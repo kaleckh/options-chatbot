@@ -637,7 +637,7 @@ def _make_objective(
         # (too noisy to optimize on short windows) so it's locked to profile value.
         w_iv    = trial.suggest_float("w_iv",    0.10, 0.70)
         w_delta = trial.suggest_float("w_delta", 0.10, 0.60)
-        w_dte   = float(sp["confidence_weights"].get("dte", 0.20))   # fixed, not tuned
+        w_dte   = float(STRATEGY_PROFILE["confidence_weights"].get("dte", 0.20))   # fixed, not tuned
         w_tech  = trial.suggest_float("w_tech",  0.00, 0.15)   # capped low — lagging indicators
         weights = {"iv_percentile": w_iv, "delta": w_delta, "dte": w_dte, "technical": w_tech}
 
