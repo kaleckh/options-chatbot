@@ -532,6 +532,41 @@ with tab_predictions:
     # ══ SECTION 2: Daily Top Picks ════════════════════════════════════════════
     st.markdown("### 🎯 Today's Top Trades")
 
+    # ── Auto-scan: run once daily, 30 min after US market open (10:00 AM ET) ──
+    def _auto_scan_due() -> bool:
+        """Return True if it's a weekday, past 10:00 AM ET, and no picks saved today."""
+        from zoneinfo import ZoneInfo
+        now_et   = datetime.now(ZoneInfo("America/New_York"))
+        if now_et.weekday() >= 5:          # Saturday / Sunday
+            return False
+        if now_et.hour < 10:               # before 10:00 AM ET
+            return False
+        today_str = now_et.strftime("%Y-%m-%d")
+        existing  = _load_predictions()
+        return not any(
+            p.get("entry_date", "")[:10] == today_str and p.get("type") == "daily_scan"
+            for p in existing
+        )
+
+    if _auto_scan_due() and not st.session_state.get("auto_scan_done_today"):
+        with st.spinner("Auto-scanning watchlist for today's top picks (10:00 AM ET trigger)…"):
+            _auto_picks = scan_daily_top_trades(n_picks=5)
+        if _auto_picks:
+            _existing = _load_predictions()
+            from zoneinfo import ZoneInfo
+            _today_str = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+            _new_id = max((p.get("id", 0) for p in _existing), default=0)
+            for _p in _auto_picks:
+                _new_id += 1
+                _rec = dict(_p)
+                _rec["id"] = _new_id
+                _existing.append(_rec)
+            from options_chatbot import _save_predictions
+            _save_predictions(_existing)
+            st.session_state["auto_scan_done_today"] = _today_str
+            st.success(f"Auto-scan complete — saved {len(_auto_picks)} picks for {_today_str}.")
+            st.rerun()
+
     scan_col, grade_col, refresh_col = st.columns([3, 2, 1])
 
     if scan_col.button("🔍 Scan Watchlist for Top 5 Picks", use_container_width=True, key="scan_btn"):
