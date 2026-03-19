@@ -1162,8 +1162,8 @@ with tab_lab:
             st.markdown("""
 **Pipeline**
 1. Downloads price history for your chosen tickers
-2. Splits into rolling windows: *train → out-of-sample test*
-3. Optuna (Bayesian search) tunes **10 parameters** that maximise Profit Factor on the training slice. Each window warm-starts from the prior window's best params, so the optimizer builds on what it learned.
+2. Splits into **expanding windows**: training always starts from day 1 and grows with each step. The test window advances 2 months at a time. Later windows have more training data and produce more stable params.
+3. Optuna (Bayesian search) tunes **9 parameters** that maximise Profit Factor on the training slice. Each window warm-starts from the prior window's best params, so the optimizer builds on what it learned.
 4. Best params are validated on the held-out test slice — all 5 guardrails must pass
 5. Stop-loss and profit-target search bounds adapt automatically based on what prior window trades reveal (stop-out rate, target hit rate, avg win/loss)
 
@@ -1210,8 +1210,8 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
         )
 
         # Internal constants — not exposed to the user
-        _TRAIN_MONTHS = 6   # learn on 6 months of history at a time
-        _TEST_MONTHS  = 2   # then immediately test on the next 2 months
+        _TRAIN_MONTHS = 12  # minimum initial training period (expands with each window)
+        _TEST_MONTHS  = 2   # test window size (advances by this each step)
 
         st.markdown("### How far back to look")
         from datetime import date as _date
@@ -1223,9 +1223,8 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
         )
         _start_year = _date.today().year - opt_years
         st.caption(
-            f"The optimizer will start in **{_start_year}** and walk forward month-by-month to today, "
-            f"spending 6 months learning then immediately testing what it learned on the next 2 months — "
-            f"repeating that cycle until it reaches the present."
+            f"The optimizer will start in **{_start_year}** and walk forward to today in 2-month steps. "
+            f"Each step trains on **all available history up to that point** — so later windows have more data and produce more stable params."
         )
 
         st.markdown("### Search depth")
@@ -1450,6 +1449,7 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                         exit_r = t.get("exit_reason", "")
                         exit_icon = "🎯" if exit_r == "target" else ("🛑" if exit_r == "stop" else "⏳")
                         trade_rows.append({
+                            "Ticker":     t.get("ticker", "—") or "—",
                             "Date":       t["date"][:10],
                             "Type":       ("📈 CALL" if t.get("type") == "call" else "📉 PUT") if t.get("type") else "—",
                             "Confidence": f"{t.get('confidence', 0):.1f}%",

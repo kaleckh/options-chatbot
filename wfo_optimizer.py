@@ -779,15 +779,17 @@ def _run_wfo_for_closes(
     # 30 (hv30 warmup) + 252 (iv_pct lookback) + small buffer = 290.
     CONTEXT_DAYS = 290
 
-    windows = []
-    start = 0
-    while start + train_days + test_days <= n:
-        test_start   = start + train_days
+    # Expanding window: training always anchors at index 0 and grows each step.
+    # Each test period advances by test_days, but training sees ALL prior history.
+    # This prevents the rolling approach from "forgetting" old regimes.
+    windows     = []
+    test_start  = train_days   # first test begins after minimum training period
+    while test_start + test_days <= n:
         ctx_start    = max(0, test_start - CONTEXT_DAYS)
-        trade_offset = test_start - ctx_start   # context days at front of test slice
+        trade_offset = test_start - ctx_start
         if multi:
             windows.append({
-                "train":        {sym: c.iloc[start : test_start]
+                "train":        {sym: c.iloc[0 : test_start]          # always from day 0
                                  for sym, c in closes_input.items()},
                 "test":         {sym: c.iloc[ctx_start : test_start + test_days]
                                  for sym, c in closes_input.items()},
@@ -795,11 +797,11 @@ def _run_wfo_for_closes(
             })
         else:
             windows.append({
-                "train":        closes_input.iloc[start : test_start],
+                "train":        closes_input.iloc[0 : test_start],     # always from day 0
                 "test":         closes_input.iloc[ctx_start : test_start + test_days],
                 "trade_offset": trade_offset,
             })
-        start += test_days
+        test_start += test_days
 
     if not windows:
         return {"error": f"Not enough data for even one WFO window for {label}"}
@@ -993,6 +995,7 @@ def _run_wfo_for_closes(
             # Store compact OOS trade list (with exit_reason for UI analysis)
             record["oos_trade_pnl"] = [
                 {
+                    "ticker":      t.get("ticker",     ""),
                     "date":        t["date"],
                     "type":        t.get("type", ""),
                     "pnl_pct":     round(t["pnl_pct"], 2),
