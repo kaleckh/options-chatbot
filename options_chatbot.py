@@ -1441,14 +1441,14 @@ def backfill_predictions(
                 # Entry price = open on pred_date
                 entry_price = round(float(opens.iloc[i]), 2)
 
-                # Direction decision
-                if ret5 > 1.0 and c_now > sma20:
+                # Direction decision (threshold aligned with live scanner: 0.3%)
+                if ret5 > 0.3 and c_now > sma20:
                     direction = "bullish"
                     # confidence: scales 6–9 with strength of signal
-                    conf = min(9, 6 + int(min(ret5 - 1.0, 6) / 2))
-                elif ret5 < -1.0 and c_now < sma20:
+                    conf = min(9, 6 + int(min(ret5 - 0.3, 6) / 2))
+                elif ret5 < -0.3 and c_now < sma20:
                     direction = "bearish"
-                    conf = min(9, 6 + int(min(abs(ret5) - 1.0, 6) / 2))
+                    conf = min(9, 6 + int(min(abs(ret5) - 0.3, 6) / 2))
                 else:
                     skipped_neutral += 1
                     continue
@@ -2020,7 +2020,11 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 reasons.append(f"High IV rank ({iv_pct:.0f}th pct) — options are expensive, consider smaller size")
 
             today_str   = datetime.now().strftime("%Y-%m-%d")
-            target_str  = (datetime.now() + timedelta(days=dte + 2)).strftime("%Y-%m-%d")
+            _raw_target = datetime.now() + timedelta(days=dte + 2)
+            # Roll forward to next weekday if target lands on weekend
+            while _raw_target.weekday() >= 5:
+                _raw_target += timedelta(days=1)
+            target_str  = _raw_target.strftime("%Y-%m-%d")
 
             candidates.append({
                 "ticker":             ticker,
@@ -2294,15 +2298,20 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
 
 
 def _calculate_ev(delta: float, avg_win_pct: float, avg_loss_pct: float,
-                  capital_at_risk: float, extra_margin_pct: float = 0.0) -> dict:
+                  capital_at_risk: float, extra_margin_pct: float = 0.0,
+                  confidence: float = None) -> dict:
     """
     EV = (P_profit × avg_win) − (P_loss × avg_loss)
-    Uses |delta| as proxy for P(profit).
+    Uses confidence score (0–100) as P(profit) when available; falls back to
+    |delta| only if confidence is not supplied.
     Trade signal fires only when EV ≥ min_ev_return_pct (10%) AND EV > 0.
     Extra margin requirement raised if option is illiquid.
     """
     sp = STRATEGY_PROFILE
-    p_win  = min(abs(delta), 0.99)
+    if confidence is not None:
+        p_win = min(max(confidence / 100.0, 0.01), 0.99)
+    else:
+        p_win = min(abs(delta), 0.99)
     p_loss = 1.0 - p_win
     ev_pct    = (p_win * avg_win_pct) - (p_loss * abs(avg_loss_pct))
     ev_dollars = capital_at_risk * ev_pct / 100.0
@@ -2399,7 +2408,8 @@ def evaluate_trade_signal(
         # ── 5. EV calculation ─────────────────────────────────────────────────
         ev_signal = False
         if delta is not None:
-            ev = _calculate_ev(delta, avg_win_pct, avg_loss_pct, adj_dollars, extra_margin)
+            ev = _calculate_ev(delta, avg_win_pct, avg_loss_pct, adj_dollars, extra_margin,
+                               confidence=confidence_score)
             ev_signal = ev["trade_signal"]
             out["expected_value"] = ev
 
