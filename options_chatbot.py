@@ -98,6 +98,35 @@ STRATEGY_PROFILE = {
     },
 }
 
+# ── Persist / restore STRATEGY_PROFILE across restarts ───────────────────────
+PROFILE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_profile.json")
+
+
+def _save_profile() -> None:
+    """Write STRATEGY_PROFILE to disk. Call after every Apply."""
+    with open(PROFILE_FILE, "w") as f:
+        json.dump(
+            {k: v for k, v in STRATEGY_PROFILE.items() if k not in ("name", "philosophy")},
+            f, indent=2,
+        )
+
+
+def _load_profile() -> None:
+    """Merge saved profile into STRATEGY_PROFILE in-place (runs at import time)."""
+    if not os.path.exists(PROFILE_FILE):
+        return
+    try:
+        with open(PROFILE_FILE) as f:
+            saved = json.load(f)
+        for section in ("confidence_weights", "targets", "filters", "risk"):
+            if section in saved and isinstance(saved[section], dict):
+                STRATEGY_PROFILE[section].update(saved[section])
+    except Exception:
+        pass  # corrupt file — fall back to defaults silently
+
+
+_load_profile()  # restore on every import / app startup
+
 # ── Live alias so all legacy code that reads risk_settings["x"] auto-reflects changes ──
 risk_settings = STRATEGY_PROFILE["risk"]
 

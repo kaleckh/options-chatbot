@@ -38,6 +38,7 @@ from options_chatbot import (
     _calculate_confidence_score,
     scan_daily_top_trades,
     _save_predictions,
+    _save_profile,
 )
 
 # ── Database ───────────────────────────────────────────────────────────────────
@@ -1604,6 +1605,7 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                             if "profit_target_pct" in params: sp["risk"]["profit_target_pct"]        = params["profit_target_pct"]
                             if "min_ev_pct"        in params: sp["filters"]["min_ev_return_pct"]     = params["min_ev_pct"]
 
+                            _save_profile()
                             st.success(
                                 f"✅ Applied {regime} recommendations from {n_acc} accepted windows. "
                                 "Chatbot and backtest are now using the new params."
