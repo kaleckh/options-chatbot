@@ -1447,7 +1447,7 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                     for t in all_oos_trades:
                         pnl = t["pnl_pct"]
                         exit_r = t.get("exit_reason", "")
-                        exit_icon = "🎯" if exit_r == "target" else ("🛑" if exit_r == "stop" else "⏳")
+                        exit_icon = "🎯" if exit_r == "target" else ("📉" if exit_r == "trailing_stop" else ("🛑" if exit_r == "stop" else "⏳"))
                         trade_rows.append({
                             "Ticker":     t.get("ticker", "—") or "—",
                             "Date":       t["date"][:10],

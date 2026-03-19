@@ -300,6 +300,32 @@ def _simulate_window(
 
     cache = _cache if _cache is not None else _precompute(closes, dte_at_entry)
 
+    # ── Per-day indicator arrays for adaptive exit scoring ─────────────────────
+    # RSI 14
+    _rsi14 = np.full(n, 50.0)
+    _dp    = np.zeros(n)
+    _dp[1:] = np.diff(prices)
+    for _i in range(15, n):
+        _w = _dp[_i - 14 : _i]
+        _u = float(np.mean(_w[_w > 0])) if np.any(_w > 0) else 0.0
+        _d = float(np.mean(-_w[_w < 0])) if np.any(_w < 0) else 0.0
+        _rsi14[_i] = 100.0 - 100.0 / (1.0 + _u / (_d + 1e-9))
+    # MACD (EMA12 − EMA26)
+    _k12 = 2.0 / 13.0; _k26 = 2.0 / 27.0
+    _ema12 = np.empty(n); _ema26 = np.empty(n)
+    _ema12[0] = _ema26[0] = prices[0]
+    for _i in range(1, n):
+        _ema12[_i] = prices[_i] * _k12 + _ema12[_i - 1] * (1 - _k12)
+        _ema26[_i] = prices[_i] * _k26 + _ema26[_i - 1] * (1 - _k26)
+    _macd = _ema12 - _ema26
+    # SMA 20 / SMA 50
+    _sma20 = np.full(n, np.nan)
+    _sma50 = np.full(n, np.nan)
+    for _i in range(20, n):
+        _sma20[_i] = float(np.mean(prices[_i - 20 : _i]))
+    for _i in range(50, n):
+        _sma50[_i] = float(np.mean(prices[_i - 50 : _i]))
+
     T = dte_at_entry / 365.0
     pnl_list: list[float] = []
     trades:   list[dict]  = []
@@ -364,6 +390,18 @@ def _simulate_window(
         target_px = entry_px * (1 + profit_target_pct / 100)
         exit_px, exit_reason = entry_px, "expired"
 
+        # ── Adaptive exit state ───────────────────────────────────────────────
+        # Trailing stop: activates once option gains ≥50% of profit target,
+        # then trails 18% below the high-watermark option price.
+        # TP extension: if tech setup is still intact at target, ride with trail.
+        # Tech decay: if indicators collapse mid-trade, raise the stop floor.
+        trail_activate_px = entry_px * (1 + profit_target_pct * 0.50 / 100)
+        trail_depth       = 0.18       # trail stop sits 18% below peak
+        high_watermark    = entry_px
+        trail_active      = False
+        trail_stop_px     = 0.0
+        dynamic_stop_px   = stop_px    # raised by tech-decay logic
+
         for d in range(1, dte_at_entry + 1):
             fi = i + d
             if fi >= n:
@@ -376,20 +414,74 @@ def _simulate_window(
                     if trade_type == "call"
                     else max(0.0, best_strike - S_now)
                 )
-                # Cap intrinsic at profit target — same as if the target had been
-                # hit on the last day (prevents deeply-ITM expiry returns from
-                # inflating pnl_pct far beyond the intended profit target)
-                exit_px     = min(intrinsic, target_px)
+                # If trailing was active, allow gains above original target;
+                # otherwise cap at target to prevent inflated expiry returns.
+                exit_px     = min(intrinsic, high_watermark) if trail_active else min(intrinsic, target_px)
                 exit_reason = "expired"
                 break
+
             g2      = _bs_greeks(S_now, best_strike, T_now, RISK_FREE_RATE, hv30, trade_type)
             opt_now = g2.get("bs_price", 0.0) if g2 else 0.0
-            if opt_now <= stop_px:
-                exit_px, exit_reason = opt_now, "stop"
+
+            # Update high watermark
+            if opt_now > high_watermark:
+                high_watermark = opt_now
+
+            # ── Current tech score from live indicators ───────────────────────
+            if fi >= 50 and not np.isnan(_sma50[fi]):
+                cur_tech = _tech_score(
+                    rsi14     = float(_rsi14[fi]),
+                    macd      = float(_macd[fi]),
+                    macd_prev = float(_macd[fi - 1]),
+                    price     = S_now,
+                    sma20     = float(_sma20[fi]) if not np.isnan(_sma20[fi]) else S_now,
+                    sma50     = float(_sma50[fi]),
+                    trade_type= trade_type,
+                )
+            else:
+                cur_tech = tech   # fallback to entry-day score
+
+            tech_healthy  = cur_tech >= max(25.0, tech * 0.65)
+            tech_decayed  = cur_tech <  max(20.0, tech * 0.40)
+
+            # ── Activate trailing stop once position is well in-profit ────────
+            if not trail_active and opt_now >= trail_activate_px:
+                trail_active  = True
+                trail_stop_px = high_watermark * (1 - trail_depth)
+
+            # ── Update trailing stop to follow high watermark ─────────────────
+            if trail_active:
+                trail_stop_px = max(trail_stop_px, high_watermark * (1 - trail_depth))
+
+            # ── Tech-decay: raise stop floor to protect against bad setups ────
+            if tech_decayed:
+                if opt_now >= entry_px:
+                    # In profit — lock in at least break-even
+                    dynamic_stop_px = max(dynamic_stop_px, entry_px * 1.02)
+                else:
+                    # In loss — tighten remaining loss budget by 40%
+                    tighter = dynamic_stop_px + (entry_px - dynamic_stop_px) * 0.40
+                    dynamic_stop_px = max(dynamic_stop_px, tighter)
+
+            # ── Hard stop (whichever is higher: static, dynamic, or trail) ────
+            effective_stop = max(dynamic_stop_px, trail_stop_px if trail_active else 0.0)
+            if opt_now <= effective_stop:
+                exit_px     = opt_now
+                exit_reason = "trailing_stop" if trail_active else "stop"
                 break
+
+            # ── Take-profit: extend if setup still healthy, else lock in ──────
             if opt_now >= target_px:
-                exit_px, exit_reason = target_px, "target"   # cap at limit price
-                break
+                if tech_healthy and not trail_active:
+                    # Tech still intact — switch to trailing stop; let it run
+                    trail_active  = True
+                    trail_stop_px = high_watermark * (1 - trail_depth)
+                    # Don't break — trade continues under trail management
+                elif not trail_active:
+                    exit_px     = target_px
+                    exit_reason = "target"
+                    break
+                # If trail already active, just keep riding
 
         pnl = (exit_px - entry_px) / entry_px * 100
         pnl_list.append(pnl)
