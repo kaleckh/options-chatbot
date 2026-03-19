@@ -971,198 +971,147 @@ import options_chatbot as _oc
 with tab_lab:
     st.markdown(
         "<h3 style='margin-bottom:0'>🔬 Strategy Lab</h3>"
-        "<p style='color:gray;margin-top:2px'>Tune the formula → evaluate a trade → run a backtest. "
-        "Every change applies instantly across Chat and all tools.</p>",
+        "<p style='color:gray;margin-top:2px'>Inspect every parameter the brain uses to score trades. "
+        "Run the optimizer to improve them. Changes apply instantly across Chat and all tools.</p>",
         unsafe_allow_html=True,
     )
-    sub_bt, sub_opt = st.tabs(["📊 Backtest", "🎯 Optimizer"])
+    sub_brain, sub_opt = st.tabs(["🧠 Strategy Brain", "🎯 Optimizer"])
 
 
-    # ── SUB-TAB: Backtest ────────────────────────────────────────────────────
-    with sub_bt:
-        st.subheader("📊 Options Strategy Backtester")
+    # ── SUB-TAB: Strategy Brain ───────────────────────────────────────────────
+    with sub_brain:
+        _sp  = _oc.STRATEGY_PROFILE
+        _cw  = _sp["confidence_weights"]
+        _tgt = _sp["targets"]
+        _risk = _sp["risk"]
+        _filt = _sp["filters"]
+        _w_sum = sum(_cw.values()) or 1.0
+
+        st.markdown("#### Confidence Score")
         st.caption(
-            "Simulates buying options on a schedule over historical data. "
-            "IV estimated from 30-day HV — directional signal, not exact P&L. "
-            "Defaults pre-filled from the current strategy profile."
+            "Every candidate trade is scored 0–100. All four components are normalized "
+            "so their weights always sum to 100%, regardless of the raw values. "
+            "The optimizer tunes all four weights — these are the live values it's currently using."
         )
 
-        _sp = _oc.STRATEGY_PROFILE  # live reference — reflects optimizer Apply changes
+        # Weight bars
+        w_labels = ["IV Rank", "Delta", "DTE", "Technical"]
+        w_keys   = ["iv_percentile", "delta", "dte", "technical"]
+        w_descs  = [
+            "Lower IV rank = cheaper options = higher score. Peaks at IV rank 0, falls linearly to 0 at the 50th percentile.",
+            "Peaks at the delta target, falls off as the option moves further ITM or OTM. Gaussian fall-off controlled by delta_falloff.",
+            "Peaks at the optimal DTE, falls off for shorter or longer expirations. Triangle function centered on dte_optimal.",
+            "RSI + MACD + SMA trend alignment on the underlying stock. 40% SMA stack, 35% RSI positioning, 25% MACD momentum.",
+        ]
+        cw1, cw2, cw3, cw4 = st.columns(4)
+        for col, label, key, desc in zip([cw1, cw2, cw3, cw4], w_labels, w_keys, w_descs):
+            raw_w  = _cw.get(key, 0.0)
+            norm_w = raw_w / _w_sum * 100
+            col.metric(label, f"{norm_w:.1f}%", help=desc)
 
-        with st.form("backtest_form"):
-            c1, c2 = st.columns(2)
-            bt_symbol   = c1.text_input("Ticker", value="SPY").upper()
-            bt_type     = c2.selectbox("Option type", ["signal", "call", "put"],
-                                        help="'signal' auto-selects direction from momentum (recommended)")
+        st.markdown(
+            "<div style='background:rgba(255,255,255,0.04);border-radius:6px;padding:10px 14px;"
+            "font-size:0.85em;color:#aaa;margin-top:4px'>"
+            "<strong style='color:#eee'>Formula:</strong>  "
+            "Confidence = ( IV_score × <em>w_iv</em> + Delta_score × <em>w_δ</em> + "
+            "DTE_score × <em>w_dte</em> + Tech_score × <em>w_tech</em> ) ÷ Σweights"
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
-            c3, c4, c5 = st.columns(3)
-            bt_dte      = c3.number_input("DTE at entry", min_value=1, max_value=60,
-                                           value=_sp["targets"]["dte_optimal"])
-            bt_delta    = c4.number_input("Delta target", min_value=0.05, max_value=0.50,
-                                           value=float(_sp["targets"]["delta_optimal"]), step=0.05,
-                                           help="Target option delta for strike selection")
-            bt_lookback = c5.number_input("Lookback (trading days)", min_value=20, max_value=756, value=252,
-                                           help="252 ≈ 1 year")
+        st.markdown("---")
 
-            c6, c7, c8 = st.columns(3)
-            bt_stop     = c6.number_input("Stop-loss %", min_value=10, max_value=100,
-                                           value=int(_sp["risk"]["stop_loss_pct"]),
-                                           help="Exit when option loses this % of premium")
-            bt_target   = c7.number_input("Profit target %", min_value=10, max_value=500,
-                                           value=int(_sp["risk"]["profit_target_pct"]),
-                                           help="100 = 2x (double your money)")
-            bt_size     = c8.number_input("Position size $", min_value=100, max_value=100_000, value=1_000, step=100,
-                                           help="Base dollar size per trade (scales with signal confidence)")
+        # ── Technical Score ───────────────────────────────────────────────────
+        st.markdown("#### Technical Score  *(0 – 100)*")
+        st.caption(
+            "Computed live from the underlying stock's last 90 days of price data. "
+            "Direction-aware: a bullish setup (CALL) and bearish setup (PUT) are scored differently on the same data."
+        )
 
-            ca1, ca2 = st.columns(2)
-            bt_account  = ca1.number_input("Starting account capital $", min_value=1_000, max_value=10_000_000,
-                                            value=10_000, step=1_000,
-                                            help="Used to show account value over time. Each trade's dollar P&L is added/subtracted from this balance.")
-            bt_risk_pct = ca2.slider("Risk per trade (% of account)", min_value=1, max_value=30, value=10,
-                                      help="What % of your account is allocated to each trade. Position size $ above sets the base; this slider shows account-level impact.")
+        tc1, tc2, tc3 = st.columns(3)
+        tc1.metric("SMA Trend", "40% weight",
+                   help="CALL: price > SMA20 (+50pts) AND SMA20 > SMA50 (+50pts)\n"
+                        "PUT:  price < SMA20 (+50pts) AND SMA20 < SMA50 (+50pts)")
+        tc2.metric("RSI (14)", "35% weight",
+                   help="CALL: peaks when RSI ≈ 55 (mild bullish momentum, not overbought). Score = 100 − |RSI − 55| × (100/35)\n"
+                        "PUT:  peaks when RSI ≈ 45 (mild bearish momentum, not oversold)")
+        tc3.metric("MACD Histogram", "25% weight",
+                   help="CALL: 100pts if MACD > 0 AND rising, 50pts if MACD > 0 only, 0 otherwise\n"
+                        "PUT:  100pts if MACD < 0 AND falling, 50pts if MACD < 0 only, 0 otherwise")
 
-            submitted = st.form_submit_button("▶ Run Backtest", use_container_width=True)
+        st.markdown(
+            "<div style='background:rgba(255,255,255,0.04);border-radius:6px;padding:10px 14px;"
+            "font-size:0.85em;color:#aaa;margin-top:4px'>"
+            "<strong style='color:#eee'>Neutral baseline:</strong> 50 — a ticker with flat RSI, "
+            "neutral MACD, and price mid-range between SMAs scores 50. "
+            "Score → 100 = strong setup aligned with trade direction. Score → 0 = setup directly opposed."
+            "</div>",
+            unsafe_allow_html=True,
+        )
 
-        if submitted:
-            with st.spinner(f"Backtesting {bt_symbol} ({bt_type}) over {bt_lookback} days…"):
-                raw = backtest_strategy(
-                    symbol=bt_symbol,
-                    option_type=bt_type,
-                    dte_at_entry=int(bt_dte),
-                    delta_target=float(bt_delta),
-                    lookback_days=int(bt_lookback),
-                    stop_loss_pct=float(bt_stop),
-                    profit_target_pct=float(bt_target),
-                    position_size_dollars=float(bt_size),
-                )
-            data = json.loads(raw)
+        st.markdown("---")
 
-            if "error" in data:
-                st.error(data["error"])
-            else:
-                res = data["results"]
-                total_pnl = res["total_pnl_dollars"]
+        # ── Entry Targets & Filters ────────────────────────────────────────────
+        st.markdown("#### Entry Rules")
 
-                # ── Primary KPIs ─────────────────────────────────────────────
-                k1, k2, k3 = st.columns(3)
-                k1.metric(
-                    "Win Rate",
-                    f"{res['win_rate_pct']}%",
-                    help=f"Winning trades: {int(res['trades_simulated'] * res['win_rate_pct'] / 100)} / {res['trades_simulated']}",
-                )
-                k2.metric(
-                    "Total Return",
-                    f"{res['total_return_pct']:+.1f}%",
-                    delta=f"${total_pnl:+,.0f} on ${res['total_capital_deployed']:,.0f} deployed",
-                )
-                k3.metric(
-                    "Max Drawdown",
-                    f"{res.get('max_drawdown_pct', 0):.1f}%",
-                    delta=f"Stopped out: {res['stopped_out_pct']}%",
-                    delta_color="inverse",
-                )
+        e1, e2, e3, e4 = st.columns(4)
+        e1.metric("Delta Target",   f"{_tgt['delta_optimal']:.2f}",
+                  help=f"Optimal option delta. Score peaks here, falls to 0 at ±{_tgt['delta_falloff']:.2f} away.")
+        e2.metric("Delta Falloff",  f"±{_tgt['delta_falloff']:.2f}",
+                  help="How quickly the delta component drops off. Wider = more tolerant of off-target strikes.")
+        e3.metric("DTE Target",     f"{_tgt['dte_optimal']}d",
+                  help=f"Optimal days-to-expiry. Score falls to 0 at ±{_tgt['dte_falloff']}d away.")
+        e4.metric("DTE Falloff",    f"±{_tgt['dte_falloff']}d",
+                  help="How quickly the DTE component drops off. Wider = more tolerant of non-optimal expirations.")
 
-                # ── Secondary stats ───────────────────────────────────────────
-                s1, s2, s3, s4 = st.columns(4)
-                s1.metric("Trades",          res["trades_simulated"])
-                s2.metric("Avg P&L / trade", f"{res['avg_pnl_pct']:+.1f}%")
-                s3.metric("Hit target",      f"{res['hit_profit_target_pct']}%")
-                s4.metric("Expected Value",  f"{res['expected_value_pct']:+.1f}%")
+        e5, e6, e7, e8 = st.columns(4)
+        e5.metric("IV Rank Max",    f"{_tgt['iv_percentile_max']}th pct",
+                  help="IV rank score peaks at 0 (cheapest options) and falls linearly to 0 at this percentile. Above this = IV is expensive.")
+        e6.metric("Min EV %",       f"{_filt['min_ev_return_pct']:.0f}%",
+                  help="Trade only fires if Expected Value ≥ this. EV = P(win)×profit_target − P(loss)×stop_loss.")
+        e7.metric("5-Day Momentum", "±0.3%",
+                  help="Minimum 5-day return to generate a directional signal. Below this threshold = no trade.")
+        e8.metric("SMA20 Confirm",  "Required",
+                  help="Price must be above SMA20 for CALLs, below for PUTs. Momentum + trend must agree.")
 
-                st.markdown("---")
+        st.markdown("---")
 
-                if "filters" in data:
-                    fl = data["filters"]
-                    total_skipped = (fl["days_skipped_no_signal"] + fl["days_skipped_vix_too_high"] +
-                                     fl["days_skipped_hv_rank_high"] + fl["days_skipped_no_strike"])
-                    with st.expander(f"🔍 Filter breakdown — {total_skipped} days skipped, {fl['days_traded']} traded"):
-                        f1, f2, f3, f4 = st.columns(4)
-                        f1.metric("No signal",      fl["days_skipped_no_signal"])
-                        f2.metric("VIX too high",   fl["days_skipped_vix_too_high"])
-                        f3.metric("HV rank high",   fl["days_skipped_hv_rank_high"])
-                        f4.metric("No valid strike",fl["days_skipped_no_strike"])
+        # ── Exit Rules ─────────────────────────────────────────────────────────
+        st.markdown("#### Exit Rules")
 
-                # ── Account value over time ────────────────────────────────────
-                if data.get("equity_curve"):
-                    ec = pd.DataFrame(data["equity_curve"])
-                    ec["date"] = pd.to_datetime(ec["date"])
-                    ec = ec.set_index("date")
+        x1, x2, x3, x4 = st.columns(4)
+        x1.metric("Stop-Loss",       f"−{_risk['stop_loss_pct']:.0f}%",
+                  help="Exit the option when it loses this % of the premium paid. Non-negotiable.")
+        x2.metric("Profit Target",   f"+{_risk['profit_target_pct']:.0f}%",
+                  help="Take profit when the option gains this % of premium. 100% = double the premium.")
+        x3.metric("Max Drawdown",    f"{_risk['max_drawdown_pct']:.0f}%",
+                  help="Pause all trading if the portfolio drops this % from its peak.")
+        x4.metric("0DTE Cap",        f"{_risk['dte_0_max_pct']:.0f}% of account",
+                  help="Same-day expiry trades are limited to this % of total account size.")
 
-                    # Build account-level curve: each trade risks bt_risk_pct% of *current* account
-                    acct = float(bt_account)
-                    acct_curve, hwm_curve = [], []
-                    hwm_acct = acct
-                    for pnl_pct in ec["trade_pnl_pct"]:
-                        position  = acct * bt_risk_pct / 100
-                        pnl_dol   = position * pnl_pct / 100
-                        acct      = max(acct + pnl_dol, 0.0)
-                        hwm_acct  = max(hwm_acct, acct)
-                        acct_curve.append(round(acct, 2))
-                        hwm_curve.append(round(hwm_acct, 2))
+        st.markdown("---")
 
-                    ec["Account Value ($)"]   = acct_curve
-                    ec["High Water Mark ($)"] = hwm_curve
-                    final_acct   = acct_curve[-1] if acct_curve else bt_account
-                    total_ret    = (final_acct - bt_account) / bt_account * 100
-                    acct_max_dd  = max(
-                        (h - a) / h * 100 for h, a in zip(hwm_curve, acct_curve) if h > 0
-                    ) if hwm_curve else 0.0
+        # ── Defense & Risk Filters ──────────────────────────────────────────────
+        st.markdown("#### Defense & Risk Filters")
 
-                    st.markdown("#### Account Performance")
-                    ap1, ap2, ap3, ap4 = st.columns(4)
-                    ap1.metric("Starting Capital", f"${bt_account:,.0f}")
-                    ap2.metric("Ending Capital",   f"${final_acct:,.0f}",
-                               delta=f"{total_ret:+.1f}%")
-                    ap3.metric("Win Rate",         f"{res['win_rate_pct']}%")
-                    ap4.metric("Max Drawdown",     f"{acct_max_dd:.1f}%", delta_color="inverse")
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("VIX Defense Trigger", f"{_filt['vix_defense_threshold']:.0f}",
+                  help="When VIX rises above this level, Defense Mode activates: position sizes are reduced.")
+        d2.metric("Defense Size Mult",   f"{_filt['defense_position_mult']}×",
+                  help=f"In Defense Mode, all position sizes are multiplied by this. "
+                       f"E.g. {_filt['defense_position_mult']}× = half the normal size.")
+        d3.metric("ATR Stop Widener",    f"{_filt['atr_expansion_stop_mult']}×",
+                  help="When ATR is expanding (volatile market), stop-losses are multiplied by this to avoid whipsaws.")
+        d4.metric("IV Crush Threshold",  f"{_filt['iv_crush_z_threshold']:.1f}σ",
+                  help="If the option's IV is this many standard deviations above 30-day HV mean, IV crush risk is flagged.")
 
-                    # Prepend starting capital row so chart anchors at bt_account
-                    _ec_origin = ec.index[0] - pd.Timedelta(days=1)
-                    _ec_start  = pd.DataFrame({"Account Value ($)": [float(bt_account)],
-                                               "High Water Mark ($)": [float(bt_account)]},
-                                              index=[_ec_origin])
-                    ec_with_origin = pd.concat([_ec_start, ec[["Account Value ($)", "High Water Mark ($)"]]])
-                    # Resample to daily and forward-fill so the chart is a smooth step curve
-                    acct_chart = ec_with_origin.resample("D").last().ffill()
-                    st.line_chart(acct_chart, color=["#00c17c", "#555555"])
-                    st.caption(
-                        f"🟢 Account value starting from ${bt_account:,.0f}, with {bt_risk_pct}% risked per trade.  "
-                        "⬛ Gray = high water mark (best balance ever). Gap = drawdown. "
-                        "Flat sections = days with no trade signal."
-                    )
-
-                    st.markdown("##### Per-Trade P&L %")
-                    ec["Win P&L %"]  = ec["trade_pnl_pct"].where(ec["win"],  0.0)
-                    ec["Loss P&L %"] = ec["trade_pnl_pct"].where(~ec["win"], 0.0)
-                    st.bar_chart(ec[["Win P&L %", "Loss P&L %"]], color=["#00c17c", "#ff4b4b"])
-                    st.caption("Each bar = one trade's premium return %. Green = win, red = loss.")
-
-                with st.expander("📋 All trades", expanded=False):
-                    trades_df = pd.DataFrame(data["all_trades"])[[
-                        "entry_date", "option_type", "underlying_entry", "strike", "delta",
-                        "position_dollars", "entry_option_px", "exit_option_px",
-                        "pnl_pct", "pnl_dollars", "exit_reason"
-                    ]].rename(columns={
-                        "entry_date":       "Date",
-                        "option_type":      "Type",
-                        "underlying_entry": "Stock $",
-                        "strike":           "Strike",
-                        "delta":            "Delta",
-                        "position_dollars": "Size $",
-                        "entry_option_px":  "Entry px",
-                        "exit_option_px":   "Exit px",
-                        "pnl_pct":          "P&L %",
-                        "pnl_dollars":      "P&L $",
-                        "exit_reason":      "Exit",
-                    })
-                    st.dataframe(trades_df, use_container_width=True)
-
-                st.caption(
-                    f"Formula: delta target {bt_delta} · VIX defense {_sp['filters']['vix_defense_threshold']:.0f} · "
-                    f"IV crush threshold {_sp['filters']['iv_crush_z_threshold']:.1f}σ · "
-                    f"min EV {_sp['filters']['min_ev_return_pct']:.0f}%  |  "
-                    "⚠️ IV estimated from 30-day historical vol. Use as directional signal only."
-                )
+        d5, d6, d7, _ = st.columns(4)
+        d5.metric("IV Crush Penalty",    f"−{_filt['iv_crush_confidence_penalty']:.0f} pts",
+                  help="Confidence score is reduced by this amount when IV crush risk is detected.")
+        d6.metric("Liquidity Max Spread",f"{_filt['liquidity_spread_max_pct']:.1f}%",
+                  help="Bid-ask spread above this % of mid-price = flagged as illiquid.")
+        d7.metric("Illiquid Margin",     f"+{_filt['illiquid_extra_margin_pct']:.0f}%",
+                  help="Illiquid options require this much extra EV margin above the min_ev_return_pct threshold.")
 
     # ── SUB-TAB: Walk-Forward Optimizer ──────────────────────────────────────
     with sub_opt:
