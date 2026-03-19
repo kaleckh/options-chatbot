@@ -1367,15 +1367,20 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                     "Flat sections = time periods the optimizer wasn't confident enough to trade."
                 )
 
-                # Build account-level curve using compounding position sizing
+                # Build account-level curve using compounding position sizing.
+                # Cap each trade's pnl_pct at the strategy stop/target to prevent
+                # tiny-premium OTM options from producing unrealistic 1000%+ returns.
+                _stop_cap   = -abs(_oc.STRATEGY_PROFILE["risk"]["stop_loss_pct"])
+                _target_cap =  abs(_oc.STRATEGY_PROFILE["risk"]["profit_target_pct"])
                 acct = sim_capital
                 acct_max_dd_pct = 0.0
                 acct_hwm_inner  = sim_capital
                 acct_vals = []
                 for t in all_oos_trades:
-                    position = acct * sim_risk_pct / 100
-                    pnl_dol  = position * t["pnl_pct"] / 100
-                    acct     = max(acct + pnl_dol, 0.0)
+                    pnl_capped = max(_stop_cap, min(_target_cap, t["pnl_pct"]))
+                    position   = acct * sim_risk_pct / 100
+                    pnl_dol    = position * pnl_capped / 100
+                    acct       = max(acct + pnl_dol, 0.0)
                     acct_hwm_inner = max(acct_hwm_inner, acct)
                     if acct_hwm_inner > 0:
                         acct_max_dd_pct = max(acct_max_dd_pct, (acct_hwm_inner - acct) / acct_hwm_inner * 100)
@@ -1437,6 +1442,40 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                     "Each bar = one trade's return on option premium (e.g. +100% = option doubled, "
                     f"-50% = stop hit at half premium). {sim_risk_pct}% of account was at risk per trade."
                 )
+
+                with st.expander(f"📋 All trades ({len(all_oos_trades)})", expanded=False):
+                    trade_rows = []
+                    for t in all_oos_trades:
+                        pnl = t["pnl_pct"]
+                        exit_r = t.get("exit_reason", "")
+                        exit_icon = "🎯" if exit_r == "target" else ("🛑" if exit_r == "stop" else "⏳")
+                        trade_rows.append({
+                            "Date":       t["date"][:10],
+                            "Type":       ("📈 CALL" if t.get("type") == "call" else "📉 PUT") if t.get("type") else "—",
+                            "Confidence": f"{t.get('confidence', 0):.1f}%",
+                            "Tech Score": f"{t.get('tech_score', 0):.0f}/100",
+                            "EV":         f"{t.get('ev', 0):.1f}%",
+                            "Strike":     f"${t.get('strike', 0):.2f}" if t.get("strike") else "—",
+                            "Entry Px":   f"${t.get('entry_px', 0):.3f}" if t.get("entry_px") else "—",
+                            "Exit Px":    f"${t.get('exit_px', 0):.3f}" if t.get("exit_px") else "—",
+                            "P&L %":      f"{pnl:+.1f}%",
+                            "Exit":       f"{exit_icon} {exit_r}",
+                        })
+                    df_trades = pd.DataFrame(trade_rows)
+
+                    def _color_pnl_trade(val: str):
+                        try:
+                            v = float(val.replace("%", "").replace("+", ""))
+                            if v > 0: return "color: #28a745; font-weight:bold"
+                            if v < 0: return "color: #c0392b; font-weight:bold"
+                        except Exception:
+                            pass
+                        return ""
+
+                    st.dataframe(
+                        df_trades.style.map(_color_pnl_trade, subset=["P&L %"]),
+                        use_container_width=True, hide_index=True,
+                    )
 
                 st.markdown("---")
 

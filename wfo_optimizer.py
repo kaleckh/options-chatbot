@@ -982,8 +982,15 @@ def _run_wfo_for_closes(
             record["oos_trade_pnl"] = [
                 {
                     "date":        t["date"],
+                    "type":        t.get("type", ""),
                     "pnl_pct":     round(t["pnl_pct"], 2),
                     "exit_reason": t.get("exit_reason", ""),
+                    "confidence":  round(t.get("confidence", 0.0), 1),
+                    "tech_score":  round(t.get("tech_score",  0.0), 1),
+                    "ev":          round(t.get("ev",          0.0), 1),
+                    "strike":      round(t.get("strike",      0.0), 2),
+                    "entry_px":    round(t.get("entry_px",    0.0), 4),
+                    "exit_px":     round(t.get("exit_px",     0.0), 4),
                 }
                 for t in oos_result.get("trades", [])
             ]
