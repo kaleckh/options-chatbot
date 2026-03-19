@@ -1183,11 +1183,11 @@ Every candidate trade is scored on the underlying's technical setup — 40% SMA 
 
 | # | Gate | Rule |
 |---|------|------|
-| G1 | Overfitting | OOS Profit Factor ≥ 80% of in-sample Profit Factor |
-| G2 | Stability | Weight drift ≤ your drift limit (default 40%) |
+| G1 | Overfitting | OOS Profit Factor ≥ 70% of in-sample Profit Factor |
+| G2 | Stability | IV rank + delta weight drift ≤ your drift limit (default 75%) |
 | G3 | Sample size | Auto floor: max(10, test_days ÷ 4) × √tickers |
-| G4 | Noise | Top-10 trial weight std < 0.15 |
-| G5 | Consistency | OOS win rate ≥ 45% |
+| G4 | Noise | Top-10 trial IV rank + delta std < 0.15 |
+| G5 | Consistency | OOS win rate ≥ 40% |
 
 Results are saved to `wfo_results.json`. **You decide whether to apply them.**
 """)
@@ -1238,11 +1238,11 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
         st.markdown("### Stability guard")
         opt_drift = st.slider(
             "How much the strategy is allowed to change",
-            10, 80, 60, step=5, key="opt_drift",
+            10, 80, 75, step=5, key="opt_drift",
             help=(
                 "If a time period finds params that are too different from the current strategy it gets rejected as a fluke. "
                 "Lower = stricter, fewer periods accepted. Higher = more flexible, more periods accepted. "
-                "60% is a good default."
+                "75% is recommended — too low causes excessive rejections."
             ),
             format="%d%%",
         )

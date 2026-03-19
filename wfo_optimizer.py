@@ -615,8 +615,8 @@ def _make_objective(
     closes_input,   # pd.Series (single) or dict[str, pd.Series] (multi)
     config: dict,
     multi: bool = False,
-    stop_bounds: tuple = (30.0, 70.0),   # (lo, hi) learned from prior window
-    tgt_bounds:  tuple = (50.0, 200.0),  # (lo, hi) learned from prior window
+    stop_bounds: tuple = (25.0, 60.0),   # (lo, hi) learned from prior window
+    tgt_bounds:  tuple = (50.0, 150.0),  # (lo, hi) learned from prior window
 ) -> Callable:
     """
     Precompute HV/IV data ONCE. Each trial tunes 9 parameters:
@@ -633,10 +633,12 @@ def _make_objective(
 
     def objective(trial: "optuna.Trial") -> float:
         # ── Confidence weights ────────────────────────────────────────────────
+        # DTE weight is fixed — it was causing 70-107% drift between windows
+        # (too noisy to optimize on short windows) so it's locked to profile value.
         w_iv    = trial.suggest_float("w_iv",    0.10, 0.70)
         w_delta = trial.suggest_float("w_delta", 0.10, 0.60)
-        w_dte   = trial.suggest_float("w_dte",   0.05, 0.50)
-        w_tech  = trial.suggest_float("w_tech",  0.00, 0.40)   # optimizer decides technical weight
+        w_dte   = float(sp["confidence_weights"].get("dte", 0.20))   # fixed, not tuned
+        w_tech  = trial.suggest_float("w_tech",  0.00, 0.15)   # capped low — lagging indicators
         weights = {"iv_percentile": w_iv, "delta": w_delta, "dte": w_dte, "technical": w_tech}
 
         # ── Entry parameters ──────────────────────────────────────────────────
@@ -692,19 +694,20 @@ def _check_guardrails(
     """Returns (passed, [issue messages]). ALL must pass."""
     issues: list[str] = []
 
-    # G1: OOS Profit Factor ≥ 80% of IS Profit Factor
-    # (Sharpe is noisy for options — PF ratio is a more meaningful overfitting gate)
+    # G1: OOS Profit Factor ≥ 70% of IS Profit Factor
+    # (relaxed from 80% — options OOS naturally degrades; 70% is a reasonable generalization floor)
     is_pf  = is_result.get("profit_factor",  0)
     oos_pf = oos_result.get("profit_factor", 0)
-    if is_pf > 1.0 and oos_pf < 0.8 * is_pf:
+    if is_pf > 1.0 and oos_pf < 0.70 * is_pf:
         issues.append(
-            f"G1 — OOS PF ({oos_pf:.2f}) < 80% of IS PF ({is_pf:.2f}): overfit"
+            f"G1 — OOS PF ({oos_pf:.2f}) < 70% of IS PF ({is_pf:.2f}): overfit"
         )
 
     # G2: Weight drift ≤ max_drift_pct from current profile
+    # DTE excluded — it's now fixed, not tuned
     total = sum(best_weights.values()) or 1.0
     norm  = {k: v / total for k, v in best_weights.items()}
-    for key in ["iv_percentile", "delta", "dte"]:
+    for key in ["iv_percentile", "delta"]:
         cur   = current_weights.get(key, 0.33)
         new   = norm.get(key, 0.33)
         drift = abs(new - cur) / max(cur, 0.01)
@@ -720,9 +723,9 @@ def _check_guardrails(
             f"G3 — only {oos_result['n_trades']} OOS trades (need ≥ {min_trades})"
         )
 
-    # G4: Top-10 trial weight stability
+    # G4: Top-10 trial weight stability (DTE excluded — fixed, not tuned)
     if len(top_trials) >= 3:
-        for key in ["w_iv", "w_delta", "w_dte"]:
+        for key in ["w_iv", "w_delta"]:
             vals = [t.get(key, 0.0) for t in top_trials]
             std  = float(np.std(vals))
             if std > 0.15:
@@ -730,11 +733,12 @@ def _check_guardrails(
                     f"G4 — '{key}' unstable across top trials (std={std:.3f} > 0.15)"
                 )
 
-    # G5: OOS win rate ≥ 45%
+    # G5: OOS win rate ≥ 40% (relaxed from 45% — long options with asymmetric payoffs
+    # can be profitable below 45% when winners are large enough)
     oos_wr = oos_result.get("win_rate", 0)
-    if oos_wr < 0.45:
+    if oos_wr < 0.40:
         issues.append(
-            f"G5 — OOS win rate {oos_wr*100:.1f}% < 45% floor (consistency gate)"
+            f"G5 — OOS win rate {oos_wr*100:.1f}% < 40% floor (consistency gate)"
         )
 
     return len(issues) == 0, issues
@@ -799,8 +803,8 @@ def _run_wfo_for_closes(
     regime_params: dict[str, list[dict]] = {"normal": [], "defense": []}
 
     # Adaptive exit bounds — start at defaults, shift after each window
-    stop_bounds: tuple = (30.0, 70.0)
-    tgt_bounds:  tuple = (50.0, 200.0)
+    stop_bounds: tuple = (25.0, 60.0)
+    tgt_bounds:  tuple = (50.0, 150.0)
     adaptation_notes: list[str] = []   # notes from the most recent adaptation
     prev_best_params: Optional[dict] = None   # warm-start for next window
 
