@@ -37,6 +37,7 @@ from options_chatbot import (
     _get_market_regime,
     _calculate_confidence_score,
     scan_daily_top_trades,
+    _save_predictions,
 )
 
 # ── Database ───────────────────────────────────────────────────────────────────
@@ -599,7 +600,6 @@ with tab_predictions:
                 _rec = dict(_p)
                 _rec["id"] = _new_id
                 _existing.append(_rec)
-            from options_chatbot import _save_predictions
             _save_predictions(_existing)
             st.session_state["auto_scan_done_today"] = _today_str
             st.success(f"Auto-scan complete — saved {len(_auto_picks)} picks for {_today_str}.")
@@ -695,7 +695,6 @@ with tab_predictions:
                 rec["id"] = new_id
                 preds_all.append(rec)
                 added += 1
-            from options_chatbot import _save_predictions
             _save_predictions(preds_all)
             if added:
                 st.success(f"Saved {added} pick(s) to prediction history.")
@@ -829,8 +828,8 @@ with tab_predictions:
 
                 styled = (
                     df_graded.style
-                    .applymap(_color_outcome, subset=["Outcome"])
-                    .applymap(_color_pnl,     subset=["Stock %", "Est. Option P&L"])
+                    .map(_color_outcome, subset=["Outcome"])
+                    .map(_color_pnl,     subset=["Stock %", "Est. Option P&L"])
                 )
                 st.dataframe(styled, use_container_width=True, hide_index=True)
 
@@ -907,7 +906,7 @@ with tab_predictions:
                             pass
                         return ""
                     st.dataframe(
-                        df_rolled.style.applymap(_color_rolled, subset=["Rolled P&L"]),
+                        df_rolled.style.map(_color_rolled, subset=["Rolled P&L"]),
                         use_container_width=True, hide_index=True,
                     )
 
