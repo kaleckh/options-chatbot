@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Options Trading Chatbot
-Powered by Claude claude-opus-4-6 + Yahoo Finance (yfinance)
+Powered by Claude Sonnet 4.6 + Yahoo Finance (yfinance)
 
 Specializes in:
 - US large-cap stocks and ETFs with high options liquidity
@@ -13,21 +13,18 @@ Free enhancements:
 - Earnings calendar: warns when earnings fall within your DTE
 - Market context: VIX level, SPY/QQQ trend, market regime
 - Put/Call ratio: directional sentiment from live options flow
+- Paper trading journal: log trades and track real P&L
+- Strategy backtester: simulate how a strategy would have performed historically
 """
 
 import os
+import re
 import json
 import math
-import time
+import subprocess
 import numpy as np
 from datetime import datetime, timedelta
-import anthropic
 import yfinance as yf
-from dotenv import load_dotenv
-
-load_dotenv()
-
-client = anthropic.Anthropic()
 
 RISK_FREE_RATE = 0.045  # 4.5% — approximate 3-month T-bill. Update periodically.
 
@@ -52,6 +49,8 @@ risk_settings = {
     "stop_loss_pct":      50.0,    # exit when option loses this % of premium
     "dte_0_max_pct":       2.0,    # 0DTE trades capped at 2% of account (binary)
 }
+
+PAPER_TRADES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades.json")
 
 
 # ─── Black-Scholes Greeks ──────────────────────────────────────────────────────
@@ -872,6 +871,349 @@ def manage_risk_settings(
     return json.dumps(result, indent=2)
 
 
+# ─── Tool 11: Paper trading journal ──────────────────────────────────────────
+
+def _load_trades() -> list:
+    if os.path.exists(PAPER_TRADES_FILE):
+        try:
+            with open(PAPER_TRADES_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def _save_trades(trades: list):
+    with open(PAPER_TRADES_FILE, "w") as f:
+        json.dump(trades, f, indent=2, default=str)
+
+
+def log_paper_trade(
+    action: str = "list",
+    symbol: str = None,
+    option_type: str = None,
+    strike: float = None,
+    expiration: str = None,
+    entry_price: float = None,
+    underlying_entry: float = None,
+    contracts: int = 1,
+    notes: str = None,
+    trade_id: int = None,
+    exit_price: float = None,
+) -> str:
+    """
+    Paper trading journal — log, track, and close options trades.
+
+    action="add"   — log a new trade
+    action="list"  — show all trades + summary stats (win rate, total P&L)
+    action="check" — estimate current P&L for open trades using Black-Scholes
+    action="close" — mark a trade closed with a final exit price
+    """
+    trades = _load_trades()
+    today = datetime.now()
+
+    if action == "add":
+        if not all([symbol, option_type, strike, expiration, entry_price]):
+            return json.dumps({"error": "Required: symbol, option_type, strike, expiration, entry_price"})
+        exp_dt = datetime.strptime(expiration, "%Y-%m-%d")
+        dte = (exp_dt - today).days
+        new_id = max((t["id"] for t in trades), default=0) + 1
+        stop_px = round(entry_price * (1 - risk_settings["stop_loss_pct"] / 100), 2)
+        trade = {
+            "id": new_id,
+            "symbol": symbol.upper(),
+            "option_type": option_type.lower(),
+            "strike": strike,
+            "expiration": expiration,
+            "dte_at_entry": dte,
+            "entry_price": entry_price,
+            "cost_per_contract": round(entry_price * 100, 2),
+            "contracts": contracts,
+            "total_cost": round(entry_price * 100 * contracts, 2),
+            "underlying_entry": underlying_entry,
+            "entry_date": today.strftime("%Y-%m-%d"),
+            "stop_loss_price": stop_px,
+            "target_2x_price": round(entry_price * 2, 2),
+            "status": "open",
+            "exit_price": None,
+            "exit_date": None,
+            "pnl_pct": None,
+            "pnl_dollars": None,
+            "notes": notes or "",
+        }
+        trades.append(trade)
+        _save_trades(trades)
+        return json.dumps({
+            "message": f"Trade #{new_id} logged.",
+            "trade": trade,
+            "reminders": {
+                "stop_loss": f"Exit if option falls to ${stop_px}",
+                "target":    f"Take profit at ${trade['target_2x_price']} (100% gain)",
+                "expires":   f"{expiration} ({dte} DTE)",
+            },
+        }, indent=2)
+
+    elif action == "list":
+        if not trades:
+            return json.dumps({"message": "No paper trades logged yet.", "total": 0})
+        closed = [t for t in trades if t["status"] == "closed"]
+        open_t  = [t for t in trades if t["status"] == "open"]
+        wins    = [t for t in closed if (t.get("pnl_pct") or 0) > 0]
+        losses  = [t for t in closed if (t.get("pnl_pct") or 0) <= 0]
+        return json.dumps({
+            "summary": {
+                "total_trades": len(trades),
+                "open": len(open_t),
+                "closed": len(closed),
+                "win_rate": f"{round(len(wins)/len(closed)*100,1)}%" if closed else "N/A",
+                "avg_win_pct":  round(sum(t["pnl_pct"] for t in wins)   / len(wins),   1) if wins   else None,
+                "avg_loss_pct": round(sum(t["pnl_pct"] for t in losses) / len(losses), 1) if losses else None,
+                "total_pnl_dollars": round(sum(t.get("pnl_dollars") or 0 for t in closed), 2),
+            },
+            "open_trades":   open_t,
+            "recent_closed": closed[-10:],
+        }, indent=2, default=str)
+
+    elif action == "check":
+        open_t = [t for t in trades if t["status"] == "open"]
+        if trade_id:
+            open_t = [t for t in open_t if t["id"] == trade_id]
+        if not open_t:
+            return json.dumps({"message": "No open trades to check."})
+        results = []
+        for t in open_t:
+            try:
+                ticker = yf.Ticker(t["symbol"])
+                S = _get_price(ticker)
+                exp_dt = datetime.strptime(t["expiration"], "%Y-%m-%d")
+                dte = max((exp_dt - today).days, 0)
+                T = dte / 365.0
+                # Try to get real IV from chain, fall back to HV30
+                iv = None
+                try:
+                    ch = ticker.option_chain(t["expiration"])
+                    df = ch.calls if t["option_type"] == "call" else ch.puts
+                    if not df.empty:
+                        idx = (df["strike"] - S).abs().idxmin()
+                        iv_raw = df.loc[idx, "impliedVolatility"]
+                        if iv_raw and iv_raw > 0:
+                            iv = float(iv_raw)
+                except Exception:
+                    pass
+                if not iv:
+                    h = ticker.history(period="2mo")
+                    if len(h) >= 30:
+                        lr = np.log(h["Close"] / h["Close"].shift(1)).dropna()
+                        iv = float(lr.rolling(30).std().iloc[-1] * np.sqrt(252))
+                if T <= 0:
+                    cur = max(0.0, S - t["strike"]) if t["option_type"] == "call" else max(0.0, t["strike"] - S)
+                elif iv:
+                    g = _bs_greeks(S, t["strike"], T, RISK_FREE_RATE, iv, t["option_type"])
+                    cur = g.get("bs_price") if g else None
+                else:
+                    cur = None
+                if cur is not None:
+                    pct = round((cur / t["entry_price"] - 1) * 100, 1)
+                    dlr = round((cur - t["entry_price"]) * 100 * t["contracts"], 2)
+                    if pct >= 100:     flag = "🚀 2x TARGET — consider taking profit"
+                    elif pct >= 50:    flag = "🟢 BIG WINNER — consider partial exit"
+                    elif pct > 0:      flag = "🟢 PROFIT"
+                    elif pct > -risk_settings["stop_loss_pct"]: flag = "🔴 LOSS"
+                    else:              flag = "⛔ STOP LOSS HIT — exit now"
+                else:
+                    pct, dlr, flag = None, None, "Cannot price"
+                results.append({
+                    "id": t["id"],
+                    "trade": f"{t['symbol']} {t['option_type'].upper()} ${t['strike']} {t['expiration']}",
+                    "entry_price": t["entry_price"],
+                    "current_value_est": round(cur, 4) if cur else None,
+                    "underlying_now": round(S, 2),
+                    "dte_remaining": dte,
+                    "pnl_pct": pct,
+                    "pnl_dollars": dlr,
+                    "status": flag,
+                })
+            except Exception as e:
+                results.append({"id": t["id"], "error": str(e)})
+        return json.dumps({"updates": results, "note": "Values estimated via Black-Scholes"}, indent=2)
+
+    elif action == "close":
+        if trade_id is None or exit_price is None:
+            return json.dumps({"error": "Required: trade_id and exit_price"})
+        for t in trades:
+            if t["id"] == trade_id:
+                if t["status"] == "closed":
+                    return json.dumps({"error": f"Trade #{trade_id} already closed."})
+                pct = round((exit_price / t["entry_price"] - 1) * 100, 1)
+                dlr = round((exit_price - t["entry_price"]) * 100 * t["contracts"], 2)
+                t.update({"status": "closed", "exit_price": exit_price,
+                           "exit_date": today.strftime("%Y-%m-%d"),
+                           "pnl_pct": pct, "pnl_dollars": dlr})
+                _save_trades(trades)
+                return json.dumps({
+                    "message": f"Trade #{trade_id} closed.",
+                    "outcome": "WIN 🟢" if pct > 0 else "LOSS 🔴",
+                    "pnl_pct": pct, "pnl_dollars": dlr,
+                }, indent=2)
+        return json.dumps({"error": f"Trade #{trade_id} not found."})
+
+    return json.dumps({"error": f"Unknown action '{action}'. Use: add, list, check, close"})
+
+
+# ─── Tool 12: Historical strategy backtester ──────────────────────────────────
+
+def backtest_strategy(
+    symbol: str,
+    option_type: str = "call",
+    dte_at_entry: int = 7,
+    strike_offset_pct: float = 3.0,
+    lookback_days: int = 252,
+    stop_loss_pct: float = 50.0,
+    profit_target_pct: float = 100.0,
+) -> str:
+    """
+    Simulates buying options at regular intervals over historical price data.
+
+    Every 5 trading days over the lookback period:
+      - Entry: buy an option with dte_at_entry days to expiration
+      - Strike: stock_price × (1 + offset%) for calls, (1 - offset%) for puts
+      - IV proxy: 30-day historical volatility at time of entry
+      - Exit: hit profit target, stop loss, or hold to expiration
+
+    Returns win rate, expected value, and sample trade breakdown.
+
+    IMPORTANT LIMITATION: Uses historical volatility as IV proxy. Real option
+    prices depend on actual implied vol at the time, which may differ significantly.
+    This tests whether the STOCK moved enough — not the actual option P&L.
+    """
+    try:
+        fetch_days = lookback_days + dte_at_entry + 90
+        t = yf.Ticker(symbol.upper())
+        hist = t.history(period=f"{fetch_days}d")
+        if hist.empty or len(hist) < 60:
+            return json.dumps({"error": f"Not enough price history for {symbol}"})
+
+        closes = hist["Close"].dropna()
+        n = len(closes)
+        simulated = []
+
+        # Simulate a trade entry every 5 trading days
+        for i in range(30, min(n - dte_at_entry - 1, lookback_days + 30), 5):
+            S0 = float(closes.iloc[i])
+
+            # 30-day HV as IV proxy
+            log_rets = [math.log(float(closes.iloc[j]) / float(closes.iloc[j-1]))
+                        for j in range(i - 30, i) if j > 0]
+            if len(log_rets) < 20:
+                continue
+            hv30 = float(np.std(log_rets) * math.sqrt(252))
+            if hv30 <= 0:
+                continue
+
+            K = round(S0 * (1 + strike_offset_pct/100), 2) if option_type == "call" \
+                else round(S0 * (1 - strike_offset_pct/100), 2)
+
+            entry_g = _bs_greeks(S0, K, dte_at_entry/365.0, RISK_FREE_RATE, hv30, option_type)
+            if not entry_g or not entry_g.get("bs_price") or entry_g["bs_price"] < 0.01:
+                continue
+
+            entry_px = entry_g["bs_price"]
+            stop_px   = entry_px * (1 - stop_loss_pct / 100)
+            target_px = entry_px * (1 + profit_target_pct / 100)
+
+            exit_px = None
+            exit_reason = "expired"
+
+            for d in range(1, dte_at_entry + 1):
+                fi = i + d
+                if fi >= n:
+                    break
+                S_now = float(closes.iloc[fi])
+                T_now = max((dte_at_entry - d) / 365.0, 0)
+
+                if T_now <= 0:
+                    exit_px = max(0.0, S_now - K) if option_type == "call" else max(0.0, K - S_now)
+                    exit_reason = "expired"
+                    break
+
+                g = _bs_greeks(S_now, K, T_now, RISK_FREE_RATE, hv30, option_type)
+                opt_now = g.get("bs_price", 0.0) if g else 0.0
+
+                if opt_now <= stop_px:
+                    exit_px = opt_now
+                    exit_reason = f"stop_loss ({stop_loss_pct}%)"
+                    break
+                if opt_now >= target_px:
+                    exit_px = opt_now
+                    exit_reason = f"profit_target ({profit_target_pct}%)"
+                    break
+
+            if exit_px is None:
+                fi = min(i + dte_at_entry, n - 1)
+                S_exp = float(closes.iloc[fi])
+                exit_px = max(0.0, S_exp - K) if option_type == "call" else max(0.0, K - S_exp)
+
+            pnl_pct = round((exit_px / entry_px - 1) * 100, 1)
+            simulated.append({
+                "entry_date":       str(closes.index[i])[:10],
+                "underlying_entry": round(S0, 2),
+                "strike":           K,
+                "entry_option_px":  round(entry_px, 4),
+                "exit_option_px":   round(exit_px, 4),
+                "exit_reason":      exit_reason,
+                "pnl_pct":          pnl_pct,
+                "hv30_as_iv":       round(hv30 * 100, 1),
+            })
+
+        if not simulated:
+            return json.dumps({"error": "No valid simulated trades. Try wider parameters."})
+
+        wins    = [t for t in simulated if t["pnl_pct"] > 0]
+        losses  = [t for t in simulated if t["pnl_pct"] <= 0]
+        doubles = [t for t in simulated if t["pnl_pct"] >= profit_target_pct]
+        stopped = [t for t in simulated if "stop_loss" in t["exit_reason"]]
+
+        avg_pnl  = round(sum(t["pnl_pct"] for t in simulated) / len(simulated), 1)
+        avg_win  = round(sum(t["pnl_pct"] for t in wins)   / len(wins),   1) if wins   else 0
+        avg_loss = round(sum(t["pnl_pct"] for t in losses) / len(losses), 1) if losses else 0
+        ev = round((len(wins)/len(simulated)) * avg_win + (len(losses)/len(simulated)) * avg_loss, 1)
+
+        return json.dumps({
+            "symbol": symbol.upper(),
+            "strategy": {
+                "option_type":        option_type,
+                "dte_at_entry":       dte_at_entry,
+                "strike_offset_pct":  strike_offset_pct,
+                "stop_loss_pct":      stop_loss_pct,
+                "profit_target_pct":  profit_target_pct,
+                "lookback_days":      lookback_days,
+                "IMPORTANT_CAVEAT":   (
+                    "IV estimated from 30-day HV. Real options used actual implied vol, "
+                    "which varies. This simulation shows if the STOCK made the required move, "
+                    "not guaranteed option P&L. Use as directional signal, not precise forecast."
+                ),
+            },
+            "results": {
+                "trades_simulated":       len(simulated),
+                "win_rate_pct":           round(len(wins)/len(simulated)*100, 1),
+                "avg_pnl_pct":            avg_pnl,
+                "expected_value_pct":     ev,
+                "avg_winning_trade_pct":  avg_win,
+                "avg_losing_trade_pct":   avg_loss,
+                "hit_profit_target_pct":  round(len(doubles)/len(simulated)*100, 1),
+                "stopped_out_pct":        round(len(stopped)/len(simulated)*100, 1),
+                "expired_worthless_pct":  round(
+                    sum(1 for t in simulated if t["exit_reason"]=="expired" and t["pnl_pct"]<-90)
+                    / len(simulated) * 100, 1),
+            },
+            "best_trade":  max(simulated, key=lambda x: x["pnl_pct"]),
+            "worst_trade": min(simulated, key=lambda x: x["pnl_pct"]),
+            "recent_10_trades": simulated[-10:],
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps({"error": type(e).__name__, "message": str(e)})
+
+
 # ─── Tool definitions ──────────────────────────────────────────────────────────
 
 TOOLS = [
@@ -1082,6 +1424,60 @@ TOOLS = [
             "required": [],
         },
     },
+    {
+        "name": "log_paper_trade",
+        "description": (
+            "Paper trading journal — log, track, and close options trades to measure real performance. "
+            "Use action='add' to log a new trade after recommending it. "
+            "Use action='list' to show all trades and the win rate / total P&L summary. "
+            "Use action='check' to estimate current P&L for open trades using live prices + Black-Scholes. "
+            "Use action='close' to record the final exit price and lock in the result. "
+            "ALWAYS offer to log a trade after giving a specific recommendation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action":            {"type": "string", "enum": ["add", "list", "check", "close"],
+                                      "description": "What to do: add/list/check/close"},
+                "symbol":            {"type": "string", "description": "Ticker e.g. NVDA"},
+                "option_type":       {"type": "string", "enum": ["call", "put"]},
+                "strike":            {"type": "number", "description": "Strike price"},
+                "expiration":        {"type": "string", "description": "Expiration date YYYY-MM-DD"},
+                "entry_price":       {"type": "number", "description": "Option mid price at entry"},
+                "underlying_entry":  {"type": "number", "description": "Stock price at entry"},
+                "contracts":         {"type": "integer", "default": 1},
+                "notes":             {"type": "string", "description": "Optional trade thesis/notes"},
+                "trade_id":          {"type": "integer", "description": "For check/close actions"},
+                "exit_price":        {"type": "number", "description": "Option price at exit (for close)"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "backtest_strategy",
+        "description": (
+            "Backtests an options buying strategy on historical price data. "
+            "Simulates buying an OTM call or put every 5 trading days over the past year (or custom period). "
+            "Shows win rate, average P&L, expected value, how often the 2x target was hit, "
+            "and how often stop loss was triggered. "
+            "Use this when the user asks 'how would this strategy have performed?' or wants to validate "
+            "an approach before risking real money. "
+            "IMPORTANT: IV is estimated from historical volatility — treat as directional signal, not exact P&L."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "symbol":             {"type": "string", "description": "Ticker to backtest, e.g. NVDA"},
+                "option_type":        {"type": "string", "enum": ["call", "put"], "default": "call"},
+                "dte_at_entry":       {"type": "integer", "description": "DTE when buying each option (e.g. 7, 14)", "default": 7},
+                "strike_offset_pct":  {"type": "number",  "description": "% OTM at entry — 3 means 3% out of the money", "default": 3.0},
+                "lookback_days":      {"type": "integer", "description": "Trading days of history to test over (252 = ~1 year)", "default": 252},
+                "stop_loss_pct":      {"type": "number",  "description": "Exit if option loses this % (default 50)", "default": 50.0},
+                "profit_target_pct":  {"type": "number",  "description": "Take profit at this % gain (default 100 = 2x)", "default": 100.0},
+            },
+            "required": ["symbol"],
+        },
+    },
 ]
 
 TOOL_DISPATCH = {
@@ -1096,6 +1492,8 @@ TOOL_DISPATCH = {
     "get_put_call_ratio":        get_put_call_ratio,
     "calculate_position_size":   calculate_position_size,
     "manage_risk_settings":      manage_risk_settings,
+    "log_paper_trade":           log_paper_trade,
+    "backtest_strategy":         backtest_strategy,
 }
 
 
@@ -1109,26 +1507,82 @@ def run_tool(name: str, inputs: dict) -> str:
         return json.dumps({"error": type(e).__name__, "message": str(e)})
 
 
-# ─── Claude call with exponential backoff ──────────────────────────────────────
+# ─── Claude CLI via subprocess ─────────────────────────────────────────────────
 
-def _call_claude(max_retries: int = 4, **kwargs):
-    """Call Claude API with exponential backoff on rate-limit and server errors."""
-    for attempt in range(max_retries):
+def _build_tool_schema_text() -> str:
+    lines = [
+        "Call tools one at a time using this exact format:\n"
+        "<tool_call>{\"tool\": \"name\", \"args\": {...}}</tool_call>\n"
+        "\nAvailable tools:"
+    ]
+    for tool in TOOLS:
+        desc = tool["description"].split("\n")[0][:120]
+        props = tool["input_schema"].get("properties", {})
+        req = tool["input_schema"].get("required", [])
+        args = ", ".join(f"{k}{'*' if k in req else ''}" for k in props)
+        lines.append(f"\n{tool['name']}({args})\n  {desc}")
+    return "\n".join(lines)
+
+
+def _build_prompt(messages: list, system: str) -> str:
+    parts = [system, "\n\n---\n\nCONVERSATION:\n"]
+    for msg in messages:
+        role = msg["role"].upper()
+        content = msg["content"]
+        if isinstance(content, str):
+            parts.append(f"{role}: {content}\n\n")
+        elif isinstance(content, list):
+            chunks = []
+            for item in content:
+                if not isinstance(item, dict):
+                    continue
+                t = item.get("type", "")
+                if t == "text" and item.get("text"):
+                    chunks.append(item["text"])
+                elif t == "tool_result":
+                    result = item.get("content", "")
+                    if len(result) > 3000:
+                        result = result[:3000] + "...[truncated]"
+                    chunks.append(f"<tool_result>{result}</tool_result>")
+            if chunks:
+                parts.append(f"{role}: {''.join(chunks)}\n\n")
+    parts.append("ASSISTANT:")
+    return "".join(parts)
+
+
+def _call_claude_cli(prompt: str) -> str:
+    try:
+        result = subprocess.run(
+            ["claude", "-p"],
+            input=prompt, capture_output=True, text=True,
+            timeout=120, encoding="utf-8",
+        )
+        if result.returncode != 0 and result.stderr:
+            return f"[CLI Error: {result.stderr[:200]}]"
+        return result.stdout.strip()
+    except FileNotFoundError:
+        return "[Error: 'claude' command not found. Ensure Claude Code is installed and in PATH.]"
+    except subprocess.TimeoutExpired:
+        return "[Error: Claude CLI timed out after 120s.]"
+    except Exception as e:
+        return f"[Error calling Claude CLI: {e}]"
+
+
+def _parse_tool_calls(response: str) -> list:
+    matches = re.findall(r'<tool_call>(.*?)</tool_call>', response, re.DOTALL)
+    calls = []
+    for i, m in enumerate(matches):
         try:
-            return client.messages.create(**kwargs)
-        except anthropic.RateLimitError:
-            if attempt == max_retries - 1:
-                raise
-            wait = 5 * (2 ** attempt)   # 5s, 10s, 20s, 40s
-            print(f"  ⏳ Rate limited — retrying in {wait}s...")
-            time.sleep(wait)
-        except anthropic.APIStatusError as e:
-            if e.status_code >= 500 and attempt < max_retries - 1:
-                wait = 3 * (2 ** attempt)
-                print(f"  ⏳ Server error ({e.status_code}) — retrying in {wait}s...")
-                time.sleep(wait)
-            else:
-                raise
+            data = json.loads(m.strip())
+            data["_id"] = f"call_{i}"
+            calls.append(data)
+        except json.JSONDecodeError:
+            pass
+    return calls
+
+
+def _strip_tool_calls(text: str) -> str:
+    return re.sub(r'<tool_call>.*?</tool_call>', '', text, flags=re.DOTALL).strip()
 
 
 # ─── Conversation history trimmer ─────────────────────────────────────────────
@@ -1273,10 +1727,34 @@ When a user asks for trades that can 100%+ within days, follow this exact sequen
 If the user hasn't told you their account size yet, ask before giving position sizing.
 Once they tell you, call `manage_risk_settings(account_size=X)` to store it.
 
+## Paper Trading Journal (log_paper_trade)
+After giving a specific trade recommendation, ALWAYS offer to log it. Say:
+"Want me to log this in your paper trading journal so we can track how it performs?"
+- action="add": log a new trade after recommending it
+- action="check": estimate current P&L for all open trades
+- action="list": show all trades + win rate / P&L summary
+- action="close": record exit price and finalize result
+
+## Backtesting (backtest_strategy)
+When a user asks "how would this have performed?" or wants to test a strategy:
+1. Run `backtest_strategy` with their parameters
+2. Explain the win rate, expected value, and how often the 2x target was hit
+3. Compare to realistic benchmarks (random 50% would give EV near 0)
+4. ALWAYS mention the key caveat: IV is estimated from HV — real option prices
+   depend on actual implied vol at the time, which this simulation approximates.
+5. Use results to REFINE strategy (adjust DTE, offset, or ticker selection)
+
+Key backtest metrics to highlight:
+- `win_rate_pct`: % of trades that were profitable at exit
+- `expected_value_pct`: average P&L per trade (positive = edge)
+- `hit_profit_target_pct`: % of trades that doubled
+- `stopped_out_pct`: % of trades that hit stop loss
+
 ## Data Notes
 - Market data from Yahoo Finance (~15-min delayed)
 - Greeks calculated via Black-Scholes from live IV
 - HV Rank uses realized vol as proxy (true IV rank requires paid historical IV data)
+- Backtest IV estimated from 30-day historical vol — treat as directional signal
 - This is analysis only — not financial advice. Total premium loss is always possible.
 
 ## Scan Watchlist (for broad market scans without specific tickers)
@@ -1294,14 +1772,15 @@ def chat():
         watchlist=", ".join(DEFAULT_WATCHLIST),
         datetime=datetime.now().strftime("%A, %Y-%m-%d %H:%M ET"),
         rfr=round(RISK_FREE_RATE * 100, 1),
-    )
+    ) + "\n\n## Tool Calling\n" + _build_tool_schema_text()
 
     print()
     print("=" * 66)
     print("  📈  Options Trading Assistant  —  Enhanced Edition")
     print("  Claude Sonnet 4.6  x  Yahoo Finance (free, ~15-min delayed)")
-    print("  11 tools: Greeks · IV Rank · Earnings · VIX · P/C Ratio")
-    print("          · 2x Screener · Position Sizing · Risk Management")
+    print("  13 tools: Greeks · IV Rank · Earnings · VIX · P/C Ratio")
+    print("    · 2x Screener · Position Sizing · Risk Management")
+    print("    · Paper Trading Journal · Strategy Backtester")
     print("  Scope: Large-cap single-leg | 0–21 DTE | 15% max drawdown")
     print("=" * 66)
     print()
@@ -1318,20 +1797,28 @@ def chat():
     print("  [ Find Trades ]")
     print('    "Find me the best option trade to double my money within 2 weeks"')
     print('    "Scan the market for the hottest calls right now"')
-    print('    "Show me unusual options activity across mega-caps"')
     print('    "Best NVDA calls this week — are options cheap or expensive?"')
     print()
     print("  [ Specific Analysis ]")
     print('    "Analyze TSLA — I\'m bearish, what put should I buy?"')
     print('    "Show me SPY 0DTE options and the put/call ratio"')
     print('    "Does AAPL have earnings coming up that would affect my trade?"')
-    print('    "Is IV on COIN cheap or expensive right now?"')
+    print()
+    print("  [ Backtest a Strategy ]")
+    print('    "Backtest buying NVDA 5% OTM calls with 7 DTE over the past year"')
+    print('    "How would buying weekly SPY puts have performed in the last 6 months?"')
+    print('    "Test a TSLA call strategy — 3% OTM, 14 DTE, 50% stop, 2x target"')
+    print()
+    print("  [ Paper Trading Journal ]")
+    print('    "Log this trade in my paper trading journal"')
+    print('    "How are my open paper trades doing right now?"')
+    print('    "Show me my paper trading win rate and total P&L"')
+    print('    "Close trade #3 — I sold it for $2.10"')
     print()
     print("  [ Risk & Sizing ]")
     print('    "How many contracts of the NVDA $X call should I buy?"')
     print('    "What is my max drawdown limit and how many losing trades until I hit it?"')
     print('    "Change my stop-loss to 40% and max trade risk to 3%"')
-    print('    "Show me my current risk settings"')
     print()
     print("  Type 'quit' to exit.\n")
 
@@ -1352,51 +1839,37 @@ def chat():
         print()
 
         while True:
-            response = _call_claude(
-                model="claude-sonnet-4-6",
-                max_tokens=8192,
-                system=system,
-                tools=TOOLS,
-                messages=_trim_history(conversation),
-                thinking={"type": "adaptive"},
-            )
+            raw = _call_claude_cli(_build_prompt(_trim_history(conversation), system))
 
-            if response.stop_reason == "end_turn":
-                for block in response.content:
-                    if hasattr(block, "type") and block.type == "text":
-                        print(f"Assistant: {block.text}")
-                conversation.append({"role": "assistant", "content": response.content})
+            tool_calls = _parse_tool_calls(raw)
+            visible_text = _strip_tool_calls(raw)
+
+            if visible_text:
+                print(f"Assistant: {visible_text}")
+
+            if not tool_calls:
+                conversation.append({"role": "assistant", "content": visible_text or raw})
                 print()
                 break
 
-            elif response.stop_reason == "tool_use":
-                for block in response.content:
-                    if not hasattr(block, "type"):
-                        continue
-                    if block.type == "text" and block.text.strip():
-                        print(f"Assistant: {block.text}")
-                    elif block.type == "tool_use":
-                        arg_str = json.dumps(block.input)
-                        preview = arg_str[:72] + ("..." if len(arg_str) > 72 else "")
-                        print(f"  🔍 {block.name}({preview})")
+            # Execute each tool call and collect results
+            tool_results = []
+            for call in tool_calls:
+                tool_name = call.get("tool", "")
+                tool_args = call.get("args", {})
+                arg_str = json.dumps(tool_args)
+                preview = arg_str[:72] + ("..." if len(arg_str) > 72 else "")
+                print(f"  🔍 {tool_name}({preview})")
+                result = run_tool(tool_name, tool_args)
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": call["_id"],
+                    "content": result,
+                })
 
-                conversation.append({"role": "assistant", "content": response.content})
-
-                tool_results = []
-                for block in response.content:
-                    if hasattr(block, "type") and block.type == "tool_use":
-                        result = run_tool(block.name, block.input)
-                        tool_results.append({
-                            "type": "tool_result",
-                            "tool_use_id": block.id,
-                            "content": result,
-                        })
-
-                conversation.append({"role": "user", "content": tool_results})
-
-            else:
-                print(f"[Unexpected stop reason: {response.stop_reason}]")
-                break
+            # Add assistant turn and tool results to conversation history
+            conversation.append({"role": "assistant", "content": [{"type": "text", "text": raw}]})
+            conversation.append({"role": "user", "content": tool_results})
 
 
 if __name__ == "__main__":
