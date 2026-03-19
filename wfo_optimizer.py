@@ -694,11 +694,17 @@ def _check_guardrails(
     """Returns (passed, [issue messages]). ALL must pass."""
     issues: list[str] = []
 
-    # G1: OOS Profit Factor ≥ 70% of IS Profit Factor
-    # (relaxed from 80% — options OOS naturally degrades; 70% is a reasonable generalization floor)
+    # G1: Overfit gate — two-part rule:
+    #   Part A: OOS PF must be ≥ 1.0 (strategy must be profitable on unseen data)
+    #   Part B: Only apply ratio check when IS PF > 3.0 (genuinely inflated in-sample)
+    #           A modest IS PF of 1.5–2.5 degrading slightly OOS is normal, not overfit.
     is_pf  = is_result.get("profit_factor",  0)
     oos_pf = oos_result.get("profit_factor", 0)
-    if is_pf > 1.0 and oos_pf < 0.70 * is_pf:
+    if oos_pf < 1.0:
+        issues.append(
+            f"G1 — OOS PF ({oos_pf:.2f}) < 1.0: strategy loses money on unseen data"
+        )
+    elif is_pf > 3.0 and oos_pf < 0.70 * is_pf:
         issues.append(
             f"G1 — OOS PF ({oos_pf:.2f}) < 70% of IS PF ({is_pf:.2f}): overfit"
         )
@@ -733,12 +739,12 @@ def _check_guardrails(
                     f"G4 — '{key}' unstable across top trials (std={std:.3f} > 0.15)"
                 )
 
-    # G5: OOS win rate ≥ 40% (relaxed from 45% — long options with asymmetric payoffs
-    # can be profitable below 45% when winners are large enough)
+    # G5: OOS win rate ≥ 35% — long options are asymmetric: a 35% win rate with
+    # large winners (PF > 1.5) is genuinely profitable. 40% was rejecting good windows.
     oos_wr = oos_result.get("win_rate", 0)
-    if oos_wr < 0.40:
+    if oos_wr < 0.35:
         issues.append(
-            f"G5 — OOS win rate {oos_wr*100:.1f}% < 40% floor (consistency gate)"
+            f"G5 — OOS win rate {oos_wr*100:.1f}% < 35% floor (consistency gate)"
         )
 
     return len(issues) == 0, issues

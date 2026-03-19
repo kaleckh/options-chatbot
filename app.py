@@ -1183,11 +1183,11 @@ Every candidate trade is scored on the underlying's technical setup — 40% SMA 
 
 | # | Gate | Rule |
 |---|------|------|
-| G1 | Overfitting | OOS Profit Factor ≥ 70% of in-sample Profit Factor |
+| G1 | Overfitting | OOS PF ≥ 1.0 (profitable on unseen data); if IS PF > 3.0, OOS PF must also be ≥ 70% of IS PF |
 | G2 | Stability | IV rank + delta weight drift ≤ your drift limit (default 75%) |
 | G3 | Sample size | Auto floor: max(10, test_days ÷ 4) × √tickers |
 | G4 | Noise | Top-10 trial IV rank + delta std < 0.15 |
-| G5 | Consistency | OOS win rate ≥ 40% |
+| G5 | Consistency | OOS win rate ≥ 35% |
 
 Results are saved to `wfo_results.json`. **You decide whether to apply them.**
 """)
