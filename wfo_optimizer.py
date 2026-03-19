@@ -837,7 +837,9 @@ def _run_wfo_for_closes(
         if prev_best_params is not None:
             warm = {}
             for k, v in prev_best_params.items():
-                if k == "stop_loss_pct":
+                if k == "w_dte":
+                    continue  # fixed — not a tunable param any more
+                elif k == "stop_loss_pct":
                     warm[k] = float(np.clip(v, stop_bounds[0], stop_bounds[1]))
                 elif k == "profit_target_pct":
                     warm[k] = float(np.clip(v, tgt_bounds[0], tgt_bounds[1]))
@@ -857,7 +859,7 @@ def _run_wfo_for_closes(
         best_weights = {
             "iv_percentile": best_params["w_iv"],
             "delta":         best_params["w_delta"],
-            "dte":           best_params["w_dte"],
+            "dte":           float(STRATEGY_PROFILE["confidence_weights"].get("dte", 0.20)),  # fixed
             "technical":     best_params.get("w_tech", 0.0),
         }
         total = sum(best_weights.values()) or 1.0
