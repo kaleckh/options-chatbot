@@ -532,6 +532,44 @@ with tab_predictions:
     # ══ SECTION 2: Daily Top Picks ════════════════════════════════════════════
     st.markdown("### 🎯 Today's Top Trades")
 
+    # ── Next auto-scan countdown banner ───────────────────────────────────────
+    def _next_scan_info() -> tuple[str, str]:
+        """Return (label, color) describing when the next auto-scan will fire."""
+        from zoneinfo import ZoneInfo
+        now_et    = datetime.now(ZoneInfo("America/New_York"))
+        today_str = now_et.strftime("%Y-%m-%d")
+        existing  = _load_predictions()
+        today_done = any(
+            p.get("entry_date", "")[:10] == today_str and p.get("type") == "daily_scan"
+            for p in existing
+        )
+        # Find next weekday at 10:00 AM ET that hasn't been scanned yet
+        from datetime import timedelta as _td
+        candidate = now_et.replace(hour=10, minute=0, second=0, microsecond=0)
+        # If today is a weekday and scan not done yet and we're before/at 10 AM, it's today
+        if now_et.weekday() < 5 and not today_done:
+            if now_et < candidate:
+                mins_left = int((candidate - now_et).total_seconds() / 60)
+                if mins_left < 60:
+                    return f"⏱ Auto-scan in {mins_left} min (10:00 AM ET today)", "#e0a800"
+                else:
+                    hrs = mins_left // 60
+                    return f"⏱ Auto-scan in {hrs}h {mins_left % 60}m (10:00 AM ET today)", "#e0a800"
+            else:
+                return "🔄 Auto-scan due now — will run on next page load", "#28a745"
+        # Otherwise find next weekday
+        next_day = now_et + _td(days=1)
+        while next_day.weekday() >= 5:
+            next_day += _td(days=1)
+        label = "tomorrow" if (next_day.date() - now_et.date()).days == 1 else next_day.strftime("%A %b %d")
+        return f"🕙 Next auto-scan: {label} at 10:00 AM ET", "#6c757d"
+
+    _scan_label, _scan_color = _next_scan_info()
+    st.markdown(
+        f'<div style="font-size:0.85em;color:{_scan_color};margin-bottom:10px">{_scan_label}</div>',
+        unsafe_allow_html=True,
+    )
+
     # ── Auto-scan: run once daily, 30 min after US market open (10:00 AM ET) ──
     def _auto_scan_due() -> bool:
         """Return True if it's a weekday, past 10:00 AM ET, and no picks saved today."""
