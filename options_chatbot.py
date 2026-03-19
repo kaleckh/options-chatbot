@@ -1271,9 +1271,11 @@ def log_prediction(
                 actual_move_pct = round((exit_price / entry_price - 1) * 100, 2)
                 direction = p["direction"]
                 predicted_move = p.get("target_move_pct", 0)
+                # Normalise direction: call/put → bullish/bearish for outcome logic
+                is_bullish = direction in ("bullish", "call")
                 # Was direction correct?
-                dir_correct = (direction == "bullish" and actual_move_pct > 0) or \
-                              (direction == "bearish" and actual_move_pct < 0)
+                dir_correct = (is_bullish and actual_move_pct > 0) or \
+                              (not is_bullish and actual_move_pct < 0)
                 # Was magnitude within 50% of predicted move (generous)?
                 mag_ok = abs(actual_move_pct) >= abs(predicted_move) * 0.5 if predicted_move else dir_correct
                 if dir_correct and mag_ok:
@@ -1282,12 +1284,28 @@ def log_prediction(
                     outcome = "directional"
                 else:
                     outcome = "miss"
-                p.update({
-                    "outcome": outcome,
-                    "exit_price": round(exit_price, 2),
-                    "actual_move_pct": actual_move_pct,
-                    "graded_date": today.strftime("%Y-%m-%d"),
-                })
+
+                # Estimated option P&L for daily_scan picks (delta-approximation)
+                est_option_gain_pct = None
+                if p.get("type") == "daily_scan":
+                    delta   = p.get("delta_est", 0.0)
+                    premium = p.get("est_premium", 0.0)
+                    if delta > 0 and premium > 0:
+                        dir_factor = 1.0 if is_bullish else -1.0
+                        raw_gain = dir_factor * delta * (entry_price * actual_move_pct / 100.0) / premium * 100.0
+                        stop   = -abs(p.get("stop_loss_pct",   50.0))
+                        target =  abs(p.get("profit_target_pct", 100.0))
+                        est_option_gain_pct = round(max(stop, min(target, raw_gain)), 1)
+
+                update = {
+                    "outcome":            outcome,
+                    "exit_price":         round(exit_price, 2),
+                    "actual_move_pct":    actual_move_pct,
+                    "graded_date":        today.strftime("%Y-%m-%d"),
+                }
+                if est_option_gain_pct is not None:
+                    update["est_option_gain_pct"] = est_option_gain_pct
+                p.update(update)
                 graded_count += 1
             except Exception as e:
                 p["grade_error"] = str(e)

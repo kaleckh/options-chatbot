@@ -740,7 +740,7 @@ with tab_predictions:
             else:
                 outcome_icon = {"hit": "✅", "directional": "🟡", "miss": "❌"}
                 sort_col, filter_col = st.columns([2, 2])
-                sort_by    = sort_col.selectbox("Sort by", ["Date ↓", "Date ↑", "Actual move", "Confidence"],
+                sort_by    = sort_col.selectbox("Sort by", ["Date ↓", "Date ↑", "Option P&L", "Confidence"],
                                                 key="pred_sort")
                 filter_out = filter_col.multiselect("Show outcomes", ["hit", "directional", "miss"],
                                                     default=["hit", "directional", "miss"],
@@ -751,23 +751,25 @@ with tab_predictions:
                     filtered.sort(key=lambda x: x.get("entry_date", ""), reverse=True)
                 elif sort_by == "Date ↑":
                     filtered.sort(key=lambda x: x.get("entry_date", ""))
-                elif sort_by == "Actual move":
-                    filtered.sort(key=lambda x: abs(x.get("actual_move_pct") or 0), reverse=True)
+                elif sort_by == "Option P&L":
+                    filtered.sort(key=lambda x: x.get("est_option_gain_pct") or 0, reverse=True)
                 elif sort_by == "Confidence":
                     filtered.sort(key=lambda x: x.get("confidence") or 0, reverse=True)
 
                 rows = []
                 for p in filtered:
-                    actual = p.get("actual_move_pct")
-                    arrow  = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
+                    actual  = p.get("actual_move_pct")
+                    opt_pnl = p.get("est_option_gain_pct")
+                    arrow   = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
                     rows.append({
-                        "Date":        p.get("entry_date", "")[:10],
-                        "Ticker":      p["ticker"],
-                        "Trade":       arrow,
-                        "Confidence":  f"{p.get('confidence', 0):.1f}%",
-                        "Actual %":    f"{actual:+.2f}%" if actual is not None else "—",
-                        "Outcome":     outcome_icon.get(p["outcome"], "?") + " " + p["outcome"].upper(),
-                        "Target Date": p.get("target_date", "")[:10],
+                        "Date":          p.get("entry_date", "")[:10],
+                        "Ticker":        p["ticker"],
+                        "Trade":         arrow,
+                        "Confidence":    f"{p.get('confidence', 0):.1f}%",
+                        "Stock %":       f"{actual:+.2f}%" if actual is not None else "—",
+                        "Est. Option P&L": f"{opt_pnl:+.1f}%" if opt_pnl is not None else "—",
+                        "Outcome":       outcome_icon.get(p["outcome"], "?") + " " + p["outcome"].upper(),
+                        "Target Date":   p.get("target_date", "")[:10],
                     })
 
                 df_graded = pd.DataFrame(rows)
@@ -778,11 +780,11 @@ with tab_predictions:
                     if "❌" in val:  return "color: #c0392b"
                     return ""
 
-                def _color_actual(val: str):
+                def _color_pnl(val: str):
                     try:
                         v = float(val.replace("%", "").replace("+", ""))
-                        if v > 0:  return "color: #28a745"
-                        if v < 0:  return "color: #c0392b"
+                        if v > 0:  return "color: #28a745; font-weight:bold"
+                        if v < 0:  return "color: #c0392b; font-weight:bold"
                     except Exception:
                         pass
                     return ""
@@ -790,9 +792,86 @@ with tab_predictions:
                 styled = (
                     df_graded.style
                     .applymap(_color_outcome, subset=["Outcome"])
-                    .applymap(_color_actual,  subset=["Actual %"])
+                    .applymap(_color_pnl,     subset=["Stock %", "Est. Option P&L"])
                 )
                 st.dataframe(styled, use_container_width=True, hide_index=True)
+
+                # ── Rolled picks: same ticker+direction on consecutive days ──
+                st.markdown("#### 🔄 Rolled Positions")
+                st.caption("If the same pick appeared on back-to-back days, this shows the compounded option P&L had you held and rolled.")
+
+                # Build consecutive runs per ticker+direction (sorted by entry_date)
+                from itertools import groupby
+                all_graded_sorted = sorted(graded, key=lambda x: (x["ticker"], x.get("direction",""), x.get("entry_date","")))
+                rolled_rows = []
+                for (ticker, direction), group in groupby(all_graded_sorted, key=lambda x: (x["ticker"], x.get("direction",""))):
+                    run: list[dict] = []
+                    for p in group:
+                        if p.get("est_option_gain_pct") is None:
+                            continue
+                        if not run:
+                            run.append(p)
+                            continue
+                        # Check if consecutive trading day (within 4 calendar days)
+                        try:
+                            prev_date = pd.to_datetime(run[-1]["entry_date"])
+                            curr_date = pd.to_datetime(p["entry_date"])
+                            gap = (curr_date - prev_date).days
+                        except Exception:
+                            gap = 999
+                        if 1 <= gap <= 4:
+                            run.append(p)
+                        else:
+                            if len(run) >= 2:
+                                # Compute compounded return
+                                compound = 1.0
+                                for r in run:
+                                    compound *= (1 + r["est_option_gain_pct"] / 100.0)
+                                total_pct = round((compound - 1.0) * 100, 1)
+                                arrow = "📈 CALL" if direction == "call" else "📉 PUT"
+                                rolled_rows.append({
+                                    "Ticker":      ticker,
+                                    "Trade":       arrow,
+                                    "Days Rolled": len(run),
+                                    "From":        run[0]["entry_date"][:10],
+                                    "To":          run[-1]["entry_date"][:10],
+                                    "Daily P&Ls":  " → ".join(f"{r['est_option_gain_pct']:+.1f}%" for r in run),
+                                    "Rolled P&L":  f"{total_pct:+.1f}%",
+                                })
+                            run = [p]
+                    # flush final run
+                    if len(run) >= 2:
+                        compound = 1.0
+                        for r in run:
+                            compound *= (1 + r["est_option_gain_pct"] / 100.0)
+                        total_pct = round((compound - 1.0) * 100, 1)
+                        arrow = "📈 CALL" if direction == "call" else "📉 PUT"
+                        rolled_rows.append({
+                            "Ticker":      ticker,
+                            "Trade":       arrow,
+                            "Days Rolled": len(run),
+                            "From":        run[0]["entry_date"][:10],
+                            "To":          run[-1]["entry_date"][:10],
+                            "Daily P&Ls":  " → ".join(f"{r['est_option_gain_pct']:+.1f}%" for r in run),
+                            "Rolled P&L":  f"{total_pct:+.1f}%",
+                        })
+
+                if not rolled_rows:
+                    st.info("No consecutive same-direction picks yet — rolled returns will appear here once the same pick repeats on back-to-back days.")
+                else:
+                    df_rolled = pd.DataFrame(rolled_rows).sort_values("Days Rolled", ascending=False)
+                    def _color_rolled(val: str):
+                        try:
+                            v = float(val.replace("%","").replace("+",""))
+                            if v > 0: return "color: #28a745; font-weight:bold"
+                            if v < 0: return "color: #c0392b; font-weight:bold"
+                        except Exception:
+                            pass
+                        return ""
+                    st.dataframe(
+                        df_rolled.style.applymap(_color_rolled, subset=["Rolled P&L"]),
+                        use_container_width=True, hide_index=True,
+                    )
 
         # ── Breakdown ─────────────────────────────────────────────────────────
         with hist_tab_breakdown:
