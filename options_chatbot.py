@@ -1,4 +1,5 @@
-#!/usr/bin/env python3
+#!/usr/bin/env
+#  python3
 """
 Options Trading Chatbot
 Powered by Claude Sonnet 4.6 + Yahoo Finance (yfinance)
@@ -99,16 +100,39 @@ STRATEGY_PROFILE = {
 }
 
 # ── Persist / restore STRATEGY_PROFILE across restarts ───────────────────────
-PROFILE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_profile.json")
+PROFILE_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_profile.json")
+CHANGELOG_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brain_changelog.json")
 
 
-def _save_profile() -> None:
+def _log_brain_update(source: str, note: str) -> None:
+    """Append one timestamped entry to brain_changelog.json."""
+    from datetime import timezone
+    entry = {
+        "ts":     datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": source,
+        "note":   note,
+    }
+    try:
+        if os.path.exists(CHANGELOG_FILE):
+            with open(CHANGELOG_FILE) as f:
+                log = json.load(f)
+        else:
+            log = []
+        log.append(entry)
+        with open(CHANGELOG_FILE, "w") as f:
+            json.dump(log, f, indent=2)
+    except Exception:
+        pass  # never crash the caller over a changelog write
+
+
+def _save_profile(note: str = "") -> None:
     """Write STRATEGY_PROFILE to disk. Call after every Apply."""
     with open(PROFILE_FILE, "w") as f:
         json.dump(
             {k: v for k, v in STRATEGY_PROFILE.items() if k not in ("name", "philosophy")},
             f, indent=2,
         )
+    _log_brain_update(source="apply", note=note or "Strategy profile updated")
 
 
 def _load_profile() -> None:

@@ -39,6 +39,7 @@ from options_chatbot import (
     scan_daily_top_trades,
     _save_predictions,
     _save_profile,
+    CHANGELOG_FILE,
 )
 
 # ── Database ───────────────────────────────────────────────────────────────────
@@ -964,6 +965,59 @@ with tab_predictions:
                 if cb_rows:
                     st.dataframe(pd.DataFrame(cb_rows), use_container_width=True, hide_index=True)
 
+    # ── Brain Version History ─────────────────────────────────────────────────
+    st.markdown("---")
+    st.markdown("### 🧠 Brain Version History")
+
+    _changelog: list[dict] = []
+    if os.path.exists(CHANGELOG_FILE):
+        try:
+            with open(CHANGELOG_FILE) as _f:
+                _changelog = json.load(_f)
+        except Exception:
+            _changelog = []
+
+    if not _changelog:
+        st.info("No brain updates recorded yet — apply optimizer recommendations to start tracking.")
+    else:
+        # Most-recent entry summary
+        _last = _changelog[-1]
+        _last_ts_raw = _last.get("ts", "")
+        try:
+            from datetime import timezone as _tz, timedelta as _tds
+            _last_dt = datetime.strptime(_last_ts_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz.utc)
+            _et      = _last_dt.astimezone(_tz(_tds(hours=-5)))
+            _last_ts = _et.strftime("%b %d, %Y  %I:%M %p ET").replace(" 0", " ")
+        except Exception:
+            _last_ts = _last_ts_raw
+
+        st.markdown(
+            f"<div style='background:rgba(255,255,255,0.04);border-radius:8px;"
+            f"padding:12px 16px;margin-bottom:12px'>"
+            f"<span style='color:#aaa;font-size:0.82em'>Last updated</span><br>"
+            f"<span style='font-size:1.05em;font-weight:600'>{_last_ts}</span>"
+            f"<span style='color:#888;font-size:0.85em;margin-left:12px'>{_last.get('note','')}</span>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        with st.expander(f"📜 Full history ({len(_changelog)} entries)", expanded=False):
+            _log_rows = []
+            for _entry in reversed(_changelog):
+                _ts_raw = _entry.get("ts", "")
+                try:
+                    from datetime import timezone as _tz2, timedelta as _tds2
+                    _dt  = datetime.strptime(_ts_raw, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=_tz2.utc)
+                    _et2 = _dt.astimezone(_tz2(_tds2(hours=-5)))
+                    _ts_fmt = _et2.strftime("%Y-%m-%d  %I:%M %p ET")
+                except Exception:
+                    _ts_fmt = _ts_raw
+                _log_rows.append({
+                    "Timestamp": _ts_fmt,
+                    "Details":   _entry.get("note", ""),
+                })
+            st.dataframe(pd.DataFrame(_log_rows), use_container_width=True, hide_index=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 3: Strategy Lab  (Backtest · Optimizer)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1644,7 +1698,14 @@ Results are saved to `wfo_results.json`. **You decide whether to apply them.**
                             if "profit_target_pct" in params: sp["risk"]["profit_target_pct"]        = params["profit_target_pct"]
                             if "min_ev_pct"        in params: sp["filters"]["min_ev_return_pct"]     = params["min_ev_pct"]
 
-                            _save_profile()
+                            _syms_str = ", ".join(wfo_display.get("symbols", [label]))
+                            _note = (
+                                f"Optimizer applied — {_syms_str} · {regime} regime · "
+                                f"{n_acc}/{wfo_display.get('windows_total', '?')} windows passed · "
+                                f"stop {round(params.get('stop_loss_pct', 0))}% / "
+                                f"target {round(params.get('profit_target_pct', 0))}%"
+                            )
+                            _save_profile(note=_note)
                             st.success(
                                 f"✅ Applied {regime} recommendations from {n_acc} accepted windows. "
                                 "Chatbot and backtest are now using the new params."
