@@ -2204,12 +2204,21 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             if tech < min_tech_score:
                 continue
 
-            # Find best strike near delta_target
+            # Find best strike near delta_target using realistic option strike increments
+            # Real options trade at $0.50 / $1 / $5 intervals depending on price level
+            if price >= 200:
+                _inc = 5.0
+            elif price >= 50:
+                _inc = 1.0
+            else:
+                _inc = 0.5
+            _base_k      = round(round(price / _inc) * _inc, 2)
+            _test_strikes = [round(_base_k + i * _inc, 2) for i in range(-20, 21)]
+
             best_strike: float | None = None
             best_g:      dict  | None = None
             best_diff = 999.0
-            for offset in [x * 0.5 for x in range(-10, 16)]:
-                K = round(price * (1 + offset / 100), 2)
+            for K in _test_strikes:
                 g = _bs_greeks(price, K, T, RISK_FREE_RATE, hv30, trade_type)
                 if not g:
                     continue

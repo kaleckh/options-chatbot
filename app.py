@@ -623,6 +623,42 @@ with tab_predictions:
         st.rerun()
 
     # ── Today's picks ─────────────────────────────────────────────────────────
+    import options_chatbot as _oc_pred
+
+    def _enrich_pick(p: dict) -> dict:
+        """Fill in any fields that may be missing from older saved records."""
+        p = dict(p)
+        prem = p.get("est_premium", 0) or 0
+        sl_pct = p.get("stop_loss_pct", 50)
+        tp_pct = p.get("profit_target_pct", 100)
+        # SL / TP option prices
+        if p.get("sl_option_px") is None and prem:
+            p["sl_option_px"] = round(prem * (1 - sl_pct / 100), 3)
+        if p.get("tp_option_px") is None and prem:
+            p["tp_option_px"] = round(prem * (1 + tp_pct / 100), 3)
+        # Quality score
+        if p.get("quality_score") is None and p.get("iv_rank") is not None:
+            p["quality_score"] = _oc_pred._compute_quality_score(
+                p["iv_rank"], p.get("delta_est", 0.30), p.get("dte", 10)
+            )
+        # Strategy fields
+        if p.get("strategy_label") is None and prem and p.get("stock_price"):
+            strat = _oc_pred._generate_trade_strategy(
+                trade_type       = p.get("direction", "call"),
+                direction_score  = p.get("direction_score", p.get("confidence", 60)),
+                quality_score    = p.get("quality_score", 50),
+                iv_rank          = p.get("iv_rank", 50),
+                rsi14            = p.get("rsi14", 50),
+                spy_ret5         = p.get("spy_ret5", 0),
+                est_premium      = prem,
+                stop_loss_pct    = sl_pct,
+                profit_target_pct= tp_pct,
+                stock_price      = p["stock_price"],
+                delta_est        = p.get("delta_est", 0.30),
+            )
+            p.update(strat)
+        return p
+
     picks = st.session_state.get("daily_picks", [])
     if picks:
         st.markdown(
@@ -636,6 +672,7 @@ with tab_predictions:
         # Summary table
         scan_rows = []
         for p in picks:
+            p = _enrich_pick(p)
             direction = p.get("direction", "")
             arrow = "📈 CALL" if direction == "call" else "📉 PUT"
             sl_px = p.get("sl_option_px")
@@ -646,17 +683,59 @@ with tab_predictions:
                 "Dir. Score":   f"{p.get('direction_score', p['confidence']):.1f}%",
                 "Quality":      f"{p.get('quality_score', 0):.0f}/100",
                 "Stock Price":  f"${p['stock_price']:.2f}",
-                "Strike":       f"${p['strike_est']:.2f}",
-                "Premium":      f"${p['est_premium']:.2f}",
-                "SL":           f"${sl_px:.2f}" if sl_px is not None else f"−{p['stop_loss_pct']:.0f}%",
-                "TP":           f"${tp_px:.2f}" if tp_px is not None else f"+{p['profit_target_pct']:.0f}%",
+                "Strike":       f"${p['strike_est']:.0f}",
+                "Premium":      f"${p.get('est_premium', 0):.2f}",
+                "SL":           f"${sl_px:.2f}" if sl_px is not None else "—",
+                "TP":           f"${tp_px:.2f}" if tp_px is not None else "—",
                 "Strategy":     p.get("strategy_label", "Standard"),
                 "EV%":          f"{p['ev_pct']:.1f}%",
             })
-        st.dataframe(pd.DataFrame(scan_rows), use_container_width=True, hide_index=True)
+        st.dataframe(
+            pd.DataFrame(scan_rows),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Dir. Score": st.column_config.TextColumn(
+                    "Dir. Score",
+                    help="Direction Score (0–100%): how likely the stock moves the right way.\n\n"
+                         "• 55% tech setup (RSI / MACD / SMA alignment)\n"
+                         "• 30% SPY regime alignment (is the market with you?)\n"
+                         "• 15% momentum strength (5-day move magnitude)\n"
+                         "• Minus RSI overextension penalty (up to −15 pts)",
+                ),
+                "Quality": st.column_config.TextColumn(
+                    "Quality",
+                    help="Option Quality Score (0–100): rates the option itself, not the direction.\n\n"
+                         "• 40% IV rank (low IV = cheap premium = better)\n"
+                         "• 35% Delta fit (how close to the target delta)\n"
+                         "• 25% DTE fit (how close to the optimal expiry)",
+                ),
+                "SL": st.column_config.TextColumn(
+                    "SL",
+                    help="Stop Loss — option exit price if the trade moves against you "
+                         f"(premium × (1 − stop%)). Exit immediately if the option trades at or below this.",
+                ),
+                "TP": st.column_config.TextColumn(
+                    "TP",
+                    help="Take Profit — option exit price when your profit target is reached "
+                         "(premium × (1 + target%)). Close the position when the option trades at or above this.",
+                ),
+                "Strategy": st.column_config.TextColumn(
+                    "Strategy",
+                    help="Adaptive exit guidance based on the setup:\n\n"
+                         "• Hold to target — high-conviction, regime aligned\n"
+                         "• Let it breathe — cheap options, take time\n"
+                         "• Exit early — high IV, take profit before IV crush\n"
+                         "• Lighter size — moderate signal, reduce exposure\n"
+                         "• RSI caution — RSI at extreme, mean-reversion risk\n"
+                         "• Regime risk — SPY opposing the trade direction\n\n"
+                         "Expand a pick below for the full explanation.",
+                ),
+            },
+        )
 
         # Per-pick signal detail expanders
-        for p in picks:
+        for p in [_enrich_pick(p) for p in picks]:
             direction = p.get("direction", "")
             border    = "#28a745" if direction == "call" else "#c0392b"
             arrow     = "📈" if direction == "call" else "📉"
@@ -802,24 +881,51 @@ with tab_predictions:
             else:
                 pend_rows = []
                 for p in sorted(pending, key=lambda x: x.get("target_date", "")):
-                    arrow  = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
-                    sl_px  = p.get("sl_option_px")
-                    tp_px  = p.get("tp_option_px")
+                    p     = _enrich_pick(p)
+                    arrow = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
+                    sl_px = p.get("sl_option_px")
+                    tp_px = p.get("tp_option_px")
                     pend_rows.append({
                         "Date":        p.get("entry_date", "")[:10],
                         "Ticker":      p["ticker"],
                         "Trade":       arrow,
                         "Dir. Score":  f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
-                        "Quality":     f"{p.get('quality_score', 0):.0f}/100" if p.get('quality_score') is not None else "—",
-                        "Stock Price": f"${p.get('entry_price', 0):.2f}",
-                        "Strike":      f"${p.get('strike_est', 0):.2f}",
+                        "Quality":     f"{p.get('quality_score', 0):.0f}/100",
+                        "Stock Price": f"${p.get('entry_price', p.get('stock_price', 0)):.2f}",
+                        "Strike":      f"${p.get('strike_est', 0):.0f}",
                         "Premium":     f"${p.get('est_premium', 0):.2f}",
-                        "SL":          f"${sl_px:.2f}" if sl_px is not None else f"−{p.get('stop_loss_pct', 50):.0f}%",
-                        "TP":          f"${tp_px:.2f}" if tp_px is not None else f"+{p.get('profit_target_pct', 100):.0f}%",
-                        "Strategy":    p.get("strategy_label", "—"),
+                        "SL":          f"${sl_px:.2f}" if sl_px is not None else "—",
+                        "TP":          f"${tp_px:.2f}" if tp_px is not None else "—",
+                        "Strategy":    p.get("strategy_label", "Standard"),
                         "Target Date": p.get("target_date", "")[:10],
                     })
-                st.dataframe(pd.DataFrame(pend_rows), use_container_width=True, hide_index=True)
+                st.dataframe(
+                    pd.DataFrame(pend_rows),
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Dir. Score": st.column_config.TextColumn(
+                            "Dir. Score",
+                            help="Direction Score (0–100%): tech setup (55%) + SPY regime (30%) + momentum (15%) − RSI overextension penalty.",
+                        ),
+                        "Quality": st.column_config.TextColumn(
+                            "Quality",
+                            help="Option Quality Score: IV rank (40%) + delta fit (35%) + DTE fit (25%). Rates the option, not the direction.",
+                        ),
+                        "SL": st.column_config.TextColumn(
+                            "SL",
+                            help="Stop Loss — the option price at which to exit if the trade moves against you.",
+                        ),
+                        "TP": st.column_config.TextColumn(
+                            "TP",
+                            help="Take Profit — the option price at which to exit when your profit target is hit.",
+                        ),
+                        "Strategy": st.column_config.TextColumn(
+                            "Strategy",
+                            help="Adaptive exit guidance. Today's picks show the full explanation when expanded.",
+                        ),
+                    },
+                )
 
         # ── Graded ────────────────────────────────────────────────────────────
         with hist_tab_graded:
