@@ -1960,6 +1960,123 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
         return 50.0
 
 
+def _fetch_best_option(
+    ticker: str,
+    trade_type: str,       # "call" or "put"
+    delta_target: float,
+    target_dte: int,
+    hv30_fallback: float = 0.30,
+) -> dict | None:
+    """
+    Fetch the real options chain and return the strike/premium closest to delta_target.
+
+    Works both during market hours (uses bid/ask mid) and after hours (uses lastPrice).
+    Falls back to Black-Scholes on HV30 if the chain is completely unavailable.
+
+    Returns a dict with keys: strike, premium, expiry, dte, delta, iv, live_chain
+    Returns None if no valid option could be found at all.
+    """
+    import yfinance as _yf
+
+    best: dict | None = None
+    best_diff = 999.0
+
+    # ── Try real options chain first ──────────────────────────────────────────
+    try:
+        _t    = _yf.Ticker(ticker)
+        _exps = _t.options
+        if _exps:
+            _today_d  = datetime.now().date()
+            _best_exp = min(
+                _exps,
+                key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - _today_d).days - target_dte)
+            )
+            _actual_dte = (datetime.strptime(_best_exp, "%Y-%m-%d").date() - _today_d).days
+            _T          = max(_actual_dte, 1) / 365.0
+            _chain      = _t.option_chain(_best_exp)
+            _df         = _chain.calls if trade_type == "call" else _chain.puts
+
+            for _, _row in _df.iterrows():
+                _K    = float(_row.get("strike") or 0)
+                if _K <= 0:
+                    continue
+
+                # Premium: bid/ask mid during hours, lastPrice after hours
+                _bid  = float(_row.get("bid")       or 0)
+                _ask  = float(_row.get("ask")       or 0)
+                _last = float(_row.get("lastPrice") or 0)
+                if _bid > 0 and _ask > 0:
+                    _mid = (_bid + _ask) / 2
+                elif _last > 0:
+                    _mid = _last
+                else:
+                    continue
+                if _mid < 0.01:
+                    continue
+
+                # IV: use chain value when available, else HV30 for delta calc only
+                _iv   = float(_row.get("impliedVolatility") or 0)
+                _vol  = _iv if _iv > 0.01 else hv30_fallback
+
+                _price = float(_row.get("underlyingPrice") or 0)
+                if not _price:
+                    continue  # need underlying price for BS
+
+                _g = _bs_greeks(_price, _K, _T, RISK_FREE_RATE, _vol, trade_type)
+                if not _g:
+                    continue
+
+                _diff = abs(abs(_g.get("delta", 0)) - delta_target)
+                if _diff < best_diff:
+                    best_diff = _diff
+                    best = {
+                        "strike":     _K,
+                        "premium":    round(_mid, 4),
+                        "expiry":     _best_exp,
+                        "dte":        _actual_dte,
+                        "delta":      round(abs(_g.get("delta", 0)), 3),
+                        "iv":         round(_iv, 4),
+                        "live_chain": True,
+                    }
+    except Exception:
+        pass
+
+    if best is not None:
+        return best
+
+    # ── BS fallback: real-increment strikes priced on HV30 ───────────────────
+    try:
+        _price_hist = _yf.Ticker(ticker).history(period="5d")["Close"].dropna()
+        if len(_price_hist) == 0:
+            return None
+        _S = float(_price_hist.iloc[-1])
+        if _S >= 200:  _inc = 5.0
+        elif _S >= 50: _inc = 1.0
+        else:          _inc = 0.5
+        _base = round(round(_S / _inc) * _inc, 2)
+        _T    = target_dte / 365.0
+        for _K in [round(_base + i * _inc, 2) for i in range(-20, 21)]:
+            _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, hv30_fallback, trade_type)
+            if not _g:
+                continue
+            _diff = abs(abs(_g.get("delta", 0)) - delta_target)
+            if _diff < best_diff:
+                best_diff = _diff
+                best = {
+                    "strike":     _K,
+                    "premium":    round(float(_g.get("bs_price", 0)), 4),
+                    "expiry":     None,
+                    "dte":        target_dte,
+                    "delta":      round(abs(_g.get("delta", 0)), 3),
+                    "iv":         round(hv30_fallback, 4),
+                    "live_chain": False,
+                }
+    except Exception:
+        pass
+
+    return best
+
+
 def _compute_quality_score(iv_pct: float, delta_val: float, dte: int) -> float:
     """
     Option quality score (0-100): how good is the option to buy if direction is right?
@@ -2204,78 +2321,17 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             if tech < min_tech_score:
                 continue
 
-            # ── Fetch real options chain: actual strikes + bid/ask mid prices ────
-            best_strike: float | None = None
-            best_g:      dict  | None = None
-            best_diff    = 999.0
-            est_premium: float | None = None
-            actual_dte   = dte          # updated to real expiry DTE if chain succeeds
-            actual_exp   = None         # real expiry date string
-
-            try:
-                _t_yf  = yf.Ticker(ticker)
-                _exps  = _t_yf.options   # tuple of "YYYY-MM-DD" strings
-                if _exps:
-                    _today_d  = datetime.now().date()
-                    # Pick expiry closest to target DTE (prefer slightly longer)
-                    actual_exp = min(
-                        _exps,
-                        key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - _today_d).days - dte)
-                    )
-                    actual_dte = (datetime.strptime(actual_exp, "%Y-%m-%d").date() - _today_d).days
-                    _T_real    = max(actual_dte, 1) / 365.0
-                    _chain     = _t_yf.option_chain(actual_exp)
-                    _df        = _chain.calls if bullish else _chain.puts
-
-                    for _, _row in _df.iterrows():
-                        _K   = float(_row.get("strike")            or 0)
-                        _bid = float(_row.get("bid")               or 0)
-                        _ask = float(_row.get("ask")               or 0)
-                        _iv  = float(_row.get("impliedVolatility") or 0)
-                        if _K <= 0 or _iv <= 0:
-                            continue
-                        _mid = (_bid + _ask) / 2 if (_bid and _ask) else float(_row.get("lastPrice") or 0)
-                        if _mid < 0.05:
-                            continue
-                        _g = _bs_greeks(price, _K, _T_real, RISK_FREE_RATE, _iv, trade_type)
-                        if not _g:
-                            continue
-                        _diff = abs(abs(_g.get("delta", 0)) - delta_target)
-                        if _diff < best_diff:
-                            best_diff   = _diff
-                            best_strike = _K
-                            best_g      = _g
-                            est_premium = round(_mid, 4)
-            except Exception:
-                pass  # fall through to BS fallback
-
-            # ── BS fallback: use HV30 if real chain is unavailable ────────────
-            if best_strike is None:
-                _T = dte / 365.0
-                if price >= 200:  _inc = 5.0
-                elif price >= 50: _inc = 1.0
-                else:             _inc = 0.5
-                _base_k = round(round(price / _inc) * _inc, 2)
-                for _K in [round(_base_k + i * _inc, 2) for i in range(-20, 21)]:
-                    _g = _bs_greeks(price, _K, _T, RISK_FREE_RATE, hv30, trade_type)
-                    if not _g:
-                        continue
-                    _diff = abs(abs(_g.get("delta", 0)) - delta_target)
-                    if _diff < best_diff:
-                        best_diff   = _diff
-                        best_strike = _K
-                        best_g      = _g
-
-            if best_strike is None or not best_g:
+            # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
+            _opt = _fetch_best_option(ticker, trade_type, delta_target, dte, hv30_fallback=hv30)
+            if _opt is None:
                 continue
 
-            if est_premium is None:
-                est_premium = float(best_g.get("bs_price", 0))
-            if est_premium < 0.01:
-                continue
-
-            delta_val = abs(float(best_g.get("delta", 0)))
-            dte       = actual_dte  # use real expiry DTE going forward
+            best_strike = _opt["strike"]
+            est_premium = _opt["premium"]
+            delta_val   = _opt["delta"]
+            actual_exp  = _opt["expiry"]
+            actual_dte  = _opt["dte"]
+            dte         = actual_dte
 
             # Direction Score: predicts if stock moves the right way (this is the headline)
             direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5)

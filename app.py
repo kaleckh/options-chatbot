@@ -626,35 +626,68 @@ with tab_predictions:
     import options_chatbot as _oc_pred
 
     def _enrich_pick(p: dict) -> dict:
-        """Fill in any fields that may be missing from older saved records."""
+        """
+        Fill in any fields that may be missing from older saved records.
+        For records without live chain data, fetch the real options chain once
+        per ticker+direction per session (cached in st.session_state).
+        """
         p = dict(p)
-        prem = p.get("est_premium", 0) or 0
         sl_pct = p.get("stop_loss_pct", 50)
         tp_pct = p.get("profit_target_pct", 100)
-        # SL / TP option prices
-        if p.get("sl_option_px") is None and prem:
+
+        # ── Refresh strike/premium from live chain if record is stale ─────────
+        if not p.get("live_chain") and p.get("ticker") and p.get("direction"):
+            _cache_key = f"_chain_{p['ticker']}_{p['direction']}"
+            if _cache_key not in st.session_state:
+                try:
+                    _opt = _oc_pred._fetch_best_option(
+                        ticker        = p["ticker"],
+                        trade_type    = p["direction"],
+                        delta_target  = float(p.get("delta_est", 0.30)),
+                        target_dte    = int(p.get("dte", 10)),
+                        hv30_fallback = 0.30,
+                    )
+                    st.session_state[_cache_key] = _opt
+                except Exception:
+                    st.session_state[_cache_key] = None
+
+            _opt = st.session_state.get(_cache_key)
+            if _opt and _opt.get("live_chain"):
+                p["strike_est"]  = _opt["strike"]
+                p["est_premium"] = _opt["premium"]
+                p["delta_est"]   = _opt["delta"]
+                if _opt.get("expiry"):
+                    p["target_date"] = _opt["expiry"]
+                p["dte"]         = _opt["dte"]
+                p["live_chain"]  = True
+
+        prem = p.get("est_premium", 0) or 0
+
+        # ── SL / TP option prices ─────────────────────────────────────────────
+        if prem:
             p["sl_option_px"] = round(prem * (1 - sl_pct / 100), 3)
-        if p.get("tp_option_px") is None and prem:
             p["tp_option_px"] = round(prem * (1 + tp_pct / 100), 3)
-        # Quality score
+
+        # ── Quality score ─────────────────────────────────────────────────────
         if p.get("quality_score") is None and p.get("iv_rank") is not None:
             p["quality_score"] = _oc_pred._compute_quality_score(
                 p["iv_rank"], p.get("delta_est", 0.30), p.get("dte", 10)
             )
-        # Strategy fields
+
+        # ── Strategy fields ───────────────────────────────────────────────────
         if p.get("strategy_label") is None and prem and p.get("stock_price"):
             strat = _oc_pred._generate_trade_strategy(
-                trade_type       = p.get("direction", "call"),
-                direction_score  = p.get("direction_score", p.get("confidence", 60)),
-                quality_score    = p.get("quality_score", 50),
-                iv_rank          = p.get("iv_rank", 50),
-                rsi14            = p.get("rsi14", 50),
-                spy_ret5         = p.get("spy_ret5", 0),
-                est_premium      = prem,
-                stop_loss_pct    = sl_pct,
-                profit_target_pct= tp_pct,
-                stock_price      = p["stock_price"],
-                delta_est        = p.get("delta_est", 0.30),
+                trade_type        = p.get("direction", "call"),
+                direction_score   = p.get("direction_score", p.get("confidence", 60)),
+                quality_score     = p.get("quality_score", 50),
+                iv_rank           = p.get("iv_rank", 50),
+                rsi14             = p.get("rsi14", 50),
+                spy_ret5          = p.get("spy_ret5", 0),
+                est_premium       = prem,
+                stop_loss_pct     = sl_pct,
+                profit_target_pct = tp_pct,
+                stock_price       = p["stock_price"],
+                delta_est         = p.get("delta_est", 0.30),
             )
             p.update(strat)
         return p
