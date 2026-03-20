@@ -2030,6 +2030,99 @@ def _compute_direction_score(
     return round(max(0.0, min(100.0, raw - penalty)), 1)
 
 
+def _generate_trade_strategy(
+    trade_type: str,
+    direction_score: float,
+    quality_score: float,
+    iv_rank: float,
+    rsi14: float,
+    spy_ret5: float,
+    est_premium: float,
+    stop_loss_pct: float,
+    profit_target_pct: float,
+    stock_price: float,
+    delta_est: float,
+) -> dict:
+    """
+    Generate an adaptive TP/SL strategy for a single pick.
+
+    Returns:
+      sl_option_px   : option price at stop loss
+      tp_option_px   : option price at take profit
+      stock_sl       : underlying price where stop triggers
+      stock_tp       : underlying price where target triggers
+      label          : short table label (≤ 20 chars)
+      comment        : 1-sentence strategy note
+    """
+    is_bullish   = (trade_type == "call")
+    sl_option_px = round(est_premium * (1 - stop_loss_pct   / 100), 3)
+    tp_option_px = round(est_premium * (1 + profit_target_pct / 100), 3)
+
+    # Approximate underlying move needed to hit TP or SL via delta
+    d = max(delta_est, 0.05)
+    stock_move_to_tp = (est_premium * profit_target_pct / 100) / d
+    stock_move_to_sl = (est_premium * stop_loss_pct    / 100) / d
+    if is_bullish:
+        stock_tp = round(stock_price + stock_move_to_tp, 2)
+        stock_sl = round(stock_price - stock_move_to_sl, 2)
+    else:
+        stock_tp = round(stock_price - stock_move_to_tp, 2)
+        stock_sl = round(stock_price + stock_move_to_sl, 2)
+
+    spy_aligned = (is_bullish and spy_ret5 > 0) or (not is_bullish and spy_ret5 < 0)
+    rsi_extreme = (is_bullish and rsi14 > 68) or (not is_bullish and rsi14 < 32)
+
+    # Priority-ordered rule set — first match wins
+    if rsi_extreme:
+        label   = "⚠ RSI caution"
+        comment = (
+            f"RSI at {'overbought' if is_bullish else 'oversold'} extreme ({rsi14:.0f}) — "
+            "mean-reversion risk is elevated. Exit immediately if momentum stalls; don't hold into expiry."
+        )
+    elif not spy_aligned and abs(spy_ret5) >= 1.5:
+        label   = "⚠ Regime risk"
+        comment = (
+            f"SPY is moving {'up' if spy_ret5 > 0 else 'down'} {abs(spy_ret5):.1f}% while this trade fades "
+            "the market. Reduce to 60% of normal size and take profit at 50–60% of target if reached."
+        )
+    elif iv_rank >= 65:
+        label   = "Exit early"
+        comment = (
+            f"IV at {iv_rank:.0f}th percentile — options are expensive and IV crush can erode gains "
+            "even on a winning move. Target 50–60% of full profit and exit before last 2 days."
+        )
+    elif direction_score >= 78 and quality_score >= 65 and spy_aligned:
+        label   = "Hold to target"
+        comment = (
+            "High-conviction setup with market regime aligned. Hold to the full profit target; "
+            "if the option doubles early, consider activating a trailing stop at 80% of peak value."
+        )
+    elif direction_score >= 65 and iv_rank <= 20:
+        label   = "Let it breathe"
+        comment = (
+            f"IV very low ({iv_rank:.0f}th pct) — premium is cheap so theta decay is slow. "
+            "Hold to the full target without rushing; the trade has time on its side."
+        )
+    elif direction_score < 60:
+        label   = "Lighter size"
+        comment = (
+            "Direction signal is moderate. Consider half normal size; take profit at 60% of target "
+            "and do not average in if the trade moves against you early."
+        )
+    else:
+        label   = "Standard"
+        comment = "Follow stop and target as set. No unusual risk factors detected."
+
+    return {
+        "sl_option_px": sl_option_px,
+        "tp_option_px": tp_option_px,
+        "stock_sl":     stock_sl,
+        "stock_tp":     stock_tp,
+        "label":        label,
+        "comment":      comment,
+    }
+
+
 def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = 35.0, min_tech_score: float = 55.0) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
@@ -2174,6 +2267,20 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 _raw_target += timedelta(days=1)
             target_str  = _raw_target.strftime("%Y-%m-%d")
 
+            strategy = _generate_trade_strategy(
+                trade_type=trade_type,
+                direction_score=direction_score,
+                quality_score=quality_score,
+                iv_rank=iv_pct,
+                rsi14=rsi14,
+                spy_ret5=_spy_ret5,
+                est_premium=est_premium,
+                stop_loss_pct=stop_loss_pct,
+                profit_target_pct=profit_target_pct,
+                stock_price=price,
+                delta_est=delta_val,
+            )
+
             candidates.append({
                 "ticker":             ticker,
                 "direction":          trade_type,
@@ -2197,6 +2304,12 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "target_date":        target_str,
                 "entry_price":        round(price, 2),
                 "signal_reasons":     reasons,
+                "strategy_label":     strategy["label"],
+                "strategy_comment":   strategy["comment"],
+                "sl_option_px":       strategy["sl_option_px"],
+                "tp_option_px":       strategy["tp_option_px"],
+                "stock_sl":           strategy["stock_sl"],
+                "stock_tp":           strategy["stock_tp"],
                 "type":               "daily_scan",
                 "outcome":            None,
             })

@@ -638,15 +638,19 @@ with tab_predictions:
         for p in picks:
             direction = p.get("direction", "")
             arrow = "📈 CALL" if direction == "call" else "📉 PUT"
+            sl_px = p.get("sl_option_px")
+            tp_px = p.get("tp_option_px")
             scan_rows.append({
                 "Ticker":       p["ticker"],
                 "Trade":        arrow,
                 "Dir. Score":   f"{p.get('direction_score', p['confidence']):.1f}%",
-                "Quality":      f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
-                "Tech Score":   f"{p['tech_score']:.0f}/100",
-                "IV Rank":      f"{p['iv_rank']:.0f}th pct",
+                "Quality":      f"{p.get('quality_score', 0):.0f}/100",
                 "Stock Price":  f"${p['stock_price']:.2f}",
                 "Strike":       f"${p['strike_est']:.2f}",
+                "Premium":      f"${p['est_premium']:.2f}",
+                "SL":           f"${sl_px:.2f}" if sl_px is not None else f"−{p['stop_loss_pct']:.0f}%",
+                "TP":           f"${tp_px:.2f}" if tp_px is not None else f"+{p['profit_target_pct']:.0f}%",
+                "Strategy":     p.get("strategy_label", "Standard"),
                 "EV%":          f"{p['ev_pct']:.1f}%",
             })
         st.dataframe(pd.DataFrame(scan_rows), use_container_width=True, hide_index=True)
@@ -679,11 +683,46 @@ with tab_predictions:
                     st.markdown("**Signal reasons:**")
                     for reason in p["signal_reasons"]:
                         st.markdown(f"- {reason}")
-                st.caption(
-                    f"Stop loss: −{p['stop_loss_pct']:.0f}% · "
-                    f"Profit target: +{p['profit_target_pct']:.0f}% · "
-                    f"Target date: {p['target_date']}"
+
+                # ── Exit Strategy ─────────────────────────────────────────────
+                st.markdown("**Exit strategy:**")
+                is_call = p.get("direction") == "call"
+                sl_px   = p.get("sl_option_px")
+                tp_px   = p.get("tp_option_px")
+                stk_sl  = p.get("stock_sl")
+                stk_tp  = p.get("stock_tp")
+                s1, s2, s3, s4 = st.columns(4)
+                s1.metric(
+                    "Stop Loss",
+                    f"${sl_px:.2f}" if sl_px is not None else f"−{p['stop_loss_pct']:.0f}%",
+                    f"−{p['stop_loss_pct']:.0f}% on premium",
+                    delta_color="inverse",
+                    help="Exit the option if it falls to this price (stop loss on premium paid)",
                 )
+                s2.metric(
+                    "Take Profit",
+                    f"${tp_px:.2f}" if tp_px is not None else f"+{p['profit_target_pct']:.0f}%",
+                    f"+{p['profit_target_pct']:.0f}% on premium",
+                    delta_color="normal",
+                    help="Exit the option when it reaches this price (profit target on premium)",
+                )
+                s3.metric(
+                    "Stock SL ~",
+                    f"${stk_sl:.2f}" if stk_sl is not None else "—",
+                    f"{'rises' if not is_call else 'falls'} to this",
+                    delta_color="inverse",
+                    help="Approximate underlying price where your stop loss triggers (delta-approximated)",
+                )
+                s4.metric(
+                    "Stock TP ~",
+                    f"${stk_tp:.2f}" if stk_tp is not None else "—",
+                    f"{'falls' if not is_call else 'rises'} to this",
+                    delta_color="normal",
+                    help="Approximate underlying price where your profit target triggers (delta-approximated)",
+                )
+                if p.get("strategy_comment"):
+                    st.info(f"💡 {p['strategy_comment']}", icon=None)
+                st.caption(f"Target date: {p['target_date']} · DTE at entry: {p['dte']}d")
 
         # Save button
         if st.button("💾 Save today's picks to history", use_container_width=True, key="save_picks_btn"):
@@ -763,19 +802,22 @@ with tab_predictions:
             else:
                 pend_rows = []
                 for p in sorted(pending, key=lambda x: x.get("target_date", "")):
-                    arrow = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
+                    arrow  = "📈 CALL" if p.get("direction") == "call" else "📉 PUT"
+                    sl_px  = p.get("sl_option_px")
+                    tp_px  = p.get("tp_option_px")
                     pend_rows.append({
                         "Date":        p.get("entry_date", "")[:10],
                         "Ticker":      p["ticker"],
                         "Trade":       arrow,
-                        "Confidence":  f"{p.get('confidence', 0):.1f}%",
                         "Dir. Score":  f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
-                        "Quality":     f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
-                        "Tech Score":  f"{p.get('tech_score', 0):.0f}/100",
+                        "Quality":     f"{p.get('quality_score', 0):.0f}/100" if p.get('quality_score') is not None else "—",
                         "Stock Price": f"${p.get('entry_price', 0):.2f}",
                         "Strike":      f"${p.get('strike_est', 0):.2f}",
+                        "Premium":     f"${p.get('est_premium', 0):.2f}",
+                        "SL":          f"${sl_px:.2f}" if sl_px is not None else f"−{p.get('stop_loss_pct', 50):.0f}%",
+                        "TP":          f"${tp_px:.2f}" if tp_px is not None else f"+{p.get('profit_target_pct', 100):.0f}%",
+                        "Strategy":    p.get("strategy_label", "—"),
                         "Target Date": p.get("target_date", "")[:10],
-                        "EV%":         f"{p.get('ev_pct', 0):.1f}%",
                     })
                 st.dataframe(pd.DataFrame(pend_rows), use_container_width=True, hide_index=True)
 
