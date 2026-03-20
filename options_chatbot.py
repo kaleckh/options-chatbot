@@ -1960,7 +1960,77 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
         return 50.0
 
 
-def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = 35.0) -> list:
+def _compute_quality_score(iv_pct: float, delta_val: float, dte: int) -> float:
+    """
+    Option quality score (0-100): how good is the option to buy if direction is right?
+    Components: IV rank (40%) + delta fit (35%) + DTE fit (25%)
+    Independent of direction — purely about option economics.
+    """
+    import math as _math
+    sp = STRATEGY_PROFILE
+
+    iv_score    = max(0.0, 100.0 - iv_pct)   # 0th pct = 100, 100th pct = 0
+
+    d_opt   = float(sp["targets"]["delta_optimal"])
+    d_fall  = float(sp["targets"]["delta_falloff"])
+    delta_score = 100.0 * _math.exp(-((abs(delta_val) - d_opt) ** 2) / (2 * d_fall ** 2))
+
+    t_opt   = float(sp["targets"]["dte_optimal"])
+    t_fall  = float(sp["targets"]["dte_falloff"])
+    dte_score = max(0.0, 100.0 * (1.0 - abs(dte - t_opt) / max(t_fall, 1.0)))
+
+    quality = iv_score * 0.40 + delta_score * 0.35 + dte_score * 0.25
+    return round(min(100.0, max(0.0, quality)), 1)
+
+
+def _compute_direction_score(
+    tech_score: float,
+    trade_type: str,     # "call" or "put"
+    rsi14: float,
+    ret5: float,         # 5-day % return of the underlying
+    spy_ret5: float,     # 5-day % return of SPY (market regime)
+) -> float:
+    """
+    Direction Score (0-100): how likely is the stock to move in the intended direction?
+
+    Three weighted components:
+      55% tech score        (RSI/MACD/SMA directional alignment)
+      30% regime alignment  (SPY moving same direction as trade?)
+      15% momentum strength (magnitude of 5-day move in trade direction)
+
+    Minus an RSI overextension penalty (0-15 pts) for mean-reversion risk:
+      if bullish and RSI > 72 → -15 pts; RSI > 68 → -8 pts
+      if bearish and RSI < 28 → -15 pts; RSI < 32 → -8 pts
+    """
+    is_bullish = (trade_type == "call")
+
+    # ── Regime alignment (0-100): is SPY moving with the trade? ──────────────
+    spy_aligned  = (is_bullish and spy_ret5 > 0) or (not is_bullish and spy_ret5 < 0)
+    spy_magnitude = abs(spy_ret5)
+    if spy_magnitude < 0.5:
+        regime_score = 50.0                              # flat market = neutral
+    elif spy_aligned:
+        regime_score = min(100.0, 50.0 + spy_magnitude * 16.7)   # 0.5% → 58, 3%+ → 100
+    else:
+        regime_score = max(0.0, 50.0 - spy_magnitude * 16.7)     # opposing = penalty
+
+    # ── Momentum strength (0-100): how big is the move in the right direction? ─
+    abs_ret5   = abs(ret5)
+    mom_score  = min(100.0, abs_ret5 / 5.0 * 100.0)    # 5%+ move = full score
+
+    # ── Weighted blend ────────────────────────────────────────────────────────
+    raw = tech_score * 0.55 + regime_score * 0.30 + mom_score * 0.15
+
+    # ── RSI overextension penalty ─────────────────────────────────────────────
+    if is_bullish:
+        penalty = 15.0 if rsi14 > 72 else (8.0 if rsi14 > 68 else 0.0)
+    else:
+        penalty = 15.0 if rsi14 < 28 else (8.0 if rsi14 < 32 else 0.0)
+
+    return round(max(0.0, min(100.0, raw - penalty)), 1)
+
+
+def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = 35.0, min_tech_score: float = 55.0) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
 
@@ -1985,6 +2055,15 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
     T                 = dte / 365.0
 
     candidates: list[dict] = []
+
+    # Fetch SPY regime data once for all tickers
+    _spy_ret5 = 0.0
+    try:
+        _spy_hist = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+        if len(_spy_hist) >= 6:
+            _spy_ret5 = float((_spy_hist.iloc[-1] / _spy_hist.iloc[-6] - 1) * 100)
+    except Exception:
+        pass
 
     for ticker in DEFAULT_WATCHLIST:
         try:
@@ -2021,8 +2100,16 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 continue
             trade_type = "call" if bullish else "put"
 
-            # Technical setup score
+            # RSI 14 (needed for direction score overextension penalty)
+            _diffs   = np.diff(prices[max(0, idx - 15) : idx + 1])
+            _avg_up  = float(np.mean(_diffs[_diffs > 0])) if np.any(_diffs > 0) else 0.0
+            _avg_dn  = float(np.mean(-_diffs[_diffs < 0])) if np.any(_diffs < 0) else 0.0
+            rsi14    = round(100.0 - 100.0 / (1.0 + _avg_up / (_avg_dn + 1e-9)), 1)
+
+            # Technical setup score — gate early to avoid expensive strike search on weak setups
             tech = _compute_tech_score_live(ticker, trade_type)
+            if tech < min_tech_score:
+                continue
 
             # Find best strike near delta_target
             best_strike: float | None = None
@@ -2045,14 +2132,16 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             est_premium = float(best_g["bs_price"])
             delta_val   = abs(float(best_g.get("delta", 0)))
 
-            # Confidence score (all 4 components)
-            conf_data  = _calculate_confidence_score(iv_pct, delta_val, dte, tech_score=tech)
-            confidence = conf_data["confidence_score"]
-            if confidence < min_confidence:
+            # Direction Score: predicts if stock moves the right way (this is the headline)
+            direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5)
+            if direction_score < min_confidence:
                 continue
 
-            # Expected value gate
-            p_win  = confidence / 100.0
+            # Quality Score: rates the option to buy if direction is right
+            quality_score = _compute_quality_score(iv_pct, delta_val, dte)
+
+            # Expected value gate (uses direction score as P(win))
+            p_win  = direction_score / 100.0
             ev_pct = p_win * profit_target_pct - (1.0 - p_win) * stop_loss_pct
             if ev_pct < min_ev:
                 continue
@@ -2072,6 +2161,12 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             elif iv_pct > 70:
                 reasons.append(f"High IV rank ({iv_pct:.0f}th pct) — options are expensive, consider smaller size")
 
+            # Regime alignment reason
+            if abs(_spy_ret5) >= 0.5:
+                spy_dir = "rising" if _spy_ret5 > 0 else "falling"
+                aligned = (bullish and _spy_ret5 > 0) or (bearish and _spy_ret5 < 0)
+                reasons.append(f"SPY {spy_dir} {_spy_ret5:+.1f}% (regime {'aligned ✓' if aligned else 'opposing ✗'})")
+
             today_str   = datetime.now().strftime("%Y-%m-%d")
             _raw_target = datetime.now() + timedelta(days=dte + 2)
             # Roll forward to next weekday if target lands on weekend
@@ -2082,7 +2177,9 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             candidates.append({
                 "ticker":             ticker,
                 "direction":          trade_type,
-                "confidence":         round(confidence, 1),
+                "confidence":         round(direction_score, 1),
+                "direction_score":    round(direction_score, 1),
+                "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
                 "iv_rank":            round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
@@ -2094,6 +2191,8 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "profit_target_pct":  profit_target_pct,
                 "ev_pct":             round(ev_pct, 1),
                 "ret5":               round(ret5, 2),
+                "rsi14":              round(rsi14, 1),
+                "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
                 "target_date":        target_str,
                 "entry_price":        round(price, 2),

@@ -382,6 +382,13 @@ def _simulate_window(
         confidence = evaluator.confidence_score(
             iv_percentile=iv_pct, delta=delta_val, dte=dte_at_entry, tech_score=tech
         )
+        # RSI overextension penalty — same rule as live direction score
+        _rsi_at_entry = float(_rsi14[i])
+        if trade_type == "call":
+            _rsi_pen = 15.0 if _rsi_at_entry > 72 else (8.0 if _rsi_at_entry > 68 else 0.0)
+        else:
+            _rsi_pen = 15.0 if _rsi_at_entry < 28 else (8.0 if _rsi_at_entry < 32 else 0.0)
+        confidence = max(0.0, confidence - _rsi_pen)
         ev = evaluator.expected_value(confidence, stop_loss_pct, profit_target_pct)
         if confidence < min_confidence or ev < min_ev_pct:
             continue

@@ -639,16 +639,15 @@ with tab_predictions:
             direction = p.get("direction", "")
             arrow = "📈 CALL" if direction == "call" else "📉 PUT"
             scan_rows.append({
-                "Ticker":      p["ticker"],
-                "Trade":       arrow,
-                "Confidence":  f"{p['confidence']:.1f}%",
-                "Tech Score":  f"{p['tech_score']:.0f}/100",
-                "IV Rank":     f"{p['iv_rank']:.0f}th pct",
-                "Stock Price": f"${p['stock_price']:.2f}",
-                "Strike":      f"${p['strike_est']:.2f}",
-                "DTE":         p["dte"],
-                "Est. Premium":f"${p['est_premium']:.2f}",
-                "EV%":         f"{p['ev_pct']:.1f}%",
+                "Ticker":       p["ticker"],
+                "Trade":        arrow,
+                "Dir. Score":   f"{p.get('direction_score', p['confidence']):.1f}%",
+                "Quality":      f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
+                "Tech Score":   f"{p['tech_score']:.0f}/100",
+                "IV Rank":      f"{p['iv_rank']:.0f}th pct",
+                "Stock Price":  f"${p['stock_price']:.2f}",
+                "Strike":       f"${p['strike_est']:.2f}",
+                "EV%":          f"{p['ev_pct']:.1f}%",
             })
         st.dataframe(pd.DataFrame(scan_rows), use_container_width=True, hide_index=True)
 
@@ -657,11 +656,17 @@ with tab_predictions:
             direction = p.get("direction", "")
             border    = "#28a745" if direction == "call" else "#c0392b"
             arrow     = "📈" if direction == "call" else "📉"
-            with st.expander(f"{arrow} {p['ticker']} — {p['confidence']:.1f}% confidence"):
-                dc1, dc2, dc3 = st.columns(3)
-                dc1.metric("Confidence",   f"{p['confidence']:.1f}%")
-                dc2.metric("Tech Score",   f"{p['tech_score']:.0f}/100")
-                dc3.metric("IV Rank",      f"{p['iv_rank']:.0f}th pct")
+            _dir_s = p.get('direction_score', p['confidence'])
+            _qual_s = p.get('quality_score')
+            _qual_str = f" · quality {_qual_s:.0f}/100" if _qual_s is not None else ""
+            with st.expander(f"{arrow} {p['ticker']} — {_dir_s:.1f}% direction{_qual_str}"):
+                dc1, dc2, dc3, dc4 = st.columns(4)
+                dc1.metric("Direction Score", f"{p.get('direction_score', p['confidence']):.1f}%",
+                           help="Predicts if stock moves the right way: tech setup + SPY regime alignment + momentum strength − RSI overextension penalty")
+                dc2.metric("Quality Score", f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
+                           help="Rates the option to buy if direction is right: IV rank + delta fit + DTE fit")
+                dc3.metric("Tech Score",   f"{p['tech_score']:.0f}/100")
+                dc4.metric("IV Rank",      f"{p['iv_rank']:.0f}th pct")
                 dc4, dc5, dc6 = st.columns(3)
                 dc4.metric("Stock Price",  f"${p['stock_price']:.2f}")
                 dc5.metric("Strike",       f"${p['strike_est']:.2f}")
@@ -764,6 +769,8 @@ with tab_predictions:
                         "Ticker":      p["ticker"],
                         "Trade":       arrow,
                         "Confidence":  f"{p.get('confidence', 0):.1f}%",
+                        "Dir. Score":  f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
+                        "Quality":     f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
                         "Tech Score":  f"{p.get('tech_score', 0):.0f}/100",
                         "Stock Price": f"${p.get('entry_price', 0):.2f}",
                         "Strike":      f"${p.get('strike_est', 0):.2f}",
