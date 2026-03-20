@@ -683,8 +683,8 @@ with tab_predictions:
                 "Dir. Score":   f"{p.get('direction_score', p['confidence']):.1f}%",
                 "Quality":      f"{p.get('quality_score', 0):.0f}/100",
                 "Stock Price":  f"${p['stock_price']:.2f}",
-                "Strike":       f"${p['strike_est']:.0f}",
-                "Premium":      f"${p.get('est_premium', 0):.2f}",
+                "Strike":       f"${p['strike_est']:.2f}".rstrip("0").rstrip(".") if p.get("live_chain") else f"~${p['strike_est']:.0f}",
+                "Premium":      f"${p.get('est_premium', 0):.2f}" + ("" if p.get("live_chain") else " ~"),
                 "SL":           f"${sl_px:.2f}" if sl_px is not None else "—",
                 "TP":           f"${tp_px:.2f}" if tp_px is not None else "—",
                 "Strategy":     p.get("strategy_label", "Standard"),
@@ -752,7 +752,11 @@ with tab_predictions:
                 dc4.metric("IV Rank",      f"{p['iv_rank']:.0f}th pct")
                 dc4, dc5, dc6 = st.columns(3)
                 dc4.metric("Stock Price",  f"${p['stock_price']:.2f}")
-                dc5.metric("Strike",       f"${p['strike_est']:.2f}")
+                dc5.metric(
+                    "Strike" + (" ✓" if p.get("live_chain") else " ~est"),
+                    f"${p['strike_est']:.2f}".rstrip("0").rstrip("."),
+                    help="Real market strike from live options chain" if p.get("live_chain") else "Estimated — live chain unavailable at scan time",
+                )
                 dc6.metric("Delta Est.",   f"{p['delta_est']:.2f}")
                 dc7, dc8, dc9 = st.columns(3)
                 dc7.metric("Est. Premium", f"${p['est_premium']:.2f}")
@@ -892,8 +896,8 @@ with tab_predictions:
                         "Dir. Score":  f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
                         "Quality":     f"{p.get('quality_score', 0):.0f}/100",
                         "Stock Price": f"${p.get('entry_price', p.get('stock_price', 0)):.2f}",
-                        "Strike":      f"${p.get('strike_est', 0):.0f}",
-                        "Premium":     f"${p.get('est_premium', 0):.2f}",
+                        "Strike":      f"${p.get('strike_est', 0):.2f}".rstrip("0").rstrip(".") if p.get("live_chain") else f"~${p.get('strike_est', 0):.0f}",
+                        "Premium":     f"${p.get('est_premium', 0):.2f}" + ("" if p.get("live_chain") else " ~"),
                         "SL":          f"${sl_px:.2f}" if sl_px is not None else "—",
                         "TP":          f"${tp_px:.2f}" if tp_px is not None else "—",
                         "Strategy":    p.get("strategy_label", "Standard"),

@@ -2204,35 +2204,78 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             if tech < min_tech_score:
                 continue
 
-            # Find best strike near delta_target using realistic option strike increments
-            # Real options trade at $0.50 / $1 / $5 intervals depending on price level
-            if price >= 200:
-                _inc = 5.0
-            elif price >= 50:
-                _inc = 1.0
-            else:
-                _inc = 0.5
-            _base_k      = round(round(price / _inc) * _inc, 2)
-            _test_strikes = [round(_base_k + i * _inc, 2) for i in range(-20, 21)]
-
+            # ── Fetch real options chain: actual strikes + bid/ask mid prices ────
             best_strike: float | None = None
             best_g:      dict  | None = None
-            best_diff = 999.0
-            for K in _test_strikes:
-                g = _bs_greeks(price, K, T, RISK_FREE_RATE, hv30, trade_type)
-                if not g:
-                    continue
-                diff = abs(abs(g.get("delta", 0)) - delta_target)
-                if diff < best_diff:
-                    best_diff   = diff
-                    best_strike = K
-                    best_g      = g
+            best_diff    = 999.0
+            est_premium: float | None = None
+            actual_dte   = dte          # updated to real expiry DTE if chain succeeds
+            actual_exp   = None         # real expiry date string
 
-            if best_strike is None or not best_g or best_g.get("bs_price", 0) < 0.01:
+            try:
+                _t_yf  = yf.Ticker(ticker)
+                _exps  = _t_yf.options   # tuple of "YYYY-MM-DD" strings
+                if _exps:
+                    _today_d  = datetime.now().date()
+                    # Pick expiry closest to target DTE (prefer slightly longer)
+                    actual_exp = min(
+                        _exps,
+                        key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - _today_d).days - dte)
+                    )
+                    actual_dte = (datetime.strptime(actual_exp, "%Y-%m-%d").date() - _today_d).days
+                    _T_real    = max(actual_dte, 1) / 365.0
+                    _chain     = _t_yf.option_chain(actual_exp)
+                    _df        = _chain.calls if bullish else _chain.puts
+
+                    for _, _row in _df.iterrows():
+                        _K   = float(_row.get("strike")            or 0)
+                        _bid = float(_row.get("bid")               or 0)
+                        _ask = float(_row.get("ask")               or 0)
+                        _iv  = float(_row.get("impliedVolatility") or 0)
+                        if _K <= 0 or _iv <= 0:
+                            continue
+                        _mid = (_bid + _ask) / 2 if (_bid and _ask) else float(_row.get("lastPrice") or 0)
+                        if _mid < 0.05:
+                            continue
+                        _g = _bs_greeks(price, _K, _T_real, RISK_FREE_RATE, _iv, trade_type)
+                        if not _g:
+                            continue
+                        _diff = abs(abs(_g.get("delta", 0)) - delta_target)
+                        if _diff < best_diff:
+                            best_diff   = _diff
+                            best_strike = _K
+                            best_g      = _g
+                            est_premium = round(_mid, 4)
+            except Exception:
+                pass  # fall through to BS fallback
+
+            # ── BS fallback: use HV30 if real chain is unavailable ────────────
+            if best_strike is None:
+                _T = dte / 365.0
+                if price >= 200:  _inc = 5.0
+                elif price >= 50: _inc = 1.0
+                else:             _inc = 0.5
+                _base_k = round(round(price / _inc) * _inc, 2)
+                for _K in [round(_base_k + i * _inc, 2) for i in range(-20, 21)]:
+                    _g = _bs_greeks(price, _K, _T, RISK_FREE_RATE, hv30, trade_type)
+                    if not _g:
+                        continue
+                    _diff = abs(abs(_g.get("delta", 0)) - delta_target)
+                    if _diff < best_diff:
+                        best_diff   = _diff
+                        best_strike = _K
+                        best_g      = _g
+
+            if best_strike is None or not best_g:
                 continue
 
-            est_premium = float(best_g["bs_price"])
-            delta_val   = abs(float(best_g.get("delta", 0)))
+            if est_premium is None:
+                est_premium = float(best_g.get("bs_price", 0))
+            if est_premium < 0.01:
+                continue
+
+            delta_val = abs(float(best_g.get("delta", 0)))
+            dte       = actual_dte  # use real expiry DTE going forward
 
             # Direction Score: predicts if stock moves the right way (this is the headline)
             direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5)
@@ -2269,12 +2312,15 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 aligned = (bullish and _spy_ret5 > 0) or (bearish and _spy_ret5 < 0)
                 reasons.append(f"SPY {spy_dir} {_spy_ret5:+.1f}% (regime {'aligned ✓' if aligned else 'opposing ✗'})")
 
-            today_str   = datetime.now().strftime("%Y-%m-%d")
-            _raw_target = datetime.now() + timedelta(days=dte + 2)
-            # Roll forward to next weekday if target lands on weekend
-            while _raw_target.weekday() >= 5:
-                _raw_target += timedelta(days=1)
-            target_str  = _raw_target.strftime("%Y-%m-%d")
+            today_str  = datetime.now().strftime("%Y-%m-%d")
+            # Use the actual option expiry date when available; otherwise estimate
+            if actual_exp:
+                target_str = actual_exp
+            else:
+                _raw_target = datetime.now() + timedelta(days=dte + 2)
+                while _raw_target.weekday() >= 5:
+                    _raw_target += timedelta(days=1)
+                target_str = _raw_target.strftime("%Y-%m-%d")
 
             strategy = _generate_trade_strategy(
                 trade_type=trade_type,
@@ -2300,7 +2346,9 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "iv_rank":            round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
                 "stock_price":        round(price, 2),
-                "strike_est":         round(best_strike, 2),
+                "strike_est":         best_strike,   # real market strike — no rounding
+                "expiry":             actual_exp or target_str,
+                "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
                 "dte":                dte,
                 "est_premium":        round(est_premium, 4),
                 "stop_loss_pct":      stop_loss_pct,
