@@ -1,0 +1,29 @@
+[
+  {
+    "ts": "2026-03-20T05:48:27Z",
+    "source": "apply",
+    "note": "Manual brain edit"
+  },
+  {
+    "ts": "2026-03-20T19:03:11Z",
+    "source": "apply",
+    "note": "Manual brain edit"
+  },
+  {
+    "ts": "2026-03-20T19:07:18Z",
+    "source": "apply",
+    "note": "profit_target_pct: 110 \u2192 120"
+  },
+  {
+    "ts": "2026-03-20T21:04:01Z",
+    "source": "apply",
+    "note": "dte_optimal: 10 \u2192 12",
+    "profile": "equity"
+  },
+  {
+    "ts": "2026-03-21T01:54:09Z",
+    "source": "apply",
+    "note": "iv_percentile: 0.392 \u2192 0.45 | delta (weight): 0.2557 \u2192 0.2 | dte (weight): 0.1723 \u2192 0.15 | delta_optimal: 0.45 \u2192 0.3 | liquidity_spread_max_pct: 1.5 \u2192 1.0 | profit_target_pct: 120 \u2192 150",
+    "profile": "equity"
+  }
+]
