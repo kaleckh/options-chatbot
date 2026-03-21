@@ -340,6 +340,29 @@ a { color: var(--accent) !important; text-decoration: none !important; }
 a:hover { text-decoration: underline !important; }
 code, pre, .stCode { font-family: var(--mono) !important; font-size: 0.78rem !important; background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; }
 
+/* ── Hide sidebar collapse button entirely to prevent accidental collapse ── */
+[data-testid="collapsedControl"],
+[data-testid="stSidebarCollapseButton"],
+[data-testid="stSidebar"] [data-testid="stBaseButton-header"],
+[data-testid="stSidebar"] button[kind="header"] {
+  display: none !important;
+}
+/* Hide ALL Material Icons ligature text (arrow_right, arrow_down, etc.) */
+[data-testid="stExpander"] summary span,
+details summary span,
+[data-testid="stExpander"] summary > span {
+  font-size: 0 !important; width: 0 !important; overflow: hidden !important;
+  display: inline-block !important; line-height: 0 !important;
+}
+/* Restore the actual label text inside the summary */
+[data-testid="stExpander"] summary p,
+[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"],
+[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] span,
+[data-testid="stExpander"] summary [data-testid="stMarkdownContainer"] p {
+  font-size: 0.82rem !important; width: auto !important; overflow: visible !important;
+  display: inline !important; line-height: normal !important;
+}
+
 /* ── Sidebar ───────────────────────────────────────────────────── */
 [data-testid="stSidebar"] { background: var(--bg-2) !important; border-right: 1px solid var(--border) !important; }
 [data-testid="stSidebar"] > div:first-child { padding: 1rem 0.85rem !important; }
@@ -506,32 +529,6 @@ div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-act
 .tag-call, .tag-put, .tag-neutral { font-size: 0.65rem !important; }
 </style>
 """, unsafe_allow_html=True)
-
-# ── Hide stray Material Icons ligature text (arrow_right, keyboard_double, etc.)
-# st.markdown strips <script> via DOMPurify; st.html with unsafe_allow_javascript
-# executes inline with full DOM access.
-st.html("""
-<script>
-(function() {
-  const ICON_TEXTS = new Set([
-    'arrow_right','arrow_drop_down','arrow_drop_up','arrow_forward',
-    'expand_more','expand_less','chevron_right','chevron_left',
-    'keyboard_double_arrow_up','keyboard_double_arrow_down',
-    'keyboard_double','keyboard_arrow_up','keyboard_arrow_down',
-    'unfold_more','unfold_less','more_vert','close','check',
-  ]);
-  function sweep() {
-    document.querySelectorAll('span, button > span').forEach(el => {
-      if (ICON_TEXTS.has(el.textContent.trim())) {
-        el.style.setProperty('display','none','important');
-      }
-    });
-  }
-  sweep();
-  new MutationObserver(sweep).observe(document.body, {childList:true, subtree:true});
-})();
-</script>
-""", unsafe_allow_javascript=True)
 
 # ── Session state ──────────────────────────────────────────────────────────────
 
