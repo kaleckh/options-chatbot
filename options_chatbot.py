@@ -7,7 +7,7 @@ Powered by Claude Sonnet 4.6 + Yahoo Finance (yfinance)
 Specializes in:
 - US large-cap stocks and ETFs with high options liquidity
 - Single-leg positions: long/short calls and puts
-- Short DTE: 0–21 days to expiration
+- DTE range: 5–35 days to expiration
 
 Free enhancements:
 - IV Analysis: HV30, HV Rank, IV vs HV comparison
@@ -28,21 +28,70 @@ import shutil
 import subprocess
 import numpy as np
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import yfinance as yf
+
+_ET = ZoneInfo("America/New_York")
+
+def _market_is_open() -> bool:
+    """Return True only if US equities market is currently in regular session (9:30–16:00 ET, Mon–Fri)."""
+    now = datetime.now(_ET)
+    if now.weekday() >= 5:
+        return False
+    open_  = now.replace(hour=9,  minute=30, second=0, microsecond=0)
+    close_ = now.replace(hour=16, minute=0,  second=0, microsecond=0)
+    return open_ <= now <= close_
 
 RISK_FREE_RATE = 0.045  # 4.5% — approximate 3-month T-bill. Update periodically.
 
+# System-wide DTE bounds — enforced across scan, _fetch_best_option, and WFO.
+DTE_MIN = 5   # never enter a position with fewer than 5 days to expiry
+DTE_MAX = 35  # never look for expirations beyond 35 days out
+
 DEFAULT_WATCHLIST = [
-    "SPY", "QQQ", "AAPL", "NVDA", "TSLA", "MSFT", "META", "AMZN",
-    "GOOGL", "AMD", "NFLX", "COIN", "PLTR", "ARM", "SMCI", "MSTR",
-    "JPM", "BAC", "XOM", "V", "DIS", "UBER", "BABA", "RIVN",
+    # ── Index ETFs (bypass sector rule, use index strategy profile) ───────────
+    "SPY", "QQQ", "IWM", "DIA", "XLK",
+    # ── Technology ────────────────────────────────────────────────────────────
+    "AAPL", "NVDA", "MSFT", "META", "AMD",
+    # ── Communication Services ────────────────────────────────────────────────
+    "GOOGL", "NFLX", "DIS", "T", "CMCSA",
+    # ── Financials ────────────────────────────────────────────────────────────
+    "JPM", "GS", "BAC", "V", "C",
+    # ── Healthcare ────────────────────────────────────────────────────────────
+    "UNH", "LLY", "JNJ", "ABBV", "PFE",
+    # ── Energy ────────────────────────────────────────────────────────────────
+    "XOM", "CVX", "OXY", "COP", "SLB",
+    # ── Consumer Discretionary ────────────────────────────────────────────────
+    "TSLA", "AMZN", "MCD", "NKE", "SBUX",
+    # ── Consumer Staples ──────────────────────────────────────────────────────
+    "WMT", "KO", "COST", "PG", "PM",
+    # ── Industrials ───────────────────────────────────────────────────────────
+    "CAT", "BA", "DE", "LMT", "RTX",
+    # ── Materials ─────────────────────────────────────────────────────────────
+    "FCX", "NEM", "CLF", "AA", "LIN",
+    # ── Real Estate ───────────────────────────────────────────────────────────
+    "AMT", "PLD", "SPG", "WELL", "EQR",
+    # ── Speculative / High-Beta ───────────────────────────────────────────────
+    "COIN", "MSTR", "PLTR", "ARM", "SMCI",
 ]
 
 # High-beta names most likely to make the big % moves needed for 2x options gains
 HIGH_BETA_WATCHLIST = [
     "NVDA", "TSLA", "AMD", "COIN", "PLTR", "MSTR", "ARM", "SMCI",
-    "RIVN", "BABA", "NFLX", "META", "GOOGL", "AMZN", "AAPL", "MSFT",
+    "NFLX", "META", "GOOGL", "AMZN", "AAPL", "MSFT",
+    "LLY", "OXY", "FCX", "CLF",   # high-IV / high-beta additions
 ]
+
+# Tickers treated as broad-market indexes (use index strategy profile, no earnings filter)
+INDEX_TICKERS = {"QQQ", "SPY", "IWM", "DIA", "XLK"}
+
+def _asset_class(ticker: str) -> str:
+    """'index' for broad-market ETFs, 'equity' for everything else."""
+    return "index" if ticker.upper() in INDEX_TICKERS else "equity"
+
+def _get_profile(ticker: str) -> dict:
+    """Return the strategy profile dict for the given ticker."""
+    return STRATEGY_PROFILES[_asset_class(ticker)]
 
 # ─── Risk settings (user can update account_size mid-conversation) ────────────
 # Claude will read/write these via the manage_risk_settings tool.
@@ -51,107 +100,208 @@ HIGH_BETA_WATCHLIST = [
 PAPER_TRADES_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades.json")
 PREDICTIONS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "predictions.json")
 
-# ─── Strategy Profile ─────────────────────────────────────────────────────────
-# This is the canonical strategy definition for the entire system.
-# All tools, the chatbot, and the backtest reference these values.
-STRATEGY_PROFILE = {
-    "name": "OTM Short-Duration Momentum Strategy",
-    "philosophy": (
-        "Buy OTM calls or puts on high-conviction momentum signals with strict entry filters. "
-        "Entry is gated by signal quality, volatility regime, and liquidity. "
-        "Position size scales with conviction. Exit rules are fixed and non-negotiable."
-    ),
-    # Confidence score weights (normalized automatically — optimizer tunes all 4)
-    "confidence_weights": {
-        "iv_percentile": 0.40,   # IV rank/percentile of the option being purchased
-        "delta":         0.30,   # distance from optimal delta (0.30)
-        "dte":           0.20,   # distance from optimal DTE (10 days)
-        "technical":     0.10,   # RSI + MACD + SMA trend alignment
+# ─── Dual Strategy Profiles ────────────────────────────────────────────────────
+# Two independent parameter sets — identical structure, different defaults.
+# equity: single stocks — existing values, unchanged.
+# index:  broad-market ETFs — longer DTE, tighter delta, lower VIX threshold.
+STRATEGY_PROFILES: dict[str, dict] = {
+    "equity": {
+        "name": "OTM Short-Duration Momentum Strategy (Equity)",
+        "philosophy": (
+            "Buy OTM calls or puts on high-conviction momentum signals with strict entry filters. "
+            "Entry is gated by signal quality, volatility regime, and liquidity. "
+            "Position size scales with conviction. Exit rules are fixed and non-negotiable."
+        ),
+        "confidence_weights": {
+            "iv_percentile": 0.40,
+            "delta":         0.30,
+            "dte":           0.20,
+            "technical":     0.10,
+        },
+        "targets": {
+            "delta_optimal":     0.30,
+            "delta_falloff":     0.20,
+            "dte_optimal":       10,
+            "dte_falloff":       20,
+            "iv_percentile_max": 50,
+        },
+        "filters": {
+            "vix_defense_threshold":        25.0,
+            "atr_expansion_stop_mult":       1.5,
+            "defense_position_mult":         0.5,
+            "liquidity_spread_max_pct":      1.5,
+            "illiquid_extra_margin_pct":    10.0,
+            "iv_crush_z_threshold":          2.0,
+            "iv_crush_confidence_penalty":  20.0,
+            "min_ev_return_pct":            10.0,
+        },
+        "risk": {
+            "stop_loss_pct":       50.0,
+            "profit_target_pct":  100.0,
+            "max_position_pct":    40.0,
+            "min_position_pct":     7.0,
+            "account_size":        None,
+            "max_drawdown_pct":    15.0,
+            "dte_0_max_pct":        2.0,
+            "time_exit_pct":       50.0,
+        },
+        "entry": {
+            "entry_momentum_pct":  0.50,
+            "min_direction_score": 35.0,
+            "min_tech_score":      55.0,
+        },
+        "direction_score_weights": {
+            "tech":     0.55,
+            "regime":   0.30,
+            "momentum": 0.15,
+        },
+        "rsi_overextension": {
+            "severe_threshold":   72,
+            "moderate_threshold": 68,
+            "severe_penalty":     15.0,
+            "moderate_penalty":    8.0,
+        },
+        "quality_score_weights": {
+            "iv_rank": 0.40,
+            "delta":   0.35,
+            "dte":     0.25,
+        },
     },
-    # Optimal parameter targets
-    "targets": {
-        "delta_optimal":      0.30,   # sweet spot for OTM leverage
-        "delta_falloff":      0.20,   # score = 0 when |delta - optimal| >= this
-        "dte_optimal":        10,     # sweet spot (days)
-        "dte_falloff":        20,     # score = 0 when |dte - optimal| >= this
-        "iv_percentile_max":  50,     # prefer buying when IV rank < 50th percentile
-    },
-    # Entry filters
-    "filters": {
-        "vix_defense_threshold":       25.0,   # VIX above this → Defense Mode
-        "atr_expansion_stop_mult":      1.5,   # widen stop-loss when ATR is expanding
-        "defense_position_mult":        0.5,   # position size in Defense Mode
-        "liquidity_spread_max_pct":     1.5,   # flag as illiquid above this bid-ask spread %
-        "illiquid_extra_margin_pct":   10.0,   # extra required profit margin if illiquid
-        "iv_crush_z_threshold":         2.0,   # z-scores above 30-day HV mean → IV crush risk
-        "iv_crush_confidence_penalty": 20.0,   # subtract this from confidence score
-        "min_ev_return_pct":           10.0,   # EV must be ≥ 10% ROC to emit trade signal
-    },
-    # Exit & position rules (single source of truth — risk_settings is an alias of this)
-    "risk": {
-        "stop_loss_pct":        50.0,   # exit when option loses this % of premium
-        "profit_target_pct":   100.0,   # take profit when option gains this %
-        "max_position_pct":    40.0,    # ceiling: highest risk % (confidence=10)
-        "min_position_pct":     7.0,    # floor: lowest risk % (confidence=1)
-        "account_size":        None,    # set by user via manage_risk_settings
-        "max_drawdown_pct":    15.0,    # pause trading after this % portfolio drawdown
-        "dte_0_max_pct":        2.0,    # 0DTE trades capped at this % of account
+    "index": {
+        "name": "OTM Index Momentum Strategy",
+        "philosophy": (
+            "Trade broad-market ETFs with longer duration, tighter delta targeting, "
+            "and a lower VIX defense threshold — indexes have lower realized vol and "
+            "are more directly correlated with the VIX regime."
+        ),
+        "confidence_weights": {
+            "iv_percentile": 0.40,
+            "delta":         0.30,
+            "dte":           0.20,
+            "technical":     0.10,
+        },
+        "targets": {
+            "delta_optimal":     0.30,
+            "delta_falloff":     0.10,   # tighter window — less OTM tolerance
+            "dte_optimal":       21,     # longer duration, less gamma risk
+            "dte_falloff":       14,     # ±14 days
+            "iv_percentile_max": 40,     # indexes run lower IV than single stocks
+        },
+        "filters": {
+            "vix_defense_threshold":        20.0,   # more directly VIX-correlated
+            "atr_expansion_stop_mult":       1.5,
+            "defense_position_mult":         0.5,
+            "liquidity_spread_max_pct":      1.5,
+            "illiquid_extra_margin_pct":    10.0,
+            "iv_crush_z_threshold":          2.0,
+            "iv_crush_confidence_penalty":  20.0,
+            "min_ev_return_pct":            10.0,
+        },
+        "risk": {
+            "stop_loss_pct":       45.0,   # tighter — indexes move less
+            "profit_target_pct":  100.0,
+            "max_position_pct":    40.0,
+            "min_position_pct":     7.0,
+            "account_size":        None,
+            "max_drawdown_pct":    15.0,
+            "dte_0_max_pct":        2.0,
+            "time_exit_pct":       50.0,
+        },
+        "entry": {
+            "entry_momentum_pct":  0.30,   # indexes need less momentum to signal
+            "min_direction_score": 35.0,
+            "min_tech_score":      55.0,
+        },
+        "direction_score_weights": {
+            "tech":     0.55,
+            "regime":   0.30,
+            "momentum": 0.15,
+        },
+        "rsi_overextension": {
+            "severe_threshold":   72,
+            "moderate_threshold": 68,
+            "severe_penalty":     15.0,
+            "moderate_penalty":    8.0,
+        },
+        "quality_score_weights": {
+            "iv_rank": 0.40,
+            "delta":   0.35,
+            "dte":     0.25,
+        },
     },
 }
 
-# ── Persist / restore STRATEGY_PROFILE across restarts ───────────────────────
-PROFILE_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "strategy_profile.json")
-CHANGELOG_FILE  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "brain_changelog.json")
+# Backwards-compat alias — all existing code referencing STRATEGY_PROFILE gets equity profile
+STRATEGY_PROFILE = STRATEGY_PROFILES["equity"]
+
+# ── Persist / restore both profiles across restarts ───────────────────────────
+_DIR_OC      = os.path.dirname(os.path.abspath(__file__))
+PROFILE_FILES = {
+    "equity": os.path.join(_DIR_OC, "strategy_profile.json"),          # keeps backwards compat
+    "index":  os.path.join(_DIR_OC, "strategy_profile_index.json"),
+}
+CHANGELOG_FILES = {
+    "equity": os.path.join(_DIR_OC, "brain_changelog.json"),
+    "index":  os.path.join(_DIR_OC, "brain_changelog_index.json"),
+}
+# Backwards-compat single-profile aliases
+PROFILE_FILE   = PROFILE_FILES["equity"]
+CHANGELOG_FILE = CHANGELOG_FILES["equity"]
 
 
-def _log_brain_update(source: str, note: str) -> None:
-    """Append one timestamped entry to brain_changelog.json."""
+def _log_brain_update(source: str, note: str, profile: str = "equity") -> None:
+    """Append one timestamped entry to the profile's changelog file."""
     from datetime import timezone
     entry = {
-        "ts":     datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "source": source,
-        "note":   note,
+        "ts":      datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source":  source,
+        "note":    note,
+        "profile": profile,
     }
+    cfile = CHANGELOG_FILES.get(profile, CHANGELOG_FILES["equity"])
     try:
-        if os.path.exists(CHANGELOG_FILE):
-            with open(CHANGELOG_FILE) as f:
+        log = []
+        if os.path.exists(cfile):
+            with open(cfile) as f:
                 log = json.load(f)
-        else:
-            log = []
         log.append(entry)
-        with open(CHANGELOG_FILE, "w") as f:
+        with open(cfile, "w") as f:
             json.dump(log, f, indent=2)
     except Exception:
-        pass  # never crash the caller over a changelog write
+        pass
 
 
-def _save_profile(note: str = "") -> None:
-    """Write STRATEGY_PROFILE to disk. Call after every Apply."""
-    with open(PROFILE_FILE, "w") as f:
+def _save_profile(note: str = "", profile: str = "equity") -> None:
+    """Write one strategy profile to disk. Call after every Apply."""
+    sp = STRATEGY_PROFILES[profile]
+    with open(PROFILE_FILES[profile], "w") as f:
         json.dump(
-            {k: v for k, v in STRATEGY_PROFILE.items() if k not in ("name", "philosophy")},
+            {k: v for k, v in sp.items() if k not in ("name", "philosophy")},
             f, indent=2,
         )
-    _log_brain_update(source="apply", note=note or "Strategy profile updated")
+    _log_brain_update(source="apply", note=note or f"{profile} strategy profile updated", profile=profile)
 
 
 def _load_profile() -> None:
-    """Merge saved profile into STRATEGY_PROFILE in-place (runs at import time)."""
-    if not os.path.exists(PROFILE_FILE):
-        return
-    try:
-        with open(PROFILE_FILE) as f:
-            saved = json.load(f)
-        for section in ("confidence_weights", "targets", "filters", "risk"):
-            if section in saved and isinstance(saved[section], dict):
-                STRATEGY_PROFILE[section].update(saved[section])
-    except Exception:
-        pass  # corrupt file — fall back to defaults silently
+    """Merge saved profiles into STRATEGY_PROFILES in-place (runs at import time)."""
+    for profile, pfile in PROFILE_FILES.items():
+        if not os.path.exists(pfile):
+            continue
+        try:
+            with open(pfile) as f:
+                saved = json.load(f)
+            sp = STRATEGY_PROFILES[profile]
+            for section in ("confidence_weights", "targets", "filters", "risk", "entry",
+                            "direction_score_weights", "rsi_overextension", "quality_score_weights"):
+                if section in saved and isinstance(saved[section], dict):
+                    sp[section].update(saved[section])
+        except Exception:
+            pass  # corrupt file — fall back to defaults silently
 
 
 _load_profile()  # restore on every import / app startup
 
-# ── Live alias so all legacy code that reads risk_settings["x"] auto-reflects changes ──
+# Live alias so legacy code that reads risk_settings["x"] auto-reflects equity changes
 risk_settings = STRATEGY_PROFILE["risk"]
 
 
@@ -287,7 +437,7 @@ def get_stock_snapshot(symbol: str) -> str:
 # ─── Tool 2: Options chain ─────────────────────────────────────────────────────
 
 def get_options_chain(symbol: str, option_type: str = None,
-                      max_dte: int = 21, expiration_date: str = None) -> str:
+                      max_dte: int = DTE_MAX, expiration_date: str = None) -> str:
     try:
         today = datetime.now()
         t = yf.Ticker(symbol.upper())
@@ -671,7 +821,7 @@ def get_earnings_info(symbol: str) -> str:
         elif days_until <= 7:
             warning = f"⚠️  EARNINGS IN {days_until} DAYS — IV will spike into earnings then CRUSH after. High risk for option buyers."
         elif days_until <= 21:
-            warning = f"⚠️  EARNINGS IN {days_until} DAYS — falls within typical 0-21 DTE window. Factor IV crush into your exit plan."
+            warning = f"⚠️  EARNINGS IN {days_until} DAYS — falls within typical 5–35 DTE window. Factor IV crush into your exit plan."
 
         return json.dumps({
             "symbol": symbol.upper(),
@@ -983,24 +1133,35 @@ def manage_risk_settings(
     flt = sp["filters"]
     tgt = sp["targets"]
 
-    # ── Apply updates ─────────────────────────────────────────────────────────
-    if account_size               is not None: rsk["account_size"]               = account_size
-    if max_drawdown_pct           is not None: rsk["max_drawdown_pct"]           = max_drawdown_pct
-    if stop_loss_pct              is not None: rsk["stop_loss_pct"]              = stop_loss_pct
-    if profit_target_pct          is not None: rsk["profit_target_pct"]          = profit_target_pct
-    if min_position_pct           is not None: rsk["min_position_pct"]           = min_position_pct
-    if max_position_pct           is not None: rsk["max_position_pct"]           = max_position_pct
-    if dte_0_max_pct              is not None: rsk["dte_0_max_pct"]              = dte_0_max_pct
-    if vix_defense_threshold      is not None: flt["vix_defense_threshold"]      = vix_defense_threshold
-    if defense_position_mult      is not None: flt["defense_position_mult"]      = defense_position_mult
-    if atr_expansion_stop_mult    is not None: flt["atr_expansion_stop_mult"]    = atr_expansion_stop_mult
-    if min_ev_return_pct          is not None: flt["min_ev_return_pct"]          = min_ev_return_pct
-    if liquidity_spread_max_pct   is not None: flt["liquidity_spread_max_pct"]   = liquidity_spread_max_pct
-    if illiquid_extra_margin_pct  is not None: flt["illiquid_extra_margin_pct"]  = illiquid_extra_margin_pct
-    if iv_crush_z_threshold       is not None: flt["iv_crush_z_threshold"]       = iv_crush_z_threshold
-    if iv_crush_confidence_penalty is not None: flt["iv_crush_confidence_penalty"] = iv_crush_confidence_penalty
-    if delta_target               is not None: tgt["delta_optimal"]              = delta_target
-    if dte_target                 is not None: tgt["dte_optimal"]                = dte_target
+    # ── Track changes: capture before values, apply, record after ─────────────
+    _changes: dict[str, dict] = {}
+
+    def _apply(store: dict, key: str, new_val):
+        if new_val is not None:
+            old = store.get(key)
+            store[key] = new_val
+            if old != new_val:
+                _changes[key] = {"before": old, "after": new_val}
+
+    _apply(rsk, "account_size",               account_size)
+    _apply(rsk, "max_drawdown_pct",           max_drawdown_pct)
+    _apply(rsk, "stop_loss_pct",              stop_loss_pct)
+    _apply(rsk, "profit_target_pct",          profit_target_pct)
+    _apply(rsk, "min_position_pct",           min_position_pct)
+    _apply(rsk, "max_position_pct",           max_position_pct)
+    _apply(rsk, "dte_0_max_pct",              dte_0_max_pct)
+    _apply(flt, "vix_defense_threshold",      vix_defense_threshold)
+    _apply(flt, "defense_position_mult",      defense_position_mult)
+    _apply(flt, "atr_expansion_stop_mult",    atr_expansion_stop_mult)
+    _apply(flt, "min_ev_return_pct",          min_ev_return_pct)
+    _apply(flt, "liquidity_spread_max_pct",   liquidity_spread_max_pct)
+    _apply(flt, "illiquid_extra_margin_pct",  illiquid_extra_margin_pct)
+    _apply(flt, "iv_crush_z_threshold",       iv_crush_z_threshold)
+    _apply(flt, "iv_crush_confidence_penalty", iv_crush_confidence_penalty)
+    if delta_target is not None:
+        _apply(tgt, "delta_optimal", delta_target)
+    if dte_target is not None:
+        _apply(tgt, "dte_optimal", dte_target)
 
     # ── Build full profile snapshot ───────────────────────────────────────────
     acct = rsk.get("account_size")
@@ -1050,6 +1211,15 @@ def manage_risk_settings(
             "min_per_trade_$":    round(acct * rsk["min_position_pct"] / 100, 2),
             "max_0dte_$":         round(acct * rsk["dte_0_max_pct"] / 100, 2),
             "max_drawdown_$":     round(acct * rsk["max_drawdown_pct"] / 100, 2),
+        }
+
+    if _changes:
+        result["changes"] = {
+            "date": datetime.now(_ET).strftime("%Y-%m-%d %H:%M ET"),
+            "updated": {
+                k: {"before": v["before"], "after": v["after"]}
+                for k, v in _changes.items()
+            },
         }
 
     return json.dumps(result, indent=2)
@@ -1269,10 +1439,12 @@ def log_prediction(
     confidence: int = 5,
     reasoning: str = "",
     prediction_id: int = None,
+    scan_date: str = None,
 ) -> str:
     """
     action="log"    — record a new daily prediction (fetches entry price automatically)
-    action="grade"  — grade all ungraded predictions whose target_date has passed
+    action="grade"  — grade predictions: checks TP/SL hit on any day before expiry, not just at target_date.
+                      Pass scan_date="YYYY-MM-DD" to grade only one run's picks.
     action="list"   — show all predictions + accuracy stats
     action="delete" — remove a prediction by id
     """
@@ -1283,18 +1455,35 @@ def log_prediction(
     if action == "list":
         if not preds:
             return json.dumps({"message": "No predictions recorded yet."})
-        total   = len(preds)
-        graded  = [p for p in preds if p.get("outcome")]
-        hits    = [p for p in graded if p["outcome"] == "hit"]
-        dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
-        pending = [p for p in preds if not p.get("outcome")]
+
+        # Split by source: algorithmic daily_scan picks vs manually-logged predictions
+        scan_preds   = [p for p in preds if p.get("type") == "daily_scan"]
+        manual_preds = [p for p in preds if p.get("type") != "daily_scan"]
+
+        def _stats(subset):
+            graded  = [p for p in subset if p.get("outcome")]
+            hits    = [p for p in graded if p["outcome"] == "hit"]
+            dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
+            pending = [p for p in subset if not p.get("outcome")]
+            return {
+                "total":               len(subset),
+                "graded":              len(graded),
+                "pending":             len(pending),
+                "hit_rate_pct":        round(len(hits)   / len(graded) * 100, 1) if graded else None,
+                "directional_rate_pct": round(len(dir_ok) / len(graded) * 100, 1) if graded else None,
+            }
+
         summary = {
-            "total_predictions": total,
-            "graded": len(graded),
-            "pending_grade": len(pending),
-            "hit_rate_pct":       round(len(hits) / len(graded) * 100, 1) if graded else None,
-            "directional_rate_pct": round(len(dir_ok) / len(graded) * 100, 1) if graded else None,
+            # Algorithmic scan model stats — these reflect the Direction Score model accuracy
+            "scan_model": _stats(scan_preds),
+            # Manually-logged predictions from chat — Claude's own direct calls
+            "manual_predictions": _stats(manual_preds),
             "predictions": preds,
+            "_note": (
+                "scan_model = daily_scan algorithmic picks (Direction Score + Quality Score model). "
+                "manual_predictions = predictions logged directly via chat. "
+                "Do NOT conflate the two when assessing model performance."
+            ),
         }
         return json.dumps(summary, indent=2, default=str)
 
@@ -1304,32 +1493,189 @@ def log_prediction(
         for p in preds:
             if p.get("outcome"):
                 continue
+            if scan_date and p.get("entry_date", "")[:10] != scan_date:
+                continue
             try:
-                target_dt = datetime.strptime(p["target_date"], "%Y-%m-%d")
+                entry_dt  = datetime.strptime(p["entry_date"][:10], "%Y-%m-%d")
+                target_dt = datetime.strptime(p["target_date"],      "%Y-%m-%d")
             except Exception:
                 continue
-            if today.date() < target_dt.date():
-                continue  # not yet due
+            # Skip only if the scan date is in the future
+            if today.date() < entry_dt.date():
+                continue
             try:
-                t = yf.Ticker(p["ticker"])
-                hist = t.history(start=p["entry_date"], end=(target_dt + timedelta(days=3)).strftime("%Y-%m-%d"))
+                t           = yf.Ticker(p["ticker"])
+                is_same_day = entry_dt.date() == today.date()
+                if is_same_day:
+                    # Same-day: use fast_info for real-time price + today's intraday range
+                    import pandas as _pd
+                    fi          = t.fast_info
+                    _cur        = float(fi.last_price or fi.regular_market_price)
+                    _high       = float(getattr(fi, "day_high", None) or _cur)
+                    _low        = float(getattr(fi, "day_low",  None) or _cur)
+                    hist = _pd.DataFrame(
+                        [{"Close": _cur, "High": _high, "Low": _low}],
+                        index=[_pd.Timestamp(datetime.now(_ET).date())],
+                    )
+                else:
+                    fetch_end   = (max(today, target_dt) + timedelta(days=3)).strftime("%Y-%m-%d")
+                    fetch_start = (entry_dt + timedelta(days=1)).strftime("%Y-%m-%d")
+                    hist        = t.history(start=fetch_start, end=fetch_end)
+                if not is_same_day and hist.empty:
+                    # Last-resort fallback for non-same-day picks
+                    fb   = t.history(period="5d", interval="1d")
+                    hist = fb[fb.index.date > entry_dt.date()]
                 if hist.empty:
+                    p["grade_error"] = "No market data available yet"
                     continue
-                entry_price  = p["entry_price"]
-                # Use the close on or just after target_date
-                target_rows = hist[hist.index.date >= target_dt.date()]
-                if target_rows.empty:
-                    target_rows = hist
-                exit_price = float(target_rows["Close"].iloc[0])
-                actual_move_pct = round((exit_price / entry_price - 1) * 100, 2)
-                direction = p["direction"]
-                predicted_move = p.get("target_move_pct", 0)
-                # Normalise direction: call/put → bullish/bearish for outcome logic
-                is_bullish = direction in ("bullish", "call")
-                # Was direction correct?
+            except Exception as e:
+                p["grade_error"] = str(e)
+                continue
+
+            # If pick was made outside market hours, resolve next-open price on first grade
+            if p.get("entry_at_open") and p.get("entry_open_price") is None:
+                try:
+                    _oh = yf.Ticker(p["ticker"]).history(
+                        start=entry_dt.strftime("%Y-%m-%d"),
+                        end=(entry_dt + timedelta(days=10)).strftime("%Y-%m-%d"),
+                    )
+                    _after = _oh[_oh.index.date > entry_dt.date()]
+                    if not _after.empty:
+                        p["entry_open_price"] = round(float(_after["Open"].iloc[0]), 2)
+                except Exception:
+                    pass
+
+            _entry_raw = p.get("entry_open_price") or p.get("entry_price")
+            if _entry_raw is None:
+                p["grade_error"] = "Missing entry price"
+                continue
+            entry_price   = float(_entry_raw)
+            direction     = p["direction"]
+            is_bullish    = direction in ("bullish", "call")
+            dir_factor    = 1.0 if is_bullish else -1.0
+            delta         = float(p.get("delta_est")             or 0.0)
+            premium       = float(p.get("est_premium")           or 0.0)
+            stop_pct      = abs(float(p.get("stop_loss_pct")     or 50.0))
+            tp_pct        = abs(float(p.get("profit_target_pct") or 100.0))
+            time_exit_day = p.get("time_exit_day")
+            dte           = max(int(p.get("target_dte") or p.get("dte") or 7), 1)
+            theta_per_day = 0.0 if is_same_day else (premium / dte if premium > 0 else 0.0)
+
+            exit_price   = None
+            exit_reason  = None
+            exit_day_idx = None
+            exit_opt_pct = None
+
+            for day_idx, (ts, row) in enumerate(hist.iterrows()):
+                days_held = day_idx + 1
+                row_date  = ts.date()
+                close_px  = float(row["Close"])
+
+                # TP: intraday favorable price (spike could be a real exit opportunity)
+                # SL: end-of-day close only (intraday lows cause false positives on options)
+                if premium > 0 and delta > 0:
+                    fav_px    = float(row["High"]) if is_bullish else float(row["Low"])
+                    fav_move  = fav_px - entry_price
+                    raw_fav   = max(0.01, premium + dir_factor * delta * fav_move
+                                    - theta_per_day * days_held)
+                    fav_gain  = (raw_fav / premium - 1) * 100
+
+                    if fav_gain >= tp_pct:
+                        exit_price   = close_px
+                        exit_reason  = "tp_hit"
+                        exit_opt_pct = tp_pct
+                        exit_day_idx = day_idx
+                        break
+
+                    adv_px    = float(row["Low"]) if is_bullish else float(row["High"])
+                    adv_move  = adv_px - entry_price
+                    raw_adv   = max(0.01, premium + dir_factor * delta * adv_move
+                                    - theta_per_day * days_held)
+                    adv_gain  = (raw_adv / premium - 1) * 100
+
+                    if adv_gain <= -stop_pct:
+                        exit_price   = close_px
+                        exit_reason  = "sl_hit"
+                        exit_opt_pct = -stop_pct
+                        exit_day_idx = day_idx
+                        break
+
+                if time_exit_day and days_held >= time_exit_day:
+                    exit_price   = close_px
+                    exit_reason  = "time_exit"
+                    exit_day_idx = day_idx
+                    break
+
+                if row_date >= target_dt.date():
+                    exit_price   = close_px
+                    exit_reason  = "expired"
+                    exit_day_idx = day_idx
+                    break
+
+            # No exit condition met yet — update current live P&L snapshot but stay pending
+            if exit_price is None:
+                # Fallback: if the targeted range returned nothing, try the last 5 trading days
+                _hist_for_pnl = hist
+                if _hist_for_pnl.empty:
+                    try:
+                        _fb = yf.Ticker(p["ticker"]).history(period="5d")
+                        _fb = _fb[_fb.index.date > entry_dt.date()]
+                        if not _fb.empty:
+                            _hist_for_pnl = _fb
+                    except Exception:
+                        pass
+                if not _hist_for_pnl.empty:
+                    latest_close = float(_hist_for_pnl["Close"].iloc[-1])
+                    p["current_stock_px"]  = round(latest_close, 2)
+                    p["current_stock_pct"] = round((latest_close / entry_price - 1) * 100, 2) if entry_price else None
+                    # current_pnl_pct is NOT computed here — the display layer computes it
+                    # from live chain prices (live_premium / est_premium) to avoid delta estimation.
+
+                    # Attempt to get the actual live option mid price from the chain.
+                    # Only use chain pricing when expiry was stored at scan time (real pick).
+                    # Picks with expiry=None have theoretical est_premium — comparisons would be misleading.
+                    _live_mid = None
+                    try:
+                        _exp = p.get("expiry")   # must be a real stored expiry, not target_date
+                        _K   = p.get("strike_est")
+                        if _exp and _K:
+                            # Only use chain pricing when expiry was stored at scan time.
+                            # Verify expiry is still in the available list; skip if already expired.
+                            _avail = t.options  # tuple of valid expiry strings
+                            if _avail and _exp in _avail:
+                                _ch  = t.option_chain(_exp)
+                                _df  = _ch.calls if is_bullish else _ch.puts
+                                # Snap to nearest strike (no fixed tolerance)
+                                _K_f = float(_K)
+                                _row = _df.iloc[(_df["strike"] - _K_f).abs().argsort()[:1]]
+                                if not _row.empty:
+                                    _bid = float(_row["bid"].iloc[0])
+                                    _ask = float(_row["ask"].iloc[0])
+                                    if _bid > 0 and _ask > 0:
+                                        _live_mid = round((_bid + _ask) / 2, 2)
+                                        # Recalculate P&L from the real mid price
+                                        _real_pct = (_live_mid / premium - 1) * 100
+                                        p["current_pnl_pct"] = round(
+                                            max(-stop_pct, min(tp_pct, _real_pct)), 1
+                                        )
+                    except Exception:
+                        pass
+                    if _live_mid is not None:
+                        p["current_option_px"] = _live_mid
+                    else:
+                        p.pop("current_option_px", None)  # don't show a made-up price
+                continue
+
+            actual_move_pct = round((exit_price / entry_price - 1) * 100, 2)
+            predicted_move  = p.get("target_move_pct", 0)
+
+            if exit_reason == "tp_hit":
+                outcome = "hit"
+            elif exit_reason == "sl_hit":
+                outcome = "miss"
+            else:
                 dir_correct = (is_bullish and actual_move_pct > 0) or \
                               (not is_bullish and actual_move_pct < 0)
-                # Was magnitude within 50% of predicted move (generous)?
                 mag_ok = abs(actual_move_pct) >= abs(predicted_move) * 0.5 if predicted_move else dir_correct
                 if dir_correct and mag_ok:
                     outcome = "hit"
@@ -1338,33 +1684,71 @@ def log_prediction(
                 else:
                     outcome = "miss"
 
-                # Estimated option P&L for daily_scan picks (delta-approximation)
-                est_option_gain_pct = None
-                if p.get("type") == "daily_scan":
-                    delta   = p.get("delta_est", 0.0)
-                    premium = p.get("est_premium", 0.0)
-                    if delta > 0 and premium > 0:
-                        dir_factor = 1.0 if is_bullish else -1.0
-                        raw_gain = dir_factor * delta * (entry_price * actual_move_pct / 100.0) / premium * 100.0
-                        stop   = -abs(p.get("stop_loss_pct",   50.0))
-                        target =  abs(p.get("profit_target_pct", 100.0))
-                        est_option_gain_pct = round(max(stop, min(target, raw_gain)), 1)
+            option_gain_pct  = None
+            daily_option_pnl: list[dict] = []
+            if p.get("type") == "daily_scan" and premium > 0 and delta > 0:
+                if exit_opt_pct is not None:
+                    option_gain_pct = round(exit_opt_pct, 1)
+                else:
+                    raw_gain = dir_factor * delta * (entry_price * actual_move_pct / 100.0) / premium * 100.0
+                    option_gain_pct = round(max(-stop_pct, min(tp_pct, raw_gain)), 1)
 
-                update = {
-                    "outcome":            outcome,
-                    "exit_price":         round(exit_price, 2),
-                    "actual_move_pct":    actual_move_pct,
-                    "graded_date":        today.strftime("%Y-%m-%d"),
-                }
-                if est_option_gain_pct is not None:
-                    update["est_option_gain_pct"] = est_option_gain_pct
-                p.update(update)
-                graded_count += 1
-            except Exception as e:
-                p["grade_error"] = str(e)
+                hold_rows   = list(hist.iterrows())[: (exit_day_idx or len(hist) - 1) + 1]
+                prev_opt_px = premium
+                for di, (ts2, row2) in enumerate(hold_rows):
+                    stock_px   = float(row2["Close"])
+                    stock_move = stock_px - entry_price
+                    raw_opt    = max(0.01, premium + dir_factor * delta * stock_move
+                                    - theta_per_day * (di + 1))
+                    raw_pct    = (raw_opt / premium - 1) * 100
+                    capped_pct = max(-stop_pct, min(tp_pct, raw_pct))
+                    capped_opt = premium * (1 + capped_pct / 100)
+                    daily_option_pnl.append({
+                        "date":      ts2.strftime("%Y-%m-%d"),
+                        "stock_px":  round(stock_px, 2),
+                        "stock_chg": round((stock_px / entry_price - 1) * 100, 2),
+                        "opt_px":    round(capped_opt, 2),
+                        "day_pct":   round((capped_opt / prev_opt_px - 1) * 100, 1),
+                        "cum_pct":   round(capped_pct, 1),
+                    })
+                    prev_opt_px = capped_opt
+
+            update = {
+                "outcome":         outcome,
+                "exit_price":      round(exit_price, 2),
+                "actual_move_pct": actual_move_pct,
+                "graded_date":     today.strftime("%Y-%m-%d"),
+                "exit_reason":     exit_reason,
+            }
+            if option_gain_pct is not None:
+                update["option_gain_pct"] = option_gain_pct
+            if daily_option_pnl:
+                update["daily_option_pnl"] = daily_option_pnl
+            p.update(update)
+            graded_count += 1
+
         _save_predictions(preds)
         return json.dumps({"message": f"Graded {graded_count} prediction(s).",
                            "predictions": preds}, indent=2, default=str)
+
+    # ── ungrade ───────────────────────────────────────────────────────────────
+    if action == "ungrade":
+        ungraded_count = 0
+        _grade_fields = ["outcome", "exit_price", "actual_move_pct", "graded_date",
+                         "exit_reason", "option_gain_pct", "est_option_gain_pct",
+                         "daily_option_pnl", "current_pnl_pct", "current_option_px",
+                         "current_stock_pct", "current_stock_px", "grade_error",
+                         "entry_open_price"]
+        for p in preds:
+            if not p.get("outcome"):
+                continue
+            if scan_date and p.get("entry_date", "")[:10] != scan_date:
+                continue
+            for key in _grade_fields:
+                p.pop(key, None)
+            ungraded_count += 1
+        _save_predictions(preds)
+        return json.dumps({"message": f"Ungraded {ungraded_count} prediction(s)."})
 
     # ── delete ────────────────────────────────────────────────────────────────
     if action == "delete":
@@ -1629,6 +2013,8 @@ def backtest_strategy(
         spy_closes = spy_hist["Close"].dropna()
 
         closes = hist["Close"].dropna()
+        highs  = hist["High"].reindex(closes.index).ffill()
+        lows   = hist["Low"].reindex(closes.index).ffill()
         n = len(closes)
 
         # Build a lookup: date → SPY HV30 (for VIX proxy filter)
@@ -1646,11 +2032,27 @@ def backtest_strategy(
                   for j in range(ci - 30, ci) if j > 0]
             hv_history.append(float(np.std(lr) * math.sqrt(252)) * 100 if len(lr) >= 20 else 0.0)
 
-        simulated  = []
-        skipped    = {"no_signal": 0, "vix_filter": 0, "hv_rank_filter": 0, "no_valid_strike": 0}
+        # Pre-fetch known earnings dates to skip bars where earnings fall within hold window
+        _earnings_date_strs: set[str] = set()
+        try:
+            _ed_df = yf.Ticker(symbol.upper()).earnings_dates
+            if _ed_df is not None and not _ed_df.empty:
+                for _edt in _ed_df.index:
+                    _earnings_date_strs.add(str(_edt)[:10])
+        except Exception:
+            pass
 
-        for i in range(30, min(n - dte_at_entry - 1, lookback_days + 30)):
-            # Only check every trading day (not every 5) — let filters thin the trades naturally
+        simulated  = []
+        skipped    = {"no_signal": 0, "vix_filter": 0, "hv_rank_filter": 0,
+                      "no_valid_strike": 0, "tech_score": 0, "ev_gate": 0, "earnings": 0}
+
+        # Pull thresholds from the correct profile for this ticker
+        _sp        = _get_profile(symbol)
+        _min_tech  = float(_sp["entry"].get("min_tech_score", 55.0))
+        _min_dir   = float(_sp["entry"].get("min_direction_score", 35.0))
+        _min_ev    = float(_sp["filters"].get("min_ev_return_pct", 10.0))
+
+        for i in range(50, min(n - dte_at_entry - 1, lookback_days + 50)):
             S0 = float(closes.iloc[i])
 
             # ── HV calculations ────────────────────────────────────────────────
@@ -1663,13 +2065,23 @@ def backtest_strategy(
                 continue
 
             # ── Filter 1: VIX proxy (SPY HV30 as market vol regime) ────────────
-            # Map ticker day to nearest SPY day by position ratio
-            spy_idx = min(int(i * len(spy_closes) / n), len(spy_closes) - 1)
-            spy_hv  = spy_hv_by_idx.get(spy_idx, 0)
-            # SPY HV30 > 35% annualised ≈ VIX > 35 regime
+            spy_idx_now = min(int(i * len(spy_closes) / n), len(spy_closes) - 1)
+            spy_hv  = spy_hv_by_idx.get(spy_idx_now, 0)
             if spy_hv > vix_max:
                 skipped["vix_filter"] += 1
                 continue
+
+            # ── Earnings gate: skip if known earnings fall within hold window ─────
+            if _earnings_date_strs:
+                _bar_dt = datetime.strptime(str(closes.index[i])[:10], "%Y-%m-%d")
+                _earn_skip = any(
+                    0 <= (datetime.strptime(_es, "%Y-%m-%d") - _bar_dt).days <= dte_at_entry
+                    for _es in _earnings_date_strs
+                    if len(_es) == 10
+                )
+                if _earn_skip:
+                    skipped["earnings"] += 1
+                    continue
 
             # ── Filter 2: HV rank proxy — skip if vol is historically expensive ──
             hv_hist_idx = i - 30
@@ -1677,50 +2089,127 @@ def backtest_strategy(
                 continue
             trailing = [hv_history[j] for j in range(max(0, hv_hist_idx - 252), hv_hist_idx + 1)
                         if hv_history[j] > 0]
+            hv_rank = 50.0  # neutral default
             if trailing:
                 hv_rank = sum(1 for v in trailing if v <= hv30 * 100) / len(trailing) * 100
                 if hv_rank > hv_rank_max:
                     skipped["hv_rank_filter"] += 1
                     continue
 
-            # ── Filter 3: Momentum + trend signal ─────────────────────────────
-            if i < 25:
-                continue
-            c5   = float(closes.iloc[i - 5])
-            sma20 = float(closes.iloc[i - 20: i].mean())
-            ret5  = (S0 / c5 - 1) * 100
-            ret1  = (S0 / float(closes.iloc[i - 1]) - 1) * 100  # today's move
+            # ── Filter 3: Full scoring pipeline (same as live scanner + brain) ──
+            _p_arr = closes.values[:i + 1].astype(float)
+            _idx   = len(_p_arr) - 1
 
-            if option_type == "signal" or require_signal:
-                bullish_signal = ret5 > 0.5 and S0 > sma20
-                bearish_signal = ret5 < -0.5 and S0 < sma20
-                if not bullish_signal and not bearish_signal:
+            sma20 = float(np.mean(_p_arr[_idx - 20:_idx]))
+            sma50 = float(np.mean(_p_arr[_idx - 50:_idx]))
+            ret5  = (S0 / float(closes.iloc[i - 5]) - 1) * 100 if i >= 5 else 0.0
+
+            # RSI 14 from historical closes
+            _diffs    = np.diff(_p_arr[max(0, _idx - 15):_idx + 1])
+            _avg_up   = float(np.mean(_diffs[_diffs > 0])) if np.any(_diffs > 0) else 0.0
+            _avg_down = float(np.mean(-_diffs[_diffs < 0])) if np.any(_diffs < 0) else 0.0
+            rsi14     = 100.0 - 100.0 / (1.0 + _avg_up / (_avg_down + 1e-9))
+
+            # MACD (EMA12 − EMA26) from historical closes
+            _k12, _k26 = 2.0 / 13.0, 2.0 / 27.0
+            _e12 = _e26 = float(_p_arr[0])
+            _e12p = _e26p = _e12
+            for _px in _p_arr[1:]:
+                _e12p, _e26p = _e12, _e26
+                _e12 = float(_px) * _k12 + _e12 * (1 - _k12)
+                _e26 = float(_px) * _k26 + _e26 * (1 - _k26)
+            macd        = _e12 - _e26
+            macd_rising = macd > (_e12p - _e26p)
+
+            # SPY 5-day return for regime alignment score
+            spy_idx_5 = max(0, spy_idx_now - 5)
+            spy_ret5  = (float(spy_closes.iloc[spy_idx_now]) /
+                         float(spy_closes.iloc[spy_idx_5]) - 1) * 100
+
+            # Tech score — same formula as _compute_tech_score_live
+            def _tech_score_bt(tt: str) -> float:
+                if tt == "call":
+                    _tr  = (50.0 if S0 > sma20 else 0.0) + (50.0 if sma20 > sma50 else 0.0)
+                    _rs  = max(0.0, 100.0 - abs(rsi14 - 55.0) * (100.0 / 35.0))
+                    _mcd = 100.0 if macd > 0 and macd_rising else (50.0 if macd > 0 else 0.0)
+                else:
+                    _tr  = (50.0 if S0 < sma20 else 0.0) + (50.0 if sma20 < sma50 else 0.0)
+                    _rs  = max(0.0, 100.0 - abs(rsi14 - 45.0) * (100.0 / 35.0))
+                    _mcd = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
+                return _tr * 0.40 + _rs * 0.35 + _mcd * 0.25
+
+            if option_type == "signal":
+                # Auto-select direction: pick whichever passes gates with higher direction_score
+                _best_dir, _best_ds, _best_ts = None, -1.0, 0.0
+                for _tt in ("call", "put"):
+                    _ts = _tech_score_bt(_tt)
+                    if _ts < _min_tech:
+                        continue
+                    _ds = _compute_direction_score(_ts, _tt, rsi14, ret5, spy_ret5, sp=_sp)
+                    if _ds >= _min_dir and _ds > _best_ds:
+                        _best_ds, _best_dir, _best_ts = _ds, _tt, _ts
+                if _best_dir is None:
                     skipped["no_signal"] += 1
                     continue
-                if option_type == "signal":
-                    trade_type = "call" if bullish_signal else "put"
-                else:
-                    # Fixed direction — must align with signal
-                    if option_type == "call" and not bullish_signal:
-                        skipped["no_signal"] += 1
-                        continue
-                    if option_type == "put" and not bearish_signal:
-                        skipped["no_signal"] += 1
-                        continue
-                    trade_type = option_type
+                trade_type      = _best_dir
+                tech_score      = _best_ts
+                direction_score = _best_ds
             else:
-                trade_type = option_type if option_type != "signal" else "call"
+                trade_type  = option_type
+                tech_score  = _tech_score_bt(trade_type)
+                if tech_score < _min_tech:
+                    skipped["tech_score"] += 1
+                    continue
+                direction_score = _compute_direction_score(
+                    tech_score, trade_type, rsi14, ret5, spy_ret5, sp=_sp)
+                if direction_score < _min_dir:
+                    skipped["no_signal"] += 1
+                    continue
 
-            # Confidence-based position sizing (mirrors 7–40% linear scale)
-            signal_strength = min(abs(ret5) / 3.0, 1.0)  # 0–1 scale (3% move = max)
+            # IV crush proxy: z-score of current HV30 vs trailing HV distribution
+            # (mirrors brain's _calculate_iv_skew — uses HV as IV proxy in backtest)
+            _hv_slice = [hv_history[j] for j in range(max(0, hv_hist_idx - 252), hv_hist_idx + 1)
+                         if hv_history[j] > 0]
+            if len(_hv_slice) >= 10:
+                _hv_mean = float(np.mean(_hv_slice))
+                _hv_std  = float(np.std(_hv_slice))
+                if _hv_std > 0:
+                    _hv_z = (hv30 * 100 - _hv_mean) / _hv_std
+                    if _hv_z >= _sp["filters"]["iv_crush_z_threshold"]:
+                        _crush_pen = _sp["filters"]["iv_crush_confidence_penalty"]
+                        direction_score = max(0.0, direction_score - _crush_pen)
+                        if direction_score < _min_dir:
+                            skipped["no_signal"] += 1
+                            continue
+
+            # EV gate — same as live scanner
+            _p_win = direction_score / 100.0
+            _ev    = _p_win * profit_target_pct - (1.0 - _p_win) * stop_loss_pct
+            if require_signal and _ev < _min_ev:
+                skipped["ev_gate"] += 1
+                continue
+
+            # Position sizing — direction_score drives allocation (same 7–40% scale)
             lo = risk_settings["min_position_pct"] / 100
             hi = risk_settings["max_position_pct"] / 100
-            conf_pct = lo + signal_strength * (hi - lo)
+            conf_pct = lo + (direction_score / 100.0) * (hi - lo)
             acct = risk_settings.get("account_size") or 0
             if acct:
                 trade_dollars = round(acct * conf_pct, 2)
             else:
-                trade_dollars = round(position_size_dollars * (0.5 + signal_strength * 0.5), 2)
+                trade_dollars = round(position_size_dollars * conf_pct, 2)
+
+            # ATR stop widening — same multiplier as brain (_get_market_regime)
+            _tr_vals = []
+            for _ai in range(max(1, i - 27), i + 1):
+                _h = float(highs.iloc[_ai])
+                _l = float(lows.iloc[_ai])
+                _cp = float(closes.iloc[_ai - 1])
+                _tr_vals.append(max(_h - _l, abs(_h - _cp), abs(_l - _cp)))
+            _atr14 = float(np.mean(_tr_vals[-14:])) if len(_tr_vals) >= 14 else 0.0
+            _atr28 = float(np.mean(_tr_vals)) if _tr_vals else _atr14
+            _atr_expanding = _atr14 > _atr28 * 1.05
+            _stop_mult = float(_sp["filters"]["atr_expansion_stop_mult"]) if _atr_expanding else 1.0
 
             # ── Strike selection: find strike closest to delta_target ───────────
             T = dte_at_entry / 365.0
@@ -1744,7 +2233,7 @@ def backtest_strategy(
 
             K        = best_strike
             entry_px = best_entry_g["bs_price"]
-            stop_px  = entry_px * (1 - stop_loss_pct / 100)
+            stop_px  = entry_px * (1 - (stop_loss_pct / 100) * _stop_mult)
             target_px = entry_px * (1 + profit_target_pct / 100)
 
             # ── Simulate holding through DTE ───────────────────────────────────
@@ -1783,6 +2272,8 @@ def backtest_strategy(
                 # would have filled before expiry if the option reached the target
                 exit_px  = min(intrinsic, target_px)
 
+            quality_score = _compute_quality_score(hv_rank, abs(best_entry_g.get("delta", 0)), dte_at_entry, sp=_sp)
+
             pnl_pct     = round((exit_px / entry_px - 1) * 100, 1)
             pnl_dollars = round(trade_dollars * pnl_pct / 100, 2)
             simulated.append({
@@ -1799,6 +2290,11 @@ def backtest_strategy(
                 "position_dollars": trade_dollars,
                 "hv30_as_iv":       round(hv30 * 100, 1),
                 "signal_5d_ret":    round(ret5, 2),
+                "direction_score":  round(direction_score, 1),
+                "tech_score":       round(tech_score, 1),
+                "quality_score":    round(quality_score, 1),
+                "rsi14":            round(rsi14, 1),
+                "ev_pct":           round(_ev, 1),
             })
 
         if not simulated:
@@ -1866,11 +2362,19 @@ def backtest_strategy(
                 ),
             },
             "filters": {
-                "days_skipped_no_signal":    skipped["no_signal"],
-                "days_skipped_vix_too_high": skipped["vix_filter"],
-                "days_skipped_hv_rank_high": skipped["hv_rank_filter"],
-                "days_skipped_no_strike":    skipped["no_valid_strike"],
-                "days_traded":               len(simulated),
+                "days_skipped_no_signal":       skipped["no_signal"],
+                "days_skipped_tech_score_low":  skipped["tech_score"],
+                "days_skipped_ev_gate":         skipped["ev_gate"],
+                "days_skipped_vix_too_high":    skipped["vix_filter"],
+                "days_skipped_hv_rank_high":    skipped["hv_rank_filter"],
+                "days_skipped_earnings":        skipped["earnings"],
+                "days_skipped_no_strike":       skipped["no_valid_strike"],
+                "days_traded":                  len(simulated),
+                "score_gates": {
+                    "min_tech_score":       _min_tech,
+                    "min_direction_score":  _min_dir,
+                    "min_ev_return_pct":    _min_ev,
+                },
             },
             "results": {
                 "trades_simulated":       len(simulated),
@@ -1955,16 +2459,17 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
             macd_s = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
 
         score = trend * 0.40 + rsi_s * 0.35 + macd_s * 0.25
-        return round(float(score), 1)
+        return round(float(score), 1), round(rsi14, 1), round(float(p[-1] / p[-6] - 1) * 100, 2) if len(p) >= 6 else 0.0
     except Exception:
-        return 50.0
+        return 50.0, 50.0, 0.0
 
 
 def _fetch_best_option(
     ticker: str,
-    trade_type: str,       # "call" or "put"
+    trade_type: str,         # "call" or "put"
     delta_target: float,
     target_dte: int,
+    stock_price: float = 0.0,
     hv30_fallback: float = 0.30,
 ) -> dict | None:
     """
@@ -1981,14 +2486,31 @@ def _fetch_best_option(
     best: dict | None = None
     best_diff = 999.0
 
+    # ── Fetch current stock price if not provided ─────────────────────────────
+    _S = stock_price
+    try:
+        if not _S:
+            _S = float(_yf.Ticker(ticker).history(period="2d")["Close"].dropna().iloc[-1])
+    except Exception:
+        pass
+    if not _S:
+        return None
+
     # ── Try real options chain first ──────────────────────────────────────────
     try:
         _t    = _yf.Ticker(ticker)
         _exps = _t.options
         if _exps:
-            _today_d  = datetime.now().date()
+            _today_d = datetime.now().date()
+            # Filter to expirations within system-wide DTE bounds
+            _valid_exps = [
+                e for e in _exps
+                if DTE_MIN <= (datetime.strptime(e, "%Y-%m-%d").date() - _today_d).days <= DTE_MAX
+            ]
+            if not _valid_exps:
+                raise ValueError(f"No expirations between {DTE_MIN}–{DTE_MAX} DTE")
             _best_exp = min(
-                _exps,
+                _valid_exps,
                 key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - _today_d).days - target_dte)
             )
             _actual_dte = (datetime.strptime(_best_exp, "%Y-%m-%d").date() - _today_d).days
@@ -2015,14 +2537,10 @@ def _fetch_best_option(
                     continue
 
                 # IV: use chain value when available, else HV30 for delta calc only
-                _iv   = float(_row.get("impliedVolatility") or 0)
-                _vol  = _iv if _iv > 0.01 else hv30_fallback
+                _iv  = float(_row.get("impliedVolatility") or 0)
+                _vol = _iv if _iv > 0.01 else hv30_fallback
 
-                _price = float(_row.get("underlyingPrice") or 0)
-                if not _price:
-                    continue  # need underlying price for BS
-
-                _g = _bs_greeks(_price, _K, _T, RISK_FREE_RATE, _vol, trade_type)
+                _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, _vol, trade_type)
                 if not _g:
                     continue
 
@@ -2032,6 +2550,8 @@ def _fetch_best_option(
                     best = {
                         "strike":     _K,
                         "premium":    round(_mid, 4),
+                        "bid":        round(_bid, 4),
+                        "ask":        round(_ask, 4),
                         "expiry":     _best_exp,
                         "dte":        _actual_dte,
                         "delta":      round(abs(_g.get("delta", 0)), 3),
@@ -2046,15 +2566,13 @@ def _fetch_best_option(
 
     # ── BS fallback: real-increment strikes priced on HV30 ───────────────────
     try:
-        _price_hist = _yf.Ticker(ticker).history(period="5d")["Close"].dropna()
-        if len(_price_hist) == 0:
-            return None
-        _S = float(_price_hist.iloc[-1])
+        _S_fb = _S  # already fetched above
         if _S >= 200:  _inc = 5.0
         elif _S >= 50: _inc = 1.0
         else:          _inc = 0.5
         _base = round(round(_S / _inc) * _inc, 2)
-        _T    = target_dte / 365.0
+        _clamped_dte = max(DTE_MIN, min(DTE_MAX, target_dte))
+        _T    = _clamped_dte / 365.0
         for _K in [round(_base + i * _inc, 2) for i in range(-20, 21)]:
             _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, hv30_fallback, trade_type)
             if not _g:
@@ -2077,14 +2595,16 @@ def _fetch_best_option(
     return best
 
 
-def _compute_quality_score(iv_pct: float, delta_val: float, dte: int) -> float:
+def _compute_quality_score(iv_pct: float, delta_val: float, dte: int, sp=None) -> float:
     """
     Option quality score (0-100): how good is the option to buy if direction is right?
     Components: IV rank (40%) + delta fit (35%) + DTE fit (25%)
     Independent of direction — purely about option economics.
+    Pass sp=_get_profile(ticker) to use the correct profile for the ticker.
     """
     import math as _math
-    sp = STRATEGY_PROFILE
+    if sp is None:
+        sp = STRATEGY_PROFILE
 
     iv_score    = max(0.0, 100.0 - iv_pct)   # 0th pct = 100, 100th pct = 0
 
@@ -2094,9 +2614,14 @@ def _compute_quality_score(iv_pct: float, delta_val: float, dte: int) -> float:
 
     t_opt   = float(sp["targets"]["dte_optimal"])
     t_fall  = float(sp["targets"]["dte_falloff"])
-    dte_score = max(0.0, 100.0 * (1.0 - abs(dte - t_opt) / max(t_fall, 1.0)))
+    dte_score = 100.0 * _math.exp(-((dte - t_opt) ** 2) / (2 * max(t_fall, 1.0) ** 2))
 
-    quality = iv_score * 0.40 + delta_score * 0.35 + dte_score * 0.25
+    _qw     = sp.get("quality_score_weights", {})
+    _w_iv   = float(_qw.get("iv_rank", 0.40))
+    _w_d    = float(_qw.get("delta",   0.35))
+    _w_dte  = float(_qw.get("dte",     0.25))
+    _w_tot  = _w_iv + _w_d + _w_dte or 1.0
+    quality = (iv_score * _w_iv + delta_score * _w_d + dte_score * _w_dte) / _w_tot
     return round(min(100.0, max(0.0, quality)), 1)
 
 
@@ -2106,6 +2631,7 @@ def _compute_direction_score(
     rsi14: float,
     ret5: float,         # 5-day % return of the underlying
     spy_ret5: float,     # 5-day % return of SPY (market regime)
+    sp=None,             # strategy profile dict; defaults to STRATEGY_PROFILE (equity)
 ) -> float:
     """
     Direction Score (0-100): how likely is the stock to move in the intended direction?
@@ -2119,30 +2645,45 @@ def _compute_direction_score(
       if bullish and RSI > 72 → -15 pts; RSI > 68 → -8 pts
       if bearish and RSI < 28 → -15 pts; RSI < 32 → -8 pts
     """
+    if sp is None:
+        sp = STRATEGY_PROFILE
+    _dw  = sp.get("direction_score_weights", {})
+    _w_tech = float(_dw.get("tech",     0.55))
+    _w_reg  = float(_dw.get("regime",   0.30))
+    _w_mom  = float(_dw.get("momentum", 0.15))
+    _rsi_oe = sp.get("rsi_overextension", {})
+    _sev_t  = float(_rsi_oe.get("severe_threshold",   72))
+    _mod_t  = float(_rsi_oe.get("moderate_threshold", 68))
+    _sev_p  = float(_rsi_oe.get("severe_penalty",     15.0))
+    _mod_p  = float(_rsi_oe.get("moderate_penalty",    8.0))
+
     is_bullish = (trade_type == "call")
 
     # ── Regime alignment (0-100): is SPY moving with the trade? ──────────────
-    spy_aligned  = (is_bullish and spy_ret5 > 0) or (not is_bullish and spy_ret5 < 0)
+    spy_aligned   = (is_bullish and spy_ret5 > 0) or (not is_bullish and spy_ret5 < 0)
     spy_magnitude = abs(spy_ret5)
     if spy_magnitude < 0.5:
         regime_score = 50.0                              # flat market = neutral
     elif spy_aligned:
-        regime_score = min(100.0, 50.0 + spy_magnitude * 16.7)   # 0.5% → 58, 3%+ → 100
+        regime_score = min(100.0, 50.0 + spy_magnitude * 16.7)
     else:
-        regime_score = max(0.0, 50.0 - spy_magnitude * 16.7)     # opposing = penalty
+        regime_score = max(0.0, 50.0 - spy_magnitude * 16.7)
 
     # ── Momentum strength (0-100): how big is the move in the right direction? ─
-    abs_ret5   = abs(ret5)
-    mom_score  = min(100.0, abs_ret5 / 5.0 * 100.0)    # 5%+ move = full score
+    abs_ret5  = abs(ret5)
+    mom_score = min(100.0, abs_ret5 / 5.0 * 100.0)    # 5%+ move = full score
 
     # ── Weighted blend ────────────────────────────────────────────────────────
-    raw = tech_score * 0.55 + regime_score * 0.30 + mom_score * 0.15
+    _w_total = _w_tech + _w_reg + _w_mom or 1.0
+    raw = (tech_score * _w_tech + regime_score * _w_reg + mom_score * _w_mom) / _w_total
 
     # ── RSI overextension penalty ─────────────────────────────────────────────
     if is_bullish:
-        penalty = 15.0 if rsi14 > 72 else (8.0 if rsi14 > 68 else 0.0)
+        penalty = _sev_p if rsi14 > _sev_t else (_mod_p if rsi14 > _mod_t else 0.0)
     else:
-        penalty = 15.0 if rsi14 < 28 else (8.0 if rsi14 < 32 else 0.0)
+        _bear_sev_t = 100.0 - _sev_t   # mirror: 72 → 28
+        _bear_mod_t = 100.0 - _mod_t   # mirror: 68 → 32
+        penalty = _sev_p if rsi14 < _bear_sev_t else (_mod_p if rsi14 < _bear_mod_t else 0.0)
 
     return round(max(0.0, min(100.0, raw - penalty)), 1)
 
@@ -2240,7 +2781,7 @@ def _generate_trade_strategy(
     }
 
 
-def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = 35.0, min_tech_score: float = 55.0) -> list:
+def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = None, min_tech_score: float = None) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
 
@@ -2256,12 +2797,18 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
     """
     if dte is None:
         dte = int(STRATEGY_PROFILE["targets"]["dte_optimal"])
+    dte = max(DTE_MIN, min(DTE_MAX, dte))  # clamp to system-wide bounds
 
     sp                = STRATEGY_PROFILE
     stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
     profit_target_pct = float(sp["risk"]["profit_target_pct"])
     delta_target      = float(sp["targets"]["delta_optimal"])
     min_ev            = float(sp["filters"]["min_ev_return_pct"])
+    # Entry gates from STRATEGY_PROFILE — overridable by caller for testing
+    if min_confidence is None:
+        min_confidence = float(sp["entry"].get("min_direction_score", 35.0))
+    if min_tech_score is None:
+        min_tech_score = float(sp["entry"].get("min_tech_score", 55.0))
     T                 = dte / 365.0
 
     candidates: list[dict] = []
@@ -2276,6 +2823,8 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
         pass
 
     for ticker in DEFAULT_WATCHLIST:
+        _ac = _asset_class(ticker)
+        sp  = _get_profile(ticker)
         try:
             hist = yf.Ticker(ticker).history(period="90d")["Close"].dropna()
             if len(hist) < 55:
@@ -2284,6 +2833,15 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             n      = len(prices)
             idx    = n - 1
             price  = float(prices[idx])
+
+            # Sector fetch — equity only
+            if _ac == "equity":
+                try:
+                    _sector = yf.Ticker(ticker).info.get("sector")
+                except Exception:
+                    _sector = None
+            else:
+                _sector = None
 
             # HV30
             log_rets = np.log(prices[1:] / prices[:-1])
@@ -2317,12 +2875,31 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             rsi14    = round(100.0 - 100.0 / (1.0 + _avg_up / (_avg_dn + 1e-9)), 1)
 
             # Technical setup score — gate early to avoid expensive strike search on weak setups
-            tech = _compute_tech_score_live(ticker, trade_type)
+            tech, _rsi14_live, _ret5_live = _compute_tech_score_live(ticker, trade_type)
             if tech < min_tech_score:
                 continue
 
+            # ── Earnings gate: skip if earnings fall within the DTE window ──────
+            if _ac == "equity":
+                _earnings_skip = False
+                try:
+                    _t_yf = yf.Ticker(ticker)
+                    _ed = _t_yf.earnings_dates
+                    if _ed is not None and not _ed.empty:
+                        _today_dt = datetime.now().replace(tzinfo=None)
+                        _future_ed = _ed[_ed.index.tz_localize(None) >= _today_dt] if _ed.index.tzinfo else _ed[_ed.index >= _today_dt]
+                        if not _future_ed.empty:
+                            _next_earn = _future_ed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
+                            _days_to_earn = (_next_earn - _today_dt).days
+                            if 0 <= _days_to_earn <= dte:
+                                _earnings_skip = True  # earnings inside our hold window → skip
+                except Exception:
+                    pass  # can't determine earnings — allow through, chatbot will warn
+                if _earnings_skip:
+                    continue
+
             # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
-            _opt = _fetch_best_option(ticker, trade_type, delta_target, dte, hv30_fallback=hv30)
+            _opt = _fetch_best_option(ticker, trade_type, float(sp["targets"]["delta_optimal"]), dte, hv30_fallback=hv30)
             if _opt is None:
                 continue
 
@@ -2333,18 +2910,50 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             actual_dte  = _opt["dte"]
             dte         = actual_dte
 
+            # Liquidity gate — same as brain (skip if bid/ask spread too wide)
+            _opt_bid = _opt.get("bid")
+            _opt_ask = _opt.get("ask")
+            if _opt_bid and _opt_ask:
+                _liq = _check_trade_liquidity(_opt_bid, _opt_ask)
+                if _liq["is_illiquid"]:
+                    continue
+
             # Direction Score: predicts if stock moves the right way (this is the headline)
-            direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5)
+            direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
+
+            # IV crush check — same as brain (penalise if strike IV >> HV distribution)
+            try:
+                _skew = _calculate_iv_skew(yf.Ticker(ticker), actual_exp or "", trade_type, best_strike)
+                _iv_pen = _skew["iv_crush_penalty_pts"]
+                if _iv_pen > 0:
+                    direction_score = max(0.0, direction_score - _iv_pen)
+            except Exception:
+                pass
+
             if direction_score < min_confidence:
                 continue
 
+            # Per-ticker profile values
+            _stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
+            _profit_target_pct = float(sp["risk"]["profit_target_pct"])
+            _min_ev            = float(sp["filters"]["min_ev_return_pct"])
+
+            # Market regime — ATR stop widening + defense mode (same as brain)
+            try:
+                _regime = _get_market_regime(ticker)
+                _adj_stop_pct  = round(_stop_loss_pct * _regime["stop_loss_mult"], 1)
+                _adj_size_mult = _regime["position_size_mult"]
+            except Exception:
+                _adj_stop_pct  = _stop_loss_pct
+                _adj_size_mult = 1.0
+
             # Quality Score: rates the option to buy if direction is right
-            quality_score = _compute_quality_score(iv_pct, delta_val, dte)
+            quality_score = _compute_quality_score(iv_pct, delta_val, dte, sp=sp)
 
             # Expected value gate (uses direction score as P(win))
             p_win  = direction_score / 100.0
-            ev_pct = p_win * profit_target_pct - (1.0 - p_win) * stop_loss_pct
-            if ev_pct < min_ev:
+            ev_pct = p_win * _profit_target_pct - (1.0 - p_win) * _stop_loss_pct
+            if ev_pct < _min_ev:
                 continue
 
             # Build human-readable signal reasons
@@ -2368,7 +2977,8 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 aligned = (bullish and _spy_ret5 > 0) or (bearish and _spy_ret5 < 0)
                 reasons.append(f"SPY {spy_dir} {_spy_ret5:+.1f}% (regime {'aligned ✓' if aligned else 'opposing ✗'})")
 
-            today_str  = datetime.now().strftime("%Y-%m-%d")
+            today_str   = datetime.now(_ET).strftime("%Y-%m-%d %H:%M ET")
+            _at_open    = not _market_is_open()   # pick made outside market hours
             # Use the actual option expiry date when available; otherwise estimate
             if actual_exp:
                 target_str = actual_exp
@@ -2386,8 +2996,8 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 rsi14=rsi14,
                 spy_ret5=_spy_ret5,
                 est_premium=est_premium,
-                stop_loss_pct=stop_loss_pct,
-                profit_target_pct=profit_target_pct,
+                stop_loss_pct=_adj_stop_pct,   # ATR-widened stop if volatility expanding
+                profit_target_pct=_profit_target_pct,
                 stock_price=price,
                 delta_est=delta_val,
             )
@@ -2395,7 +3005,6 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             candidates.append({
                 "ticker":             ticker,
                 "direction":          trade_type,
-                "confidence":         round(direction_score, 1),
                 "direction_score":    round(direction_score, 1),
                 "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
@@ -2407,15 +3016,18 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
                 "dte":                dte,
                 "est_premium":        round(est_premium, 4),
-                "stop_loss_pct":      stop_loss_pct,
-                "profit_target_pct":  profit_target_pct,
+                "stop_loss_pct":      _adj_stop_pct,    # ATR-adjusted (may be wider than base)
+                "profit_target_pct":  _profit_target_pct,
+                "atr_stop_widened":   _adj_stop_pct != _stop_loss_pct,
                 "ev_pct":             round(ev_pct, 1),
                 "ret5":               round(ret5, 2),
                 "rsi14":              round(rsi14, 1),
                 "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
                 "target_date":        target_str,
-                "entry_price":        round(price, 2),
+                "entry_price":        round(price, 2),   # last close at scan time
+                "entry_at_open":      _at_open,          # True = market was closed, use next-open price
+                "entry_open_price":   None,               # filled on first grade after market opens
                 "signal_reasons":     reasons,
                 "strategy_label":     strategy["label"],
                 "strategy_comment":   strategy["comment"],
@@ -2423,14 +3035,125 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "tp_option_px":       strategy["tp_option_px"],
                 "stock_sl":           strategy["stock_sl"],
                 "stock_tp":           strategy["stock_tp"],
+                "time_exit_pct":      float(sp["risk"].get("time_exit_pct", 50.0)),
+                "time_exit_day":      max(1, math.ceil(dte * float(sp["risk"].get("time_exit_pct", 50.0)) / 100)),
                 "type":               "daily_scan",
                 "outcome":            None,
+                "asset_class":        _ac,
+                "sector":             _sector,
             })
         except Exception:
             continue
 
-    candidates.sort(key=lambda x: x["confidence"], reverse=True)
-    return candidates[:n_picks]
+    candidates.sort(key=lambda x: x["direction_score"], reverse=True)
+
+    # ── Sector concentration: equity picks — max 2 from same sector ───────────
+    _sector_counts: dict[str, int] = {}
+    _accepted: list[dict] = []
+    _overflow: list[dict] = []
+    for _c in candidates:
+        if len(_accepted) >= n_picks:
+            _overflow.append(_c)
+            continue
+        if _c.get("asset_class") == "index":
+            _accepted.append(_c)
+        else:
+            _sec = _c.get("sector") or "Unknown"
+            if _sector_counts.get(_sec, 0) < 2:
+                _accepted.append(_c)
+                _sector_counts[_sec] = _sector_counts.get(_sec, 0) + 1
+            else:
+                _overflow.append(_c)
+
+    # Fill any remaining slots with overflow picks (respecting sector rule)
+    for _c in _overflow:
+        if len(_accepted) >= n_picks:
+            break
+        if _c.get("asset_class") == "equity":
+            _sec = _c.get("sector") or "Unknown"
+            if _sector_counts.get(_sec, 0) < 2:
+                _accepted.append(_c)
+                _sector_counts[_sec] = _sector_counts.get(_sec, 0) + 1
+
+    return _accepted
+
+
+def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
+    """
+    Re-score the full watchlist each morning and apply roll-forward logic.
+
+    Rules:
+    - Pending picks whose (ticker, direction) still ranks in the top n_picks
+      are ROLLED: entry_price, est_premium, strike_est, expiry, id, and
+      entry_date are preserved; scoring fields are refreshed from today's scan.
+    - Freed slots are filled with NEW picks from the scored list.
+    - If a new pick shares (ticker, strike_est, expiry) with a rolled pick,
+      it is suppressed — the rolled version wins.
+
+    Returns:
+        {
+            "rolled":   [...],  # picks kept with refreshed scores
+            "new":      [...],  # brand-new picks filling open slots
+            "dropped":  [...],  # picks that fell out of the top-n ranking
+        }
+    """
+    today_str = datetime.now(_ET).strftime("%Y-%m-%d")
+
+    # Score full watchlist — large n_picks so we see all qualifying candidates
+    all_candidates = scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
+
+    # Determine which (ticker, direction) pairs sit in today's top-n
+    top_n_keys  = {(c["ticker"], c["direction"]) for c in all_candidates[:n_picks]}
+    cand_lookup = {(c["ticker"], c["direction"]): c for c in all_candidates}
+
+    rolled:  list[dict] = []
+    dropped: list[dict] = []
+
+    for p in pending_picks:
+        key = (p.get("ticker", ""), p.get("direction", ""))
+        if key in top_n_keys:
+            fresh   = cand_lookup[key]
+            updated = dict(p)
+            # Refresh scoring + signal fields; preserve entry anchor fields
+            for _f in ("direction_score", "tech_score", "quality_score",
+                       "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
+                       "signal_reasons", "strategy_label", "strategy_comment"):
+                if _f in fresh:
+                    updated[_f] = fresh[_f]
+            updated["pick_status"]      = "rolled"
+            updated["roll_count"]       = p.get("roll_count", 0) + 1
+            updated["last_rolled_date"] = today_str
+            if "original_entry_date" not in updated:
+                updated["original_entry_date"] = p.get("entry_date", today_str)
+            rolled.append(updated)
+        else:
+            dropped.append(p)
+
+    # Fill empty slots with new picks
+    slots_needed   = n_picks - len(rolled)
+    used_keys      = {(r["ticker"], r["direction"]) for r in rolled}
+    rolled_anchors = {(r["ticker"], r.get("strike_est"), r.get("expiry")) for r in rolled}
+
+    new_picks: list[dict] = []
+    for c in all_candidates:
+        if slots_needed <= 0:
+            break
+        key = (c["ticker"], c["direction"])
+        if key in used_keys:
+            continue
+        # Suppress duplicate exposure (same ticker+strike+expiry already rolled)
+        anchor = (c["ticker"], c.get("strike_est"), c.get("expiry"))
+        if anchor in rolled_anchors:
+            continue
+        fresh_pick = dict(c)
+        fresh_pick["pick_status"]         = "new"
+        fresh_pick["roll_count"]          = 0
+        fresh_pick["original_entry_date"] = fresh_pick["entry_date"]
+        new_picks.append(fresh_pick)
+        used_keys.add(key)
+        slots_needed -= 1
+
+    return {"rolled": rolled, "new": new_picks, "dropped": dropped}
 
 
 def _calculate_confidence_score(
@@ -2743,13 +3466,34 @@ def evaluate_trade_signal(
             "expiry":      expiry,
         }
 
-        # ── 1. Confidence score (IV rank + delta + DTE + technical setup) ─────
+        # ── 1. Direction Score + Quality Score (replaces single confidence) ──────
         confidence_score = None
         if iv_percentile is not None and delta is not None and dte is not None:
-            tech = _compute_tech_score_live(symbol, option_type)
-            conf = _calculate_confidence_score(iv_percentile, delta, dte, tech_score=tech)
-            confidence_score = conf["confidence_score"]
-            out["confidence"] = conf
+            tech, rsi14_live, ret5_live = _compute_tech_score_live(symbol, option_type)
+
+            # Fetch SPY 5-day return for regime alignment
+            try:
+                _spy_hist = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+                spy_ret5 = float(_spy_hist.iloc[-1] / _spy_hist.iloc[-6] - 1) * 100 if len(_spy_hist) >= 6 else 0.0
+            except Exception:
+                spy_ret5 = 0.0
+
+            _eval_sp        = _get_profile(symbol)
+            direction_score = _compute_direction_score(tech, option_type, rsi14_live, ret5_live, spy_ret5, sp=_eval_sp)
+            quality_score   = _compute_quality_score(iv_percentile, abs(delta), dte, sp=_eval_sp)
+
+            # Use direction score as the headline for PROCEED/AVOID gating
+            confidence_score = direction_score
+            out["confidence"] = {
+                "direction_score":  round(direction_score, 1),
+                "quality_score":    round(quality_score, 1),
+                "tech_score":       round(tech, 1),
+                "rsi14":            round(rsi14_live, 1),
+                "spy_5d_ret":       round(spy_ret5, 2),
+                "iv_percentile":    iv_percentile,
+                "delta":            delta,
+                "dte":              dte,
+            }
 
         # ── 2. IV skew + crush check ──────────────────────────────────────────
         iv_crush_penalty = 0.0
@@ -2758,8 +3502,8 @@ def evaluate_trade_signal(
         iv_crush_penalty = skew["iv_crush_penalty_pts"]
         if confidence_score is not None and iv_crush_penalty > 0:
             adjusted = max(0.0, confidence_score - iv_crush_penalty)
-            out["confidence"]["adjusted_score"]    = round(adjusted, 1)
-            out["confidence"]["iv_crush_penalty"]  = -iv_crush_penalty
+            out["confidence"]["direction_score_adj"] = round(adjusted, 1)
+            out["confidence"]["iv_crush_penalty"]    = -iv_crush_penalty
             confidence_score = adjusted
 
         # ── 3. Liquidity check ────────────────────────────────────────────────
@@ -2799,6 +3543,23 @@ def evaluate_trade_signal(
             blocks.append(f"Confidence too low ({confidence_score:.0f}/100)")
         if skew["iv_crush_warning"]:
             warnings.append(skew["iv_crush_warning"])
+        # Earnings proximity warning (same check as daily scan)
+        if dte is not None:
+            try:
+                _ed_df = yf.Ticker(symbol).earnings_dates
+                if _ed_df is not None and not _ed_df.empty:
+                    _now_dt = datetime.now().replace(tzinfo=None)
+                    _fed = _ed_df[_ed_df.index.tz_localize(None) >= _now_dt] if _ed_df.index.tzinfo else _ed_df[_ed_df.index >= _now_dt]
+                    if not _fed.empty:
+                        _next_e = _fed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
+                        _days_e = (_next_e - _now_dt).days
+                        if 0 <= _days_e <= dte:
+                            warnings.append(
+                                f"⚠️ EARNINGS in {_days_e} day(s) — within your {dte}-day hold window. "
+                                f"Expect elevated IV and gap risk."
+                            )
+            except Exception:
+                pass
         if out.get("liquidity", {}).get("is_illiquid"):
             warnings.append(out["liquidity"]["flag"])
         if regime["defense_mode"]:
@@ -3317,9 +4078,13 @@ def _find_claude() -> str:
     return "claude"  # will raise FileNotFoundError with original message
 
 
+CHAT_MODEL = "claude-haiku-4-5-20251001"  # fast model; change to claude-sonnet-4-6 for deeper analysis
+
+
 def _call_claude_cli(prompt: str, system: str = "") -> str:
     try:
-        cmd = [_find_claude(), "-p", "--tools", "", "--no-session-persistence"]
+        cmd = [_find_claude(), "-p", "--tools", "", "--no-session-persistence",
+               "--model", CHAT_MODEL]
         if system:
             cmd += ["--system-prompt", system]
         result = subprocess.run(
@@ -3328,7 +4093,16 @@ def _call_claude_cli(prompt: str, system: str = "") -> str:
             timeout=120, encoding="utf-8",
         )
         if result.returncode != 0 and result.stderr:
-            return f"[CLI Error: {result.stderr[:200]}]"
+            # If model flag unsupported by this CLI version, retry without it
+            if "model" in result.stderr.lower() or "unknown" in result.stderr.lower():
+                cmd_fallback = [c for c in cmd if c not in ("--model", CHAT_MODEL)]
+                result = subprocess.run(
+                    cmd_fallback,
+                    input=prompt, capture_output=True, text=True,
+                    timeout=120, encoding="utf-8",
+                )
+            if result.returncode != 0 and result.stderr:
+                return f"[CLI Error: {result.stderr[:200]}]"
         return result.stdout.strip()
     except FileNotFoundError:
         return "[Error: 'claude' command not found. Ensure Claude Code is installed.]"
@@ -3388,236 +4162,97 @@ def _get_system_prompt() -> str:
 
     illiq_total = round(flt["min_ev_return_pct"] + flt["illiquid_extra_margin_pct"])
 
-    return f"""You are an expert options trading advisor specializing in US large-cap equity options.
-You operate using a defined strategy called the **OTM Short-Duration Momentum Strategy**.
+    return f"""You are a strategy explainer for an options trading model. Your role is strictly limited to:
 
-## Core Strategy
-- **Universe**: High-liquidity large-caps and ETFs — SPY, QQQ, AAPL, NVDA, TSLA, META, MSFT, AMZN, GOOGL, AMD, NFLX, COIN, PLTR, and similar
-- **Instrument**: Single-leg long calls or puts only (no spreads, no naked shorts)
-- **Timeframe**: 5–21 DTE preferred; 0DTE only for high-conviction binary setups capped at {rsk["dte_0_max_pct"]:.0f}%
-- **Strike**: Target delta {tgt["delta_optimal"] - tgt["delta_falloff"]:.2f}–{tgt["delta_optimal"] + tgt["delta_falloff"]:.2f} OTM (sweet spot: {tgt["delta_optimal"]:.2f})
-- **Entry gate**: All five filters must clear before a trade is recommended (see evaluate_trade_signal)
+1. Explaining how this strategy and model work
+2. Defining options terminology
+3. Describing why a specific pick was generated (why that strike, why that DTE, what the scores mean)
+4. Explaining backtest and scan results
 
-## Confidence Score (0–100)
-Your internal confidence in any trade is computed from three inputs with fixed weights:
-- **IV Rank/Percentile** ({iv_w}%): lower IV rank = cheaper options = higher score
-- **Delta** ({d_w}%): score peaks at delta {tgt["delta_optimal"]:.2f}, falls off linearly toward {tgt["delta_optimal"] - tgt["delta_falloff"]:.2f} or {tgt["delta_optimal"] + tgt["delta_falloff"]:.2f}
-- **DTE** ({dte_w}%): score peaks at {tgt["dte_optimal"]} DTE, falls off toward 0 or {tgt["dte_optimal"] + tgt["dte_falloff"]}+
-After computing, apply adjustments:
-- **IV Crush Penalty**: if OTM option's IV is >{flt["iv_crush_z_threshold"]:.1f}σ above 30-day HV mean → subtract {flt["iv_crush_confidence_penalty"]:.0f} confidence points
-- Final score ≥ 60 → PROCEED; 40–59 → PROCEED WITH CAUTION; < 40 → AVOID
+## Hard Boundaries — never cross these
+- Do NOT tell the user whether to buy, sell, or hold any position
+- Do NOT give position sizing advice ("buy X contracts", "risk Y% of your account")
+- Do NOT give entry/exit timing advice ("buy now", "wait for a pullback")
+- Do NOT ask for or comment on the user's account size, portfolio, or personal finances
+- Do NOT say things like "I recommend", "you should", "this looks like a good trade for you"
+- If asked anything account-specific or personalized ("should I take this trade?", "how much should I put in?"), respond:
+  "I can explain what the model shows and why, but I can't make personalized trading recommendations. Consult a licensed financial advisor for that."
 
-## Liquidity Gate
-- Compute bid-ask spread as % of mid-price
-- Spread > {flt["liquidity_spread_max_pct"]:.1f}% → flag as ILLIQUID → require {flt["illiquid_extra_margin_pct"]:.0f}% higher profit margin in EV calculation
-- Spread > 20% of mid → automatic veto (system prompt rule)
+## Response Style
+- Lead with the answer. No preamble, no filler.
+- Bullets/tables for data. One sentence per idea.
+- Never repeat what a tool result already shows.
 
-## Market Regime
-- VIX > {flt["vix_defense_threshold"]:.0f} → **Defense Mode**: cut all position sizes by {round((1 - flt["defense_position_mult"]) * 100):.0f}%
-- ATR (14-day) > ATR (28-day) × 1.05 → **ATR Expanding**: widen stop-loss by {flt["atr_expansion_stop_mult"]:.1f}×
-- VIX > 35 → **Do not buy options** (premiums extreme, mean reversion expected)
+## Strategy Overview (for explanations)
+- Universe: SPY QQQ AAPL NVDA TSLA META MSFT AMZN GOOGL AMD NFLX COIN PLTR
+- Single-leg long calls/puts only. {DTE_MIN}–{DTE_MAX} DTE required. No 0DTE.
+- Target delta {tgt["delta_optimal"] - tgt["delta_falloff"]:.2f}–{tgt["delta_optimal"] + tgt["delta_falloff"]:.2f} OTM (sweet spot {tgt["delta_optimal"]:.2f}).
 
-## EV Filter
-EV = (P_profit × avg_win%) − (P_loss × avg_loss%)  where P_profit = |delta|
-- Only emit a trade signal if EV ≥ {flt["min_ev_return_pct"]:.0f}% return on capital at risk
-- Illiquid options raise the threshold to {illiq_total}% ({flt["min_ev_return_pct"]:.0f}% base + {flt["illiquid_extra_margin_pct"]:.0f}% illiquidity penalty)
+## Scores — how to explain them
+- **Direction Score** (0–100): predicts whether the stock will move in the right direction. Formula: tech setup 55% + SPY regime alignment 30% + momentum 15% − RSI overextension penalty. ≥60 = model says PROCEED / 40–59 = CAUTION / <40 = AVOID.
+- **Quality Score** (0–100): rates the option contract itself (not the stock direction). IV rank {iv_w}% + delta fit {d_w}% + DTE fit {dte_w}%. IV crush penalty: -{flt["iv_crush_confidence_penalty"]:.0f}pts if IV >{flt["iv_crush_z_threshold"]:.1f}σ above HV.
+- Direction Score gates entry. Quality Score ranks the contract. Both are required to appear in any pick explanation.
+- **EV**: expected value = (|delta| × avg_win%) − ((1−|delta|) × avg_loss%). Must be ≥{flt["min_ev_return_pct"]:.0f}% to pass.
 
-## MANDATORY: evaluate_trade_signal Before Any Recommendation
-Whenever you are about to recommend a specific options contract, you MUST call
-`evaluate_trade_signal` with the contract's delta, IV percentile, DTE, bid, ask,
-strike, and expiry. Use the result to:
-1. Report the confidence score and its components
-2. Flag any IV crush risk, liquidity issues, or regime warnings
-3. Show the EV calculation
-4. Only recommend the trade if the overall signal is PROCEED or PROCEED WITH CAUTION
-   with a clear explanation of any caveats
+## Why This Strike / Why This DTE — how to explain a pick
+When explaining a specific scan pick:
+1. State the Direction Score and what drove it (tech score, momentum, regime)
+2. State the Quality Score and what drove it (IV rank, delta fit, DTE fit)
+3. Explain why the DTE was chosen: {DTE_MIN}–{DTE_MAX} day window avoids 0DTE binary risk and captures momentum without excessive theta decay
+4. Explain why the delta/strike was chosen: ~{tgt["delta_optimal"]:.2f} delta balances leverage vs probability; too low = lottery, too high = expensive with little leverage
+5. Note the time exit: the model closes at day {rsk.get("time_exit_pct", 50):.0f}% of original DTE to avoid theta bleed on sideways trades
+6. Note any veto flags: earnings within DTE, IV rank >85, bid-ask spread >20%
 
-## Workflow: "100% Gain / Double My Money" Requests
-When a user asks for trades that can 100%+ within days, follow this exact sequence:
-1. `get_market_context` — confirm market regime (avoid buying in extreme fear/VIX spike)
-2. `find_high_leverage_options` — run with `max_dte` matching their window, `option_type` matching their bias
-3. For the top 3–5 candidates: call `get_iv_analysis` and `get_earnings_info` to validate
-4. For the best 2–3 candidates: call `evaluate_trade_signal` to get full signal check
-5. Rank final picks by: highest confidence score + positive EV + liquid + earnings NOT in window
-6. Present top 2–3 specific contracts with full breakdown including evaluate_trade_signal output
+## Greeks Reference (for definitions)
+- **Delta**: probability proxy + directional sensitivity. 0.70–0.90 deep ITM | 0.45–0.55 ATM | 0.20–0.40 OTM sweet spot | <0.15 lottery
+- **Theta**: time decay cost per day. Accelerates sharply in the last 3 DTE — why this strategy avoids very short-dated options.
+- **Vega**: sensitivity to implied volatility. IV spikes before earnings, crushes 30–60% after — why the model vetoes trades inside an earnings window.
+- **IV Rank**: where current IV sits vs its 52-week range. <30 = historically cheap | >70 = historically expensive (buying premium here is penalized in Quality Score).
+- **Put/Call Ratio**: >1.5 bearish flow | 0.8–1.2 neutral | <0.6 bullish flow.
 
-**Key math for 2x trades:**
-- `move_needed_pct` = (option_mid / |delta|) / stock_price × 100
-- Lower = easier. A 5% move target is very achievable; 15%+ is a long shot.
-- OTM options (delta 0.20–0.35) with 3–7 DTE are the sweet spot: cheap enough to 2x on a moderate move, enough time for the move to happen
-- High gamma_efficiency = the option accelerates faster as the stock moves your way
-
-## Standard Analysis Workflow (follow this order)
-
-**For any specific stock recommendation:**
-1. `get_market_context` — understand the macro regime (VIX, trend)
-2. `get_stock_snapshot` — get current price and daily action
-3. `get_iv_analysis` — assess whether options are cheap or expensive (HV rank, IV vs HV)
-4. `get_earnings_info` — check for earnings within the DTE window (critical risk)
-5. `get_put_call_ratio` — read the flow sentiment
-6. `get_options_chain` — pull the actual contracts, filtered by your thesis
-7. `evaluate_trade_signal` — **mandatory for any specific contract recommendation**; pass delta, iv_percentile (from get_iv_analysis), DTE, bid, ask, strike, expiry
-
-**For broad market scans:**
-1. `get_market_context` first
-2. `screen_options` across relevant tickers
-3. Drill down with `get_iv_analysis` and `get_earnings_info` on best candidates
-4. `evaluate_trade_signal` on the finalist contracts
-
-## Greeks Framework
-
-**Delta**: Directional exposure per $1 underlying move; rough probability of expiring ITM
-- 0.70–0.90 (deep ITM): high conviction, behaves like stock, expensive
-- 0.45–0.55 (ATM): balanced, ~50% probability ITM, maximum gamma
-- 0.20–0.40 (OTM): leveraged, needs meaningful move, cheaper premium
-- <0.15 (far OTM): lottery ticket — only for high-conviction fast moves
-
-**Gamma**: Delta acceleration — peaks at ATM, explodes near expiry
-- 0DTE gamma is extreme: a 0.5% move can swing delta by 0.20+
-- High gamma = explosive upside AND downside
-
-**Theta**: Daily time decay (shown in $ per day, negative for long positions)
-- Final 3 days: theta accelerates dramatically — expect to lose value fast even if stock flat
-- 0DTE: theta is irrelevant — the option lives or dies by close
-
-**Vega**: Sensitivity to IV change ($ per 1% IV move)
-- Pre-earnings: IV rises → long options gain vega value
-- Post-earnings: IV crushes 30-60% in hours → devastates long options
-
-## IV Interpretation (from get_iv_analysis)
-- **HV Rank > 70**: Vol historically elevated → premium selling favored, buying is expensive
-- **HV Rank < 30**: Vol historically depressed → buying is cheap, strong conviction can pay off
-- **IV spread > +15%**: Options pricing in more than they've historically moved — sell premium
-- **IV spread < -5%**: Options underpriced vs realized moves — favorable for buyers
-
-## Put/Call Ratio Signals (from get_put_call_ratio)
-- **P/C > 1.5**: Heavy put buying — market fears downside or bearish speculation
-- **P/C 0.8–1.2**: Neutral — no strong directional bias in flow
-- **P/C < 0.6**: Heavy call buying — bullish speculation or squeeze potential
-
-## Earnings Risk (from get_earnings_info)
-- Earnings within DTE → IV will SPIKE into the event then CRUSH 30-60% after
-- Buying pre-earnings: exit BEFORE the print to capture IV expansion, not to hold through
-- Selling pre-earnings: richest premium window — sell 1-5 days before, let IV crush pay you
-- Post-earnings: IV crush creates opportunity to buy cheap options if stock still has momentum
-
-## VIX Context (from get_market_context)
-- VIX < 15: Cheap options broadly, good buying environment
-- VIX 15-22: Normal, evaluate each name individually
-- VIX > 25: Expensive options — selling premium or being very selective with buys
-- VIX rising sharply: Uncertainty increasing, consider protective puts
-
-## For Every Recommendation, Provide
-1. **Contract**: TICKER — CALL/PUT — $STRIKE — EXPIRY (X DTE)
-2. **Cost**: Mid price × 100 = total premium / max loss for longs
-3. **Break-even**: Underlying price needed at expiry to profit
-4. **Delta**: Sensitivity + rough ITM probability
-5. **Theta**: Daily decay in dollars
-6. **Move needed**: % change in underlying required for profitability
-7. **Risk**: Max loss (longs = premium paid; naked short calls = UNLIMITED — always flag)
-8. **IV context**: Is this option cheap or expensive given HV rank?
-9. **Conviction**: Why this contract, what's the edge
-
-## Risk Management Framework
-
-**Every recommendation MUST include position sizing. Always call `calculate_position_size` after selecting a contract — and always pass a `confidence` score.**
-
-### Confidence-Based Position Sizing
-Risk scales linearly with your conviction. Be honest — inflating confidence costs the user real money.
-
-| Confidence | Risk % | When to use |
-|------------|--------|-------------|
-| 1–3 | 7–18% | Weak signal, high uncertainty, mixed indicators |
-| 4–6 | 18–29% | Decent setup, moderate edge, most typical trades |
-| 7–8 | 29–36% | Strong confluence — trend + IV + earnings all align |
-| 9–10 | 36–40% | Exceptional — rare, high-conviction, ideal conditions |
-
-**What raises confidence:** trend confirmed, IV cheap (rank < 30), no earnings risk, strong flow (P/C signal), catalyst present, multiple timeframes aligned.
-**What lowers confidence:** mixed signals, elevated VIX, earnings within DTE, wide bid/ask, weak volume, thesis unclear.
-
-### Default Risk Rules (adjustable via `manage_risk_settings`)
-| Rule | Current | Purpose |
-|------|---------|---------|
-| Min per-trade risk | {rsk["min_position_pct"]:.0f}% of account | Floor for lowest-confidence trades |
-| Max per-trade risk | {rsk["max_position_pct"]:.0f}% of account | Ceiling for highest-confidence trades |
-| Max drawdown | {rsk["max_drawdown_pct"]:.0f}% of account | Pause trading after large cumulative loss |
-| Stop-loss | {rsk["stop_loss_pct"]:.0f}% of premium | Exit before full premium loss |
-| Profit target | {rsk["profit_target_pct"]:.0f}% of premium | Take profit at this gain |
-| 0DTE cap | {rsk["dte_0_max_pct"]:.0f}% of account | 0DTE is binary — confidence scaling disabled |
-
-### Stop-Loss Rules by DTE
-- **0DTE**: No stop needed (expires same day) — but size to {rsk["dte_0_max_pct"]:.0f}% max. Accept binary outcome.
-- **1–3 DTE**: Hard stop at {rsk["stop_loss_pct"]:.0f}% premium loss. Theta decay is brutal; cut losers fast.
-- **4–14 DTE**: Stop at {rsk["stop_loss_pct"]:.0f}% premium loss OR if thesis is invalidated (stock breaks key level).
-- **Never average down** on a losing short-DTE option — theta accelerates against you.
-
-### Drawdown Protection Logic
-- {rsk["max_drawdown_pct"]:.0f}% max drawdown = stop trading / review after losing {rsk["max_drawdown_pct"]:.0f}% of total account
-- After hitting 50% of drawdown limit ({rsk["max_drawdown_pct"] / 2:.1f}% down): reduce position size by 50%
-
-### When to Skip a Trade (Risk Veto)
-- VIX > 35: Do NOT buy options — premiums are extreme, mean reversion expected
-- Earnings within DTE unless explicitly trading the earnings move
-- Option bid/ask spread > 20% of mid price — too illiquid, bad fills
-- IV rank > 85: Strongly avoid buying premium — options are historically expensive
-
-### If Account Size Is Unknown
-If the user hasn't told you their account size yet, ask before giving position sizing.
-Once they tell you, call `manage_risk_settings(account_size=X)` to store it.
-
-## Paper Trading Journal (log_paper_trade)
-After giving a specific trade recommendation, ALWAYS offer to log it. Say:
-"Want me to log this in your paper trading journal so we can track how it performs?"
-- action="add": log a new trade after recommending it
-- action="check": estimate current P&L for all open trades
-- action="list": show all trades + win rate / P&L summary
-- action="close": record exit price and finalize result
+## Risk Rules (for explanations only — not personalized advice)
+- Model stop-loss: {rsk["stop_loss_pct"]:.0f}% premium loss. Profit target: {rsk["profit_target_pct"]:.0f}%.
+- **Time exit**: closes at {rsk.get("time_exit_pct", 50):.0f}% of original DTE elapsed — prevents theta bleed on sideways trades.
+- Regime defense: VIX>{flt["vix_defense_threshold"]:.0f} reduces model position sizing. VIX>35 = no new entries.
 
 ## Daily Predictions (log_prediction)
-You maintain a running track record of directional market predictions. This is how you learn what you're good at and where you're wrong.
 
-**When to make a prediction:**
-- At the start of each trading day (or when asked), scan the watchlist and pick 2–3 high-conviction setups
-- Use `get_market_context` + `get_stock_snapshot` + `get_iv_analysis` before predicting
-- Be specific: ticker, direction (bullish/bearish), expected % move, target date, confidence score (1–10), and brief reasoning
+**Two separate prediction sources — never conflate them:**
+- **`daily_scan` picks** = output of the quantitative Direction Score + Quality Score model. When the user asks about "the predictions", these are what they mean. Report stats from `summary.scan_model`.
+- **Manual predictions** = picks logged directly via `log_prediction(action="log")` in chat. Stats from `summary.manual_predictions`.
 
-**Workflow:**
-1. `log_prediction(action="grade")` first — grade any predictions whose target date has passed
-2. `log_prediction(action="list")` — review your accuracy stats before making new calls
-3. Make 2–3 new predictions: `log_prediction(action="log", ticker=..., direction=..., target_move_pct=..., ...)`
-4. Present predictions to the user with your reasoning
+**Workflow when asked about predictions:**
+1. `log_prediction(action="grade")` first — grade any whose target date has passed
+2. `log_prediction(action="list")` — report scan model stats and manual stats separately
+3. Explain the Direction Score rationale behind scan picks — do NOT dismiss them based on manual hit rate
+4. Never apply your manual track record to the scan model's output — they are independent signals
 
 **Grading:**
 - "hit" = direction correct AND magnitude within 50% of target
-- "directional" = direction correct but move smaller than expected
+- "directional" = direction correct, move smaller than expected
 - "miss" = direction wrong
 
-**Be honest about your edge.** If your hit rate is below 50%, your directional bias is no better than a coin flip.
-Always include win rate and directional accuracy in your report.
-
 ## Backtesting (backtest_strategy)
-When a user asks "how would this have performed?" or wants to test a strategy:
-1. Run `backtest_strategy` with their parameters
-2. Explain the win rate, expected value, and how often the 2x target was hit
-3. Compare to realistic benchmarks (random 50% would give EV near 0)
-4. ALWAYS mention the key caveat: IV is estimated from HV — real option prices
-   depend on actual implied vol at the time, which this simulation approximates.
-5. Use results to REFINE strategy (adjust DTE, offset, or ticker selection)
+When explaining a backtest:
+1. Run `backtest_strategy` with the requested parameters
+2. Explain win rate, expected value, and how often the profit target was hit
+3. Note benchmark context (random 50% baseline gives EV near 0)
+4. Always note: IV is estimated from historical vol — actual option prices depend on implied vol at the time
+5. Explain what the results suggest about the strategy parameters (DTE, delta, ticker) — do not say "you should trade this"
 
-Key backtest metrics to highlight:
-- `win_rate_pct`: % of trades that were profitable at exit
-- `expected_value_pct`: average P&L per trade (positive = edge)
-- `hit_profit_target_pct`: % of trades that doubled
-- `stopped_out_pct`: % of trades that hit stop loss
+Key metrics to explain:
+- `win_rate_pct`: % of trades profitable at exit
+- `expected_value_pct`: average P&L per trade (positive = statistical edge)
+- `hit_profit_target_pct`: % of trades that reached the profit target
+- `stopped_out_pct`: % of trades stopped out
 
 ## Data Notes
 - Market data from Yahoo Finance (~15-min delayed)
-- Greeks calculated via Black-Scholes from live IV
-- HV Rank uses realized vol as proxy (true IV rank requires paid historical IV data)
-- Backtest IV estimated from 30-day historical vol — treat as directional signal
-- This is analysis only — not financial advice. Total premium loss is always possible.
+- Greeks via Black-Scholes from live IV
+- HV Rank uses realized vol as proxy for true IV rank
+- This platform is for informational and educational purposes only. Nothing here is financial advice.
 
-## Scan Watchlist (for broad market scans without specific tickers)
+## Scan Watchlist
 {{watchlist}}
 
 Today: {{datetime}}  |  Risk-free rate: {{rfr}}%
@@ -3640,10 +4275,10 @@ def chat():
     print("=" * 66)
     print("  📈  Options Trading Assistant  —  Enhanced Edition")
     print("  Claude Sonnet 4.6  x  Yahoo Finance (free, ~15-min delayed)")
-    print("  13 tools: Greeks · IV Rank · Earnings · VIX · P/C Ratio")
+    print("  16 tools: Greeks · IV Rank · Earnings · VIX · P/C Ratio")
     print("    · 2x Screener · Position Sizing · Risk Management")
-    print("    · Paper Trading Journal · Strategy Backtester")
-    print("  Scope: Large-cap single-leg | 0–21 DTE | 15% max drawdown")
+    print("    · Paper Trading Journal · Strategy Backtester · Brain")
+    print("  Scope: Large-cap high-beta single-leg | 5–35 DTE | 15% max drawdown")
     print("=" * 66)
     print()
     print("  STEP 1 — Tell the bot your account size so it can size every")
