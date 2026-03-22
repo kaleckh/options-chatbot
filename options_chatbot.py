@@ -1878,14 +1878,15 @@ def backfill_predictions(
                 # Entry price = open on pred_date
                 entry_price = round(float(opens.iloc[i]), 2)
 
-                # Direction decision (threshold aligned with live scanner: 0.3%)
-                if ret5 > 0.3 and c_now > sma20:
+                # Direction decision (threshold from Brain entry.entry_momentum_pct)
+                _mom_thr = float(sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+                if ret5 > _mom_thr and c_now > sma20:
                     direction = "bullish"
                     # confidence: scales 6–9 with strength of signal
-                    conf = min(9, 6 + int(min(ret5 - 0.3, 6) / 2))
-                elif ret5 < -0.3 and c_now < sma20:
+                    conf = min(9, 6 + int(min(ret5 - _mom_thr, 6) / 2))
+                elif ret5 < -_mom_thr and c_now < sma20:
                     direction = "bearish"
-                    conf = min(9, 6 + int(min(abs(ret5) - 0.3, 6) / 2))
+                    conf = min(9, 6 + int(min(abs(ret5) - _mom_thr, 6) / 2))
                 else:
                     skipped_neutral += 1
                     continue
@@ -2862,8 +2863,9 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             sma20 = float(np.mean(prices[idx - 20 : idx]))
             sma50 = float(np.mean(prices[idx - 50 : idx]))
 
-            bullish = ret5 >  0.3 and price > sma20
-            bearish = ret5 < -0.3 and price < sma20
+            _mom_thr = float(_sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+            bullish = ret5 >  _mom_thr and price > sma20
+            bearish = ret5 < -_mom_thr and price < sma20
             if not bullish and not bearish:
                 continue
             trade_type = "call" if bullish else "put"
@@ -3155,59 +3157,6 @@ def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
 
     return {"rolled": rolled, "new": new_picks, "dropped": dropped}
 
-
-def _calculate_confidence_score(
-    iv_percentile: float,
-    delta: float,
-    dte: int,
-    tech_score: float = 50.0,   # 0–100 directional technical setup score
-) -> dict:
-    """
-    Weighted confidence score 0–100 based on the STRATEGY_PROFILE weights.
-
-    iv_percentile : lower IV rank = cheaper options = higher score
-    delta         : peaks at delta_optimal, Gaussian fall-off
-    dte           : peaks at dte_optimal, Gaussian fall-off
-    tech_score    : RSI + MACD + SMA trend alignment (0-100, 50 = neutral)
-                    weight controlled by STRATEGY_PROFILE["confidence_weights"]["technical"]
-    """
-    sp = STRATEGY_PROFILE
-    # IV percentile: 0th → score 1.0, 100th → score 0.0
-    iv_norm = max(0.0, 1.0 - iv_percentile / 100.0)
-
-    # Delta: triangle peak at optimal
-    d_opt = sp["targets"]["delta_optimal"]
-    d_fall = sp["targets"]["delta_falloff"]
-    delta_norm = max(0.0, 1.0 - abs(abs(delta) - d_opt) / d_fall)
-
-    # DTE: triangle peak at optimal
-    t_opt = sp["targets"]["dte_optimal"]
-    t_fall = sp["targets"]["dte_falloff"]
-    dte_norm = max(0.0, 1.0 - abs(dte - t_opt) / t_fall)
-
-    # Technical: already 0-100, normalize to 0-1
-    tech_norm = tech_score / 100.0
-
-    w = sp["confidence_weights"]
-    total_w = sum(w.values()) or 1.0
-    raw = (
-        w["iv_percentile"]        * iv_norm   * 100
-        + w["delta"]              * delta_norm * 100
-        + w["dte"]                * dte_norm   * 100
-        + w.get("technical", 0.0) * tech_norm  * 100
-    ) / total_w
-
-    return {
-        "confidence_score":      round(raw, 1),
-        "iv_component":          round(iv_norm    * w["iv_percentile"]        / total_w * 100, 1),
-        "delta_component":       round(delta_norm * w["delta"]                / total_w * 100, 1),
-        "dte_component":         round(dte_norm   * w["dte"]                  / total_w * 100, 1),
-        "tech_component":        round(tech_norm  * w.get("technical", 0.0)  / total_w * 100, 1),
-        "tech_score_in":         round(tech_score, 1),
-        "iv_percentile_in":      iv_percentile,
-        "delta_in":              round(abs(delta), 3),
-        "dte_in":                dte,
-    }
 
 
 def _check_trade_liquidity(bid: float, ask: float) -> dict:

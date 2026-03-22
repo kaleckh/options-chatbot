@@ -1,10 +1,4 @@
 {
-  "confidence_weights": {
-    "iv_percentile": 0.45,
-    "delta": 0.2,
-    "dte": 0.15,
-    "technical": 0.18
-  },
   "targets": {
     "delta_optimal": 0.3,
     "delta_falloff": 0.2,
@@ -36,5 +30,21 @@
     "entry_momentum_pct": 0.5,
     "min_direction_score": 35,
     "min_tech_score": 55
+  },
+  "direction_score_weights": {
+    "tech": 0.55,
+    "regime": 0.30,
+    "momentum": 0.15
+  },
+  "quality_score_weights": {
+    "iv_rank": 0.40,
+    "delta": 0.35,
+    "dte": 0.25
+  },
+  "rsi_overextension": {
+    "severe_threshold": 72,
+    "moderate_threshold": 68,
+    "severe_penalty": 15.0,
+    "moderate_penalty": 8.0
   }
 }

@@ -589,6 +589,21 @@ with st.sidebar:
 
     _active_tab = st.session_state["active_tab"]
 
+    # Scroll to top on every page load + hide stale chat elements on non-chat tabs
+    _is_chat = st.session_state.get("active_tab", "💬 Chat") == "💬 Chat"
+    st.html(f"""<script>
+try {{
+  var doc = window.parent.document;
+  var main = doc.querySelector('section.main');
+  if (main) main.scrollTo({{top: 0, behavior: 'instant'}});
+  // Hide stale chat elements immediately when not on chat tab
+  var hide = {'false' if _is_chat else 'true'};
+  doc.querySelectorAll('[data-testid="stChatMessage"], [data-testid="stChatInput"], [data-testid="stChatInputContainer"]').forEach(function(el) {{
+    el.style.display = hide ? 'none' : '';
+  }});
+}} catch(e) {{}}
+</script>""")
+
     st.markdown("---")
 
     # Chat-specific sidebar content
@@ -706,9 +721,8 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ── Auto-refresh: detect external updates (auto_scan.py) and reload ───────────
-# Uses st.fragment(run_every=30) — runs a lightweight background check every
-# 30 seconds without a full page reload. If predictions.json was updated
-# (e.g. by Windows Task Scheduler running auto_scan.py), triggers a full rerun.
+# Lightweight background check every 90s — only active on Predictions tab.
+# If predictions.json was updated (e.g. by auto_scan.py), triggers a full rerun.
 @st.fragment(run_every=90)
 def _watch_predictions_file():
     _mtime = os.path.getmtime(PREDICTIONS_FILE) if os.path.exists(PREDICTIONS_FILE) else 0.0
@@ -716,7 +730,8 @@ def _watch_predictions_file():
         st.session_state["pred_file_mtime"] = _mtime
         st.rerun()
 
-_watch_predictions_file()
+if st.session_state.get("active_tab", "💬 Chat") == "📊 Predictions":
+    _watch_predictions_file()
 
 # ── Sector sentiment helpers (used in Predictions tab) ───────────────────────
 
@@ -851,7 +866,7 @@ def _sentiment_badge_delta(new_sent: str, new_ret: float, old_sent: str | None) 
 
 # ── Main content area — driven by sidebar navigation ───────────────────────────
 
-_nav = st.session_state.get("active_tab", "💬 Chat")
+_nav = _active_tab  # single source of truth — set in sidebar
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 1: Chat
@@ -2560,31 +2575,10 @@ elif _nav == "🔬 Strategy Lab":
         st.caption("Adjust any parameter and hit **Save** to apply instantly across chat, scans, and backtests. Every save creates a version history entry.")
 
         _sp   = _oc.STRATEGY_PROFILES[_brain_profile]
-        _cw   = _sp["confidence_weights"]
         _tgt  = _sp["targets"]
         _risk = _sp["risk"]
         _filt = _sp["filters"]
         _entry = _sp.get("entry", {})
-
-        # ── Section 1: Scoring Weights ─────────────────────────────────────────
-        st.markdown('<div class="section-header">Scoring Weights</div>', unsafe_allow_html=True)
-        st.caption("How much each factor contributes to the Direction Score. Weights are normalized automatically.")
-        _sc1, _sc2, _sc3, _sc4 = st.columns(4)
-        _w_iv    = _sc1.slider("IV Rank",    0.05, 0.80, float(_cw.get("iv_percentile", 0.40)), 0.05, key=f"br_w_iv_{_brain_profile}",
-                               help="Lower IV rank = cheaper options = higher score. Higher weight = IV dominates selection.")
-        _w_delta = _sc2.slider("Delta",      0.05, 0.70, float(_cw.get("delta",         0.30)), 0.05, key=f"br_w_delta_{_brain_profile}",
-                               help="How tightly delta must match the target. Higher weight = strike precision matters more.")
-        _w_dte   = _sc3.slider("DTE",        0.05, 0.50, float(_cw.get("dte",           0.20)), 0.05, key=f"br_w_dte_{_brain_profile}",
-                               help="How tightly DTE must match the target. Higher weight = expiry timing matters more.")
-        _w_tech  = _sc4.slider("Technical",  0.00, 0.30, float(_cw.get("technical",     0.10)), 0.05, key=f"br_w_tech_{_brain_profile}",
-                               help="RSI + MACD + SMA trend alignment. Higher weight = only strong technical setups pass.")
-        _w_total = _w_iv + _w_delta + _w_dte + _w_tech or 1.0
-        _sc1.caption(f"{_w_iv/_w_total*100:.0f}% normalized")
-        _sc2.caption(f"{_w_delta/_w_total*100:.0f}% normalized")
-        _sc3.caption(f"{_w_dte/_w_total*100:.0f}% normalized")
-        _sc4.caption(f"{_w_tech/_w_total*100:.0f}% normalized")
-
-        st.markdown("---")
 
         # ── Direction Score Weights ────────────────────────────────────────────
         _dsw  = _sp.get("direction_score_weights", {})
@@ -2806,12 +2800,6 @@ elif _nav == "🔬 Strategy Lab":
                 if round(float(_before[k]), 4) != round(float(_after[k]), 4)
             ]
 
-            _oc.STRATEGY_PROFILES[_brain_profile]["confidence_weights"].update({
-                "iv_percentile": _w_iv,
-                "delta":         _w_delta,
-                "dte":           _w_dte,
-                "technical":     _w_tech,
-            })
             _oc.STRATEGY_PROFILES[_brain_profile]["targets"].update({
                 "delta_optimal":     _delta_opt,
                 "delta_falloff":     _delta_fall,
@@ -2949,19 +2937,25 @@ elif _nav == "🔬 Strategy Lab":
                 "backtest, and chat response. Change them only via the optimizer Apply button."
             )
             _sp_ro = _oc.STRATEGY_PROFILE
-            _cw    = _sp_ro["confidence_weights"]
             _tgt   = _sp_ro["targets"]
             _risk  = _sp_ro["risk"]
             _filt  = _sp_ro["filters"]
+            _dsw_ro = _sp_ro.get("direction_score_weights", {})
+            _qsw_ro = _sp_ro.get("quality_score_weights", {})
 
-            st.markdown("**Confidence weights** *(normalized)*")
-            ro1, ro2, ro3, ro4 = st.columns(4)
-            _w_sum = sum(_cw.values()) or 1.0
-            ro1.metric("IV Rank",    f"{_cw['iv_percentile']/_w_sum*100:.1f}%")
-            ro2.metric("Delta",      f"{_cw['delta']/_w_sum*100:.1f}%")
-            ro3.metric("DTE",        f"{_cw['dte']/_w_sum*100:.1f}%")
-            ro4.metric("Technical",  f"{_cw.get('technical',0.0)/_w_sum*100:.1f}%",
-                       help="RSI + MACD + SMA trend alignment — optimizer-learned weight")
+            st.markdown("**Direction Score weights** *(normalized)*")
+            ro1, ro2, ro3 = st.columns(3)
+            _ds_sum = sum(_dsw_ro.values()) or 1.0
+            ro1.metric("Tech setup",  f"{_dsw_ro.get('tech',0.55)/_ds_sum*100:.0f}%")
+            ro2.metric("SPY regime",  f"{_dsw_ro.get('regime',0.30)/_ds_sum*100:.0f}%")
+            ro3.metric("Momentum",    f"{_dsw_ro.get('momentum',0.15)/_ds_sum*100:.0f}%")
+
+            st.markdown("**Quality Score weights** *(normalized)*")
+            rq1, rq2, rq3 = st.columns(3)
+            _qs_sum = sum(_qsw_ro.values()) or 1.0
+            rq1.metric("IV Rank",  f"{_qsw_ro.get('iv_rank',0.40)/_qs_sum*100:.0f}%")
+            rq2.metric("Delta fit", f"{_qsw_ro.get('delta',0.35)/_qs_sum*100:.0f}%")
+            rq3.metric("DTE fit",   f"{_qsw_ro.get('dte',0.25)/_qs_sum*100:.0f}%")
 
             st.markdown("**Entry rules**")
             re1, re2, re3, re4 = st.columns(4)
@@ -3733,7 +3727,6 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
 
             if final:
                 sp       = _oc.STRATEGY_PROFILES.get(_opt_profile, _oc.STRATEGY_PROFILE)
-                cur_cw   = sp["confidence_weights"]
                 cur_tgt  = sp["targets"]
                 cur_risk = sp["risk"]
                 cur_filt = sp["filters"]
@@ -3743,12 +3736,8 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
 
                 # Human-readable labels for each optimized param
                 _PARAM_LABELS = {
-                    "iv_percentile":     ("IV Rank weight",        lambda: round(cur_cw.get("iv_percentile", 0), 4),      "%",  100),
-                    "delta":             ("Delta weight",           lambda: round(cur_cw.get("delta", 0), 4),              "%",  100),
-                    "dte":               ("DTE weight",             lambda: round(cur_cw.get("dte", 0), 4),                "%",  100),
-                    "technical":         ("Technical weight",       lambda: round(cur_cw.get("technical", 0.0), 4),        "%",  100),
                     "delta_target":      ("Delta target",           lambda: cur_tgt.get("delta_optimal", 0.30),            "",   1),
-                    "entry_momentum":    ("Entry momentum %",       lambda: 0.5,                                           "%",  1),
+                    "entry_momentum":    ("Entry momentum %",       lambda: sp.get("entry", {}).get("entry_momentum_pct", 0.5), "%",  1),
                     "min_confidence":    ("Min confidence",         lambda: 50.0,                                          "",   1),
                     "min_ev_pct":        ("Min EV %",               lambda: cur_filt.get("min_ev_return_pct", 10.0),       "%",  1),
                     "stop_loss_pct":     ("Stop-loss %",            lambda: cur_risk.get("stop_loss_pct", 50.0),           "%",  1),
@@ -3773,15 +3762,6 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
 
                         col_left, col_right = st.columns(2)
                         with col_left:
-                            st.markdown("**Confidence weights**")
-                            for key in ("iv_percentile", "delta", "dte", "technical"):
-                                lbl, cur_fn, unit, scale = _PARAM_LABELS[key]
-                                cur_v = round(cur_fn() * scale, 1)
-                                new_v = round(params.get(key, cur_fn()) * scale, 1)
-                                delta_str = f"{new_v - cur_v:+.1f}{unit}"
-                                st.metric(lbl, f"{new_v}{unit}", delta=delta_str)
-
-                        with col_right:
                             st.markdown("**Entry & exit parameters**")
                             for key in ("delta_target", "entry_momentum", "min_confidence", "min_ev_pct", "stop_loss_pct", "profit_target_pct"):
                                 if key not in params:
@@ -3814,11 +3794,6 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
                             type="primary",
                         ):
                             # ── Write to the selected profile (not always equity) ──
-                            cw = sp["confidence_weights"]
-                            if "iv_percentile"     in params: cw["iv_percentile"]                                       = params["iv_percentile"]
-                            if "delta"             in params: cw["delta"]                                               = params["delta"]
-                            if "dte"               in params: cw["dte"]                                                 = params["dte"]
-                            if "technical"         in params: cw["technical"]                                           = params["technical"]
                             if "delta_target"      in params: sp["targets"]["delta_optimal"]                            = params["delta_target"]
                             if "stop_loss_pct"     in params: sp["risk"]["stop_loss_pct"]                               = params["stop_loss_pct"]
                             if "profit_target_pct" in params: sp["risk"]["profit_target_pct"]                           = params["profit_target_pct"]
