@@ -3,3 +3,6 @@ yfinance>=0.2.40
 numpy>=1.26.0
 scipy>=1.13.0
 requests>=2.31.0
+streamlit-authenticator>=0.4.2
+PyYAML>=6.0
+bcrypt>=4.0

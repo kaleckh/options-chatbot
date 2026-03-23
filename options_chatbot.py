@@ -166,6 +166,19 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "delta":   0.35,
             "dte":     0.25,
         },
+        "early_exit": {
+            "enabled":                True,
+            "min_hold_days":          1,
+            "tech_decay_pct":         35.0,
+            "direction_floor":        30.0,
+            "momentum_reversal":      True,
+            "rsi_extreme_exit":       True,
+            "rsi_call_ceiling":       78,
+            "rsi_put_floor":          22,
+            "trailing_profit_pct":    40.0,
+            "trailing_giveback_pct":  50.0,
+            "min_profit_to_exit_pct": 5.0,
+        },
     },
     "index": {
         "name": "OTM Index Momentum Strategy",
@@ -227,6 +240,19 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "iv_rank": 0.40,
             "delta":   0.35,
             "dte":     0.25,
+        },
+        "early_exit": {
+            "enabled":                True,
+            "min_hold_days":          1,
+            "tech_decay_pct":         35.0,
+            "direction_floor":        30.0,
+            "momentum_reversal":      True,
+            "rsi_extreme_exit":       True,
+            "rsi_call_ceiling":       78,
+            "rsi_put_floor":          22,
+            "trailing_profit_pct":    40.0,
+            "trailing_giveback_pct":  50.0,
+            "min_profit_to_exit_pct": 5.0,
         },
     },
 }
@@ -292,7 +318,8 @@ def _load_profile() -> None:
                 saved = json.load(f)
             sp = STRATEGY_PROFILES[profile]
             for section in ("confidence_weights", "targets", "filters", "risk", "entry",
-                            "direction_score_weights", "rsi_overextension", "quality_score_weights"):
+                            "direction_score_weights", "rsi_overextension", "quality_score_weights",
+                            "early_exit"):
                 if section in saved and isinstance(saved[section], dict):
                     sp[section].update(saved[section])
         except Exception:
@@ -1491,6 +1518,14 @@ def log_prediction(
     # ── grade ─────────────────────────────────────────────────────────────────
     if action == "grade":
         graded_count = 0
+        # Fetch SPY regime data once for all picks (reused by early exit checks)
+        _spy_ret5_grade = 0.0
+        try:
+            _spy_grade = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+            if len(_spy_grade) >= 6:
+                _spy_ret5_grade = float((_spy_grade.iloc[-1] / _spy_grade.iloc[-6] - 1) * 100)
+        except Exception:
+            pass
         for p in preds:
             if p.get("outcome"):
                 continue
@@ -1689,7 +1724,60 @@ def log_prediction(
                         p["current_option_px"] = _live_mid
                     else:
                         p.pop("current_option_px", None)  # don't show a made-up price
-                continue
+
+                    # ── Smart early exit check ────────────────────────────────
+                    _ee_sp  = _get_profile(p.get("ticker", ""))
+                    _ee_cfg = _ee_sp.get("early_exit", {})
+                    _days_held_total = (today.date() - entry_dt.date()).days
+
+                    if (_ee_cfg.get("enabled", False)
+                        and p.get("type") == "daily_scan"
+                        and _days_held_total >= int(_ee_cfg.get("min_hold_days", 1))
+                        and premium > 0 and delta > 0):
+
+                        # Determine current option P&L %
+                        _cur_pnl = p.get("current_pnl_pct")
+                        if _cur_pnl is None and _live_mid is not None and premium > 0:
+                            _cur_pnl = round((_live_mid / premium - 1) * 100, 1)
+                        if _cur_pnl is None:
+                            # Delta-based fallback
+                            _stock_move = latest_close - entry_price
+                            _raw_opt = max(0.01, premium + dir_factor * delta * _stock_move
+                                           - theta_per_day * _days_held_total)
+                            _cur_pnl = round((_raw_opt / premium - 1) * 100, 1)
+
+                        # Track peak P&L across grading cycles
+                        _peak = float(p.get("peak_pnl_pct", 0))
+                        if _cur_pnl > _peak:
+                            _peak = _cur_pnl
+                        p["peak_pnl_pct"] = round(_peak, 1)
+
+                        _ee_min_profit = float(_ee_cfg.get("min_profit_to_exit_pct", 5.0))
+                        if _cur_pnl >= _ee_min_profit:
+                            _should_exit, _exit_detail = _check_early_exit(
+                                pick=p,
+                                current_pnl_pct=_cur_pnl,
+                                peak_pnl_pct=_peak,
+                                sp=_ee_sp,
+                                spy_ret5=_spy_ret5_grade,
+                            )
+                            if _should_exit:
+                                exit_price   = latest_close
+                                exit_reason  = "indicator_exit"
+                                exit_day_idx = len(hist) - 1 if not hist.empty else 0
+                                exit_opt_pct = max(-stop_pct, min(tp_pct, _cur_pnl))
+                                p["indicator_exit_detail"] = _exit_detail
+                                # Fall through to outcome determination below
+                    elif p.get("type") == "daily_scan" and premium > 0:
+                        # Still track peak even when early exit not triggered
+                        _cur_pnl = p.get("current_pnl_pct")
+                        if _cur_pnl is not None:
+                            _peak = float(p.get("peak_pnl_pct", 0))
+                            if _cur_pnl > _peak:
+                                p["peak_pnl_pct"] = round(_cur_pnl, 1)
+
+                if exit_price is None:
+                    continue
 
             actual_move_pct = round((exit_price / entry_price - 1) * 100, 2)
             predicted_move  = p.get("target_move_pct", 0)
@@ -1698,6 +1786,9 @@ def log_prediction(
                 outcome = "hit"
             elif exit_reason == "sl_hit":
                 outcome = "miss"
+            elif exit_reason == "indicator_exit":
+                # Smart exits are gated by min_profit_to_exit_pct, so always profitable
+                outcome = "hit" if (exit_opt_pct is not None and exit_opt_pct > 0) else "directional"
             else:
                 dir_correct = (is_bullish and actual_move_pct > 0) or \
                               (not is_bullish and actual_move_pct < 0)
@@ -2713,6 +2804,93 @@ def _compute_direction_score(
         penalty = _sev_p if rsi14 < _bear_sev_t else (_mod_p if rsi14 < _bear_mod_t else 0.0)
 
     return round(max(0.0, min(100.0, raw - penalty)), 1)
+
+
+def _check_early_exit(
+    pick: dict,
+    current_pnl_pct: float,
+    peak_pnl_pct: float,
+    sp: dict = None,
+    spy_ret5: float = 0.0,
+) -> tuple:
+    """
+    Check whether a pending pick should be exited early based on indicator
+    degradation. Only called for profitable picks held >= min_hold_days.
+
+    Returns (should_exit: bool, reason_detail: str).
+    """
+    if sp is None:
+        sp = _get_profile(pick.get("ticker", ""))
+
+    ee = sp.get("early_exit", {})
+    if not ee.get("enabled", False):
+        return False, ""
+
+    ticker     = pick["ticker"]
+    trade_type = pick["direction"]
+    is_bull    = trade_type in ("call", "bullish")
+
+    # ── 1. Trailing profit giveback (no API call) ─────────────────────────
+    trail_activate = float(ee.get("trailing_profit_pct", 40.0))
+    trail_giveback = float(ee.get("trailing_giveback_pct", 50.0))
+    if peak_pnl_pct >= trail_activate and current_pnl_pct < peak_pnl_pct:
+        pct_given_back = (peak_pnl_pct - current_pnl_pct) / peak_pnl_pct * 100
+        if pct_given_back >= trail_giveback:
+            return True, (
+                f"profit giveback: peak {peak_pnl_pct:+.1f}% -> now {current_pnl_pct:+.1f}% "
+                f"({pct_given_back:.0f}% of gains lost)"
+            )
+
+    # ── 2-5. Fetch live indicators (one call via existing function) ───────
+    try:
+        tech_live, rsi_live, ret5_live = _compute_tech_score_live(ticker, trade_type)
+    except Exception:
+        return False, ""  # can't compute indicators — skip
+
+    dir_score_live = _compute_direction_score(
+        tech_live, trade_type, rsi_live, ret5_live, spy_ret5, sp=sp,
+    )
+
+    # ── 2. Tech score decay ───────────────────────────────────────────────
+    entry_tech = float(pick.get("tech_score", 50))
+    tech_decay_threshold = float(ee.get("tech_decay_pct", 35.0))
+    if entry_tech > 0:
+        decay_pct = (entry_tech - tech_live) / entry_tech * 100
+        if decay_pct >= tech_decay_threshold:
+            return True, (
+                f"tech_score collapsed {decay_pct:.0f}% "
+                f"({entry_tech:.0f} -> {tech_live:.0f})"
+            )
+
+    # ── 3. Direction score below floor ────────────────────────────────────
+    dir_floor = float(ee.get("direction_floor", 30.0))
+    if dir_score_live < dir_floor:
+        return True, (
+            f"direction_score {dir_score_live:.0f} below floor {dir_floor:.0f} "
+            f"(entry was {pick.get('direction_score', '?')})"
+        )
+
+    # ── 4. Momentum reversal ─────────────────────────────────────────────
+    if ee.get("momentum_reversal", True):
+        entry_ret5 = float(pick.get("ret5", 0))
+        if entry_ret5 != 0 and ret5_live != 0:
+            if is_bull and entry_ret5 > 0 and ret5_live < -0.3:
+                return True, (
+                    f"momentum reversed: entry ret5 {entry_ret5:+.1f}% -> now {ret5_live:+.1f}%"
+                )
+            if not is_bull and entry_ret5 < 0 and ret5_live > 0.3:
+                return True, (
+                    f"momentum reversed: entry ret5 {entry_ret5:+.1f}% -> now {ret5_live:+.1f}%"
+                )
+
+    # ── 5. RSI extreme against trade ─────────────────────────────────────
+    if ee.get("rsi_extreme_exit", True):
+        if is_bull and rsi_live >= float(ee.get("rsi_call_ceiling", 78)):
+            return True, f"RSI {rsi_live:.0f} hit overbought extreme — reversal risk"
+        if not is_bull and rsi_live <= float(ee.get("rsi_put_floor", 22)):
+            return True, f"RSI {rsi_live:.0f} hit oversold extreme — reversal risk"
+
+    return False, ""
 
 
 def _generate_trade_strategy(

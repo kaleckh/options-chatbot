@@ -327,7 +327,7 @@ section.main > div.block-container { padding: 1rem 1.5rem 2rem !important; max-w
 html, body, [class*="css"] { font-family: var(--sans) !important; }
 /* h1/h2: used sparingly inside tab content — treated as sub-page titles */
 h1 { font-size: 1.0rem !important; font-weight: 600 !important; letter-spacing: -0.02em !important; color: var(--text-0) !important; margin: 0 0 0.5rem !important; }
-h2 { font-size: 0.88rem !important; font-weight: 600 !important; letter-spacing: -0.01em !important; color: var(--text-0) !important; margin: 0 0 0.5rem !important; }
+h2 { font-size: 0.82rem !important; font-weight: 600 !important; letter-spacing: -0.01em !important; color: var(--text-0) !important; margin: 0 0 0.5rem !important; }
 /* h3/h4/h5: treated as section-header equivalents when used in markdown */
 h3 { font-size: 0.65rem !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.12em !important; color: var(--text-3) !important; margin: 1.5rem 0 0.5rem !important; padding-bottom: 0.5rem !important; border-bottom: 1px solid var(--border-subtle) !important; }
 h4 { font-size: 0.65rem !important; font-weight: 700 !important; text-transform: uppercase !important; letter-spacing: 0.12em !important; color: var(--text-3) !important; margin: 1rem 0 0.5rem !important; }
@@ -373,13 +373,13 @@ details summary span,
 /* ── Metrics ───────────────────────────────────────────────────── */
 [data-testid="stMetric"] { background: var(--bg-2) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; padding: 0.75rem 1rem !important; }
 [data-testid="stMetricLabel"] > div { font-size: 0.65rem !important; font-weight: 600 !important; text-transform: uppercase !important; letter-spacing: 0.09em !important; color: var(--text-2) !important; }
-[data-testid="stMetricValue"] { font-family: var(--mono) !important; font-size: 1.25rem !important; font-weight: 500 !important; color: var(--text-0) !important; letter-spacing: -0.03em !important; }
-[data-testid="stMetricDelta"] { font-family: var(--mono) !important; font-size: 0.68rem !important; }
+[data-testid="stMetricValue"] { font-family: var(--mono) !important; font-size: 1.0rem !important; font-weight: 500 !important; color: var(--text-0) !important; letter-spacing: -0.03em !important; }
+[data-testid="stMetricDelta"] { font-family: var(--mono) !important; font-size: 0.72rem !important; }
 
 /* ── Buttons ───────────────────────────────────────────────────── */
-button[kind="primary"] { background: var(--accent) !important; border: none !important; border-radius: 3px !important; font-family: var(--sans) !important; font-size: 0.8rem !important; font-weight: 500 !important; color: #fff !important; letter-spacing: 0.01em !important; padding: 0.5rem 1rem !important; }
+button[kind="primary"] { background: var(--accent) !important; border: none !important; border-radius: 3px !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 500 !important; color: #fff !important; letter-spacing: 0.01em !important; padding: 0.5rem 1rem !important; }
 button[kind="primary"]:hover { background: #3d8ef8 !important; }
-button[kind="secondary"], .stButton > button { background: var(--bg-4) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; color: var(--text-1) !important; font-family: var(--sans) !important; font-size: 0.8rem !important; font-weight: 400 !important; }
+button[kind="secondary"], .stButton > button { background: var(--bg-4) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; color: var(--text-1) !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 400 !important; }
 .stButton > button:hover { background: var(--bg-3) !important; border-color: #30363d !important; color: var(--text-0) !important; }
 button[kind="tertiary"] { background: transparent !important; border: none !important; color: var(--text-2) !important; font-size: 0.78rem !important; }
 
@@ -390,7 +390,7 @@ button[kind="tertiary"] { background: transparent !important; border: none !impo
 
 /* ── Sliders ───────────────────────────────────────────────────── */
 [data-baseweb="slider"] [role="slider"] { background: var(--accent) !important; border: 2px solid var(--accent) !important; }
-[data-baseweb="slider"] div[data-testid="stThumbValue"] { background: var(--accent) !important; color: #fff !important; font-family: var(--mono) !important; font-size: 0.68rem !important; }
+[data-baseweb="slider"] div[data-testid="stThumbValue"] { background: var(--accent) !important; color: #fff !important; font-family: var(--mono) !important; font-size: 0.72rem !important; }
 [data-baseweb="slider"] > div > div { background: var(--border) !important; }
 [data-baseweb="slider"] > div > div > div:first-child { background: var(--accent) !important; }
 
@@ -428,7 +428,7 @@ iframe[title="st_aggrid"] { border: 1px solid var(--border) !important; border-r
 [data-testid="stChatMessage"][data-from="user"] { background: var(--bg-4) !important; border-color: var(--border) !important; }
 [data-testid="stChatInput"] > div { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 4px !important; }
 [data-testid="stChatInput"] > div:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--accent-dim) !important; }
-[data-testid="stChatInput"] textarea { background: transparent !important; color: var(--text-0) !important; font-size: 0.85rem !important; font-family: var(--sans) !important; }
+[data-testid="stChatInput"] textarea { background: transparent !important; color: var(--text-0) !important; font-size: 0.82rem !important; font-family: var(--sans) !important; }
 
 /* ── Hide material-icons ligature spans (show as raw text when font blocked) ── */
 span.material-icons, span.material-icons-outlined, span.material-icons-round, span.material-symbols-outlined, span.material-symbols-rounded { display: none !important; }
@@ -437,7 +437,7 @@ span.material-icons, span.material-icons-outlined, span.material-icons-round, sp
 
 /* ── Status / Spinners ─────────────────────────────────────────── */
 [data-testid="stStatus"] { background: var(--bg-2) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; }
-[data-testid="stStatus"] summary { font-size: 0.75rem !important; color: var(--text-2) !important; }
+[data-testid="stStatus"] summary { font-size: 0.72rem !important; color: var(--text-2) !important; }
 .stSpinner > div { border-color: var(--accent) transparent transparent !important; }
 
 /* ── Alerts ────────────────────────────────────────────────────── */
@@ -508,6 +508,23 @@ div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-act
 .changed-row { background:rgba(210,153,34,0.06) !important; }
 .changed-row:hover { background:rgba(45,125,247,0.09) !important; }
 
+/* ── Pred grid table (st.columns-based, interactive rows) ─────── */
+.pred-hdr { font-size:0.65rem; color:var(--text-2); text-transform:uppercase; font-weight:600;
+            letter-spacing:0.09em; padding:0.5rem 0.75rem;
+            border-top:1px solid var(--border-subtle); border-bottom:2px solid var(--border);
+            cursor:help; white-space:nowrap; user-select:none; }
+.pred-hdr:hover { color:var(--text-1); }
+.pred-cell { font-size:0.82rem; padding:0.5rem 0.75rem; border-bottom:1px solid var(--border-subtle);
+             color:var(--text-1); white-space:nowrap; vertical-align:middle; }
+.pred-row-even { background:rgba(255,255,255,0.022); }
+.pred-row-odd  { background:transparent; }
+
+/* ── Summary cards (batch metrics) ─────────────────────────────── */
+.summary-card { background:var(--bg-3); border:1px solid var(--border); border-radius:0.25rem; padding:0.5rem 0.75rem; text-align:center; margin-bottom:1rem; }
+.summary-card .sc-label { font-size:0.65rem; color:var(--text-2); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.25rem; }
+.summary-card .sc-value { font-size:1.0rem; font-weight:500; line-height:1.1; }
+.summary-card .sc-sub   { font-size:0.72rem; color:var(--text-3); margin-top:0.25rem; }
+
 /* ── Utility classes for inline HTML ───────────────────────────── */
 .mono { font-family: var(--mono) !important; }
 .label { font-size: 0.65rem !important; font-weight: 600 !important; text-transform: uppercase !important; letter-spacing: 0.09em !important; color: var(--text-2) !important; }
@@ -530,6 +547,56 @@ div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-act
 .tag-call, .tag-put, .tag-neutral { font-size: 0.65rem !important; }
 </style>
 """, unsafe_allow_html=True)
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+
+import yaml
+import streamlit_authenticator as stauth
+
+_CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
+
+if os.path.exists(_CONFIG_PATH):
+    # Local: load from config.yaml file
+    with open(_CONFIG_PATH) as _cf:
+        _auth_config = yaml.safe_load(_cf)
+else:
+    # Cloud: load from st.secrets
+    try:
+        _auth_config = yaml.safe_load(st.secrets["auth"]["config_yaml"])
+    except Exception:
+        _auth_config = None
+
+if _auth_config:
+    _authenticator = stauth.Authenticate(
+        _auth_config["credentials"],
+        _auth_config["cookie"]["name"],
+        _auth_config["cookie"]["key"],
+        _auth_config["cookie"]["expiry_days"],
+    )
+
+    _authenticator.login(location="main")
+
+    if not st.session_state.get("authentication_status"):
+        # ── Landing page (shown when logged out) ─────────────────────────
+        st.markdown("""
+        <div style="max-width:480px; margin:3rem auto; text-align:center;">
+          <div style="font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em; margin-bottom:0.25rem;">
+            OPTIONS<span style="color:var(--accent);">AI</span>
+          </div>
+          <div style="font-size:0.72rem; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:2rem;">
+            Intelligent Options Trading Assistant
+          </div>
+          <div style="text-align:left; color:var(--text-2); font-size:0.82rem; line-height:1.8; margin-bottom:2rem;">
+            <div style="margin-bottom:0.5rem;"><span style="color:var(--accent);">&#9679;</span>&nbsp; AI-powered daily scan across 60+ large-cap tickers with real options chain data</div>
+            <div style="margin-bottom:0.5rem;"><span style="color:var(--green);">&#9679;</span>&nbsp; Smart position management with automatic HOLD / EXIT / REPLACE recommendations</div>
+            <div><span style="color:var(--amber);">&#9679;</span>&nbsp; Walk-forward optimized strategy brain with live indicator-based early exit logic</div>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.session_state.get("authentication_status") is False:
+            st.error("Incorrect username or password.")
+        st.stop()
 
 # ── Session state ──────────────────────────────────────────────────────────────
 
@@ -565,10 +632,20 @@ if "system" not in st.session_state:
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
+    # ── Auth: logout + username ───────────────────────────────────────────
+    if _auth_config:
+        _auth_col1, _auth_col2 = st.columns([3, 1])
+        _auth_col1.markdown(
+            f"<div style='font-size:0.65rem;color:var(--text-3);text-transform:uppercase;letter-spacing:0.08em;padding:0.25rem 0'>"
+            f"{st.session_state.get('name', '')}</div>",
+            unsafe_allow_html=True,
+        )
+        _authenticator.logout("Logout", location="sidebar", key="sidebar_logout")
+
     st.markdown("""
 <div style="padding:0.25rem 0 0.75rem; border-bottom:1px solid var(--border); margin-bottom:0.75rem;">
   <div style="font-family:var(--mono); font-size:0.88rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em;">OPTIONS<span style="color:var(--accent);">AI</span></div>
-  <div style="font-size:0.65rem; color:var(--text-3); margin-top:2px; letter-spacing:0.04em; text-transform:uppercase;">Yahoo Finance · ~15 min delay</div>
+  <div style="font-size:0.65rem; color:var(--text-3); margin-top:0.25rem; letter-spacing:0.04em; text-transform:uppercase;">Yahoo Finance · ~15 min delay</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -706,7 +783,7 @@ try {{
                 st.rerun()
 
     st.markdown("---")
-    st.markdown("""<div style="font-size:0.63rem; color:var(--text-3); line-height:1.5; padding-top:0.25rem;">Not financial advice. Options trading involves substantial risk of loss. Quotes delayed ~15 min.</div>""", unsafe_allow_html=True)
+    st.markdown("""<div style="font-size:0.65rem; color:var(--text-3); line-height:1.5; padding-top:0.25rem;">Not financial advice. Options trading involves substantial risk of loss. Quotes delayed ~15 min.</div>""", unsafe_allow_html=True)
 
 # ── Header ─────────────────────────────────────────────────────────────────────
 
@@ -839,13 +916,13 @@ def _sentiment_badge(sentiment: str, ret_pct: float | None = None) -> str:
     icon  = _SENTIMENT_ICONS.get(sentiment, "➡")
     badge = (
         f'<span style="background:{color};color:white;padding:2px 8px;'
-        f'border-radius:4px;font-size:0.82em;font-weight:600;white-space:nowrap">'
+        f'border-radius:0.25rem;font-size:0.82rem;font-weight:600;white-space:nowrap">'
         f'{icon} {sentiment}</span>'
     )
     if ret_pct is not None:
         sign = "+" if ret_pct >= 0 else ""
         badge += (
-            f'<span style="color:{color};font-size:0.78em;margin-left:4px">'
+            f'<span style="color:{color};font-size:0.72rem;margin-left:0.25rem">'
             f'{sign}{ret_pct:.1f}%</span>'
         )
     return badge
@@ -858,9 +935,9 @@ def _sentiment_badge_delta(new_sent: str, new_ret: float, old_sent: str | None) 
         old_badge = _sentiment_badge(old_sent)
         return (
             f'<span style="opacity:0.55">{old_badge}</span>'
-            f'<span style="color:#666;font-size:0.8em;margin:0 4px">→</span>'
+            f'<span style="color:var(--text-3);font-size:0.72rem;margin:0 0.25rem">→</span>'
             f'{new_badge}'
-            f'<span style="font-size:0.72em;color:#d29922;margin-left:5px">changed</span>'
+            f'<span style="font-size:0.72rem;color:var(--amber);margin-left:0.25rem">changed</span>'
         )
     return new_badge
 
@@ -1020,20 +1097,20 @@ elif _nav == "📊 Predictions":
         # Build table
         table_html = """
 <style>
-.sent-table { width:100%; border-collapse:collapse; font-size:0.88em; }
-.sent-table th { background:#1e1e2e; color:#ccc; padding:6px 10px;
-                 text-align:left; font-weight:600; border-bottom:2px solid #333; }
-.sent-table td { padding:7px 10px; border-bottom:1px solid #21262d; vertical-align:middle; }
+.sent-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+.sent-table th { background:var(--bg-3); color:var(--text-1); padding:0.5rem 0.75rem;
+                 text-align:left; font-weight:600; border-bottom:2px solid var(--border-subtle); }
+.sent-table td { padding:0.5rem 0.75rem; border-bottom:1px solid var(--border); vertical-align:middle; }
 .sent-table tr:hover td { background:rgba(255,255,255,0.03); }
 .sent-table tr.changed-row td { background:rgba(224,168,0,0.05); }
-.etf-badge { color:#888; font-size:0.8em; margin-left:4px; }
+.etf-badge { color:var(--text-3); font-size:0.72rem; margin-left:0.25rem; }
 </style>
 <table class="sent-table">
 <thead><tr>
   <th>Sector</th>
-  <th>Near-Term&nbsp;<span style="font-weight:400;color:#8b949e">(0–1 month)</span></th>
-  <th>Medium-Term&nbsp;<span style="font-weight:400;color:#8b949e">(1–12 months)</span></th>
-  <th>Long-Term&nbsp;<span style="font-weight:400;color:#8b949e">(12–36 months)</span></th>
+  <th>Near-Term&nbsp;<span style="font-weight:400;color:var(--text-2)">(0–1 month)</span></th>
+  <th>Medium-Term&nbsp;<span style="font-weight:400;color:var(--text-2)">(1–12 months)</span></th>
+  <th>Long-Term&nbsp;<span style="font-weight:400;color:var(--text-2)">(12–36 months)</span></th>
 </tr></thead><tbody>
 """
         for row in sector_rows:
@@ -1057,14 +1134,14 @@ elif _nav == "📊 Predictions":
         bull_count = sum(1 for s in all_sentiments if "Bullish" in s)
         bear_count = sum(1 for s in all_sentiments if "Bearish" in s)
         neut_count = len(all_sentiments) - bull_count - bear_count
-        bias_color = "#3fb950" if bull_count > bear_count else ("#f85149" if bear_count > bull_count else "#484f58")
+        bias_color = "var(--green)" if bull_count > bear_count else ("var(--red)" if bear_count > bull_count else "var(--text-3)")
         bias_label = "Bullish Bias" if bull_count > bear_count else ("Bearish Bias" if bear_count > bull_count else "Mixed/Neutral")
         st.markdown(
-            f'<div style="margin-top:8px;font-size:0.83em;color:#8b949e">'
+            f'<div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-2)">'
             f'Near-term breadth: '
-            f'<span style="color:#3fb950">▲ {bull_count} bullish</span> · '
-            f'<span style="color:#484f58">➡ {neut_count} neutral</span> · '
-            f'<span style="color:#f85149">▼ {bear_count} bearish</span> — '
+            f'<span style="color:var(--green)">▲ {bull_count} bullish</span> · '
+            f'<span style="color:var(--text-3)">➡ {neut_count} neutral</span> · '
+            f'<span style="color:var(--red)">▼ {bear_count} bearish</span> — '
             f'<strong style="color:{bias_color}">{bias_label}</strong>'
             f'</div>',
             unsafe_allow_html=True,
@@ -1150,14 +1227,15 @@ elif _nav == "📊 Predictions":
     preds = _load_predictions()
     # Show only daily_scan type records in this section
     scan_preds = [p for p in preds if p.get("type") == "daily_scan"]
-    all_preds  = preds  # keep for stats that include bot predictions
 
     graded  = [p for p in scan_preds if p.get("outcome")]
     pending = [p for p in scan_preds if not p.get("outcome")]
 
     if not scan_preds:
         st.info("No saved picks yet — scan and save today's picks below.")
-    if True:  # always render tabs + scan section
+
+    # Always render tabs + scan section (even when no picks yet)
+    if True:
         hits    = [p for p in graded if p["outcome"] == "hit"]
         dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
         call_g  = [p for p in graded if p.get("direction") == "call"]
@@ -1216,10 +1294,23 @@ elif _nav == "📊 Predictions":
         def _auto_grade_runner():
             _enabled = st.session_state.get("auto_grade_enabled", False)
             if _enabled:
+                # Only run during market hours + 30 min after close (9:30 AM - 4:30 PM ET, weekdays)
+                from zoneinfo import ZoneInfo
+                _now_et = datetime.now(ZoneInfo("America/New_York"))
+                _wd = _now_et.weekday()
+                _hr = _now_et.hour
+                _mn = _now_et.minute
+                _mins = _hr * 60 + _mn
+                _market_open  = 9 * 60 + 30   # 9:30 AM ET
+                _market_final = 18 * 60         # 6:00 PM ET (allow for settlement + yfinance data lag)
+                if _wd >= 5 or _mins < _market_open or _mins > _market_final:
+                    st.session_state["auto_grade_last_run"] = f"{_now_et.strftime('%H:%M')} ET — outside market hours, skipped"
+                    return
                 _ag_result = json.loads(log_prediction(action="grade"))
                 _ag_msg = _ag_result.get("message", "Graded 0")
                 try: _ag_n = int(_ag_msg.split()[1])
                 except Exception: _ag_n = 0
+                st.session_state["auto_grade_last_run"] = f"{_now_et.strftime('%H:%M')} ET"
                 if _ag_n > 0:
                     st.toast(f"Auto-graded {_ag_n} pick(s)", icon="⚖️")
                     st.rerun()
@@ -1227,12 +1318,16 @@ elif _nav == "📊 Predictions":
 
         # ── Pending ───────────────────────────────────────────────────────────
         with hist_tab_pending:
-            _ag_toggle_col, _ = st.columns([2, 6])
+            _ag_toggle_col, _ag_ts_col = st.columns([2, 6])
             _ag_toggle_col.toggle(
                 "⚖️ Auto-grade (every 10 min)",
+                value=True,
                 key="auto_grade_enabled",
                 help="Automatically checks all pending picks every 10 minutes and grades any that hit their TP, SL, or expiry.",
             )
+            _ag_last = st.session_state.get("auto_grade_last_run")
+            if _ag_last:
+                _ag_ts_col.caption(f"Last ran: {_ag_last}")
             if not pending:
                 st.info("No active trades.")
             else:
@@ -1304,8 +1399,9 @@ elif _nav == "📊 Predictions":
                             pend_rows.append({
                                 "Ticker":       p["ticker"],
                                 "Trade":        arrow,
-                                "Dir. Score":   f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
-                                "Quality":      f"{p.get('quality_score', 0):.0f}/100",
+                                "Dir. Score":   f"{p.get('direction_score', p.get('confidence', 0)):.0f}",
+                                "Tech":         f"{p.get('tech_score', 0):.0f}",
+                                "Quality":      f"{p.get('quality_score', 0):.0f}",
                                 "Stock Price":  _ep_label,
                                 "Curr. Price":  f"${_cur_stk_px:.2f}" if _cur_stk_px is not None else "—",
                                 "Stock %":      f"{cur_stk:+.2f}%" if cur_stk is not None else "—",
@@ -1320,14 +1416,15 @@ elif _nav == "📊 Predictions":
                             })
                         # Manual row-by-row table so delete button is inline with each row
                         _sorted_pend_picks = sorted(_picks, key=lambda x: x.get("direction_score", x.get("confidence", 0)), reverse=True)
-                        _COL_W = [1.1, 1.1, 0.85, 0.8, 0.95, 0.9, 0.8, 1.0, 0.75, 0.8, 0.8, 0.65, 0.8, 1.1, 1.1, 0.35]
-                        _COL_H = ["Ticker","Trade","Dir. Score","Quality","Stock Price","Curr. Price","Stock %",
+                        _COL_W = [1.1, 1.1, 0.85, 0.55, 0.8, 0.95, 0.9, 0.8, 1.0, 0.75, 0.8, 0.8, 0.65, 0.8, 1.1, 1.1, 0.35]
+                        _COL_H = ["Ticker","Trade","Dir. Score","Tech","Quality","Stock Price","Curr. Price","Stock %",
                                   "Options P&L","Strike","Premium","Current","SL","TP",
                                   "Option Expiry","Target Date",""]
                         _COL_TIPS = {
                             "Ticker":       "The stock symbol for this prediction",
                             "Trade":        "Direction of the trade — CALL (bullish) or PUT (bearish)",
                             "Dir. Score":   "Directional confidence score (0–100). Combines IV percentile, delta, DTE, and technical signals. Higher = stronger conviction.",
+                            "Tech":         "Technical setup score (0–100). SMA trend + RSI + MACD at entry.",
                             "Quality":      "Quality score (0–100). Measures option structure quality: liquidity, spread, and Greeks alignment.",
                             "Stock Price":  "Stock price at the time the prediction was made",
                             "Curr. Price":  "Current stock price (equity feed, ~1–5 min delay)",
@@ -1342,19 +1439,7 @@ elif _nav == "📊 Predictions":
                             "Target Date":  "The date by which the predicted move is expected to occur",
                             "":             "",
                         }
-                        # Inject grid table CSS
-                        st.markdown("""
-                        <style>
-                        .pred-hdr { font-size:11px; color:#888; text-transform:uppercase;
-                                    letter-spacing:0.05em; padding:6px 4px 6px 4px;
-                                    border-top:1px solid #333; border-bottom:2px solid #444;
-                                    cursor: help; }
-                        .pred-hdr:hover { color: #8b949e; }
-                        .pred-cell { font-size:13px; padding:9px 4px; border-bottom:1px solid #222; }
-                        .pred-row-even  { background: #0f0f17; }
-                        .pred-row-odd   { background: #12121e; }
-                        </style>
-                        """, unsafe_allow_html=True)
+
 
                         # Header
                         _hc = st.columns(_COL_W)
@@ -1370,7 +1455,7 @@ elif _nav == "📊 Predictions":
                             _row_cls = "pred-row-even" if _ri % 2 == 0 else "pred-row-odd"
                             _rc = st.columns(_COL_W)
                             _idx_badge = (
-                                "<span title='Index ETF' style='font-size:11px;margin-left:4px;vertical-align:middle'>📊</span>"
+                                "<span title='Index ETF' style='font-size:0.72rem;margin-left:0.25rem;vertical-align:middle'>📊</span>"
                                 if _dp.get("asset_class") == "index" else ""
                             )
                             _rc[0].markdown(f"<div class='pred-cell {_row_cls}'><b>{_row['Ticker']}</b>{_idx_badge}</div>", unsafe_allow_html=True)
@@ -1379,39 +1464,40 @@ elif _nav == "📊 Predictions":
                             _roll_ct   = _dp.get("roll_count", 0)
                             _rolled_badge = (
                                 f"<span title='Rolled forward {_roll_ct}x — original entry preserved' "
-                                f"style='font-size:10px;color:#888;margin-left:5px;vertical-align:middle;"
-                                f"background:#1e1e2e;border:1px solid #333;border-radius:3px;padding:1px 5px'>↻{_roll_ct}</span>"
+                                f"style='font-size:0.65rem;color:var(--text-3);margin-left:0.25rem;vertical-align:middle;"
+                                f"background:var(--bg-3);border:1px solid var(--border-subtle);border-radius:0.25rem;padding:0.125rem 0.25rem'>↻{_roll_ct}</span>"
                                 if _is_rolled else ""
                             )
                             _rc[1].markdown(
                                 f"<div class='pred-cell {_row_cls}'>"
-                                f"<span style='background:{'#0d2e0d' if _is_call else '#2e0d0d'};"
-                                f"color:{'#3ddb6e' if _is_call else '#e05252'};"
-                                f"padding:2px 7px;border-radius:3px;font-size:13px;font-weight:700'>{_row['Trade']}</span>"
+                                f"<span style='background:{'var(--green-dim,#0d2e0d)' if _is_call else 'var(--red-dim,#2e0d0d)'};"
+                                f"color:{'var(--green)' if _is_call else 'var(--red)'};"
+                                f"padding:0.125rem 0.5rem;border-radius:0.25rem;font-size:0.82rem;font-weight:700'>{_row['Trade']}</span>"
                                 f"{_rolled_badge}</div>",
                                 unsafe_allow_html=True,
                             )
                             _rc[2].markdown(f"<div class='pred-cell {_row_cls}'>{_row['Dir. Score']}</div>", unsafe_allow_html=True)
-                            _rc[3].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:#aaa'>{_row['Quality']}</span></div>", unsafe_allow_html=True)
-                            _rc[4].markdown(f"<div class='pred-cell {_row_cls}'>{_row['Stock Price']}</div>", unsafe_allow_html=True)
-                            _rc[5].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:#e0c97f'>{_row['Curr. Price']}</span></div>", unsafe_allow_html=True)
+                            _rc[3].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:var(--text-2)'>{_row['Tech']}</span></div>", unsafe_allow_html=True)
+                            _rc[4].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:var(--text-2)'>{_row['Quality']}</span></div>", unsafe_allow_html=True)
+                            _rc[5].markdown(f"<div class='pred-cell {_row_cls}'>{_row['Stock Price']}</div>", unsafe_allow_html=True)
+                            _rc[6].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:var(--amber)'>{_row['Curr. Price']}</span></div>", unsafe_allow_html=True)
                             _sv = _row["Stock %"]
-                            _sc = "#3fb950" if _sv.startswith("+") else ("#f85149" if _sv.startswith("-") else "#aaa")
-                            _rc[6].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:{_sc};font-weight:600'>{_sv}</span></div>", unsafe_allow_html=True)
+                            _sc = "var(--green)" if _sv.startswith("+") else ("var(--red)" if _sv.startswith("-") else "var(--text-2)")
+                            _rc[7].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:{_sc};font-weight:600'>{_sv}</span></div>", unsafe_allow_html=True)
                             _pv = _row["Options P&L"]
-                            _pc = "#3fb950" if _pv.startswith("+") else ("#f85149" if _pv.startswith("-") else "#aaa")
-                            _rc[7].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:{_pc};font-weight:700'>{_pv}</span></div>", unsafe_allow_html=True)
-                            for _ci, _key in enumerate(["Strike","Premium","Current","SL","TP","Option Expiry","Target Date"], start=8):
+                            _pc = "var(--green)" if _pv.startswith("+") else ("var(--red)" if _pv.startswith("-") else "var(--text-2)")
+                            _rc[8].markdown(f"<div class='pred-cell {_row_cls}'><span style='color:{_pc};font-weight:700'>{_pv}</span></div>", unsafe_allow_html=True)
+                            for _ci, _key in enumerate(["Strike","Premium","Current","SL","TP","Option Expiry","Target Date"], start=9):
                                 _rc[_ci].markdown(f"<div class='pred-cell {_row_cls}'>{_row[_key]}</div>", unsafe_allow_html=True)
                             # Inline delete button
                             _pid = _dp.get("id")
                             _confirm_key = f"_confirm_del_{_pid}"
                             if not st.session_state.get(_confirm_key):
-                                if _rc[15].button("🗑", key=f"del_{_pid}", help=f"Delete {_dp.get('ticker')}"):
+                                if _rc[16].button("🗑", key=f"del_{_pid}", help=f"Delete {_dp.get('ticker')}"):
                                     st.session_state[_confirm_key] = True
                                     st.rerun()
                             else:
-                                if _rc[15].button("✓", key=f"delconfirm_{_pid}", type="primary", help=f"Confirm delete {_dp.get('ticker')}"):
+                                if _rc[16].button("✓", key=f"delconfirm_{_pid}", type="primary", help=f"Confirm delete {_dp.get('ticker')}"):
                                     _oc_pred.log_prediction(action="delete", prediction_id=_pid)
                                     st.session_state.pop(_confirm_key, None)
                                     st.rerun()
@@ -1427,21 +1513,20 @@ elif _nav == "📊 Predictions":
                             _n_priced = len(_batch_pnls)
 
                             def _val_color(v):
-                                if v is None: return "#888888"
-                                return "#3fb950" if v >= 0 else "#f85149"
+                                if v is None: return "var(--text-3)"
+                                return "var(--green)" if v >= 0 else "var(--red)"
 
                             def _summary_card(label, value_str, color, sub="&nbsp;"):
                                 return (
-                                    f"<div style='background:#1a1a2e;border:1px solid #21262d;border-radius:5px;"
-                                    f"padding:8px 10px;text-align:center;margin-bottom:16px'>"
-                                    f"<div style='font-size:10px;color:#aaa;letter-spacing:0.06em;text-transform:uppercase;margin-bottom:4px'>{label}</div>"
-                                    f"<div style='font-size:21px;font-weight:700;color:{color};line-height:1.1'>{value_str}</div>"
-                                    f"<div style='font-size:11px;color:#777;margin-top:3px'>{sub}</div>"
+                                    f"<div class='summary-card'>"
+                                    f"<div class='sc-label'>{label}</div>"
+                                    f"<div class='sc-value' style='color:{color}'>{value_str}</div>"
+                                    f"<div class='sc-sub'>{sub}</div>"
                                     f"</div>"
                                 )
 
                             _c1, _c2, _c3, _c4, _c5 = st.columns(5)
-                            _win_color = "#3fb950" if _n_pos > _n_neg else ("#f85149" if _n_neg > _n_pos else "#888888")
+                            _win_color = "var(--green)" if _n_pos > _n_neg else ("var(--red)" if _n_neg > _n_pos else "var(--text-3)")
                             _c1.markdown(_summary_card(
                                 "Avg Options P&L",
                                 f"{_avg_pnl:+.1f}%" if _avg_pnl is not None else "—",
@@ -1513,7 +1598,7 @@ elif _nav == "📊 Predictions":
 
             _scan_label, _scan_color = _next_scan_info()
             st.markdown(
-                f'<div style="font-size:0.85em;color:{_scan_color};margin-bottom:10px">{_scan_label}</div>',
+                f'<div style="font-size:0.82rem;color:{_scan_color};margin-bottom:0.5rem">{_scan_label}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -1586,15 +1671,15 @@ elif _nav == "📊 Predictions":
                 arrow     = "📈" if direction == "call" else "📉"
                 _dir_s    = p.get("direction_score", p.get("confidence", 0))
                 _qual_s   = p.get("quality_score")
-                _qual_str = f" · quality {_qual_s:.0f}/100" if _qual_s is not None else ""
-                _label    = f"{arrow} {p['ticker']} — {_dir_s:.1f}% direction{_qual_str}{extra_label}"
+                _qual_str = f" · quality {_qual_s:.0f}" if _qual_s is not None else ""
+                _label    = f"{arrow} {p['ticker']} — {_dir_s:.0f} direction{_qual_str}{extra_label}"
                 with st.expander(_label):
                     dc1, dc2, dc3, dc4 = st.columns(4)
-                    dc1.metric("Direction Score", f"{_dir_s:.1f}%",
+                    dc1.metric("Direction Score", f"{_dir_s:.0f}",
                                help="Predicts if stock moves the right way")
-                    dc2.metric("Quality Score", f"{_qual_s:.0f}/100" if _qual_s is not None else "—",
+                    dc2.metric("Quality Score", f"{_qual_s:.0f}" if _qual_s is not None else "—",
                                help="Rates the option to buy if direction is right")
-                    dc3.metric("Tech Score",   f"{p.get('tech_score', 0):.0f}/100")
+                    dc3.metric("Tech Score",   f"{p.get('tech_score', 0):.0f}")
                     dc4.metric("IV Rank",      f"{p.get('iv_rank', 0):.0f}th pct")
                     dc4, dc5, dc6 = st.columns(3)
                     dc4.metric("Stock Price",  f"${p.get('stock_price', 0):.2f}")
@@ -1640,7 +1725,7 @@ elif _nav == "📊 Predictions":
                 _active = _scan_result["active_positions"]
                 st.markdown('<div class="section-header">ACTIVE POSITIONS</div>', unsafe_allow_html=True)
                 st.markdown(
-                    f"<div style='color:var(--text-3);font-size:0.75rem;margin-bottom:0.5rem'>"
+                    f"<div style='color:var(--text-3);font-size:0.72rem;margin-bottom:0.5rem'>"
                     f"{len(_active)} open position(s) re-evaluated against today\'s market data</div>",
                     unsafe_allow_html=True,
                 )
@@ -1659,7 +1744,7 @@ elif _nav == "📊 Predictions":
                         "Ticker":       ap["ticker"],
                         "Trade":        _arrow,
                         "Action":       _rec,
-                        "Dir. Score":   f"{_fresh_ds:.1f}%" if _fresh_ds is not None else "—",
+                        "Dir. Score":   f"{_fresh_ds:.0f}" if _fresh_ds is not None else "—",
                         "Change":       f"{_score_d:+.1f}" if _score_d is not None else "—",
                         "P&L":          f"{_pnl:+.1f}%" if _pnl is not None else "—",
                         "Strike":       f"${ap.get('strike_est', 0):.2f}".rstrip("0").rstrip("."),
@@ -1711,7 +1796,7 @@ elif _nav == "📊 Predictions":
                         _repl = ap.get("replace_with")
                         if _repl:
                             st.markdown(
-                                f"<div style='color:var(--amber);font-size:0.75rem;margin-bottom:0.25rem'>"
+                                f"<div style='color:var(--amber);font-size:0.72rem;margin-bottom:0.25rem'>"
                                 f"Suggested replacement: <b>{_repl['ticker']} "
                                 f"{_repl['direction'].upper()}</b> — "
                                 f"direction {_repl['direction_score']:.0f}%, "
@@ -1772,7 +1857,7 @@ elif _nav == "📊 Predictions":
                 _header = "NEW OPPORTUNITIES" if _scan_result and _scan_result.get("active_positions") else "TODAY\'S TOP TRADES"
                 st.markdown(f'<div class="section-header">{_header}</div>', unsafe_allow_html=True)
                 st.markdown(
-                    f"<div style='color:var(--text-3);font-size:0.75rem;margin-bottom:0.5rem'>"
+                    f"<div style='color:var(--text-3);font-size:0.72rem;margin-bottom:0.5rem'>"
                     f"Scanned {len(DEFAULT_WATCHLIST)} large-cap tickers · "
                     f"{datetime.now().strftime('%b %d, %Y %H:%M')} · "
                     f"Top {len(_new_opps)} by confidence score</div>",
@@ -1790,8 +1875,8 @@ elif _nav == "📊 Predictions":
                     scan_rows.append({
                         "Ticker":       p["ticker"],
                         "Trade":        arrow,
-                        "Dir. Score":   f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
-                        "Quality":      f"{p.get('quality_score', 0):.0f}/100",
+                        "Dir. Score":   f"{p.get('direction_score', p.get('confidence', 0)):.0f}",
+                        "Quality":      f"{p.get('quality_score', 0):.0f}",
                         "Stock Price":  f"${p.get('stock_price', 0):.2f}",
                         "Strike":       f"${p.get('strike_est', 0):.2f}".rstrip("0").rstrip(".") if p.get("live_chain") else f"~${p.get('strike_est', 0):.0f}",
                         "Premium":      f"${p.get('est_premium', 0):.2f}" + ("" if p.get("live_chain") else " ~"),
@@ -1921,13 +2006,13 @@ elif _nav == "📊 Predictions":
                     _hi_avg = round(sum(_hi_rates) / len(_hi_rates), 1)
                     _lo_avg = round(sum(_lo_rates) / len(_lo_rates), 1)
                     _diff   = _hi_avg - _lo_avg
-                    _cal_color = "#4caf50" if _diff >= 5 else ("#ff9800" if _diff >= 0 else "#f44336")
+                    _cal_color = "var(--green)" if _diff >= 5 else ("var(--amber)" if _diff >= 0 else "var(--red)")
                     st.markdown(
-                        f"<div style='background:rgba(255,255,255,0.04);border-radius:8px;padding:12px 16px;margin-bottom:12px'>"
-                        f"<span style='color:#aaa;font-size:0.82em'>Score Calibration — Dir Score ≥80 vs &lt;80</span><br>"
+                        f"<div style='background:rgba(255,255,255,0.04);border-radius:0.5rem;padding:0.75rem 1rem;margin-bottom:0.75rem'>"
+                        f"<span style='color:var(--text-2);font-size:0.82rem'>Score Calibration — Dir Score ≥80 vs &lt;80</span><br>"
                         f"<span style='color:{_cal_color};font-weight:600'>High-score picks: {_hi_avg}% win rate &nbsp;|&nbsp; "
                         f"Low-score picks: {_lo_avg}% win rate &nbsp;|&nbsp; Edge: {'+' if _diff>=0 else ''}{_diff}pp</span>"
-                        f"<span style='color:#666;font-size:0.8em;margin-left:8px'>"
+                        f"<span style='color:var(--text-3);font-size:0.72rem;margin-left:0.5rem'>"
                         f"{'✅ Scores are predictive' if _diff >= 5 else ('⚠️ Weak separation' if _diff >= 0 else '❌ Scores may be inverted')}"
                         f"</span></div>",
                         unsafe_allow_html=True,
@@ -1986,12 +2071,13 @@ elif _nav == "📊 Predictions":
                     arrow   = "▲ CALL" if p.get("direction") == "call" else "▼ PUT"
                     exit_r  = p.get("exit_reason", "expired")
                     exit_label = {"tp_hit": "TP Hit", "sl_hit": "SL Hit",
-                                  "time_exit": "Time Exit", "expired": "Expired"}.get(exit_r, exit_r)
+                                  "time_exit": "Time Exit", "expired": "Expired",
+                                  "indicator_exit": "Smart Exit"}.get(exit_r, exit_r)
                     rows.append({
                         "Date":         p.get("entry_date", "")[:16],  # include HH:MM if present
                         "Ticker":       p["ticker"],
                         "Trade":        arrow,
-                        "Confidence":   f"{p.get('direction_score') or p.get('confidence', 0):.1f}%",
+                        "Confidence":   f"{p.get('direction_score') or p.get('confidence', 0):.0f}",
                         "Stock %":      f"{actual:+.2f}%" if actual is not None else "—",
                         "Options P&L":  f"{opt_pnl:+.1f}%" if opt_pnl is not None else "—",
                         "Exit":         exit_label,
@@ -1999,6 +2085,11 @@ elif _nav == "📊 Predictions":
                         "Option Expiry": p.get("expiry", "—")[:10] if p.get("expiry") else "—",
                         "Target Date":  p.get("target_date", "")[:10],
                     })
+
+                # Exit type counts
+                _n_smart = sum(1 for p in filtered if p.get("exit_reason") == "indicator_exit")
+                if _n_smart > 0:
+                    st.caption(f"Smart Exits: {_n_smart} trade(s) closed early by indicator logic")
 
                 # Group graded picks by scan date, each with its own Undo button
                 _graded_by_date: dict[str, list] = {}
@@ -2028,7 +2119,7 @@ elif _nav == "📊 Predictions":
                                 badge_col="Trade",
                             ), unsafe_allow_html=True)
                         with _gdel_col:
-                            st.markdown("<div style='height:38px'></div>", unsafe_allow_html=True)
+                            st.markdown("<div style='height:2.5rem'></div>", unsafe_allow_html=True)
                             for _gp, _ in _gpicks:
                                 _gpid = _gp.get("id")
                                 _gconfirm_key = f"_confirm_del_{_gpid}"
@@ -2616,17 +2707,17 @@ elif _nav == "📊 Predictions":
                 # ── Hit-rate colour helper ─────────────────────────────────────
                 def _hr_cell(rate):
                     if rate is None:
-                        return "<span style='color:#888'>—</span>"
+                        return "<span style='color:var(--text-3)'>—</span>"
                     if rate >= 70:
-                        return f"<span style='color:#3fb950;font-weight:bold'>{rate}%</span>"
+                        return f"<span style='color:var(--green);font-weight:bold'>{rate}%</span>"
                     if rate >= 50:
-                        return f"<span style='color:#d29922;font-weight:bold'>{rate}%</span>"
-                    return f"<span style='color:#f85149;font-weight:bold'>{rate}%</span>"
+                        return f"<span style='color:var(--amber);font-weight:bold'>{rate}%</span>"
+                    return f"<span style='color:var(--red);font-weight:bold'>{rate}%</span>"
 
                 def _pnl_cell(val):
                     if val is None:
-                        return "<span style='color:#888'>—</span>"
-                    col = "#3fb950" if val >= 0 else "#f85149"
+                        return "<span style='color:var(--text-3)'>—</span>"
+                    col = "var(--green)" if val >= 0 else "var(--red)"
                     return f"<span style='color:{col};font-weight:bold'>{val:+.1f}%</span>"
 
                 # ── Build HTML table ───────────────────────────────────────────
@@ -2636,8 +2727,8 @@ elif _nav == "📊 Predictions":
   <th>Sector</th>
   <th>Picks</th>
   <th>Graded</th>
-  <th>Hit Rate&nbsp;<span style="font-weight:400;color:#8b949e">(dir+target)</span></th>
-  <th>Full Hit&nbsp;<span style="font-weight:400;color:#8b949e">(target only)</span></th>
+  <th>Hit Rate&nbsp;<span style="font-weight:400;color:var(--text-2)">(dir+target)</span></th>
+  <th>Full Hit&nbsp;<span style="font-weight:400;color:var(--text-2)">(target only)</span></th>
   <th>Avg Option P&amp;L</th>
   <th>Call / Put</th>
   <th>Avg Score</th>
@@ -2666,7 +2757,7 @@ elif _nav == "📊 Predictions":
                     _scores    = [float(p.get("direction_score") or p.get("confidence") or 0)
                                   for p in _picks]
                     _avg_score = round(sum(_scores) / len(_scores), 1) if _scores else None
-                    _pend_note = f" <span style='color:#888;font-size:0.85em'>({_pend} open)</span>" if _pend else ""
+                    _pend_note = f" <span style='color:var(--text-3);font-size:0.82rem'>({_pend} open)</span>" if _pend else ""
                     _perf_html += (
                         f"<tr>"
                         f"<td><strong>{_sn}</strong></td>"
@@ -2697,10 +2788,10 @@ elif _nav == "📊 Predictions":
                         _top_sec = round(sum(1 for h in _all_sec_hrs if h >= 0.70) / len(_all_sec_hrs) * 100)
                         _bot_sec = round(sum(1 for h in _all_sec_hrs if h < 0.50) / len(_all_sec_hrs) * 100)
                         st.markdown(
-                            f'<div style="margin-top:8px;font-size:0.83em;color:#8b949e">'
+                            f'<div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-2)">'
                             f'Sector hit rates: '
-                            f'<span style="color:#3fb950">▲ {_top_sec}% of sectors ≥ 70%</span> · '
-                            f'<span style="color:#f85149">▼ {_bot_sec}% of sectors &lt; 50%</span>'
+                            f'<span style="color:var(--green)">▲ {_top_sec}% of sectors ≥ 70%</span> · '
+                            f'<span style="color:var(--red)">▼ {_bot_sec}% of sectors &lt; 50%</span>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
@@ -2842,7 +2933,62 @@ elif _nav == "🔬 Strategy Lab":
 
         st.markdown("---")
 
-        # ── Section 4: Defense Filters ─────────────────────────────────────────
+        # ── Section 4b: Smart Early Exit ──────────────────────────────────────
+        st.markdown('<div class="section-header">Smart Early Exit</div>', unsafe_allow_html=True)
+        st.caption("Automatically exits profitable trades when indicators turn against the position.")
+        _ee = _sp.get("early_exit", {})
+
+        _ee_enabled = st.toggle(
+            "Enable smart early exit",
+            value=bool(_ee.get("enabled", True)),
+            key=f"br_ee_enabled_{_brain_profile}",
+            help="When enabled, the auto-grader checks live indicators every 10 minutes and exits profitable trades if conditions deteriorate.",
+        )
+
+        if _ee_enabled:
+            _ee1, _ee2, _ee3 = st.columns(3)
+            _ee_min_hold = _ee1.slider("Min hold days", 1, 5, int(_ee.get("min_hold_days", 1)), 1,
+                                        key=f"br_ee_hold_{_brain_profile}",
+                                        help="Minimum days held before smart exit can trigger.")
+            _ee_min_profit = _ee2.slider("Min profit to exit %", 0, 20, int(_ee.get("min_profit_to_exit_pct", 5)), 1,
+                                          key=f"br_ee_min_profit_{_brain_profile}",
+                                          help="Only trigger smart exit if current option P&L is at least this %.")
+            _ee_tech_decay = _ee3.slider("Tech decay trigger %", 20, 60, int(_ee.get("tech_decay_pct", 35)), 5,
+                                          key=f"br_ee_tech_decay_{_brain_profile}",
+                                          help="Exit if tech score has fallen by this % from entry.")
+
+            _ee4, _ee5, _ee6 = st.columns(3)
+            _ee_dir_floor = _ee4.slider("Direction score floor", 15, 45, int(_ee.get("direction_floor", 30)), 5,
+                                         key=f"br_ee_dir_floor_{_brain_profile}",
+                                         help="Exit if live direction score drops below this absolute level.")
+            _ee_mom_rev = _ee5.toggle("Momentum reversal exit", value=bool(_ee.get("momentum_reversal", True)),
+                                       key=f"br_ee_mom_{_brain_profile}",
+                                       help="Exit if 5-day momentum flips direction since entry.")
+            _ee_rsi_ext = _ee6.toggle("RSI extreme exit", value=bool(_ee.get("rsi_extreme_exit", True)),
+                                       key=f"br_ee_rsi_{_brain_profile}",
+                                       help="Exit if RSI reaches extreme territory against the trade direction.")
+
+            st.caption("Trailing profit protection — locks in gains when position gives back too much.")
+            _ee7, _ee8 = st.columns(2)
+            _ee_trail_pct = _ee7.slider("Trail activate at %", 20, 80, int(_ee.get("trailing_profit_pct", 40)), 5,
+                                         key=f"br_ee_trail_pct_{_brain_profile}",
+                                         help="Activate trailing protection once option gains reach this %.")
+            _ee_giveback = _ee8.slider("Max giveback %", 30, 70, int(_ee.get("trailing_giveback_pct", 50)), 5,
+                                        key=f"br_ee_giveback_{_brain_profile}",
+                                        help="Exit if the option gives back this % of its peak unrealized gain.")
+        else:
+            _ee_min_hold    = int(_ee.get("min_hold_days", 1))
+            _ee_min_profit  = int(_ee.get("min_profit_to_exit_pct", 5))
+            _ee_tech_decay  = int(_ee.get("tech_decay_pct", 35))
+            _ee_dir_floor   = int(_ee.get("direction_floor", 30))
+            _ee_mom_rev     = bool(_ee.get("momentum_reversal", True))
+            _ee_rsi_ext     = bool(_ee.get("rsi_extreme_exit", True))
+            _ee_trail_pct   = int(_ee.get("trailing_profit_pct", 40))
+            _ee_giveback    = int(_ee.get("trailing_giveback_pct", 50))
+
+        st.markdown("---")
+
+        # ── Section 5: Defense Filters ─────────────────────────────────────────
         st.markdown('<div class="section-header">Defense & IV Filters</div>', unsafe_allow_html=True)
         _d1, _d2, _d3, _d4 = st.columns(4)
         _vix_def  = _d1.slider("VIX defense level", 18, 40, int(_filt.get("vix_defense_threshold",   25)), 1, key=f"br_vix_{_brain_profile}",
@@ -3007,6 +3153,19 @@ elif _nav == "🔬 Strategy Lab":
                 "delta":   _qs_d,
                 "dte":     _qs_dte,
             })
+            _oc.STRATEGY_PROFILES[_brain_profile]["early_exit"] = {
+                "enabled":                _ee_enabled,
+                "min_hold_days":          _ee_min_hold,
+                "tech_decay_pct":         float(_ee_tech_decay),
+                "direction_floor":        float(_ee_dir_floor),
+                "momentum_reversal":      _ee_mom_rev,
+                "rsi_extreme_exit":       _ee_rsi_ext,
+                "rsi_call_ceiling":       78,
+                "rsi_put_floor":          22,
+                "trailing_profit_pct":    float(_ee_trail_pct),
+                "trailing_giveback_pct":  float(_ee_giveback),
+                "min_profit_to_exit_pct": float(_ee_min_profit),
+            }
 
             # Build note: user note + auto-detected diffs
             _user_note = _brain_note.strip()
@@ -3051,13 +3210,13 @@ elif _nav == "🔬 Strategy Lab":
             _last_profile     = _last.get("profile", "equity")
             _last_profile_lbl = "📈 Equity" if _last_profile == "equity" else "📊 Index"
             st.markdown(
-                f"<div style='background:rgba(255,255,255,0.04);border-radius:8px;"
-                f"padding:12px 16px;margin-bottom:12px'>"
-                f"<span style='color:#aaa;font-size:0.82em'>Last updated</span>"
-                f"<span style='font-size:0.78em;color:#888;margin-left:10px;background:#1e1e2e;"
-                f"border:1px solid #333;border-radius:3px;padding:1px 6px'>{_last_profile_lbl}</span><br>"
-                f"<span style='font-size:1.05em;font-weight:600'>{_last_ts}</span>"
-                f"<span style='color:#888;font-size:0.85em;margin-left:12px'>{_last.get('note','')}</span>"
+                f"<div style='background:rgba(255,255,255,0.04);border-radius:0.5rem;"
+                f"padding:0.75rem 1rem;margin-bottom:0.75rem'>"
+                f"<span style='color:var(--text-2);font-size:0.82rem'>Last updated</span>"
+                f"<span style='font-size:0.72rem;color:var(--text-3);margin-left:0.5rem;background:var(--bg-3);"
+                f"border:1px solid var(--border-subtle);border-radius:0.25rem;padding:0.125rem 0.5rem'>{_last_profile_lbl}</span><br>"
+                f"<span style='font-size:1.0rem;font-weight:600'>{_last_ts}</span>"
+                f"<span style='color:var(--text-3);font-size:0.82rem;margin-left:0.75rem'>{_last.get('note','')}</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
@@ -3402,7 +3561,7 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
                         "Date":       t["date"][:10],
                         "Type":       ("📈 CALL" if t.get("type") == "call" else "📉 PUT"),
                         "Sector":     t.get("sector", "—"),
-                        "Dir Score":  f"{t.get('direction_score', 0):.1f}%",
+                        "Dir Score":  f"{t.get('direction_score', 0):.0f}",
                         "Tech":       f"{t.get('tech_score', 0):.0f}",
                         "EV":         f"{t.get('ev', 0):.1f}%",
                         "Strike":     f"${t.get('strike', 0):.2f}" if t.get("strike") else "—",
@@ -3640,8 +3799,8 @@ Results are saved to `wfo_results.json`. The backtest is read-only — it never 
                             "Ticker":     t.get("ticker", "—") or "—",
                             "Date":       t["date"][:10],
                             "Type":       ("📈 CALL" if t.get("type") == "call" else "📉 PUT") if t.get("type") else "—",
-                            "Confidence": f"{t.get('direction_score') or t.get('confidence', 0):.1f}%",
-                            "Tech Score": f"{t.get('tech_score', 0):.0f}/100",
+                            "Confidence": f"{t.get('direction_score') or t.get('confidence', 0):.0f}",
+                            "Tech Score": f"{t.get('tech_score', 0):.0f}",
                             "EV":         f"{t.get('ev', 0):.1f}%",
                             "Strike":     f"${t.get('strike', 0):.2f}" if t.get("strike") else "—",
                             "Entry Px":   f"${t.get('entry_px', 0):.3f}" if t.get("entry_px") else "—",

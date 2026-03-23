@@ -26,8 +26,8 @@
     "confidence": 6,
     "reasoning": "HV rank at historic low (0.3%) \u2014 coiled spring. Broader market in downtrend argues for downside resolution. TSLA rejected $400 today, closed -1.61% near session lows. High-beta name gets hit hardest in risk-off moves.",
     "outcome": null,
-    "current_stock_px": 378.11,
-    "current_stock_pct": -3.75
+    "current_stock_px": 380.85,
+    "current_stock_pct": -3.05
   },
   {
     "id": 3,
@@ -40,8 +40,8 @@
     "confidence": 5,
     "reasoning": "Tech sector under sustained pressure. NVDA consolidating below recent highs, down -0.87% today. IV fairly priced (IV \u2248 HV30) \u2014 no bullish repricing expected. Semis tend to lag in broader market downturns.",
     "outcome": null,
-    "current_stock_px": 175.38,
-    "current_stock_pct": -2.76
+    "current_stock_px": 175.64,
+    "current_stock_pct": -2.61
   },
   {
     "id": 4,
@@ -732,10 +732,10 @@
     "roll_count": 0,
     "original_entry_date": "2026-03-23 12:43 ET",
     "id": 44,
-    "current_stock_px": 378.29,
-    "current_stock_pct": -0.53,
-    "current_option_px": 6.6,
-    "current_pnl_pct": 11.4
+    "current_stock_px": 380.85,
+    "current_stock_pct": 0.14,
+    "current_option_px": 5.62,
+    "current_pnl_pct": -5.1
   },
   {
     "ticker": "QQQ",
@@ -785,10 +785,10 @@
     "roll_count": 0,
     "original_entry_date": "2026-03-23 12:43 ET",
     "id": 45,
-    "current_stock_px": 587.82,
-    "current_stock_pct": 0.99,
-    "current_option_px": 6.47,
-    "current_pnl_pct": 13.2
+    "current_stock_px": 588.0,
+    "current_stock_pct": 1.02,
+    "current_option_px": 5.77,
+    "current_pnl_pct": 1.0
   },
   {
     "ticker": "SPY",
@@ -839,9 +839,9 @@
     "roll_count": 0,
     "original_entry_date": "2026-03-23 12:43 ET",
     "id": 46,
-    "current_stock_px": 655.98,
-    "current_stock_pct": 1.14,
-    "current_option_px": 6.5,
-    "current_pnl_pct": 9.9
+    "current_stock_px": 655.38,
+    "current_stock_pct": 1.05,
+    "current_option_px": 6.32,
+    "current_pnl_pct": 6.8
   }
 ]
