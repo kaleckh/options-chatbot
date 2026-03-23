@@ -555,6 +555,9 @@ import streamlit_authenticator as stauth
 
 _CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.yaml")
 
+_auth_config = None
+_auth_error = None
+
 if os.path.exists(_CONFIG_PATH):
     # Local: load from config.yaml file
     with open(_CONFIG_PATH) as _cf:
@@ -563,40 +566,53 @@ else:
     # Cloud: load from st.secrets
     try:
         _auth_config = yaml.safe_load(st.secrets["auth"]["config_yaml"])
-    except Exception:
-        _auth_config = None
+    except KeyError:
+        _auth_error = "Missing [auth] config_yaml in Streamlit secrets."
+    except Exception as _e:
+        _auth_error = f"Failed to parse auth config: {_e}"
 
-if _auth_config:
-    _authenticator = stauth.Authenticate(
-        _auth_config["credentials"],
-        _auth_config["cookie"]["name"],
-        _auth_config["cookie"]["key"],
-        _auth_config["cookie"]["expiry_days"],
-    )
+if _auth_config is None:
+    # Auth config missing — block access entirely
+    st.markdown("""
+    <div style="max-width:480px; margin:3rem auto; text-align:center;">
+      <div style="font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--text-0); margin-bottom:1rem;">
+        OPTIONS<span style="color:var(--accent);">AI</span>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.error(_auth_error or "Authentication configuration not found. Add config.yaml or set Streamlit secrets.")
+    st.stop()
 
-    _authenticator.login(location="main")
+_authenticator = stauth.Authenticate(
+    _auth_config["credentials"],
+    _auth_config["cookie"]["name"],
+    _auth_config["cookie"]["key"],
+    _auth_config["cookie"]["expiry_days"],
+)
 
-    if not st.session_state.get("authentication_status"):
-        # ── Landing page (shown when logged out) ─────────────────────────
-        st.markdown("""
-        <div style="max-width:480px; margin:3rem auto; text-align:center;">
-          <div style="font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em; margin-bottom:0.25rem;">
-            OPTIONS<span style="color:var(--accent);">AI</span>
-          </div>
-          <div style="font-size:0.72rem; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:2rem;">
-            Intelligent Options Trading Assistant
-          </div>
-          <div style="text-align:left; color:var(--text-2); font-size:0.82rem; line-height:1.8; margin-bottom:2rem;">
-            <div style="margin-bottom:0.5rem;"><span style="color:var(--accent);">&#9679;</span>&nbsp; AI-powered daily scan across 60+ large-cap tickers with real options chain data</div>
-            <div style="margin-bottom:0.5rem;"><span style="color:var(--green);">&#9679;</span>&nbsp; Smart position management with automatic HOLD / EXIT / REPLACE recommendations</div>
-            <div><span style="color:var(--amber);">&#9679;</span>&nbsp; Walk-forward optimized strategy brain with live indicator-based early exit logic</div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
+_authenticator.login(location="main")
 
-        if st.session_state.get("authentication_status") is False:
-            st.error("Incorrect username or password.")
-        st.stop()
+if st.session_state.get("authentication_status") is not True:
+    # ── Landing page (shown when logged out or login failed) ─────────
+    st.markdown("""
+    <div style="max-width:480px; margin:3rem auto; text-align:center;">
+      <div style="font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em; margin-bottom:0.25rem;">
+        OPTIONS<span style="color:var(--accent);">AI</span>
+      </div>
+      <div style="font-size:0.72rem; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:2rem;">
+        Intelligent Options Trading Assistant
+      </div>
+      <div style="text-align:left; color:var(--text-2); font-size:0.82rem; line-height:1.8; margin-bottom:2rem;">
+        <div style="margin-bottom:0.5rem;"><span style="color:var(--accent);">&#9679;</span>&nbsp; AI-powered daily scan across 60+ large-cap tickers with real options chain data</div>
+        <div style="margin-bottom:0.5rem;"><span style="color:var(--green);">&#9679;</span>&nbsp; Smart position management with automatic HOLD / EXIT / REPLACE recommendations</div>
+        <div><span style="color:var(--amber);">&#9679;</span>&nbsp; Walk-forward optimized strategy brain with live indicator-based early exit logic</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    if st.session_state.get("authentication_status") is False:
+        st.error("Incorrect username or password.")
+    st.stop()
 
 # ── Session state ──────────────────────────────────────────────────────────────
 
