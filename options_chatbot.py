@@ -1461,7 +1461,8 @@ def log_prediction(
         manual_preds = [p for p in preds if p.get("type") != "daily_scan"]
 
         def _stats(subset):
-            graded  = [p for p in subset if p.get("outcome")]
+            _non_action = ("manual_exit", "replaced")
+            graded  = [p for p in subset if p.get("outcome") and p["outcome"] not in _non_action]
             hits    = [p for p in graded if p["outcome"] == "hit"]
             dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
             pending = [p for p in subset if not p.get("outcome")]
@@ -1503,20 +1504,44 @@ def log_prediction(
             # Skip only if the scan date is in the future
             if today.date() < entry_dt.date():
                 continue
+            # Extract entry fields early — needed for same-day live P&L snapshot
+            _entry_raw_early = p.get("entry_open_price") or p.get("entry_price") or p.get("stock_price")
+            _entry_px  = float(_entry_raw_early) if _entry_raw_early else 0.0
+            _is_bull   = p.get("direction") in ("bullish", "call")
+            _premium   = float(p.get("est_premium") or 0.0)
+
             try:
                 t           = yf.Ticker(p["ticker"])
                 is_same_day = entry_dt.date() == today.date()
                 if is_same_day:
-                    # Same-day: use fast_info for real-time price + today's intraday range
-                    import pandas as _pd
-                    fi          = t.fast_info
-                    _cur        = float(fi.last_price or fi.regular_market_price)
-                    _high       = float(getattr(fi, "day_high", None) or _cur)
-                    _low        = float(getattr(fi, "day_low",  None) or _cur)
-                    hist = _pd.DataFrame(
-                        [{"Close": _cur, "High": _high, "Low": _low}],
-                        index=[_pd.Timestamp(datetime.now(_ET).date())],
-                    )
+                    # Same-day: only update live P&L snapshot — do NOT grade.
+                    # The day's high/low includes price action before entry time,
+                    # so SL/TP checks would use stale extremes and false-trigger.
+                    fi   = t.fast_info
+                    _cur = float(fi.last_price or fi.regular_market_price)
+                    p["current_stock_px"]  = round(_cur, 2)
+                    p["current_stock_pct"] = round((_cur / _entry_px - 1) * 100, 2) if _entry_px else None
+                    # Fetch live option mid price for P&L display
+                    try:
+                        _exp = p.get("expiry")
+                        _K   = p.get("strike_est")
+                        if _exp and _K:
+                            _avail = t.options
+                            if _avail and _exp in _avail:
+                                _ch  = t.option_chain(_exp)
+                                _df  = _ch.calls if _is_bull else _ch.puts
+                                _row = _df.iloc[(_df["strike"] - float(_K)).abs().argsort()[:1]]
+                                if not _row.empty:
+                                    _bid = float(_row["bid"].iloc[0])
+                                    _ask = float(_row["ask"].iloc[0])
+                                    if _bid > 0 and _ask > 0:
+                                        _live_mid = round((_bid + _ask) / 2, 2)
+                                        p["current_option_px"] = _live_mid
+                                        if _premium > 0:
+                                            p["current_pnl_pct"] = round((_live_mid / _premium - 1) * 100, 1)
+                    except Exception:
+                        pass
+                    continue  # skip grading until next trading day
                 else:
                     fetch_end   = (max(today, target_dt) + timedelta(days=3)).strftime("%Y-%m-%d")
                     fetch_start = (entry_dt + timedelta(days=1)).strftime("%Y-%m-%d")
@@ -1879,7 +1904,7 @@ def backfill_predictions(
                 entry_price = round(float(opens.iloc[i]), 2)
 
                 # Direction decision (threshold from Brain entry.entry_momentum_pct)
-                _mom_thr = float(sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+                _mom_thr = float(STRATEGY_PROFILE.get("entry", {}).get("entry_momentum_pct", 0.5))
                 if ret5 > _mom_thr and c_now > sma20:
                     direction = "bullish"
                     # confidence: scales 6–9 with strength of signal
@@ -1935,7 +1960,8 @@ def backfill_predictions(
 
     # Summary stats
     backfill_preds = [p for p in preds if p.get("source") == "backfill"]
-    graded  = [p for p in backfill_preds if p.get("outcome")]
+    _non_action = ("manual_exit", "replaced")
+    graded  = [p for p in backfill_preds if p.get("outcome") and p["outcome"] not in _non_action]
     hits    = [p for p in graded if p["outcome"] == "hit"]
     dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
 
@@ -2833,7 +2859,10 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             prices = hist.values.astype(float)
             n      = len(prices)
             idx    = n - 1
-            price  = float(prices[idx])
+            price  = float(prices[idx])  # latest price for indicator calculation
+            # Entry price = previous day's close (last complete candle).
+            # During market hours, prices[idx] is a partial intraday snapshot.
+            _entry_stock_price = float(prices[idx - 1]) if n >= 2 else price
 
             # Sector fetch — equity only
             if _ac == "equity":
@@ -2863,7 +2892,7 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             sma20 = float(np.mean(prices[idx - 20 : idx]))
             sma50 = float(np.mean(prices[idx - 50 : idx]))
 
-            _mom_thr = float(_sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+            _mom_thr = float(sp.get("entry", {}).get("entry_momentum_pct", 0.5))
             bullish = ret5 >  _mom_thr and price > sma20
             bearish = ret5 < -_mom_thr and price < sma20
             if not bullish and not bearish:
@@ -3000,7 +3029,7 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 est_premium=est_premium,
                 stop_loss_pct=_adj_stop_pct,   # ATR-widened stop if volatility expanding
                 profit_target_pct=_profit_target_pct,
-                stock_price=price,
+                stock_price=_entry_stock_price,
                 delta_est=delta_val,
             )
 
@@ -3012,7 +3041,7 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "tech_score":         round(tech, 1),
                 "iv_rank":            round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
-                "stock_price":        round(price, 2),
+                "stock_price":        round(_entry_stock_price, 2),
                 "strike_est":         best_strike,   # real market strike — no rounding
                 "expiry":             actual_exp or target_str,
                 "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
@@ -3027,7 +3056,7 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
                 "target_date":        target_str,
-                "entry_price":        round(price, 2),   # last close at scan time
+                "entry_price":        round(_entry_stock_price, 2),   # prev day's close (last complete candle)
                 "entry_at_open":      _at_open,          # True = market was closed, use next-open price
                 "entry_open_price":   None,               # filled on first grade after market opens
                 "signal_reasons":     reasons,
@@ -3157,6 +3186,149 @@ def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
 
     return {"rolled": rolled, "new": new_picks, "dropped": dropped}
 
+
+def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> dict:
+    """
+    Re-score all pending picks against today's market data and produce
+    HOLD / EXIT / REPLACE recommendations for each.
+
+    If no pending picks exist, falls back to a plain scan_daily_top_trades().
+
+    Returns:
+        {
+            "active_positions": [
+                {**pick, "recommendation": "HOLD"|"EXIT"|"REPLACE",
+                 "rec_reason": str, "fresh_direction_score": float,
+                 "score_delta": float, "replace_with": dict|None},
+            ],
+            "new_opportunities": [...],
+        }
+    """
+    # ── No pending picks → just do a fresh scan ──────────────────────────────
+    if not pending_picks:
+        fresh = scan_daily_top_trades(n_picks=n_picks)
+        for p in fresh:
+            p["pick_status"] = "new"
+            p["roll_count"] = 0
+            p["original_entry_date"] = p.get("entry_date", "")
+        return {"active_positions": [], "new_opportunities": fresh}
+
+    # ── Full rescore of watchlist ─────────────────────────────────────────────
+    all_candidates = scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
+    cand_lookup = {(c["ticker"], c["direction"]): c for c in all_candidates}
+
+    # Thresholds
+    SCORE_DROP_THRESHOLD = 15     # direction score drop > 15 pts → EXIT
+    REPLACE_ADVANTAGE    = 10     # new candidate must beat old by 10+ pts
+    SL_PROXIMITY_FACTOR  = 0.70   # within 70% of stop loss → EXIT
+
+    active_positions: list[dict] = []
+    hold_keys: set[tuple] = set()
+
+    for p in pending_picks:
+        key = (p.get("ticker", ""), p.get("direction", ""))
+        rec = dict(p)
+        fresh = cand_lookup.get(key)
+
+        old_score = float(p.get("direction_score", 0))
+        current_pnl = p.get("current_pnl_pct")
+        stop_loss = float(p.get("stop_loss_pct", 50))
+
+        # ── Determine recommendation ─────────────────────────────────────────
+        if fresh is None:
+            # Ticker no longer passes scan gates (momentum flipped, tech failed, etc.)
+            rec["recommendation"] = "EXIT"
+            rec["rec_reason"] = "No longer meets scan criteria — failed momentum, tech, or EV gates"
+            rec["fresh_direction_score"] = None
+            rec["score_delta"] = None
+        else:
+            fresh_score = float(fresh.get("direction_score", 0))
+            delta = fresh_score - old_score
+            rec["fresh_direction_score"] = round(fresh_score, 1)
+            rec["score_delta"] = round(delta, 1)
+
+            # Check stop loss proximity
+            if current_pnl is not None and current_pnl <= -(stop_loss * SL_PROXIMITY_FACTOR):
+                rec["recommendation"] = "EXIT"
+                rec["rec_reason"] = (
+                    f"Approaching stop loss — current P&L {current_pnl:+.1f}% "
+                    f"(stop at -{stop_loss:.0f}%)"
+                )
+            elif delta < -SCORE_DROP_THRESHOLD:
+                rec["recommendation"] = "EXIT"
+                rec["rec_reason"] = (
+                    f"Direction score degraded {old_score:.0f}% → {fresh_score:.0f}% "
+                    f"({delta:+.0f} pts)"
+                )
+            else:
+                # Still qualifies → HOLD; refresh scoring fields
+                rec["recommendation"] = "HOLD"
+                rec["rec_reason"] = f"Still ranks well — direction score {fresh_score:.0f}%"
+                for _f in ("direction_score", "tech_score", "quality_score",
+                           "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
+                           "signal_reasons", "strategy_label", "strategy_comment"):
+                    if _f in fresh:
+                        rec[_f] = fresh[_f]
+                hold_keys.add(key)
+
+        rec["replace_with"] = None
+        active_positions.append(rec)
+
+    # ── For EXIT picks, check if a replacement is available ───────────────────
+    for rec in active_positions:
+        if rec["recommendation"] != "EXIT":
+            continue
+        old_score = float(rec.get("direction_score", 0))
+        best_replacement = None
+        best_adv = 0
+        for c in all_candidates:
+            ckey = (c["ticker"], c["direction"])
+            if ckey in hold_keys:
+                continue
+            # Don't suggest a ticker that's already an active position
+            if any(ckey == (a.get("ticker"), a.get("direction")) for a in active_positions):
+                continue
+            adv = float(c.get("direction_score", 0)) - old_score
+            if adv >= REPLACE_ADVANTAGE and adv > best_adv:
+                best_replacement = c
+                best_adv = adv
+        if best_replacement:
+            rec["recommendation"] = "REPLACE"
+            rec["rec_reason"] += (
+                f" — replace with {best_replacement['ticker']} "
+                f"{best_replacement['direction'].upper()} "
+                f"({best_replacement['direction_score']:.0f}%)"
+            )
+            rec["replace_with"] = best_replacement
+
+    # ── Fill remaining slots with new opportunities ───────────────────────────
+    slots_available = max(0, n_picks - len([r for r in active_positions
+                                             if r["recommendation"] == "HOLD"]))
+    used_keys = {(r["ticker"], r["direction"]) for r in active_positions}
+    new_opportunities: list[dict] = []
+    for c in all_candidates:
+        if slots_available <= 0:
+            break
+        ckey = (c["ticker"], c["direction"])
+        if ckey in used_keys:
+            continue
+        # Skip if already suggested as a replacement
+        if any(r.get("replace_with") and
+               (r["replace_with"]["ticker"], r["replace_with"]["direction"]) == ckey
+               for r in active_positions):
+            continue
+        fresh_pick = dict(c)
+        fresh_pick["pick_status"] = "new"
+        fresh_pick["roll_count"] = 0
+        fresh_pick["original_entry_date"] = fresh_pick.get("entry_date", "")
+        new_opportunities.append(fresh_pick)
+        used_keys.add(ckey)
+        slots_available -= 1
+
+    return {
+        "active_positions": active_positions,
+        "new_opportunities": new_opportunities,
+    }
 
 
 def _check_trade_liquidity(bid: float, ask: float) -> dict:

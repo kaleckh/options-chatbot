@@ -44,6 +44,7 @@ from options_chatbot import (
     _get_market_regime,
     scan_daily_top_trades,
     roll_forward_daily_picks,
+    generate_position_recommendations,
     _save_predictions,
     _save_profile,
     CHANGELOG_FILE,
@@ -1151,11 +1152,12 @@ elif _nav == "📊 Predictions":
     scan_preds = [p for p in preds if p.get("type") == "daily_scan"]
     all_preds  = preds  # keep for stats that include bot predictions
 
+    graded  = [p for p in scan_preds if p.get("outcome")]
+    pending = [p for p in scan_preds if not p.get("outcome")]
+
     if not scan_preds:
         st.info("No saved picks yet — scan and save today's picks below.")
-    else:
-        graded  = [p for p in scan_preds if p.get("outcome")]
-        pending = [p for p in scan_preds if not p.get("outcome")]
+    if True:  # always render tabs + scan section
         hits    = [p for p in graded if p["outcome"] == "hit"]
         dir_ok  = [p for p in graded if p["outcome"] in ("hit", "directional")]
         call_g  = [p for p in graded if p.get("direction") == "call"]
@@ -1164,7 +1166,7 @@ elif _nav == "📊 Predictions":
         # Summary metrics
         m1, m2, m3, m4, m5 = st.columns(5)
         m1.metric("Total Picks",   len(scan_preds))
-        m2.metric("Pending",       len(pending))
+        m2.metric("Active Trades", len(pending))
         m3.metric("Hit Rate",      f"{round(len(hits)/len(graded)*100,1)}%" if graded else "—",
                   help="Direction correct AND magnitude ≥ 50% of target")
         m4.metric("Directional",   f"{round(len(dir_ok)/len(graded)*100,1)}%" if graded else "—",
@@ -1202,7 +1204,7 @@ elif _nav == "📊 Predictions":
                                 help="Average option gain/loss % across graded equity picks")
 
         hist_tab_pending, hist_tab_graded, hist_tab_breakdown, hist_tab_sim, hist_tab_sectors = st.tabs(
-            [f"⏳ Pending ({len(pending)})",
+            [f"⏳ Active ({len(pending)})",
              f"✅ Graded ({len(graded)})",
              "📊 Breakdown",
              "💰 Portfolio Sim",
@@ -1232,7 +1234,7 @@ elif _nav == "📊 Predictions":
                 help="Automatically checks all pending picks every 10 minutes and grades any that hit their TP, SL, or expiry.",
             )
             if not pending:
-                st.info("No pending picks.")
+                st.info("No active trades.")
             else:
                 # Group by effective batch date: rolled picks use last_rolled_date so they
                 # appear in today's active batch rather than their original entry batch.
@@ -1248,7 +1250,7 @@ elif _nav == "📊 Predictions":
                     # Show time from the first pick's entry_date if it contains a time component
                     _raw_entry = _picks[0].get("entry_date", _scan_date)
                     _time_str  = _raw_entry[10:].strip() if len(_raw_entry) > 10 else ""
-                    _label = f"📅 {_scan_date}{('  ' + _time_str) if _time_str else ''}  ·  {_pending_count} pick{'s' if _pending_count != 1 else ''} pending"
+                    _label = f"📅 {_scan_date}{('  ' + _time_str) if _time_str else ''}  ·  {_pending_count} PICKS ACTIVE"
                     # Most recent section expanded by default, older ones collapsed
                     with st.expander(_label, expanded=(_i == 0)):
                         _gcol, _ = st.columns([2, 5])
@@ -1556,8 +1558,16 @@ elif _nav == "📊 Predictions":
 
             if scan_col.button("🔍 Scan Watchlist for Top 5 Picks", use_container_width=True, key="scan_btn",
                                help="Analyzes all tickers in your watchlist using technical indicators, IV rank, and momentum. Returns the top 5 highest-confidence option setups for today with recommended strikes, premiums, and TP/SL targets."):
-                with st.spinner(f"Scanning {len(DEFAULT_WATCHLIST)} tickers for highest-confidence setups…"):
-                    st.session_state["daily_picks"] = scan_daily_top_trades(n_picks=5)
+                with st.spinner(f"Scanning {len(DEFAULT_WATCHLIST)} tickers & evaluating active positions…"):
+                    _existing = _load_predictions()
+                    _pending  = [p for p in _existing if p.get("type") == "daily_scan" and not p.get("outcome")]
+                    _result   = generate_position_recommendations(_pending, n_picks=5)
+                    st.session_state["scan_result"] = _result
+                    # daily_picks = HOLDs + new opportunities (for save compatibility)
+                    st.session_state["daily_picks"] = (
+                        [p for p in _result["active_positions"] if p["recommendation"] == "HOLD"]
+                        + _result["new_opportunities"]
+                    )
                 st.rerun()
 
 
@@ -1566,19 +1576,212 @@ elif _nav == "📊 Predictions":
                 st.rerun()
 
             # ── Today's picks ─────────────────────────────────────────────────────────
+            _scan_result = st.session_state.get("scan_result")
             picks = st.session_state.get("daily_picks", [])
-            if picks:
+
+            # ── Helper: render a single pick's detail expander ────────────────────
+            def _render_pick_expander(p, prefix="", extra_label=""):
+                p = _enrich_pick(p)
+                direction = p.get("direction", "")
+                arrow     = "📈" if direction == "call" else "📉"
+                _dir_s    = p.get("direction_score", p.get("confidence", 0))
+                _qual_s   = p.get("quality_score")
+                _qual_str = f" · quality {_qual_s:.0f}/100" if _qual_s is not None else ""
+                _label    = f"{arrow} {p['ticker']} — {_dir_s:.1f}% direction{_qual_str}{extra_label}"
+                with st.expander(_label):
+                    dc1, dc2, dc3, dc4 = st.columns(4)
+                    dc1.metric("Direction Score", f"{_dir_s:.1f}%",
+                               help="Predicts if stock moves the right way")
+                    dc2.metric("Quality Score", f"{_qual_s:.0f}/100" if _qual_s is not None else "—",
+                               help="Rates the option to buy if direction is right")
+                    dc3.metric("Tech Score",   f"{p.get('tech_score', 0):.0f}/100")
+                    dc4.metric("IV Rank",      f"{p.get('iv_rank', 0):.0f}th pct")
+                    dc4, dc5, dc6 = st.columns(3)
+                    dc4.metric("Stock Price",  f"${p.get('stock_price', 0):.2f}")
+                    dc5.metric(
+                        "Strike" + (" ✓" if p.get("live_chain") else " ~est"),
+                        f"${p.get('strike_est', 0):.2f}".rstrip("0").rstrip("."),
+                    )
+                    dc6.metric("Delta Est.",   f"{p.get('delta_est', 0):.2f}")
+                    dc7, dc8, dc9 = st.columns(3)
+                    dc7.metric("Est. Premium", f"${p.get('est_premium', 0):.2f}")
+                    dc8.metric("EV%",          f"{p.get('ev_pct', 0):.1f}%")
+                    dc9.metric("5-Day Ret",    f"{p.get('ret5', 0):+.1f}%")
+                    if p.get("signal_reasons"):
+                        st.markdown("**Signal reasons:**")
+                        for reason in p["signal_reasons"]:
+                            st.markdown(f"- {reason}")
+                    # Exit strategy
+                    st.markdown("**Exit strategy:**")
+                    is_call = direction == "call"
+                    sl_px   = p.get("sl_option_px")
+                    tp_px   = p.get("tp_option_px")
+                    stk_sl  = p.get("stock_sl")
+                    stk_tp  = p.get("stock_tp")
+                    s1, s2, s3, s4 = st.columns(4)
+                    s1.metric("Stop Loss",
+                              f"${sl_px:.2f}" if sl_px is not None else f"−{p.get('stop_loss_pct', 50):.0f}%",
+                              f"−{p.get('stop_loss_pct', 50):.0f}% on premium", delta_color="inverse")
+                    s2.metric("Take Profit",
+                              f"${tp_px:.2f}" if tp_px is not None else f"+{p.get('profit_target_pct', 100):.0f}%",
+                              f"+{p.get('profit_target_pct', 100):.0f}% on premium", delta_color="normal")
+                    s3.metric("Stock SL ~",
+                              f"${stk_sl:.2f}" if stk_sl is not None else "—",
+                              f"{'rises' if not is_call else 'falls'} to this", delta_color="inverse")
+                    s4.metric("Stock TP ~",
+                              f"${stk_tp:.2f}" if stk_tp is not None else "—",
+                              f"{'falls' if not is_call else 'rises'} to this", delta_color="normal")
+                    if p.get("strategy_comment"):
+                        st.info(f"💡 {p['strategy_comment']}", icon=None)
+                    st.caption(f"Target date: {p.get('target_date', '—')} · DTE at entry: {p.get('dte', '—')}d")
+
+            # ── Section A: Active Positions with Recommendations ──────────────────
+            if _scan_result and _scan_result.get("active_positions"):
+                _active = _scan_result["active_positions"]
+                st.markdown('<div class="section-header">ACTIVE POSITIONS</div>', unsafe_allow_html=True)
                 st.markdown(
-                    f"<div style='color:#888;font-size:0.85em;margin-bottom:8px'>"
-                    f"Scanned {len(DEFAULT_WATCHLIST)} large-cap tickers · "
-                    f"{datetime.now().strftime('%b %d, %Y %H:%M')} · "
-                    f"Top {len(picks)} by confidence score</div>",
+                    f"<div style='color:var(--text-3);font-size:0.75rem;margin-bottom:0.5rem'>"
+                    f"{len(_active)} open position(s) re-evaluated against today\'s market data</div>",
                     unsafe_allow_html=True,
                 )
 
-                # Summary table
+                # Active positions table
+                _active_rows = []
+                for ap in _active:
+                    ap = _enrich_pick(ap)
+                    _dir = ap.get("direction", "")
+                    _arrow = "📈 CALL" if _dir == "call" else "📉 PUT"
+                    _rec = ap.get("recommendation", "HOLD")
+                    _fresh_ds = ap.get("fresh_direction_score")
+                    _score_d = ap.get("score_delta")
+                    _pnl = ap.get("current_pnl_pct")
+                    _active_rows.append({
+                        "Ticker":       ap["ticker"],
+                        "Trade":        _arrow,
+                        "Action":       _rec,
+                        "Dir. Score":   f"{_fresh_ds:.1f}%" if _fresh_ds is not None else "—",
+                        "Change":       f"{_score_d:+.1f}" if _score_d is not None else "—",
+                        "P&L":          f"{_pnl:+.1f}%" if _pnl is not None else "—",
+                        "Strike":       f"${ap.get('strike_est', 0):.2f}".rstrip("0").rstrip("."),
+                        "Premium":      f"${ap.get('est_premium', 0):.2f}",
+                        "Expiry":       ap.get("expiry", "—"),
+                        "Reason":       ap.get("rec_reason", ""),
+                    })
+                st.markdown(_ft_table(
+                    _active_rows,
+                    pnl_cols=["P&L", "Change"],
+                    rate_cols=["Dir. Score"],
+                    badge_col="Trade",
+                    mono_cols=["Strike", "Premium"],
+                ), unsafe_allow_html=True)
+
+                # Per-position expanders with action buttons
+                for _idx, ap in enumerate(_active):
+                    _rec = ap.get("recommendation", "HOLD")
+                    _rec_icon = {"HOLD": "🟢", "EXIT": "🔴", "REPLACE": "🟡"}.get(_rec, "⚪")
+                    _render_pick_expander(ap, extra_label=f" · {_rec_icon} {_rec}")
+
+                    # Recommendation reason + action buttons
+                    _reason = ap.get("rec_reason", "")
+                    _pick_id = ap.get("id", _idx)
+
+                    if _rec == "EXIT":
+                        st.caption(f"Recommendation: {_reason}")
+                        if st.button(f"Accept EXIT — close {ap['ticker']}", key=f"exit_{_pick_id}",
+                                     use_container_width=True):
+                            # Grade as manual_exit in predictions.json
+                            _all_preds = _load_predictions()
+                            for _pp in _all_preds:
+                                if _pp.get("id") == ap.get("id"):
+                                    _pp["outcome"] = "manual_exit"
+                                    _pp["exit_reason"] = "manual_exit"
+                                    _pp["graded_date"] = datetime.now().strftime("%Y-%m-%d")
+                                    break
+                            _save_predictions(_all_preds)
+                            # Remove from scan_result
+                            _scan_result["active_positions"] = [
+                                x for x in _scan_result["active_positions"]
+                                if x.get("id") != ap.get("id")
+                            ]
+                            st.session_state["scan_result"] = _scan_result
+                            st.rerun()
+
+                    elif _rec == "REPLACE":
+                        st.caption(f"Recommendation: {_reason}")
+                        _repl = ap.get("replace_with")
+                        if _repl:
+                            st.markdown(
+                                f"<div style='color:var(--amber);font-size:0.75rem;margin-bottom:0.25rem'>"
+                                f"Suggested replacement: <b>{_repl['ticker']} "
+                                f"{_repl['direction'].upper()}</b> — "
+                                f"direction {_repl['direction_score']:.0f}%, "
+                                f"EV {_repl['ev_pct']:.1f}%</div>",
+                                unsafe_allow_html=True,
+                            )
+                        _bc1, _bc2 = st.columns(2)
+                        if _bc1.button(f"Accept REPLACE", key=f"replace_{_pick_id}",
+                                       use_container_width=True):
+                            # Grade old as replaced
+                            _all_preds = _load_predictions()
+                            for _pp in _all_preds:
+                                if _pp.get("id") == ap.get("id"):
+                                    _pp["outcome"] = "replaced"
+                                    _pp["exit_reason"] = "replaced"
+                                    _pp["graded_date"] = datetime.now().strftime("%Y-%m-%d")
+                                    break
+                            _save_predictions(_all_preds)
+                            # Move replacement to new_opportunities
+                            if _repl:
+                                _scan_result["new_opportunities"].append(_repl)
+                            _scan_result["active_positions"] = [
+                                x for x in _scan_result["active_positions"]
+                                if x.get("id") != ap.get("id")
+                            ]
+                            st.session_state["scan_result"] = _scan_result
+                            # Update daily_picks
+                            st.session_state["daily_picks"] = (
+                                [p for p in _scan_result["active_positions"] if p.get("recommendation") == "HOLD"]
+                                + _scan_result["new_opportunities"]
+                            )
+                            st.rerun()
+                        if _bc2.button(f"Override: HOLD", key=f"override_hold_{_pick_id}",
+                                       use_container_width=True):
+                            for _ap2 in _scan_result["active_positions"]:
+                                if _ap2.get("id") == ap.get("id"):
+                                    _ap2["recommendation"] = "HOLD"
+                                    _ap2["rec_reason"] = "User override — holding position"
+                                    break
+                            st.session_state["scan_result"] = _scan_result
+                            st.session_state["daily_picks"] = (
+                                [p for p in _scan_result["active_positions"] if p.get("recommendation") == "HOLD"]
+                                + _scan_result["new_opportunities"]
+                            )
+                            st.rerun()
+
+                    else:  # HOLD
+                        st.caption(f"Recommendation: {_reason}")
+
+                st.markdown("---")
+
+            # ── Section B: New Opportunities ──────────────────────────────────────
+            _new_opps = (_scan_result or {}).get("new_opportunities", []) if _scan_result else picks
+            if not _scan_result and picks:
+                _new_opps = picks  # fallback: no scan_result, just raw picks
+
+            if _new_opps:
+                _header = "NEW OPPORTUNITIES" if _scan_result and _scan_result.get("active_positions") else "TODAY\'S TOP TRADES"
+                st.markdown(f'<div class="section-header">{_header}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f"<div style='color:var(--text-3);font-size:0.75rem;margin-bottom:0.5rem'>"
+                    f"Scanned {len(DEFAULT_WATCHLIST)} large-cap tickers · "
+                    f"{datetime.now().strftime('%b %d, %Y %H:%M')} · "
+                    f"Top {len(_new_opps)} by confidence score</div>",
+                    unsafe_allow_html=True,
+                )
+
+                # New opportunities table
                 scan_rows = []
-                for p in picks:
+                for p in _new_opps:
                     p = _enrich_pick(p)
                     direction = p.get("direction", "")
                     arrow = "📈 CALL" if direction == "call" else "📉 PUT"
@@ -1587,15 +1790,15 @@ elif _nav == "📊 Predictions":
                     scan_rows.append({
                         "Ticker":       p["ticker"],
                         "Trade":        arrow,
-                        "Dir. Score":   f"{p.get('direction_score', p['confidence']):.1f}%",
+                        "Dir. Score":   f"{p.get('direction_score', p.get('confidence', 0)):.1f}%",
                         "Quality":      f"{p.get('quality_score', 0):.0f}/100",
-                        "Stock Price":  f"${p['stock_price']:.2f}",
-                        "Strike":       f"${p['strike_est']:.2f}".rstrip("0").rstrip(".") if p.get("live_chain") else f"~${p['strike_est']:.0f}",
+                        "Stock Price":  f"${p.get('stock_price', 0):.2f}",
+                        "Strike":       f"${p.get('strike_est', 0):.2f}".rstrip("0").rstrip(".") if p.get("live_chain") else f"~${p.get('strike_est', 0):.0f}",
                         "Premium":      f"${p.get('est_premium', 0):.2f}" + ("" if p.get("live_chain") else " ~"),
                         "SL":           f"${sl_px:.2f}" if sl_px is not None else "—",
                         "TP":           f"${tp_px:.2f}" if tp_px is not None else "—",
                         "Strategy":     p.get("strategy_label", "Standard"),
-                        "EV%":          f"{p['ev_pct']:.1f}%",
+                        "EV%":          f"{p.get('ev_pct', 0):.1f}%",
                     })
                 st.markdown(_ft_table(
                     scan_rows,
@@ -1605,89 +1808,42 @@ elif _nav == "📊 Predictions":
                     mono_cols=["Stock Price", "Strike", "Premium", "SL", "TP"],
                 ), unsafe_allow_html=True)
 
-                # Per-pick signal detail expanders
-                for p in [_enrich_pick(p) for p in picks]:
-                    direction = p.get("direction", "")
-                    border    = "#3fb950" if direction == "call" else "#f85149"
-                    arrow     = "📈" if direction == "call" else "📉"
-                    _dir_s = p.get('direction_score', p['confidence'])
-                    _qual_s = p.get('quality_score')
-                    _qual_str = f" · quality {_qual_s:.0f}/100" if _qual_s is not None else ""
-                    with st.expander(f"{arrow} {p['ticker']} — {_dir_s:.1f}% direction{_qual_str}"):
-                        dc1, dc2, dc3, dc4 = st.columns(4)
-                        dc1.metric("Direction Score", f"{p.get('direction_score', p['confidence']):.1f}%",
-                                   help="Predicts if stock moves the right way: tech setup + SPY regime alignment + momentum strength − RSI overextension penalty")
-                        dc2.metric("Quality Score", f"{p.get('quality_score', '—'):.0f}/100" if p.get('quality_score') is not None else "—",
-                                   help="Rates the option to buy if direction is right: IV rank + delta fit + DTE fit")
-                        dc3.metric("Tech Score",   f"{p['tech_score']:.0f}/100")
-                        dc4.metric("IV Rank",      f"{p['iv_rank']:.0f}th pct")
-                        dc4, dc5, dc6 = st.columns(3)
-                        dc4.metric("Stock Price",  f"${p['stock_price']:.2f}")
-                        dc5.metric(
-                            "Strike" + (" ✓" if p.get("live_chain") else " ~est"),
-                            f"${p['strike_est']:.2f}".rstrip("0").rstrip("."),
-                            help="Real market strike from live options chain" if p.get("live_chain") else "Estimated — live chain unavailable at scan time",
-                        )
-                        dc6.metric("Delta Est.",   f"{p['delta_est']:.2f}")
-                        dc7, dc8, dc9 = st.columns(3)
-                        dc7.metric("Est. Premium", f"${p['est_premium']:.2f}")
-                        dc8.metric("EV%",          f"{p['ev_pct']:.1f}%")
-                        dc9.metric("5-Day Ret",    f"{p['ret5']:+.1f}%")
-                        if p.get("signal_reasons"):
-                            st.markdown("**Signal reasons:**")
-                            for reason in p["signal_reasons"]:
-                                st.markdown(f"- {reason}")
+                # Per-pick expanders
+                for p in _new_opps:
+                    _render_pick_expander(p)
 
-                        # ── Exit Strategy ─────────────────────────────────────────────
-                        st.markdown("**Exit strategy:**")
-                        is_call = p.get("direction") == "call"
-                        sl_px   = p.get("sl_option_px")
-                        tp_px   = p.get("tp_option_px")
-                        stk_sl  = p.get("stock_sl")
-                        stk_tp  = p.get("stock_tp")
-                        s1, s2, s3, s4 = st.columns(4)
-                        s1.metric(
-                            "Stop Loss",
-                            f"${sl_px:.2f}" if sl_px is not None else f"−{p['stop_loss_pct']:.0f}%",
-                            f"−{p['stop_loss_pct']:.0f}% on premium",
-                            delta_color="inverse",
-                            help="Exit the option if it falls to this price (stop loss on premium paid)",
-                        )
-                        s2.metric(
-                            "Take Profit",
-                            f"${tp_px:.2f}" if tp_px is not None else f"+{p['profit_target_pct']:.0f}%",
-                            f"+{p['profit_target_pct']:.0f}% on premium",
-                            delta_color="normal",
-                            help="Exit the option when it reaches this price (profit target on premium)",
-                        )
-                        s3.metric(
-                            "Stock SL ~",
-                            f"${stk_sl:.2f}" if stk_sl is not None else "—",
-                            f"{'rises' if not is_call else 'falls'} to this",
-                            delta_color="inverse",
-                            help="Approximate underlying price where your stop loss triggers (delta-approximated)",
-                        )
-                        s4.metric(
-                            "Stock TP ~",
-                            f"${stk_tp:.2f}" if stk_tp is not None else "—",
-                            f"{'falls' if not is_call else 'rises'} to this",
-                            delta_color="normal",
-                            help="Approximate underlying price where your profit target triggers (delta-approximated)",
-                        )
-                        if p.get("strategy_comment"):
-                            st.info(f"💡 {p['strategy_comment']}", icon=None)
-                        st.caption(f"Target date: {p['target_date']} · DTE at entry: {p['dte']}d")
-
-                # Save button
-                if st.button("💾 Save today's picks to history", use_container_width=True, key="save_picks_btn"):
+                # ── Save button ───────────────────────────────────────────────────
+                if st.button("💾 Save picks to history", use_container_width=True, key="save_picks_btn"):
                     preds_all = _load_predictions()
                     today_str = datetime.now().strftime("%Y-%m-%d")
-                    # Avoid duplicate saves for today
+
+                    # Picks to save: HOLDs (refresh scores) + new opportunities
+                    _holds = [p for p in (_scan_result or {}).get("active_positions", [])
+                              if p.get("recommendation") == "HOLD"] if _scan_result else []
+                    _to_save = _new_opps  # new picks always saved
+
+                    # Refresh HOLD picks in predictions.json (update scoring, preserve entry)
+                    _existing_ids = {p.get("id") for p in _holds if p.get("id")}
+                    for _pp in preds_all:
+                        if _pp.get("id") in _existing_ids:
+                            _hold_match = next((h for h in _holds if h.get("id") == _pp.get("id")), None)
+                            if _hold_match:
+                                for _f in ("direction_score", "tech_score", "quality_score",
+                                           "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
+                                           "signal_reasons", "strategy_label", "strategy_comment",
+                                           "last_rolled_date"):
+                                    if _f in _hold_match:
+                                        _pp[_f] = _hold_match[_f]
+                                _pp["pick_status"] = "rolled"
+                                _pp["roll_count"] = _pp.get("roll_count", 0) + 1
+                                _pp["last_rolled_date"] = datetime.now().strftime("%Y-%m-%d")
+
+                    # Add new picks (dedup by ticker for today)
                     already = {p.get("ticker") for p in preds_all
                                if p.get("entry_date", "")[:10] == today_str and p.get("type") == "daily_scan"}
                     new_id = max((p.get("id", 0) for p in preds_all), default=0)
                     added = 0
-                    for p in picks:
+                    for p in _to_save:
                         if p["ticker"] in already:
                             continue
                         new_id += 1
@@ -1695,16 +1851,20 @@ elif _nav == "📊 Predictions":
                         rec["id"] = new_id
                         preds_all.append(rec)
                         added += 1
+
                     _save_predictions(preds_all)
-                    if added:
-                        st.success(f"Saved {added} pick(s) to prediction history.")
+                    _held = len(_existing_ids)
+                    if added or _held:
+                        st.success(f"Saved {added} new pick(s), refreshed {_held} held position(s).")
                     else:
                         st.info("Today's picks were already saved.")
                     st.session_state.pop("daily_picks", None)
+                    st.session_state.pop("scan_result", None)
                     st.rerun()
-            else:
+
+            elif not picks and not _scan_result:
                 st.info(
-                    "Click **Scan Watchlist** to generate today's top 5 high-confidence option setups "
+                    "Click **Scan Watchlist** to generate today\'s top 5 high-confidence option setups "
                     "across all large-cap tickers."
                 )
 
