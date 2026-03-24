@@ -288,36 +288,38 @@ st.markdown("""
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-0:          #0a0e13;
-  --bg-1:          #0d1117;
-  --bg-2:          #13181f;
-  --bg-3:          #161b22;
-  --bg-4:          #1c2333;
-  --border:        #21262d;
-  --border-subtle: #161b22;
-  --text-0:        #f0f3f7;
-  --text-1:        #c9d1d9;
-  --text-2:        #8b949e;
-  --text-3:        #484f58;
-  --accent:        #2d7df7;
-  --accent-dim:    rgba(45,125,247,0.14);
-  --green:         #3fb950;
-  --green-dim:     rgba(63,185,80,0.12);
-  --red:           #f85149;
-  --red-dim:       rgba(248,81,73,0.12);
-  --amber:         #d29922;
-  --amber-dim:     rgba(210,153,34,0.12);
+  --bg-0:          #080b10;
+  --bg-1:          #0c1017;
+  --bg-2:          #11161e;
+  --bg-3:          #151c26;
+  --bg-4:          #1a2332;
+  --border:        #1e2736;
+  --border-subtle: #151c26;
+  --text-0:        #edf2f7;
+  --text-1:        #b8c4d0;
+  --text-2:        #6b7a8d;
+  --text-3:        #3d4a5c;
+  --accent:        #4a90f7;
+  --accent-dim:    rgba(74,144,247,0.12);
+  --accent-glow:   rgba(74,144,247,0.06);
+  --green:         #34d399;
+  --green-dim:     rgba(52,211,153,0.10);
+  --red:           #f87171;
+  --red-dim:       rgba(248,113,113,0.10);
+  --amber:         #fbbf24;
+  --amber-dim:     rgba(251,191,36,0.10);
   --mono:          'JetBrains Mono', 'Consolas', 'Courier New', monospace;
   --sans:          'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 /* ── Base ─────────────────────────────────────────────────────── */
 .stApp, .stApp > div { background: var(--bg-1) !important; }
-section.main > div.block-container { padding: 1rem 1.5rem 2rem !important; max-width: 100% !important; }
+section.main > div.block-container { padding: 1.25rem 2rem 2.5rem !important; max-width: 100% !important; }
 #MainMenu, header[data-testid="stHeader"], footer, [data-testid="stToolbar"] { display: none !important; }
 * { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
 /* ── Typography — 4-level hierarchy ───────────────────────────── */
 /*  L1  Page title    1.0rem  600  --text-0  (rendered in custom HTML header)  */
@@ -365,27 +367,28 @@ details summary span,
 }
 
 /* ── Sidebar ───────────────────────────────────────────────────── */
-[data-testid="stSidebar"] { background: var(--bg-2) !important; border-right: 1px solid var(--border) !important; }
-[data-testid="stSidebar"] > div:first-child { padding: 1rem 0.85rem !important; }
+[data-testid="stSidebar"] { background: linear-gradient(180deg, var(--bg-2) 0%, var(--bg-0) 100%) !important; border-right: 1px solid var(--border) !important; }
+[data-testid="stSidebar"] > div:first-child { padding: 1.25rem 1rem !important; }
 [data-testid="stSidebar"] .stMarkdown h2 { font-size: 0.82rem !important; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-2) !important; font-weight: 600 !important; margin-bottom: 0 !important; }
 [data-testid="stSidebar"] .stMarkdown p { font-size: 0.72rem !important; color: var(--text-3) !important; }
 
 /* ── Metrics ───────────────────────────────────────────────────── */
-[data-testid="stMetric"] { background: var(--bg-2) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; padding: 0.75rem 1rem !important; }
+[data-testid="stMetric"] { background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-3) 100%) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; padding: 0.85rem 1.1rem !important; transition: border-color 0.2s ease, box-shadow 0.2s ease !important; }
+[data-testid="stMetric"]:hover { border-color: var(--accent) !important; box-shadow: 0 0 12px var(--accent-glow) !important; }
 [data-testid="stMetricLabel"] > div { font-size: 0.65rem !important; font-weight: 600 !important; text-transform: uppercase !important; letter-spacing: 0.09em !important; color: var(--text-2) !important; }
-[data-testid="stMetricValue"] { font-family: var(--mono) !important; font-size: 1.0rem !important; font-weight: 500 !important; color: var(--text-0) !important; letter-spacing: -0.03em !important; }
+[data-testid="stMetricValue"] { font-family: var(--mono) !important; font-size: 1.05rem !important; font-weight: 500 !important; color: var(--text-0) !important; letter-spacing: -0.03em !important; }
 [data-testid="stMetricDelta"] { font-family: var(--mono) !important; font-size: 0.72rem !important; }
 
 /* ── Buttons ───────────────────────────────────────────────────── */
-button[kind="primary"] { background: var(--accent) !important; border: none !important; border-radius: 3px !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 500 !important; color: #fff !important; letter-spacing: 0.01em !important; padding: 0.5rem 1rem !important; }
-button[kind="primary"]:hover { background: #3d8ef8 !important; }
-button[kind="secondary"], .stButton > button { background: var(--bg-4) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; color: var(--text-1) !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 400 !important; }
-.stButton > button:hover { background: var(--bg-3) !important; border-color: #30363d !important; color: var(--text-0) !important; }
+button[kind="primary"] { background: linear-gradient(135deg, var(--accent) 0%, #3a7be8 100%) !important; border: none !important; border-radius: 6px !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 500 !important; color: #fff !important; letter-spacing: 0.01em !important; padding: 0.55rem 1.1rem !important; box-shadow: 0 2px 8px rgba(74,144,247,0.2) !important; transition: all 0.15s ease !important; }
+button[kind="primary"]:hover { background: linear-gradient(135deg, #5a9df8 0%, #4a90f7 100%) !important; box-shadow: 0 4px 14px rgba(74,144,247,0.3) !important; transform: translateY(-1px) !important; }
+button[kind="secondary"], .stButton > button { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; color: var(--text-1) !important; font-family: var(--sans) !important; font-size: 0.82rem !important; font-weight: 400 !important; transition: all 0.15s ease !important; }
+.stButton > button:hover { background: var(--bg-4) !important; border-color: var(--text-3) !important; color: var(--text-0) !important; }
 button[kind="tertiary"] { background: transparent !important; border: none !important; color: var(--text-2) !important; font-size: 0.78rem !important; }
 
 /* ── Inputs ────────────────────────────────────────────────────── */
-.stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] > div { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; color: var(--text-0) !important; font-family: var(--sans) !important; font-size: 0.82rem !important; }
-.stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--accent-dim) !important; outline: none !important; }
+.stTextInput input, .stNumberInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] > div { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; color: var(--text-0) !important; font-family: var(--sans) !important; font-size: 0.82rem !important; transition: border-color 0.15s ease, box-shadow 0.15s ease !important; }
+.stTextInput input:focus, .stNumberInput input:focus, .stTextArea textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-dim), 0 0 16px var(--accent-glow) !important; outline: none !important; }
 .stSelectbox div[data-baseweb="select"] * { color: var(--text-1) !important; font-size: 0.82rem !important; }
 
 /* ── Sliders ───────────────────────────────────────────────────── */
@@ -400,7 +403,8 @@ button[kind="tertiary"] { background: transparent !important; border: none !impo
 .stCheckbox label { font-size: 0.8rem !important; color: var(--text-1) !important; }
 
 /* ── Expanders ─────────────────────────────────────────────────── */
-[data-testid="stExpander"] { border: 1px solid var(--border) !important; border-radius: 3px !important; background: var(--bg-2) !important; margin-bottom: 0.5rem !important; overflow: hidden !important; }
+[data-testid="stExpander"] { border: 1px solid var(--border) !important; border-radius: 6px !important; background: var(--bg-2) !important; margin-bottom: 0.5rem !important; overflow: hidden !important; transition: border-color 0.15s ease !important; }
+[data-testid="stExpander"]:hover { border-color: var(--text-3) !important; }
 [data-testid="stExpander"] summary { display: flex !important; align-items: center !important; gap: 0.5rem !important; padding: 0.5rem 1rem !important; background: transparent !important; cursor: pointer !important; }
 [data-testid="stExpander"] summary svg { flex-shrink: 0 !important; width: 1rem !important; height: 1rem !important; color: var(--text-3) !important; }
 /* Hide material-icons span — font ligature renders as raw text when CDN is blocked */
@@ -413,9 +417,10 @@ button[kind="tertiary"] { background: transparent !important; border: none !impo
 
 /* ── Tabs (st.tabs) ────────────────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] { background: transparent !important; border-bottom: 1px solid var(--border) !important; gap: 0 !important; padding: 0 !important; }
-.stTabs [data-baseweb="tab"] { background: transparent !important; color: var(--text-2) !important; font-size: 0.78rem !important; font-weight: 500 !important; padding: 0.5rem 1rem !important; border-bottom: 2px solid transparent !important; text-transform: uppercase !important; letter-spacing: 0.06em !important; margin: 0 !important; }
+.stTabs [data-baseweb="tab"] { background: transparent !important; color: var(--text-2) !important; font-size: 0.78rem !important; font-weight: 500 !important; padding: 0.6rem 1.1rem !important; border-bottom: 2px solid transparent !important; text-transform: uppercase !important; letter-spacing: 0.06em !important; margin: 0 !important; transition: color 0.15s ease !important; }
+.stTabs [data-baseweb="tab"]:hover { color: var(--text-1) !important; }
 .stTabs [aria-selected="true"] { color: var(--text-0) !important; border-bottom: 2px solid var(--accent) !important; background: transparent !important; }
-.stTabs [data-baseweb="tab-panel"] { padding: 1rem 0 0 !important; }
+.stTabs [data-baseweb="tab-panel"] { padding: 1.15rem 0 0 !important; }
 
 /* ── DataFrames ────────────────────────────────────────────────── */
 .stDataFrame { border: 1px solid var(--border) !important; border-radius: 3px !important; overflow: hidden !important; }
@@ -423,12 +428,18 @@ button[kind="tertiary"] { background: transparent !important; border: none !impo
 iframe[title="st_aggrid"] { border: 1px solid var(--border) !important; border-radius: 3px !important; }
 
 /* ── Chat ──────────────────────────────────────────────────────── */
-[data-testid="stChatMessageContainer"] { gap: 0.5rem !important; }
-[data-testid="stChatMessage"] { background: var(--bg-2) !important; border: 1px solid var(--border-subtle) !important; border-radius: 3px !important; padding: 0.75rem 1rem !important; }
-[data-testid="stChatMessage"][data-from="user"] { background: var(--bg-4) !important; border-color: var(--border) !important; }
-[data-testid="stChatInput"] > div { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 4px !important; }
-[data-testid="stChatInput"] > div:focus-within { border-color: var(--accent) !important; box-shadow: 0 0 0 2px var(--accent-dim) !important; }
-[data-testid="stChatInput"] textarea { background: transparent !important; color: var(--text-0) !important; font-size: 0.82rem !important; font-family: var(--sans) !important; }
+[data-testid="stChatMessageContainer"] { gap: 0.6rem !important; }
+[data-testid="stChatMessage"] { background: var(--bg-2) !important; border: 1px solid var(--border-subtle) !important; border-radius: 8px !important; padding: 0.9rem 1.15rem !important; transition: border-color 0.15s ease !important; }
+[data-testid="stChatMessage"]:hover { border-color: var(--border) !important; }
+[data-testid="stChatMessage"][data-from="user"] { background: linear-gradient(135deg, var(--bg-4) 0%, var(--bg-3) 100%) !important; border-color: var(--border) !important; border-left: 2px solid var(--accent) !important; }
+[data-testid="stChatInput"] { position: sticky !important; bottom: 0 !important; padding: 0.75rem 0 1rem !important; background: linear-gradient(180deg, transparent 0%, var(--bg-1) 20%) !important; z-index: 100 !important; }
+[data-testid="stChatInput"] > div { background: var(--bg-3) !important; border: 1px solid var(--border) !important; border-radius: 12px !important; padding: 0.15rem 0.25rem !important; box-shadow: 0 2px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--border) !important; transition: all 0.2s ease !important; }
+[data-testid="stChatInput"] > div:focus-within { border-color: var(--accent) !important; box-shadow: 0 2px 16px rgba(0,0,0,0.4), 0 0 0 2px var(--accent-dim), 0 0 30px var(--accent-glow) !important; }
+[data-testid="stChatInput"] textarea { background: transparent !important; color: var(--text-0) !important; font-size: 0.85rem !important; font-family: var(--sans) !important; padding: 0.6rem 0.75rem !important; }
+[data-testid="stChatInput"] textarea::placeholder { color: var(--text-3) !important; font-style: normal !important; }
+[data-testid="stChatInput"] button { background: var(--accent) !important; border: none !important; border-radius: 8px !important; width: 34px !important; height: 34px !important; margin: 4px !important; transition: all 0.15s ease !important; }
+[data-testid="stChatInput"] button:hover { background: #5a9df8 !important; box-shadow: 0 0 10px var(--accent-dim) !important; }
+[data-testid="stChatInput"] button svg { color: #fff !important; }
 
 /* ── Hide material-icons ligature spans (show as raw text when font blocked) ── */
 span.material-icons, span.material-icons-outlined, span.material-icons-round, span.material-symbols-outlined, span.material-symbols-rounded { display: none !important; }
@@ -436,7 +447,7 @@ span.material-icons, span.material-icons-outlined, span.material-icons-round, sp
 [data-testid="ScrollToTopButton"], button[data-testid*="scroll"], .stApp > div > button[kind="scrollToTop"] { display: none !important; }
 
 /* ── Status / Spinners ─────────────────────────────────────────── */
-[data-testid="stStatus"] { background: var(--bg-2) !important; border: 1px solid var(--border) !important; border-radius: 3px !important; }
+[data-testid="stStatus"] { background: var(--bg-2) !important; border: 1px solid var(--border) !important; border-radius: 6px !important; }
 [data-testid="stStatus"] summary { font-size: 0.72rem !important; color: var(--text-2) !important; }
 .stSpinner > div { border-color: var(--accent) transparent transparent !important; }
 
@@ -465,22 +476,22 @@ div[data-testid="stAlert"][data-baseweb="notification"] { background: var(--bg-3
 div[data-testid="stSidebar"] .nav-btn button,
 div[data-testid="stSidebar"] .nav-btn-active button {
   width: 100% !important; text-align: left !important;
-  padding: 0.5rem 0.75rem !important; font-size: 0.78rem !important;
-  font-weight: 400 !important; border-radius: 3px !important;
+  padding: 0.6rem 0.85rem !important; font-size: 0.8rem !important;
+  font-weight: 400 !important; border-radius: 6px !important;
   border: none !important; box-shadow: none !important; margin: 0 !important;
   background: transparent !important; color: var(--text-2) !important;
   letter-spacing: 0.01em !important;
-  transition: background 0.1s ease, color 0.1s ease !important;
+  transition: all 0.15s ease !important;
 }
 div[data-testid="stSidebar"] .nav-btn button:hover { background: rgba(255,255,255,0.04) !important; color: var(--text-0) !important; }
-div[data-testid="stSidebar"] .nav-btn-active button { background: var(--accent-dim) !important; color: var(--text-0) !important; font-weight: 500 !important; border-left: 2px solid var(--accent) !important; padding-left: calc(0.75rem - 2px) !important; }
-div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-active { margin-bottom: 1px !important; }
+div[data-testid="stSidebar"] .nav-btn-active button { background: linear-gradient(135deg, var(--accent-dim) 0%, rgba(74,144,247,0.06) 100%) !important; color: var(--text-0) !important; font-weight: 500 !important; border-left: 2px solid var(--accent) !important; padding-left: calc(0.85rem - 2px) !important; box-shadow: 0 0 12px var(--accent-glow) !important; }
+div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-active { margin-bottom: 2px !important; }
 
 /* ── Fintech Table ─────────────────────────────────────────────── */
-.ft-wrap { overflow-x: auto; overflow-y: auto; border: 1px solid var(--border); border-radius: 3px; background: var(--bg-2); }
+.ft-wrap { overflow-x: auto; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-2); }
 .ft-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; font-family: var(--sans); }
 .ft-table thead { position: sticky; top: 0; z-index: 10; }
-.ft-table thead th { background: var(--bg-3); color: var(--text-2); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; padding: 0.5rem 0.75rem; border-bottom: 2px solid var(--border); white-space: nowrap; user-select: none; }
+.ft-table thead th { background: linear-gradient(180deg, var(--bg-3) 0%, var(--bg-2) 100%); color: var(--text-2); font-size: 0.65rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; padding: 0.55rem 0.75rem; border-bottom: 2px solid var(--border); white-space: nowrap; user-select: none; }
 .ft-table thead th.r { text-align: right; }
 .ft-table tbody tr { border-bottom: 1px solid var(--border-subtle); transition: background 0.08s ease; }
 .ft-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.022); }
@@ -492,11 +503,11 @@ div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-act
 .ft-table td.neg  { color: #f85149 !important; font-family: var(--mono); }
 .ft-table td.warn { color: #d29922 !important; font-family: var(--mono); }
 .ft-table td.dim  { color: var(--text-2); }
-.ft-table .badge-call { display:inline-block; padding:1px 6px; border-radius:2px; background:rgba(63,185,80,0.12); color:#3fb950; font-size:0.65rem; font-weight:600; letter-spacing:0.04em; font-family:var(--mono); }
-.ft-table .badge-put  { display:inline-block; padding:1px 6px; border-radius:2px; background:rgba(248,81,73,0.12);  color:#f85149; font-size:0.65rem; font-weight:600; letter-spacing:0.04em; font-family:var(--mono); }
-.ft-table .badge-hit  { display:inline-block; padding:1px 6px; border-radius:2px; background:rgba(63,185,80,0.12);  color:#3fb950; font-size:0.72rem; }
-.ft-table .badge-miss { display:inline-block; padding:1px 6px; border-radius:2px; background:rgba(248,81,73,0.12);  color:#f85149; font-size:0.72rem; }
-.ft-table .badge-dir  { display:inline-block; padding:1px 6px; border-radius:2px; background:rgba(210,153,34,0.12); color:#d29922; font-size:0.72rem; }
+.ft-table .badge-call { display:inline-block; padding:2px 8px; border-radius:4px; background:var(--green-dim); color:var(--green); font-size:0.65rem; font-weight:600; letter-spacing:0.04em; font-family:var(--mono); }
+.ft-table .badge-put  { display:inline-block; padding:2px 8px; border-radius:4px; background:var(--red-dim);  color:var(--red); font-size:0.65rem; font-weight:600; letter-spacing:0.04em; font-family:var(--mono); }
+.ft-table .badge-hit  { display:inline-block; padding:2px 8px; border-radius:4px; background:var(--green-dim);  color:var(--green); font-size:0.72rem; }
+.ft-table .badge-miss { display:inline-block; padding:2px 8px; border-radius:4px; background:var(--red-dim);  color:var(--red); font-size:0.72rem; }
+.ft-table .badge-dir  { display:inline-block; padding:2px 8px; border-radius:4px; background:var(--amber-dim); color:var(--amber); font-size:0.72rem; }
 /* Sent-table (sector sentiment) — same language */
 .sent-table { width:100%; border-collapse:collapse; font-size:0.78rem; font-family:var(--sans); }
 .sent-table thead { position:sticky; top:0; z-index:10; }
@@ -520,9 +531,10 @@ div[data-testid="stSidebar"] .nav-btn, div[data-testid="stSidebar"] .nav-btn-act
 .pred-row-odd  { background:transparent; }
 
 /* ── Summary cards (batch metrics) ─────────────────────────────── */
-.summary-card { background:var(--bg-3); border:1px solid var(--border); border-radius:0.25rem; padding:0.5rem 0.75rem; text-align:center; margin-bottom:1rem; }
+.summary-card { background:linear-gradient(135deg, var(--bg-3) 0%, var(--bg-2) 100%); border:1px solid var(--border); border-radius:6px; padding:0.65rem 0.85rem; text-align:center; margin-bottom:1rem; transition:border-color 0.15s ease; }
+.summary-card:hover { border-color:var(--text-3); }
 .summary-card .sc-label { font-size:0.65rem; color:var(--text-2); letter-spacing:0.06em; text-transform:uppercase; margin-bottom:0.25rem; }
-.summary-card .sc-value { font-size:1.0rem; font-weight:500; line-height:1.1; }
+.summary-card .sc-value { font-size:1.05rem; font-weight:500; line-height:1.1; }
 .summary-card .sc-sub   { font-size:0.72rem; color:var(--text-3); margin-top:0.25rem; }
 
 /* ── Utility classes for inline HTML ───────────────────────────── */
@@ -590,28 +602,130 @@ _authenticator = stauth.Authenticate(
     _auth_config["cookie"]["expiry_days"],
 )
 
-_authenticator.login(location="main")
+# Ensure session state keys exist before cookie re-auth attempt
+for _k in ("name", "username", "authentication_status"):
+    st.session_state.setdefault(_k, None)
+
+# Let authenticator handle cookie re-auth silently (no UI rendered)
+_authenticator.login(location="unrendered")
 
 if st.session_state.get("authentication_status") is not True:
-    # ── Landing page (shown when logged out or login failed) ─────────
+    # ── Login page CSS ─────────────────────────────────────────────────
     st.markdown("""
-    <div style="max-width:480px; margin:3rem auto; text-align:center;">
-      <div style="font-family:var(--mono); font-size:1.5rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em; margin-bottom:0.25rem;">
+    <style>
+    /* Center + constrain login page */
+    section.main > .block-container {
+        max-width: 420px !important;
+        margin: 0 auto !important;
+        padding: 12vh 1rem 2rem !important;
+    }
+    /* Hide sidebar on login */
+    [data-testid="stSidebar"] { display: none !important; }
+    /* Input labels */
+    .stTextInput > label {
+        font-size: 0.68rem !important;
+        font-weight: 600 !important;
+        color: var(--text-2) !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.1em !important;
+        margin-bottom: 0.3rem !important;
+    }
+    /* Input fields */
+    .stTextInput input {
+        background: var(--bg-0) !important;
+        border: 1px solid var(--border) !important;
+        border-radius: 6px !important;
+        padding: 0.65rem 0.85rem !important;
+        font-size: 0.88rem !important;
+        color: var(--text-0) !important;
+        transition: border-color 0.2s, box-shadow 0.2s !important;
+    }
+    .stTextInput input:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 3px var(--accent-dim) !important;
+    }
+    .stTextInput input::placeholder {
+        color: var(--text-3) !important;
+        font-weight: 400 !important;
+    }
+    /* Sign In button */
+    .stButton > button {
+        width: 100% !important;
+        background: var(--accent) !important;
+        border: none !important;
+        border-radius: 6px !important;
+        padding: 0.6rem 1.5rem !important;
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        color: #fff !important;
+        letter-spacing: 0.02em !important;
+        margin-top: 0.5rem !important;
+        transition: background 0.15s, box-shadow 0.15s, transform 0.1s !important;
+    }
+    .stButton > button:hover {
+        background: #3d8ef8 !important;
+        box-shadow: 0 4px 16px rgba(45,125,247,0.35) !important;
+    }
+    .stButton > button:active {
+        transform: scale(0.98) !important;
+    }
+    /* Error alert */
+    [data-testid="stAlert"] {
+        border-radius: 6px !important;
+        margin-top: 0.75rem !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ── Branding ───────────────────────────────────────────────────────
+    st.markdown("""
+    <div style="text-align:center; margin-bottom:2rem;">
+      <div style="font-family:var(--mono); font-size:1.8rem; font-weight:700; color:var(--text-0); letter-spacing:-0.03em; margin-bottom:0.3rem;">
         OPTIONS<span style="color:var(--accent);">AI</span>
       </div>
-      <div style="font-size:0.72rem; color:var(--text-3); text-transform:uppercase; letter-spacing:0.1em; margin-bottom:2rem;">
+      <div style="font-size:0.68rem; color:var(--text-3); text-transform:uppercase; letter-spacing:0.16em;">
         Intelligent Options Trading Assistant
-      </div>
-      <div style="text-align:left; color:var(--text-2); font-size:0.82rem; line-height:1.8; margin-bottom:2rem;">
-        <div style="margin-bottom:0.5rem;"><span style="color:var(--accent);">&#9679;</span>&nbsp; AI-powered daily scan across 60+ large-cap tickers with real options chain data</div>
-        <div style="margin-bottom:0.5rem;"><span style="color:var(--green);">&#9679;</span>&nbsp; Smart position management with automatic HOLD / EXIT / REPLACE recommendations</div>
-        <div><span style="color:var(--amber);">&#9679;</span>&nbsp; Walk-forward optimized strategy brain with live indicator-based early exit logic</div>
       </div>
     </div>
     """, unsafe_allow_html=True)
 
-    if st.session_state.get("authentication_status") is False:
-        st.error("Incorrect username or password.")
+    # ── Custom login form ──────────────────────────────────────────────
+    _login_container = st.container()
+    with _login_container:
+        _login_user = st.text_input("Username", key="login_username", placeholder="Enter username")
+        _login_pass = st.text_input("Password", key="login_password", type="password", placeholder="Enter password")
+        _login_submit = st.button("Sign In", key="login_submit", use_container_width=True)
+        if _login_submit and _login_user and _login_pass:
+            try:
+                _result = _authenticator.authentication_controller.login(
+                    _login_user, _login_pass
+                )
+                if _result is True:
+                    _authenticator.cookie_controller.set_cookie()
+                    st.rerun()
+            except Exception:
+                st.session_state["authentication_status"] = False
+        if st.session_state.get("authentication_status") is False:
+            st.error("Incorrect username or password.")
+
+    # ── Feature highlights ─────────────────────────────────────────────
+    st.markdown("""
+    <div style="margin-top:2.5rem; padding-top:1.5rem; border-top:1px solid var(--border-subtle);">
+      <div style="display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.85rem;">
+        <div style="flex-shrink:0; width:6px; height:6px; border-radius:50%; background:var(--accent); margin-top:0.4rem;"></div>
+        <div style="font-size:0.76rem; color:var(--text-2); line-height:1.5;">AI-powered daily scan across 60+ large-cap tickers with real options chain data</div>
+      </div>
+      <div style="display:flex; align-items:flex-start; gap:0.75rem; margin-bottom:0.85rem;">
+        <div style="flex-shrink:0; width:6px; height:6px; border-radius:50%; background:var(--green); margin-top:0.4rem;"></div>
+        <div style="font-size:0.76rem; color:var(--text-2); line-height:1.5;">Smart position management with automatic HOLD / EXIT / REPLACE recommendations</div>
+      </div>
+      <div style="display:flex; align-items:flex-start; gap:0.75rem;">
+        <div style="flex-shrink:0; width:6px; height:6px; border-radius:50%; background:var(--amber); margin-top:0.4rem;"></div>
+        <div style="font-size:0.76rem; color:var(--text-2); line-height:1.5;">Walk-forward optimized strategy brain with live indicator-based early exit logic</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     st.stop()
 
 # ── Session state ──────────────────────────────────────────────────────────────
@@ -659,9 +773,12 @@ with st.sidebar:
         _authenticator.logout("Logout", location="sidebar", key="sidebar_logout")
 
     st.markdown("""
-<div style="padding:0.25rem 0 0.75rem; border-bottom:1px solid var(--border); margin-bottom:0.75rem;">
-  <div style="font-family:var(--mono); font-size:0.88rem; font-weight:600; color:var(--text-0); letter-spacing:-0.02em;">OPTIONS<span style="color:var(--accent);">AI</span></div>
-  <div style="font-size:0.65rem; color:var(--text-3); margin-top:0.25rem; letter-spacing:0.04em; text-transform:uppercase;">Yahoo Finance · ~15 min delay</div>
+<div style="padding:0.5rem 0 0.85rem; border-bottom:1px solid var(--border); margin-bottom:0.85rem;">
+  <div style="font-family:var(--mono); font-size:1.0rem; font-weight:700; color:var(--text-0); letter-spacing:-0.02em;">OPTIONS<span style="color:var(--accent);">AI</span></div>
+  <div style="display:flex; align-items:center; gap:0.4rem; margin-top:0.4rem;">
+    <span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green);"></span>
+    <span style="font-size:0.62rem; color:var(--text-2); letter-spacing:0.06em; text-transform:uppercase; font-weight:500;">Yahoo Finance · ~15 min delay</span>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -805,12 +922,16 @@ try {{
 
 _now_str = datetime.now().strftime("%a %b %d, %Y  %H:%M ET")
 st.markdown(f"""
-<div style="display:flex; align-items:baseline; justify-content:space-between; padding-bottom:0.6rem; border-bottom:1px solid var(--border); margin-bottom:1rem;">
-  <div>
-    <span style="font-family:var(--mono); font-size:1.05rem; font-weight:600; color:var(--text-0); letter-spacing:-0.03em;">OPTIONS<span style="color:var(--accent);">AI</span></span>
-    <span style="font-size:0.7rem; color:var(--text-3); margin-left:0.85rem; letter-spacing:0.04em; text-transform:uppercase;">Claude Code · 16 tools · single-leg options · 5–35 DTE</span>
+<div style="display:flex; align-items:center; justify-content:space-between; padding:0.75rem 0 0.85rem; border-bottom:1px solid var(--border); margin-bottom:1.25rem;">
+  <div style="display:flex; align-items:center; gap:1rem;">
+    <div style="font-family:var(--mono); font-size:1.2rem; font-weight:700; color:var(--text-0); letter-spacing:-0.03em;">OPTIONS<span style="color:var(--accent);">AI</span></div>
+    <div style="display:flex; gap:0.5rem; align-items:center;">
+      <span style="display:inline-block; padding:2px 8px; border-radius:4px; background:var(--accent-dim); color:var(--accent); font-size:0.6rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; font-family:var(--mono);">Claude Code</span>
+      <span style="display:inline-block; padding:2px 8px; border-radius:4px; background:var(--bg-4); color:var(--text-2); font-size:0.6rem; font-weight:500; letter-spacing:0.04em; text-transform:uppercase; font-family:var(--mono);">16 Tools</span>
+      <span style="display:inline-block; padding:2px 8px; border-radius:4px; background:var(--bg-4); color:var(--text-2); font-size:0.6rem; font-weight:500; letter-spacing:0.04em; text-transform:uppercase; font-family:var(--mono);">Single-Leg · 5–35 DTE</span>
+    </div>
   </div>
-  <span style="font-family:var(--mono); font-size:0.7rem; color:var(--text-3);">{_now_str}</span>
+  <div style="font-family:var(--mono); font-size:0.7rem; color:var(--text-3); background:var(--bg-3); padding:4px 10px; border-radius:4px; border:1px solid var(--border);">{_now_str}</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -967,6 +1088,38 @@ _nav = _active_tab  # single source of truth — set in sidebar
 # ══════════════════════════════════════════════════════════════════════════════
 
 if _nav == "💬 Chat":
+
+    # ── Empty state welcome ──────────────────────────────────────────────────
+    if not st.session_state.conversation:
+        st.markdown("""
+<div style="max-width:560px; margin:3rem auto; text-align:center;">
+  <div style="font-family:var(--mono); font-size:1.6rem; font-weight:700; color:var(--text-0); letter-spacing:-0.03em; margin-bottom:0.35rem;">
+    OPTIONS<span style="color:var(--accent);">AI</span>
+  </div>
+  <div style="font-size:0.78rem; color:var(--text-2); margin-bottom:2.5rem; line-height:1.6;">
+    AI-powered options analysis with real-time market data.<br>
+    Ask about any ticker, scan for trades, or backtest a strategy.
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.6rem; text-align:left;">
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:0.85rem 1rem;">
+      <div style="font-size:0.62rem; color:var(--accent); text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:0.35rem;">Market Overview</div>
+      <div style="font-size:0.78rem; color:var(--text-1); line-height:1.5;">"What's the market setup right now?"</div>
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:0.85rem 1rem;">
+      <div style="font-size:0.62rem; color:var(--green); text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:0.35rem;">Find Trades</div>
+      <div style="font-size:0.78rem; color:var(--text-1); line-height:1.5;">"Best NVDA calls this week"</div>
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:0.85rem 1rem;">
+      <div style="font-size:0.62rem; color:var(--amber); text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:0.35rem;">Analysis</div>
+      <div style="font-size:0.78rem; color:var(--text-1); line-height:1.5;">"Is IV on TSLA cheap or expensive?"</div>
+    </div>
+    <div style="background:var(--bg-3); border:1px solid var(--border); border-radius:8px; padding:0.85rem 1rem;">
+      <div style="font-size:0.62rem; color:var(--red); text-transform:uppercase; letter-spacing:0.08em; font-weight:600; margin-bottom:0.35rem;">Backtest</div>
+      <div style="font-size:0.78rem; color:var(--text-1); line-height:1.5;">"Backtest NVDA 5% OTM calls, 7 DTE"</div>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
 
     # ── Render chat history ──────────────────────────────────────────────────
 
