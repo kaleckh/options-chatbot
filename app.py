@@ -800,18 +800,55 @@ with st.sidebar:
 
     _active_tab = st.session_state["active_tab"]
 
-    # Scroll to top on every page load + hide stale chat elements on non-chat tabs
+    # Keep non-chat tabs anchored at the top and prevent stale chat focus from dragging
+    # the viewport to the bottom during tab switches.
     _is_chat = st.session_state.get("active_tab", "💬 Chat") == "💬 Chat"
+    if not _is_chat:
+        st.markdown("""
+        <style>
+        [data-testid="stChatMessage"],
+        [data-testid="stChatInput"],
+        [data-testid="stChatInputContainer"],
+        [data-testid="stChatInputTextArea"],
+        [data-testid="stAppScrollToBottomContainer"],
+        [data-testid="stBottom"],
+        [data-testid="stBottomBlockContainer"] {
+          display: none !important;
+          visibility: hidden !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
     st.html(f"""<script>
 try {{
   var doc = window.parent.document;
-  var main = doc.querySelector('section.main');
-  if (main) main.scrollTo({{top: 0, behavior: 'instant'}});
-  // Hide stale chat elements immediately when not on chat tab
+  var main = doc.querySelector('[data-testid="stMain"]') || doc.querySelector('[data-testid="stAppViewContainer"]');
   var hide = {'false' if _is_chat else 'true'};
-  doc.querySelectorAll('[data-testid="stChatMessage"], [data-testid="stChatInput"], [data-testid="stChatInputContainer"]').forEach(function(el) {{
+  var chatNodes = doc.querySelectorAll(
+    '[data-testid="stChatMessage"], ' +
+    '[data-testid="stChatInput"], ' +
+    '[data-testid="stChatInputContainer"], ' +
+    '[data-testid="stChatInputTextArea"], ' +
+    '[data-testid="stAppScrollToBottomContainer"], ' +
+    '[data-testid="stBottom"], ' +
+    '[data-testid="stBottomBlockContainer"]'
+  );
+  chatNodes.forEach(function(el) {{
     el.style.display = hide ? 'none' : '';
   }});
+  if (hide) {{
+    var active = doc.activeElement;
+    if (active && active.closest && active.closest('[data-testid="stChatInput"], [data-testid="stChatInputContainer"]')) {{
+      active.blur();
+    }}
+    var keepTop = function() {{
+      if (main) main.scrollTo({{top: 0, behavior: 'instant'}});
+    }};
+    keepTop();
+    requestAnimationFrame(keepTop);
+    setTimeout(keepTop, 0);
+  }} else if (main) {{
+    main.scrollTo({{top: 0, behavior: 'instant'}});
+  }}
 }} catch(e) {{}}
 </script>""")
 
@@ -941,7 +978,11 @@ st.markdown(f"""
 @st.fragment(run_every=90)
 def _watch_predictions_file():
     _mtime = os.path.getmtime(PREDICTIONS_FILE) if os.path.exists(PREDICTIONS_FILE) else 0.0
-    if st.session_state.get("pred_file_mtime", 0) != _mtime:
+    _prev_mtime = st.session_state.get("pred_file_mtime")
+    if _prev_mtime is None:
+        st.session_state["pred_file_mtime"] = _mtime
+        return
+    if _prev_mtime != _mtime:
         st.session_state["pred_file_mtime"] = _mtime
         st.rerun()
 
