@@ -800,11 +800,13 @@ with st.sidebar:
 
     _active_tab = st.session_state["active_tab"]
 
-    # Hide stale chat elements on non-chat tabs without forcing a scroll jump
+    # Scroll to top on every page load + hide stale chat elements on non-chat tabs
     _is_chat = st.session_state.get("active_tab", "💬 Chat") == "💬 Chat"
     st.html(f"""<script>
 try {{
   var doc = window.parent.document;
+  var main = doc.querySelector('section.main');
+  if (main) main.scrollTo({{top: 0, behavior: 'instant'}});
   // Hide stale chat elements immediately when not on chat tab
   var hide = {'false' if _is_chat else 'true'};
   doc.querySelectorAll('[data-testid="stChatMessage"], [data-testid="stChatInput"], [data-testid="stChatInputContainer"]').forEach(function(el) {{
