@@ -24,11 +24,15 @@ logging.basicConfig(
 
 try:
     from options_chatbot import (
+        DEFAULT_WATCHLIST,
         roll_forward_daily_picks,
         log_prediction,
         _load_predictions,
         _save_predictions,
+        scan_daily_top_trades,
     )
+    from positions_repository import create_positions_repository
+    from supervised_scan import LIVE_SCAN_TRUTH_LANE, run_supervised_scan
 except Exception as e:
     logging.error(f"Import failed: {e}")
     sys.exit(1)
@@ -70,7 +74,9 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     preds = _load_predictions()
     today_graded = [
         p for p in preds
-        if p.get("graded_date", "")[:10] == date_str and p.get("outcome")
+        if p.get("graded_date", "")[:10] == date_str
+        and p.get("outcome")
+        and p.get("type") == "daily_scan"
     ]
     if not today_graded:
         return None
@@ -102,7 +108,7 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
 
     # Streak: look at all-time graded picks ordered by graded_date
     all_graded = sorted(
-        [p for p in preds if p.get("outcome") and p.get("graded_date")],
+        [p for p in preds if p.get("type") == "daily_scan" and p.get("outcome") and p.get("graded_date")],
         key=lambda p: p["graded_date"]
     )
     streak = 0
@@ -184,7 +190,19 @@ if _already:
 
 logging.info(f"Starting roll-forward scan for {today_str} ({len(pending)} pending picks)…")
 try:
-    result = roll_forward_daily_picks(pending, n_picks=5)
+    supervised = run_supervised_scan(
+        scan_func=scan_daily_top_trades,
+        positions_repository=create_positions_repository(os.getenv("DATABASE_URL")),
+        n_picks=5,
+        watchlist_size=len(DEFAULT_WATCHLIST),
+        playbook_id=os.getenv("OPTIONS_SCAN_PLAYBOOK") or "short_term",
+        use_recommended_policy=True,
+        truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,
+        min_trades=int(os.getenv("OPTIONS_SCAN_MIN_TRADES", "20")),
+    )
+    if supervised.get("policy_fail_closed"):
+        raise RuntimeError(supervised.get("policy_error") or "supervised scan failed closed")
+    result = roll_forward_daily_picks(pending, n_picks=5, candidates=supervised["ranked_picks"])
 except Exception as e:
     logging.error(f"Roll-forward scan failed: {e}")
     sys.exit(1)

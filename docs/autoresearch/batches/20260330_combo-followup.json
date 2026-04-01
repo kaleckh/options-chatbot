@@ -1,0 +1,66 @@
+{
+  "baseline": "research_runs/20260330_154734_baseline-playbook-decomposition",
+  "playbooks": [
+    "broad",
+    "bullish_momentum",
+    "bearish_defensive"
+  ],
+  "specs": [
+    {
+      "slug": "equity-tech-72-plus-ev-7",
+      "proposal_rel": "docs/autoresearch/proposals/combo-followup/equity-tech-72-plus-ev-7.md",
+      "overrides": {
+        "entry": {
+          "min_tech_score": 72.0
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    },
+    {
+      "slug": "equity-tech-72-plus-momentum-0p70",
+      "proposal_rel": "docs/autoresearch/proposals/combo-followup/equity-tech-72-plus-momentum-0p70.md",
+      "overrides": {
+        "entry": {
+          "min_tech_score": 72.0,
+          "entry_momentum_pct": 0.7
+        }
+      }
+    },
+    {
+      "slug": "equity-direction-75-plus-ev-7",
+      "proposal_rel": "docs/autoresearch/proposals/combo-followup/equity-direction-75-plus-ev-7.md",
+      "overrides": {
+        "entry": {
+          "min_direction_score": 75.0
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    },
+    {
+      "slug": "equity-tech-72-plus-direction-75",
+      "proposal_rel": "docs/autoresearch/proposals/combo-followup/equity-tech-72-plus-direction-75.md",
+      "overrides": {
+        "entry": {
+          "min_tech_score": 72.0,
+          "min_direction_score": 75.0
+        }
+      }
+    },
+    {
+      "slug": "equity-ev-7-plus-momentum-0p70",
+      "proposal_rel": "docs/autoresearch/proposals/combo-followup/equity-ev-7-plus-momentum-0p70.md",
+      "overrides": {
+        "entry": {
+          "entry_momentum_pct": 0.7
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    }
+  ]
+}

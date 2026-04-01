@@ -1,0 +1,40 @@
+{
+  "name": "options-chatbot",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently \"next dev\" \"cd python-backend && uvicorn main:app --reload --port 8100\"",
+    "dev:next": "next dev",
+    "dev:python": "cd python-backend && uvicorn main:app --reload --port 8100",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "build": "node -e \"require('fs').rmSync('.next',{ recursive: true, force: true })\" && next build",
+    "start": "next start",
+    "lint": "next lint",
+    "verify:python": "python -m unittest discover -s tests -p \"test_*.py\" -v",
+    "verify:smoke": "python scripts/options_algorithm_smoke.py --fixture",
+    "verify": "npm run verify:python && npm run daytrading:test && npm run build",
+    "daytrading:validate": "node scripts/run_day_trading_validation.js",
+    "daytrading:watch": "node scripts/run_day_trading_watchlist.js",
+    "daytrading:experiments": "node scripts/run_day_trading_experiments.js",
+    "daytrading:test": "node --test tests/day-trading/*.test.js",
+    "options:smoke": "python scripts/options_algorithm_smoke.py",
+    "options:experiments": "python scripts/options_experiment_matrix.py",
+    "options:record": "python scripts/record_options_forward_truth.py --use-recommended-policy"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "concurrently": "^9.1.0",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.0"
+  }
+}

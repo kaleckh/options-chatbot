@@ -1,0 +1,20 @@
+{
+  "profile_overrides": {
+    "equity": {
+      "entry": {
+        "entry_momentum_pct": 0.7
+      },
+      "filters": {
+        "min_calibrated_expectancy_pct": 7.0
+      },
+      "risk": {
+        "time_exit_pct": 33.0,
+        "profit_target_pct": 80.0
+      },
+      "early_exit": {
+        "trailing_profit_pct": 25.0,
+        "trailing_giveback_pct": 40.0
+      }
+    }
+  }
+}

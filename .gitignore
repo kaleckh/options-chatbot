@@ -14,3 +14,27 @@ wheels/
 .env.*
 config.yaml
 .streamlit/secrets.toml
+
+# Next.js
+.next/
+out/
+node_modules/
+
+# Next.js build
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# Day-trading lab runtime state
+data/day-trading/
+data/options-validation/
+
+# Local autoresearch artifacts
+research_runs/
+
+# Local runtime state
+tmp/
+tmp_public/
+chat_history.db
+market_data.db
+*.db-shm
+*.db-wal

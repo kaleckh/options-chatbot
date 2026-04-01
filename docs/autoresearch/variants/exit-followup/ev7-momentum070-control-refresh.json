@@ -1,0 +1,12 @@
+{
+  "profile_overrides": {
+    "equity": {
+      "entry": {
+        "entry_momentum_pct": 0.7
+      },
+      "filters": {
+        "min_calibrated_expectancy_pct": 7.0
+      }
+    }
+  }
+}

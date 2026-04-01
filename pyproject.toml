@@ -2,15 +2,15 @@
 name = "ai-python"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.14"
+requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=0.86.0",
     "numpy>=2.4.3",
     "optuna>=3.6.0",
+    "pandas>=2.3.3",
+    "pyarrow>=20.0.0",
+    "psycopg[binary]>=3.2.1",
     "python-dotenv>=1.2.2",
     "requests>=2.32.5",
     "scipy>=1.17.1",
-    "streamlit>=1.55.0",
-    "streamlit-authenticator>=0.4.2",
     "yfinance>=1.2.0",
 ]

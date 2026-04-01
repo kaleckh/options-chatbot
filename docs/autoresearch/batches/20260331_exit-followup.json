@@ -1,0 +1,29 @@
+{
+  "baseline": "research_runs/20260330_233407_equity-ev-7-plus-momentum-0p70",
+  "playbooks": [
+    "broad",
+    "bullish_momentum",
+    "bearish_defensive"
+  ],
+  "blockers": [
+    "Diversification-aware marginal ranking is not informative under n_picks=1 replay.",
+    "Contract-level tradability weighting needs replay candidate access to exact-contract quote quality before ranking."
+  ],
+  "specs": [
+    {
+      "slug": "ev7-momentum070-exit-time33",
+      "proposal_rel": "docs/autoresearch/proposals/exit-followup/ev7-momentum070-exit-time33.md",
+      "variant_rel": "docs/autoresearch/variants/exit-followup/ev7-momentum070-exit-time33.json"
+    },
+    {
+      "slug": "ev7-momentum070-exit-target80",
+      "proposal_rel": "docs/autoresearch/proposals/exit-followup/ev7-momentum070-exit-target80.md",
+      "variant_rel": "docs/autoresearch/variants/exit-followup/ev7-momentum070-exit-target80.json"
+    },
+    {
+      "slug": "ev7-momentum070-exit-time33-target80-trail25-giveback40",
+      "proposal_rel": "docs/autoresearch/proposals/exit-followup/ev7-momentum070-exit-time33-target80-trail25-giveback40.md",
+      "variant_rel": "docs/autoresearch/variants/exit-followup/ev7-momentum070-exit-time33-target80-trail25-giveback40.json"
+    }
+  ]
+}

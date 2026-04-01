@@ -1,0 +1,248 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-0: #080b10;
+  --bg-1: #0c1017;
+  --bg-2: #11161e;
+  --bg-3: #151c26;
+  --bg-4: #1a2332;
+  --border: #1e2736;
+  --border-subtle: #151c26;
+  --text-0: #edf2f7;
+  --text-1: #b8c4d0;
+  --text-2: #6b7a8d;
+  --text-3: #5a6b80;
+  --accent: #4a90f7;
+  --accent-dim: rgba(74,144,247,0.12);
+  --accent-glow: rgba(74,144,247,0.06);
+  --green: #34d399;
+  --green-dim: rgba(52,211,153,0.10);
+  --red: #f87171;
+  --red-dim: rgba(248,113,113,0.10);
+  --amber: #fbbf24;
+  --amber-dim: rgba(251,191,36,0.10);
+}
+
+/* ── Focus & Accessibility ──────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ── Base ───────────────────────────────────────────────────── */
+html {
+  min-height: 100dvh;
+}
+
+body {
+  background: var(--bg-1);
+  color: var(--text-1);
+}
+
+/* ── Fintech table styles ───────────────────────────────────── */
+.ft-wrap {
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-2);
+  /* Scroll shadow indicators */
+  background:
+    linear-gradient(to right, var(--bg-2) 30%, transparent),
+    linear-gradient(to left, var(--bg-2) 30%, transparent),
+    linear-gradient(to right, rgba(0,0,0,0.3), transparent 15px),
+    linear-gradient(to left, rgba(0,0,0,0.3), transparent 15px);
+  background-position: left center, right center, left center, right center;
+  background-repeat: no-repeat;
+  background-size: 20px 100%, 20px 100%, 15px 100%, 15px 100%;
+  background-attachment: local, local, scroll, scroll;
+}
+
+.ft-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.ft-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.ft-table th {
+  background: var(--bg-3);
+  color: var(--text-1);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 2px solid var(--border-subtle);
+}
+
+.ft-table td {
+  padding: 0.45rem 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-1);
+}
+
+.ft-table tbody tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.ft-table tbody tr:nth-child(even) td {
+  background: rgba(255,255,255,0.01);
+}
+
+.ft-table .mono { font-family: var(--font-mono, 'JetBrains Mono'), monospace; }
+.ft-table .dim { color: var(--text-3); }
+.ft-table .pos { color: var(--green); }
+.ft-table .neg { color: var(--red); }
+.ft-table .warn { color: var(--amber); }
+
+/* ── Badges ─────────────────────────────────────────────────── */
+.badge-call {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+}
+
+.badge-put {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--red-dim);
+  color: var(--red);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+}
+
+.badge-hit {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--green-dim);
+  color: var(--green);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-miss {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--red-dim);
+  color: var(--red);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.badge-dir {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--amber-dim);
+  color: var(--amber);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* ── Sentiment badges ───────────────────────────────────────── */
+.sent-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 0.25rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  color: white;
+}
+
+/* ── Metric cards ───────────────────────────────────────────── */
+.metric-card {
+  background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-3) 100%);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.85rem 1.1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.metric-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-2);
+}
+
+.metric-value {
+  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+  font-size: 1.05rem;
+  font-weight: 500;
+  color: var(--text-0);
+  letter-spacing: -0.03em;
+}
+
+/* ── Section headers ────────────────────────────────────────── */
+.section-header {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+  margin: 1.5rem 0 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── Markdown prose in chat ─────────────────────────────────── */
+/* ── Toast animation ────────────────────────────────────────── */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-in.slide-in-from-right {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+/* ── Typing indicator ───────────────────────────────────────── */

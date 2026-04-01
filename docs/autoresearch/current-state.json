@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-03-31T21:27:08",
+  "phase_id": "truth-first-validation-phase",
+  "mode": "validation",
+  "freeze_search": true,
+  "required_baseline_control": "baseline_broad_control",
+  "allowed_truth_lanes": [
+    "synthetic_research",
+    "historical_imported_daily",
+    "historical_imported"
+  ],
+  "validation_scope_symbols": [
+    "SPY",
+    "QQQ"
+  ],
+  "active_queue_count": 1,
+  "frozen_queue_count": 4,
+  "historical_queue_count": 3,
+  "recent_runs": [
+    {
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_211304_broad-ev7-momentum070-exit-time33-truth-check-daily",
+      "slug": "broad-ev7-momentum070-exit-time33-truth-check-daily",
+      "status": "completed",
+      "mode": "validation",
+      "cohort_id": "broad_ev7_momentum070_exit_time33",
+      "recommended_verdict": "reject",
+      "recommended_stage": "imported_truth_candidate"
+    },
+    {
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_210807_validate-broad-ev7-momentum070-v4",
+      "slug": "validate-broad-ev7-momentum070-v4",
+      "status": "completed",
+      "mode": "validation",
+      "cohort_id": "broad_ev7_momentum070",
+      "recommended_verdict": "reject",
+      "recommended_stage": "imported_truth_candidate"
+    },
+    {
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_210545_validate-broad-ev7-momentum070-v3",
+      "slug": "validate-broad-ev7-momentum070-v3",
+      "status": "failed",
+      "mode": "validation",
+      "cohort_id": "broad_ev7_momentum070",
+      "recommended_verdict": "n/a",
+      "recommended_stage": "n/a"
+    },
+    {
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_210043_validate-baseline-broad-control-v3",
+      "slug": "validate-baseline-broad-control-v3",
+      "status": "completed",
+      "mode": "validation",
+      "cohort_id": "baseline_broad_control",
+      "recommended_verdict": "reject",
+      "recommended_stage": "imported_truth_candidate"
+    },
+    {
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_205647_validate-broad-ev7-momentum070-v2c",
+      "slug": "validate-broad-ev7-momentum070-v2c",
+      "status": "failed",
+      "mode": "validation",
+      "cohort_id": "broad_ev7_momentum070",
+      "recommended_verdict": "n/a",
+      "recommended_stage": "n/a"
+    }
+  ],
+  "latest_closures": [
+    {
+      "recorded_at": "2026-03-31T19:42:40",
+      "slug": "ev7-momentum070-exit-time33-target80-trail25-giveback40",
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_114749_ev7-momentum070-exit-time33-target80-trail25-giveback40",
+      "final_verdict": "reject",
+      "approver": "kalec",
+      "rationale": "The combined exit branch stayed non-promotable and did not preserve enough of the better momentum behavior.",
+      "advance_queue_state": false
+    },
+    {
+      "recorded_at": "2026-03-31T19:42:38",
+      "slug": "ev7-momentum070-exit-target80",
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_113655_ev7-momentum070-exit-target80",
+      "final_verdict": "reject",
+      "approver": "kalec",
+      "rationale": "The target80 exit branch over-pruned the book and did not preserve the stronger momentum slice.",
+      "advance_queue_state": false
+    },
+    {
+      "recorded_at": "2026-03-31T19:42:37",
+      "slug": "ev7-momentum070-exit-time33",
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260331_113214_ev7-momentum070-exit-time33",
+      "final_verdict": "hold",
+      "approver": "kalec",
+      "rationale": "The time33 exit follow-up improved one lane but stayed block or watch overall, so it remains a hold-only branch.",
+      "advance_queue_state": false
+    },
+    {
+      "recorded_at": "2026-03-31T19:42:36",
+      "slug": "equity-min-tech-score-72",
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260330_194429_equity-min-tech-score-72",
+      "final_verdict": "hold",
+      "approver": "kalec",
+      "rationale": "Tech 72 remains a valid challenger, but current evidence is still watch-level and support-limited.",
+      "advance_queue_state": false
+    },
+    {
+      "recorded_at": "2026-03-31T19:42:34",
+      "slug": "equity-entry-momentum-pct-0p70",
+      "run_dir": "C:\\Users\\kalec\\options-chatbot\\research_runs\\20260330_223629_equity-entry-momentum-pct-0p70",
+      "final_verdict": "hold",
+      "approver": "kalec",
+      "rationale": "Momentum 0.70 still belongs in the frozen cohort set, but it has not cleared truth-first validation.",
+      "advance_queue_state": false
+    }
+  ]
+}

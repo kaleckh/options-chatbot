@@ -1,0 +1,610 @@
+{
+  "baseline": "research_runs/20260330_154734_baseline-playbook-decomposition",
+  "playbooks": [
+    "broad",
+    "bullish_momentum",
+    "bearish_defensive"
+  ],
+  "specs": [
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 58,
+      "slug": "equity-min-tech-score-58",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-58.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 60,
+      "slug": "equity-min-tech-score-60",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-60.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 62,
+      "slug": "equity-min-tech-score-62",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-62.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 64,
+      "slug": "equity-min-tech-score-64",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-64.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 66,
+      "slug": "equity-min-tech-score-66",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-66.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 68,
+      "slug": "equity-min-tech-score-68",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-68.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 70,
+      "slug": "equity-min-tech-score-70",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-70.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 72,
+      "slug": "equity-min-tech-score-72",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-72.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 74,
+      "slug": "equity-min-tech-score-74",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-74.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 76,
+      "slug": "equity-min-tech-score-76",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-76.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 78,
+      "slug": "equity-min-tech-score-78",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-78.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 80,
+      "slug": "equity-min-tech-score-80",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-80.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 82,
+      "slug": "equity-min-tech-score-82",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-82.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 84,
+      "slug": "equity-min-tech-score-84",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-84.md"
+    },
+    {
+      "batch_index": 1,
+      "batch_slug": "tech_sweep",
+      "batch_title": "Equity tech floor sweep",
+      "section": "entry",
+      "key": "min_tech_score",
+      "value": 86,
+      "slug": "equity-min-tech-score-86",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-tech-score-86.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 40,
+      "slug": "equity-min-direction-score-40",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-40.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 45,
+      "slug": "equity-min-direction-score-45",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-45.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 50,
+      "slug": "equity-min-direction-score-50",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-50.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 55,
+      "slug": "equity-min-direction-score-55",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-55.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 60,
+      "slug": "equity-min-direction-score-60",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-60.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 65,
+      "slug": "equity-min-direction-score-65",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-65.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 70,
+      "slug": "equity-min-direction-score-70",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-70.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 75,
+      "slug": "equity-min-direction-score-75",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-75.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 78,
+      "slug": "equity-min-direction-score-78",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-78.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 80,
+      "slug": "equity-min-direction-score-80",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-80.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 82,
+      "slug": "equity-min-direction-score-82",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-82.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 84,
+      "slug": "equity-min-direction-score-84",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-84.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 86,
+      "slug": "equity-min-direction-score-86",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-86.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 88,
+      "slug": "equity-min-direction-score-88",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-88.md"
+    },
+    {
+      "batch_index": 2,
+      "batch_slug": "direction_sweep",
+      "batch_title": "Equity direction floor sweep",
+      "section": "entry",
+      "key": "min_direction_score",
+      "value": 90,
+      "slug": "equity-min-direction-score-90",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-direction-score-90.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 1,
+      "slug": "equity-min-calibrated-expectancy-pct-1",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-1.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 2,
+      "slug": "equity-min-calibrated-expectancy-pct-2",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-2.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 3,
+      "slug": "equity-min-calibrated-expectancy-pct-3",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-3.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 4,
+      "slug": "equity-min-calibrated-expectancy-pct-4",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-4.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 5,
+      "slug": "equity-min-calibrated-expectancy-pct-5",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-5.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 6,
+      "slug": "equity-min-calibrated-expectancy-pct-6",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-6.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 7,
+      "slug": "equity-min-calibrated-expectancy-pct-7",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-7.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 8,
+      "slug": "equity-min-calibrated-expectancy-pct-8",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-8.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 9,
+      "slug": "equity-min-calibrated-expectancy-pct-9",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-9.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 10,
+      "slug": "equity-min-calibrated-expectancy-pct-10",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-10.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 11,
+      "slug": "equity-min-calibrated-expectancy-pct-11",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-11.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 12,
+      "slug": "equity-min-calibrated-expectancy-pct-12",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-12.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 14,
+      "slug": "equity-min-calibrated-expectancy-pct-14",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-14.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 16,
+      "slug": "equity-min-calibrated-expectancy-pct-16",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-16.md"
+    },
+    {
+      "batch_index": 3,
+      "batch_slug": "ev_sweep",
+      "batch_title": "Equity calibrated expectancy floor sweep",
+      "section": "filters",
+      "key": "min_calibrated_expectancy_pct",
+      "value": 20,
+      "slug": "equity-min-calibrated-expectancy-pct-20",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-min-calibrated-expectancy-pct-20.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.55,
+      "slug": "equity-entry-momentum-pct-0p55",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p55.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.6,
+      "slug": "equity-entry-momentum-pct-0p60",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p60.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.65,
+      "slug": "equity-entry-momentum-pct-0p65",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p65.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.7,
+      "slug": "equity-entry-momentum-pct-0p70",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p70.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.75,
+      "slug": "equity-entry-momentum-pct-0p75",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p75.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.8,
+      "slug": "equity-entry-momentum-pct-0p80",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p80.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.85,
+      "slug": "equity-entry-momentum-pct-0p85",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p85.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.9,
+      "slug": "equity-entry-momentum-pct-0p90",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p90.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 0.95,
+      "slug": "equity-entry-momentum-pct-0p95",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-0p95.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.0,
+      "slug": "equity-entry-momentum-pct-1p00",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p00.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.05,
+      "slug": "equity-entry-momentum-pct-1p05",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p05.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.1,
+      "slug": "equity-entry-momentum-pct-1p10",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p10.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.15,
+      "slug": "equity-entry-momentum-pct-1p15",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p15.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.2,
+      "slug": "equity-entry-momentum-pct-1p20",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p20.md"
+    },
+    {
+      "batch_index": 4,
+      "batch_slug": "momentum_sweep",
+      "batch_title": "Equity momentum confirmation sweep",
+      "section": "entry",
+      "key": "entry_momentum_pct",
+      "value": 1.25,
+      "slug": "equity-entry-momentum-pct-1p25",
+      "proposal_rel": "docs/autoresearch/proposals/sixty-run-grid/equity-entry-momentum-pct-1p25.md"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "imports": [
+    {
+      "input": "tmp_public/spy_options.parquet",
+      "source": "philippdubach_spy_2025",
+      "format": "philippdubach_daily",
+      "underlying": "SPY",
+      "underlying_input": "tmp_public/spy_underlying.parquet",
+      "date_from": "2025-01-01",
+      "date_to": "2025-12-31"
+    },
+    {
+      "input": "tmp_public/qqq_options.parquet",
+      "source": "philippdubach_qqq_2025",
+      "format": "philippdubach_daily",
+      "underlying": "QQQ",
+      "underlying_input": "tmp_public/qqq_underlying.parquet",
+      "date_from": "2025-01-01",
+      "date_to": "2025-12-31"
+    }
+  ]
+}

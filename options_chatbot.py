@@ -1,8 +1,8 @@
 #!/usr/bin/env
 #  python3
 """
-Options Trading Chatbot
-Powered by Claude Sonnet 4.6 + Yahoo Finance (yfinance)
+Options Trading Engine
+Powered by Yahoo Finance (yfinance)
 
 Specializes in:
 - US large-cap stocks and ETFs with high options liquidity
@@ -26,10 +26,31 @@ import math
 import glob
 import shutil
 import subprocess
+from functools import wraps
+from typing import Optional
 import numpy as np
+import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import yfinance as yf
+
+from expectancy_calibration import (
+    DEFAULT_SHRINKAGE_TRADES,
+    DEFAULT_SPARSE_WARNING_TRADES,
+    DEFAULT_SURFACE_MIN_TRADES,
+    build_expectancy_surface,
+    lookup_calibrated_expectancy,
+    normalized_market_regime,
+)
+from market_data_service import (
+    get_earnings_dates as _md_get_earnings_dates,
+    get_fast_info as _md_get_fast_info,
+    get_history as _md_get_history,
+    get_option_chain as _md_get_option_chain,
+    get_options as _md_get_options,
+    get_ticker_info as _md_get_ticker_info,
+    request_scope as _market_data_request_scope,
+)
 
 _ET = ZoneInfo("America/New_York")
 
@@ -47,6 +68,16 @@ RISK_FREE_RATE = 0.045  # 4.5% — approximate 3-month T-bill. Update periodical
 # System-wide DTE bounds — enforced across scan, _fetch_best_option, and WFO.
 DTE_MIN = 5   # never enter a position with fewer than 5 days to expiry
 DTE_MAX = 35  # never look for expirations beyond 35 days out
+DEFAULT_SCAN_PICKS = 1
+
+# Only trade names that are seasoned enough to replay honestly and liquid enough
+# that stock movement and option execution are easier to trust.
+UNDERLYING_LIQUIDITY_WINDOW = 20
+UNDERLYING_FILTERS = {
+    "history_days_min": 252,
+    "avg_volume_20d_min": 3_000_000,
+    "avg_dollar_volume_20d_min": 250_000_000,
+}
 
 DEFAULT_WATCHLIST = [
     # ── Index ETFs (bypass sector rule, use index strategy profile) ───────────
@@ -88,6 +119,215 @@ INDEX_TICKERS = {"QQQ", "SPY", "IWM", "DIA", "XLK"}
 def _asset_class(ticker: str) -> str:
     """'index' for broad-market ETFs, 'equity' for everything else."""
     return "index" if ticker.upper() in INDEX_TICKERS else "equity"
+
+
+def _cached_history(
+    symbol: str,
+    *,
+    period: str | None = None,
+    start=None,
+    end=None,
+    interval: str = "1d",
+) -> pd.DataFrame:
+    return _md_get_history(
+        symbol,
+        period=period,
+        start=start,
+        end=end,
+        interval=interval,
+        ticker_factory=yf.Ticker,
+    )
+
+
+def _cached_ticker_info(symbol: str) -> dict:
+    return _md_get_ticker_info(symbol, ticker_factory=yf.Ticker)
+
+
+def _cached_earnings_dates(symbol: str) -> pd.DataFrame:
+    return _md_get_earnings_dates(symbol, ticker_factory=yf.Ticker)
+
+
+def _cached_options(symbol: str) -> list[str]:
+    return _md_get_options(symbol, ticker_factory=yf.Ticker)
+
+
+def _cached_options_metadata(symbol: str):
+    return _md_get_options(symbol, ticker_factory=yf.Ticker, include_metadata=True)
+
+
+def _cached_option_chain(symbol: str, expiry: str):
+    return _md_get_option_chain(symbol, expiry, ticker_factory=yf.Ticker)
+
+
+def _cached_option_chain_metadata(symbol: str, expiry: str):
+    return _md_get_option_chain(symbol, expiry, ticker_factory=yf.Ticker, include_metadata=True)
+
+
+def _cached_fast_info(symbol: str):
+    return _md_get_fast_info(symbol, ticker_factory=yf.Ticker)
+
+
+def _fast_info_last_price(fast_info) -> float:
+    if not fast_info:
+        return 0.0
+    if isinstance(fast_info, dict):
+        getter = fast_info.get
+    else:
+        getter = lambda key: getattr(fast_info, key, None)
+    for key in ("last_price", "regular_market_price", "lastPrice", "regularMarketPrice"):
+        value = getter(key)
+        if value is not None:
+            try:
+                return float(value)
+            except Exception:
+                continue
+    return 0.0
+
+
+def _market_data_scoped(fn):
+    @wraps(fn)
+    def _wrapped(*args, **kwargs):
+        with _market_data_request_scope():
+            return fn(*args, **kwargs)
+    return _wrapped
+
+
+def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WINDOW) -> dict:
+    """Summarize whether an underlying is seasoned and liquid enough to trade."""
+    if hist is None or hist.empty or "Close" not in hist or "Volume" not in hist:
+        return {
+            "eligible": False,
+            "history_days": 0,
+            "avg_volume_20d": 0.0,
+            "avg_dollar_volume_20d": 0.0,
+            "liquidity_tier": "insufficient",
+            "failures": ["Missing close/volume history"],
+        }
+
+    closes = hist["Close"].dropna().astype(float)
+    if closes.empty:
+        return {
+            "eligible": False,
+            "history_days": 0,
+            "avg_volume_20d": 0.0,
+            "avg_dollar_volume_20d": 0.0,
+            "liquidity_tier": "insufficient",
+            "failures": ["Missing close history"],
+        }
+
+    volumes = hist["Volume"].reindex(closes.index).fillna(0.0).astype(float)
+    history_days = int(len(closes))
+    calc_window = min(int(window), history_days)
+    avg_volume_20d = float(volumes.tail(calc_window).mean()) if calc_window else 0.0
+    avg_dollar_volume_20d = float((closes.tail(calc_window) * volumes.tail(calc_window)).mean()) if calc_window else 0.0
+
+    failures: list[str] = []
+    if history_days < int(UNDERLYING_FILTERS["history_days_min"]):
+        failures.append("Insufficient trading history")
+    if avg_volume_20d < float(UNDERLYING_FILTERS["avg_volume_20d_min"]):
+        failures.append("Average stock volume too low")
+    if avg_dollar_volume_20d < float(UNDERLYING_FILTERS["avg_dollar_volume_20d_min"]):
+        failures.append("Average dollar volume too low")
+
+    if avg_volume_20d >= 10_000_000 and avg_dollar_volume_20d >= 1_000_000_000:
+        tier = "elite"
+    elif avg_volume_20d >= float(UNDERLYING_FILTERS["avg_volume_20d_min"]) and avg_dollar_volume_20d >= float(UNDERLYING_FILTERS["avg_dollar_volume_20d_min"]):
+        tier = "liquid"
+    else:
+        tier = "thin"
+
+    return {
+        "eligible": not failures,
+        "history_days": history_days,
+        "avg_volume_20d": round(avg_volume_20d, 0),
+        "avg_dollar_volume_20d": round(avg_dollar_volume_20d, 2),
+        "liquidity_tier": tier,
+        "failures": failures,
+    }
+
+
+def _candidate_rank_tuple(candidate: dict) -> tuple:
+    calibrated = candidate.get("calibrated_expectancy_pct")
+    calibrated_value = (
+        float(calibrated)
+        if calibrated is not None and bool(candidate.get("calibration_is_dense"))
+        else -9999.0
+    )
+    return (
+        1 if str(candidate.get("promotion_class") or "").strip().lower() == "promotable_exact_contract" else 0,
+        float(candidate.get("direction_score", 0.0) or 0.0),
+        float(candidate.get("quality_score", 0.0) or 0.0),
+        float(candidate.get("tech_score", 0.0) or 0.0),
+        1 if bool(candidate.get("calibration_is_dense")) else 0,
+        calibrated_value,
+    )
+
+
+def _candidate_signal_value(candidate: dict) -> float:
+    return float(candidate.get("direction_score", 0.0) or 0.0)
+
+
+def _live_contract_selection_source(option_snapshot: dict | None) -> str:
+    if not option_snapshot:
+        return "model_contract_fallback"
+    if bool(option_snapshot.get("live_chain")) and option_snapshot.get("contract_symbol"):
+        return "live_chain_exact_contract"
+    return "model_contract_fallback"
+
+
+def _live_pick_promotion_class(
+    *,
+    has_exact_contract: bool,
+    calibration_lookup: Optional[dict],
+    dense_calibration: Optional[dict],
+) -> str:
+    if not has_exact_contract:
+        return "research_bootstrap"
+    if calibration_lookup is not None and dense_calibration is None:
+        return "research_sparse_calibration"
+    if dense_calibration is not None:
+        return "promotable_exact_contract"
+    return "research_bootstrap"
+
+
+def _load_expectancy_surface_for_live(
+    min_trades: int = DEFAULT_SURFACE_MIN_TRADES,
+    bucket_size: int = 10,
+    *,
+    truth_lane: str = "historical_imported_daily",
+    playbook: str = "broad",
+) -> dict | None:
+    try:
+        from wfo_optimizer import (
+            IMPORTED_DAILY_TRUTH_SOURCE,
+            MIN_IMPORTED_QUOTE_COVERAGE_PCT,
+            load_last_imported_daily_results,
+        )
+    except Exception:
+        return None
+
+    normalized_truth_lane = str(truth_lane or IMPORTED_DAILY_TRUTH_SOURCE).strip().lower() or IMPORTED_DAILY_TRUTH_SOURCE
+    if normalized_truth_lane != IMPORTED_DAILY_TRUTH_SOURCE:
+        return None
+
+    result = load_last_imported_daily_results()
+    if not result:
+        return None
+    if str(result.get("truth_source") or "").strip().lower() != IMPORTED_DAILY_TRUTH_SOURCE:
+        return None
+    if str(result.get("playbook") or "").strip().lower() != str(playbook or "broad").strip().lower():
+        return None
+    if float(result.get("quote_coverage_pct", 0.0) or 0.0) < float(MIN_IMPORTED_QUOTE_COVERAGE_PCT):
+        return None
+
+    return build_expectancy_surface(
+        result=result,
+        min_trades=min_trades,
+        bucket_size=bucket_size,
+        shrinkage_trades=DEFAULT_SHRINKAGE_TRADES,
+        sparse_warning_trades=DEFAULT_SPARSE_WARNING_TRADES,
+    )
+
 
 def _get_profile(ticker: str) -> dict:
     """Return the strategy profile dict for the given ticker."""
@@ -131,6 +371,13 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "defense_position_mult":         0.5,
             "liquidity_spread_max_pct":      1.5,
             "illiquid_extra_margin_pct":    10.0,
+            "min_option_mid_price":          0.30,
+            "min_option_volume":            100,
+            "min_option_open_interest":     500,
+            "max_option_quote_age_hours":   48.0,
+            "min_calibrated_expectancy_pct": 10.0,
+            "entry_slippage_pct":            5.0,
+            "exit_slippage_pct":             5.0,
             "iv_crush_z_threshold":          2.0,
             "iv_crush_confidence_penalty":  20.0,
             "min_ev_return_pct":            10.0,
@@ -138,17 +385,17 @@ STRATEGY_PROFILES: dict[str, dict] = {
         "risk": {
             "stop_loss_pct":       50.0,
             "profit_target_pct":  100.0,
-            "max_position_pct":    40.0,
-            "min_position_pct":     7.0,
+            "max_position_pct":     3.0,
+            "min_position_pct":     0.5,
             "account_size":        None,
             "max_drawdown_pct":    15.0,
-            "dte_0_max_pct":        2.0,
+            "dte_0_max_pct":        0.5,
             "time_exit_pct":       50.0,
         },
         "entry": {
             "entry_momentum_pct":  0.50,
-            "min_direction_score": 35.0,
-            "min_tech_score":      55.0,
+            "min_direction_score": 55.0,
+            "min_tech_score":      65.0,
         },
         "direction_score_weights": {
             "tech":     0.55,
@@ -206,6 +453,13 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "defense_position_mult":         0.5,
             "liquidity_spread_max_pct":      1.5,
             "illiquid_extra_margin_pct":    10.0,
+            "min_option_mid_price":          0.30,
+            "min_option_volume":            100,
+            "min_option_open_interest":     500,
+            "max_option_quote_age_hours":   48.0,
+            "min_calibrated_expectancy_pct": 10.0,
+            "entry_slippage_pct":            5.0,
+            "exit_slippage_pct":             5.0,
             "iv_crush_z_threshold":          2.0,
             "iv_crush_confidence_penalty":  20.0,
             "min_ev_return_pct":            10.0,
@@ -213,17 +467,17 @@ STRATEGY_PROFILES: dict[str, dict] = {
         "risk": {
             "stop_loss_pct":       45.0,   # tighter — indexes move less
             "profit_target_pct":  100.0,
-            "max_position_pct":    40.0,
-            "min_position_pct":     7.0,
+            "max_position_pct":     2.5,
+            "min_position_pct":     0.5,
             "account_size":        None,
             "max_drawdown_pct":    15.0,
-            "dte_0_max_pct":        2.0,
+            "dte_0_max_pct":        0.5,
             "time_exit_pct":       50.0,
         },
         "entry": {
             "entry_momentum_pct":  0.30,   # indexes need less momentum to signal
-            "min_direction_score": 35.0,
-            "min_tech_score":      55.0,
+            "min_direction_score": 55.0,
+            "min_tech_score":      65.0,
         },
         "direction_score_weights": {
             "tech":     0.55,
@@ -413,20 +667,39 @@ def _enrich_row(row, S, option_type, exp_str, today) -> dict:
     }
 
 
-def _get_price(ticker_obj) -> float:
-    hist = ticker_obj.history(period="1d", interval="5m")
-    if not hist.empty:
-        return float(hist["Close"].iloc[-1])
-    return float((ticker_obj.info or {}).get("currentPrice") or (ticker_obj.info or {}).get("regularMarketPrice") or 0)
+def _get_price(ticker_obj=None, symbol: str | None = None) -> float:
+    symbol_name = (symbol or getattr(ticker_obj, "ticker", None) or getattr(ticker_obj, "symbol", None) or "")
+    if symbol_name:
+        try:
+            hist = _cached_history(str(symbol_name).upper(), period="1d", interval="5m")
+            if not hist.empty:
+                return float(hist["Close"].iloc[-1])
+        except Exception:
+            pass
+        try:
+            fast_info = _cached_fast_info(str(symbol_name).upper())
+            price = _fast_info_last_price(fast_info)
+            if price:
+                return price
+        except Exception:
+            pass
+    if ticker_obj is not None:
+        hist = ticker_obj.history(period="1d", interval="5m")
+        if not hist.empty:
+            return float(hist["Close"].iloc[-1])
+        info = getattr(ticker_obj, "info", {}) or {}
+        return float(info.get("currentPrice") or info.get("regularMarketPrice") or 0)
+    return 0.0
 
 
 # ─── Tool 1: Stock snapshot ────────────────────────────────────────────────────
 
+@_market_data_scoped
 def get_stock_snapshot(symbol: str) -> str:
     try:
-        t = yf.Ticker(symbol.upper())
-        hist = t.history(period="5d", interval="5m")
-        info = t.info or {}
+        symbol_up = symbol.upper()
+        hist = _cached_history(symbol_up, period="5d", interval="5m")
+        info = _cached_ticker_info(symbol_up) or {}
 
         if not hist.empty:
             last      = float(hist["Close"].iloc[-1])
@@ -434,18 +707,24 @@ def get_stock_snapshot(symbol: str) -> str:
             day_high  = float(hist["High"].resample("D").max().iloc[-1])
             day_low   = float(hist["Low"].resample("D").min().iloc[-1])
             day_vol   = int(hist["Volume"].resample("D").sum().iloc[-1])
+            daily_closes = hist["Close"].resample("D").last().dropna()
         else:
-            last     = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+            last     = info.get("currentPrice") or info.get("regularMarketPrice") or _fast_info_last_price(_cached_fast_info(symbol_up))
             day_open = info.get("regularMarketOpen")
             day_high = info.get("dayHigh")
             day_low  = info.get("dayLow")
             day_vol  = info.get("regularMarketVolume")
+            daily_closes = pd.Series(dtype=float)
 
-        prev_close = info.get("previousClose") or info.get("regularMarketPreviousClose")
+        prev_close = (
+            info.get("previousClose")
+            or info.get("regularMarketPreviousClose")
+            or (float(daily_closes.iloc[-2]) if len(daily_closes) >= 2 else None)
+        )
         change_pct = round((last / prev_close - 1) * 100, 2) if last and prev_close else None
 
         return json.dumps({
-            "symbol": symbol.upper(),
+            "symbol": symbol_up,
             "last_price": round(last, 2),
             "open": round(day_open, 2) if day_open else None,
             "high": round(day_high, 2) if day_high else None,
@@ -463,12 +742,13 @@ def get_stock_snapshot(symbol: str) -> str:
 
 # ─── Tool 2: Options chain ─────────────────────────────────────────────────────
 
+@_market_data_scoped
 def get_options_chain(symbol: str, option_type: str = None,
                       max_dte: int = DTE_MAX, expiration_date: str = None) -> str:
     try:
         today = datetime.now()
-        t = yf.Ticker(symbol.upper())
-        all_exps = t.options
+        symbol_up = symbol.upper()
+        all_exps = _cached_options(symbol_up)
 
         if expiration_date:
             target_exps = [expiration_date] if expiration_date in all_exps else []
@@ -480,10 +760,10 @@ def get_options_chain(symbol: str, option_type: str = None,
             return json.dumps({"error": f"No expirations within {max_dte} DTE",
                                "available": list(all_exps[:10])})
 
-        S = _get_price(t)
+        S = _get_price(symbol=symbol_up)
         options = []
         for exp in target_exps:
-            chain = t.option_chain(exp)
+            chain = _cached_option_chain(symbol_up, exp)
             frames = []
             if option_type != "put":  frames.append(("call", chain.calls))
             if option_type != "call": frames.append(("put",  chain.puts))
@@ -493,7 +773,7 @@ def get_options_chain(symbol: str, option_type: str = None,
 
         options.sort(key=lambda x: x.get("volume") or 0, reverse=True)
         return json.dumps({
-            "symbol": symbol.upper(),
+            "symbol": symbol_up,
             "underlying_price": round(S, 2),
             "expirations_fetched": target_exps,
             "contracts_found": len(options),
@@ -506,6 +786,7 @@ def get_options_chain(symbol: str, option_type: str = None,
 
 # ─── Tool 3: Multi-ticker screener ────────────────────────────────────────────
 
+@_market_data_scoped
 def screen_options(symbols: list, option_type: str = "both",
                    max_dte: int = 21, min_volume: int = 100) -> str:
     if isinstance(symbols, str):
@@ -515,14 +796,14 @@ def screen_options(symbols: list, option_type: str = "both",
 
     for sym in symbols[:6]:
         try:
-            t = yf.Ticker(sym.upper())
-            target_exps = [e for e in t.options
+            sym_up = sym.upper()
+            target_exps = [e for e in _cached_options(sym_up)
                            if 0 <= (datetime.strptime(e, "%Y-%m-%d") - today).days <= max_dte]
             if not target_exps:
                 continue
-            S = _get_price(t)
+            S = _get_price(symbol=sym_up)
             for exp in target_exps:
-                chain = t.option_chain(exp)
+                chain = _cached_option_chain(sym_up, exp)
                 frames = []
                 if option_type != "put":  frames.append(("call", chain.calls))
                 if option_type != "call": frames.append(("put",  chain.puts))
@@ -531,7 +812,7 @@ def screen_options(symbols: list, option_type: str = "both",
                         if (row.get("volume") or 0) < min_volume:
                             continue
                         enriched = _enrich_row(row.to_dict(), S, otype, exp, today)
-                        enriched["symbol"] = sym.upper()
+                        enriched["symbol"] = sym_up
                         all_opts.append(enriched)
         except Exception:
             continue
@@ -548,6 +829,7 @@ def screen_options(symbols: list, option_type: str = "both",
 
 # ─── Tool 4: High-leverage / 2x screener ─────────────────────────────────────
 
+@_market_data_scoped
 def find_high_leverage_options(
     symbols: list = None,
     option_type: str = "both",
@@ -577,18 +859,18 @@ def find_high_leverage_options(
 
     for sym in symbols[:8]:
         try:
-            t = yf.Ticker(sym.upper())
-            target_exps = [e for e in t.options
+            sym_up = sym.upper()
+            target_exps = [e for e in _cached_options(sym_up)
                            if 0 <= (datetime.strptime(e, "%Y-%m-%d") - today).days <= max_dte]
             if not target_exps:
                 continue
 
-            S = _get_price(t)
+            S = _get_price(symbol=sym_up)
             if not S:
                 continue
 
             for exp in target_exps:
-                chain = t.option_chain(exp)
+                chain = _cached_option_chain(sym_up, exp)
                 dte = (datetime.strptime(exp, "%Y-%m-%d") - today).days
                 T = max(dte, 1) / 365.0
 
@@ -637,7 +919,7 @@ def find_high_leverage_options(
                         break_even = round(K + mid, 2) if otype == "call" else round(K - mid, 2)
 
                         candidates.append({
-                            "symbol": sym.upper(),
+                            "symbol": sym_up,
                             "type": otype,
                             "strike": K,
                             "expiration": exp,
@@ -683,26 +965,29 @@ def find_high_leverage_options(
 
 # ─── Tool 5: Expirations ───────────────────────────────────────────────────────
 
+@_market_data_scoped
 def get_expirations(symbol: str) -> str:
     try:
-        t = yf.Ticker(symbol.upper())
+        symbol_up = symbol.upper()
         today = datetime.now()
         results = []
-        for exp in t.options:
+        all_exps = _cached_options(symbol_up)
+        for exp in all_exps:
             try:
                 dte = (datetime.strptime(exp, "%Y-%m-%d") - today).days
                 if 0 <= dte <= 21:
                     results.append({"date": exp, "dte": dte})
             except ValueError:
                 continue
-        return json.dumps({"symbol": symbol.upper(), "expirations_within_21_days": results,
-                           "all_available": list(t.options)})
+        return json.dumps({"symbol": symbol_up, "expirations_within_21_days": results,
+                           "all_available": list(all_exps)})
     except Exception as e:
         return json.dumps({"error": str(e)})
 
 
 # ─── Tool 5: IV & Volatility Analysis ─────────────────────────────────────────
 
+@_market_data_scoped
 def get_iv_analysis(symbol: str) -> str:
     """
     Calculates:
@@ -713,10 +998,10 @@ def get_iv_analysis(symbol: str) -> str:
     """
     try:
         today = datetime.now()
-        t = yf.Ticker(symbol.upper())
+        symbol_up = symbol.upper()
 
         # ── Historical volatility ──────────────────────────────────────────────
-        hist = t.history(period="1y")
+        hist = _cached_history(symbol_up, period="1y")
         if hist.empty or len(hist) < 30:
             return json.dumps({"error": "Not enough price history for vol calculation"})
 
@@ -743,13 +1028,13 @@ def get_iv_analysis(symbol: str) -> str:
         else:               hv_regime = "VERY LOW — vol near 1-year trough, options are cheap"
 
         # ── Current ATM implied volatility ────────────────────────────────────
-        S = _get_price(t)
+        S = _get_price(symbol=symbol_up)
         atm_iv = None
         atm_exp = None
-        for exp in t.options:
+        for exp in _cached_options(symbol_up):
             dte = (datetime.strptime(exp, "%Y-%m-%d") - today).days
             if 14 <= dte <= 45:
-                chain = t.option_chain(exp)
+                chain = _cached_option_chain(symbol_up, exp)
                 calls = chain.calls
                 if calls.empty:
                     continue
@@ -770,7 +1055,7 @@ def get_iv_analysis(symbol: str) -> str:
             iv_assessment = "Could not determine (no ATM IV available)"
 
         return json.dumps({
-            "symbol": symbol.upper(),
+            "symbol": symbol_up,
             "underlying_price": round(S, 2),
             "realized_volatility": {
                 "hv10_pct": hv10,
@@ -797,19 +1082,21 @@ def get_iv_analysis(symbol: str) -> str:
 
 # ─── Tool 6: Earnings calendar ────────────────────────────────────────────────
 
+@_market_data_scoped
 def get_earnings_info(symbol: str) -> str:
     """
     Returns next earnings date, days until earnings, and a warning
     if earnings fall within the next 21 days (major IV event risk).
     """
     try:
-        t = yf.Ticker(symbol.upper())
+        symbol_up = symbol.upper()
+        t = None
         today = datetime.now()
         next_date = None
 
         # Try earnings_dates DataFrame first (most reliable)
         try:
-            ed = t.earnings_dates
+            ed = _cached_earnings_dates(symbol_up)
             if ed is not None and not ed.empty:
                 future = ed[ed.index.tz_localize(None) >= today] if ed.index.tzinfo else ed[ed.index >= today]
                 if not future.empty:
@@ -823,6 +1110,7 @@ def get_earnings_info(symbol: str) -> str:
         # Fallback: try calendar
         if next_date is None:
             try:
+                t = t or yf.Ticker(symbol_up)
                 cal = t.calendar
                 if isinstance(cal, dict):
                     dates = cal.get("Earnings Date", [])
@@ -833,7 +1121,7 @@ def get_earnings_info(symbol: str) -> str:
 
         if next_date is None:
             return json.dumps({
-                "symbol": symbol.upper(),
+                "symbol": symbol_up,
                 "next_earnings": "Not found",
                 "warning": "Could not determine earnings date — check manually before trading",
             })
@@ -851,7 +1139,7 @@ def get_earnings_info(symbol: str) -> str:
             warning = f"⚠️  EARNINGS IN {days_until} DAYS — falls within typical 5–35 DTE window. Factor IV crush into your exit plan."
 
         return json.dumps({
-            "symbol": symbol.upper(),
+            "symbol": symbol_up,
             "next_earnings_date": next_date_dt.strftime("%Y-%m-%d"),
             "days_until_earnings": days_until,
             "warning": warning,
@@ -866,6 +1154,7 @@ def get_earnings_info(symbol: str) -> str:
 
 # ─── Tool 7: Market context (VIX + SPY/QQQ trend) ────────────────────────────
 
+@_market_data_scoped
 def get_market_context() -> str:
     """
     Fetches:
@@ -878,7 +1167,7 @@ def get_market_context() -> str:
         today = datetime.now()
 
         # VIX
-        vix_hist = yf.Ticker("^VIX").history(period="10d")
+        vix_hist = _cached_history("^VIX", period="10d")
         vix_now  = round(float(vix_hist["Close"].iloc[-1]), 2)
         vix_5d   = round(float(vix_hist["Close"].iloc[-5]), 2) if len(vix_hist) >= 5 else vix_now
         vix_chg  = round(vix_now - vix_5d, 2)
@@ -893,7 +1182,7 @@ def get_market_context() -> str:
         vix_trend = "RISING (fear increasing)" if vix_chg > 1 else "FALLING (fear decreasing)" if vix_chg < -1 else "STABLE"
 
         # SPY trend
-        spy_hist = yf.Ticker("SPY").history(period="1mo")
+        spy_hist = _cached_history("SPY", period="1mo")
         spy_now  = round(float(spy_hist["Close"].iloc[-1]), 2)
         spy_1w   = round(float(spy_hist["Close"].iloc[-5]), 2)
         spy_1mo  = round(float(spy_hist["Close"].iloc[0]), 2)
@@ -901,7 +1190,7 @@ def get_market_context() -> str:
         spy_1mo_chg = round((spy_now / spy_1mo - 1) * 100, 2)
 
         # QQQ trend
-        qqq_hist = yf.Ticker("QQQ").history(period="1mo")
+        qqq_hist = _cached_history("QQQ", period="1mo")
         qqq_now  = round(float(qqq_hist["Close"].iloc[-1]), 2)
         qqq_1mo  = round(float(qqq_hist["Close"].iloc[0]), 2)
         qqq_1mo_chg = round((qqq_now / qqq_1mo - 1) * 100, 2)
@@ -952,6 +1241,7 @@ def get_market_context() -> str:
 
 # ─── Tool 8: Put/Call ratio ────────────────────────────────────────────────────
 
+@_market_data_scoped
 def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
     """
     Calculates the put/call volume ratio across all near-term expirations.
@@ -964,8 +1254,8 @@ def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
     """
     try:
         today = datetime.now()
-        t = yf.Ticker(symbol.upper())
-        S = _get_price(t)
+        symbol_up = symbol.upper()
+        S = _get_price(symbol=symbol_up)
 
         total_call_vol = 0
         total_put_vol  = 0
@@ -974,12 +1264,12 @@ def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
         by_expiration  = []
         top_strikes    = []
 
-        for exp in t.options:
+        for exp in _cached_options(symbol_up):
             dte = (datetime.strptime(exp, "%Y-%m-%d") - today).days
             if not (0 <= dte <= max_dte):
                 continue
 
-            chain = t.option_chain(exp)
+            chain = _cached_option_chain(symbol_up, exp)
             c_vol = int(chain.calls["volume"].sum() or 0)
             p_vol = int(chain.puts["volume"].sum()  or 0)
             c_oi  = int(chain.calls["openInterest"].sum() or 0)
@@ -1021,7 +1311,7 @@ def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
         top_strikes.sort(key=lambda x: x["volume"], reverse=True)
 
         return json.dumps({
-            "symbol": symbol.upper(),
+            "symbol": symbol_up,
             "underlying_price": round(S, 2),
             "overall": {
                 "total_call_volume": total_call_vol,
@@ -1051,8 +1341,8 @@ def calculate_position_size(
     """
     Calculates safe position sizing for a single options trade.
 
-    confidence (1–10): scales risk linearly from min_trade_risk_pct (7%) at 1
-    up to max_trade_risk_pct (40%) at 10. Use your honest assessment of edge.
+    confidence (1–10): scales premium-at-risk linearly from min_position_pct
+    up to max_position_pct. Use your honest assessment of edge.
     """
     acct = account_size or risk_settings["account_size"]
 
@@ -1071,8 +1361,8 @@ def calculate_position_size(
         confidence_note = f"Manual override: {risk_pct}%"
     else:
         # Linear interpolation: confidence 1 → min, 10 → max
-        lo  = risk_settings["min_trade_risk_pct"]
-        hi  = risk_settings["max_trade_risk_pct"]
+        lo  = risk_settings["min_position_pct"]
+        hi  = risk_settings["max_position_pct"]
         c   = max(1, min(10, confidence))
         risk_pct = round(lo + (c - 1) / 9.0 * (hi - lo), 2)
         confidence_note = (
@@ -1082,9 +1372,24 @@ def calculate_position_size(
 
     max_risk_dollars  = round(acct * risk_pct / 100, 2)
     cost_per_contract = round(option_price * 100, 2)
-    max_contracts     = max(1, int(max_risk_dollars / cost_per_contract))
+    max_contracts     = int(max_risk_dollars // max(cost_per_contract, 0.01))
     actual_risk       = round(max_contracts * cost_per_contract, 2)
     pct_of_account    = round(actual_risk / acct * 100, 2)
+
+    if max_contracts <= 0:
+        return json.dumps({
+            "error": "Trade exceeds the current risk budget.",
+            "account_size": acct,
+            "option_price": option_price,
+            "risk_budget_dollars": max_risk_dollars,
+            "cost_per_contract": cost_per_contract,
+            "confidence_sizing": {
+                "confidence_score": confidence,
+                "risk_pct_applied": risk_pct,
+                "note": confidence_note,
+            },
+            "fix": "Lower the option premium, reduce the manual risk override, or increase account size before taking this trade.",
+        }, indent=2)
 
     stop_loss_pct   = risk_settings["stop_loss_pct"]
     stop_loss_value = round(option_price * (1 - stop_loss_pct / 100), 2)
@@ -1144,6 +1449,13 @@ def manage_risk_settings(
     min_ev_return_pct: float = None,
     liquidity_spread_max_pct: float = None,
     illiquid_extra_margin_pct: float = None,
+    min_option_mid_price: float = None,
+    min_option_volume: int = None,
+    min_option_open_interest: int = None,
+    max_option_quote_age_hours: float = None,
+    min_calibrated_expectancy_pct: float = None,
+    entry_slippage_pct: float = None,
+    exit_slippage_pct: float = None,
     iv_crush_z_threshold: float = None,
     iv_crush_confidence_penalty: float = None,
     # ── Confidence target params ──────────────────────────────────────────────
@@ -1183,6 +1495,13 @@ def manage_risk_settings(
     _apply(flt, "min_ev_return_pct",          min_ev_return_pct)
     _apply(flt, "liquidity_spread_max_pct",   liquidity_spread_max_pct)
     _apply(flt, "illiquid_extra_margin_pct",  illiquid_extra_margin_pct)
+    _apply(flt, "min_option_mid_price",       min_option_mid_price)
+    _apply(flt, "min_option_volume",          min_option_volume)
+    _apply(flt, "min_option_open_interest",   min_option_open_interest)
+    _apply(flt, "max_option_quote_age_hours", max_option_quote_age_hours)
+    _apply(flt, "min_calibrated_expectancy_pct", min_calibrated_expectancy_pct)
+    _apply(flt, "entry_slippage_pct",         entry_slippage_pct)
+    _apply(flt, "exit_slippage_pct",          exit_slippage_pct)
     _apply(flt, "iv_crush_z_threshold",       iv_crush_z_threshold)
     _apply(flt, "iv_crush_confidence_penalty", iv_crush_confidence_penalty)
     if delta_target is not None:
@@ -1214,6 +1533,13 @@ def manage_risk_settings(
             "iv_crush_confidence_penalty": flt["iv_crush_confidence_penalty"],
             "liquidity_spread_max_pct":    flt["liquidity_spread_max_pct"],
             "illiquid_extra_margin_pct":   flt["illiquid_extra_margin_pct"],
+            "min_option_mid_price":        flt["min_option_mid_price"],
+            "min_option_volume":           flt["min_option_volume"],
+            "min_option_open_interest":    flt["min_option_open_interest"],
+            "max_option_quote_age_hours":  flt["max_option_quote_age_hours"],
+            "min_calibrated_expectancy_pct": flt["min_calibrated_expectancy_pct"],
+            "entry_slippage_pct":          flt["entry_slippage_pct"],
+            "exit_slippage_pct":           flt["exit_slippage_pct"],
             "min_ev_return_pct":           flt["min_ev_return_pct"],
         },
         "market_regime": {
@@ -1268,6 +1594,7 @@ def _save_trades(trades: list):
         json.dump(trades, f, indent=2, default=str)
 
 
+@_market_data_scoped
 def log_paper_trade(
     action: str = "list",
     symbol: str = None,
@@ -1363,15 +1690,15 @@ def log_paper_trade(
         results = []
         for t in open_t:
             try:
-                ticker = yf.Ticker(t["symbol"])
-                S = _get_price(ticker)
+                symbol_up = str(t["symbol"]).upper()
+                S = _get_price(symbol=symbol_up)
                 exp_dt = datetime.strptime(t["expiration"], "%Y-%m-%d")
                 dte = max((exp_dt - today).days, 0)
                 T = dte / 365.0
                 # Try to get real IV from chain, fall back to HV30
                 iv = None
                 try:
-                    ch = ticker.option_chain(t["expiration"])
+                    ch = _cached_option_chain(symbol_up, t["expiration"])
                     df = ch.calls if t["option_type"] == "call" else ch.puts
                     if not df.empty:
                         idx = (df["strike"] - S).abs().idxmin()
@@ -1381,7 +1708,7 @@ def log_paper_trade(
                 except Exception:
                     pass
                 if not iv:
-                    h = ticker.history(period="2mo")
+                    h = _cached_history(symbol_up, period="2mo")
                     if len(h) >= 30:
                         lr = np.log(h["Close"] / h["Close"].shift(1)).dropna()
                         iv = float(lr.rolling(30).std().iloc[-1] * np.sqrt(252))
@@ -1456,7 +1783,7 @@ def _save_predictions(preds: list):
     with open(PREDICTIONS_FILE, "w") as f:
         json.dump(preds, f, indent=2, default=str)
 
-
+@_market_data_scoped
 def log_prediction(
     action: str = "log",
     ticker: str = None,
@@ -1483,9 +1810,15 @@ def log_prediction(
         if not preds:
             return json.dumps({"message": "No predictions recorded yet."})
 
-        # Split by source: algorithmic daily_scan picks vs manually-logged predictions
-        scan_preds   = [p for p in preds if p.get("type") == "daily_scan"]
-        manual_preds = [p for p in preds if p.get("type") != "daily_scan"]
+        # Keep live scan, manual chat calls, and synthetic backfills separate.
+        scan_preds     = [p for p in preds if p.get("type") == "daily_scan"]
+        backfill_preds = [p for p in preds if p.get("source") == "backfill" or p.get("type") == "backfill"]
+        manual_preds   = [
+            p for p in preds
+            if p.get("type") != "daily_scan"
+            and p.get("source") != "backfill"
+            and p.get("type") != "backfill"
+        ]
 
         def _stats(subset):
             _non_action = ("manual_exit", "replaced")
@@ -1504,13 +1837,16 @@ def log_prediction(
         summary = {
             # Algorithmic scan model stats — these reflect the Direction Score model accuracy
             "scan_model": _stats(scan_preds),
+            # Synthetic historical labels generated by backfill_predictions()
+            "backfill_predictions": _stats(backfill_preds),
             # Manually-logged predictions from chat — Claude's own direct calls
             "manual_predictions": _stats(manual_preds),
             "predictions": preds,
             "_note": (
                 "scan_model = daily_scan algorithmic picks (Direction Score + Quality Score model). "
+                "backfill_predictions = synthetic historical labels from backfill_predictions(). "
                 "manual_predictions = predictions logged directly via chat. "
-                "Do NOT conflate the two when assessing model performance."
+                "Do NOT conflate these sources when assessing model performance."
             ),
         }
         return json.dumps(summary, indent=2, default=str)
@@ -1521,7 +1857,7 @@ def log_prediction(
         # Fetch SPY regime data once for all picks (reused by early exit checks)
         _spy_ret5_grade = 0.0
         try:
-            _spy_grade = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+            _spy_grade = _cached_history("SPY", period="10d")["Close"].dropna()
             if len(_spy_grade) >= 6:
                 _spy_ret5_grade = float((_spy_grade.iloc[-1] / _spy_grade.iloc[-6] - 1) * 100)
         except Exception:
@@ -1546,14 +1882,13 @@ def log_prediction(
             _premium   = float(p.get("est_premium") or 0.0)
 
             try:
-                t           = yf.Ticker(p["ticker"])
                 is_same_day = entry_dt.date() == today.date()
                 if is_same_day:
                     # Same-day: only update live P&L snapshot — do NOT grade.
                     # The day's high/low includes price action before entry time,
                     # so SL/TP checks would use stale extremes and false-trigger.
-                    fi   = t.fast_info
-                    _cur = float(fi.last_price or fi.regular_market_price)
+                    fi   = _cached_fast_info(p["ticker"])
+                    _cur = _fast_info_last_price(fi)
                     p["current_stock_px"]  = round(_cur, 2)
                     p["current_stock_pct"] = round((_cur / _entry_px - 1) * 100, 2) if _entry_px else None
                     # Fetch live option mid price for P&L display
@@ -1561,9 +1896,9 @@ def log_prediction(
                         _exp = p.get("expiry")
                         _K   = p.get("strike_est")
                         if _exp and _K:
-                            _avail = t.options
+                            _avail = _cached_options(p["ticker"])
                             if _avail and _exp in _avail:
-                                _ch  = t.option_chain(_exp)
+                                _ch  = _cached_option_chain(p["ticker"], _exp)
                                 _df  = _ch.calls if _is_bull else _ch.puts
                                 _row = _df.iloc[(_df["strike"] - float(_K)).abs().argsort()[:1]]
                                 if not _row.empty:
@@ -1580,10 +1915,10 @@ def log_prediction(
                 else:
                     fetch_end   = (max(today, target_dt) + timedelta(days=3)).strftime("%Y-%m-%d")
                     fetch_start = (entry_dt + timedelta(days=1)).strftime("%Y-%m-%d")
-                    hist        = t.history(start=fetch_start, end=fetch_end)
+                    hist        = _cached_history(p["ticker"], start=fetch_start, end=fetch_end)
                 if not is_same_day and hist.empty:
                     # Last-resort fallback for non-same-day picks
-                    fb   = t.history(period="5d", interval="1d")
+                    fb   = _cached_history(p["ticker"], period="5d", interval="1d")
                     hist = fb[fb.index.date > entry_dt.date()]
                 if hist.empty:
                     p["grade_error"] = "No market data available yet"
@@ -1595,7 +1930,8 @@ def log_prediction(
             # If pick was made outside market hours, resolve next-open price on first grade
             if p.get("entry_at_open") and p.get("entry_open_price") is None:
                 try:
-                    _oh = yf.Ticker(p["ticker"]).history(
+                    _oh = _cached_history(
+                        p["ticker"],
                         start=entry_dt.strftime("%Y-%m-%d"),
                         end=(entry_dt + timedelta(days=10)).strftime("%Y-%m-%d"),
                     )
@@ -1678,7 +2014,7 @@ def log_prediction(
                 _hist_for_pnl = hist
                 if _hist_for_pnl.empty:
                     try:
-                        _fb = yf.Ticker(p["ticker"]).history(period="5d")
+                        _fb = _cached_history(p["ticker"], period="5d")
                         _fb = _fb[_fb.index.date > entry_dt.date()]
                         if not _fb.empty:
                             _hist_for_pnl = _fb
@@ -1701,9 +2037,9 @@ def log_prediction(
                         if _exp and _K:
                             # Only use chain pricing when expiry was stored at scan time.
                             # Verify expiry is still in the available list; skip if already expired.
-                            _avail = t.options  # tuple of valid expiry strings
+                            _avail = _cached_options(p["ticker"])  # tuple of valid expiry strings
                             if _avail and _exp in _avail:
-                                _ch  = t.option_chain(_exp)
+                                _ch  = _cached_option_chain(p["ticker"], _exp)
                                 _df  = _ch.calls if is_bullish else _ch.puts
                                 # Snap to nearest strike (no fixed tolerance)
                                 _K_f = float(_K)
@@ -1780,7 +2116,13 @@ def log_prediction(
                     continue
 
             actual_move_pct = round((exit_price / entry_price - 1) * 100, 2)
-            predicted_move  = p.get("target_move_pct", 0)
+            predicted_move  = p.get("target_move_pct")
+            if not predicted_move:
+                _stock_tp = p.get("stock_tp")
+                if _stock_tp is not None and entry_price:
+                    predicted_move = abs((float(_stock_tp) / entry_price - 1) * 100)
+                else:
+                    predicted_move = 0
 
             if exit_reason == "tp_hit":
                 outcome = "hit"
@@ -1886,8 +2228,7 @@ def log_prediction(
 
         # Fetch current price as entry
         try:
-            t = yf.Ticker(ticker.upper())
-            entry_price = round(_get_price(t), 2)
+            entry_price = round(_get_price(symbol=ticker.upper()), 2)
         except Exception as e:
             return json.dumps({"error": f"Could not fetch price for {ticker}: {e}"})
 
@@ -1916,6 +2257,7 @@ def log_prediction(
 
 # ─── Tool 13: Retroactive prediction backfill ─────────────────────────────────
 
+@_market_data_scoped
 def backfill_predictions(
     tickers: list = None,
     lookback_days: int = 90,
@@ -1957,8 +2299,8 @@ def backfill_predictions(
 
     for ticker in tickers:
         try:
-            t    = yf.Ticker(ticker.upper())
-            hist = t.history(start=fetch_start, end=fetch_end, interval="1d")
+            ticker_up = ticker.upper()
+            hist = _cached_history(ticker_up, start=fetch_start, end=fetch_end, interval="1d")
             if hist.empty or len(hist) < 25:
                 continue
             closes = hist["Close"]
@@ -1980,7 +2322,7 @@ def backfill_predictions(
                     continue                     # target not yet reached
 
                 date_str = pred_date.strftime("%Y-%m-%d")
-                if (ticker.upper(), date_str) in existing:
+                if (ticker_up, date_str) in existing:
                     continue
 
                 # Signal: use data available *before* market open on pred_date
@@ -1994,8 +2336,9 @@ def backfill_predictions(
                 # Entry price = open on pred_date
                 entry_price = round(float(opens.iloc[i]), 2)
 
-                # Direction decision (threshold from Brain entry.entry_momentum_pct)
-                _mom_thr = float(STRATEGY_PROFILE.get("entry", {}).get("entry_momentum_pct", 0.5))
+                # Direction decision (threshold from the ticker's active profile)
+                _sp = _get_profile(ticker)
+                _mom_thr = float(_sp.get("entry", {}).get("entry_momentum_pct", 0.5))
                 if ret5 > _mom_thr and c_now > sma20:
                     direction = "bullish"
                     # confidence: scales 6–9 with strength of signal
@@ -2025,7 +2368,8 @@ def backfill_predictions(
 
                 pred = {
                     "id":               next_id,
-                    "ticker":           ticker.upper(),
+                    "ticker":           ticker_up,
+                    "type":             "backfill",
                     "direction":        direction,
                     "target_move_pct":  target_move_pct,
                     "entry_date":       date_str,
@@ -2040,7 +2384,7 @@ def backfill_predictions(
                     "source":           "backfill",
                 }
                 preds.append(pred)
-                existing.add((ticker.upper(), date_str))
+                existing.add((ticker_up, date_str))
                 next_id += 1
                 added += 1
 
@@ -2070,10 +2414,11 @@ def backfill_predictions(
 
 # ─── Tool 14: Historical strategy backtester ──────────────────────────────────
 
+@_market_data_scoped
 def backtest_strategy(
     symbol: str,
     option_type: str = "signal",   # "call" | "put" | "signal" (auto from momentum)
-    dte_at_entry: int = 7,
+    dte_at_entry: int = None,      # defaults to the symbol profile's target DTE
     delta_target: float = None,    # defaults to STRATEGY_PROFILE["targets"]["delta_optimal"]
     lookback_days: int = 252,
     stop_loss_pct: float = None,   # defaults to STRATEGY_PROFILE["risk"]["stop_loss_pct"]
@@ -2109,25 +2454,28 @@ def backtest_strategy(
         (mirrors the 7–40% linear confidence scale)
     """
     try:
-        # Resolve None defaults from STRATEGY_PROFILE — single source of truth
-        if delta_target     is None: delta_target     = STRATEGY_PROFILE["targets"]["delta_optimal"]
-        if stop_loss_pct    is None: stop_loss_pct    = STRATEGY_PROFILE["risk"]["stop_loss_pct"]
-        if profit_target_pct is None: profit_target_pct = STRATEGY_PROFILE["risk"]["profit_target_pct"]
-        if vix_max          is None: vix_max          = STRATEGY_PROFILE["filters"]["vix_defense_threshold"]
+        # Resolve defaults from the symbol's active profile.
+        symbol_up = symbol.upper()
+        _profile = _get_profile(symbol)
+        if dte_at_entry is None:
+            dte_at_entry = max(DTE_MIN, min(DTE_MAX, int(_profile["targets"]["dte_optimal"])))
+        if delta_target      is None: delta_target      = _profile["targets"]["delta_optimal"]
+        if stop_loss_pct     is None: stop_loss_pct     = _profile["risk"]["stop_loss_pct"]
+        if profit_target_pct is None: profit_target_pct = _profile["risk"]["profit_target_pct"]
+        if vix_max           is None: vix_max           = _profile["filters"]["vix_defense_threshold"]
 
         # Dollar sizing: explicit param → risk_settings account → fallback $1 000
         if position_size_dollars is None:
-            acct = STRATEGY_PROFILE["risk"].get("account_size") or 0
+            acct = _profile["risk"].get("account_size") or 0
             position_size_dollars = acct * 0.10 if acct else 1_000.0
 
         fetch_days = lookback_days + dte_at_entry + 120
-        t = yf.Ticker(symbol.upper())
-        hist = t.history(period=f"{fetch_days}d")
+        hist = _cached_history(symbol_up, period=f"{fetch_days}d")
         if hist.empty or len(hist) < 80:
             return json.dumps({"error": f"Not enough price history for {symbol}"})
 
         # Also fetch SPY as VIX proxy (HV of SPY ≈ market vol regime)
-        spy_hist = yf.Ticker("SPY").history(period=f"{fetch_days}d") if symbol.upper() != "SPY" else hist
+        spy_hist = _cached_history("SPY", period=f"{fetch_days}d") if symbol_up != "SPY" else hist
         spy_closes = spy_hist["Close"].dropna()
 
         closes = hist["Close"].dropna()
@@ -2153,7 +2501,7 @@ def backtest_strategy(
         # Pre-fetch known earnings dates to skip bars where earnings fall within hold window
         _earnings_date_strs: set[str] = set()
         try:
-            _ed_df = yf.Ticker(symbol.upper()).earnings_dates
+            _ed_df = _cached_earnings_dates(symbol_up)
             if _ed_df is not None and not _ed_df.empty:
                 for _edt in _ed_df.index:
                     _earnings_date_strs.add(str(_edt)[:10])
@@ -2308,10 +2656,11 @@ def backtest_strategy(
                 continue
 
             # Position sizing — direction_score drives allocation (same 7–40% scale)
-            lo = risk_settings["min_position_pct"] / 100
-            hi = risk_settings["max_position_pct"] / 100
+            _risk = _sp["risk"]
+            lo = float(_risk["min_position_pct"]) / 100
+            hi = float(_risk["max_position_pct"]) / 100
             conf_pct = lo + (direction_score / 100.0) * (hi - lo)
-            acct = risk_settings.get("account_size") or 0
+            acct = _risk.get("account_size") or 0
             if acct:
                 trade_dollars = round(acct * conf_pct, 2)
             else:
@@ -2535,12 +2884,14 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
     Returns 50.0 (neutral) if data cannot be fetched.
     """
     try:
-        hist = yf.Ticker(symbol).history(period="90d")["Close"].dropna()
+        hist = _cached_history(symbol, period="90d")["Close"].dropna()
         if len(hist) < 55:
             return 50.0
         p = hist.values.astype(float)
         n = len(p)
-        idx = n - 1   # most recent day
+        idx = n - 2 if _market_is_open() and n >= 2 else n - 1
+        if idx < 50:
+            return 50.0, 50.0, 0.0
 
         # SMA20 / SMA50
         sma20 = float(np.mean(p[idx - 20 : idx]))
@@ -2577,7 +2928,8 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
             macd_s = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
 
         score = trend * 0.40 + rsi_s * 0.35 + macd_s * 0.25
-        return round(float(score), 1), round(rsi14, 1), round(float(p[-1] / p[-6] - 1) * 100, 2) if len(p) >= 6 else 0.0
+        ret5 = round(float(price / p[idx - 5] - 1) * 100, 2) if idx >= 5 else 0.0
+        return round(float(score), 1), round(rsi14, 1), ret5
     except Exception:
         return 50.0, 50.0, 0.0
 
@@ -2599,8 +2951,6 @@ def _fetch_best_option(
     Returns a dict with keys: strike, premium, expiry, dte, delta, iv, live_chain
     Returns None if no valid option could be found at all.
     """
-    import yfinance as _yf
-
     best: dict | None = None
     best_diff = 999.0
 
@@ -2608,7 +2958,7 @@ def _fetch_best_option(
     _S = stock_price
     try:
         if not _S:
-            _S = float(_yf.Ticker(ticker).history(period="2d")["Close"].dropna().iloc[-1])
+            _S = float(_cached_history(ticker, period="2d")["Close"].dropna().iloc[-1])
     except Exception:
         pass
     if not _S:
@@ -2616,8 +2966,8 @@ def _fetch_best_option(
 
     # ── Try real options chain first ──────────────────────────────────────────
     try:
-        _t    = _yf.Ticker(ticker)
-        _exps = _t.options
+        _exp_snapshot = _cached_options_metadata(ticker)
+        _exps = list(_exp_snapshot.value or []) if getattr(_exp_snapshot, "status", None) == "fresh" else []
         if _exps:
             _today_d = datetime.now().date()
             # Filter to expirations within system-wide DTE bounds
@@ -2633,7 +2983,10 @@ def _fetch_best_option(
             )
             _actual_dte = (datetime.strptime(_best_exp, "%Y-%m-%d").date() - _today_d).days
             _T          = max(_actual_dte, 1) / 365.0
-            _chain      = _t.option_chain(_best_exp)
+            _chain_snapshot = _cached_option_chain_metadata(ticker, _best_exp)
+            if getattr(_chain_snapshot, "status", None) != "fresh":
+                raise ValueError("option chain snapshot is not fresh")
+            _chain = _chain_snapshot.value
             _df         = _chain.calls if trade_type == "call" else _chain.puts
 
             for _, _row in _df.iterrows():
@@ -2653,6 +3006,23 @@ def _fetch_best_option(
                     continue
                 if _mid < 0.01:
                     continue
+
+                _contract_volume = int(_row.get("volume") or 0)
+                _open_interest = int(_row.get("openInterest") or 0)
+                _last_trade_age_hours = None
+                _last_trade_raw = _row.get("lastTradeDate")
+                if _last_trade_raw is not None:
+                    try:
+                        if hasattr(_last_trade_raw, "to_pydatetime"):
+                            _last_trade_dt = _last_trade_raw.to_pydatetime()
+                        elif isinstance(_last_trade_raw, datetime):
+                            _last_trade_dt = _last_trade_raw
+                        else:
+                            _last_trade_dt = datetime.fromisoformat(str(_last_trade_raw).replace("Z", "+00:00"))
+                        _now_dt = datetime.now(_last_trade_dt.tzinfo) if getattr(_last_trade_dt, "tzinfo", None) else datetime.now()
+                        _last_trade_age_hours = max((_now_dt - _last_trade_dt).total_seconds() / 3600.0, 0.0)
+                    except Exception:
+                        _last_trade_age_hours = None
 
                 # IV: use chain value when available, else HV30 for delta calc only
                 _iv  = float(_row.get("impliedVolatility") or 0)
@@ -2674,7 +3044,14 @@ def _fetch_best_option(
                         "dte":        _actual_dte,
                         "delta":      round(abs(_g.get("delta", 0)), 3),
                         "iv":         round(_iv, 4),
+                        "volume":     _contract_volume,
+                        "open_interest": _open_interest,
+                        "quote_age_hours": round(_last_trade_age_hours, 2) if _last_trade_age_hours is not None else None,
+                        "contract_symbol": str(_row.get("contractSymbol") or "").strip().upper() or None,
+                        "quote_basis": "mid" if (_bid > 0 and _ask > 0) else "last",
                         "live_chain": True,
+                        "options_snapshot_status": getattr(_exp_snapshot, "status", None),
+                        "option_chain_status": getattr(_chain_snapshot, "status", None),
                     }
     except Exception:
         pass
@@ -2705,6 +3082,8 @@ def _fetch_best_option(
                     "dte":        target_dte,
                     "delta":      round(abs(_g.get("delta", 0)), 3),
                     "iv":         round(hv30_fallback, 4),
+                    "contract_symbol": None,
+                    "quote_basis": "model",
                     "live_chain": False,
                 }
     except Exception:
@@ -2788,8 +3167,8 @@ def _compute_direction_score(
         regime_score = max(0.0, 50.0 - spy_magnitude * 16.7)
 
     # ── Momentum strength (0-100): how big is the move in the right direction? ─
-    abs_ret5  = abs(ret5)
-    mom_score = min(100.0, abs_ret5 / 5.0 * 100.0)    # 5%+ move = full score
+    move_in_trade_direction = ret5 if is_bullish else -ret5
+    mom_score = min(100.0, max(0.0, move_in_trade_direction / 5.0 * 100.0))
 
     # ── Weighted blend ────────────────────────────────────────────────────────
     _w_total = _w_tech + _w_reg + _w_mom or 1.0
@@ -2985,8 +3364,14 @@ def _generate_trade_strategy(
         "comment":      comment,
     }
 
-
-def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: float = None, min_tech_score: float = None) -> list:
+@_market_data_scoped
+def scan_daily_top_trades(
+    n_picks: int = DEFAULT_SCAN_PICKS,
+    dte: int = None,
+    min_confidence: float = None,
+    min_tech_score: float = None,
+    calibration_playbook: str = "broad",
+) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
 
@@ -3000,52 +3385,57 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
     Returns up to n_picks candidates sorted by confidence score descending.
     Each entry is a dict suitable for direct storage as a prediction record.
     """
-    if dte is None:
-        dte = int(STRATEGY_PROFILE["targets"]["dte_optimal"])
-    dte = max(DTE_MIN, min(DTE_MAX, dte))  # clamp to system-wide bounds
+    scan_target_dte = None if dte is None else max(DTE_MIN, min(DTE_MAX, int(dte)))
 
-    sp                = STRATEGY_PROFILE
-    stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
-    profit_target_pct = float(sp["risk"]["profit_target_pct"])
-    delta_target      = float(sp["targets"]["delta_optimal"])
-    min_ev            = float(sp["filters"]["min_ev_return_pct"])
+    min_confidence_override = min_confidence
+    min_tech_score_override = min_tech_score
     # Entry gates from STRATEGY_PROFILE — overridable by caller for testing
-    if min_confidence is None:
-        min_confidence = float(sp["entry"].get("min_direction_score", 35.0))
-    if min_tech_score is None:
-        min_tech_score = float(sp["entry"].get("min_tech_score", 55.0))
-    T                 = dte / 365.0
-
     candidates: list[dict] = []
 
     # Fetch SPY regime data once for all tickers
     _spy_ret5 = 0.0
     try:
-        _spy_hist = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+        _spy_hist = _cached_history("SPY", period="10d")["Close"].dropna()
         if len(_spy_hist) >= 6:
             _spy_ret5 = float((_spy_hist.iloc[-1] / _spy_hist.iloc[-6] - 1) * 100)
     except Exception:
         pass
+    expectancy_surface = _load_expectancy_surface_for_live(playbook=calibration_playbook)
+    market_regime_bucket = normalized_market_regime(spy_ret5=_spy_ret5)
+    market_open = _market_is_open()
 
     for ticker in DEFAULT_WATCHLIST:
         _ac = _asset_class(ticker)
         sp  = _get_profile(ticker)
+        ticker_min_confidence = (
+            float(sp["entry"].get("min_direction_score", 35.0))
+            if min_confidence_override is None else float(min_confidence_override)
+        )
+        ticker_min_tech_score = (
+            float(sp["entry"].get("min_tech_score", 55.0))
+            if min_tech_score_override is None else float(min_tech_score_override)
+        )
         try:
-            hist = yf.Ticker(ticker).history(period="90d")["Close"].dropna()
+            hist_frame = _cached_history(ticker, period="400d")
+            liquidity_snapshot = _underlying_liquidity_snapshot(hist_frame)
+            if not liquidity_snapshot["eligible"]:
+                continue
+
+            hist = hist_frame["Close"].dropna().tail(90)
             if len(hist) < 55:
                 continue
             prices = hist.values.astype(float)
             n      = len(prices)
-            idx    = n - 1
-            price  = float(prices[idx])  # latest price for indicator calculation
-            # Entry price = previous day's close (last complete candle).
-            # During market hours, prices[idx] is a partial intraday snapshot.
-            _entry_stock_price = float(prices[idx - 1]) if n >= 2 else price
+            signal_idx = n - 2 if market_open and n >= 2 else n - 1
+            if signal_idx < 50:
+                continue
+            price  = float(prices[signal_idx])
+            _entry_stock_price = price
 
             # Sector fetch — equity only
             if _ac == "equity":
                 try:
-                    _sector = yf.Ticker(ticker).info.get("sector")
+                    _sector = _cached_ticker_info(ticker).get("sector")
                 except Exception:
                     _sector = None
             else:
@@ -3053,22 +3443,22 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
 
             # HV30
             log_rets = np.log(prices[1:] / prices[:-1])
-            hv30 = float(np.std(log_rets[idx - 30 : idx]) * math.sqrt(252))
+            hv30 = float(np.std(log_rets[signal_idx - 30 : signal_idx]) * math.sqrt(252))
             if hv30 <= 0:
                 continue
 
             # IV percentile (rank of today's hv30 vs 90-day rolling hv30 history)
             hv_hist = []
-            for i in range(30, n):
+            for i in range(30, signal_idx + 1):
                 hv_i = float(np.std(log_rets[max(0, i - 30) : i]) * math.sqrt(252))
                 if hv_i > 0:
                     hv_hist.append(hv_i)
             iv_pct = float(np.sum(np.array(hv_hist) <= hv30) / max(len(hv_hist), 1) * 100) if hv_hist else 50.0
 
             # Momentum signal (same logic as backtest)
-            ret5  = (price / float(prices[idx - 5]) - 1) * 100
-            sma20 = float(np.mean(prices[idx - 20 : idx]))
-            sma50 = float(np.mean(prices[idx - 50 : idx]))
+            ret5  = (price / float(prices[signal_idx - 5]) - 1) * 100
+            sma20 = float(np.mean(prices[signal_idx - 20 : signal_idx]))
+            sma50 = float(np.mean(prices[signal_idx - 50 : signal_idx]))
 
             _mom_thr = float(sp.get("entry", {}).get("entry_momentum_pct", 0.5))
             bullish = ret5 >  _mom_thr and price > sma20
@@ -3077,30 +3467,30 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 continue
             trade_type = "call" if bullish else "put"
 
-            # RSI 14 (needed for direction score overextension penalty)
-            _diffs   = np.diff(prices[max(0, idx - 15) : idx + 1])
-            _avg_up  = float(np.mean(_diffs[_diffs > 0])) if np.any(_diffs > 0) else 0.0
-            _avg_dn  = float(np.mean(-_diffs[_diffs < 0])) if np.any(_diffs < 0) else 0.0
-            rsi14    = round(100.0 - 100.0 / (1.0 + _avg_up / (_avg_dn + 1e-9)), 1)
-
             # Technical setup score — gate early to avoid expensive strike search on weak setups
             tech, _rsi14_live, _ret5_live = _compute_tech_score_live(ticker, trade_type)
-            if tech < min_tech_score:
+            rsi14 = _rsi14_live
+            ret5 = _ret5_live
+            if tech < ticker_min_tech_score:
                 continue
+
+            ticker_target_dte = (
+                max(DTE_MIN, min(DTE_MAX, int(sp["targets"].get("dte_optimal", 10))))
+                if scan_target_dte is None else scan_target_dte
+            )
 
             # ── Earnings gate: skip if earnings fall within the DTE window ──────
             if _ac == "equity":
                 _earnings_skip = False
                 try:
-                    _t_yf = yf.Ticker(ticker)
-                    _ed = _t_yf.earnings_dates
+                    _ed = _cached_earnings_dates(ticker)
                     if _ed is not None and not _ed.empty:
                         _today_dt = datetime.now().replace(tzinfo=None)
                         _future_ed = _ed[_ed.index.tz_localize(None) >= _today_dt] if _ed.index.tzinfo else _ed[_ed.index >= _today_dt]
                         if not _future_ed.empty:
                             _next_earn = _future_ed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
                             _days_to_earn = (_next_earn - _today_dt).days
-                            if 0 <= _days_to_earn <= dte:
+                            if 0 <= _days_to_earn <= ticker_target_dte:
                                 _earnings_skip = True  # earnings inside our hold window → skip
                 except Exception:
                     pass  # can't determine earnings — allow through, chatbot will warn
@@ -3108,7 +3498,14 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                     continue
 
             # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
-            _opt = _fetch_best_option(ticker, trade_type, float(sp["targets"]["delta_optimal"]), dte, hv30_fallback=hv30)
+            _opt = _fetch_best_option(
+                ticker,
+                trade_type,
+                float(sp["targets"]["delta_optimal"]),
+                ticker_target_dte,
+                stock_price=_entry_stock_price,
+                hv30_fallback=hv30,
+            )
             if _opt is None:
                 continue
 
@@ -3117,39 +3514,42 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             delta_val   = _opt["delta"]
             actual_exp  = _opt["expiry"]
             actual_dte  = _opt["dte"]
-            dte         = actual_dte
 
             # Liquidity gate — same as brain (skip if bid/ask spread too wide)
-            _opt_bid = _opt.get("bid")
-            _opt_ask = _opt.get("ask")
-            if _opt_bid and _opt_ask:
-                _liq = _check_trade_liquidity(_opt_bid, _opt_ask)
-                if _liq["is_illiquid"]:
-                    continue
+            _liq = _check_trade_liquidity(
+                _opt.get("bid"),
+                _opt.get("ask"),
+                contract_volume=_opt.get("volume"),
+                open_interest=_opt.get("open_interest"),
+                quote_age_hours=_opt.get("quote_age_hours"),
+                sp=sp,
+            )
+            if _liq["is_illiquid"]:
+                continue
 
             # Direction Score: predicts if stock moves the right way (this is the headline)
             direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
 
             # IV crush check — same as brain (penalise if strike IV >> HV distribution)
             try:
-                _skew = _calculate_iv_skew(yf.Ticker(ticker), actual_exp or "", trade_type, best_strike)
+                _skew = _calculate_iv_skew(ticker, best_strike, trade_type, actual_exp or "", sp=sp)
                 _iv_pen = _skew["iv_crush_penalty_pts"]
                 if _iv_pen > 0:
                     direction_score = max(0.0, direction_score - _iv_pen)
             except Exception:
                 pass
 
-            if direction_score < min_confidence:
+            if direction_score < ticker_min_confidence:
                 continue
 
             # Per-ticker profile values
             _stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
             _profit_target_pct = float(sp["risk"]["profit_target_pct"])
-            _min_ev            = float(sp["filters"]["min_ev_return_pct"])
+            _min_empirical_ev  = float(sp["filters"].get("min_calibrated_expectancy_pct", 0.0))
 
             # Market regime — ATR stop widening + defense mode (same as brain)
             try:
-                _regime = _get_market_regime(ticker)
+                _regime = _get_market_regime(ticker, sp=sp)
                 _adj_stop_pct  = round(_stop_loss_pct * _regime["stop_loss_mult"], 1)
                 _adj_size_mult = _regime["position_size_mult"]
             except Exception:
@@ -3157,12 +3557,25 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 _adj_size_mult = 1.0
 
             # Quality Score: rates the option to buy if direction is right
-            quality_score = _compute_quality_score(iv_pct, delta_val, dte, sp=sp)
+            quality_score = _compute_quality_score(iv_pct, delta_val, actual_dte, sp=sp)
 
-            # Expected value gate (uses direction score as P(win))
-            p_win  = direction_score / 100.0
-            ev_pct = p_win * _profit_target_pct - (1.0 - p_win) * _stop_loss_pct
-            if ev_pct < _min_ev:
+            calibration_lookup = lookup_calibrated_expectancy(
+                expectancy_surface,
+                direction_score=direction_score,
+                quality_score=quality_score,
+                market_regime=market_regime_bucket,
+                trade_type=trade_type,
+                tech_score=tech,
+                require_positive=True,
+                allow_overall=False,
+            )
+            calibration = (
+                calibration_lookup
+                if calibration_lookup is not None and bool(calibration_lookup.get("dense_cohort"))
+                else None
+            )
+            ev_pct = float(calibration.get("avg_pnl_pct")) if calibration else None
+            if ev_pct is not None and ev_pct < _min_empirical_ev:
                 continue
 
             # Build human-readable signal reasons
@@ -3192,7 +3605,7 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
             if actual_exp:
                 target_str = actual_exp
             else:
-                _raw_target = datetime.now() + timedelta(days=dte + 2)
+                _raw_target = datetime.now() + timedelta(days=actual_dte + 2)
                 while _raw_target.weekday() >= 5:
                     _raw_target += timedelta(days=1)
                 target_str = _raw_target.strftime("%Y-%m-%d")
@@ -3210,33 +3623,63 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 stock_price=_entry_stock_price,
                 delta_est=delta_val,
             )
+            target_move_pct = round(abs((strategy["stock_tp"] / _entry_stock_price - 1) * 100), 2) if _entry_stock_price else None
+
+            contract_selection_source = _live_contract_selection_source(_opt)
+            has_exact_contract = contract_selection_source == "live_chain_exact_contract"
+            promotion_class = _live_pick_promotion_class(
+                has_exact_contract=has_exact_contract,
+                calibration_lookup=calibration_lookup,
+                dense_calibration=calibration,
+            )
 
             candidates.append({
                 "ticker":             ticker,
                 "direction":          trade_type,
+                "option_type":        trade_type,
                 "direction_score":    round(direction_score, 1),
                 "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
                 "iv_rank":            round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
                 "stock_price":        round(_entry_stock_price, 2),
+                "underlying_price_at_selection": round(_entry_stock_price, 2),
                 "strike_est":         best_strike,   # real market strike — no rounding
+                "strike":             best_strike,
                 "expiry":             actual_exp or target_str,
+                "contract_symbol":    _opt.get("contract_symbol"),
                 "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
-                "dte":                dte,
+                "dte":                actual_dte,
                 "est_premium":        round(est_premium, 4),
                 "stop_loss_pct":      _adj_stop_pct,    # ATR-adjusted (may be wider than base)
                 "profit_target_pct":  _profit_target_pct,
                 "atr_stop_widened":   _adj_stop_pct != _stop_loss_pct,
-                "ev_pct":             round(ev_pct, 1),
+                "ev_pct":             round(ev_pct, 1) if ev_pct is not None else None,
+                "calibrated_expectancy_pct": round(ev_pct, 2) if ev_pct is not None else None,
+                "calibration_source": calibration_lookup.get("lookup_source") if calibration_lookup else None,
+                "calibration_trades": calibration_lookup.get("trades") if calibration_lookup else None,
+                "calibration_raw_expectancy_pct": calibration_lookup.get("avg_pnl_pct_raw") if calibration_lookup else None,
+                "calibration_parent_expectancy_pct": calibration_lookup.get("parent_avg_pnl_pct") if calibration_lookup else None,
+                "calibration_used_parent_shrinkage": calibration_lookup.get("used_parent_shrinkage") if calibration_lookup else None,
+                "calibration_sparse_warning": calibration_lookup.get("sparse_warning") if calibration_lookup else None,
+                "calibration_density": calibration_lookup.get("calibration_density") if calibration_lookup else None,
+                "calibration_is_dense": bool(calibration_lookup.get("dense_cohort")) if calibration_lookup else False,
+                "surface_provenance": calibration_lookup.get("surface_provenance") if calibration_lookup else None,
                 "ret5":               round(ret5, 2),
                 "rsi14":              round(rsi14, 1),
                 "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
+                "quote_time_et":      today_str,
+                "quote_basis":        _opt.get("quote_basis"),
+                "selection_source":   contract_selection_source,
+                "contract_selection_source": contract_selection_source,
+                "promotion_class":    promotion_class,
+                "promotable":         promotion_class == "promotable_exact_contract",
                 "target_date":        target_str,
                 "entry_price":        round(_entry_stock_price, 2),   # prev day's close (last complete candle)
                 "entry_at_open":      _at_open,          # True = market was closed, use next-open price
                 "entry_open_price":   None,               # filled on first grade after market opens
+                "target_move_pct":    target_move_pct,
                 "signal_reasons":     reasons,
                 "strategy_label":     strategy["label"],
                 "strategy_comment":   strategy["comment"],
@@ -3245,16 +3688,23 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
                 "stock_sl":           strategy["stock_sl"],
                 "stock_tp":           strategy["stock_tp"],
                 "time_exit_pct":      float(sp["risk"].get("time_exit_pct", 50.0)),
-                "time_exit_day":      max(1, math.ceil(dte * float(sp["risk"].get("time_exit_pct", 50.0)) / 100)),
+                "time_exit_day":      max(1, math.ceil(actual_dte * float(sp["risk"].get("time_exit_pct", 50.0)) / 100)),
                 "type":               "daily_scan",
                 "outcome":            None,
                 "asset_class":        _ac,
                 "sector":             _sector,
+                "avg_volume_20d":     liquidity_snapshot["avg_volume_20d"],
+                "avg_dollar_volume_20d": liquidity_snapshot["avg_dollar_volume_20d"],
+                "underlying_liquidity_tier": liquidity_snapshot["liquidity_tier"],
+                "history_days":       liquidity_snapshot["history_days"],
+                "contract_volume":    _opt.get("volume"),
+                "contract_open_interest": _opt.get("open_interest"),
+                "quote_age_hours":    _opt.get("quote_age_hours"),
             })
         except Exception:
             continue
 
-    candidates.sort(key=lambda x: x["direction_score"], reverse=True)
+    candidates.sort(key=_candidate_rank_tuple, reverse=True)
 
     # ── Sector concentration: equity picks — max 2 from same sector ───────────
     _sector_counts: dict[str, int] = {}
@@ -3287,7 +3737,11 @@ def scan_daily_top_trades(n_picks: int = 5, dte: int = None, min_confidence: flo
     return _accepted
 
 
-def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
+def roll_forward_daily_picks(
+    pending_picks: list,
+    n_picks: int = DEFAULT_SCAN_PICKS,
+    candidates: list[dict] | None = None,
+) -> dict:
     """
     Re-score the full watchlist each morning and apply roll-forward logic.
 
@@ -3309,7 +3763,7 @@ def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
     today_str = datetime.now(_ET).strftime("%Y-%m-%d")
 
     # Score full watchlist — large n_picks so we see all qualifying candidates
-    all_candidates = scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
+    all_candidates = list(candidates) if candidates is not None else scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
 
     # Determine which (ticker, direction) pairs sit in today's top-n
     top_n_keys  = {(c["ticker"], c["direction"]) for c in all_candidates[:n_picks]}
@@ -3326,6 +3780,7 @@ def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
             # Refresh scoring + signal fields; preserve entry anchor fields
             for _f in ("direction_score", "tech_score", "quality_score",
                        "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
+                       "calibrated_expectancy_pct", "calibration_source", "calibration_trades",
                        "signal_reasons", "strategy_label", "strategy_comment"):
                 if _f in fresh:
                     updated[_f] = fresh[_f]
@@ -3365,7 +3820,11 @@ def roll_forward_daily_picks(pending_picks: list, n_picks: int = 5) -> dict:
     return {"rolled": rolled, "new": new_picks, "dropped": dropped}
 
 
-def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> dict:
+def generate_position_recommendations(
+    pending_picks: list,
+    n_picks: int = DEFAULT_SCAN_PICKS,
+    candidates: list[dict] | None = None,
+) -> dict:
     """
     Re-score all pending picks against today's market data and produce
     HOLD / EXIT / REPLACE recommendations for each.
@@ -3384,7 +3843,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
     """
     # ── No pending picks → just do a fresh scan ──────────────────────────────
     if not pending_picks:
-        fresh = scan_daily_top_trades(n_picks=n_picks)
+        fresh = list(candidates)[:n_picks] if candidates is not None else scan_daily_top_trades(n_picks=n_picks)
         for p in fresh:
             p["pick_status"] = "new"
             p["roll_count"] = 0
@@ -3392,7 +3851,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
         return {"active_positions": [], "new_opportunities": fresh}
 
     # ── Full rescore of watchlist ─────────────────────────────────────────────
-    all_candidates = scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
+    all_candidates = list(candidates) if candidates is not None else scan_daily_top_trades(n_picks=len(DEFAULT_WATCHLIST))
     cand_lookup = {(c["ticker"], c["direction"]): c for c in all_candidates}
 
     # Thresholds
@@ -3408,7 +3867,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
         rec = dict(p)
         fresh = cand_lookup.get(key)
 
-        old_score = float(p.get("direction_score", 0))
+        old_score = _candidate_signal_value(p)
         current_pnl = p.get("current_pnl_pct")
         stop_loss = float(p.get("stop_loss_pct", 50))
 
@@ -3420,7 +3879,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
             rec["fresh_direction_score"] = None
             rec["score_delta"] = None
         else:
-            fresh_score = float(fresh.get("direction_score", 0))
+            fresh_score = _candidate_signal_value(fresh)
             delta = fresh_score - old_score
             rec["fresh_direction_score"] = round(fresh_score, 1)
             rec["score_delta"] = round(delta, 1)
@@ -3456,7 +3915,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
     for rec in active_positions:
         if rec["recommendation"] != "EXIT":
             continue
-        old_score = float(rec.get("direction_score", 0))
+        old_score = _candidate_signal_value(rec)
         best_replacement = None
         best_adv = 0
         for c in all_candidates:
@@ -3466,7 +3925,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
             # Don't suggest a ticker that's already an active position
             if any(ckey == (a.get("ticker"), a.get("direction")) for a in active_positions):
                 continue
-            adv = float(c.get("direction_score", 0)) - old_score
+            adv = _candidate_signal_value(c) - old_score
             if adv >= REPLACE_ADVANTAGE and adv > best_adv:
                 best_replacement = c
                 best_adv = adv
@@ -3475,7 +3934,7 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
             rec["rec_reason"] += (
                 f" — replace with {best_replacement['ticker']} "
                 f"{best_replacement['direction'].upper()} "
-                f"({best_replacement['direction_score']:.0f}%)"
+                f"({_candidate_signal_value(best_replacement):+.1f})"
             )
             rec["replace_with"] = best_replacement
 
@@ -3509,44 +3968,75 @@ def generate_position_recommendations(pending_picks: list, n_picks: int = 5) -> 
     }
 
 
-def _check_trade_liquidity(bid: float, ask: float) -> dict:
+def _check_trade_liquidity(
+    bid: float,
+    ask: float,
+    *,
+    contract_volume: int = None,
+    open_interest: int = None,
+    quote_age_hours: float = None,
+    sp: dict = None,
+) -> dict:
     """
     Bid-ask spread as % of mid-price.
     If spread > 1.5% flag as illiquid and require 10% extra profit margin.
     """
-    f = STRATEGY_PROFILE["filters"]
+    if sp is None:
+        sp = STRATEGY_PROFILE
+    f = sp["filters"]
     if not bid or not ask or ask <= bid:
         return {
-            "mid_price": None, "spread_pct": 999.0, "is_illiquid": True,
+            "mid_price": None,
+            "spread_pct": 999.0,
+            "is_illiquid": True,
             "extra_margin_pct": f["illiquid_extra_margin_pct"],
-            "flag": "⚠️ ILLIQUID — no valid bid/ask",
+            "contract_volume": contract_volume,
+            "open_interest": open_interest,
+            "quote_age_hours": quote_age_hours,
+            "reasons": ["no_valid_bid_ask"],
+            "flag": "No valid bid/ask",
         }
     mid = (bid + ask) / 2.0
     spread_pct = (ask - bid) / mid * 100.0
-    illiquid = spread_pct > f["liquidity_spread_max_pct"]
+    reasons: list[str] = []
+    if mid < float(f.get("min_option_mid_price", 0.30)):
+        reasons.append("premium_too_low")
+    if spread_pct > f["liquidity_spread_max_pct"]:
+        reasons.append("wide_spread")
+    if contract_volume is not None and int(contract_volume) < int(f.get("min_option_volume", 0)):
+        reasons.append("low_contract_volume")
+    if open_interest is not None and int(open_interest) < int(f.get("min_option_open_interest", 0)):
+        reasons.append("low_open_interest")
+    if quote_age_hours is not None and float(quote_age_hours) > float(f.get("max_option_quote_age_hours", 9999.0)):
+        reasons.append("stale_quote")
+    illiquid = bool(reasons)
     return {
         "mid_price":       round(mid, 4),
         "spread_pct":      round(spread_pct, 2),
         "is_illiquid":     illiquid,
+        "contract_volume": contract_volume,
+        "open_interest":   open_interest,
+        "quote_age_hours": round(float(quote_age_hours), 2) if quote_age_hours is not None else None,
+        "reasons":         reasons,
         "extra_margin_pct": f["illiquid_extra_margin_pct"] if illiquid else 0.0,
         "flag": (
-            f"⚠️ ILLIQUID — spread {spread_pct:.1f}% > {f['liquidity_spread_max_pct']}%"
-            f" — requires {f['illiquid_extra_margin_pct']:.0f}% extra profit margin"
-            if illiquid else f"✅ Liquid — spread {spread_pct:.1f}%"
+            f"Contract blocked: {', '.join(reasons)}"
+            if illiquid else f"Liquid contract — spread {spread_pct:.1f}%"
         ),
     }
 
 
-def _get_market_regime(symbol: str) -> dict:
+def _get_market_regime(symbol: str, sp: dict = None) -> dict:
     """
     VIX + ATR regime detector.
     VIX > 25 → Defense Mode (50% position sizes).
     ATR expanding (14d > 28d avg by 5%) → stop-loss ×1.5.
     """
-    sp = STRATEGY_PROFILE
+    if sp is None:
+        sp = _get_profile(symbol)
     # VIX
     try:
-        vix = float(yf.Ticker("^VIX").history(period="5d")["Close"].iloc[-1])
+        vix = float(_cached_history("^VIX", period="5d")["Close"].iloc[-1])
     except Exception:
         vix = 20.0
 
@@ -3554,7 +4044,7 @@ def _get_market_regime(symbol: str) -> dict:
     atr_14 = atr_28 = 0.0
     atr_expanding = False
     try:
-        hist = yf.Ticker(symbol).history(period="45d")
+        hist = _cached_history(symbol, period="45d")
         hi, lo, cl = hist["High"].values, hist["Low"].values, hist["Close"].values
         trs = [max(hi[i] - lo[i], abs(hi[i] - cl[i-1]), abs(lo[i] - cl[i-1]))
                for i in range(1, len(cl))]
@@ -3590,14 +4080,15 @@ def _get_market_regime(symbol: str) -> dict:
     }
 
 
-def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expiry: str) -> dict:
+def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expiry: str, sp: dict = None) -> dict:
     """
     Vertical skew: (OTM IV − ATM IV) / ATM IV for the target strike.
     Time skew: near-term ATM IV minus next-expiry ATM IV.
     IV crush check: if target IV > HV30_mean + 2σ, apply confidence penalty.
     """
-    sp = STRATEGY_PROFILE
-    ticker = yf.Ticker(symbol)
+    symbol_name = str(symbol)
+    if sp is None:
+        sp = _get_profile(symbol_name)
     spot = None
     atm_iv = target_iv = None
     vertical_skew = 0.0
@@ -3610,14 +4101,14 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
 
     # Get spot price
     try:
-        spot = float(ticker.history(period="2d")["Close"].iloc[-1])
+        spot = float(_cached_history(symbol_name, period="2d")["Close"].iloc[-1])
     except Exception:
         pass
 
     # Vertical skew from target expiry
     if spot is not None:
         try:
-            chain = ticker.option_chain(expiry)
+            chain = _cached_option_chain(symbol_name, expiry)
             opts = chain.calls if option_type.lower() == "call" else chain.puts
             opts = opts[opts["impliedVolatility"] > 0]
 
@@ -3633,10 +4124,10 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
     # Time skew: compare near vs next expiry ATM IV
     if spot is not None:
         try:
-            exps = ticker.options
+            exps = _cached_options(symbol_name)
             if len(exps) >= 2:
                 def _atm_iv(exp):
-                    c = ticker.option_chain(exp)
+                    c = _cached_option_chain(symbol_name, exp)
                     o = c.calls if option_type.lower() == "call" else c.puts
                     o = o[o["impliedVolatility"] > 0]
                     r = o.iloc[(o["strike"] - spot).abs().argsort()[:1]]
@@ -3650,7 +4141,7 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
     # IV crush check: compare target IV to 30-day HV rolling distribution
     if target_iv is not None:
         try:
-            hist90 = ticker.history(period="120d")
+            hist90 = _cached_history(symbol_name, period="120d")
             log_rets = np.log(hist90["Close"] / hist90["Close"].shift(1)).dropna().values
             windows = [float(np.std(log_rets[i-30:i]) * math.sqrt(252) * 100)
                        for i in range(30, len(log_rets))]
@@ -3699,7 +4190,11 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
 
 def _calculate_ev(delta: float, avg_win_pct: float, avg_loss_pct: float,
                   capital_at_risk: float, extra_margin_pct: float = 0.0,
-                  confidence: float = None) -> dict:
+                  confidence: float = None, sp: dict = None,
+                  empirical_expectancy_pct: float = None,
+                  empirical_win_rate_pct: float = None,
+                  required_ev_floor_pct: float = None,
+                  ev_source: str = "heuristic") -> dict:
     """
     EV = (P_profit × avg_win) − (P_loss × avg_loss)
     Uses confidence score (0–100) as P(profit) when available; falls back to
@@ -3707,17 +4202,29 @@ def _calculate_ev(delta: float, avg_win_pct: float, avg_loss_pct: float,
     Trade signal fires only when EV ≥ min_ev_return_pct (10%) AND EV > 0.
     Extra margin requirement raised if option is illiquid.
     """
-    sp = STRATEGY_PROFILE
-    if confidence is not None:
+    if sp is None:
+        sp = STRATEGY_PROFILE
+    if empirical_expectancy_pct is not None:
+        p_win = min(max((empirical_win_rate_pct or 0.0) / 100.0, 0.01), 0.99)
+        ev_pct = float(empirical_expectancy_pct)
+        threshold = (
+            float(required_ev_floor_pct)
+            if required_ev_floor_pct is not None
+            else float(sp["filters"].get("min_calibrated_expectancy_pct", 0.0))
+        ) + extra_margin_pct
+    elif confidence is not None:
         p_win = min(max(confidence / 100.0, 0.01), 0.99)
+        threshold = sp["filters"]["min_ev_return_pct"] + extra_margin_pct
+        ev_pct = (p_win * avg_win_pct) - ((1.0 - p_win) * abs(avg_loss_pct))
     else:
         p_win = min(abs(delta), 0.99)
+        threshold = sp["filters"]["min_ev_return_pct"] + extra_margin_pct
+        ev_pct = (p_win * avg_win_pct) - ((1.0 - p_win) * abs(avg_loss_pct))
     p_loss = 1.0 - p_win
-    ev_pct    = (p_win * avg_win_pct) - (p_loss * abs(avg_loss_pct))
     ev_dollars = capital_at_risk * ev_pct / 100.0
-    threshold = sp["filters"]["min_ev_return_pct"] + extra_margin_pct
     signal = ev_pct > 0 and ev_pct >= threshold
     return {
+        "source":             ev_source,
         "p_profit":           round(p_win, 3),
         "p_loss":             round(p_loss, 3),
         "avg_win_pct":        avg_win_pct,
@@ -3732,7 +4239,7 @@ def _calculate_ev(delta: float, avg_win_pct: float, avg_loss_pct: float,
         ),
     }
 
-
+@_market_data_scoped
 def evaluate_trade_signal(
     symbol: str,
     option_type: str,
@@ -3740,6 +4247,9 @@ def evaluate_trade_signal(
     expiry: str,
     bid: float = None,
     ask: float = None,
+    contract_volume: int = None,
+    open_interest: int = None,
+    quote_age_hours: float = None,
     delta: float = None,
     iv_percentile: float = None,
     dte: int = None,
@@ -3753,17 +4263,24 @@ def evaluate_trade_signal(
     Combines:
       1. Confidence score (IV rank, Delta, DTE, Technical setup — weights optimizer-tuned)
       2. IV vertical + time skew; IV crush penalty if OTM IV > HV mean + 2σ
-      3. Liquidity check — flags illiquid spreads and adjusts required profit margin
+      3. Liquidity check — blocks missing/two-sided quotes and flags illiquid spreads, volume, OI, and stale chains
       4. Market regime — VIX + ATR expansion (Defense Mode, stop-loss widening)
       5. EV formula — (P_win × avg_win) − (P_loss × avg_loss) using delta as P_win proxy
     """
     try:
+        _eval_sp = _get_profile(symbol)
         out: dict = {
             "symbol":      symbol.upper(),
             "option_type": option_type,
             "strike":      strike,
             "expiry":      expiry,
         }
+        direction_score = None
+        quality_score = None
+        spy_ret5 = 0.0
+        market_regime_bucket = None
+        calibration = None
+        expectancy_surface = _load_expectancy_surface_for_live()
 
         # ── 1. Direction Score + Quality Score (replaces single confidence) ──────
         confidence_score = None
@@ -3772,14 +4289,14 @@ def evaluate_trade_signal(
 
             # Fetch SPY 5-day return for regime alignment
             try:
-                _spy_hist = yf.Ticker("SPY").history(period="10d")["Close"].dropna()
+                _spy_hist = _cached_history("SPY", period="10d")["Close"].dropna()
                 spy_ret5 = float(_spy_hist.iloc[-1] / _spy_hist.iloc[-6] - 1) * 100 if len(_spy_hist) >= 6 else 0.0
             except Exception:
                 spy_ret5 = 0.0
 
-            _eval_sp        = _get_profile(symbol)
             direction_score = _compute_direction_score(tech, option_type, rsi14_live, ret5_live, spy_ret5, sp=_eval_sp)
             quality_score   = _compute_quality_score(iv_percentile, abs(delta), dte, sp=_eval_sp)
+            market_regime_bucket = normalized_market_regime(spy_ret5=spy_ret5)
 
             # Use direction score as the headline for PROCEED/AVOID gating
             confidence_score = direction_score
@@ -3796,7 +4313,7 @@ def evaluate_trade_signal(
 
         # ── 2. IV skew + crush check ──────────────────────────────────────────
         iv_crush_penalty = 0.0
-        skew = _calculate_iv_skew(symbol, strike, option_type, expiry)
+        skew = _calculate_iv_skew(symbol, strike, option_type, expiry, sp=_eval_sp)
         out["iv_skew"] = skew
         iv_crush_penalty = skew["iv_crush_penalty_pts"]
         if confidence_score is not None and iv_crush_penalty > 0:
@@ -3804,33 +4321,113 @@ def evaluate_trade_signal(
             out["confidence"]["direction_score_adj"] = round(adjusted, 1)
             out["confidence"]["iv_crush_penalty"]    = -iv_crush_penalty
             confidence_score = adjusted
+        if confidence_score is not None and quality_score is not None:
+            calibration_lookup = lookup_calibrated_expectancy(
+                expectancy_surface,
+                direction_score=confidence_score,
+                quality_score=quality_score,
+                market_regime=market_regime_bucket,
+                trade_type=option_type,
+                tech_score=tech,
+                require_positive=True,
+                allow_overall=False,
+            )
+            calibration = (
+                calibration_lookup
+                if calibration_lookup is not None and bool(calibration_lookup.get("dense_cohort"))
+                else None
+            )
+            out["confidence"]["market_regime_bucket"] = market_regime_bucket
+            out["confidence"]["calibrated_expectancy_pct"] = (
+                round(float(calibration.get("avg_pnl_pct", 0.0) or 0.0), 2)
+                if calibration else None
+            )
+            out["confidence"]["calibration_source"] = calibration_lookup.get("lookup_source") if calibration_lookup else None
+            out["confidence"]["calibration_trades"] = calibration_lookup.get("trades") if calibration_lookup else 0
+            out["confidence"]["calibration_raw_expectancy_pct"] = (
+                round(float(calibration_lookup.get("avg_pnl_pct_raw", 0.0) or 0.0), 2)
+                if calibration_lookup else None
+            )
+            out["confidence"]["calibration_parent_expectancy_pct"] = (
+                round(float(calibration_lookup.get("parent_avg_pnl_pct", 0.0) or 0.0), 2)
+                if calibration_lookup and calibration_lookup.get("parent_avg_pnl_pct") is not None else None
+            )
+            out["confidence"]["calibration_used_parent_shrinkage"] = (
+                bool(calibration_lookup.get("used_parent_shrinkage")) if calibration_lookup else None
+            )
+            out["confidence"]["calibration_sparse_warning"] = (
+                calibration_lookup.get("sparse_warning") if calibration_lookup else None
+            )
+            out["confidence"]["calibration_density"] = (
+                calibration_lookup.get("calibration_density") if calibration_lookup else None
+            )
+            out["confidence"]["surface_provenance"] = (
+                calibration_lookup.get("surface_provenance") if calibration_lookup else None
+            )
 
         # ── 3. Liquidity check ────────────────────────────────────────────────
         extra_margin = 0.0
-        if bid is not None and ask is not None:
-            liq = _check_trade_liquidity(bid, ask)
-            extra_margin = liq["extra_margin_pct"]
-            out["liquidity"] = liq
+        liq = _check_trade_liquidity(
+            bid,
+            ask,
+            contract_volume=contract_volume,
+            open_interest=open_interest,
+            quote_age_hours=quote_age_hours,
+            sp=_eval_sp,
+        )
+        extra_margin = liq["extra_margin_pct"]
+        out["liquidity"] = liq
 
         # ── 4. Market regime ──────────────────────────────────────────────────
-        regime = _get_market_regime(symbol)
+        regime = _get_market_regime(symbol, sp=_eval_sp)
         out["market_regime"] = regime
 
-        base_stop   = risk_settings["stop_loss_pct"]
+        base_stop   = float(_eval_sp["risk"]["stop_loss_pct"])
         adj_stop    = round(base_stop * regime["stop_loss_mult"], 1)
         adj_dollars = round(position_dollars * regime["position_size_mult"], 2)
         out["adjusted_parameters"] = {
             "position_dollars":  adj_dollars,
             "stop_loss_pct":     adj_stop,
-            "profit_target_pct": STRATEGY_PROFILE["risk"]["profit_target_pct"],
+            "profit_target_pct": float(_eval_sp["risk"]["profit_target_pct"]),
             "regime_notes":      regime["regime_notes"],
         }
 
         # ── 5. EV calculation ─────────────────────────────────────────────────
         ev_signal = False
         if delta is not None:
-            ev = _calculate_ev(delta, avg_win_pct, avg_loss_pct, adj_dollars, extra_margin,
-                               confidence=confidence_score)
+            if expectancy_surface is not None and calibration is None:
+                ev = {
+                    "source": "replay_calibrated_unavailable",
+                    "p_profit": None,
+                    "p_loss": None,
+                    "avg_win_pct": avg_win_pct,
+                    "avg_loss_pct": avg_loss_pct,
+                    "ev_pct": None,
+                    "ev_dollars": None,
+                    "required_ev_pct": round(float(_eval_sp["filters"].get("min_calibrated_expectancy_pct", 0.0)), 1),
+                    "trade_signal": False,
+                    "ev_note": "âŒ No dense positive replay-backed expectancy is available for this score/regime bucket.",
+                }
+            else:
+                ev = _calculate_ev(
+                    delta,
+                    avg_win_pct,
+                    avg_loss_pct,
+                    adj_dollars,
+                    extra_margin,
+                    confidence=confidence_score,
+                    sp=_eval_sp,
+                    empirical_expectancy_pct=(
+                        float(calibration.get("avg_pnl_pct", 0.0) or 0.0)
+                        if calibration else None
+                    ),
+                    empirical_win_rate_pct=(
+                        float(calibration.get("win_rate_pct", 0.0) or 0.0)
+                        if calibration else None
+                    ),
+                    required_ev_floor_pct=float(_eval_sp["filters"].get("min_calibrated_expectancy_pct", 0.0)),
+                    ev_source="replay_calibrated" if calibration else "heuristic",
+                )
             ev_signal = ev["trade_signal"]
             out["expected_value"] = ev
 
@@ -3838,14 +4435,15 @@ def evaluate_trade_signal(
         blocks   = []
         warnings = []
 
-        if confidence_score is not None and confidence_score < 40:
-            blocks.append(f"Confidence too low ({confidence_score:.0f}/100)")
+        min_direction_score = float(_eval_sp.get("entry", {}).get("min_direction_score", 35.0))
+        if confidence_score is not None and confidence_score < min_direction_score:
+            blocks.append(f"Direction score too low ({confidence_score:.0f}/{min_direction_score:.0f} required)")
         if skew["iv_crush_warning"]:
             warnings.append(skew["iv_crush_warning"])
         # Earnings proximity warning (same check as daily scan)
         if dte is not None:
             try:
-                _ed_df = yf.Ticker(symbol).earnings_dates
+                _ed_df = _cached_earnings_dates(symbol)
                 if _ed_df is not None and not _ed_df.empty:
                     _now_dt = datetime.now().replace(tzinfo=None)
                     _fed = _ed_df[_ed_df.index.tz_localize(None) >= _now_dt] if _ed_df.index.tzinfo else _ed_df[_ed_df.index >= _now_dt]
@@ -3860,7 +4458,9 @@ def evaluate_trade_signal(
             except Exception:
                 pass
         if out.get("liquidity", {}).get("is_illiquid"):
-            warnings.append(out["liquidity"]["flag"])
+            blocks.append(out["liquidity"]["flag"])
+        if expectancy_surface is not None and delta is not None and calibration is None:
+            blocks.append("No dense positive replay-backed expectancy is available for this setup.")
         if regime["defense_mode"]:
             warnings.append(f"⚠️ Defense Mode — VIX {regime['vix']:.0f}")
         if not ev_signal and delta is not None:
@@ -3880,6 +4480,13 @@ def evaluate_trade_signal(
                 if confidence_score is not None else rec
             ),
         }
+        if calibration is not None:
+            out["promotion_class"] = "promotable_exact_contract"
+        elif expectancy_surface is not None:
+            out["promotion_class"] = "research_sparse_calibration"
+        else:
+            out["promotion_class"] = "research_bootstrap"
+        out["promotable"] = out["promotion_class"] == "promotable_exact_contract"
 
         return json.dumps(out, indent=2)
 
@@ -4052,7 +4659,7 @@ TOOLS = [
             "ALWAYS call this after identifying a specific trade to recommend. "
             "Given an option price, account size, and your confidence score (1-10), returns "
             "the number of contracts, total dollar risk, stop-loss price, and drawdown impact. "
-            "Confidence scales risk linearly: 1=7% of account, 10=40% of account. "
+            "Confidence scales premium-at-risk linearly: 1=0.5% of account, 10=3.0% of account. "
             "Be honest — only use 8-10 when you have strong conviction from multiple confirming signals."
         ),
         "input_schema": {
@@ -4075,7 +4682,7 @@ TOOLS = [
                     "type": "integer",
                     "description": (
                         "Your confidence in this trade on a 1–10 scale. "
-                        "Maps linearly to position size: 1→7%, 5→~21%, 10→40% of account. "
+                        "Maps linearly to position size: 1→0.5%, 5→~1.6%, 10→3.0% of account. "
                         "1-3: weak signal, high uncertainty. "
                         "4-6: moderate edge, decent setup. "
                         "7-8: strong confluence of signals. "
@@ -4109,9 +4716,9 @@ TOOLS = [
                 "max_drawdown_pct":     {"type": "number",  "description": "Pause all trading after this % portfolio drawdown (default 15)"},
                 "stop_loss_pct":        {"type": "number",  "description": "Exit when option loses this % of premium paid (default 50)"},
                 "profit_target_pct":    {"type": "number",  "description": "Take profit when option gains this % of premium paid (default 100)"},
-                "min_position_pct":     {"type": "number",  "description": "Minimum position size as % of account — floor for low-confidence trades (default 7)"},
-                "max_position_pct":     {"type": "number",  "description": "Maximum position size as % of account — ceiling for high-confidence trades (default 40)"},
-                "dte_0_max_pct":        {"type": "number",  "description": "Cap 0DTE trades to this % of account (default 2)"},
+                "min_position_pct":     {"type": "number",  "description": "Minimum position size as % of account — floor for low-confidence trades (default 0.5)"},
+                "max_position_pct":     {"type": "number",  "description": "Maximum position size as % of account — ceiling for high-confidence trades (default 3.0 equity / 2.5 index)"},
+                "dte_0_max_pct":        {"type": "number",  "description": "Cap 0DTE trades to this % of account (default 0.5)"},
                 # ── Market regime / defense ───────────────────────────────────
                 "vix_defense_threshold":     {"type": "number",  "description": "VIX level that triggers defense mode — cut position sizes (default 25)"},
                 "defense_position_mult":     {"type": "number",  "description": "Multiply all position sizes by this in defense mode, e.g. 0.5 = half size (default 0.5)"},
@@ -4256,7 +4863,7 @@ TOOLS = [
             "Computes: (1) Confidence score weighted by IV rank 40%, delta 30%, DTE 30%. "
             "(2) IV vertical + time skew; penalises confidence by 20 pts if OTM IV is >2σ above "
             "30-day HV mean (IV crush risk). "
-            "(3) Liquidity check — flags bid-ask spread > 1.5% of mid and requires 10% extra profit margin. "
+            "(3) Liquidity check — blocks missing bid/ask quotes and flags wide spreads, low volume/OI, and stale chains. "
             "(4) Market regime — VIX + ATR; Defense Mode halves position size, expanding ATR widens stop 1.5×. "
             "(5) EV formula: EV = (delta × avg_win) − ((1−delta) × avg_loss); signal only if EV ≥ 10%."
         ),
@@ -4269,6 +4876,9 @@ TOOLS = [
                 "expiry":          {"type": "string",  "description": "Expiration date YYYY-MM-DD"},
                 "bid":             {"type": "number",  "description": "Current bid price"},
                 "ask":             {"type": "number",  "description": "Current ask price"},
+                "contract_volume": {"type": "integer", "description": "Latest option contract volume, if known"},
+                "open_interest":   {"type": "integer", "description": "Latest option open interest, if known"},
+                "quote_age_hours": {"type": "number",  "description": "Hours since the last trade/quote update, if known"},
                 "delta":           {"type": "number",  "description": "Option delta (positive number, e.g. 0.30)"},
                 "iv_percentile":   {"type": "number",  "description": "IV rank/percentile 0-100 (from get_iv_analysis)"},
                 "dte":             {"type": "integer", "description": "Days to expiration"},
@@ -4667,6 +5277,3 @@ def chat():
             conversation.append({"role": "assistant", "content": [{"type": "text", "text": raw}]})
             conversation.append({"role": "user", "content": tool_results})
 
-
-if __name__ == "__main__":
-    chat()

@@ -1,0 +1,131 @@
+{
+  "manifest_version": 1,
+  "id": "truth-first-validation-phase",
+  "phase_id": "truth-first-validation-phase",
+  "phase": "truth_first_validation",
+  "mode": "validation",
+  "holdout_start": "2026-03-31",
+  "freeze_search": true,
+  "allowed_truth_lanes": [
+    "historical_imported_daily",
+    "historical_imported"
+  ],
+  "required_baseline_control": "baseline_broad_control",
+  "allowed_proposal_families": [
+    "baseline",
+    "broad"
+  ],
+  "required_watchlist": [
+    "SPY",
+    "QQQ"
+  ],
+  "notes": [
+    "Historical 1y/2y synthetic replay is treated as searched evidence, not a clean holdout.",
+    "Synthetic replay remains available for research/debug comparisons, but it is not an allowed authoritative truth lane for this frozen validation phase.",
+    "No live-default changes or promotion changes should be made from synthetic-only wins.",
+    "Forward holdout recording should start on March 31, 2026 and remain append-only.",
+    "The active truth-first validation scope is intentionally narrowed to SPY and QQQ until imported real-data coverage exists for the broader watchlist."
+  ],
+  "symbols": [
+    "SPY",
+    "QQQ"
+  ],
+  "cohorts": [
+    {
+      "id": "baseline_broad_control",
+      "role": "control",
+      "label": "Baseline Broad",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {}
+    },
+    {
+      "id": "broad_tech72",
+      "role": "broad_challenger",
+      "label": "Broad Tech 72",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "min_tech_score": 72.0
+        }
+      }
+    },
+    {
+      "id": "broad_direction75",
+      "role": "broad_challenger",
+      "label": "Broad Direction 75",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "min_direction_score": 75.0
+        }
+      }
+    },
+    {
+      "id": "broad_ev7",
+      "role": "broad_challenger",
+      "label": "Broad EV 7",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    },
+    {
+      "id": "broad_momentum070",
+      "role": "broad_challenger",
+      "label": "Broad Momentum 0.70",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "entry_momentum_pct": 0.7
+        }
+      }
+    },
+    {
+      "id": "broad_ev7_momentum070",
+      "role": "broad_challenger",
+      "label": "Broad EV 7 + Momentum 0.70",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "entry_momentum_pct": 0.7
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    },
+    {
+      "id": "broad_ev7_momentum070_exit_time33",
+      "role": "broad_challenger",
+      "label": "Broad EV 7 + Momentum 0.70 + Time Exit 33",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "entry_momentum_pct": 0.7
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        },
+        "risk": {
+          "time_exit_pct": 33.0
+        }
+      }
+    },
+    {
+      "id": "momentum_sidecar_tech72_ev7",
+      "role": "momentum_sidecar",
+      "label": "Momentum Sidecar Tech 72 + EV 7",
+      "playbooks": ["broad", "bullish_momentum", "bearish_defensive"],
+      "overrides": {
+        "entry": {
+          "min_tech_score": 72.0
+        },
+        "filters": {
+          "min_calibrated_expectancy_pct": 7.0
+        }
+      }
+    }
+  ]
+}

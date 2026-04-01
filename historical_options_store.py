@@ -1,0 +1,1302 @@
+from __future__ import annotations
+
+import csv
+import hashlib
+import json
+import os
+import sqlite3
+from contextlib import closing
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time
+from pathlib import Path
+from typing import Any, Iterable, Optional, Sequence
+from zoneinfo import ZoneInfo
+
+import pandas as pd
+import pyarrow.parquet as pq
+
+
+ROOT_DIR = Path(__file__).resolve().parent
+DEFAULT_HISTORICAL_OPTIONS_DB_PATH = ROOT_DIR / "data" / "options-validation" / "options_history.db"
+EASTERN_TZ = ZoneInfo("America/New_York")
+ENTRY_QUOTE_MINUTE_ET = 10 * 60 + 10
+ENTRY_QUOTE_WINDOW_MINUTES = 15
+DAILY_QUOTE_MINUTE_ET = 15 * 60 + 55
+INTRADAY_SNAPSHOT_KIND = "intraday"
+DAILY_SNAPSHOT_KIND = "daily_eod"
+TRUSTED_DATA_TRUST = "trusted"
+FIXTURE_DATA_TRUST = "fixture"
+SQLITE_TIMEOUT_SECONDS = 30.0
+SQLITE_BUSY_TIMEOUT_MS = 30_000
+
+
+def _sqlite_connect(path: str | Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(path, timeout=SQLITE_TIMEOUT_SECONDS)
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA synchronous = NORMAL")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def _db_path() -> Path:
+    override = os.getenv("HISTORICAL_OPTIONS_DB_PATH")
+    return Path(override) if override else DEFAULT_HISTORICAL_OPTIONS_DB_PATH
+
+
+def _ensure_parent_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_column(conn: sqlite3.Connection, table_name: str, column_name: str, column_sql: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+    existing = {str(row[1]) for row in rows}
+    if column_name not in existing:
+        conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_sql}")
+
+
+def _normalize_data_trust(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw == FIXTURE_DATA_TRUST:
+        return FIXTURE_DATA_TRUST
+    return TRUSTED_DATA_TRUST
+
+
+def _infer_data_trust(source_label: Any, input_path: Any, dataset_kind: Any) -> str:
+    values = [
+        str(source_label or "").strip().lower(),
+        str(dataset_kind or "").strip().lower(),
+    ]
+    fixture_tokens = ("fixture", "sample", "demo")
+    if any(token in value for value in values for token in fixture_tokens):
+        return FIXTURE_DATA_TRUST
+    return TRUSTED_DATA_TRUST
+
+
+def _index_columns(conn: sqlite3.Connection, index_name: str) -> list[str]:
+    rows = conn.execute(f"PRAGMA index_info('{index_name}')").fetchall()
+    return [str(row[2]) for row in rows]
+
+
+def _has_snapshot_kind_unique_index(conn: sqlite3.Connection) -> bool:
+    rows = conn.execute("PRAGMA index_list(option_quote_snapshots)").fetchall()
+    for row in rows:
+        index_name = str(row[1])
+        is_unique = int(row[2]) == 1
+        if not is_unique:
+            continue
+        if _index_columns(conn, index_name) == ["as_of_utc", "contract_symbol", "snapshot_kind"]:
+            return True
+    return False
+
+
+def _rebuild_option_quote_snapshots_table(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        ALTER TABLE option_quote_snapshots RENAME TO option_quote_snapshots_legacy;
+
+        CREATE TABLE option_quote_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            as_of_utc TEXT NOT NULL,
+            quote_date_et TEXT NOT NULL,
+            quote_minute_et INTEGER NOT NULL,
+            snapshot_kind TEXT NOT NULL DEFAULT 'intraday',
+            underlying TEXT NOT NULL,
+            contract_symbol TEXT NOT NULL,
+            expiry TEXT NOT NULL,
+            option_type TEXT NOT NULL,
+            strike REAL NOT NULL,
+            bid REAL,
+            ask REAL,
+            last REAL,
+            iv REAL,
+            underlying_price REAL,
+            volume INTEGER,
+            open_interest INTEGER,
+            source_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE RESTRICT,
+            UNIQUE(as_of_utc, contract_symbol, snapshot_kind)
+        );
+
+        INSERT OR IGNORE INTO option_quote_snapshots (
+            id,
+            as_of_utc,
+            quote_date_et,
+            quote_minute_et,
+            snapshot_kind,
+            underlying,
+            contract_symbol,
+            expiry,
+            option_type,
+            strike,
+            bid,
+            ask,
+            last,
+            iv,
+            underlying_price,
+            volume,
+            open_interest,
+            source_batch_id
+        )
+        SELECT
+            id,
+            as_of_utc,
+            quote_date_et,
+            quote_minute_et,
+            COALESCE(snapshot_kind, 'intraday'),
+            underlying,
+            contract_symbol,
+            expiry,
+            option_type,
+            strike,
+            bid,
+            ask,
+            last,
+            iv,
+            underlying_price,
+            volume,
+            open_interest,
+            source_batch_id
+        FROM option_quote_snapshots_legacy;
+
+        DROP TABLE option_quote_snapshots_legacy;
+
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_underlying_date
+            ON option_quote_snapshots (underlying, snapshot_kind, quote_date_et, option_type, quote_minute_et);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_contract_date
+            ON option_quote_snapshots (contract_symbol, snapshot_kind, quote_date_et, quote_minute_et DESC);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_tuple_date
+            ON option_quote_snapshots (underlying, snapshot_kind, expiry, option_type, strike, quote_date_et, quote_minute_et DESC);
+        """
+    )
+
+
+def _backfill_import_batch_trust(conn: sqlite3.Connection) -> None:
+    rows = conn.execute(
+        """
+        SELECT id, source_label, input_path, dataset_kind, data_trust
+        FROM import_batches
+        """
+    ).fetchall()
+    for row in rows:
+        inferred = _infer_data_trust(row[1], row[2], row[3])
+        current = _normalize_data_trust(row[4])
+        if current != inferred:
+            conn.execute(
+                "UPDATE import_batches SET data_trust = ? WHERE id = ?",
+                (inferred, int(row[0])),
+            )
+
+
+def _normalize_contract_symbol(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if not raw:
+        raise ValueError("contract_symbol is required")
+    return raw
+
+
+def _normalize_underlying(value: Any) -> str:
+    raw = str(value or "").strip().upper()
+    if not raw:
+        raise ValueError("underlying is required")
+    return raw
+
+
+def _normalize_option_type(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    if raw in {"c", "call"}:
+        return "call"
+    if raw in {"p", "put"}:
+        return "put"
+    raise ValueError("option_type must be call/c or put/p")
+
+
+def _parse_date(value: Any, field_name: str) -> date:
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError(f"{field_name} is required")
+    return date.fromisoformat(raw[:10])
+
+
+def _parse_float(value: Any, *, field_name: str, required: bool = False) -> Optional[float]:
+    if value is None or str(value).strip() == "":
+        if required:
+            raise ValueError(f"{field_name} is required")
+        return None
+    parsed = float(value)
+    return parsed
+
+
+def _parse_int(value: Any, *, field_name: str) -> Optional[int]:
+    if value is None or str(value).strip() == "":
+        return None
+    return int(float(value))
+
+
+def _parse_as_of_utc(value: Any) -> datetime:
+    raw = str(value or "").strip()
+    if not raw:
+        raise ValueError("as_of_utc is required")
+    normalized = raw.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=EASTERN_TZ)
+    return parsed.astimezone(UTC)
+
+
+def _build_as_of_utc_for_quote_date(trade_date: date, minute_et: int) -> datetime:
+    hour = int(minute_et // 60)
+    minute = int(minute_et % 60)
+    local_stamp = datetime.combine(trade_date, time(hour=hour, minute=minute), tzinfo=EASTERN_TZ)
+    return local_stamp.astimezone(UTC)
+
+
+def _quote_date_et(as_of_utc: datetime) -> tuple[str, int]:
+    as_of_et = as_of_utc.astimezone(EASTERN_TZ)
+    minute = as_of_et.hour * 60 + as_of_et.minute
+    return as_of_et.date().isoformat(), minute
+
+
+def _quote_price(row: dict[str, Any]) -> tuple[Optional[float], Optional[str]]:
+    bid = row.get("bid")
+    ask = row.get("ask")
+    last = row.get("last")
+    if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
+        return round((bid + ask) / 2.0, 4), "mid"
+    if last is not None and last > 0:
+        return round(last, 4), "last"
+    return None, None
+
+
+def _quote_price_with_mode(row: dict[str, Any], *, allow_last_price: bool) -> tuple[Optional[float], Optional[str]]:
+    bid = row.get("bid")
+    ask = row.get("ask")
+    last = row.get("last")
+    if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
+        return round((bid + ask) / 2.0, 4), "mid"
+    if allow_last_price and last is not None and last > 0:
+        return round(last, 4), "last"
+    return None, None
+
+
+@dataclass(frozen=True)
+class HistoricalQuote:
+    as_of_utc: str
+    quote_date_et: str
+    quote_minute_et: int
+    underlying: str
+    contract_symbol: str
+    expiry: str
+    option_type: str
+    strike: float
+    price: float
+    price_basis: str
+    underlying_price: Optional[float]
+    bid: Optional[float]
+    ask: Optional[float]
+    last: Optional[float]
+    iv: Optional[float]
+    volume: Optional[int]
+    open_interest: Optional[int]
+    snapshot_kind: str
+
+
+def init_schema(db_path: str | Path | None = None) -> Path:
+    path = Path(db_path) if db_path else _db_path()
+    _ensure_parent_dir(path)
+    with closing(_sqlite_connect(path)) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS import_batches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_label TEXT NOT NULL,
+                dataset_kind TEXT NOT NULL DEFAULT 'intraday_csv',
+                data_trust TEXT NOT NULL DEFAULT 'trusted',
+                input_path TEXT NOT NULL,
+                file_hash TEXT NOT NULL,
+                imported_at_utc TEXT NOT NULL,
+                total_rows INTEGER NOT NULL,
+                imported_rows INTEGER NOT NULL,
+                duplicate_rows INTEGER NOT NULL,
+                rejected_rows INTEGER NOT NULL,
+                warnings_json TEXT NOT NULL DEFAULT '[]'
+            );
+
+            CREATE TABLE IF NOT EXISTS option_quote_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                as_of_utc TEXT NOT NULL,
+                quote_date_et TEXT NOT NULL,
+                quote_minute_et INTEGER NOT NULL,
+                snapshot_kind TEXT NOT NULL DEFAULT 'intraday',
+                underlying TEXT NOT NULL,
+                contract_symbol TEXT NOT NULL,
+                expiry TEXT NOT NULL,
+                option_type TEXT NOT NULL,
+                strike REAL NOT NULL,
+                bid REAL,
+                ask REAL,
+                last REAL,
+                iv REAL,
+                underlying_price REAL,
+                volume INTEGER,
+                open_interest INTEGER,
+                source_batch_id INTEGER NOT NULL REFERENCES import_batches(id) ON DELETE RESTRICT,
+                UNIQUE(as_of_utc, contract_symbol, snapshot_kind)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_underlying_date
+                ON option_quote_snapshots (underlying, snapshot_kind, quote_date_et, option_type, quote_minute_et);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_contract_date
+                ON option_quote_snapshots (contract_symbol, snapshot_kind, quote_date_et, quote_minute_et DESC);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_tuple_date
+                ON option_quote_snapshots (underlying, snapshot_kind, expiry, option_type, strike, quote_date_et, quote_minute_et DESC);
+            """
+        )
+        _ensure_column(conn, "import_batches", "dataset_kind", "TEXT NOT NULL DEFAULT 'intraday_csv'")
+        _ensure_column(conn, "import_batches", "data_trust", "TEXT NOT NULL DEFAULT 'trusted'")
+        _ensure_column(conn, "option_quote_snapshots", "snapshot_kind", "TEXT NOT NULL DEFAULT 'intraday'")
+        if not _has_snapshot_kind_unique_index(conn):
+            _rebuild_option_quote_snapshots_table(conn)
+        _backfill_import_batch_trust(conn)
+        conn.commit()
+    return path
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _normalize_csv_row(row: dict[str, Any], *, snapshot_kind: str = INTRADAY_SNAPSHOT_KIND) -> dict[str, Any]:
+    as_of_utc = _parse_as_of_utc(row.get("as_of_utc") or row.get("as_of"))
+    quote_date_et, quote_minute_et = _quote_date_et(as_of_utc)
+    normalized = {
+        "as_of_utc": as_of_utc.isoformat().replace("+00:00", "Z"),
+        "quote_date_et": quote_date_et,
+        "quote_minute_et": quote_minute_et,
+        "snapshot_kind": str(snapshot_kind or INTRADAY_SNAPSHOT_KIND),
+        "underlying": _normalize_underlying(row.get("underlying")),
+        "contract_symbol": _normalize_contract_symbol(row.get("contract_symbol")),
+        "expiry": _parse_date(row.get("expiry"), "expiry").isoformat(),
+        "option_type": _normalize_option_type(row.get("option_type")),
+        "strike": _parse_float(row.get("strike"), field_name="strike", required=True),
+        "bid": _parse_float(row.get("bid"), field_name="bid"),
+        "ask": _parse_float(row.get("ask"), field_name="ask"),
+        "last": _parse_float(row.get("last"), field_name="last"),
+        "iv": _parse_float(row.get("iv"), field_name="iv"),
+        "underlying_price": _parse_float(row.get("underlying_price"), field_name="underlying_price"),
+        "volume": _parse_int(row.get("volume"), field_name="volume"),
+        "open_interest": _parse_int(row.get("open_interest"), field_name="open_interest"),
+    }
+    return normalized
+
+
+def import_historical_option_snapshots(
+    input_path: str | Path,
+    source_label: str,
+    *,
+    dataset_kind: str = "intraday_csv",
+    snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    csv_path = Path(input_path)
+    if not csv_path.exists():
+        raise FileNotFoundError(f"No snapshot CSV found at {csv_path}")
+
+    path = init_schema(db_path)
+    file_hash = _file_sha256(csv_path)
+    imported_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    data_trust = _infer_data_trust(source_label, csv_path, dataset_kind)
+    total_rows = 0
+    imported_rows = 0
+    duplicate_rows = 0
+    rejected_rows = 0
+    warnings: list[str] = []
+
+    with closing(_sqlite_connect(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO import_batches (
+                source_label,
+                dataset_kind,
+                data_trust,
+                input_path,
+                file_hash,
+                imported_at_utc,
+                total_rows,
+                imported_rows,
+                duplicate_rows,
+                rejected_rows,
+                warnings_json
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, '[]')
+            """,
+            (
+                str(source_label or "").strip() or "manual_import",
+                str(dataset_kind or "intraday_csv").strip() or "intraday_csv",
+                data_trust,
+                str(csv_path),
+                file_hash,
+                imported_at_utc,
+            ),
+        )
+        batch_id = int(cursor.lastrowid)
+
+        with csv_path.open("r", encoding="utf8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            for row_index, row in enumerate(reader, start=2):
+                total_rows += 1
+                try:
+                    normalized = _normalize_csv_row(row, snapshot_kind=snapshot_kind)
+                except Exception as exc:
+                    rejected_rows += 1
+                    if len(warnings) < 20:
+                        warnings.append(f"Row {row_index}: {exc}")
+                    continue
+
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO option_quote_snapshots (
+                        as_of_utc,
+                        quote_date_et,
+                        quote_minute_et,
+                        snapshot_kind,
+                        underlying,
+                        contract_symbol,
+                        expiry,
+                        option_type,
+                        strike,
+                        bid,
+                        ask,
+                        last,
+                        iv,
+                        underlying_price,
+                        volume,
+                        open_interest,
+                        source_batch_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized["as_of_utc"],
+                        normalized["quote_date_et"],
+                        normalized["quote_minute_et"],
+                        normalized["snapshot_kind"],
+                        normalized["underlying"],
+                        normalized["contract_symbol"],
+                        normalized["expiry"],
+                        normalized["option_type"],
+                        normalized["strike"],
+                        normalized["bid"],
+                        normalized["ask"],
+                        normalized["last"],
+                        normalized["iv"],
+                        normalized["underlying_price"],
+                        normalized["volume"],
+                        normalized["open_interest"],
+                        batch_id,
+                    ),
+                )
+                if cursor.rowcount > 0:
+                    imported_rows += 1
+                else:
+                    duplicate_rows += 1
+
+        cursor.execute(
+            """
+            UPDATE import_batches
+            SET total_rows = ?,
+                imported_rows = ?,
+                duplicate_rows = ?,
+                rejected_rows = ?,
+                warnings_json = ?
+            WHERE id = ?
+            """,
+            (
+                total_rows,
+                imported_rows,
+                duplicate_rows,
+                rejected_rows,
+                json.dumps(warnings),
+                batch_id,
+            ),
+        )
+        conn.commit()
+
+    return {
+        "db_path": str(path),
+        "batch_id": batch_id,
+        "source_label": source_label,
+        "input_path": str(csv_path),
+        "file_hash": file_hash,
+        "imported_at_utc": imported_at_utc,
+        "dataset_kind": dataset_kind,
+        "data_trust": data_trust,
+        "snapshot_kind": snapshot_kind,
+        "total_rows": total_rows,
+        "imported_rows": imported_rows,
+        "duplicate_rows": duplicate_rows,
+        "rejected_rows": rejected_rows,
+        "warnings": warnings,
+    }
+
+
+def _maybe_read_underlying_prices(
+    input_path: str | Path | None,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict[str, float]:
+    if not input_path:
+        return {}
+    frame = pd.read_parquet(input_path)
+    if frame.empty:
+        return {}
+
+    date_column = None
+    for candidate in ("date", "Date", "timestamp"):
+        if candidate in frame.columns:
+            date_column = candidate
+            break
+    close_column = None
+    for candidate in ("close", "Close", "adj_close", "adjusted_close"):
+        if candidate in frame.columns:
+            close_column = candidate
+            break
+    if date_column is None or close_column is None:
+        return {}
+
+    frame = frame[[date_column, close_column]].copy()
+    frame["quote_date_et"] = pd.to_datetime(frame[date_column], utc=False, errors="coerce").dt.date.astype(str)
+    frame["underlying_price"] = pd.to_numeric(frame[close_column], errors="coerce")
+    frame = frame.dropna(subset=["quote_date_et", "underlying_price"])
+    if date_from is not None:
+        frame = frame.loc[frame["quote_date_et"] >= date_from.isoformat()]
+    if date_to is not None:
+        frame = frame.loc[frame["quote_date_et"] <= date_to.isoformat()]
+    if frame.empty:
+        return {}
+    return {
+        str(row["quote_date_et"]): float(row["underlying_price"])
+        for _, row in frame.iterrows()
+    }
+
+
+def _iter_daily_parquet_records(
+    parquet_path: Path,
+    *,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    batch_size: int = 50_000,
+) -> Iterable[dict[str, Any]]:
+    parquet_file = pq.ParquetFile(parquet_path)
+    preferred_columns = [
+        "contract_id",
+        "contract_symbol",
+        "contractSymbol",
+        "symbol",
+        "underlying",
+        "expiration",
+        "expiry",
+        "strike",
+        "type",
+        "option_type",
+        "date",
+        "bid",
+        "ask",
+        "last",
+        "mark",
+        "volume",
+        "open_interest",
+        "implied_volatility",
+        "iv",
+    ]
+    columns = [column for column in preferred_columns if column in parquet_file.schema.names]
+    for batch in parquet_file.iter_batches(batch_size=batch_size, columns=columns):
+        frame = batch.to_pandas()
+        if frame.empty:
+            continue
+        if "date" not in frame.columns:
+            if "Date" in frame.columns:
+                frame["date"] = frame["Date"]
+            elif "timestamp" in frame.columns:
+                frame["date"] = frame["timestamp"]
+        if "date" not in frame.columns:
+            for row in frame.to_dict(orient="records"):
+                yield row
+            continue
+        parsed_dates = pd.to_datetime(frame["date"], utc=False, errors="coerce").dt.date
+        frame = frame.assign(_parsed_date=parsed_dates)
+        frame = frame.dropna(subset=["_parsed_date"])
+        if date_from is not None:
+            frame = frame.loc[frame["_parsed_date"] >= date_from]
+        if date_to is not None:
+            frame = frame.loc[frame["_parsed_date"] <= date_to]
+        if frame.empty:
+            continue
+        frame = frame.drop(columns=["_parsed_date"])
+        for row in frame.to_dict(orient="records"):
+            yield row
+
+
+def import_daily_option_parquet(
+    input_path: str | Path,
+    source_label: str,
+    *,
+    underlying: str | None = None,
+    underlying_input: str | Path | None = None,
+    dataset_kind: str = "daily_parquet",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    parquet_path = Path(input_path)
+    if not parquet_path.exists():
+        raise FileNotFoundError(f"No daily options parquet found at {parquet_path}")
+
+    path = init_schema(db_path)
+    file_hash = _file_sha256(parquet_path)
+    imported_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    data_trust = _infer_data_trust(source_label, parquet_path, dataset_kind)
+    total_rows = 0
+    imported_rows = 0
+    duplicate_rows = 0
+    rejected_rows = 0
+    warnings: list[str] = []
+
+    underlying_prices = _maybe_read_underlying_prices(
+        underlying_input,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
+    with closing(_sqlite_connect(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO import_batches (
+                source_label,
+                dataset_kind,
+                data_trust,
+                input_path,
+                file_hash,
+                imported_at_utc,
+                total_rows,
+                imported_rows,
+                duplicate_rows,
+                rejected_rows,
+                warnings_json
+            ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, 0, '[]')
+            """,
+            (
+                str(source_label or "").strip() or "daily_parquet_import",
+                str(dataset_kind or "daily_parquet").strip() or "daily_parquet",
+                data_trust,
+                str(parquet_path),
+                file_hash,
+                imported_at_utc,
+            ),
+        )
+        batch_id = int(cursor.lastrowid)
+
+        row_index = 1
+        saw_rows = False
+        for raw_row in _iter_daily_parquet_records(
+            parquet_path,
+            date_from=date_from,
+            date_to=date_to,
+        ):
+            row_index += 1
+            saw_rows = True
+            total_rows += 1
+            try:
+                row_underlying = _normalize_underlying(raw_row.get("symbol") or raw_row.get("underlying") or underlying)
+                trade_date = _parse_date(raw_row.get("date"), "date")
+                expiry = _parse_date(raw_row.get("expiration") or raw_row.get("expiry"), "expiration")
+                option_type = _normalize_option_type(raw_row.get("type") or raw_row.get("option_type"))
+                strike = _parse_float(raw_row.get("strike"), field_name="strike", required=True)
+                contract_symbol = _normalize_contract_symbol(
+                    raw_row.get("contract_id")
+                    or raw_row.get("contract_symbol")
+                    or raw_row.get("contractSymbol")
+                )
+                as_of_utc = _build_as_of_utc_for_quote_date(trade_date, DAILY_QUOTE_MINUTE_ET)
+                normalized = {
+                    "as_of_utc": as_of_utc.isoformat().replace("+00:00", "Z"),
+                    "quote_date_et": trade_date.isoformat(),
+                    "quote_minute_et": DAILY_QUOTE_MINUTE_ET,
+                    "snapshot_kind": DAILY_SNAPSHOT_KIND,
+                    "underlying": row_underlying,
+                    "contract_symbol": contract_symbol,
+                    "expiry": expiry.isoformat(),
+                    "option_type": option_type,
+                    "strike": strike,
+                    "bid": _parse_float(raw_row.get("bid"), field_name="bid"),
+                    "ask": _parse_float(raw_row.get("ask"), field_name="ask"),
+                    "last": _parse_float(raw_row.get("last"), field_name="last"),
+                    "iv": _parse_float(raw_row.get("implied_volatility") or raw_row.get("iv"), field_name="iv"),
+                    "underlying_price": underlying_prices.get(trade_date.isoformat()),
+                    "volume": _parse_int(raw_row.get("volume"), field_name="volume"),
+                    "open_interest": _parse_int(raw_row.get("open_interest"), field_name="open_interest"),
+                }
+            except Exception as exc:
+                rejected_rows += 1
+                if len(warnings) < 20:
+                    warnings.append(f"Row {row_index}: {exc}")
+                continue
+
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO option_quote_snapshots (
+                    as_of_utc,
+                    quote_date_et,
+                    quote_minute_et,
+                    snapshot_kind,
+                    underlying,
+                    contract_symbol,
+                    expiry,
+                    option_type,
+                    strike,
+                    bid,
+                    ask,
+                    last,
+                    iv,
+                    underlying_price,
+                    volume,
+                    open_interest,
+                    source_batch_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized["as_of_utc"],
+                    normalized["quote_date_et"],
+                    normalized["quote_minute_et"],
+                    normalized["snapshot_kind"],
+                    normalized["underlying"],
+                    normalized["contract_symbol"],
+                    normalized["expiry"],
+                    normalized["option_type"],
+                    normalized["strike"],
+                    normalized["bid"],
+                    normalized["ask"],
+                    normalized["last"],
+                    normalized["iv"],
+                    normalized["underlying_price"],
+                    normalized["volume"],
+                    normalized["open_interest"],
+                    batch_id,
+                ),
+            )
+            if cursor.rowcount > 0:
+                imported_rows += 1
+            else:
+                duplicate_rows += 1
+
+        if not saw_rows:
+            raise ValueError("The parquet file contained no option rows for the selected date range.")
+
+        cursor.execute(
+            """
+            UPDATE import_batches
+            SET total_rows = ?,
+                imported_rows = ?,
+                duplicate_rows = ?,
+                rejected_rows = ?,
+                warnings_json = ?
+            WHERE id = ?
+            """,
+            (
+                total_rows,
+                imported_rows,
+                duplicate_rows,
+                rejected_rows,
+                json.dumps(warnings),
+                batch_id,
+            ),
+        )
+        conn.commit()
+
+    return {
+        "db_path": str(path),
+        "batch_id": batch_id,
+        "source_label": source_label,
+        "input_path": str(parquet_path),
+        "file_hash": file_hash,
+        "imported_at_utc": imported_at_utc,
+        "dataset_kind": dataset_kind,
+        "data_trust": data_trust,
+        "snapshot_kind": DAILY_SNAPSHOT_KIND,
+        "date_from": date_from.isoformat() if isinstance(date_from, date) else None,
+        "date_to": date_to.isoformat() if isinstance(date_to, date) else None,
+        "total_rows": total_rows,
+        "imported_rows": imported_rows,
+        "duplicate_rows": duplicate_rows,
+        "rejected_rows": rejected_rows,
+        "warnings": warnings,
+    }
+
+
+class HistoricalOptionsStore:
+    def __init__(self, db_path: str | Path | None = None):
+        self.db_path = Path(db_path) if db_path else _db_path()
+        init_schema(self.db_path)
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = _sqlite_connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+    def has_quotes(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> bool:
+        with closing(self._connect()) as conn:
+            query = """
+                SELECT 1
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+            """
+            clauses: list[str] = []
+            params: list[Any] = []
+            if snapshot_kind:
+                clauses.append("q.snapshot_kind = ?")
+                params.append(str(snapshot_kind))
+            if trusted_only:
+                clauses.append("b.data_trust = ?")
+                params.append(TRUSTED_DATA_TRUST)
+            if clauses:
+                query += f" WHERE {' AND '.join(clauses)}"
+            query += " LIMIT 1"
+            row = conn.execute(query, tuple(params)).fetchone()
+        return row is not None
+
+    def list_available_underlyings(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> list[str]:
+        with closing(self._connect()) as conn:
+            query = """
+                SELECT DISTINCT q.underlying
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+            """
+            clauses: list[str] = []
+            params: list[Any] = []
+            if snapshot_kind:
+                clauses.append("q.snapshot_kind = ?")
+                params.append(str(snapshot_kind))
+            if trusted_only:
+                clauses.append("b.data_trust = ?")
+                params.append(TRUSTED_DATA_TRUST)
+            if clauses:
+                query += f" WHERE {' AND '.join(clauses)}"
+            query += " ORDER BY q.underlying"
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [str(row["underlying"]) for row in rows]
+
+    def available_quote_dates(
+        self,
+        underlying: str,
+        *,
+        snapshot_kind: str | None = None,
+        trusted_only: bool = False,
+    ) -> list[str]:
+        with closing(self._connect()) as conn:
+            query = """
+                SELECT DISTINCT q.quote_date_et
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+            """
+            clauses: list[str] = ["q.underlying = ?"]
+            params: list[Any] = [_normalize_underlying(underlying)]
+            if snapshot_kind:
+                clauses.append("q.snapshot_kind = ?")
+                params.append(str(snapshot_kind))
+            if trusted_only:
+                clauses.append("b.data_trust = ?")
+                params.append(TRUSTED_DATA_TRUST)
+            query += f" WHERE {' AND '.join(clauses)}"
+            query += " ORDER BY q.quote_date_et"
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [str(row["quote_date_et"]) for row in rows]
+
+    def shared_quote_dates(
+        self,
+        underlyings: Sequence[str],
+        *,
+        snapshot_kind: str | None = None,
+        trusted_only: bool = False,
+    ) -> list[str]:
+        normalized_underlyings = sorted(
+            {
+                _normalize_underlying(underlying)
+                for underlying in underlyings
+                if str(underlying or "").strip()
+            }
+        )
+        if not normalized_underlyings:
+            return []
+        if len(normalized_underlyings) == 1:
+            return self.available_quote_dates(
+                normalized_underlyings[0],
+                snapshot_kind=snapshot_kind,
+                trusted_only=trusted_only,
+            )
+
+        placeholders = ", ".join("?" for _ in normalized_underlyings)
+        with closing(self._connect()) as conn:
+            query = f"""
+                SELECT q.quote_date_et
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                WHERE q.underlying IN ({placeholders})
+            """
+            params: list[Any] = list(normalized_underlyings)
+            if snapshot_kind:
+                query += " AND q.snapshot_kind = ?"
+                params.append(str(snapshot_kind))
+            if trusted_only:
+                query += " AND b.data_trust = ?"
+                params.append(TRUSTED_DATA_TRUST)
+            query += """
+                GROUP BY q.quote_date_et
+                HAVING COUNT(DISTINCT q.underlying) = ?
+                ORDER BY q.quote_date_et
+            """
+            params.append(len(normalized_underlyings))
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [str(row["quote_date_et"]) for row in rows]
+
+    def summarize_imports(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> dict[str, Any]:
+        with closing(self._connect()) as conn:
+            clauses: list[str] = []
+            params: list[Any] = []
+            if snapshot_kind:
+                clauses.append("q.snapshot_kind = ?")
+                params.append(str(snapshot_kind))
+            if trusted_only:
+                clauses.append("b.data_trust = ?")
+                params.append(TRUSTED_DATA_TRUST)
+            where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+            row = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS quote_rows,
+                    COUNT(DISTINCT b.id) AS batch_count,
+                    GROUP_CONCAT(DISTINCT b.source_label) AS source_labels,
+                    GROUP_CONCAT(DISTINCT b.dataset_kind) AS dataset_kinds,
+                    GROUP_CONCAT(DISTINCT b.data_trust) AS trust_levels
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                {where_sql}
+                """,
+                tuple(params),
+            ).fetchone()
+        source_labels = [item for item in str(row["source_labels"] if row else "").split(",") if item]
+        dataset_kinds = [item for item in str(row["dataset_kinds"] if row else "").split(",") if item]
+        trust_levels = [item for item in str(row["trust_levels"] if row else "").split(",") if item]
+        return {
+            "quote_rows": int(row["quote_rows"] if row else 0),
+            "batch_count": int(row["batch_count"] if row else 0),
+            "source_labels": source_labels,
+            "dataset_kinds": dataset_kinds,
+            "trust_levels": trust_levels,
+            "trusted_only": trusted_only,
+            "snapshot_kind": snapshot_kind,
+        }
+
+    def snapshot_summary(self, snapshot_kind: str, *, trusted_only: bool = False) -> dict[str, Any]:
+        normalized_snapshot_kind = str(snapshot_kind)
+        with closing(self._connect()) as conn:
+            params: list[Any] = [normalized_snapshot_kind]
+            trust_clause = ""
+            if trusted_only:
+                trust_clause = " AND b.data_trust = ?"
+                params.append(TRUSTED_DATA_TRUST)
+            row = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS quote_count,
+                    COUNT(DISTINCT source_batch_id) AS batch_count,
+                    MIN(as_of_utc) AS earliest_quote_at_utc,
+                    MAX(as_of_utc) AS latest_quote_at_utc,
+                    MAX(b.imported_at_utc) AS latest_imported_at_utc,
+                    GROUP_CONCAT(DISTINCT b.source_label) AS source_labels,
+                    GROUP_CONCAT(DISTINCT b.dataset_kind) AS dataset_kinds,
+                    GROUP_CONCAT(DISTINCT b.data_trust) AS trust_levels
+                FROM option_quote_snapshots q
+                LEFT JOIN import_batches b
+                  ON b.id = q.source_batch_id
+                WHERE q.snapshot_kind = ?
+                {trust_clause}
+                """,
+                tuple(params),
+            ).fetchone()
+
+        quote_count = int((row["quote_count"] if row else 0) or 0)
+        return {
+            "db_path": str(self.db_path),
+            "snapshot_kind": normalized_snapshot_kind,
+            "quote_count": quote_count,
+            "batch_count": int((row["batch_count"] if row else 0) or 0),
+            "earliest_quote_at_utc": str((row["earliest_quote_at_utc"] if row else None) or "") or None,
+            "latest_quote_at_utc": str((row["latest_quote_at_utc"] if row else None) or "") or None,
+            "latest_imported_at_utc": str((row["latest_imported_at_utc"] if row else None) or "") or None,
+            "available_underlyings": self.list_available_underlyings(
+                snapshot_kind=normalized_snapshot_kind,
+                trusted_only=trusted_only,
+            ),
+            "source_labels": [item for item in str((row["source_labels"] if row else "") or "").split(",") if item],
+            "dataset_kinds": [item for item in str((row["dataset_kinds"] if row else "") or "").split(",") if item],
+            "trust_levels": [item for item in str((row["trust_levels"] if row else "") or "").split(",") if item],
+            "trusted_only": trusted_only,
+        }
+
+    def get_exact_quote(
+        self,
+        *,
+        quote_date_et: str | date,
+        contract_symbol: str | None = None,
+        underlying: str | None = None,
+        expiry: str | date | None = None,
+        option_type: str | None = None,
+        strike: float | None = None,
+        prefer_latest: bool = True,
+        snapshot_kind: str | None = None,
+        allow_last_price: bool = True,
+    ) -> Optional[HistoricalQuote]:
+        quote_date_text = quote_date_et.isoformat() if isinstance(quote_date_et, date) else str(quote_date_et)[:10]
+        clauses = ["quote_date_et = ?"]
+        params: list[Any] = [quote_date_text]
+        if snapshot_kind:
+            clauses.append("snapshot_kind = ?")
+            params.append(str(snapshot_kind))
+        if contract_symbol:
+            clauses.append("contract_symbol = ?")
+            params.append(_normalize_contract_symbol(contract_symbol))
+        else:
+            if not (underlying and expiry and option_type and strike is not None):
+                raise ValueError("Exact tuple match requires underlying, expiry, option_type, and strike.")
+            clauses.extend(
+                [
+                    "underlying = ?",
+                    "expiry = ?",
+                    "option_type = ?",
+                    "ABS(strike - ?) <= 0.0001",
+                ]
+            )
+            params.extend(
+                [
+                    _normalize_underlying(underlying),
+                    expiry.isoformat() if isinstance(expiry, date) else str(expiry)[:10],
+                    _normalize_option_type(option_type),
+                    float(strike),
+                ]
+            )
+
+        order = "DESC" if prefer_latest else "ASC"
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM option_quote_snapshots
+                WHERE {' AND '.join(clauses)}
+                ORDER BY quote_minute_et {order}, as_of_utc {order}
+                """,
+                tuple(params),
+            ).fetchall()
+        for row in rows:
+            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
+            if candidate is not None:
+                return candidate
+        return None
+
+    def find_entry_contract(
+        self,
+        *,
+        underlying: str,
+        trade_date_et: str | date,
+        option_type: str,
+        target_expiry: str | date,
+        target_strike: float,
+        earliest_minute_et: int = ENTRY_QUOTE_MINUTE_ET,
+        window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
+        snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+        allow_last_price: bool = True,
+    ) -> Optional[HistoricalQuote]:
+        quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
+        target_expiry_date = target_expiry if isinstance(target_expiry, date) else date.fromisoformat(str(target_expiry)[:10])
+
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                """
+                SELECT *
+                FROM option_quote_snapshots
+                WHERE underlying = ?
+                  AND snapshot_kind = ?
+                  AND option_type = ?
+                  AND quote_date_et = ?
+                  AND quote_minute_et >= ?
+                  AND quote_minute_et <= ?
+                ORDER BY quote_minute_et ASC, expiry ASC, ABS(strike - ?) ASC, contract_symbol ASC
+                """,
+                (
+                    _normalize_underlying(underlying),
+                    str(snapshot_kind),
+                    _normalize_option_type(option_type),
+                    quote_date_text,
+                    int(earliest_minute_et),
+                    int(earliest_minute_et + window_minutes),
+                    float(target_strike),
+                ),
+            ).fetchall()
+
+        per_contract: dict[str, HistoricalQuote] = {}
+        for row in rows:
+            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
+            if candidate is None:
+                continue
+            per_contract.setdefault(candidate.contract_symbol, candidate)
+
+        ranked = sorted(
+            per_contract.values(),
+            key=lambda item: (
+                abs((date.fromisoformat(item.expiry) - target_expiry_date).days),
+                abs(float(item.strike) - float(target_strike)),
+                item.quote_minute_et,
+                item.contract_symbol,
+            ),
+        )
+        return ranked[0] if ranked else None
+
+    def find_entry_quote_for_contract(
+        self,
+        *,
+        contract_symbol: str,
+        trade_date_et: str | date,
+        earliest_minute_et: int = ENTRY_QUOTE_MINUTE_ET,
+        window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
+        snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+        allow_last_price: bool = True,
+    ) -> Optional[HistoricalQuote]:
+        quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
+        clauses = [
+            "contract_symbol = ?",
+            "snapshot_kind = ?",
+            "quote_date_et = ?",
+        ]
+        params: list[Any] = [
+            _normalize_contract_symbol(contract_symbol),
+            str(snapshot_kind),
+            quote_date_text,
+        ]
+        if str(snapshot_kind) != DAILY_SNAPSHOT_KIND:
+            clauses.extend(
+                [
+                    "quote_minute_et >= ?",
+                    "quote_minute_et <= ?",
+                ]
+            )
+            params.extend(
+                [
+                    int(earliest_minute_et),
+                    int(earliest_minute_et + window_minutes),
+                ]
+            )
+
+        with closing(self._connect()) as conn:
+            rows = conn.execute(
+                f"""
+                SELECT *
+                FROM option_quote_snapshots
+                WHERE {' AND '.join(clauses)}
+                ORDER BY quote_minute_et ASC, as_of_utc ASC
+                """,
+                tuple(params),
+            ).fetchall()
+
+        for row in rows:
+            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
+            if candidate is not None:
+                return candidate
+        return None
+
+    def get_closing_quote(
+        self,
+        *,
+        contract_symbol: str,
+        quote_date_et: str | date,
+        snapshot_kind: str | None = None,
+        allow_last_price: bool = True,
+    ) -> Optional[HistoricalQuote]:
+        return self.get_exact_quote(
+            quote_date_et=quote_date_et,
+            contract_symbol=contract_symbol,
+            prefer_latest=True,
+            snapshot_kind=snapshot_kind,
+            allow_last_price=allow_last_price,
+        )
+
+    def _row_to_quote(self, row: sqlite3.Row, *, allow_last_price: bool = True) -> Optional[HistoricalQuote]:
+        raw = dict(row)
+        normalized = {
+            "bid": _parse_float(raw.get("bid"), field_name="bid"),
+            "ask": _parse_float(raw.get("ask"), field_name="ask"),
+            "last": _parse_float(raw.get("last"), field_name="last"),
+        }
+        price, basis = _quote_price_with_mode(normalized, allow_last_price=allow_last_price)
+        if price is None or basis is None:
+            return None
+        return HistoricalQuote(
+            as_of_utc=str(raw["as_of_utc"]),
+            quote_date_et=str(raw["quote_date_et"]),
+            quote_minute_et=int(raw["quote_minute_et"]),
+            underlying=str(raw["underlying"]),
+            contract_symbol=str(raw["contract_symbol"]),
+            expiry=str(raw["expiry"]),
+            option_type=str(raw["option_type"]),
+            strike=float(raw["strike"]),
+            price=price,
+            price_basis=basis,
+            underlying_price=_parse_float(raw.get("underlying_price"), field_name="underlying_price"),
+            bid=normalized["bid"],
+            ask=normalized["ask"],
+            last=normalized["last"],
+            iv=_parse_float(raw.get("iv"), field_name="iv"),
+            volume=_parse_int(raw.get("volume"), field_name="volume"),
+            open_interest=_parse_int(raw.get("open_interest"), field_name="open_interest"),
+            snapshot_kind=str(raw.get("snapshot_kind") or INTRADAY_SNAPSHOT_KIND),
+        )
+
+
+def load_import_batches(db_path: str | Path | None = None) -> list[dict[str, Any]]:
+    path = Path(db_path) if db_path else _db_path()
+    init_schema(path)
+    with closing(_sqlite_connect(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM import_batches
+            ORDER BY imported_at_utc DESC, id DESC
+            """
+        ).fetchall()
+    batches: list[dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item["warnings"] = json.loads(item.pop("warnings_json") or "[]")
+        item["data_trust"] = _normalize_data_trust(item.get("data_trust"))
+        batches.append(item)
+    return batches
+
+
+def available_quote_dates(
+    underlying: str,
+    *,
+    snapshot_kind: str | None = None,
+    trusted_only: bool = False,
+    db_path: str | Path | None = None,
+) -> list[str]:
+    store = HistoricalOptionsStore(db_path)
+    return store.available_quote_dates(
+        underlying,
+        snapshot_kind=snapshot_kind,
+        trusted_only=trusted_only,
+    )

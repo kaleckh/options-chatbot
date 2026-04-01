@@ -1,0 +1,48 @@
+{
+  "active": [
+    {
+      "slug": "truth-first-validation-phase",
+      "status": "validation_active",
+      "summary": "Validate the frozen champion cohort set under SPY/QQQ synthetic plus imported-daily truth, rolling windows, and forward holdout evidence."
+    }
+  ],
+  "frozen": [
+    {
+      "slug": "baseline-playbook-decomposition",
+      "status": "frozen",
+      "summary": "Broad decomposition ideas are paused while truth-first validation is active."
+    },
+    {
+      "slug": "equity-tech-floor-70",
+      "status": "frozen",
+      "summary": "Threshold search ideas stay frozen until the current champion cohorts finish validation."
+    },
+    {
+      "slug": "equity-direction-floor-80",
+      "status": "frozen",
+      "summary": "Threshold search ideas stay frozen until the current champion cohorts finish validation."
+    },
+    {
+      "slug": "equity-calibrated-expectancy-floor-10",
+      "status": "frozen",
+      "summary": "Threshold search ideas stay frozen until the current champion cohorts finish validation."
+    }
+  ],
+  "historical": [
+    {
+      "slug": "ev7-momentum070-exit-time33",
+      "status": "hold",
+      "summary": "Improved one pessimistic broad lane, but remained block/block overall."
+    },
+    {
+      "slug": "ev7-momentum070-exit-target80",
+      "status": "reject",
+      "summary": "Over-pruned the book and hurt the stronger bullish momentum slice."
+    },
+    {
+      "slug": "ev7-momentum070-exit-time33-target80-trail25-giveback40",
+      "status": "reject",
+      "summary": "Did not preserve the best momentum slice and stayed watch/block."
+    }
+  ]
+}
