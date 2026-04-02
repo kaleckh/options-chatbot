@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import tempfile
@@ -16,9 +17,17 @@ DEFAULT_STATE_FILE_NAME = "profit-loop-state.json"
 DEFAULT_RUN_LEDGER_FILE_NAME = "profit-loop-runs.jsonl"
 LEGACY_REPO_HANDOFF_PATH = ROOT_DIR / "docs" / "autoresearch" / "automation-handoff.json"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_OPERATIONAL_MAX_AGE_HOURS = 2
 DEFAULT_WEEKEND_HOLDOUT_MAX_AGE_DAYS = 3
+DEFAULT_RUN_LEASE_MINUTES = 90
+DEFAULT_CLAIM_LEASE_MINUTES = 180
+
+RUN_STATUSES = {"running", "completed", "failed", "expired"}
+LOOP_EXECUTION_STATUSES = {"healthy", "degraded", "blocked"}
+EVIDENCE_STATUSES = {"trusted", "inconclusive", "untrusted"}
+PROFITABILITY_VERDICTS = {"unproven", "inconclusive", "improved", "regressed"}
+OPEN_STATUSES = {"open", "claimed", "deferred"}
 
 BLOCKER_PRIORITY = {
     "truth_lane_mismatch": 0,
@@ -34,7 +43,6 @@ BLOCKER_PRIORITY = {
     "documentation_only": 5,
 }
 SEVERITY_PRIORITY = {"high": 0, "medium": 1, "low": 2}
-OPEN_STATUSES = {"open", "claimed", "deferred"}
 
 REQUIRED_ISSUE_KEYS = {
     "issue_id",
@@ -53,6 +61,26 @@ REQUIRED_ISSUE_KEYS = {
     "resolved_at",
     "resolution_branch",
     "resolution_commit",
+    "claim_run_id",
+    "claimed_at",
+    "claim_expires_at",
+    "proof_bundle_dir",
+    "proof_commands",
+    "before_after_comparison",
+}
+
+REQUIRED_ACTIVE_RUN_KEYS = {
+    "run_id",
+    "automation_id",
+    "phase",
+    "started_at",
+    "heartbeat_at",
+    "lease_expires_at",
+    "status",
+    "commit_sha",
+    "env_hash",
+    "proof_bundle_dir",
+    "state_hash",
 }
 
 SEEDED_ISSUES = [
@@ -148,10 +176,19 @@ def runs_ledger_path(state_dir: str | Path | None = None) -> Path:
     return shared_state_dir(state_dir) / DEFAULT_RUN_LEDGER_FILE_NAME
 
 
+def proof_runs_dir(state_dir: str | Path | None = None) -> Path:
+    return shared_state_dir(state_dir) / "runs"
+
+
+def proof_bundle_dir(run_id: str, *, state_dir: str | Path | None = None) -> Path:
+    return proof_runs_dir(state_dir) / str(run_id).strip()
+
+
 def empty_profit_loop_state() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "updated_at": utc_now_iso(),
+        "active_run": None,
         "latest_operational_health": None,
         "latest_truth_holdout": None,
         "latest_profit_validation": None,
@@ -201,6 +238,55 @@ def _load_json(path: Path) -> dict[str, Any] | None:
         raise ValueError(f"Shared profit-loop state is not valid JSON: {path}") from exc
 
 
+def _infer_loop_execution_status(snapshot: dict[str, Any] | None) -> str:
+    verdict = str((snapshot or {}).get("verdict") or "").strip().lower()
+    if verdict.startswith("blocked"):
+        return "blocked"
+    if verdict in {"degraded-watch", "recorded-no-candidates", "deferred"}:
+        return "degraded"
+    return "healthy"
+
+
+def _infer_evidence_status(snapshot: dict[str, Any] | None) -> str:
+    payload = dict(snapshot or {})
+    if payload.get("loop_execution_status") == "blocked" or _infer_loop_execution_status(payload) == "blocked":
+        return "untrusted"
+    if payload.get("evidence_complete"):
+        return "trusted"
+    return "inconclusive"
+
+
+def _infer_profitability_verdict(snapshot: dict[str, Any] | None) -> str:
+    payload = dict(snapshot or {})
+    verdict = str(payload.get("verdict") or "").strip().lower()
+    if verdict == "resolved":
+        return str(payload.get("profitability_verdict") or "inconclusive").strip().lower() or "inconclusive"
+    return "unproven"
+
+
+def _snapshot_default_fields(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
+    if snapshot is None:
+        return None
+    payload = copy.deepcopy(dict(snapshot))
+    payload.setdefault("loop_execution_status", _infer_loop_execution_status(payload))
+    payload.setdefault("evidence_status", _infer_evidence_status(payload))
+    payload.setdefault("profitability_verdict", _infer_profitability_verdict(payload))
+    payload.setdefault("proof_reuse", [])
+    payload.setdefault("evidence_complete", False)
+    return payload
+
+
+def _migrate_issue(issue: dict[str, Any]) -> dict[str, Any]:
+    migrated = dict(issue or {})
+    migrated.setdefault("claim_run_id", None)
+    migrated.setdefault("claimed_at", None)
+    migrated.setdefault("claim_expires_at", None)
+    migrated.setdefault("proof_bundle_dir", None)
+    migrated.setdefault("proof_commands", [])
+    migrated.setdefault("before_after_comparison", None)
+    return migrated
+
+
 def _normalize_issue(
     issue: dict[str, Any],
     *,
@@ -225,13 +311,15 @@ def _normalize_issue(
     summary = str(payload.get("summary") or base.get("summary") or "").strip()
     if not summary:
         raise ValueError(f"summary is required for issue {issue_id}")
-    evidence = list(payload.get("evidence") or base.get("evidence") or [])
-    suggested_fix_targets = list(payload.get("suggested_fix_targets") or base.get("suggested_fix_targets") or [])
+
     status = str(payload.get("status") or base.get("status") or "open").strip().lower()
     if status not in OPEN_STATUSES | {"resolved"}:
         raise ValueError(f"Unsupported issue status {status!r} for issue {issue_id}")
+
     first_seen = str(payload.get("first_seen_at") or base.get("first_seen_at") or current_time)
     last_seen = str(payload.get("last_seen_at") or current_time)
+    proof_commands = list(payload.get("proof_commands") or base.get("proof_commands") or [])
+    before_after = payload.get("before_after_comparison", base.get("before_after_comparison"))
 
     normalized = {
         "issue_id": issue_id,
@@ -241,8 +329,8 @@ def _normalize_issue(
         "severity": severity,
         "blocker_class": blocker_class,
         "summary": summary,
-        "evidence": [str(item) for item in evidence],
-        "suggested_fix_targets": [str(item) for item in suggested_fix_targets],
+        "evidence": [str(item) for item in list(payload.get("evidence") or base.get("evidence") or [])],
+        "suggested_fix_targets": [str(item) for item in list(payload.get("suggested_fix_targets") or base.get("suggested_fix_targets") or [])],
         "status": status,
         "deferred_reason": payload.get("deferred_reason", base.get("deferred_reason")),
         "next_action": payload.get("next_action", base.get("next_action")),
@@ -250,6 +338,12 @@ def _normalize_issue(
         "resolved_at": payload.get("resolved_at", base.get("resolved_at")),
         "resolution_branch": payload.get("resolution_branch", base.get("resolution_branch")),
         "resolution_commit": payload.get("resolution_commit", base.get("resolution_commit")),
+        "claim_run_id": payload.get("claim_run_id", base.get("claim_run_id")),
+        "claimed_at": payload.get("claimed_at", base.get("claimed_at")),
+        "claim_expires_at": payload.get("claim_expires_at", base.get("claim_expires_at")),
+        "proof_bundle_dir": payload.get("proof_bundle_dir", base.get("proof_bundle_dir")),
+        "proof_commands": [str(item) for item in proof_commands],
+        "before_after_comparison": copy.deepcopy(before_after) if before_after is not None else None,
     }
     missing = REQUIRED_ISSUE_KEYS.difference(normalized.keys())
     if missing:
@@ -257,40 +351,101 @@ def _normalize_issue(
     return normalized
 
 
+def _normalize_active_run(active_run: dict[str, Any] | None) -> dict[str, Any] | None:
+    if active_run is None:
+        return None
+    payload = dict(active_run or {})
+    normalized = {
+        "run_id": str(payload.get("run_id") or "").strip(),
+        "automation_id": str(payload.get("automation_id") or "").strip(),
+        "phase": str(payload.get("phase") or "").strip(),
+        "started_at": str(payload.get("started_at") or "").strip(),
+        "heartbeat_at": str(payload.get("heartbeat_at") or "").strip(),
+        "lease_expires_at": str(payload.get("lease_expires_at") or "").strip(),
+        "status": str(payload.get("status") or "").strip().lower(),
+        "commit_sha": str(payload.get("commit_sha") or "").strip(),
+        "env_hash": str(payload.get("env_hash") or "").strip(),
+        "proof_bundle_dir": str(payload.get("proof_bundle_dir") or "").strip(),
+        "state_hash": str(payload.get("state_hash") or "").strip() or None,
+    }
+    missing = [key for key in REQUIRED_ACTIVE_RUN_KEYS if not normalized.get(key) and key != "state_hash"]
+    if missing:
+        raise ValueError(f"active_run missing keys: {sorted(missing)}")
+    if normalized["status"] not in RUN_STATUSES:
+        raise ValueError(f"Unsupported active_run status: {normalized['status']!r}")
+    normalized.update(
+        {
+            "result_verdict": payload.get("result_verdict"),
+            "loop_execution_status": payload.get("loop_execution_status"),
+            "evidence_status": payload.get("evidence_status"),
+            "profitability_verdict": payload.get("profitability_verdict"),
+        }
+    )
+    return normalized
+
+
+def migrate_profit_loop_state(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("Profit loop state payload must be a dict")
+    version = int(payload.get("schema_version") or 1)
+    if version == SCHEMA_VERSION:
+        migrated = copy.deepcopy(payload)
+    elif version == 1:
+        migrated = copy.deepcopy(payload)
+        migrated["schema_version"] = SCHEMA_VERSION
+        migrated.setdefault("active_run", None)
+        migrated["open_issues"] = [_migrate_issue(dict(issue)) for issue in list(migrated.get("open_issues") or [])]
+        migrated["resolved_issues"] = [_migrate_issue(dict(issue)) for issue in list(migrated.get("resolved_issues") or [])]
+        migrated["latest_operational_health"] = _snapshot_default_fields(migrated.get("latest_operational_health"))
+        migrated["latest_truth_holdout"] = _snapshot_default_fields(migrated.get("latest_truth_holdout"))
+        migrated["latest_profit_validation"] = _snapshot_default_fields(migrated.get("latest_profit_validation"))
+    else:
+        raise ValueError(f"Unsupported schema_version: {payload.get('schema_version')!r}")
+    return migrated
+
+
 def validate_profit_loop_state(payload: dict[str, Any]) -> dict[str, Any]:
+    migrated = migrate_profit_loop_state(payload)
     required_top_level = {
         "schema_version",
         "updated_at",
+        "active_run",
         "latest_operational_health",
         "latest_truth_holdout",
         "latest_profit_validation",
         "open_issues",
         "resolved_issues",
     }
-    missing = required_top_level.difference(payload.keys())
+    missing = required_top_level.difference(migrated.keys())
     if missing:
         raise ValueError(f"Profit loop state missing keys: {sorted(missing)}")
-    if int(payload.get("schema_version") or 0) != SCHEMA_VERSION:
-        raise ValueError(f"Unsupported schema_version: {payload.get('schema_version')!r}")
-    if not isinstance(payload.get("open_issues"), list):
+    if int(migrated.get("schema_version") or 0) != SCHEMA_VERSION:
+        raise ValueError(f"Unsupported schema_version: {migrated.get('schema_version')!r}")
+    if not isinstance(migrated.get("open_issues"), list):
         raise ValueError("open_issues must be a list")
-    if not isinstance(payload.get("resolved_issues"), list):
+    if not isinstance(migrated.get("resolved_issues"), list):
         raise ValueError("resolved_issues must be a list")
 
     normalized = {
         "schema_version": SCHEMA_VERSION,
-        "updated_at": str(payload.get("updated_at") or utc_now_iso()),
-        "latest_operational_health": payload.get("latest_operational_health"),
-        "latest_truth_holdout": payload.get("latest_truth_holdout"),
-        "latest_profit_validation": payload.get("latest_profit_validation"),
+        "updated_at": str(migrated.get("updated_at") or utc_now_iso()),
+        "active_run": _normalize_active_run(migrated.get("active_run")),
+        "latest_operational_health": _snapshot_default_fields(migrated.get("latest_operational_health")),
+        "latest_truth_holdout": _snapshot_default_fields(migrated.get("latest_truth_holdout")),
+        "latest_profit_validation": _snapshot_default_fields(migrated.get("latest_profit_validation")),
         "open_issues": [],
         "resolved_issues": [],
     }
-    for issue in list(payload.get("open_issues") or []):
-        normalized["open_issues"].append(_normalize_issue(dict(issue), existing=None))
-    for issue in list(payload.get("resolved_issues") or []):
+    if "example_only" in migrated:
+        normalized["example_only"] = bool(migrated.get("example_only"))
+    if "notes" in migrated:
+        normalized["notes"] = list(migrated.get("notes") or [])
+
+    for issue in list(migrated.get("open_issues") or []):
+        normalized["open_issues"].append(_normalize_issue(_migrate_issue(dict(issue)), existing=None))
+    for issue in list(migrated.get("resolved_issues") or []):
         normalized["resolved_issues"].append(
-            _normalize_issue(dict(issue) | {"status": "resolved"}, existing=None)
+            _normalize_issue(_migrate_issue(dict(issue)) | {"status": "resolved"}, existing=None)
         )
     return normalized
 
@@ -298,7 +453,7 @@ def validate_profit_loop_state(payload: dict[str, Any]) -> dict[str, Any]:
 def _legacy_seed_payload() -> dict[str, Any]:
     state = empty_profit_loop_state()
     now_iso = utc_now_iso()
-    state["open_issues"] = [_normalize_issue(issue, now_iso=now_iso) for issue in SEEDED_ISSUES]
+    state["open_issues"] = [_normalize_issue(_migrate_issue(issue), now_iso=now_iso) for issue in SEEDED_ISSUES]
     return state
 
 
@@ -308,15 +463,15 @@ def _import_legacy_repo_handoff() -> dict[str, Any] | None:
         return None
     imported = empty_profit_loop_state()
     imported["updated_at"] = str(payload.get("updated_at") or utc_now_iso())
-    imported["latest_operational_health"] = payload.get("latest_operational_health")
-    imported["latest_truth_holdout"] = payload.get("latest_truth_holdout")
-    imported["latest_profit_validation"] = payload.get("latest_profit_validation")
+    imported["latest_operational_health"] = _snapshot_default_fields(payload.get("latest_operational_health"))
+    imported["latest_truth_holdout"] = _snapshot_default_fields(payload.get("latest_truth_holdout"))
+    imported["latest_profit_validation"] = _snapshot_default_fields(payload.get("latest_profit_validation"))
     now_iso = utc_now_iso()
     for issue in list(payload.get("open_issues") or []):
-        imported["open_issues"].append(_normalize_issue(dict(issue), now_iso=now_iso))
+        imported["open_issues"].append(_normalize_issue(_migrate_issue(dict(issue)), now_iso=now_iso))
     for issue in list(payload.get("resolved_issues") or []):
         imported["resolved_issues"].append(
-            _normalize_issue(dict(issue) | {"status": "resolved"}, now_iso=now_iso)
+            _normalize_issue(_migrate_issue(dict(issue)) | {"status": "resolved"}, now_iso=now_iso)
         )
     return imported
 
@@ -334,10 +489,71 @@ def ensure_profit_loop_state(state_dir: str | Path | None = None) -> Path:
     ledger = runs_ledger_path(directory)
     if not ledger.exists():
         ledger.touch()
+    proof_runs_dir(directory).mkdir(parents=True, exist_ok=True)
     path = state_path(directory)
     if not path.exists():
         initialize_profit_loop_state(directory)
     return directory
+
+
+def _state_hash_payload(payload: dict[str, Any]) -> str:
+    hashable = copy.deepcopy(payload)
+    active = dict(hashable.get("active_run") or {})
+    if active:
+        active["state_hash"] = None
+        hashable["active_run"] = active
+    encoded = json.dumps(hashable, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf8")).hexdigest()
+
+
+def _refresh_state_hash(payload: dict[str, Any]) -> dict[str, Any]:
+    active = dict(payload.get("active_run") or {})
+    if active:
+        active["state_hash"] = _state_hash_payload(payload)
+        payload["active_run"] = active
+    return payload
+
+
+def _is_expired(iso_value: str | None, *, now: datetime) -> bool:
+    lease_time = _parse_iso_datetime(iso_value)
+    return lease_time is not None and lease_time <= now
+
+
+def expire_stale_leases(
+    state: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> bool:
+    current_time = now or _utc_now()
+    current_iso = current_time.isoformat().replace("+00:00", "Z")
+    changed = False
+
+    active = dict(state.get("active_run") or {})
+    if active and str(active.get("status") or "").strip().lower() == "running" and _is_expired(
+        active.get("lease_expires_at"), now=current_time
+    ):
+        active["status"] = "expired"
+        active["heartbeat_at"] = current_iso
+        state["active_run"] = active
+        changed = True
+
+    refreshed_open: list[dict[str, Any]] = []
+    for issue in list(state.get("open_issues") or []):
+        normalized = dict(issue)
+        if str(normalized.get("status") or "").strip().lower() == "claimed" and _is_expired(
+            normalized.get("claim_expires_at"), now=current_time
+        ):
+            normalized["status"] = "open"
+            normalized["claim_run_id"] = None
+            normalized["claimed_at"] = None
+            normalized["claim_expires_at"] = None
+            normalized["last_seen_at"] = current_iso
+            changed = True
+        refreshed_open.append(normalized)
+    if changed:
+        state["open_issues"] = refreshed_open
+        state["updated_at"] = current_iso
+    return changed
 
 
 def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any]:
@@ -345,13 +561,22 @@ def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any
     payload = _load_json(state_path(state_dir))
     if payload is None:
         return initialize_profit_loop_state(state_dir)
-    return validate_profit_loop_state(payload)
+    normalized = validate_profit_loop_state(payload)
+    changed = expire_stale_leases(normalized)
+    if changed or int(payload.get("schema_version") or 1) != SCHEMA_VERSION:
+        save_profit_loop_state(normalized, state_dir=state_dir)
+    return normalized
 
 
 def save_profit_loop_state(payload: dict[str, Any], *, state_dir: str | Path | None = None) -> Path:
     normalized = validate_profit_loop_state(payload)
     normalized["updated_at"] = utc_now_iso()
-    return _atomic_write_json(state_path(state_dir), normalized)
+    _refresh_state_hash(normalized)
+    path = _atomic_write_json(state_path(state_dir), normalized)
+    if isinstance(payload, dict):
+        payload.clear()
+        payload.update(copy.deepcopy(normalized))
+    return path
 
 
 def append_run_ledger(event: dict[str, Any], *, state_dir: str | Path | None = None) -> Path:
@@ -413,7 +638,7 @@ def upsert_open_issue(
             existing = dict(resolved_issues.pop(resolved_index))
 
     normalized = _normalize_issue(
-        dict(issue) | {"status": "open", "last_seen_at": current_time},
+        _migrate_issue(dict(issue)) | {"status": "open", "last_seen_at": current_time},
         now_iso=current_time,
         existing=existing,
     )
@@ -429,6 +654,12 @@ def upsert_open_issue(
     normalized["resolved_at"] = None
     normalized["resolution_branch"] = None
     normalized["resolution_commit"] = None
+    normalized["claim_run_id"] = None
+    normalized["claimed_at"] = None
+    normalized["claim_expires_at"] = None
+    normalized["proof_bundle_dir"] = None
+    normalized["proof_commands"] = []
+    normalized["before_after_comparison"] = None
 
     if open_index is not None:
         open_issues[open_index] = normalized
@@ -446,22 +677,34 @@ def claim_issue(
     *,
     now_iso: str | None = None,
     next_action: str | None = None,
+    claim_run_id: str | None = None,
+    claim_ttl_minutes: int = DEFAULT_CLAIM_LEASE_MINUTES,
 ) -> dict[str, Any]:
     current_time = str(now_iso or utc_now_iso())
+    current_dt = _parse_iso_datetime(current_time) or _utc_now()
     open_issues = list(state.get("open_issues") or [])
     index = _find_issue_index(open_issues, issue_id)
     if index is None:
         raise ValueError(f"Cannot claim unknown issue: {issue_id}")
+    existing = dict(open_issues[index])
+    existing_claim_run_id = str(existing.get("claim_run_id") or "").strip() or None
+    if str(existing.get("status") or "").strip().lower() == "claimed" and existing_claim_run_id and existing_claim_run_id != str(claim_run_id or "").strip():
+        if not _is_expired(existing.get("claim_expires_at"), now=current_dt):
+            raise ValueError(f"Issue {issue_id} is already claimed by another active run")
+    claim_expires_at = (current_dt + timedelta(minutes=int(claim_ttl_minutes))).isoformat().replace("+00:00", "Z")
     issue = _normalize_issue(
-        dict(open_issues[index])
+        existing
         | {
             "status": "claimed",
             "last_seen_at": current_time,
             "last_validation_attempt_at": current_time,
-            "next_action": next_action or open_issues[index].get("next_action"),
+            "next_action": next_action or existing.get("next_action"),
+            "claim_run_id": str(claim_run_id or existing.get("claim_run_id") or "").strip() or None,
+            "claimed_at": current_time,
+            "claim_expires_at": claim_expires_at,
         },
         now_iso=current_time,
-        existing=open_issues[index],
+        existing=existing,
     )
     open_issues[index] = issue
     state["open_issues"] = open_issues
@@ -492,6 +735,9 @@ def defer_issue(
             "last_validation_attempt_at": current_time,
             "deferred_reason": str(deferred_reason or "").strip() or "deferred",
             "next_action": str(next_action).strip(),
+            "claim_run_id": None,
+            "claimed_at": None,
+            "claim_expires_at": None,
         },
         now_iso=current_time,
         existing=open_issues[index],
@@ -508,6 +754,9 @@ def resolve_issue(
     *,
     resolution_branch: str,
     resolution_commit: str,
+    proof_bundle_dir: str | None = None,
+    proof_commands: list[str] | None = None,
+    before_after_comparison: dict[str, Any] | None = None,
     now_iso: str | None = None,
 ) -> dict[str, Any]:
     current_time = str(now_iso or utc_now_iso())
@@ -526,6 +775,10 @@ def resolve_issue(
             "resolution_branch": str(resolution_branch or "").strip() or None,
             "resolution_commit": str(resolution_commit or "").strip() or None,
             "deferred_reason": None,
+            "proof_bundle_dir": proof_bundle_dir,
+            "proof_commands": list(proof_commands or []),
+            "before_after_comparison": copy.deepcopy(before_after_comparison) if before_after_comparison is not None else None,
+            "claim_expires_at": None,
         },
         now_iso=current_time,
     )
@@ -545,20 +798,124 @@ def set_latest_snapshot(
 ) -> dict[str, Any]:
     if key not in {"latest_operational_health", "latest_truth_holdout", "latest_profit_validation"}:
         raise ValueError(f"Unsupported latest snapshot key: {key}")
-    state[key] = copy.deepcopy(payload)
+    state[key] = _snapshot_default_fields(copy.deepcopy(payload))
     state["updated_at"] = str(now_iso or utc_now_iso())
     return state
 
 
-def issue_sort_key(issue: dict[str, Any]) -> tuple[int, int, str]:
+def begin_active_run(
+    state: dict[str, Any],
+    *,
+    automation_id: str,
+    phase: str,
+    commit_sha: str,
+    env_hash: str,
+    proof_bundle_dir: str,
+    now_iso: str | None = None,
+    lease_minutes: int = DEFAULT_RUN_LEASE_MINUTES,
+    run_id: str | None = None,
+    allow_replace: bool = False,
+) -> dict[str, Any]:
+    current_time = str(now_iso or utc_now_iso())
+    current_dt = _parse_iso_datetime(current_time) or _utc_now()
+    active = _normalize_active_run(state.get("active_run")) if state.get("active_run") else None
+    if active and active["status"] == "running" and not _is_expired(active.get("lease_expires_at"), now=current_dt):
+        if not allow_replace:
+            raise ValueError(f"Active run already in progress for {active['automation_id']}")
+    run_payload = {
+        "run_id": str(run_id or f"{automation_id}-{current_dt.strftime('%Y%m%dT%H%M%SZ')}"),
+        "automation_id": str(automation_id).strip(),
+        "phase": str(phase).strip(),
+        "started_at": current_time,
+        "heartbeat_at": current_time,
+        "lease_expires_at": (current_dt + timedelta(minutes=int(lease_minutes))).isoformat().replace("+00:00", "Z"),
+        "status": "running",
+        "commit_sha": str(commit_sha or "").strip(),
+        "env_hash": str(env_hash or "").strip(),
+        "proof_bundle_dir": str(proof_bundle_dir or "").strip(),
+        "state_hash": None,
+    }
+    state["active_run"] = _normalize_active_run(run_payload)
+    state["updated_at"] = current_time
+    return copy.deepcopy(state["active_run"])
+
+
+def heartbeat_active_run(
+    state: dict[str, Any],
+    *,
+    run_id: str,
+    phase: str | None = None,
+    now_iso: str | None = None,
+    lease_minutes: int = DEFAULT_RUN_LEASE_MINUTES,
+) -> dict[str, Any]:
+    current_time = str(now_iso or utc_now_iso())
+    current_dt = _parse_iso_datetime(current_time) or _utc_now()
+    active = _normalize_active_run(state.get("active_run"))
+    if active is None or active.get("run_id") != str(run_id).strip():
+        raise ValueError(f"Cannot heartbeat unknown active run: {run_id}")
+    active["heartbeat_at"] = current_time
+    active["lease_expires_at"] = (current_dt + timedelta(minutes=int(lease_minutes))).isoformat().replace("+00:00", "Z")
+    if phase:
+        active["phase"] = str(phase).strip()
+    state["active_run"] = active
+    state["updated_at"] = current_time
+    return copy.deepcopy(active)
+
+
+def complete_active_run(
+    state: dict[str, Any],
+    *,
+    run_id: str,
+    status: str,
+    now_iso: str | None = None,
+    phase: str | None = None,
+    result_verdict: str | None = None,
+    loop_execution_status: str | None = None,
+    evidence_status: str | None = None,
+    profitability_verdict: str | None = None,
+) -> dict[str, Any]:
+    normalized_status = str(status or "").strip().lower()
+    if normalized_status not in RUN_STATUSES.difference({"running"}):
+        raise ValueError(f"Unsupported completed run status: {status!r}")
+    current_time = str(now_iso or utc_now_iso())
+    active = _normalize_active_run(state.get("active_run"))
+    if active is None or active.get("run_id") != str(run_id).strip():
+        raise ValueError(f"Cannot complete unknown active run: {run_id}")
+    active["status"] = normalized_status
+    active["heartbeat_at"] = current_time
+    active["lease_expires_at"] = current_time
+    if phase:
+        active["phase"] = str(phase).strip()
+    if result_verdict is not None:
+        active["result_verdict"] = result_verdict
+    if loop_execution_status is not None:
+        active["loop_execution_status"] = loop_execution_status
+    if evidence_status is not None:
+        active["evidence_status"] = evidence_status
+    if profitability_verdict is not None:
+        active["profitability_verdict"] = profitability_verdict
+    state["active_run"] = active
+    state["updated_at"] = current_time
+    return copy.deepcopy(active)
+
+
+def issue_sort_key(issue: dict[str, Any]) -> tuple[int, int, int, str]:
     blocker_priority = BLOCKER_PRIORITY.get(str(issue.get("blocker_class") or "").strip(), 999)
     severity_priority = SEVERITY_PRIORITY.get(str(issue.get("severity") or "").strip().lower(), 999)
+    status_priority = 0 if str(issue.get("status") or "").strip().lower() == "open" else 1
     first_seen = str(issue.get("first_seen_at") or "")
-    return (blocker_priority, severity_priority, first_seen)
+    return (blocker_priority, severity_priority, status_priority, first_seen)
 
 
-def prioritized_open_issues(state: dict[str, Any]) -> list[dict[str, Any]]:
-    issues = [dict(item) for item in list(state.get("open_issues") or [])]
+def prioritized_open_issues(state: dict[str, Any], *, include_claimed: bool = False) -> list[dict[str, Any]]:
+    issues = []
+    for item in list(state.get("open_issues") or []):
+        status = str(item.get("status") or "").strip().lower()
+        if include_claimed:
+            if status in OPEN_STATUSES:
+                issues.append(dict(item))
+        elif status in {"open", "deferred"}:
+            issues.append(dict(item))
     issues.sort(key=issue_sort_key)
     return issues
 
@@ -577,8 +934,22 @@ def validation_prerequisite_blockers(
     current_time = now or _utc_now()
     blockers: list[dict[str, Any]] = []
 
+    active = _normalize_active_run(state.get("active_run")) if state.get("active_run") else None
+    if active and active["automation_id"] == "daily-profit-validation" and active["status"] == "running":
+        if not _is_expired(active.get("lease_expires_at"), now=current_time):
+            blockers.append(
+                {
+                    "code": "active_profit_validation_run",
+                    "severity": "blocked",
+                    "message": "Daily profit validation already has an active leased run.",
+                    "run_id": active.get("run_id"),
+                    "lease_expires_at": active.get("lease_expires_at"),
+                }
+            )
+
     health = dict(state.get("latest_operational_health") or {})
     health_time = _parse_iso_datetime(health.get("ran_at"))
+    health_status = str(health.get("loop_execution_status") or _infer_loop_execution_status(health)).strip().lower()
     if health_time is None:
         blockers.append(
             {
@@ -597,9 +968,21 @@ def validation_prerequisite_blockers(
                 "allowed_age_hours": int(operational_max_age_hours),
             }
         )
+    elif health_status == "blocked":
+        blockers.append(
+            {
+                "code": "blocked_operational_health",
+                "severity": "blocked",
+                "message": "Operational health is currently blocked, so profit validation cannot trust prerequisites.",
+                "ran_at": health.get("ran_at"),
+                "loop_execution_status": health_status,
+            }
+        )
 
     holdout = dict(state.get("latest_truth_holdout") or {})
     holdout_time = _parse_iso_datetime(holdout.get("ran_at"))
+    holdout_status = str(holdout.get("loop_execution_status") or _infer_loop_execution_status(holdout)).strip().lower()
+    refresh_status = str((((holdout.get("results") or {}).get("daily_truth_refresh") or {}).get("status")) or "").strip().lower()
     if holdout_time is None:
         blockers.append(
             {
@@ -632,4 +1015,29 @@ def validation_prerequisite_blockers(
                         "allowed_age_days": int(weekend_holdout_max_age_days),
                     }
                 )
+    if holdout_status == "blocked" or refresh_status == "failed":
+        blockers.append(
+            {
+                "code": "failed_truth_holdout",
+                "severity": "blocked",
+                "message": "The latest truth holdout snapshot failed or used an untrusted truth refresh.",
+                "ran_at": holdout.get("ran_at"),
+                "loop_execution_status": holdout_status,
+                "daily_truth_refresh_status": refresh_status,
+            }
+        )
+
+    validation = dict(state.get("latest_profit_validation") or {})
+    validation_run_status = str(validation.get("run_status") or "").strip().lower()
+    validation_time = _parse_iso_datetime(validation.get("ran_at"))
+    if validation_run_status == "running" and validation_time is not None:
+        blockers.append(
+            {
+                "code": "stale_profit_validation_snapshot",
+                "severity": "blocked",
+                "message": "The latest profit validation snapshot is still marked running.",
+                "ran_at": validation.get("ran_at"),
+                "run_id": validation.get("run_id"),
+            }
+        )
     return blockers

@@ -1,7 +1,8 @@
 {
   "example_only": true,
-  "schema_version": 1,
+  "schema_version": 2,
   "updated_at": "2026-04-02T18:00:00Z",
+  "active_run": null,
   "latest_operational_health": null,
   "latest_truth_holdout": null,
   "latest_profit_validation": null,
@@ -29,7 +30,13 @@
       "last_validation_attempt_at": null,
       "resolved_at": null,
       "resolution_branch": null,
-      "resolution_commit": null
+      "resolution_commit": null,
+      "claim_run_id": null,
+      "claimed_at": null,
+      "claim_expires_at": null,
+      "proof_bundle_dir": null,
+      "proof_commands": [],
+      "before_after_comparison": null
     }
   ],
   "resolved_issues": []

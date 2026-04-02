@@ -1,7 +1,26 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "updated_at": "2026-04-02T18:00:00Z",
-  "latest_operational_health": null,
+  "active_run": null,
+  "latest_operational_health": {
+    "run_id": "hourly-operational-health-20260402T180000Z",
+    "ran_at": "2026-04-02T18:00:00Z",
+    "verdict": "degraded-watch",
+    "run_status": "completed",
+    "loop_execution_status": "degraded",
+    "evidence_status": "trusted",
+    "profitability_verdict": "unproven",
+    "evidence_complete": true,
+    "proof_reuse": [],
+    "proof_bundle_dir": "%CODEX_HOME%/automations/shared/options-chatbot/runs/hourly-operational-health-20260402T180000Z",
+    "results": {
+      "smoke_passed": true,
+      "unittest_passed": true,
+      "unittest_count": 9,
+      "smoke_scan_truth_lane": "historical_imported_daily",
+      "smoke_live_policy_truth_source": "synthetic_research"
+    }
+  },
   "latest_truth_holdout": null,
   "latest_profit_validation": null,
   "open_issues": [
@@ -28,7 +47,13 @@
       "last_validation_attempt_at": null,
       "resolved_at": null,
       "resolution_branch": null,
-      "resolution_commit": null
+      "resolution_commit": null,
+      "claim_run_id": null,
+      "claimed_at": null,
+      "claim_expires_at": null,
+      "proof_bundle_dir": null,
+      "proof_commands": [],
+      "before_after_comparison": null
     }
   ],
   "resolved_issues": []

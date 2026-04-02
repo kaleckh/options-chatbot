@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
 
     result = run_profit_loop_canary(state_dir=state_dir, dry_run=bool(args.dry_run))
     print(json.dumps(result, indent=2))
-    return 0
+    return int(result.get("exit_code") or 0)
 
 
 if __name__ == "__main__":

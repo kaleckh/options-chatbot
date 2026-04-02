@@ -29,6 +29,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
             {
                 "OPTIONS_PROFIT_STATE_DIR": self.state_dir,
                 "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_db_path,
+                "OPTIONS_DAILY_TRUTH_AUTO_REFRESH": "0",
             },
             clear=False,
         )
@@ -89,7 +90,8 @@ class OptionsProfitCycleTests(unittest.TestCase):
             },
         }
 
-        with patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
              patch("options_profit_flywheel.list_candidate_manifests", return_value=[shadow_candidate]), \
              patch("options_profit_flywheel._load_closed_positions", return_value=[]):
             result = run_options_profit_cycle()
