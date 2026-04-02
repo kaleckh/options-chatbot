@@ -7,7 +7,12 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from forward_options_ledger import list_forward_scan_pick_events, list_forward_sessions
+from forward_options_ledger import (
+    PENDING_TRUTH_STATUS,
+    _measurement_status_for_event,
+    list_forward_scan_pick_events,
+    list_forward_sessions,
+)
 from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
 from options_profit_state import TARGET_SYMBOLS, utc_now_iso
 from wfo_optimizer import (
@@ -134,26 +139,46 @@ def _load_positions_snapshot() -> dict[str, Any]:
 
 
 def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any]:
-    pnls: list[float] = []
+    net_pnls: list[float] = []
+    gross_pnls: list[float] = []
+    net_realized_pnl_usd = 0.0
+    gross_realized_pnl_usd = 0.0
     exact_contract_count = 0
     for position in positions:
-        entry = _safe_float(position.get("entry_option_price"))
-        exit_price = _safe_float(position.get("exit_option_price"))
-        if entry is None or entry <= 0 or exit_price is None:
-            continue
+        net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
+        gross_pnl_pct = _safe_float(position.get("gross_pnl_pct"))
+        if net_pnl_pct is None or gross_pnl_pct is None:
+            entry = _safe_float(position.get("entry_execution_price"))
+            if entry is None:
+                entry = _safe_float(position.get("entry_option_price"))
+            exit_price = _safe_float(position.get("exit_execution_price"))
+            if exit_price is None:
+                exit_price = _safe_float(position.get("exit_option_price"))
+            if entry is None or entry <= 0 or exit_price is None:
+                continue
+            gross_pnl_pct = (exit_price / entry - 1.0) * 100.0
+            net_pnl_pct = gross_pnl_pct
         if str(position.get("contract_symbol") or "").strip():
             exact_contract_count += 1
-        pnls.append((exit_price / entry - 1.0) * 100.0)
-    positive = sum(value for value in pnls if value > 0)
-    negative = abs(sum(value for value in pnls if value < 0))
+        net_pnls.append(net_pnl_pct)
+        gross_pnls.append(gross_pnl_pct)
+        net_realized_pnl_usd += float(_safe_float(position.get("net_pnl_usd")) or 0.0)
+        gross_realized_pnl_usd += float(_safe_float(position.get("gross_pnl_usd")) or 0.0)
+    positive = sum(value for value in net_pnls if value > 0)
+    negative = abs(sum(value for value in net_pnls if value < 0))
     profit_factor = round(positive / negative, 3) if negative > 0 else (999.0 if positive > 0 else None)
     return {
-        "closed_position_count": len(pnls),
+        "closed_position_count": len(net_pnls),
         "exact_contract_closed_count": exact_contract_count,
-        "avg_pnl_pct": round(sum(pnls) / len(pnls), 3) if pnls else None,
+        "avg_pnl_pct": round(sum(net_pnls) / len(net_pnls), 3) if net_pnls else None,
+        "avg_net_pnl_pct": round(sum(net_pnls) / len(net_pnls), 3) if net_pnls else None,
+        "avg_gross_pnl_pct": round(sum(gross_pnls) / len(gross_pnls), 3) if gross_pnls else None,
         "profit_factor": profit_factor,
+        "net_profit_factor": profit_factor,
         "positive_sum_pct": round(positive, 3),
         "negative_sum_pct": round(negative, 3),
+        "net_realized_pnl_usd": round(net_realized_pnl_usd, 2),
+        "gross_realized_pnl_usd": round(gross_realized_pnl_usd, 2),
     }
 
 
@@ -173,11 +198,12 @@ def _load_forward_evidence(
     trusted_truth_horizon = _parse_date(latest_quote_at_utc)
 
     eligible_events: list[dict[str, Any]] = []
+    pending_truth_events: list[dict[str, Any]] = []
     all_events: list[dict[str, Any]] = []
     contamination_findings: list[dict[str, Any]] = []
     stale_metadata_events: list[dict[str, Any]] = []
     by_symbol: dict[str, dict[str, int]] = {
-        symbol: {"eligible": 0, "ineligible": 0}
+        symbol: {"eligible": 0, "pending_truth": 0, "ineligible": 0}
         for symbol in TARGET_SYMBOLS
     }
 
@@ -208,41 +234,60 @@ def _load_forward_evidence(
             or notes.get("promotion_status")
             or ""
         ).strip()
-        entry_date = _parse_date(
-            event.get("entry_date")
-            or event.get("quote_time_et")
-            or event.get("recorded_at_utc")
-        )
-        eligibility_blockers: list[str] = []
+        eligibility_blockers = [
+            str(item or "").strip()
+            for item in list(event.get("eligibility_blockers") or [])
+            if str(item or "").strip()
+        ]
         if evidence_class != LIVE_EVIDENCE_CLASS:
-            eligibility_blockers.append(f"evidence_class:{evidence_class}")
+            blocker = f"evidence_class:{evidence_class}"
+            if blocker not in eligibility_blockers:
+                eligibility_blockers.append(blocker)
         if not bool(notes.get("policy_applied")):
-            eligibility_blockers.append("policy_not_applied")
+            if "policy_not_applied" not in eligibility_blockers:
+                eligibility_blockers.append("policy_not_applied")
         if not truth_source:
-            eligibility_blockers.append("missing_truth_source")
+            if "missing_truth_source" not in eligibility_blockers:
+                eligibility_blockers.append("missing_truth_source")
         if not promotion_status:
-            eligibility_blockers.append("missing_promotion_status")
+            if "missing_promotion_status" not in eligibility_blockers:
+                eligibility_blockers.append("missing_promotion_status")
         if str(notes.get("positions_error") or "").strip():
-            eligibility_blockers.append("positions_error")
+            if "positions_error" not in eligibility_blockers:
+                eligibility_blockers.append("positions_error")
         if quote_freshness_status == "stale":
-            eligibility_blockers.append("stale_quote_metadata")
+            if "stale_quote_metadata" not in eligibility_blockers:
+                eligibility_blockers.append("stale_quote_metadata")
         if not str(event.get("contract_symbol") or "").strip():
-            eligibility_blockers.append("missing_exact_contract")
-        if trusted_truth_horizon and entry_date and entry_date > trusted_truth_horizon:
-            eligibility_blockers.append("outside_trusted_truth_horizon")
+            if "missing_exact_contract" not in eligibility_blockers:
+                eligibility_blockers.append("missing_exact_contract")
+        if _safe_float(event.get("entry_execution_price")) is None:
+            if "missing_executable_entry_quote" not in eligibility_blockers:
+                eligibility_blockers.append("missing_executable_entry_quote")
+        effective_status = _measurement_status_for_event(
+            event,
+            trusted_truth_horizon=trusted_truth_horizon,
+            base_blockers=eligibility_blockers,
+        )
+        if effective_status == PENDING_TRUTH_STATUS:
+            effective_blockers = ["entry_date_beyond_trusted_truth_horizon"]
+        elif effective_status == "eligible":
+            effective_blockers = []
+        else:
+            effective_blockers = list(eligibility_blockers)
 
         normalized_event = dict(event)
         normalized_event["evidence_class"] = evidence_class
         normalized_event["quote_freshness_status"] = quote_freshness_status
         normalized_event["truth_source"] = truth_source or None
         normalized_event["promotion_status"] = promotion_status or None
-        normalized_event["eligibility_blockers"] = list(eligibility_blockers)
-        normalized_event["eligibility_status"] = "eligible" if not eligibility_blockers else "ineligible"
+        normalized_event["eligibility_blockers"] = list(effective_blockers)
+        normalized_event["eligibility_status"] = effective_status
         all_events.append(normalized_event)
 
         symbol = str(event.get("ticker") or "").strip().upper()
         if symbol in by_symbol:
-            bucket = "eligible" if not eligibility_blockers else "ineligible"
+            bucket = effective_status if effective_status in {"eligible", PENDING_TRUTH_STATUS} else "ineligible"
             by_symbol[symbol][bucket] += 1
 
         if evidence_class != LIVE_EVIDENCE_CLASS and source_label:
@@ -263,14 +308,18 @@ def _load_forward_evidence(
                     "quote_time_et": normalized_event.get("quote_time_et"),
                 }
             )
-        if not eligibility_blockers:
+        if effective_status == "eligible":
             eligible_events.append(normalized_event)
+        elif effective_status == PENDING_TRUTH_STATUS:
+            pending_truth_events.append(normalized_event)
 
     return {
         "trusted_truth_horizon": trusted_truth_horizon.isoformat() if trusted_truth_horizon else None,
         "all_events": all_events,
         "eligible_events": eligible_events,
         "eligible_event_count": len(eligible_events),
+        "pending_truth_events": pending_truth_events,
+        "pending_truth_event_count": len(pending_truth_events),
         "contamination_findings": contamination_findings,
         "stale_metadata_events": stale_metadata_events,
         "by_symbol": by_symbol,
@@ -366,6 +415,17 @@ def evaluate_measurement_gate(
             }
         )
 
+    if int(forward_evidence.get("pending_truth_event_count") or 0) > 0:
+        blockers.append(
+            {
+                "code": "pending_truth_horizon",
+                "severity": "pending_truth",
+                "message": "Live forward evidence exists beyond the trusted imported-daily truth horizon and is waiting to mature.",
+                "pending_truth_event_count": int(forward_evidence["pending_truth_event_count"]),
+                "trusted_truth_horizon": forward_evidence.get("trusted_truth_horizon"),
+            }
+        )
+
     if int(forward_evidence["eligible_event_count"]) < int(min_eligible_forward_events):
         blockers.append(
             {
@@ -417,6 +477,8 @@ def evaluate_measurement_gate(
 
     if any(blocker["severity"] == "blocked" for blocker in blockers):
         state = "blocked"
+    elif any(blocker["severity"] == "pending_truth" for blocker in blockers):
+        state = "pending_truth"
     elif blockers:
         state = "degraded-watch"
     else:
@@ -436,6 +498,7 @@ def evaluate_measurement_gate(
             },
             "forward_evidence": {
                 "eligible_event_count": int(forward_evidence["eligible_event_count"]),
+                "pending_truth_event_count": int(forward_evidence.get("pending_truth_event_count") or 0),
                 "required_event_count": int(min_eligible_forward_events),
                 "trusted_truth_horizon": forward_evidence["trusted_truth_horizon"],
                 "truth_staleness_business_days": trusted_truth_staleness,

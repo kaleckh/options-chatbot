@@ -389,6 +389,7 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["suggested_size_reason"] = pick.get("suggested_size_reason")
     normalized["quote_time_et"] = pick.get("quote_time_et")
     normalized["quote_basis"] = pick.get("quote_basis")
+    normalized["quote_freshness_status"] = pick.get("quote_freshness_status")
     normalized["underlying_price_at_selection"] = (
         pick.get("underlying_price_at_selection")
         if pick.get("underlying_price_at_selection") is not None
@@ -406,6 +407,13 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["managed_block_reason"] = pick.get("managed_block_reason")
     normalized["bid"] = pick.get("bid")
     normalized["ask"] = pick.get("ask")
+    normalized["last"] = pick.get("last")
+    normalized["mid"] = pick.get("mid")
+    normalized["entry_execution_price"] = pick.get("entry_execution_price")
+    normalized["entry_execution_basis"] = pick.get("entry_execution_basis")
+    normalized["entry_fee_total_usd"] = pick.get("entry_fee_total_usd")
+    normalized["profitability_eligibility"] = pick.get("profitability_eligibility")
+    normalized["profitability_blockers"] = pick.get("profitability_blockers")
     normalized["candidate_rank"] = pick.get("candidate_rank")
     live_profit_entry = live_profile_entry_for_symbol(str(normalized.get("ticker") or ""))
     if live_profit_entry:
@@ -455,7 +463,7 @@ def _scan_evidence_class() -> str:
         return explicit
     if str(os.getenv("PYTEST_CURRENT_TEST") or "").strip():
         return "e2e_test"
-    return MANUAL_OBSERVATION_EVIDENCE_CLASS
+    return LIVE_PRODUCTION_EVIDENCE_CLASS
 
 
 def _scan_is_fixture() -> bool:
@@ -597,6 +605,73 @@ def _record_forward_truth_for_scan(
         "forward_truth_evidence_class": evidence_class,
         "forward_truth_authoritative": evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS,
     }
+
+
+def _position_event_payload(position: dict[str, Any], *, reason: str) -> dict[str, Any]:
+    payload = copy.deepcopy(position)
+    latest_review = dict(payload.get("latest_review") or {})
+    if not latest_review:
+        latest_review = {
+            "reviewed_at": payload.get("closed_at") or payload.get("last_reviewed_at") or datetime.now().isoformat(),
+            "pricing_source": payload.get("exit_execution_basis") or reason,
+            "current_option_price": payload.get("exit_option_price") or payload.get("last_option_price"),
+            "current_pnl_pct": payload.get("gross_pnl_pct") or payload.get("last_pnl_pct"),
+            "gross_pnl_pct": payload.get("gross_pnl_pct"),
+            "net_pnl_pct": payload.get("net_pnl_pct"),
+            "gross_pnl_usd": payload.get("gross_pnl_usd"),
+            "net_pnl_usd": payload.get("net_pnl_usd"),
+            "entry_execution_price": payload.get("entry_execution_price"),
+            "exit_execution_price": payload.get("exit_execution_price"),
+            "entry_execution_basis": payload.get("entry_execution_basis"),
+            "exit_execution_basis": payload.get("exit_execution_basis") or reason,
+            "fee_total_usd": payload.get("fee_total_usd"),
+            "recommendation": "SELL" if str(payload.get("status") or "").strip().lower() == "closed" else payload.get("last_recommendation"),
+            "reason": reason,
+            "warnings": [],
+            "metrics_snapshot": {},
+        }
+    payload["latest_review"] = latest_review
+    return payload
+
+
+def _record_forward_truth_for_position_events(
+    *,
+    reviewed_positions: list[dict[str, Any]],
+    run_mode: str,
+    reason: str,
+) -> None:
+    if not reviewed_positions:
+        return
+    tracked_positions = None
+    positions_error = None
+    if getattr(POSITIONS_REPOSITORY, "is_available", False):
+        try:
+            tracked_positions = POSITIONS_REPOSITORY.list_positions("all")
+        except Exception as exc:
+            tracked_positions = []
+            positions_error = f"tracked_positions_snapshot_failed: {exc}"
+    else:
+        positions_error = getattr(POSITIONS_REPOSITORY, "error_message", None)
+    evidence_class = _scan_evidence_class()
+    scan_snapshot = build_forward_scan_snapshot(
+        picks=[],
+        policy_applied=True,
+        policy={"truth_source": LIVE_SCAN_TRUTH_LANE, "promotion_status": "observed"},
+        playbook={"id": "tracked_positions"},
+        truth_lane=LIVE_SCAN_TRUTH_LANE,
+        positions_error=positions_error,
+        run_id=_scan_run_id(),
+        run_mode=run_mode,
+        evidence_class=evidence_class,
+        is_fixture=_scan_is_fixture(),
+        policy_artifact_id=reason,
+    )
+    record_forward_snapshot(
+        scan_snapshot=scan_snapshot,
+        reviewed_positions=[_position_event_payload(position, reason=reason) for position in reviewed_positions],
+        tracked_positions=tracked_positions,
+        source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+    )
 
 
 def _forward_evidence_log_path() -> str:
@@ -1158,6 +1233,15 @@ async def review_positions_endpoint(body: dict[str, Any] = {}):
     try:
         position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, POSITIONS_REPOSITORY, position_ids=position_ids)
+        try:
+            await _run_in_worker(
+                _record_forward_truth_for_position_events,
+                reviewed_positions=reviewed,
+                run_mode="positions_review",
+                reason="tracked_positions_review",
+            )
+        except Exception:
+            pass
         return {"positions": reviewed}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
@@ -1186,6 +1270,15 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
         )
         if position is None:
             raise HTTPException(404, f"Tracked position {position_id} was not found")
+        try:
+            await _run_in_worker(
+                _record_forward_truth_for_position_events,
+                reviewed_positions=[position],
+                run_mode="positions_close",
+                reason="manual_close",
+            )
+        except Exception:
+            pass
         return {"position": position}
     except HTTPException:
         raise

@@ -27,7 +27,11 @@
     "daytrading:test": "node --test tests/day-trading/*.test.js",
     "options:smoke": "python scripts/options_algorithm_smoke.py",
     "options:experiments": "python scripts/options_experiment_matrix.py",
-    "options:record": "python scripts/record_options_forward_truth.py --use-recommended-policy"
+    "options:record": "python scripts/record_options_forward_truth.py --use-recommended-policy",
+    "profit-loop:health": "python scripts/automation_operational_health.py --json",
+    "profit-loop:holdout": "python scripts/automation_truth_holdout.py --json",
+    "profit-loop:validate": "python scripts/automation_profit_validation.py --json",
+    "profit-loop:canary": "python scripts/run_profit_loop_canary.py"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

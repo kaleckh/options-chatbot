@@ -3,6 +3,8 @@ import sqlite3
 import tempfile
 import unittest
 from contextlib import closing
+from datetime import date
+from unittest.mock import patch
 
 from forward_options_ledger import (
     init_forward_ledger,
@@ -152,7 +154,10 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
                     is_fixture,
                     quote_freshness_status,
                     eligibility_status,
-                    eligibility_blockers
+                    eligibility_blockers,
+                    entry_execution_price,
+                    entry_execution_basis,
+                    entry_fee_total_usd
                 FROM forward_events
                 WHERE event_type = 'scan_pick'
                 """
@@ -174,12 +179,22 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(row[14], "observed")
         self.assertEqual(row[15], "ineligible")
         self.assertIn("non_live_evidence_class", row[16])
+        self.assertEqual(row[17], 5.1)
+        self.assertEqual(row[18], "ask")
+        self.assertEqual(row[19], 0.65)
 
         summary = summarize_forward_holdout(cohort_id=None, db_path=self.db_path)
         self.assertTrue(summary["available"])
         self.assertEqual(summary["scan_pick_count"], 1)
         self.assertEqual(summary["taken_pick_count"], 1)
         self.assertEqual(summary["review_count"], 1)
+        self.assertEqual(summary["eligible_event_count"], 0)
+        self.assertEqual(summary["pending_truth_event_count"], 0)
+        self.assertFalse(summary["tracked_positions_available"])
+        self.assertEqual(summary["gross_realized_pnl_usd"], 0.0)
+        self.assertEqual(summary["net_realized_pnl_usd"], 0.0)
+        self.assertIsNone(summary["gross_realized_pnl_pct"])
+        self.assertIsNone(summary["net_realized_pnl_pct"])
         self.assertEqual(summary["scan_funnel_totals"]["raw_candidates"], 3)
         self.assertEqual(summary["latest_starvation_stage"], None)
         self.assertEqual(summary["by_symbol"]["SPY"]["scan_pick_count"], 1)
@@ -252,97 +267,113 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertIn("idx_forward_events_cohort", indexes)
 
     def test_eligible_only_filter_returns_only_live_production_contracts(self):
-        record_forward_snapshot(
-            scan_snapshot={
-                "picks": [
-                    {
-                        "ticker": "SPY",
-                        "direction": "call",
-                        "option_type": "call",
-                        "contract_symbol": "SPY260417C00560000",
-                        "expiry": "2026-04-17",
-                        "strike": 560.0,
-                        "quote_time_et": "2026-04-01T09:45:00-04:00",
-                        "quote_basis": "mid",
-                        "selection_source": "live_chain_exact_contract",
-                        "promotion_class": "promotable_exact_contract",
-                    }
-                ],
-                "policy_applied": True,
-                "policy": {
-                    "truth_source": "historical_imported_daily",
-                    "promotion_status": "watch",
+        with patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "SPY",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "SPY260417C00560000",
+                            "expiry": "2026-04-17",
+                            "strike": 560.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "live_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "bid": 4.9,
+                            "ask": 5.1,
+                            "entry_execution_price": 5.1,
+                            "entry_execution_basis": "ask",
+                            "entry_fee_total_usd": 0.65,
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {
+                        "truth_source": "historical_imported_daily",
+                        "promotion_status": "watch",
+                    },
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "live_production",
+                    "run_mode": "live",
                 },
-                "playbook": {"id": "short_term"},
-                "evidence_class": "live_production",
-                "run_mode": "live",
-            },
-            reviewed_positions=[],
-            tracked_positions=[],
-            source_label="api_scan_auto",
-            db_path=self.db_path,
-        )
-        record_forward_snapshot(
-            scan_snapshot={
-                "picks": [
-                    {
-                        "ticker": "QQQ",
-                        "direction": "call",
-                        "option_type": "call",
-                        "contract_symbol": "QQQ260417C00450000",
-                        "expiry": "2026-04-17",
-                        "strike": 450.0,
-                        "quote_time_et": "2026-04-01T09:45:00-04:00",
-                        "quote_basis": "mid",
-                        "selection_source": "fixture_chain_exact_contract",
-                        "promotion_class": "promotable_exact_contract",
-                    }
-                ],
-                "policy_applied": True,
-                "policy": {
-                    "truth_source": "historical_imported_daily",
-                    "promotion_status": "watch",
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="api_scan_auto",
+                db_path=self.db_path,
+            )
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "QQQ",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "QQQ260417C00450000",
+                            "expiry": "2026-04-17",
+                            "strike": 450.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "fixture_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "bid": 3.9,
+                            "ask": 4.1,
+                            "entry_execution_price": 4.1,
+                            "entry_execution_basis": "ask",
+                            "entry_fee_total_usd": 0.65,
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {
+                        "truth_source": "historical_imported_daily",
+                        "promotion_status": "watch",
+                    },
+                    "playbook": {"id": "short_term"},
                 },
-                "playbook": {"id": "short_term"},
-            },
-            reviewed_positions=[],
-            tracked_positions=[],
-            source_label="fixture_smoke",
-            db_path=self.db_path,
-        )
-        record_forward_snapshot(
-            scan_snapshot={
-                "picks": [
-                    {
-                        "ticker": "IWM",
-                        "direction": "put",
-                        "option_type": "put",
-                        "contract_symbol": "IWM260417P00200000",
-                        "expiry": "2026-04-17",
-                        "strike": 200.0,
-                        "quote_time_et": "2026-04-01T09:45:00-04:00",
-                        "quote_basis": "mid",
-                        "selection_source": "live_chain_exact_contract",
-                        "promotion_class": "promotable_exact_contract",
-                        "quote_freshness_status": "stale",
-                    }
-                ],
-                "policy_applied": True,
-                "policy": {
-                    "truth_source": "historical_imported_daily",
-                    "promotion_status": "watch",
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="fixture_smoke",
+                db_path=self.db_path,
+            )
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "IWM",
+                            "direction": "put",
+                            "option_type": "put",
+                            "contract_symbol": "IWM260417P00200000",
+                            "expiry": "2026-04-17",
+                            "strike": 200.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "live_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "quote_freshness_status": "stale",
+                            "bid": 5.8,
+                            "ask": 6.1,
+                            "entry_execution_price": 6.1,
+                            "entry_execution_basis": "ask",
+                            "entry_fee_total_usd": 0.65,
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {
+                        "truth_source": "historical_imported_daily",
+                        "promotion_status": "watch",
+                    },
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "live_production",
                 },
-                "playbook": {"id": "short_term"},
-                "evidence_class": "live_production",
-            },
-            reviewed_positions=[],
-            tracked_positions=[],
-            source_label="api_scan_auto",
-            db_path=self.db_path,
-        )
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="api_scan_auto",
+                db_path=self.db_path,
+            )
 
-        all_events = list_forward_scan_pick_events(db_path=self.db_path)
-        eligible_events = list_forward_scan_pick_events(eligible_only=True, db_path=self.db_path)
+            all_events = list_forward_scan_pick_events(db_path=self.db_path)
+            eligible_events = list_forward_scan_pick_events(eligible_only=True, db_path=self.db_path)
 
         self.assertEqual(len(all_events), 3)
         self.assertEqual(len(eligible_events), 1)
@@ -350,6 +381,57 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(eligible_events[0]["evidence_class"], "live_production")
         self.assertEqual(eligible_events[0]["eligibility_status"], "eligible")
         self.assertEqual(eligible_events[0]["eligibility_blockers"], [])
+
+    def test_pending_truth_events_are_counted_separately_from_eligible_events(self):
+        with patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "SPY",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "SPY260417C00560000",
+                            "expiry": "2026-04-17",
+                            "strike": 560.0,
+                            "quote_time_et": "2026-04-02T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "live_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "bid": 4.9,
+                            "ask": 5.1,
+                            "entry_execution_price": 5.1,
+                            "entry_execution_basis": "ask",
+                            "entry_fee_total_usd": 0.65,
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {
+                        "truth_source": "historical_imported_daily",
+                        "promotion_status": "watch",
+                    },
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "live_production",
+                    "run_mode": "live",
+                },
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="api_scan_auto",
+                db_path=self.db_path,
+            )
+
+            all_events = list_forward_scan_pick_events(db_path=self.db_path)
+            eligible_events = list_forward_scan_pick_events(eligible_only=True, db_path=self.db_path)
+            summary = summarize_forward_holdout(db_path=self.db_path)
+
+        self.assertEqual(len(all_events), 1)
+        self.assertEqual(all_events[0]["eligibility_status"], "pending_truth")
+        self.assertEqual(all_events[0]["eligibility_blockers"], ["entry_date_beyond_trusted_truth_horizon"])
+        self.assertEqual(eligible_events, [])
+        self.assertEqual(summary["eligible_event_count"], 0)
+        self.assertEqual(summary["pending_truth_event_count"], 1)
+        self.assertEqual(summary["by_symbol"]["SPY"]["pending_truth_event_count"], 1)
+        self.assertEqual(summary["by_playbook"]["short_term"]["pending_truth_event_count"], 1)
 
     def test_summary_counts_recorded_sessions_even_when_no_events_exist(self):
         result = record_forward_snapshot(
@@ -396,6 +478,13 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertTrue(overall["available"])
         self.assertEqual(overall["session_count"], 1)
         self.assertEqual(overall["scan_pick_count"], 0)
+        self.assertEqual(overall["eligible_event_count"], 0)
+        self.assertEqual(overall["pending_truth_event_count"], 0)
+        self.assertFalse(overall["tracked_positions_available"])
+        self.assertEqual(overall["gross_realized_pnl_usd"], 0.0)
+        self.assertEqual(overall["net_realized_pnl_usd"], 0.0)
+        self.assertIsNone(overall["gross_realized_pnl_pct"])
+        self.assertIsNone(overall["net_realized_pnl_pct"])
         self.assertEqual(overall["truth_sources_seen"], ["historical_imported_daily"])
         self.assertEqual(overall["scan_funnel_totals"]["raw_candidates"], 4)
         self.assertEqual(overall["sessions_with_zero_scan_picks"], 1)
@@ -407,6 +496,8 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertTrue(cohort_summary["available"])
         self.assertEqual(cohort_summary["session_count"], 1)
         self.assertEqual(cohort_summary["scan_pick_count"], 0)
+        self.assertEqual(cohort_summary["eligible_event_count"], 0)
+        self.assertEqual(cohort_summary["pending_truth_event_count"], 0)
         self.assertEqual(cohort_summary["scan_funnel_totals"]["raw_candidates"], 4)
         self.assertEqual(cohort_summary["latest_starvation_stage"], "guardrails_filtered_all")
 

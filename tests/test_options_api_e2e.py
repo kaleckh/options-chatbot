@@ -146,12 +146,20 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "promotion_class",
             "candidate_rank",
             "quote_basis",
+            "entry_execution_price",
+            "entry_execution_basis",
+            "entry_fee_total_usd",
+            "profitability_eligibility",
+            "profitability_blockers",
         }
         for pick in picks:
             self.assertTrue(required.issubset(pick.keys()))
             self.assertEqual(pick["prediction_type"], "daily_scan")
             self.assertEqual(pick["type"], pick["direction"])
             self.assertIn(pick["type"], {"call", "put"})
+            self.assertEqual(pick["entry_fee_total_usd"], 0.65)
+            self.assertIn(pick["profitability_eligibility"], {"eligible", "ineligible"})
+            self.assertIsInstance(pick["profitability_blockers"], list)
 
         self.assertEqual(
             picks,
@@ -164,8 +172,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["forward_truth_recorded"])
         self.assertIsInstance(payload["forward_truth_session_id"], int)
         self.assertIsNone(payload["forward_truth_error"])
-        self.assertEqual(payload["forward_truth_evidence_class"], "manual_observation")
-        self.assertFalse(payload["forward_truth_authoritative"])
+        self.assertEqual(payload["forward_truth_evidence_class"], "live_production")
+        self.assertTrue(payload["forward_truth_authoritative"])
 
         evidence_response = self.client.get("/api/backtest/forward-evidence")
         self.assertEqual(evidence_response.status_code, 200)
@@ -175,8 +183,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(evidence["authoritative_session_count"], 0)
         self.assertEqual(evidence["scan_pick_count"], 0)
         self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], len(picks))
-        self.assertFalse(evidence["activation_check"]["active"])
-        self.assertEqual(evidence["activation_check"]["status"], "observation_only_latest_scan")
+        self.assertTrue(evidence["activation_check"]["active"])
+        self.assertEqual(evidence["activation_check"]["status"], "active")
         self.assertEqual(evidence["forward_truth_recording_failure_count"], 0)
         self.assertEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 0)
 
@@ -279,11 +287,12 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(payload["candidate_source"], wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE)
         self.assertEqual(payload["evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
 
-    def test_forward_evidence_report_marks_latest_observational_scan_as_non_authoritative(self):
+    def test_forward_evidence_report_marks_latest_authoritative_empty_scan_as_archived_unavailable(self):
         first = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
         self.assertEqual(first.status_code, 200)
         self.assertTrue(first.json()["forward_truth_recorded"])
-        self.assertEqual(first.json()["forward_truth_evidence_class"], "manual_observation")
+        self.assertEqual(first.json()["forward_truth_evidence_class"], "live_production")
+        self.assertTrue(first.json()["forward_truth_authoritative"])
 
         empty_scan_result = {
             "picks": [],
@@ -310,7 +319,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             second = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
         self.assertEqual(second.status_code, 200)
         self.assertTrue(second.json()["forward_truth_recorded"])
-        self.assertEqual(second.json()["forward_truth_evidence_class"], "manual_observation")
+        self.assertEqual(second.json()["forward_truth_evidence_class"], "live_production")
+        self.assertTrue(second.json()["forward_truth_authoritative"])
         self.assertEqual(second.json()["picks"], [])
 
         evidence_response = self.client.get("/api/backtest/forward-evidence")
@@ -319,7 +329,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertFalse(evidence["activation_check"]["active"])
         self.assertEqual(
             evidence["activation_check"]["status"],
-            "observation_only_latest_scan",
+            "archived_forward_unavailable",
         )
         self.assertFalse(evidence["activation_check"]["historical_evidence_available"])
         self.assertEqual(evidence["activation_check"]["latest_recorded_scan_pick_count"], 0)
@@ -1127,7 +1137,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
         self.assertEqual(backtest["total_trades"], 157)
         self.assertEqual(backtest["selection_source_counts"], {"bootstrap_heuristic": 157})
-        self.assertEqual(round(backtest["profit_factor"], 2), 1.10)
+        self.assertEqual(round(backtest["profit_factor"], 2), 1.08)
         self.assertEqual(policy["scan_policy"]["promotion_status"], "block")
         self.assertEqual(len(scan["picks"]), 2)
 

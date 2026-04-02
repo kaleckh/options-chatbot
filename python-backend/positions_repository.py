@@ -6,6 +6,8 @@ import math
 from datetime import date, datetime
 from typing import Any, Optional
 
+from options_execution import commission_total_usd, option_pnl_snapshot
+
 
 def _to_iso(value: Any) -> Any:
     if isinstance(value, (datetime, date)):
@@ -23,6 +25,15 @@ def _normalize_latest_review(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "pricing_source": row.get("pricing_source"),
         "current_option_price": row.get("current_option_price"),
         "current_pnl_pct": row.get("current_pnl_pct"),
+        "gross_pnl_pct": row.get("review_gross_pnl_pct"),
+        "net_pnl_pct": row.get("review_net_pnl_pct"),
+        "gross_pnl_usd": row.get("review_gross_pnl_usd"),
+        "net_pnl_usd": row.get("review_net_pnl_usd"),
+        "entry_execution_price": row.get("review_entry_execution_price"),
+        "exit_execution_price": row.get("review_exit_execution_price"),
+        "entry_execution_basis": row.get("review_entry_execution_basis"),
+        "exit_execution_basis": row.get("review_exit_execution_basis"),
+        "fee_total_usd": row.get("review_fee_total_usd"),
         "recommendation": row.get("recommendation"),
         "reason": row.get("reason"),
         "warnings": copy.deepcopy(row.get("warnings") or []),
@@ -32,6 +43,28 @@ def _normalize_latest_review(row: dict[str, Any]) -> Optional[dict[str, Any]]:
 
 def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     latest_review = _normalize_latest_review(row)
+    gross_pnl_pct = row.get("gross_pnl_pct")
+    net_pnl_pct = row.get("net_pnl_pct")
+    gross_pnl_usd = row.get("gross_pnl_usd")
+    net_pnl_usd = row.get("net_pnl_usd")
+    fee_total_usd = row.get("fee_total_usd")
+    exit_execution_price = row.get("exit_execution_price")
+    exit_execution_basis = row.get("exit_execution_basis")
+    if latest_review is not None:
+        if gross_pnl_pct is None:
+            gross_pnl_pct = latest_review.get("gross_pnl_pct")
+        if net_pnl_pct is None:
+            net_pnl_pct = latest_review.get("net_pnl_pct")
+        if gross_pnl_usd is None:
+            gross_pnl_usd = latest_review.get("gross_pnl_usd")
+        if net_pnl_usd is None:
+            net_pnl_usd = latest_review.get("net_pnl_usd")
+        if fee_total_usd is None:
+            fee_total_usd = latest_review.get("fee_total_usd")
+        if exit_execution_price is None:
+            exit_execution_price = latest_review.get("exit_execution_price")
+        if exit_execution_basis is None:
+            exit_execution_basis = latest_review.get("exit_execution_basis")
     normalized = {
         "id": row["id"],
         "status": row["status"],
@@ -43,6 +76,9 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
         "asset_class": row.get("asset_class"),
         "contracts": row["contracts"],
         "entry_option_price": row["entry_option_price"],
+        "entry_execution_price": row.get("entry_execution_price"),
+        "entry_execution_basis": row.get("entry_execution_basis"),
+        "entry_fee_total_usd": row.get("entry_fee_total_usd"),
         "entry_underlying_price": row.get("entry_underlying_price"),
         "filled_at": _to_iso(row["filled_at"]),
         "stop_loss_pct": row["stop_loss_pct"],
@@ -58,7 +94,14 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
         "notes": row.get("notes"),
         "closed_at": _to_iso(row.get("closed_at")),
         "exit_option_price": row.get("exit_option_price"),
+        "exit_execution_price": exit_execution_price,
+        "exit_execution_basis": exit_execution_basis,
         "exit_reason": row.get("exit_reason"),
+        "gross_pnl_pct": gross_pnl_pct,
+        "net_pnl_pct": net_pnl_pct,
+        "gross_pnl_usd": gross_pnl_usd,
+        "net_pnl_usd": net_pnl_usd,
+        "fee_total_usd": fee_total_usd,
         "created_at": _to_iso(row.get("created_at")),
         "updated_at": _to_iso(row.get("updated_at")),
         "latest_review": latest_review,
@@ -137,6 +180,9 @@ class PostgresTrackedPositionsRepository:
             asset_class TEXT,
             contracts INTEGER NOT NULL,
             entry_option_price DOUBLE PRECISION NOT NULL,
+            entry_execution_price DOUBLE PRECISION,
+            entry_execution_basis TEXT,
+            entry_fee_total_usd DOUBLE PRECISION,
             entry_underlying_price DOUBLE PRECISION,
             filled_at TIMESTAMPTZ NOT NULL,
             stop_loss_pct DOUBLE PRECISION NOT NULL,
@@ -152,13 +198,40 @@ class PostgresTrackedPositionsRepository:
             notes TEXT,
             closed_at TIMESTAMPTZ,
             exit_option_price DOUBLE PRECISION,
+            exit_execution_price DOUBLE PRECISION,
+            exit_execution_basis TEXT,
             exit_reason TEXT,
+            gross_pnl_pct DOUBLE PRECISION,
+            net_pnl_pct DOUBLE PRECISION,
+            gross_pnl_usd DOUBLE PRECISION,
+            net_pnl_usd DOUBLE PRECISION,
+            fee_total_usd DOUBLE PRECISION,
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
         ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS contract_symbol TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS entry_execution_price DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS entry_execution_basis TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS entry_fee_total_usd DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS exit_execution_price DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS gross_pnl_pct DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS net_pnl_pct DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS gross_pnl_usd DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS net_pnl_usd DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;
 
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_status ON tracked_positions (status);
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_filled_at ON tracked_positions (filled_at DESC);
@@ -170,6 +243,15 @@ class PostgresTrackedPositionsRepository:
             pricing_source TEXT,
             current_option_price DOUBLE PRECISION,
             current_pnl_pct DOUBLE PRECISION,
+            gross_pnl_pct DOUBLE PRECISION,
+            net_pnl_pct DOUBLE PRECISION,
+            gross_pnl_usd DOUBLE PRECISION,
+            net_pnl_usd DOUBLE PRECISION,
+            entry_execution_price DOUBLE PRECISION,
+            exit_execution_price DOUBLE PRECISION,
+            entry_execution_basis TEXT,
+            exit_execution_basis TEXT,
+            fee_total_usd DOUBLE PRECISION,
             recommendation TEXT NOT NULL,
             reason TEXT NOT NULL,
             warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -177,7 +259,58 @@ class PostgresTrackedPositionsRepository:
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
 
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS gross_pnl_pct DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS net_pnl_pct DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS gross_pnl_usd DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS net_pnl_usd DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS entry_execution_price DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS exit_execution_price DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS entry_execution_basis TEXT;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS warnings JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS metrics_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+
         CREATE INDEX IF NOT EXISTS idx_position_reviews_position_id ON position_reviews (position_id, reviewed_at DESC);
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS gross_pnl_pct DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS net_pnl_pct DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS gross_pnl_usd DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS net_pnl_usd DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS entry_execution_price DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS exit_execution_price DOUBLE PRECISION;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS entry_execution_basis TEXT;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;
+        ALTER TABLE position_reviews
+        ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;
         """
         try:
             with self._connect() as conn:
@@ -201,6 +334,15 @@ class PostgresTrackedPositionsRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -232,6 +374,15 @@ class PostgresTrackedPositionsRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -268,6 +419,9 @@ class PostgresTrackedPositionsRepository:
                         asset_class,
                         contracts,
                         entry_option_price,
+                        entry_execution_price,
+                        entry_execution_basis,
+                        entry_fee_total_usd,
                         entry_underlying_price,
                         filled_at,
                         stop_loss_pct,
@@ -283,9 +437,42 @@ class PostgresTrackedPositionsRepository:
                         notes,
                         closed_at,
                         exit_option_price,
-                        exit_reason
+                        exit_execution_price,
+                        exit_execution_basis,
+                        exit_reason,
+                        fee_total_usd
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s, %s
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s::jsonb,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s
                     )
                     RETURNING id
                     """,
@@ -299,6 +486,9 @@ class PostgresTrackedPositionsRepository:
                         payload.get("asset_class"),
                         payload["contracts"],
                         payload["entry_option_price"],
+                        payload.get("entry_execution_price"),
+                        payload.get("entry_execution_basis"),
+                        payload.get("entry_fee_total_usd"),
                         payload.get("entry_underlying_price"),
                         payload["filled_at"],
                         payload["stop_loss_pct"],
@@ -314,7 +504,10 @@ class PostgresTrackedPositionsRepository:
                         payload.get("notes"),
                         payload.get("closed_at"),
                         payload.get("exit_option_price"),
+                        payload.get("exit_execution_price"),
+                        payload.get("exit_execution_basis"),
                         payload.get("exit_reason"),
+                        payload.get("fee_total_usd"),
                     ),
                 )
                 row = cur.fetchone()
@@ -339,6 +532,15 @@ class PostgresTrackedPositionsRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -381,12 +583,38 @@ class PostgresTrackedPositionsRepository:
                         pricing_source,
                         current_option_price,
                         current_pnl_pct,
+                        gross_pnl_pct,
+                        net_pnl_pct,
+                        gross_pnl_usd,
+                        net_pnl_usd,
+                        entry_execution_price,
+                        exit_execution_price,
+                        entry_execution_basis,
+                        exit_execution_basis,
+                        fee_total_usd,
                         recommendation,
                         reason,
                         warnings,
                         metrics_snapshot
                     ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s::jsonb
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s::jsonb,
+                        %s::jsonb
                     )
                     """,
                     (
@@ -395,6 +623,15 @@ class PostgresTrackedPositionsRepository:
                         review.get("pricing_source"),
                         review.get("current_option_price"),
                         review.get("current_pnl_pct"),
+                        review.get("gross_pnl_pct"),
+                        review.get("net_pnl_pct"),
+                        review.get("gross_pnl_usd"),
+                        review.get("net_pnl_usd"),
+                        review.get("entry_execution_price"),
+                        review.get("exit_execution_price"),
+                        review.get("entry_execution_basis"),
+                        review.get("exit_execution_basis"),
+                        review.get("fee_total_usd"),
                         review["recommendation"],
                         review["reason"],
                         json.dumps(review.get("warnings") or []),
@@ -410,6 +647,13 @@ class PostgresTrackedPositionsRepository:
                         last_pnl_pct = %s,
                         last_recommendation = %s,
                         last_recommendation_reason = %s,
+                        exit_execution_price = %s,
+                        exit_execution_basis = %s,
+                        gross_pnl_pct = %s,
+                        net_pnl_pct = %s,
+                        gross_pnl_usd = %s,
+                        net_pnl_usd = %s,
+                        fee_total_usd = %s,
                         last_reviewed_at = %s,
                         updated_at = NOW()
                     WHERE id = %s
@@ -420,6 +664,13 @@ class PostgresTrackedPositionsRepository:
                         review.get("current_pnl_pct"),
                         review["recommendation"],
                         review["reason"],
+                        review.get("exit_execution_price"),
+                        review.get("exit_execution_basis"),
+                        review.get("gross_pnl_pct"),
+                        review.get("net_pnl_pct"),
+                        review.get("gross_pnl_usd"),
+                        review.get("net_pnl_usd"),
+                        review.get("fee_total_usd"),
                         review["reviewed_at"],
                         position_id,
                     ),
@@ -442,12 +693,32 @@ class PostgresTrackedPositionsRepository:
                 if not math.isfinite(float(exit_price)) or float(exit_price) <= 0:
                     raise ValueError("exit_price must be a finite number greater than 0.")
 
-                cur.execute("SELECT status FROM tracked_positions WHERE id = %s", (position_id,))
+                cur.execute(
+                    """
+                    SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd
+                    FROM tracked_positions
+                    WHERE id = %s
+                    """,
+                    (position_id,),
+                )
                 status_row = cur.fetchone()
                 if not status_row:
                     return None
                 if str(status_row["status"]) != "open":
                     raise ValueError(f"Tracked position {position_id} is already closed.")
+                contracts = int(status_row.get("contracts") or 1)
+                entry_execution_price = status_row.get("entry_execution_price") or status_row.get("entry_option_price")
+                entry_fee_total_usd = status_row.get("entry_fee_total_usd")
+                if entry_fee_total_usd is None:
+                    entry_fee_total_usd = commission_total_usd(contracts=contracts)
+                exit_fee_total_usd = commission_total_usd(contracts=contracts)
+                pnl_snapshot = option_pnl_snapshot(
+                    entry_execution_price=entry_execution_price,
+                    exit_execution_price=exit_price,
+                    contracts=contracts,
+                    entry_fee_total_usd=entry_fee_total_usd,
+                    exit_fee_total_usd=exit_fee_total_usd,
+                )
 
                 cur.execute(
                     """
@@ -456,7 +727,17 @@ class PostgresTrackedPositionsRepository:
                         status = 'closed',
                         closed_at = %s,
                         exit_option_price = %s,
+                        exit_execution_price = %s,
+                        exit_execution_basis = %s,
                         exit_reason = %s,
+                        last_option_price = %s,
+                        last_pnl_pct = %s,
+                        gross_pnl_pct = %s,
+                        net_pnl_pct = %s,
+                        gross_pnl_usd = %s,
+                        net_pnl_usd = %s,
+                        fee_total_usd = %s,
+                        last_reviewed_at = %s,
                         notes = CASE
                             WHEN %s IS NULL OR %s = '' THEN notes
                             WHEN notes IS NULL OR notes = '' THEN %s
@@ -469,7 +750,17 @@ class PostgresTrackedPositionsRepository:
                     (
                         closed_at,
                         exit_price,
+                        exit_price,
+                        "manual_close",
                         exit_reason,
+                        exit_price,
+                        pnl_snapshot.get("gross_pnl_pct"),
+                        pnl_snapshot.get("gross_pnl_pct"),
+                        pnl_snapshot.get("net_pnl_pct"),
+                        pnl_snapshot.get("gross_pnl_usd"),
+                        pnl_snapshot.get("net_pnl_usd"),
+                        pnl_snapshot.get("fee_total_usd"),
+                        closed_at,
                         notes,
                         notes,
                         notes,
@@ -516,6 +807,15 @@ class MemoryTrackedPositionsRepository:
             "pricing_source": review.get("pricing_source"),
             "current_option_price": review.get("current_option_price"),
             "current_pnl_pct": review.get("current_pnl_pct"),
+            "gross_pnl_pct": review.get("gross_pnl_pct"),
+            "net_pnl_pct": review.get("net_pnl_pct"),
+            "gross_pnl_usd": review.get("gross_pnl_usd"),
+            "net_pnl_usd": review.get("net_pnl_usd"),
+            "entry_execution_price": review.get("entry_execution_price"),
+            "exit_execution_price": review.get("exit_execution_price"),
+            "entry_execution_basis": review.get("entry_execution_basis"),
+            "exit_execution_basis": review.get("exit_execution_basis"),
+            "fee_total_usd": review.get("fee_total_usd"),
             "recommendation": review.get("recommendation"),
             "reason": review.get("reason"),
             "warnings": copy.deepcopy(review.get("warnings") or []),
@@ -568,6 +868,13 @@ class MemoryTrackedPositionsRepository:
         position["last_pnl_pct"] = review.get("current_pnl_pct")
         position["last_recommendation"] = review.get("recommendation")
         position["last_recommendation_reason"] = review.get("reason")
+        position["exit_execution_price"] = review.get("exit_execution_price")
+        position["exit_execution_basis"] = review.get("exit_execution_basis")
+        position["gross_pnl_pct"] = review.get("gross_pnl_pct")
+        position["net_pnl_pct"] = review.get("net_pnl_pct")
+        position["gross_pnl_usd"] = review.get("gross_pnl_usd")
+        position["net_pnl_usd"] = review.get("net_pnl_usd")
+        position["fee_total_usd"] = review.get("fee_total_usd")
         position["last_reviewed_at"] = review.get("reviewed_at")
         position["updated_at"] = review.get("reviewed_at")
         return self.get_position(position_id)  # type: ignore[arg-type]
@@ -587,10 +894,33 @@ class MemoryTrackedPositionsRepository:
             raise ValueError("exit_price must be a finite number greater than 0.")
         if position.get("status") != "open":
             raise ValueError(f"Tracked position {position_id} is already closed.")
+        exit_fee_total_usd = commission_total_usd(contracts=position.get("contracts"))
+        entry_fee_total_usd = (
+            position.get("entry_fee_total_usd")
+            if position.get("entry_fee_total_usd") is not None
+            else commission_total_usd(contracts=position.get("contracts"))
+        )
+        pnl_snapshot = option_pnl_snapshot(
+            entry_execution_price=position.get("entry_execution_price") or position.get("entry_option_price"),
+            exit_execution_price=exit_price,
+            contracts=position.get("contracts"),
+            entry_fee_total_usd=entry_fee_total_usd,
+            exit_fee_total_usd=exit_fee_total_usd,
+        )
         position["status"] = "closed"
         position["closed_at"] = closed_at
         position["exit_option_price"] = exit_price
+        position["exit_execution_price"] = exit_price
+        position["exit_execution_basis"] = "manual_close"
         position["exit_reason"] = exit_reason
+        position["last_option_price"] = exit_price
+        position["last_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
+        position["gross_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
+        position["net_pnl_pct"] = pnl_snapshot.get("net_pnl_pct")
+        position["gross_pnl_usd"] = pnl_snapshot.get("gross_pnl_usd")
+        position["net_pnl_usd"] = pnl_snapshot.get("net_pnl_usd")
+        position["fee_total_usd"] = pnl_snapshot.get("fee_total_usd")
+        position["last_reviewed_at"] = closed_at
         if notes:
             existing = position.get("notes") or ""
             position["notes"] = f"{existing}\n{notes}".strip() if existing else notes

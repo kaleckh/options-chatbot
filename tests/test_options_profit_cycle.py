@@ -57,7 +57,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertEqual(result["decision"]["action"], "no_op")
         self.assertTrue(str(result["decision"].get("reason") or "").startswith("measurement_gate_"))
         status = load_profit_status()
-        self.assertIn(status["measurement_gate"]["state"], {"blocked", "degraded-watch"})
+        self.assertIn(status["measurement_gate"]["state"], {"blocked", "pending_truth", "degraded-watch"})
         self.assertTrue(Path(live_profile_path()).exists())
         incumbents = load_incumbents_state()
         self.assertIn("SPY", incumbents["symbols"])
@@ -72,8 +72,20 @@ class OptionsProfitCycleTests(unittest.TestCase):
             "overrides": {"entry": {"min_tech_score": 88.0}},
             "evaluation": {
                 "replay_gate": {"passes": True, "promotion_status": "promote", "stability_status": "promote"},
-                "forward_exact_contract": {"eligible_trade_count": 30, "avg_pnl_pct": 12.0, "profit_factor": 1.5},
-                "tracked_realized": {"closed_position_count": 4, "avg_pnl_pct": 8.0, "profit_factor": 1.3},
+                "forward_exact_contract": {
+                    "eligible_trade_count": 30,
+                    "avg_pnl_pct": 12.0,
+                    "avg_net_pnl_pct": 11.4,
+                    "profit_factor": 1.5,
+                    "net_profit_factor": 1.45,
+                },
+                "tracked_realized": {
+                    "closed_position_count": 4,
+                    "avg_pnl_pct": 8.0,
+                    "avg_net_pnl_pct": 7.2,
+                    "profit_factor": 1.3,
+                    "net_profit_factor": 1.25,
+                },
             },
         }
 

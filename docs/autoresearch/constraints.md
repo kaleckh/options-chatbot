@@ -11,6 +11,8 @@
 
 This repo's autoresearch loop is research-only. It is meant to test one narrow deterministic hypothesis at a time and produce evidence for a human review decision.
 
+These constraints do not govern the unattended profit-loop automations. The profit loop has a separate contract at `docs/profit-loop/contract.md` and may record deterministic infra/data/guardrail fixes when its own policy allows it.
+
 Autoresearch 2.0 has two modes:
 
 - `search`: test one narrow challenger against a compatible control frame

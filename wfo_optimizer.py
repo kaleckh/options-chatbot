@@ -81,6 +81,7 @@ from historical_options_store import (
     INTRADAY_SNAPSHOT_KIND,
     TRUSTED_DATA_TRUST,
 )
+from options_execution import DEFAULT_COMMISSION_PER_CONTRACT_USD, executable_option_price, long_option_pnl
 
 try:
     import optuna
@@ -2490,6 +2491,8 @@ def run_archived_forward_daily_backtest(
             archived_quote_basis=pick.get("quote_basis"),
             archived_underlying_price_at_selection=pick.get("underlying_price_at_selection"),
             archived_selection_source=pick.get("selection_source"),
+            entry_slippage_pct=float(ticker_profile.get("filters", {}).get("entry_slippage_pct", 0.0)),
+            exit_slippage_pct=float(ticker_profile.get("filters", {}).get("exit_slippage_pct", 0.0)),
         )
 
         trade = {
@@ -4737,7 +4740,15 @@ def _simulate_trade_outcome_hist(
             exit_day_idx = fi
             break
 
-    pnl = (exit_px - entry_px) / entry_px * 100
+    pnl_snapshot = long_option_pnl(
+        entry_execution_price=entry_px,
+        exit_execution_price=exit_px,
+        contracts=1,
+        commission_per_contract_usd=DEFAULT_COMMISSION_PER_CONTRACT_USD,
+        include_entry_fee=True,
+        include_exit_fee=True,
+    )
+    pnl = float(pnl_snapshot.get("net_pnl_pct") or 0.0)
     stock_move_pct = (exit_stock_px / S0 - 1.0) * 100 if S0 > 0 else 0.0
     directional_correct = (
         (trade_type == "call" and stock_move_pct > 0)
@@ -4747,6 +4758,13 @@ def _simulate_trade_outcome_hist(
         "entry_px":    round(entry_px,   4),
         "exit_px":     round(exit_px,    4),
         "pnl_pct":     round(pnl,        2),
+        "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
+        "net_pnl_pct": pnl_snapshot.get("net_pnl_pct"),
+        "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
+        "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
+        "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
+        "entry_fee_total_usd": pnl_snapshot.get("entry_fee_total_usd"),
+        "exit_fee_total_usd": pnl_snapshot.get("exit_fee_total_usd"),
         "exit_reason": exit_reason,
         "exit_fill_basis": exit_fill_basis,
         "strike":      round(best_strike, 2),
@@ -4832,6 +4850,9 @@ def _simulate_trade_outcome_imported(
     archived_quote_basis: Optional[str] = None,
     archived_underlying_price_at_selection: Optional[float] = None,
     archived_selection_source: Optional[str] = None,
+    entry_slippage_pct: float = 0.0,
+    exit_slippage_pct: float = 0.0,
+    commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
 ) -> dict:
     normalized_truth_source = str(truth_source or IMPORTED_TRUTH_SOURCE).strip().lower() or IMPORTED_TRUTH_SOURCE
     n = len(prices)
@@ -4907,7 +4928,16 @@ def _simulate_trade_outcome_imported(
             "requested_contract_symbol": normalized_archived_contract,
         }
 
-    entry_px = float(entry_quote.price)
+    entry_execution = executable_option_price(
+        side="entry",
+        bid=entry_quote.bid,
+        ask=entry_quote.ask,
+        last=entry_quote.last,
+        slippage_pct=entry_slippage_pct,
+        quote_freshness_status="fresh",
+        allow_research_fallback=False,
+    )
+    entry_px = float(entry_execution.get("execution_price") or 0.0)
     if entry_px <= 0:
         return {
             "priced": False,
@@ -4942,7 +4972,7 @@ def _simulate_trade_outcome_imported(
 
     exit_px = entry_px
     exit_reason = "unpriced"
-    exit_fill_basis = f"historical_{entry_quote.price_basis}"
+    exit_fill_basis = f"historical_{entry_execution.get('execution_basis') or entry_quote.price_basis}"
     exit_stock_px = S0
     exit_day_idx = i
     exit_quote_at_utc = entry_quote.as_of_utc
@@ -5000,10 +5030,32 @@ def _simulate_trade_outcome_imported(
                 "contract_selection_source": contract_selection_source,
             }
 
-        opt_now = float(quote.price)
-        exit_fill_basis = f"historical_{quote.price_basis}"
+        exit_execution = executable_option_price(
+            side="exit",
+            bid=quote.bid,
+            ask=quote.ask,
+            last=quote.last,
+            slippage_pct=exit_slippage_pct,
+            quote_freshness_status="fresh",
+            allow_research_fallback=False,
+        )
+        opt_now = float(exit_execution.get("execution_price") or 0.0)
+        exit_fill_basis = f"historical_{exit_execution.get('execution_basis') or quote.price_basis}"
         exit_quote_at_utc = quote.as_of_utc
         exit_quote_minute_et = quote.quote_minute_et
+        if opt_now <= 0:
+            return {
+                "priced": False,
+                "unpriced_reason": "invalid_exit_quote",
+                "entry_day_idx": i,
+                "truth_source": normalized_truth_source,
+                "pricing_lane": normalized_truth_source,
+                "contract_symbol": entry_quote.contract_symbol,
+                "entry_quote_at_utc": entry_quote.as_of_utc,
+                "entry_quote_basis": entry_quote.price_basis,
+                "entry_contract_resolution": contract_resolution,
+                "contract_selection_source": contract_selection_source,
+            }
         if opt_now > high_watermark:
             high_watermark = opt_now
         current_pnl_pct = ((opt_now / entry_px) - 1.0) * 100.0 if entry_px > 0 else 0.0
@@ -5094,7 +5146,15 @@ def _simulate_trade_outcome_imported(
             trade_type,
         ) or {}
 
-    pnl = (exit_px - entry_px) / entry_px * 100.0
+    pnl_snapshot = long_option_pnl(
+        entry_execution_price=entry_px,
+        exit_execution_price=exit_px,
+        contracts=1,
+        commission_per_contract_usd=commission_per_contract_usd,
+        include_entry_fee=True,
+        include_exit_fee=True,
+    )
+    pnl = float(pnl_snapshot.get("net_pnl_pct") or 0.0)
     stock_move_pct = (exit_stock_px / S0 - 1.0) * 100.0 if S0 > 0 else 0.0
     directional_correct = (
         (trade_type == "call" and stock_move_pct > 0)
@@ -5105,6 +5165,13 @@ def _simulate_trade_outcome_imported(
         "entry_px": round(entry_px, 4),
         "exit_px": round(exit_px, 4),
         "pnl_pct": round(pnl, 2),
+        "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
+        "net_pnl_pct": pnl_snapshot.get("net_pnl_pct"),
+        "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
+        "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
+        "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
+        "entry_fee_total_usd": pnl_snapshot.get("entry_fee_total_usd"),
+        "exit_fee_total_usd": pnl_snapshot.get("exit_fee_total_usd"),
         "exit_reason": exit_reason,
         "exit_fill_basis": exit_fill_basis,
         "strike": round(float(entry_quote.strike), 2),
@@ -5123,6 +5190,7 @@ def _simulate_trade_outcome_imported(
         "contract_symbol": entry_quote.contract_symbol,
         "entry_quote_at_utc": entry_quote.as_of_utc,
         "entry_quote_basis": entry_quote.price_basis,
+        "entry_execution_basis": entry_execution.get("execution_basis"),
         "entry_quote_time_et": (
             "End-of-day snapshot ET"
             if snapshot_kind == DAILY_SNAPSHOT_KIND
@@ -5145,6 +5213,11 @@ def _simulate_trade_outcome_imported(
             else _et_minute_label(exit_quote_minute_et)
         ),
         "exit_quote_basis": exit_fill_basis,
+        "exit_execution_basis": (
+            exit_fill_basis.replace("historical_", "", 1)
+            if str(exit_fill_basis).startswith("historical_")
+            else exit_fill_basis
+        ),
     }
 
 
@@ -5839,6 +5912,8 @@ def run_historical_backtest(
                     archived_quote_basis=pick.get("quote_basis"),
                     archived_underlying_price_at_selection=pick.get("underlying_price_at_selection"),
                     archived_selection_source=pick.get("selection_source"),
+                    entry_slippage_pct=p_config.get("entry_slippage_pct", 0.0),
+                    exit_slippage_pct=p_config.get("exit_slippage_pct", 0.0),
                 )
             else:
                 outcome = _simulate_trade_outcome_hist(

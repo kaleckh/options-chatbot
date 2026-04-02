@@ -35,6 +35,11 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import yfinance as yf
 import market_data_service as _mds
+from options_execution import (
+    commission_total_usd,
+    executable_option_price,
+    profitability_status_with_blockers,
+)
 
 from expectancy_calibration import (
     DEFAULT_SHRINKAGE_TRADES,
@@ -335,6 +340,19 @@ def _live_pick_promotion_class(
     if dense_calibration is not None:
         return "promotable_exact_contract"
     return "research_bootstrap"
+
+
+def _should_mark_non_executable_quote(profitability_blockers: Any) -> bool:
+    blockers = {
+        str(item or "").strip().lower()
+        for item in list(profitability_blockers or [])
+        if str(item or "").strip()
+    }
+    if "missing_executable_entry_quote" in blockers:
+        return True
+    if "stale_quote_freshness" in blockers or "unknown_quote_freshness" in blockers:
+        return True
+    return any(blocker.startswith("research_only_quote_basis:") for blocker in blockers)
 
 
 def _load_expectancy_surface_for_live(
@@ -3129,6 +3147,7 @@ def _fetch_best_option(
                         "premium":    round(_mid, 4),
                         "bid":        round(_bid, 4),
                         "ask":        round(_ask, 4),
+                        "last":       round(_last, 4) if _last > 0 else None,
                         "expiry":     _best_exp,
                         "dte":        _actual_dte,
                         "delta":      round(abs(_g.get("delta", 0)), 3),
@@ -3169,6 +3188,7 @@ def _fetch_best_option(
                 best = {
                     "strike":     _K,
                     "premium":    round(float(_g.get("bs_price", 0)), 4),
+                    "model_price": round(float(_g.get("bs_price", 0)), 4),
                     "expiry":     None,
                     "dte":        target_dte,
                     "delta":      round(abs(_g.get("delta", 0)), 3),
@@ -3768,6 +3788,29 @@ def scan_daily_top_trades(
                 calibration_lookup=calibration_lookup,
                 dense_calibration=calibration,
             )
+            quote_freshness_status = (
+                str(_opt.get("option_chain_status") or _opt.get("options_snapshot_status") or "").strip().lower()
+                or ("fresh" if has_exact_contract else "unknown")
+            )
+            entry_execution = executable_option_price(
+                side="entry",
+                bid=_opt.get("bid"),
+                ask=_opt.get("ask"),
+                last=_opt.get("last"),
+                model_price=_opt.get("model_price") if _opt.get("quote_basis") == "model" else None,
+                slippage_pct=float(sp["filters"].get("entry_slippage_pct", 0.0)),
+                quote_freshness_status=quote_freshness_status,
+            )
+            profitability = profitability_status_with_blockers(
+                base_blockers=entry_execution.get("profitability_blockers"),
+                contract_symbol=_opt.get("contract_symbol"),
+                quote_freshness_status=quote_freshness_status,
+                promotion_class=promotion_class,
+                selection_source=contract_selection_source,
+                entry_execution_price=entry_execution.get("execution_price"),
+            )
+            if _should_mark_non_executable_quote(profitability.get("profitability_blockers")):
+                promotion_class = "research_non_executable_quote"
 
             candidates.append({
                 "ticker":             ticker,
@@ -3791,8 +3834,14 @@ def scan_daily_top_trades(
                 "dte":                actual_dte,
                 "bid":                _opt.get("bid"),
                 "ask":                _opt.get("ask"),
+                "last":               _opt.get("last"),
                 "mid":                round(est_premium, 4),
                 "est_premium":        round(est_premium, 4),
+                "entry_execution_price": entry_execution.get("execution_price"),
+                "entry_execution_basis": entry_execution.get("execution_basis"),
+                "entry_fee_total_usd": commission_total_usd(contracts=1) if entry_execution.get("execution_price") is not None else 0.0,
+                "profitability_eligibility": profitability["profitability_eligibility"],
+                "profitability_blockers": profitability["profitability_blockers"],
                 "stop_loss_pct":      _adj_stop_pct,    # ATR-adjusted (may be wider than base)
                 "profit_target_pct":  _profit_target_pct,
                 "atr_stop_widened":   _adj_stop_pct != _stop_loss_pct,
@@ -3813,12 +3862,13 @@ def scan_daily_top_trades(
                 "entry_date":         today_str,
                 "quote_time_et":      today_str,
                 "quote_basis":        _opt.get("quote_basis"),
+                "quote_freshness_status": quote_freshness_status,
                 "options_snapshot_status": _opt.get("options_snapshot_status"),
                 "option_chain_status": _opt.get("option_chain_status"),
                 "selection_source":   contract_selection_source,
                 "contract_selection_source": contract_selection_source,
                 "promotion_class":    promotion_class,
-                "promotable":         promotion_class == "promotable_exact_contract",
+                "promotable":         promotion_class == "promotable_exact_contract" and entry_execution.get("execution_price") is not None,
                 "target_date":        target_str,
                 "entry_price":        round(_entry_stock_price, 2),   # prev day's close (last complete candle)
                 "entry_at_open":      _at_open,          # True = market was closed, use next-open price

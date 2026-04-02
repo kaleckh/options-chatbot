@@ -59,11 +59,41 @@ def _score_profit_factor(value: Any) -> float:
     return max(min(parsed, 5.0), 0.0)
 
 
+def _preferred_metric(metrics: dict[str, Any], *keys: str) -> float:
+    for key in keys:
+        value = _safe_float(metrics.get(key))
+        if value is not None:
+            return value
+    return 0.0
+
+
 def _composite_objective_score(forward_metrics: dict[str, Any], tracked_metrics: dict[str, Any]) -> float:
-    forward_avg = _safe_float(forward_metrics.get("avg_pnl_pct")) or 0.0
-    forward_pf = _score_profit_factor(forward_metrics.get("profit_factor"))
-    tracked_avg = _safe_float(tracked_metrics.get("avg_pnl_pct")) or 0.0
-    tracked_pf = _score_profit_factor(tracked_metrics.get("profit_factor"))
+    forward_avg = _preferred_metric(
+        forward_metrics,
+        "net_realized_pnl_pct",
+        "avg_net_pnl_pct",
+        "avg_pnl_pct",
+    )
+    forward_pf = _score_profit_factor(
+        _preferred_metric(
+            forward_metrics,
+            "net_profit_factor",
+            "profit_factor",
+        )
+    )
+    tracked_avg = _preferred_metric(
+        tracked_metrics,
+        "net_realized_pnl_pct",
+        "avg_net_pnl_pct",
+        "avg_pnl_pct",
+    )
+    tracked_pf = _score_profit_factor(
+        _preferred_metric(
+            tracked_metrics,
+            "net_profit_factor",
+            "profit_factor",
+        )
+    )
     return round((forward_avg * 0.6) + ((forward_pf - 1.0) * 25.0) + (tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
 
 
@@ -186,20 +216,29 @@ def _candidate_position_metrics(symbol: str, candidate_id: str, positions: list[
         ).strip()
         if position_symbol != symbol or cohort_id != candidate_id:
             continue
-        entry = _safe_float(position.get("entry_option_price"))
-        exit_price = _safe_float(position.get("exit_option_price"))
-        if entry is None or entry <= 0 or exit_price is None:
-            continue
+        net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
+        if net_pnl_pct is None:
+            entry = _safe_float(position.get("entry_execution_price"))
+            if entry is None:
+                entry = _safe_float(position.get("entry_option_price"))
+            exit_price = _safe_float(position.get("exit_execution_price"))
+            if exit_price is None:
+                exit_price = _safe_float(position.get("exit_option_price"))
+            if entry is None or entry <= 0 or exit_price is None:
+                continue
+            net_pnl_pct = (exit_price / entry - 1.0) * 100.0
         if str(position.get("contract_symbol") or source.get("contract_symbol") or "").strip():
             exact_outcome_count += 1
-        pnls.append((exit_price / entry - 1.0) * 100.0)
+        pnls.append(net_pnl_pct)
     positive = sum(value for value in pnls if value > 0)
     negative = abs(sum(value for value in pnls if value < 0))
     return {
         "closed_position_count": len(pnls),
         "exact_outcome_count": exact_outcome_count,
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
+        "avg_net_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
         "profit_factor": round(positive / negative, 4) if negative > 0 else None,
+        "net_profit_factor": round(positive / negative, 4) if negative > 0 else None,
     }
 
 

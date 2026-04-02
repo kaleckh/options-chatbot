@@ -3,14 +3,26 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import sys
 from collections import Counter, defaultdict
 from contextlib import closing
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
+from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
+from options_execution import commission_total_usd, executable_option_price, safe_float as execution_safe_float
 
 ROOT_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = ROOT_DIR / "python-backend"
+for candidate in (ROOT_DIR, BACKEND_DIR):
+    candidate_str = str(candidate)
+    if candidate_str not in sys.path:
+        sys.path.insert(0, candidate_str)
+
+from positions_repository import create_positions_repository  # type: ignore  # noqa: E402
+
 DEFAULT_FORWARD_LEDGER_DB_PATH = ROOT_DIR / "data" / "options-validation" / "forward_tracking.db"
 
 LIVE_PRODUCTION_EVIDENCE_CLASS = "live_production"
@@ -21,6 +33,7 @@ E2E_TEST_EVIDENCE_CLASS = "e2e_test"
 RESEARCH_BACKFILL_EVIDENCE_CLASS = "research_backfill"
 ELIGIBLE_STATUS = "eligible"
 INELIGIBLE_STATUS = "ineligible"
+PENDING_TRUTH_STATUS = "pending_truth"
 
 FORWARD_SESSION_OPTIONAL_COLUMNS: dict[str, str] = {
     "run_id": "TEXT",
@@ -54,6 +67,16 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "option_iv": "REAL",
     "option_delta": "REAL",
     "option_dte": "INTEGER",
+    "entry_execution_price": "REAL",
+    "entry_execution_basis": "TEXT",
+    "entry_fee_total_usd": "REAL",
+    "exit_execution_price": "REAL",
+    "exit_execution_basis": "TEXT",
+    "gross_pnl_pct": "REAL",
+    "net_pnl_pct": "REAL",
+    "gross_pnl_usd": "REAL",
+    "net_pnl_usd": "REAL",
+    "fee_total_usd": "REAL",
     "outcome_state": "TEXT",
     "run_id": "TEXT",
     "run_mode": "TEXT",
@@ -141,6 +164,16 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
                 option_iv REAL,
                 option_delta REAL,
                 option_dte INTEGER,
+                entry_execution_price REAL,
+                entry_execution_basis TEXT,
+                entry_fee_total_usd REAL,
+                exit_execution_price REAL,
+                exit_execution_basis TEXT,
+                gross_pnl_pct REAL,
+                net_pnl_pct REAL,
+                gross_pnl_usd REAL,
+                net_pnl_usd REAL,
+                fee_total_usd REAL,
                 outcome_state TEXT,
                 run_id TEXT,
                 run_mode TEXT,
@@ -212,6 +245,142 @@ def _normalized_blockers(value: Any) -> list[str]:
         if text and text not in blockers:
             blockers.append(text)
     return blockers
+
+
+def _parse_date(value: Any) -> Optional[date]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+
+
+@lru_cache(maxsize=8)
+def _trusted_truth_horizon_for_db(db_path_hint: str) -> Optional[date]:
+    try:
+        latest_quote_at_utc = str(
+            HistoricalOptionsStore().snapshot_summary(
+                DAILY_SNAPSHOT_KIND,
+                trusted_only=True,
+            ).get("latest_quote_at_utc")
+            or ""
+        ).strip()
+    except Exception:
+        return None
+    return _parse_date(latest_quote_at_utc)
+
+
+def _trusted_truth_horizon() -> Optional[date]:
+    return _trusted_truth_horizon_for_db(str(os.getenv("HISTORICAL_OPTIONS_DB_PATH") or ""))
+
+
+def _closed_tracked_positions_snapshot() -> tuple[bool, list[dict[str, Any]]]:
+    repo = create_positions_repository(os.getenv("DATABASE_URL"))
+    if not getattr(repo, "is_available", False):
+        return False, []
+    try:
+        return True, list(repo.list_positions("closed"))
+    except Exception:
+        return False, []
+
+
+def _realized_position_summary(
+    positions: list[dict[str, Any]],
+    *,
+    cohort_id: str | None = None,
+) -> dict[str, Any]:
+    normalized_cohort = str(cohort_id or "").strip() or None
+    gross_realized_pnl_usd = 0.0
+    net_realized_pnl_usd = 0.0
+    gross_notional_usd = 0.0
+    net_notional_usd = 0.0
+    closed_position_count = 0
+    for position in list(positions or []):
+        source = dict(position.get("source_pick_snapshot") or {})
+        position_cohort = str(
+            position.get("cohort_id")
+            or source.get("cohort_id")
+            or source.get("profit_candidate_id")
+            or ""
+        ).strip() or None
+        if normalized_cohort is not None and position_cohort != normalized_cohort:
+            continue
+        entry_execution_price = execution_safe_float(
+            position.get("entry_execution_price")
+            if position.get("entry_execution_price") is not None
+            else position.get("entry_option_price")
+        )
+        gross_pnl_usd = execution_safe_float(position.get("gross_pnl_usd"))
+        net_pnl_usd = execution_safe_float(position.get("net_pnl_usd"))
+        contracts = _safe_int(position.get("contracts")) or 0
+        if (
+            entry_execution_price is None
+            or entry_execution_price <= 0
+            or contracts <= 0
+            or gross_pnl_usd is None
+            or net_pnl_usd is None
+        ):
+            continue
+        closed_position_count += 1
+        gross_realized_pnl_usd += float(gross_pnl_usd)
+        net_realized_pnl_usd += float(net_pnl_usd)
+        entry_notional_usd = float(entry_execution_price) * 100.0 * int(contracts)
+        gross_notional_usd += entry_notional_usd
+        net_notional_usd += entry_notional_usd
+    gross_realized_pnl_pct = (
+        round((gross_realized_pnl_usd / gross_notional_usd) * 100.0, 4)
+        if gross_notional_usd > 0
+        else None
+    )
+    net_realized_pnl_pct = (
+        round((net_realized_pnl_usd / net_notional_usd) * 100.0, 4)
+        if net_notional_usd > 0
+        else None
+    )
+    return {
+        "closed_position_count": closed_position_count,
+        "gross_realized_pnl_usd": round(gross_realized_pnl_usd, 4),
+        "net_realized_pnl_usd": round(net_realized_pnl_usd, 4),
+        "gross_realized_pnl_pct": gross_realized_pnl_pct,
+        "net_realized_pnl_pct": net_realized_pnl_pct,
+    }
+
+
+def _measurement_status_for_event(
+    event: dict[str, Any],
+    *,
+    trusted_truth_horizon: date | None,
+    base_blockers: list[str] | None = None,
+) -> str:
+    def _event_value(key: str) -> Any:
+        if hasattr(event, "get"):
+            return event.get(key)
+        try:
+            return event[key]
+        except Exception:
+            return None
+
+    blockers = [str(item or "").strip() for item in list(base_blockers or []) if str(item or "").strip()]
+    if blockers:
+        return INELIGIBLE_STATUS
+    existing_status = str(_event_value("eligibility_status") or "").strip().lower()
+    if existing_status == PENDING_TRUTH_STATUS:
+        return PENDING_TRUTH_STATUS
+    if existing_status and existing_status != ELIGIBLE_STATUS:
+        return existing_status
+    entry_date = _parse_date(
+        _event_value("entry_date")
+        or _event_value("quote_time_et")
+        or _event_value("recorded_at_utc")
+    )
+    if trusted_truth_horizon and entry_date and entry_date > trusted_truth_horizon:
+        return PENDING_TRUTH_STATUS
+    return ELIGIBLE_STATUS if existing_status == ELIGIBLE_STATUS or existing_status == "" else existing_status
 
 
 def _normalize_evidence_class(
@@ -333,6 +502,7 @@ def _provenance_for_snapshot(
         or scan_snapshot.get("champion_manifest_path")
     )
     return {
+        "recorded_at_utc": recorded_at_utc,
         "run_id": run_id,
         "run_mode": run_mode,
         "evidence_class": evidence_class,
@@ -360,6 +530,21 @@ def _eligibility_for_pick(
         pick,
         fallback=provenance.get("quote_freshness_status"),
     )
+    quote_basis = _safe_text(pick.get("quote_basis"))
+    derived_execution = executable_option_price(
+        side="entry",
+        bid=pick.get("bid"),
+        ask=pick.get("ask"),
+        last=pick.get("last"),
+        model_price=pick.get("premium") if quote_basis == "model" else None,
+        slippage_pct=0.0,
+    )
+    entry_execution_price = execution_safe_float(pick.get("entry_execution_price")) or derived_execution.get("execution_price")
+    profitability_blockers = _normalized_blockers(
+        pick.get("profitability_blockers")
+        if pick.get("profitability_blockers") is not None
+        else derived_execution.get("profitability_blockers")
+    )
     if provenance.get("evidence_class") != LIVE_PRODUCTION_EVIDENCE_CLASS:
         blockers.append("non_live_evidence_class")
     if provenance.get("is_fixture"):
@@ -378,11 +563,23 @@ def _eligibility_for_pick(
         blockers.append("stale_quote_freshness")
     elif quote_freshness_status == "unknown":
         blockers.append("unknown_quote_freshness")
+    if entry_execution_price is None:
+        blockers.extend(profitability_blockers or ["missing_executable_entry_quote"])
     if not _safe_text(_pick_contract_symbol(pick)):
         blockers.append("missing_contract_symbol")
+    deduped_blockers = _normalized_blockers(blockers)
+    if not deduped_blockers:
+        trusted_truth_horizon = _trusted_truth_horizon()
+        entry_date = _parse_date(
+            pick.get("quote_time_et")
+            or pick.get("entry_date")
+            or provenance.get("recorded_at_utc")
+        )
+        if trusted_truth_horizon and entry_date and entry_date > trusted_truth_horizon:
+            return PENDING_TRUTH_STATUS, ["entry_date_beyond_trusted_truth_horizon"], quote_freshness_status
     return (
-        ELIGIBLE_STATUS if not blockers else INELIGIBLE_STATUS,
-        blockers,
+        ELIGIBLE_STATUS if not deduped_blockers else INELIGIBLE_STATUS,
+        deduped_blockers,
         quote_freshness_status,
     )
 
@@ -420,7 +617,21 @@ def _session_eligibility(
         blockers.append("no_scan_picks")
     elif not any(_safe_text(_pick_contract_symbol(pick)) for pick in picks):
         blockers.append("missing_contract_symbol")
-    return ELIGIBLE_STATUS if not blockers else INELIGIBLE_STATUS, blockers
+    deduped_blockers = _normalized_blockers(blockers)
+    if not deduped_blockers:
+        trusted_truth_horizon = _trusted_truth_horizon()
+        pending_dates = [
+            _parse_date(
+                pick.get("quote_time_et")
+                or pick.get("entry_date")
+                or provenance.get("recorded_at_utc")
+            )
+            for pick in list(picks or [])
+        ]
+        pending_dates = [value for value in pending_dates if value is not None]
+        if trusted_truth_horizon and pending_dates and min(pending_dates) > trusted_truth_horizon:
+            return PENDING_TRUTH_STATUS, ["entry_date_beyond_trusted_truth_horizon"]
+    return ELIGIBLE_STATUS if not deduped_blockers else INELIGIBLE_STATUS, deduped_blockers
 
 
 def _normalized_scan_funnel(value: Any) -> dict[str, Any]:
@@ -688,6 +899,19 @@ def _event_fields_from_pick(
         if pick.get("mid") is not None
         else pick.get("premium")
     )
+    derived_execution = executable_option_price(
+        side="entry",
+        bid=pick.get("bid"),
+        ask=pick.get("ask"),
+        last=pick.get("last"),
+        model_price=pick.get("premium") if quote_basis == "model" else None,
+        slippage_pct=0.0,
+    )
+    entry_execution_price = execution_safe_float(pick.get("entry_execution_price")) or derived_execution.get("execution_price")
+    entry_execution_basis = _safe_text(pick.get("entry_execution_basis")) or _safe_text(derived_execution.get("execution_basis"))
+    entry_fee_total_usd = execution_safe_float(pick.get("entry_fee_total_usd"))
+    if entry_fee_total_usd is None and entry_execution_price is not None:
+        entry_fee_total_usd = commission_total_usd(contracts=1)
     eligibility_status, eligibility_blockers, quote_freshness_status = _eligibility_for_pick(
         pick,
         provenance=provenance,
@@ -744,6 +968,16 @@ def _event_fields_from_pick(
             else pick.get("delta_est")
         ),
         "option_dte": _safe_int(pick.get("dte")),
+        "entry_execution_price": entry_execution_price,
+        "entry_execution_basis": entry_execution_basis,
+        "entry_fee_total_usd": entry_fee_total_usd,
+        "exit_execution_price": None,
+        "exit_execution_basis": None,
+        "gross_pnl_pct": None,
+        "net_pnl_pct": None,
+        "gross_pnl_usd": None,
+        "net_pnl_usd": None,
+        "fee_total_usd": entry_fee_total_usd,
         "outcome_state": _pick_outcome_state(pick, tracked_positions),
         "run_id": provenance.get("run_id"),
         "run_mode": provenance.get("run_mode"),
@@ -788,6 +1022,16 @@ def _insert_forward_event(
     option_iv: Optional[float] = None,
     option_delta: Optional[float] = None,
     option_dte: Optional[int] = None,
+    entry_execution_price: Optional[float] = None,
+    entry_execution_basis: Optional[str] = None,
+    entry_fee_total_usd: Optional[float] = None,
+    exit_execution_price: Optional[float] = None,
+    exit_execution_basis: Optional[str] = None,
+    gross_pnl_pct: Optional[float] = None,
+    net_pnl_pct: Optional[float] = None,
+    gross_pnl_usd: Optional[float] = None,
+    net_pnl_usd: Optional[float] = None,
+    fee_total_usd: Optional[float] = None,
     outcome_state: Optional[str] = None,
     run_id: Optional[str] = None,
     run_mode: Optional[str] = None,
@@ -828,6 +1072,16 @@ def _insert_forward_event(
             option_iv,
             option_delta,
             option_dte,
+            entry_execution_price,
+            entry_execution_basis,
+            entry_fee_total_usd,
+            exit_execution_price,
+            exit_execution_basis,
+            gross_pnl_pct,
+            net_pnl_pct,
+            gross_pnl_usd,
+            net_pnl_usd,
+            fee_total_usd,
             outcome_state,
             run_id,
             run_mode,
@@ -838,7 +1092,7 @@ def _insert_forward_event(
             eligibility_status,
             eligibility_blockers,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             int(session_id),
@@ -868,6 +1122,16 @@ def _insert_forward_event(
             option_iv,
             option_delta,
             option_dte,
+            entry_execution_price,
+            entry_execution_basis,
+            entry_fee_total_usd,
+            exit_execution_price,
+            exit_execution_basis,
+            gross_pnl_pct,
+            net_pnl_pct,
+            gross_pnl_usd,
+            net_pnl_usd,
+            fee_total_usd,
             outcome_state,
             run_id,
             run_mode,
@@ -944,6 +1208,50 @@ def _position_review_event_fields(position: dict[str, Any], *, provenance: dict[
             else source.get("delta_est")
         ),
         "option_dte": _safe_int(source.get("dte")),
+        "entry_execution_price": execution_safe_float(
+            latest_review.get("entry_execution_price")
+            if latest_review.get("entry_execution_price") is not None
+            else position.get("entry_execution_price")
+        ),
+        "entry_execution_basis": _safe_text(
+            latest_review.get("entry_execution_basis")
+            or position.get("entry_execution_basis")
+        ),
+        "entry_fee_total_usd": execution_safe_float(position.get("entry_fee_total_usd")),
+        "exit_execution_price": execution_safe_float(
+            latest_review.get("exit_execution_price")
+            if latest_review.get("exit_execution_price") is not None
+            else position.get("exit_execution_price")
+        ),
+        "exit_execution_basis": _safe_text(
+            latest_review.get("exit_execution_basis")
+            or position.get("exit_execution_basis")
+        ),
+        "gross_pnl_pct": execution_safe_float(
+            latest_review.get("gross_pnl_pct")
+            if latest_review.get("gross_pnl_pct") is not None
+            else position.get("gross_pnl_pct")
+        ),
+        "net_pnl_pct": execution_safe_float(
+            latest_review.get("net_pnl_pct")
+            if latest_review.get("net_pnl_pct") is not None
+            else position.get("net_pnl_pct")
+        ),
+        "gross_pnl_usd": execution_safe_float(
+            latest_review.get("gross_pnl_usd")
+            if latest_review.get("gross_pnl_usd") is not None
+            else position.get("gross_pnl_usd")
+        ),
+        "net_pnl_usd": execution_safe_float(
+            latest_review.get("net_pnl_usd")
+            if latest_review.get("net_pnl_usd") is not None
+            else position.get("net_pnl_usd")
+        ),
+        "fee_total_usd": execution_safe_float(
+            latest_review.get("fee_total_usd")
+            if latest_review.get("fee_total_usd") is not None
+            else position.get("fee_total_usd")
+        ),
         "outcome_state": _safe_text(position.get("status")),
         "run_id": provenance.get("run_id"),
         "run_mode": provenance.get("run_mode"),
@@ -1314,6 +1622,28 @@ def list_forward_scan_pick_events(
             ),
             "selection_source": payload.get("selection_source") or row["selection_source"],
             "promotion_class": payload.get("promotion_class") or row["promotion_class"],
+            "entry_execution_price": (
+                payload.get("entry_execution_price")
+                if payload.get("entry_execution_price") is not None
+                else row["entry_execution_price"]
+            ),
+            "entry_execution_basis": payload.get("entry_execution_basis") or row["entry_execution_basis"],
+            "entry_fee_total_usd": (
+                payload.get("entry_fee_total_usd")
+                if payload.get("entry_fee_total_usd") is not None
+                else row["entry_fee_total_usd"]
+            ),
+            "exit_execution_price": (
+                payload.get("exit_execution_price")
+                if payload.get("exit_execution_price") is not None
+                else row["exit_execution_price"]
+            ),
+            "exit_execution_basis": payload.get("exit_execution_basis") or row["exit_execution_basis"],
+            "gross_pnl_pct": payload.get("gross_pnl_pct") if payload.get("gross_pnl_pct") is not None else row["gross_pnl_pct"],
+            "net_pnl_pct": payload.get("net_pnl_pct") if payload.get("net_pnl_pct") is not None else row["net_pnl_pct"],
+            "gross_pnl_usd": payload.get("gross_pnl_usd") if payload.get("gross_pnl_usd") is not None else row["gross_pnl_usd"],
+            "net_pnl_usd": payload.get("net_pnl_usd") if payload.get("net_pnl_usd") is not None else row["net_pnl_usd"],
+            "fee_total_usd": payload.get("fee_total_usd") if payload.get("fee_total_usd") is not None else row["fee_total_usd"],
             "run_id": payload.get("run_id") or row["run_id"],
             "run_mode": payload.get("run_mode") or row["run_mode"],
             "evidence_class": payload.get("evidence_class") or row["evidence_class"],
@@ -1378,7 +1708,13 @@ def summarize_forward_holdout(
                 fe.contract_symbol,
                 fe.recommendation,
                 fe.outcome_state,
-                fe.cohort_id
+                fe.cohort_id,
+                fe.eligibility_status,
+                fe.quote_time_et,
+                fe.gross_pnl_pct,
+                fe.net_pnl_pct,
+                fe.gross_pnl_usd,
+                fe.net_pnl_usd
             FROM forward_events fe
             JOIN forward_sessions fs
                 ON fs.id = fe.session_id
@@ -1417,6 +1753,8 @@ def summarize_forward_holdout(
                     sessions_with_zero_scan_picks += 1
                     latest_starvation_stage = _infer_starvation_stage(session_funnel)
 
+    positions_available = _closed_tracked_positions_snapshot()[0]
+
     if not rows and not filtered_sessions:
         return {
             "available": False,
@@ -1425,11 +1763,18 @@ def summarize_forward_holdout(
             "db_path": str(path),
             "session_count": 0,
             "scan_pick_count": 0,
+            "eligible_event_count": 0,
+            "pending_truth_event_count": 0,
             "taken_pick_count": 0,
             "blocked_pick_count": 0,
             "skipped_pick_count": 0,
             "review_count": 0,
             "closed_review_count": 0,
+            "tracked_positions_available": positions_available,
+            "gross_realized_pnl_usd": 0.0,
+            "net_realized_pnl_usd": 0.0,
+            "gross_realized_pnl_pct": None,
+            "net_realized_pnl_pct": None,
             "days_elapsed": 0,
             "unique_recording_days": 0,
             "recommendation_counts": {},
@@ -1487,11 +1832,18 @@ def summarize_forward_holdout(
             "days_elapsed": days_elapsed,
             "unique_recording_days": len(unique_days),
             "scan_pick_count": 0,
+            "eligible_event_count": 0,
+            "pending_truth_event_count": 0,
             "taken_pick_count": 0,
             "blocked_pick_count": 0,
             "skipped_pick_count": 0,
             "review_count": 0,
             "closed_review_count": 0,
+            "tracked_positions_available": positions_available,
+            "gross_realized_pnl_usd": 0.0,
+            "net_realized_pnl_usd": 0.0,
+            "gross_realized_pnl_pct": None,
+            "net_realized_pnl_pct": None,
             "recommendation_counts": {},
             "status_counts": {},
             "truth_sources_seen": sorted(truth_sources),
@@ -1515,6 +1867,8 @@ def summarize_forward_holdout(
     truth_sources: set[str] = set()
     promotion_statuses: set[str] = set()
     scan_pick_count = 0
+    eligible_event_count = 0
+    pending_truth_event_count = 0
     taken_pick_count = 0
     blocked_pick_count = 0
     skipped_pick_count = 0
@@ -1539,6 +1893,12 @@ def summarize_forward_holdout(
         "taken_pick": {"with_contract_count": 0, "missing_contract_count": 0},
         "position_review": {"with_contract_count": 0, "missing_contract_count": 0},
     }
+    trusted_truth_horizon = _trusted_truth_horizon()
+    positions_available, closed_positions = _closed_tracked_positions_snapshot()
+    gross_realized_pnl_usd = 0.0
+    net_realized_pnl_usd = 0.0
+    gross_realized_pnl_pct_values: list[float] = []
+    net_realized_pnl_pct_values: list[float] = []
 
     for row in rows:
         session_ids.add(int(row["session_id"]))
@@ -1558,6 +1918,7 @@ def summarize_forward_holdout(
         event_type = str(row["event_type"] or "").strip().lower()
         recommendation = str(row["recommendation"] or "").strip().upper()
         outcome_state = str(row["outcome_state"] or "").strip().lower()
+        eligibility_status = str(row["eligibility_status"] or "").strip().lower()
         ticker = str(row["ticker"] or "").strip().upper() or "UNKNOWN"
         playbook = _pick_playbook_id(row["playbook"]) or "unknown"
         has_contract = bool(str(row["contract_symbol"] or "").strip())
@@ -1568,6 +1929,18 @@ def summarize_forward_holdout(
 
         if event_type == "scan_pick":
             scan_pick_count += 1
+            effective_eligibility_status = _measurement_status_for_event(
+                row,
+                trusted_truth_horizon=trusted_truth_horizon,
+            )
+            if effective_eligibility_status == ELIGIBLE_STATUS:
+                eligible_event_count += 1
+                by_symbol[ticker]["eligible_event_count"] += 1
+                by_playbook[playbook]["eligible_event_count"] += 1
+            elif effective_eligibility_status == PENDING_TRUTH_STATUS:
+                pending_truth_event_count += 1
+                by_symbol[ticker]["pending_truth_event_count"] += 1
+                by_playbook[playbook]["pending_truth_event_count"] += 1
             by_symbol[ticker]["scan_pick_count"] += 1
             by_playbook[playbook]["scan_pick_count"] += 1
             if has_contract:
@@ -1608,6 +1981,18 @@ def summarize_forward_holdout(
                 closed_review_count += 1
                 by_symbol[ticker]["closed_review_count"] += 1
                 by_playbook[playbook]["closed_review_count"] += 1
+                gross_realized_usd = execution_safe_float(row["gross_pnl_usd"])
+                net_realized_usd = execution_safe_float(row["net_pnl_usd"])
+                gross_realized_pct = execution_safe_float(row["gross_pnl_pct"])
+                net_realized_pct = execution_safe_float(row["net_pnl_pct"])
+                if gross_realized_usd is not None:
+                    gross_realized_pnl_usd += gross_realized_usd
+                if net_realized_usd is not None:
+                    net_realized_pnl_usd += net_realized_usd
+                if gross_realized_pct is not None:
+                    gross_realized_pnl_pct_values.append(gross_realized_pct)
+                if net_realized_pct is not None:
+                    net_realized_pnl_pct_values.append(net_realized_pct)
 
     for session_row in filtered_sessions:
         session_id = int(session_row["id"])
@@ -1636,6 +2021,20 @@ def summarize_forward_holdout(
     if earliest is not None and latest is not None:
         days_elapsed = max((latest.date() - earliest.date()).days, 0)
 
+    realized_position_summary = _realized_position_summary(
+        closed_positions,
+        cohort_id=normalized_cohort,
+    )
+    if int(realized_position_summary.get("closed_position_count") or 0) > 0:
+        closed_review_count = max(
+            closed_review_count,
+            int(realized_position_summary["closed_position_count"]),
+        )
+        gross_realized_pnl_usd = float(realized_position_summary["gross_realized_pnl_usd"])
+        net_realized_pnl_usd = float(realized_position_summary["net_realized_pnl_usd"])
+        gross_realized_pnl_pct_values = []
+        net_realized_pnl_pct_values = []
+
     return {
         "available": True,
         "cohort_id": normalized_cohort,
@@ -1647,11 +2046,30 @@ def summarize_forward_holdout(
         "days_elapsed": days_elapsed,
         "unique_recording_days": len(unique_days),
         "scan_pick_count": scan_pick_count,
+        "eligible_event_count": eligible_event_count,
+        "pending_truth_event_count": pending_truth_event_count,
         "taken_pick_count": taken_pick_count,
         "blocked_pick_count": blocked_pick_count,
         "skipped_pick_count": skipped_pick_count,
         "review_count": review_count,
         "closed_review_count": closed_review_count,
+        "tracked_positions_available": positions_available,
+        "gross_realized_pnl_usd": round(gross_realized_pnl_usd, 2),
+        "net_realized_pnl_usd": round(net_realized_pnl_usd, 2),
+        "gross_realized_pnl_pct": (
+            round(float(realized_position_summary["gross_realized_pnl_pct"]), 2)
+            if realized_position_summary.get("gross_realized_pnl_pct") is not None
+            else round(sum(gross_realized_pnl_pct_values) / len(gross_realized_pnl_pct_values), 2)
+            if gross_realized_pnl_pct_values
+            else None
+        ),
+        "net_realized_pnl_pct": (
+            round(float(realized_position_summary["net_realized_pnl_pct"]), 2)
+            if realized_position_summary.get("net_realized_pnl_pct") is not None
+            else round(sum(net_realized_pnl_pct_values) / len(net_realized_pnl_pct_values), 2)
+            if net_realized_pnl_pct_values
+            else None
+        ),
         "recommendation_counts": dict(sorted(recommendation_counts.items())),
         "status_counts": dict(sorted(status_counts.items())),
         "truth_sources_seen": sorted(truth_sources),

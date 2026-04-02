@@ -14,6 +14,11 @@ from market_data_service import (
     get_options as _md_get_options,
     request_scope as _market_data_request_scope,
 )
+from options_execution import (
+    commission_total_usd,
+    executable_option_price,
+    option_pnl_snapshot,
+)
 from options_chatbot import (
     _check_early_exit,
     _compute_direction_score,
@@ -148,6 +153,18 @@ def build_position_payload(
     source_pick_snapshot = copy.deepcopy(scan_pick)
     if contract_symbol:
         source_pick_snapshot["contract_symbol"] = contract_symbol
+    entry_execution_price = round(float(fill_price), 4)
+    estimated_execution_price = _safe_float(scan_pick.get("entry_execution_price"))
+    entry_execution_basis = str(scan_pick.get("entry_execution_basis") or "").strip() or None
+    if (
+        entry_execution_basis
+        and estimated_execution_price is not None
+        and abs(float(estimated_execution_price) - entry_execution_price) <= 0.0001
+    ):
+        normalized_entry_execution_basis = entry_execution_basis
+    else:
+        normalized_entry_execution_basis = "manual_fill"
+    entry_fee_total_usd = commission_total_usd(contracts=contracts)
 
     payload = {
         "status": "open",
@@ -159,6 +176,9 @@ def build_position_payload(
         "asset_class": scan_pick.get("asset_class"),
         "contracts": int(contracts),
         "entry_option_price": round(float(fill_price), 4),
+        "entry_execution_price": entry_execution_price,
+        "entry_execution_basis": normalized_entry_execution_basis,
+        "entry_fee_total_usd": entry_fee_total_usd,
         "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
         "filled_at": _parse_datetime(filled_at),
         "stop_loss_pct": float(scan_pick.get("stop_loss_pct") or 50.0),
@@ -174,7 +194,14 @@ def build_position_payload(
         "notes": notes,
         "closed_at": None,
         "exit_option_price": None,
+        "exit_execution_price": None,
+        "exit_execution_basis": None,
         "exit_reason": None,
+        "gross_pnl_pct": None,
+        "net_pnl_pct": None,
+        "gross_pnl_usd": None,
+        "net_pnl_usd": None,
+        "fee_total_usd": entry_fee_total_usd,
     }
     return payload
 
@@ -212,6 +239,8 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
     )
     warnings: list[str] = []
     underlying_price = review_context.get_current_underlying_price(ticker_symbol)
+    profile = review_context.get_profile(ticker_symbol)
+    exit_slippage_pct = float((profile.get("filters") or {}).get("exit_slippage_pct", 0.0))
     expiry_date = _parse_date(expiry)
     today = datetime.now().date()
 
@@ -319,26 +348,26 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
         bid = _safe_float(row["bid"].iloc[0])
         ask = _safe_float(row["ask"].iloc[0])
         last_price = _safe_float(row["lastPrice"].iloc[0])
+        execution = executable_option_price(
+            side="exit",
+            bid=bid,
+            ask=ask,
+            last=last_price,
+            slippage_pct=exit_slippage_pct,
+        )
 
-        if bid and ask and ask >= bid:
+        if execution.get("display_price") is not None:
+            if execution.get("execution_price") is None and execution.get("display_basis") == "last":
+                warnings.append(
+                    "Using last trade only for display; stop/target checks are suppressed until a live executable bid/ask quote returns."
+                )
             return {
                 "expired": False,
-                "current_option_price": round((bid + ask) / 2.0, 4),
-                "pricing_source": "mid",
-                "price_trigger_ok": True,
-                "warnings": warnings,
-                "underlying_price": underlying_price,
-            }
-
-        if last_price and last_price > 0:
-            warnings.append(
-                "Using last trade only for display; stop/target checks are suppressed until a live bid/ask midpoint returns."
-            )
-            return {
-                "expired": False,
-                "current_option_price": round(last_price, 4),
-                "pricing_source": "last_price",
-                "price_trigger_ok": False,
+                "current_option_price": execution.get("display_price"),
+                "pricing_source": "mid" if execution.get("display_basis") == "mid" else execution.get("display_basis"),
+                "current_execution_price": execution.get("execution_price"),
+                "current_execution_basis": execution.get("execution_basis"),
+                "price_trigger_ok": execution.get("execution_price") is not None,
                 "warnings": warnings,
                 "underlying_price": underlying_price,
             }
@@ -415,9 +444,27 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     pricing = _fetch_option_quote(position, review_context)
     warnings = list(pricing.get("warnings") or [])
     current_option_price = pricing.get("current_option_price")
-    current_pnl_pct = None
-    if current_option_price is not None and entry_option_price > 0:
-        current_pnl_pct = round((float(current_option_price) / entry_option_price - 1.0) * 100.0, 1)
+    contracts = int(position.get("contracts") or 1)
+    entry_execution_price = _safe_float(position.get("entry_execution_price")) or entry_option_price
+    exit_execution_price = _safe_float(pricing.get("current_execution_price"))
+    if exit_execution_price is None and pricing.get("price_trigger_ok") and current_option_price is not None:
+        exit_execution_price = float(current_option_price)
+    entry_fee_total_usd = _safe_float(position.get("entry_fee_total_usd"))
+    if entry_fee_total_usd is None:
+        entry_fee_total_usd = commission_total_usd(contracts=contracts)
+    exit_fee_total_usd = commission_total_usd(contracts=contracts) if exit_execution_price is not None else 0.0
+    pnl_snapshot = option_pnl_snapshot(
+        entry_execution_price=entry_execution_price,
+        exit_execution_price=exit_execution_price,
+        contracts=contracts,
+        entry_fee_total_usd=entry_fee_total_usd,
+        exit_fee_total_usd=exit_fee_total_usd,
+    )
+    current_pnl_pct = (
+        round(float(pnl_snapshot["gross_pnl_pct"]), 1)
+        if pnl_snapshot.get("gross_pnl_pct") is not None
+        else None
+    )
 
     current_stock_price = pricing.get("underlying_price")
     entry_underlying_price = _safe_float(position.get("entry_underlying_price"))
@@ -427,7 +474,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
 
     existing_peak = _safe_float(position.get("peak_pnl_pct")) or 0.0
     peak_pnl_pct = existing_peak
-    if pricing.get("pricing_source") == "mid" and current_pnl_pct is not None:
+    if pricing.get("price_trigger_ok") and current_pnl_pct is not None:
         peak_pnl_pct = round(max(existing_peak, current_pnl_pct), 1)
 
     recommendation = "HOLD"
@@ -447,10 +494,10 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         reason = "Contract expiry has passed, so the position should be closed."
     elif pricing.get("price_trigger_ok") and current_pnl_pct is not None and current_pnl_pct <= -stop_loss_pct:
         recommendation = "SELL"
-        reason = f"Live option midpoint hit the stop loss at {current_pnl_pct:+.1f}%."
+        reason = f"Live executable exit hit the stop loss at {current_pnl_pct:+.1f}%."
     elif pricing.get("price_trigger_ok") and current_pnl_pct is not None and current_pnl_pct >= profit_target_pct:
         recommendation = "SELL"
-        reason = f"Live option midpoint hit the profit target at {current_pnl_pct:+.1f}%."
+        reason = f"Live executable exit hit the profit target at {current_pnl_pct:+.1f}%."
     elif days_held >= time_exit_day:
         recommendation = "SELL"
         reason = f"Time exit reached after {days_held} calendar day(s), versus a {time_exit_day}-day limit."
@@ -460,7 +507,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         if days_held >= min_hold_days:
             indicator_exit = False
             indicator_detail = ""
-            if pricing.get("pricing_source") == "mid" and current_pnl_pct is not None:
+            if pricing.get("price_trigger_ok") and current_pnl_pct is not None:
                 min_profit_to_exit = float(early_exit_cfg.get("min_profit_to_exit_pct", 5.0))
                 if current_pnl_pct >= min_profit_to_exit:
                     indicator_exit, indicator_detail = _check_early_exit(
@@ -491,10 +538,19 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "stop_option_price": stop_option_price,
         "target_option_price": target_option_price,
         "entry_option_price": entry_option_price,
+        "entry_execution_price": entry_execution_price,
+        "entry_execution_basis": position.get("entry_execution_basis"),
         "entry_underlying_price": entry_underlying_price,
         "current_underlying_price": current_stock_price,
         "current_stock_pct": current_stock_pct,
         "price_trigger_ok": bool(pricing.get("price_trigger_ok")),
+        "exit_execution_price": exit_execution_price,
+        "exit_execution_basis": pricing.get("current_execution_basis"),
+        "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
+        "net_pnl_pct": pnl_snapshot.get("net_pnl_pct"),
+        "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
+        "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
+        "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
         "expiry": str(position["expiry"])[:10],
     }
 
@@ -504,6 +560,15 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "pricing_source": pricing.get("pricing_source"),
         "current_option_price": current_option_price,
         "current_pnl_pct": current_pnl_pct,
+        "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
+        "net_pnl_pct": pnl_snapshot.get("net_pnl_pct"),
+        "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
+        "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
+        "entry_execution_price": entry_execution_price,
+        "exit_execution_price": exit_execution_price,
+        "entry_execution_basis": position.get("entry_execution_basis"),
+        "exit_execution_basis": pricing.get("current_execution_basis"),
+        "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
         "recommendation": recommendation,
         "reason": reason,
         "warnings": warnings,

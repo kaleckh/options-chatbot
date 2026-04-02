@@ -140,6 +140,68 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertEqual(result["state"], "blocked")
         self.assertIn("forward_ledger_contamination", blocker_codes)
 
+    def test_gate_returns_pending_truth_when_only_forward_evidence_is_beyond_trusted_horizon(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [],
+            "eligible_event_count": 0,
+            "pending_truth_events": [{"ticker": "SPY"}],
+            "pending_truth_event_count": 1,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {"SPY": {"eligible": 0, "pending_truth": 1, "ineligible": 0}},
+        }
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True)):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=0,
+                            min_eligible_events_per_symbol=0,
+                            min_closed_tracked_positions=0,
+                        )
+
+        blocker_codes = [item["code"] for item in result["blockers"]]
+        self.assertEqual(result["state"], "pending_truth")
+        self.assertIn("pending_truth_horizon", blocker_codes)
+        self.assertEqual(result["checks"]["forward_evidence"]["pending_truth_event_count"], 1)
+
+    def test_gate_returns_degraded_watch_when_samples_are_small_but_truth_is_healthy(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [],
+            "eligible_event_count": 0,
+            "pending_truth_events": [],
+            "pending_truth_event_count": 0,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {"SPY": {"eligible": 0, "pending_truth": 0, "ineligible": 0}},
+        }
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True)):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=1,
+                            min_eligible_events_per_symbol=0,
+                            min_closed_tracked_positions=1,
+                        )
+
+        blocker_codes = [item["code"] for item in result["blockers"]]
+        self.assertEqual(result["state"], "degraded-watch")
+        self.assertIn("insufficient_eligible_forward_truth", blocker_codes)
+        self.assertIn("insufficient_closed_tracked_positions", blocker_codes)
+
 
 if __name__ == "__main__":
     unittest.main()
