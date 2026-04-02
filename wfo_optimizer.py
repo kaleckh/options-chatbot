@@ -66,7 +66,7 @@ from expectancy_calibration import (
     lookup_calibrated_expectancy,
     normalized_market_regime,
 )
-from forward_options_ledger import list_forward_scan_pick_events
+from forward_options_ledger import LIVE_PRODUCTION_EVIDENCE_CLASS, list_forward_scan_pick_events
 from market_data_service import (
     get_history as _md_get_history,
     get_ticker_info as _md_get_ticker_info,
@@ -2158,6 +2158,13 @@ def _insufficient_archived_forward_result(
 ) -> dict[str, Any]:
     picks = list(archived_picks or [])
     pending = list(pending_truth_horizon or [])
+    contract_resolution_overview = {
+        "exact_archived_contract": 0,
+        "exact_target_contract": 0,
+        "nearest_listed_contract": 0,
+        "unresolved_candidates": max(len(picks) - len(pending), 0),
+        "pending_truth_horizon": len(pending),
+    }
     return {
         "available": False,
         "status": "insufficient_archived_evidence",
@@ -2182,6 +2189,7 @@ def _insufficient_archived_forward_result(
         "unpriced_trade_count": 0,
         "candidate_trade_count": len(picks),
         "pending_truth_horizon_count": len(pending),
+        "contract_resolution_overview": contract_resolution_overview,
         "promotion_metrics": {
             **_trade_subset_metrics([], include_exit_reasons=True),
             "promotion_status": "block",
@@ -2264,7 +2272,8 @@ def run_archived_forward_daily_backtest(
     archived_picks = list_forward_scan_pick_events(
         source_label=source_label,
         recorded_after_utc=recorded_after_utc,
-        eligible_only=require_eligible_only,
+        eligible_only=False,
+        evidence_class=LIVE_PRODUCTION_EVIDENCE_CLASS if require_eligible_only else None,
         cohort_id=cohort_id,
         tickers=tickers,
     )
@@ -2575,6 +2584,10 @@ def run_archived_forward_daily_backtest(
             "pending_truth_horizon_count": len(pending_truth_horizon),
             "quote_coverage_pct": quote_coverage_pct,
             **contract_resolution,
+            "contract_resolution_overview": _contract_resolution_overview(
+                contract_resolution,
+                pending_truth_horizon_count=len(pending_truth_horizon),
+            ),
             "entry_quote_time_et": _imported_entry_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
             "exit_quote_time_et": _imported_exit_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
             "win_rate_pct": 0.0,
@@ -2686,6 +2699,10 @@ def run_archived_forward_daily_backtest(
         "pending_truth_horizon_count": len(pending_truth_horizon),
         "quote_coverage_pct": quote_coverage_pct,
         **contract_resolution,
+        "contract_resolution_overview": _contract_resolution_overview(
+            contract_resolution,
+            pending_truth_horizon_count=len(pending_truth_horizon),
+        ),
         "entry_quote_time_et": _imported_entry_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
         "exit_quote_time_et": _imported_exit_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
         "win_rate_pct": round(win_rate, 1),
@@ -2791,6 +2808,21 @@ def _contract_resolution_summary(result: Optional[dict]) -> dict[str, Any]:
         "unresolved_contract_count": unresolved_candidates,
         "exact_contract_match_pct": round(exact_count / max(priced_trade_count, 1) * 100.0, 1) if priced_trade_count else 0.0,
         "nearest_contract_match_pct": round(nearest_count / max(priced_trade_count, 1) * 100.0, 1) if priced_trade_count else 0.0,
+    }
+
+
+def _contract_resolution_overview(
+    contract_resolution: dict[str, Any],
+    *,
+    pending_truth_horizon_count: int = 0,
+) -> dict[str, int]:
+    counts = dict(contract_resolution.get("contract_resolution_counts") or {})
+    return {
+        "exact_archived_contract": int(counts.get("exact_archived_contract", 0) or 0),
+        "exact_target_contract": int(counts.get("exact_target_contract", 0) or 0),
+        "nearest_listed_contract": int(counts.get("nearest_listed_contract", 0) or 0),
+        "unresolved_candidates": int(counts.get("unresolved_candidates", 0) or 0),
+        "pending_truth_horizon": int(pending_truth_horizon_count or 0),
     }
 
 

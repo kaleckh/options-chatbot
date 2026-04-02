@@ -17,7 +17,7 @@ function withMarketMetadata(payload, market) {
   return {
     ...payload,
     market: payload?.market || resolvedMarket,
-    marketLabel: payload?.marketLabel || (resolvedMarket === "equities_legacy" ? "Equities Legacy" : "Crypto Spot Research"),
+    marketLabel: payload?.marketLabel || (resolvedMarket === "equities_legacy" ? "Equities Legacy" : "Crypto Profitability Pilot"),
   };
 }
 
@@ -52,6 +52,10 @@ async function importCryptoDayTradingHistory(options = {}) {
   return cryptoEngine.importCryptoDayTradingHistory(options);
 }
 
+async function appendCryptoProfitabilityJournalEntry(entry) {
+  return cryptoEngine.appendProfitabilityJournalEntry(entry);
+}
+
 module.exports = {
   DEFAULT_DAY_TRADING_CONFIG: {
     crypto: cryptoEngine.DEFAULT_DAY_TRADING_CONFIG,
@@ -63,6 +67,7 @@ module.exports = {
   buildMorningWatchlist,
   runDayTradingExperiments,
   importCryptoDayTradingHistory,
+  appendCryptoProfitabilityJournalEntry,
   __markets: {
     crypto: cryptoEngine,
     equities_legacy: equitiesLegacyEngine,

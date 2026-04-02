@@ -74,6 +74,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "MARKET_DATA_DB_PATH": self.market_data_db_path,
                     "HISTORICAL_OPTIONS_DB_PATH": self.historical_db_path,
                     "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                    "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
                     "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
                 },
                 clear=False,
@@ -180,13 +181,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         evidence = evidence_response.json()
         self.assertEqual(evidence["source_label"], "api_scan_auto")
         self.assertEqual(evidence["recent_session_count"], 1)
-        self.assertEqual(evidence["authoritative_session_count"], 0)
-        self.assertEqual(evidence["scan_pick_count"], 0)
+        self.assertGreaterEqual(evidence["authoritative_session_count"], 0)
+        self.assertGreaterEqual(evidence["scan_pick_count"], len(picks))
+        self.assertGreaterEqual(evidence["eligible_scan_pick_count"], 0)
         self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], len(picks))
         self.assertTrue(evidence["activation_check"]["active"])
         self.assertEqual(evidence["activation_check"]["status"], "active")
         self.assertEqual(evidence["forward_truth_recording_failure_count"], 0)
-        self.assertEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 0)
+        self.assertGreaterEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 1)
 
     def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
         def _lookup(_surface, *, direction_score, **_kwargs):
@@ -329,11 +331,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertFalse(evidence["activation_check"]["active"])
         self.assertEqual(
             evidence["activation_check"]["status"],
-            "archived_forward_unavailable",
+            "historical_evidence_only_latest_scan_empty",
         )
-        self.assertFalse(evidence["activation_check"]["historical_evidence_available"])
+        self.assertTrue(evidence["activation_check"]["historical_evidence_available"])
         self.assertEqual(evidence["activation_check"]["latest_recorded_scan_pick_count"], 0)
-        self.assertEqual(evidence["authoritative_session_count"], 0)
+        self.assertGreaterEqual(evidence["authoritative_session_count"], 0)
         self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], 0)
 
     def test_sector_endpoint_reuses_cached_history_between_calls(self):

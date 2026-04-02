@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from options_profit_gate import evaluate_measurement_gate
+from profit_loop_automation import _require_daily_truth_refresh
 from options_profit_state import (
     TARGET_SYMBOLS,
     default_symbol_manifest,
@@ -200,6 +201,58 @@ def _load_closed_positions() -> list[dict[str, Any]]:
         return list(repo.list_positions("closed"))
     except Exception:
         return []
+
+
+def _blocked_daily_truth_refresh_gate(refresh_result: dict[str, Any]) -> dict[str, Any]:
+    blocker = {
+        "code": "daily_truth_refresh_failed",
+        "severity": "blocked",
+        "message": (
+            "The mandatory imported-daily truth refresh failed, so the options profit cycle cannot trust "
+            "the current measurement horizon."
+        ),
+        "stage": refresh_result.get("stage"),
+        "error": refresh_result.get("error"),
+        "manifest_path": refresh_result.get("manifest_path"),
+        "manifest_source": refresh_result.get("manifest_source"),
+    }
+    return {
+        "generated_at": utc_now_iso(),
+        "state": "blocked",
+        "blockers": [blocker],
+        "checks": {
+            "daily_truth_refresh": dict(refresh_result),
+            "imported_daily_artifact": {
+                "path": None,
+                "present": False,
+                "matches_store": False,
+                "quote_coverage_pct": None,
+                "required_quote_coverage_pct": None,
+            },
+            "forward_evidence": {
+                "db_path": None,
+                "eligible_event_count": 0,
+                "pending_truth_event_count": 0,
+                "required_event_count": None,
+                "trusted_truth_horizon": None,
+                "truth_staleness_business_days": None,
+                "by_symbol": {},
+                "contamination_finding_count": 0,
+                "stale_metadata_finding_count": 0,
+                "existing_symbol_floor": None,
+            },
+            "tracked_positions": {
+                "available": False,
+                "database_url_configured": bool(str(os.getenv("DATABASE_URL") or "").strip()),
+                "error_message": None,
+                "closed_position_count": 0,
+                "required_closed_position_count": None,
+            },
+        },
+        "eligible_forward_evidence": [],
+        "forward_evidence_summary": {},
+        "tracked_realized_metrics": {},
+    }
 
 
 def _candidate_position_metrics(symbol: str, candidate_id: str, positions: list[dict[str, Any]]) -> dict[str, Any]:
@@ -552,7 +605,12 @@ def run_options_profit_cycle(
     recorded_before_utc: str | None = None,
 ) -> dict[str, Any]:
     ensure_options_profit_state()
-    gate = evaluate_measurement_gate(recorded_before_utc=recorded_before_utc)
+    daily_truth_refresh = _require_daily_truth_refresh()
+    gate = (
+        _blocked_daily_truth_refresh_gate(daily_truth_refresh)
+        if str(daily_truth_refresh.get("status") or "").strip().lower() == "failed"
+        else evaluate_measurement_gate(recorded_before_utc=recorded_before_utc)
+    )
     live_profile = load_live_profile()
     incumbents = load_incumbents()
     previous_status = load_status()
@@ -607,6 +665,7 @@ def run_options_profit_cycle(
             "blockers": list(gate.get("blockers") or []),
             "checks": dict(gate.get("checks") or {}),
         },
+        "daily_truth_refresh": daily_truth_refresh,
         "active_incumbents": dict((load_live_profile().get("symbols") or {})),
         "current_canary": {
             symbol: dict(((load_incumbents().get("symbols") or {}).get(symbol) or {}).get("canary") or {})
@@ -644,6 +703,7 @@ def run_options_profit_cycle(
     write_status(status)
 
     return {
+        "daily_truth_refresh": daily_truth_refresh,
         "measurement_gate": gate,
         "decision": decision,
         "status": status,

@@ -1,8 +1,10 @@
 import type {
   BacktestReplayReport,
   BacktestResult,
+  ForwardEvidenceReport,
   LiveTradePolicy,
   MetricTruthReport,
+  OptionsProfitStatus,
   PlaybookExitAudit,
   TruthLaneComparisonReport,
 } from "@/lib/types";
@@ -317,6 +319,16 @@ export async function getBacktestSummary(
   params: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(`/api/backtest/summary${toSearchSuffix(params)}`);
+}
+
+export async function getForwardEvidenceReport(
+  params: Record<string, unknown> = {}
+): Promise<ForwardEvidenceReport> {
+  return fetchBackendJson<ForwardEvidenceReport>(`/api/backtest/forward-evidence${toSearchSuffix(params)}`);
+}
+
+export async function getOptionsProfitStatus(): Promise<OptionsProfitStatus> {
+  return fetchBackendJson<OptionsProfitStatus>("/api/options-profit/status");
 }
 
 export async function runBacktest(

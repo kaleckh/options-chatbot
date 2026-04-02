@@ -47,12 +47,19 @@ export interface ScanPick {
   tech_score?: number;
   ev: number;
   dte: number;
+  delta?: number | null;
+  iv_percentile?: number | null;
+  iv_pct?: number | null;
   target_move_pct?: number | null;
   stock_price?: number;
   strike?: number;
   strike_est?: number;
   premium?: number;
   est_premium?: number;
+  bid?: number | null;
+  ask?: number | null;
+  last?: number | null;
+  mid?: number | null;
   expiry?: string;
   asset_class?: "equity" | "index";
   sector?: string | null;
@@ -71,6 +78,27 @@ export interface ScanPick {
   guardrail_reasons?: string[];
   suggested_size_tier?: "starter" | "half" | "full" | "blocked" | string | null;
   suggested_size_reason?: string | null;
+  quote_time_et?: string | null;
+  quote_basis?: string | null;
+  quote_freshness_status?: string | null;
+  underlying_price_at_selection?: number | null;
+  selection_source?: string | null;
+  promotion_class?: string | null;
+  promotable?: boolean;
+  options_snapshot_status?: string | null;
+  option_chain_status?: string | null;
+  managed_eligible?: boolean;
+  managed_block_reason?: string | null;
+  entry_execution_price?: number | null;
+  entry_execution_basis?: string | null;
+  entry_fee_total_usd?: number | null;
+  profitability_eligibility?: string | null;
+  profitability_blockers?: string[];
+  candidate_rank?: number | null;
+  profit_candidate_id?: string | null;
+  policy_artifact_id?: string | null;
+  cohort_id?: string | null;
+  cohort_role?: string | null;
 }
 
 export type TruthLane = "synthetic" | "historical_imported" | "historical_imported_daily";
@@ -247,12 +275,128 @@ export interface TruthLaneComparisonReport {
   [key: string]: unknown;
 }
 
+export interface OptionsProfitGateBlocker {
+  code: string;
+  severity?: string | null;
+  message?: string | null;
+  [key: string]: unknown;
+}
+
+export interface OptionsProfitStatus {
+  generated_at?: string | null;
+  daily_truth_refresh?: {
+    status?: string | null;
+    stage?: string | null;
+    error?: string | null;
+    manifest_path?: string | null;
+    manifest_source?: string | null;
+    artifact_refresh?: Record<string, unknown> | null;
+    import_summary?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  } | null;
+  measurement_gate: {
+    state?: string | null;
+    blockers?: OptionsProfitGateBlocker[];
+    warnings?: string[];
+    checks?: {
+      imported_daily_artifact?: {
+        path?: string | null;
+        present?: boolean;
+        matches_store?: boolean;
+        quote_coverage_pct?: number | null;
+        required_quote_coverage_pct?: number | null;
+        [key: string]: unknown;
+      } | null;
+      forward_evidence?: {
+        db_path?: string | null;
+        eligible_event_count?: number | null;
+        pending_truth_event_count?: number | null;
+        trusted_truth_horizon?: string | null;
+        truth_staleness_business_days?: number | null;
+        by_symbol?: Record<string, { eligible?: number; pending_truth?: number; ineligible?: number }>;
+        contamination_finding_count?: number | null;
+        stale_metadata_finding_count?: number | null;
+        [key: string]: unknown;
+      } | null;
+      tracked_positions?: {
+        available?: boolean;
+        database_url_configured?: boolean;
+        error_message?: string | null;
+        closed_position_count?: number | null;
+        required_closed_position_count?: number | null;
+        [key: string]: unknown;
+      } | null;
+      [key: string]: unknown;
+    } | null;
+  };
+  active_incumbents?: Record<string, unknown>;
+  current_canary?: Record<string, unknown> | null;
+  last_decision?: Record<string, unknown> | null;
+  blockers?: Array<string | OptionsProfitGateBlocker>;
+  candidate_rankings?: Record<string, unknown>[];
+  [key: string]: unknown;
+}
+
+export interface ForwardEvidenceReport {
+  generated_at?: string | null;
+  source_label?: string | null;
+  recent_session_count?: number | null;
+  authoritative_session_count?: number | null;
+  scan_pick_count?: number | null;
+  eligible_scan_pick_count?: number | null;
+  exact_contract_capture_counts?: {
+    with_contract_count?: number | null;
+    without_contract_count?: number | null;
+  } | null;
+  forward_truth_recording_failure_count?: number | null;
+  activation_check?: {
+    active?: boolean;
+    status?: string | null;
+    message?: string | null;
+    historical_evidence_available?: boolean;
+    latest_recorded_scan_pick_count?: number | null;
+    [key: string]: unknown;
+  } | null;
+  ledger_summary?: {
+    available?: boolean;
+    authoritative_db_path?: string | null;
+    archive_db_path?: string | null;
+    scan_pick_count?: number | null;
+    eligible_scan_pick_count?: number | null;
+    observation_scan_pick_count?: number | null;
+    recent_session_count?: number | null;
+    authoritative_session_count?: number | null;
+    [key: string]: unknown;
+  } | null;
+  archived_forward_artifact?: {
+    available?: boolean;
+    path?: string | null;
+    run_at?: string | null;
+    evidence_status?: string | null;
+    primary_judge_trade_count?: number | null;
+    primary_judge_fallback_used?: boolean;
+    primary_judge_fallback_reason?: string | null;
+    pending_truth_horizon_count?: number | null;
+    archived_sample_date_coverage?: Record<string, unknown> | null;
+    [key: string]: unknown;
+  } | null;
+  recording_health?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
 export interface PositionReview {
   id?: number;
   reviewed_at: string;
   pricing_source?: string | null;
   current_option_price?: number | null;
   current_pnl_pct?: number | null;
+  entry_execution_basis?: string | null;
+  exit_execution_basis?: string | null;
+  gross_pnl_pct?: number | null;
+  net_pnl_pct?: number | null;
+  gross_pnl_usd?: number | null;
+  net_pnl_usd?: number | null;
+  fee_total_usd?: number | null;
   recommendation: "HOLD" | "SELL";
   reason: string;
   warnings: string[];
@@ -272,12 +416,19 @@ export interface TrackedPosition {
   entry_option_price: number;
   entry_underlying_price?: number | null;
   filled_at: string;
+  entry_execution_price?: number | null;
+  entry_execution_basis?: string | null;
   stop_loss_pct: number;
   profit_target_pct: number;
   time_exit_day: number;
   peak_pnl_pct?: number | null;
   last_option_price?: number | null;
   last_pnl_pct?: number | null;
+  gross_pnl_pct?: number | null;
+  net_pnl_pct?: number | null;
+  gross_pnl_usd?: number | null;
+  net_pnl_usd?: number | null;
+  fee_total_usd?: number | null;
   last_recommendation?: "HOLD" | "SELL" | null;
   last_recommendation_reason?: string | null;
   last_reviewed_at?: string | null;
@@ -285,6 +436,8 @@ export interface TrackedPosition {
   notes?: string | null;
   closed_at?: string | null;
   exit_option_price?: number | null;
+  exit_execution_price?: number | null;
+  exit_execution_basis?: string | null;
   exit_reason?: string | null;
   latest_review?: PositionReview | null;
 }
@@ -612,6 +765,7 @@ export interface DayTradingStrategySpec {
     cooldownBars: number;
     maxConcurrentPositions?: number;
     useSignalStrengthThreshold?: number;
+    exitTargetMode?: string;
   };
   riskLimits: {
     maxDrawdownFraction: number;
@@ -619,11 +773,19 @@ export interface DayTradingStrategySpec {
     maxOpenPositions: number;
     minLiquidityUsd?: number;
     maxSpreadFraction?: number;
+    maxWeeklyLossFraction?: number;
+    maxDailyLosingTrades?: number;
+    reduceSizeAtDrawdownFraction?: number;
+    reduceSizeMultiplier?: number;
+    maxCostToTargetFraction?: number;
+    assumedRoundTripFeeFraction?: number;
+    assumedSlippageFraction?: number;
   };
   sizing: {
     model: string;
     maxPositionFraction: number;
     riskPerTradeFraction?: number;
+    riskSizing?: string;
   };
   metadata?: {
     owner?: string;
@@ -632,6 +794,13 @@ export interface DayTradingStrategySpec {
     exchange?: string;
     marketType?: string;
     sessionMode?: string;
+    profitabilityProfileId?: string;
+    unlockPhase?: string;
+    executionVenuePrimary?: string;
+    executionVenueBackup?: string;
+    executionMode?: string;
+    sessionTimeZone?: string;
+    localSessionTimeZone?: string;
     alertWindowIds?: string[];
     stageHistory?: {
       from: string;
@@ -710,6 +879,96 @@ export interface DayTradingScoreboard {
   };
   leaders: DayTradingScoreboardItem[];
   items: DayTradingScoreboardItem[];
+}
+
+export interface DayTradingPilotGate {
+  id: string;
+  label: string;
+  target: string;
+  passed: boolean;
+  actual: string;
+}
+
+export interface DayTradingPilotBreakdown {
+  label: string;
+  trades: number;
+  winRate: number;
+  expectancyR: number;
+  netPnlUsd: number;
+}
+
+export interface DayTradingOperatingPlan {
+  profileId: string;
+  objective: string;
+  activeSetupId: string;
+  activeSetupLabel: string;
+  defaultRegimeBias: string;
+  marketStanceAsOf: string;
+  session: {
+    localTimeZone: string;
+    localWindow: string;
+    sessionTimeZone: string;
+    etWindow: string;
+    weekdaysOnly: boolean;
+  };
+  instruments: {
+    liveNow: string[];
+    nextPhase: string[];
+    paperOnly: string[];
+  };
+  execution: {
+    venues: string[];
+    orderStyle: string;
+    blocklist: string[];
+  };
+  risk: {
+    riskPerTradeFraction: number;
+    maxTotalOpenRiskFraction: number;
+    maxDailyLossFraction: number;
+    maxWeeklyLossFraction: number;
+    reduceSizeAtDrawdownFraction: number;
+    pauseAtDrawdownFraction: number;
+    maxCostToTargetFraction: number;
+  };
+  regimeChecklist: {
+    range: string[];
+    trend: string[];
+    event: string[];
+  };
+  journalTemplate: {
+    path: string;
+    fields: Array<{
+      key: string;
+      label: string;
+      required: boolean;
+    }>;
+  };
+}
+
+export interface DayTradingPilotSummary {
+  profileId: string;
+  phase: string;
+  progress: {
+    completedTrades: number;
+    targetTrades: number;
+    remainingTrades: number;
+  };
+  journalStats: {
+    totalEntries: number;
+    phaseOneEntries: number;
+    wins: number;
+    losses: number;
+    expectancyR: number | null;
+    profitFactor: number | null;
+    ruleAdherenceRate: number | null;
+    netPnlUsd: number;
+    maxDrawdownR: number;
+    dominantTradeShare: number | null;
+  };
+  breakdownByRegime: DayTradingPilotBreakdown[];
+  breakdownBySetup: DayTradingPilotBreakdown[];
+  gates: DayTradingPilotGate[];
+  nextUnlock: string;
 }
 
 export interface DayTradingValidationResult {
@@ -798,6 +1057,7 @@ export interface DayTradingWatchlistItem {
 
 export interface DayTradingWatchlist {
   generatedAt: string;
+  profitabilityProfileId?: string;
   evaluatedAt: string;
   market?: string;
   exchange?: string;
@@ -833,6 +1093,7 @@ export interface DayTradingWatchlist {
 
 export interface DayTradingReport {
   generatedAt: string;
+  profitabilityProfileId?: string;
   market?: string;
   exchange?: string;
   marketType?: string;
@@ -851,6 +1112,7 @@ export interface DayTradingReport {
 
 export interface DayTradingSnapshot {
   generatedAt: string;
+  profitabilityProfileId?: string;
   market?: string;
   marketLabel?: string;
   exchange?: string;
@@ -898,4 +1160,15 @@ export interface DayTradingSnapshot {
       endTimestamp: string | null;
     }[];
   } | null;
+  operatingPlan?: DayTradingOperatingPlan;
+  pilotSummary?: DayTradingPilotSummary;
+  profitabilityJournal?: {
+    path: string;
+    entryCount: number;
+    schema: Array<{
+      key: string;
+      label: string;
+      required: boolean;
+    }>;
+  };
 }

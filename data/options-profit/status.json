@@ -1,56 +1,175 @@
 {
   "active_incumbents": {
     "QQQ": {
-      "active": {
-        "applied_at": "2026-04-02T04:49:15.150974Z",
-        "base_profile": "index",
-        "candidate_id": "QQQ__baseline_broad_control",
-        "cohort_id": "baseline_broad_control",
-        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-        "mode": "incumbent",
-        "overrides": {},
-        "source": "bootstrap_default",
-        "status": "incumbent",
-        "symbol": "QQQ"
-      },
-      "canary": null,
-      "objective": null,
-      "previous": null,
+      "applied_at": "2026-04-02T04:49:15.148972Z",
+      "base_profile": "index",
+      "candidate_id": "QQQ__baseline_broad_control",
+      "cohort_id": "baseline_broad_control",
+      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+      "mode": "incumbent",
+      "overrides": {},
+      "source": "bootstrap_default",
+      "status": "incumbent",
       "symbol": "QQQ"
     },
     "SPY": {
-      "active": {
-        "applied_at": "2026-04-02T04:49:15.150974Z",
-        "base_profile": "index",
-        "candidate_id": "SPY__baseline_broad_control",
-        "cohort_id": "baseline_broad_control",
-        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-        "mode": "incumbent",
-        "overrides": {},
-        "source": "bootstrap_default",
-        "status": "incumbent",
-        "symbol": "SPY"
-      },
-      "canary": null,
-      "objective": null,
-      "previous": null,
+      "applied_at": "2026-04-02T04:49:15.148972Z",
+      "base_profile": "index",
+      "candidate_id": "SPY__baseline_broad_control",
+      "cohort_id": "baseline_broad_control",
+      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+      "mode": "incumbent",
+      "overrides": {},
+      "source": "bootstrap_default",
+      "status": "incumbent",
       "symbol": "SPY"
     }
   },
   "blockers": [
-    "Options profit cycle has not run yet."
+    {
+      "code": "forward_ledger_contamination",
+      "finding_count": 2,
+      "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
+      "severity": "blocked"
+    },
+    {
+      "allowed_truth_staleness_business_days": 3,
+      "code": "trusted_truth_stale",
+      "message": "Trusted options truth is too stale for bounded auto-optimization.",
+      "severity": "blocked",
+      "trusted_truth_horizon": "2025-12-15",
+      "truth_staleness_business_days": 78
+    },
+    {
+      "code": "insufficient_eligible_forward_truth",
+      "eligible_event_count": 0,
+      "message": "Not enough matured eligible live-production forward evidence is available.",
+      "required_event_count": 10,
+      "severity": "degraded-watch"
+    },
+    {
+      "code": "insufficient_symbol_forward_truth_qqq",
+      "eligible_event_count": 0,
+      "message": "QQQ does not yet have enough eligible live-production forward evidence.",
+      "required_event_count": 3,
+      "severity": "degraded-watch",
+      "symbol": "QQQ"
+    },
+    {
+      "code": "insufficient_symbol_forward_truth_spy",
+      "eligible_event_count": 0,
+      "message": "SPY does not yet have enough eligible live-production forward evidence.",
+      "required_event_count": 3,
+      "severity": "degraded-watch",
+      "symbol": "SPY"
+    },
+    {
+      "code": "tracked_positions_unavailable",
+      "message": "Tracked positions are unavailable because DATABASE_URL is not configured. Start local Postgres and set DATABASE_URL to enable the supervised options tracker.",
+      "severity": "blocked"
+    },
+    {
+      "closed_position_count": 0,
+      "code": "insufficient_closed_tracked_positions",
+      "message": "Not enough closed tracked positions are available for optimizer supervision.",
+      "required_closed_position_count": 1,
+      "severity": "degraded-watch"
+    }
   ],
+  "candidate_rankings": [],
   "current_canary": null,
-  "generated_at": "2026-04-02T04:49:15.150974Z",
+  "generated_at": "2026-04-02T16:12:10.593332Z",
   "last_decision": {
-    "action": "not_started",
-    "summary": "Options profit cycle has not run yet."
+    "action": "no_op",
+    "reason": "measurement_gate_blocked"
   },
+  "last_decision_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-profit\\decisions\\20260402_161210_status.json",
   "measurement_gate": {
     "blockers": [
-      "Options profit cycle has not run yet."
+      {
+        "code": "forward_ledger_contamination",
+        "finding_count": 2,
+        "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
+        "severity": "blocked"
+      },
+      {
+        "allowed_truth_staleness_business_days": 3,
+        "code": "trusted_truth_stale",
+        "message": "Trusted options truth is too stale for bounded auto-optimization.",
+        "severity": "blocked",
+        "trusted_truth_horizon": "2025-12-15",
+        "truth_staleness_business_days": 78
+      },
+      {
+        "code": "insufficient_eligible_forward_truth",
+        "eligible_event_count": 0,
+        "message": "Not enough matured eligible live-production forward evidence is available.",
+        "required_event_count": 10,
+        "severity": "degraded-watch"
+      },
+      {
+        "code": "insufficient_symbol_forward_truth_qqq",
+        "eligible_event_count": 0,
+        "message": "QQQ does not yet have enough eligible live-production forward evidence.",
+        "required_event_count": 3,
+        "severity": "degraded-watch",
+        "symbol": "QQQ"
+      },
+      {
+        "code": "insufficient_symbol_forward_truth_spy",
+        "eligible_event_count": 0,
+        "message": "SPY does not yet have enough eligible live-production forward evidence.",
+        "required_event_count": 3,
+        "severity": "degraded-watch",
+        "symbol": "SPY"
+      },
+      {
+        "code": "tracked_positions_unavailable",
+        "message": "Tracked positions are unavailable because DATABASE_URL is not configured. Start local Postgres and set DATABASE_URL to enable the supervised options tracker.",
+        "severity": "blocked"
+      },
+      {
+        "closed_position_count": 0,
+        "code": "insufficient_closed_tracked_positions",
+        "message": "Not enough closed tracked positions are available for optimizer supervision.",
+        "required_closed_position_count": 1,
+        "severity": "degraded-watch"
+      }
     ],
-    "state": "blocked",
-    "warnings": []
-  }
+    "checks": {
+      "forward_evidence": {
+        "by_symbol": {
+          "QQQ": {
+            "eligible": 0,
+            "ineligible": 1
+          },
+          "SPY": {
+            "eligible": 0,
+            "ineligible": 54
+          }
+        },
+        "contamination_finding_count": 2,
+        "eligible_event_count": 0,
+        "existing_symbol_floor": 25,
+        "required_event_count": 10,
+        "stale_metadata_finding_count": 0,
+        "trusted_truth_horizon": "2025-12-15",
+        "truth_staleness_business_days": 78
+      },
+      "imported_daily_artifact": {
+        "matches_store": true,
+        "path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\runs\\latest_daily.json",
+        "present": true,
+        "quote_coverage_pct": 100.0,
+        "required_quote_coverage_pct": 70.0
+      },
+      "tracked_positions": {
+        "available": false,
+        "closed_position_count": 0,
+        "required_closed_position_count": 1
+      }
+    },
+    "state": "blocked"
+  },
+  "previous_status_generated_at": "2026-04-02T16:05:49.239185Z"
 }

@@ -6,6 +6,8 @@ import MetricCard from "@/components/ui/MetricCard";
 import FinTable from "@/components/ui/FinTable";
 import type {
   DayTradingReport,
+  DayTradingOperatingPlan,
+  DayTradingPilotSummary,
   DayTradingSnapshot,
   DayTradingStrategySpec,
   DayTradingWatchlist,
@@ -34,6 +36,16 @@ function pct(value: number | null | undefined, digits: number = 1): string {
 function money(value: number | null | undefined, digits: number = 0): string {
   if (value == null || Number.isNaN(value)) return "-";
   return `$${value.toFixed(digits)}`;
+}
+
+function ratio(value: number | null | undefined, digits: number = 1): string {
+  if (value == null || Number.isNaN(value)) return "-";
+  return `${value.toFixed(digits)}x`;
+}
+
+function phaseLabel(value: string | null | undefined): string {
+  if (!value) return "-";
+  return value.replace(/_/g, " ");
 }
 
 function statusTone(status: string): string {
@@ -70,10 +82,10 @@ function marketCopy(market: DayTradingMarket) {
   return {
     title: "Crypto Day Trading Lab",
     description:
-      "Default active research lane for BTCUSDT, ETHUSDT, and SOLUSDT. It uses imported Binance-style 1m spot history, derives 5m strategy bars, watches two ET liquidity windows, and blocks notify decisions when live data is stale or untrusted.",
-    watchlistTitle: "Scheduled Window Watchlist",
-    windowActive: "Active crypto window",
-    windowInactive: "Outside scheduled windows",
+      "Profitability pilot for BTC-first crypto spot trading. The active live lane is a rules-first BTC range mean-reversion setup in one fixed session, while ETH stays locked until phase 1 passes and SOL remains paper-only.",
+    watchlistTitle: "Fixed Session Watchlist",
+    windowActive: "Core session live",
+    windowInactive: "Outside fixed session",
   };
 }
 
@@ -93,6 +105,12 @@ function StrategyCard({ strategy }: { strategy: DayTradingStrategySpec }) {
       </div>
 
       <p className="text-sm text-text-2 leading-relaxed">{strategy.hypothesisSummary}</p>
+
+      {strategy.metadata?.unlockPhase && (
+        <div className="text-xs text-text-3 uppercase tracking-wide">
+          Unlock phase: {strategy.metadata.unlockPhase.replace(/_/g, " ")}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 text-xs">
         <div className="bg-bg-3 border border-border rounded-md p-3">
@@ -233,6 +251,8 @@ export default function DayTradingLab() {
   const report: DayTradingReport | null = snapshot.lastReport;
   const selectedMarket = (snapshot.market || market) as DayTradingMarket;
   const copy = marketCopy(selectedMarket);
+  const operatingPlan: DayTradingOperatingPlan | null = snapshot.operatingPlan || null;
+  const pilotSummary: DayTradingPilotSummary | null = snapshot.pilotSummary || null;
   const scoreboardRows = snapshot.scoreboard.items.map((item) => ({
     Strategy: item.strategyName,
     Status: item.status.replace(/_/g, " "),
@@ -275,6 +295,40 @@ export default function DayTradingLab() {
     Window: item.sessionWindowLabel || "-",
     Source: item.marketDataSource,
     Warning: item.marketDataWarning || "-",
+  })) || [];
+  const pilotGateRows = pilotSummary?.gates.map((gate) => ({
+    Gate: gate.label,
+    Target: gate.target,
+    Actual: gate.actual,
+    Status: gate.passed ? "passed" : "pending",
+  })) || [];
+  const regimeRows = operatingPlan ? [
+    {
+      Mode: "Range",
+      Checklist: operatingPlan.regimeChecklist.range.join(" "),
+    },
+    {
+      Mode: "Trend",
+      Checklist: operatingPlan.regimeChecklist.trend.join(" "),
+    },
+    {
+      Mode: "Event",
+      Checklist: operatingPlan.regimeChecklist.event.join(" "),
+    },
+  ] : [];
+  const regimeBreakdownRows = pilotSummary?.breakdownByRegime.map((row) => ({
+    Regime: row.label,
+    Trades: String(row.trades),
+    "Win Rate": pct(row.winRate),
+    "Expectancy (R)": row.expectancyR.toFixed(2),
+    "Net PnL": money(row.netPnlUsd, 2),
+  })) || [];
+  const setupBreakdownRows = pilotSummary?.breakdownBySetup.map((row) => ({
+    Setup: row.label,
+    Trades: String(row.trades),
+    "Win Rate": pct(row.winRate),
+    "Expectancy (R)": row.expectancyR.toFixed(2),
+    "Net PnL": money(row.netPnlUsd, 2),
   })) || [];
 
   return (
@@ -381,6 +435,138 @@ export default function DayTradingLab() {
           delta={report ? `Last run ${report.generatedAt.slice(0, 16).replace("T", " ")}` : "No run yet"}
         />
       </div>
+
+      {operatingPlan && pilotSummary && (
+        <div className="space-y-4">
+          <div className="section-header flex items-center gap-2">
+            <ShieldCheck size={14} />
+            Profitability Pilot
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+            <MetricCard
+              label="Pilot Phase"
+              value={phaseLabel(pilotSummary.phase)}
+              delta={operatingPlan.defaultRegimeBias}
+            />
+            <MetricCard
+              label="Phase 1 Progress"
+              value={`${pilotSummary.progress.completedTrades}/${pilotSummary.progress.targetTrades}`}
+              delta={`${pilotSummary.progress.remainingTrades} trades remaining`}
+            />
+            <MetricCard
+              label="Expectancy"
+              value={pilotSummary.journalStats.expectancyR == null ? "-" : `${pilotSummary.journalStats.expectancyR.toFixed(2)}R`}
+              delta="Net after fees/slippage"
+            />
+            <MetricCard
+              label="Profit Factor"
+              value={ratio(pilotSummary.journalStats.profitFactor, 2)}
+              delta="Phase 1 gate >= 1.20x"
+            />
+            <MetricCard
+              label="Rule Adherence"
+              value={pct(pilotSummary.journalStats.ruleAdherenceRate)}
+              delta="Phase 1 gate >= 90%"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-3">
+              <div>
+                <div className="section-header mt-0">Operating Plan</div>
+                <p className="text-sm text-text-2">{operatingPlan.objective}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="bg-bg-3 border border-border rounded-md p-3">
+                  <div className="text-text-3 uppercase tracking-wide mb-1">Session</div>
+                  <div className="text-text-1">{operatingPlan.session.localWindow}</div>
+                  <div className="text-text-2 mt-1">{operatingPlan.session.etWindow}</div>
+                </div>
+                <div className="bg-bg-3 border border-border rounded-md p-3">
+                  <div className="text-text-3 uppercase tracking-wide mb-1">Instruments</div>
+                  <div className="text-text-1">Live now: {operatingPlan.instruments.liveNow.join(", ")}</div>
+                  <div className="text-text-2 mt-1">Next: {operatingPlan.instruments.nextPhase.join(", ")}</div>
+                </div>
+                <div className="bg-bg-3 border border-border rounded-md p-3">
+                  <div className="text-text-3 uppercase tracking-wide mb-1">Execution</div>
+                  <div className="text-text-1">{operatingPlan.execution.venues.join(" / ")}</div>
+                  <div className="text-text-2 mt-1">{operatingPlan.execution.orderStyle}</div>
+                </div>
+                <div className="bg-bg-3 border border-border rounded-md p-3">
+                  <div className="text-text-3 uppercase tracking-wide mb-1">Risk</div>
+                  <div className="text-text-1">Per trade: {pct(operatingPlan.risk.riskPerTradeFraction, 2)}</div>
+                  <div className="text-text-2 mt-1">Daily / Weekly: {pct(operatingPlan.risk.maxDailyLossFraction)} / {pct(operatingPlan.risk.maxWeeklyLossFraction)}</div>
+                </div>
+              </div>
+              <div className="text-xs text-text-3">
+                Journal path: {snapshot.profitabilityJournal?.path || "-"}
+              </div>
+            </div>
+
+            <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
+              <div>
+                <div className="section-header mt-0">Validation Gates</div>
+                <p className="text-sm text-text-2">
+                  Phase 1 stays BTC-only until all acceptance gates pass. ETH remains locked until this panel is green.
+                </p>
+              </div>
+              <FinTable
+                data={pilotGateRows}
+                badgeCol="Status"
+                monoCols={["Target", "Actual"]}
+                maxHeight="320px"
+              />
+              <div className="text-xs text-text-3">
+                Next unlock: {pilotSummary.nextUnlock}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {regimeRows.map((row) => (
+              <div key={row.Mode} className="bg-bg-2 border border-border rounded-lg p-4">
+                <div className="section-header mt-0">{row.Mode}</div>
+                <p className="text-sm text-text-2 leading-relaxed">{row.Checklist}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="bg-bg-2 border border-border rounded-lg p-4">
+              <div className="section-header mt-0">Journal By Regime</div>
+              <FinTable
+                data={regimeBreakdownRows}
+                pnlCols={["Net PnL"]}
+                rateCols={["Win Rate"]}
+                monoCols={["Trades", "Expectancy (R)"]}
+                maxHeight="280px"
+              />
+            </div>
+            <div className="bg-bg-2 border border-border rounded-lg p-4">
+              <div className="section-header mt-0">Journal By Setup</div>
+              <FinTable
+                data={setupBreakdownRows}
+                pnlCols={["Net PnL"]}
+                rateCols={["Win Rate"]}
+                monoCols={["Trades", "Expectancy (R)"]}
+                maxHeight="280px"
+              />
+            </div>
+          </div>
+
+          <div className="bg-bg-2 border border-border rounded-lg p-4">
+            <div className="section-header mt-0">Journal Template</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
+              {(snapshot.profitabilityJournal?.schema || []).map((field) => (
+                <div key={field.key} className="bg-bg-3 border border-border rounded-md px-3 py-2 text-text-2">
+                  <span className="text-text-1">{field.label}</span>
+                  {field.required ? " · required" : ""}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {(watchlistLoading || watchlist) && (
         <div className="space-y-4">

@@ -349,6 +349,7 @@ def _run_fixture_smoke(
                 "MARKET_DATA_DB_PATH": os.path.join(tmpdir, "market_data.db"),
                 "HISTORICAL_OPTIONS_DB_PATH": os.path.join(tmpdir, "options_history.db"),
                 "FORWARD_OPTIONS_LEDGER_DB_PATH": forward_ledger_path,
+                "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": forward_ledger_path,
                 "OPTIONS_EVIDENCE_CLASS": "fixture_smoke",
                 "OPTIONS_RUN_MODE": "fixture_smoke",
                 "OPTIONS_IS_FIXTURE": "1",

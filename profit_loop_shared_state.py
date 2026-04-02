@@ -390,6 +390,14 @@ def migrate_profit_loop_state(payload: dict[str, Any]) -> dict[str, Any]:
     version = int(payload.get("schema_version") or 1)
     if version == SCHEMA_VERSION:
         migrated = copy.deepcopy(payload)
+        defaults = empty_profit_loop_state()
+        migrated.setdefault("updated_at", defaults["updated_at"])
+        migrated.setdefault("active_run", defaults["active_run"])
+        migrated.setdefault("latest_operational_health", defaults["latest_operational_health"])
+        migrated.setdefault("latest_truth_holdout", defaults["latest_truth_holdout"])
+        migrated.setdefault("latest_profit_validation", defaults["latest_profit_validation"])
+        migrated.setdefault("open_issues", copy.deepcopy(defaults["open_issues"]))
+        migrated.setdefault("resolved_issues", copy.deepcopy(defaults["resolved_issues"]))
     elif version == 1:
         migrated = copy.deepcopy(payload)
         migrated["schema_version"] = SCHEMA_VERSION

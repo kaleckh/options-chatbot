@@ -10,6 +10,7 @@ from forward_options_ledger import (
     init_forward_ledger,
     list_forward_scan_pick_events,
     list_forward_sessions,
+    migrate_live_production_evidence,
     record_forward_snapshot,
     summarize_forward_holdout,
 )
@@ -635,6 +636,149 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(summary["scan_funnel_totals"]["guardrail_filtered_out"], 2)
         self.assertEqual(summary["latest_scan_funnel"]["post_guardrails_visible"], 0)
         self.assertEqual(summary["latest_starvation_stage"], "guardrails_filtered_all")
+
+    def test_default_write_routing_sends_live_production_to_authoritative_ledger(self):
+        archive_path = os.path.join(self._tmp.name, "forward_tracking_shared.db")
+        authoritative_path = os.path.join(self._tmp.name, "forward_tracking_authoritative.db")
+        with patch.dict(
+            os.environ,
+            {
+                "FORWARD_OPTIONS_LEDGER_DB_PATH": archive_path,
+                "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": authoritative_path,
+            },
+            clear=False,
+        ), patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
+            live_result = record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "SPY",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "SPY260417C00560000",
+                            "expiry": "2026-04-17",
+                            "strike": 560.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "live_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "entry_execution_price": 5.1,
+                            "entry_execution_basis": "ask",
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "live_production",
+                },
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="api_scan_auto",
+            )
+            research_result = record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "QQQ",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "QQQ260417C00450000",
+                            "expiry": "2026-04-17",
+                            "strike": 450.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "model_target_contract",
+                            "promotion_class": "research_bootstrap",
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "research_backfill",
+                },
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="research_backfill",
+            )
+
+        self.assertEqual(os.path.abspath(live_result["db_path"]), os.path.abspath(authoritative_path))
+        self.assertEqual(os.path.abspath(research_result["db_path"]), os.path.abspath(archive_path))
+        self.assertEqual(len(list_forward_sessions(db_path=authoritative_path)), 1)
+        self.assertEqual(len(list_forward_sessions(db_path=archive_path)), 1)
+
+    def test_migration_copies_only_live_production_sessions(self):
+        archive_path = os.path.join(self._tmp.name, "forward_tracking_shared.db")
+        authoritative_path = os.path.join(self._tmp.name, "forward_tracking_authoritative.db")
+        with patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
+            record_forward_snapshot(
+                scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "SPY",
+                        "direction": "call",
+                        "option_type": "call",
+                        "contract_symbol": "SPY260417C00560000",
+                        "expiry": "2026-04-17",
+                        "strike": 560.0,
+                        "quote_time_et": "2026-04-01T09:45:00-04:00",
+                        "quote_basis": "mid",
+                        "selection_source": "live_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                        "entry_execution_price": 5.1,
+                        "entry_execution_basis": "ask",
+                    }
+                ],
+                "policy_applied": True,
+                "policy": {"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+                "playbook": {"id": "short_term"},
+                "evidence_class": "live_production",
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="api_scan_auto",
+                db_path=archive_path,
+            )
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "QQQ",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "QQQ260417C00450000",
+                            "expiry": "2026-04-17",
+                            "strike": 450.0,
+                            "quote_time_et": "2026-04-01T09:45:00-04:00",
+                            "quote_basis": "mid",
+                            "selection_source": "model_target_contract",
+                            "promotion_class": "research_bootstrap",
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "research_backfill",
+                },
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="research_backfill",
+                db_path=archive_path,
+            )
+
+        result = migrate_live_production_evidence(
+            source_db_path=archive_path,
+            destination_db_path=authoritative_path,
+        )
+
+        authoritative_sessions = list_forward_sessions(db_path=authoritative_path)
+        authoritative_events = list_forward_scan_pick_events(db_path=authoritative_path)
+        self.assertEqual(result["status"], "migrated")
+        self.assertEqual(result["selected_session_count"], 1)
+        self.assertEqual(result["migrated_session_count"], 1)
+        self.assertEqual(len(authoritative_sessions), 1)
+        self.assertEqual(authoritative_sessions[0]["evidence_class"], "live_production")
+        self.assertEqual(len(authoritative_events), 1)
+        self.assertEqual(authoritative_events[0]["ticker"], "SPY")
 
 
 if __name__ == "__main__":

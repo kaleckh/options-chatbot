@@ -20,21 +20,25 @@ const BACKTEST_DIR = path.join(DATA_ROOT, "backtests");
 const EXPERIMENTS_DIR = path.join(DATA_ROOT, "experiments");
 const EXPERIMENT_REPORT_PATH = path.join(EXPERIMENTS_DIR, "latest.json");
 const IMPORT_REPORT_PATH = path.join(DATA_ROOT, "import_latest.json");
+const PROFITABILITY_JOURNAL_PATH = path.join(DATA_ROOT, "profitability_journal.json");
 const READ_ONLY_BUNDLE_CACHE = new Map();
 const NORMALIZED_BARS_CACHE = new Map();
 const DEFAULT_ACCOUNT_ID = "paper-main";
 const MANAGED_STRATEGY_OWNER = "options-chatbot-day-trading-crypto";
+const PROFITABILITY_PROFILE_ID = "crypto_profitability_v1";
 const DEFAULT_MARKET = "crypto";
 const DEFAULT_EXCHANGE = "binance_us";
 const DEFAULT_MARKET_TYPE = "spot";
 const DEFAULT_INTERVAL = "1m";
 const DEFAULT_TIMEFRAME = "5m";
+const LOCAL_SESSION_TIMEZONE = "America/Denver";
+const SESSION_TIMEZONE = "America/New_York";
 const BINANCE_API_ROOTS = [
   process.env.DAY_TRADING_CRYPTO_API_ROOT || "https://api.binance.us",
   "https://api.binance.com",
 ];
 const ET_FORMATTER = new Intl.DateTimeFormat("en-US", {
-  timeZone: "America/New_York",
+  timeZone: SESSION_TIMEZONE,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",
@@ -44,12 +48,12 @@ const ET_FORMATTER = new Intl.DateTimeFormat("en-US", {
   hour12: false,
 });
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
-const VALID_WINDOW_MODES = new Set(["all_hours", "scheduled_windows", "us_morning", "asia_open"]);
-const RESEARCH_WINDOW_MODES = ["all_hours", "scheduled_windows", "us_morning", "asia_open"];
+const TRADING_WEEKDAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
+const VALID_WINDOW_MODES = new Set(["all_hours", "scheduled_windows", "denver_core"]);
+const RESEARCH_WINDOW_MODES = ["scheduled_windows", "denver_core", "all_hours"];
 const FROZEN_CRYPTO_FAMILIES = new Set([
-  "crypto_vwap_reclaim",
-  "crypto_range_breakout",
-  "crypto_ema_pullback_continuation",
+  "crypto_range_mean_reversion",
+  "crypto_trend_continuation",
 ]);
 const CRYPTO_FAMILY_CONTINUE_RULES = {
   minimumTrades: 30,
@@ -73,14 +77,15 @@ const DEFAULT_CRYPTO_DAY_TRADING_CONFIG = {
   bars: 3120,
   startingCash: 10000,
   feesFraction: 0.0005,
-  watchlistLimit: 6,
-  notifyLookbackBars: 2,
-  maxBarAgeMinutes: 12,
+  watchlistLimit: 4,
+  notifyLookbackBars: 1,
+  maxBarAgeMinutes: 10,
   importLookbackDays: 90,
   livePollMinutes: 180,
+  localSessionTimeZone: LOCAL_SESSION_TIMEZONE,
+  sessionTimeZone: SESSION_TIMEZONE,
   alertWindows: [
-    { id: "us_morning", label: "US Morning", startEt: "08:00", endEt: "11:00" },
-    { id: "asia_open", label: "Asia Open", startEt: "20:00", endEt: "23:00" },
+    { id: "denver_core", label: "Denver Core", startEt: "09:00", endEt: "13:00" },
   ],
 };
 const VALID_STATUSES = new Set([
@@ -93,23 +98,17 @@ const VALID_STATUSES = new Set([
   "disabled",
 ]);
 const CRYPTO_EXPERIMENT_LIBRARY = {
-  crypto_range_breakout: {
+  crypto_range_mean_reversion: {
     signalThresholds: [0.64, 0.7, 0.76],
-    takeProfitFractions: [0.0075, 0.009, 0.0105],
+    takeProfitFractions: [0.0055, 0.0065, 0.0075],
     stopLossFractions: [0.0035, 0.0045, 0.0055],
-    maxHoldBars: [12, 14, 18],
+    maxHoldBars: [6, 8, 10],
   },
-  crypto_vwap_reclaim: {
-    signalThresholds: [0.62, 0.68, 0.74],
-    takeProfitFractions: [0.006, 0.0075, 0.009],
-    stopLossFractions: [0.0035, 0.0045, 0.005],
-    maxHoldBars: [12, 18, 24],
-  },
-  crypto_ema_pullback_continuation: {
-    signalThresholds: [0.6, 0.67, 0.74],
-    takeProfitFractions: [0.0065, 0.008, 0.0095],
-    stopLossFractions: [0.003, 0.004, 0.0048],
-    maxHoldBars: [12, 16, 20],
+  crypto_trend_continuation: {
+    signalThresholds: [0.66, 0.72, 0.78],
+    takeProfitFractions: [0.008, 0.0095, 0.011],
+    stopLossFractions: [0.004, 0.005, 0.006],
+    maxHoldBars: [8, 12, 16],
   },
 };
 
@@ -192,7 +191,7 @@ function getAlertWindowById(windowId, config = DEFAULT_CRYPTO_DAY_TRADING_CONFIG
 
 function getWindowModeLabel(windowMode, config = DEFAULT_CRYPTO_DAY_TRADING_CONFIG) {
   if (windowMode === "all_hours") return "All Hours";
-  if (windowMode === "scheduled_windows") return "Scheduled Windows";
+  if (windowMode === "scheduled_windows") return "Fixed Session";
   return getAlertWindowById(windowMode, config)?.label || windowMode;
 }
 
@@ -216,6 +215,15 @@ function classifyScheduledWindow(timestamp, config = DEFAULT_CRYPTO_DAY_TRADING_
   const parts = getEtParts(timestamp);
   if (!parts) {
     return { active: false, label: "invalid_time", windowId: null, windowLabel: null, minutesSinceMidnight: null };
+  }
+  if (!TRADING_WEEKDAYS.has(parts.weekday)) {
+    return {
+      active: false,
+      label: "outside_trading_days",
+      windowId: null,
+      windowLabel: null,
+      minutesSinceMidnight: (parts.hour * 60) + parts.minute,
+    };
   }
 
   const minutesSinceMidnight = (parts.hour * 60) + parts.minute;
@@ -250,6 +258,15 @@ function classifyWindow(timestamp, options = {}) {
   const parts = getEtParts(timestamp);
   if (!parts) {
     return { active: false, label: "invalid_time", windowId: null, windowLabel: null, minutesSinceMidnight: null };
+  }
+  if (!TRADING_WEEKDAYS.has(parts.weekday)) {
+    return {
+      active: false,
+      label: "outside_trading_days",
+      windowId: null,
+      windowLabel: null,
+      minutesSinceMidnight: (parts.hour * 60) + parts.minute,
+    };
   }
   if (windowMode === "all_hours") {
     return {
@@ -331,14 +348,317 @@ function normalizeCsvPathInput(value) {
     .filter(Boolean);
 }
 
+function buildProfitabilityJournalSchema() {
+  return [
+    { key: "tradeTimestamp", label: "Trade time", required: true },
+    { key: "sessionLabel", label: "Session", required: true },
+    { key: "symbol", label: "Coin", required: true },
+    { key: "regime", label: "Regime", required: true },
+    { key: "setupId", label: "Setup ID", required: true },
+    { key: "side", label: "Side", required: true },
+    { key: "plannedEntryPrice", label: "Planned entry", required: true },
+    { key: "stopPrice", label: "Stop", required: true },
+    { key: "targetPrice", label: "Target", required: true },
+    { key: "orderType", label: "Order type", required: true },
+    { key: "sizeUsd", label: "Size (USD)", required: true },
+    { key: "feesUsd", label: "Fees (USD)", required: true },
+    { key: "spreadSlippageUsd", label: "Spread + slippage (USD)", required: true },
+    { key: "pnlR", label: "Realized PnL (R)", required: true },
+    { key: "pnlUsd", label: "Realized PnL (USD)", required: true },
+    { key: "screenshotPath", label: "Screenshot path", required: true },
+    { key: "ruleAdherenceScore", label: "Rule adherence", required: true },
+    { key: "mistakeTag", label: "Mistake tag", required: true },
+    { key: "note", label: "Post-trade note", required: true },
+  ];
+}
+
+function defaultProfitabilityJournal() {
+  return {
+    version: 1,
+    profileId: PROFITABILITY_PROFILE_ID,
+    generatedAt: nowIso(),
+    schema: buildProfitabilityJournalSchema(),
+    entries: [],
+  };
+}
+
+function normalizeRuleAdherenceScore(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  if (numeric <= 1) return Math.max(0, Math.min(100, numeric * 100));
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function readProfitabilityJournal() {
+  const fallback = defaultProfitabilityJournal();
+  const stored = readJson(PROFITABILITY_JOURNAL_PATH, fallback);
+  return {
+    ...fallback,
+    ...stored,
+    profileId: PROFITABILITY_PROFILE_ID,
+    schema: buildProfitabilityJournalSchema(),
+    entries: Array.isArray(stored?.entries) ? stored.entries : [],
+  };
+}
+
+function appendProfitabilityJournalEntry(input = {}) {
+  const journal = readProfitabilityJournal();
+  const entry = {
+    entryId: `pilot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    loggedAt: nowIso(),
+    tradeTimestamp: String(input.tradeTimestamp || input.timestamp || nowIso()),
+    sessionLabel: String(input.sessionLabel || "Denver Core"),
+    symbol: String(input.symbol || "").toUpperCase(),
+    regime: String(input.regime || "").toLowerCase(),
+    setupId: String(input.setupId || ""),
+    side: String(input.side || "").toLowerCase(),
+    plannedEntryPrice: Number(input.plannedEntryPrice),
+    stopPrice: Number(input.stopPrice),
+    targetPrice: Number(input.targetPrice),
+    orderType: String(input.orderType || ""),
+    sizeUsd: Number(input.sizeUsd),
+    feesUsd: Number(input.feesUsd || 0),
+    spreadSlippageUsd: Number(input.spreadSlippageUsd || 0),
+    pnlR: Number(input.pnlR),
+    pnlUsd: Number(input.pnlUsd),
+    screenshotPath: String(input.screenshotPath || ""),
+    ruleAdherenceScore: normalizeRuleAdherenceScore(input.ruleAdherenceScore),
+    mistakeTag: String(input.mistakeTag || "none"),
+    note: String(input.note || ""),
+  };
+
+  journal.entries.push(entry);
+  journal.generatedAt = nowIso();
+  atomicWriteJsonSync(PROFITABILITY_JOURNAL_PATH, journal);
+  return {
+    journal,
+    entry,
+    summary: buildProfitabilityPilotSummary(journal.entries),
+  };
+}
+
+function computeProfitFactorFromEntries(entries = []) {
+  const grossWins = entries
+    .filter((entry) => Number(entry.pnlR || 0) > 0)
+    .reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0);
+  const grossLosses = Math.abs(entries
+    .filter((entry) => Number(entry.pnlR || 0) < 0)
+    .reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0));
+  if (grossLosses === 0) {
+    return grossWins > 0 ? null : 0;
+  }
+  return grossWins / grossLosses;
+}
+
+function computeMaxDrawdownR(entries = []) {
+  let equity = 0;
+  let peak = 0;
+  let maxDrawdown = 0;
+  for (const entry of entries) {
+    equity += Number(entry.pnlR || 0);
+    peak = Math.max(peak, equity);
+    maxDrawdown = Math.max(maxDrawdown, peak - equity);
+  }
+  return maxDrawdown;
+}
+
+function buildEntryBreakdown(entries = [], key) {
+  const grouped = new Map();
+  for (const entry of entries) {
+    const groupKey = String(entry?.[key] || "unknown");
+    const list = grouped.get(groupKey) || [];
+    list.push(entry);
+    grouped.set(groupKey, list);
+  }
+
+  return [...grouped.entries()]
+    .map(([groupKey, groupedEntries]) => {
+      const wins = groupedEntries.filter((entry) => Number(entry.pnlR || 0) > 0).length;
+      const expectancyR = groupedEntries.reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0) / groupedEntries.length;
+      const netPnlUsd = groupedEntries.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+      return {
+        label: groupKey,
+        trades: groupedEntries.length,
+        winRate: wins / groupedEntries.length,
+        expectancyR,
+        netPnlUsd,
+      };
+    })
+    .sort((left, right) => Number(right.netPnlUsd || 0) - Number(left.netPnlUsd || 0));
+}
+
+function buildProfitabilityPilotSummary(entries = []) {
+  const allEntries = Array.isArray(entries) ? entries.slice() : [];
+  const phaseOneEntries = allEntries.filter((entry) => (
+    String(entry.setupId || "") === "btcusdt-crypto-range-mean-reversion" &&
+    String(entry.symbol || "").toUpperCase() === "BTCUSDT"
+  ));
+  const tradeCount = phaseOneEntries.length;
+  const wins = phaseOneEntries.filter((entry) => Number(entry.pnlR || 0) > 0).length;
+  const losses = phaseOneEntries.filter((entry) => Number(entry.pnlR || 0) < 0).length;
+  const expectancyR = tradeCount > 0
+    ? phaseOneEntries.reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0) / tradeCount
+    : null;
+  const netPnlUsd = phaseOneEntries.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+  const profitFactor = computeProfitFactorFromEntries(phaseOneEntries);
+  const ruleAdherenceRate = tradeCount > 0
+    ? phaseOneEntries.reduce((sum, entry) => sum + Number(entry.ruleAdherenceScore || 0), 0) / tradeCount / 100
+    : null;
+  const maxDrawdownR = computeMaxDrawdownR(phaseOneEntries);
+  const grossPositivePnl = phaseOneEntries
+    .filter((entry) => Number(entry.pnlUsd || 0) > 0)
+    .reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+  const dominantTradePnl = phaseOneEntries.reduce((best, entry) => (
+    Math.max(best, Number(entry.pnlUsd || 0))
+  ), 0);
+  const dominantTradeShare = grossPositivePnl > 0 ? dominantTradePnl / grossPositivePnl : null;
+  const gates = [
+    {
+      id: "expectancy",
+      label: "Net expectancy > 0",
+      target: "> 0R",
+      passed: expectancyR != null && expectancyR > 0,
+      actual: expectancyR == null ? "-" : `${expectancyR.toFixed(2)}R`,
+    },
+    {
+      id: "profit_factor",
+      label: "Profit factor >= 1.20",
+      target: ">= 1.20",
+      passed: profitFactor != null && profitFactor >= 1.2,
+      actual: profitFactor == null ? "-" : profitFactor.toFixed(2),
+    },
+    {
+      id: "rule_adherence",
+      label: "Rule adherence >= 90%",
+      target: ">= 90%",
+      passed: ruleAdherenceRate != null && ruleAdherenceRate >= 0.9,
+      actual: ruleAdherenceRate == null ? "-" : `${(ruleAdherenceRate * 100).toFixed(1)}%`,
+    },
+    {
+      id: "drawdown",
+      label: "Max drawdown < 4R",
+      target: "< 4R",
+      passed: tradeCount > 0 && maxDrawdownR < 4,
+      actual: `${maxDrawdownR.toFixed(2)}R`,
+    },
+    {
+      id: "outlier",
+      label: "Top trade <= 20% of gross PnL",
+      target: "<= 20%",
+      passed: dominantTradeShare != null && dominantTradeShare <= 0.2,
+      actual: dominantTradeShare == null ? "-" : `${(dominantTradeShare * 100).toFixed(1)}%`,
+    },
+  ];
+
+  return {
+    profileId: PROFITABILITY_PROFILE_ID,
+    phase: tradeCount >= 30 && gates.every((gate) => gate.passed) ? "phase_2_ready" : "phase_1_btc_only",
+    progress: {
+      completedTrades: tradeCount,
+      targetTrades: 30,
+      remainingTrades: Math.max(0, 30 - tradeCount),
+    },
+    journalStats: {
+      totalEntries: allEntries.length,
+      phaseOneEntries: tradeCount,
+      wins,
+      losses,
+      expectancyR,
+      profitFactor,
+      ruleAdherenceRate,
+      netPnlUsd,
+      maxDrawdownR,
+      dominantTradeShare,
+    },
+    breakdownByRegime: buildEntryBreakdown(allEntries, "regime"),
+    breakdownBySetup: buildEntryBreakdown(allEntries, "setupId"),
+    gates,
+    nextUnlock: tradeCount >= 30 && gates.every((gate) => gate.passed)
+      ? "Enable BTC and ETH trend continuation for phase 2."
+      : "Keep BTC-only mean reversion live and finish the 30-trade pilot.",
+  };
+}
+
+function buildOperatingPlan() {
+  return {
+    profileId: PROFITABILITY_PROFILE_ID,
+    objective: "Prove a repeatable BTC-first edge net of fees and slippage before unlocking ETH or SOL.",
+    activeSetupId: "btcusdt-crypto-range-mean-reversion",
+    activeSetupLabel: "BTC 5m Range Mean Reversion",
+    defaultRegimeBias: "Range mean reversion or no-trade",
+    marketStanceAsOf: "2026-04-02",
+    session: {
+      localTimeZone: LOCAL_SESSION_TIMEZONE,
+      localWindow: "07:00-11:00 America/Denver",
+      sessionTimeZone: SESSION_TIMEZONE,
+      etWindow: "09:00-13:00 America/New_York",
+      weekdaysOnly: true,
+    },
+    instruments: {
+      liveNow: ["BTCUSDT"],
+      nextPhase: ["BTCUSDT", "ETHUSDT"],
+      paperOnly: ["SOLUSDT"],
+    },
+    execution: {
+      venues: ["Coinbase Advanced", "Kraken Pro"],
+      orderStyle: "Direct order-book only. Prefer post-only or maker limits.",
+      blocklist: ["Simple buy/sell", "Convert flows", "Thin alt books", "Weekend trading"],
+    },
+    risk: {
+      riskPerTradeFraction: 0.0025,
+      maxTotalOpenRiskFraction: 0.005,
+      maxDailyLossFraction: 0.01,
+      maxWeeklyLossFraction: 0.025,
+      reduceSizeAtDrawdownFraction: 0.04,
+      pauseAtDrawdownFraction: 0.06,
+      maxCostToTargetFraction: 0.25,
+    },
+    regimeChecklist: {
+      range: [
+        "BTC is still inside session or prior-session range.",
+        "ETF, basis, and funding backdrop is mixed or muted.",
+        "No fresh catalyst is pushing price away from VWAP.",
+      ],
+      trend: [
+        "BTC breaks and holds above session structure with expanding range or volume.",
+        "Only continuation setups are allowed; stop fading every move.",
+        "ETH can mirror only after BTC phase 1 passes.",
+      ],
+      event: [
+        "Any exploit, macro shock, or abnormal expansion locks new trades for 30 minutes.",
+        "BTC and ETH only. SOL stays no-trade unless paper review explicitly unlocks it.",
+      ],
+    },
+    journalTemplate: {
+      path: PROFITABILITY_JOURNAL_PATH,
+      fields: buildProfitabilityJournalSchema(),
+    },
+  };
+}
+
+function isArtifactCompatible(payload) {
+  return payload && payload.profitabilityProfileId === PROFITABILITY_PROFILE_ID;
+}
+
 function buildCryptoManagedStrategy(options = {}) {
   const symbol = String(options.symbol || "BTCUSDT").toUpperCase();
   const baseAsset = symbol.replace(/USDT$/i, "").toLowerCase();
-  const strategyKind = String(options.strategyKind || "vwap_reclaim");
+  const strategyKind = String(options.strategyKind || "range_mean_reversion");
+  const liveStatus = String(options.status || "draft");
+  const unlockPhase = String(options.unlockPhase || "phase_1");
+  const maxPositionFraction = Number(options.maxPositionFraction || (
+    symbol === "BTCUSDT" ? 0.35 : symbol === "ETHUSDT" ? 0.28 : 0.18
+  ));
+  const minLiquidityUsd = symbol === "BTCUSDT"
+    ? 6000000
+    : symbol === "ETHUSDT"
+      ? 4500000
+      : 2500000;
+  const assumedSlippageFraction = symbol === "SOLUSDT" ? 0.0007 : 0.0004;
   const common = {
-    version: 1,
+    version: 2,
     venueType: "crypto",
-    status: "draft",
+    status: liveStatus,
     marketUniverse: {
       symbols: [symbol],
       category: "crypto-spot",
@@ -346,151 +666,211 @@ function buildCryptoManagedStrategy(options = {}) {
     },
     sizing: {
       model: "fixed_fractional",
-      maxPositionFraction: 0.14,
-      riskPerTradeFraction: 0.007,
+      riskSizing: "stop_based",
+      maxPositionFraction,
+      riskPerTradeFraction: 0.0025,
     },
     evaluationWindow: {
       timeframe: DEFAULT_TIMEFRAME,
-      warmupBars: 24,
-      minimumTrades: 14,
+      warmupBars: 30,
+      minimumTrades: 30,
     },
     metadata: {
       owner: MANAGED_STRATEGY_OWNER,
+      profitabilityProfileId: PROFITABILITY_PROFILE_ID,
+      unlockPhase,
       market: DEFAULT_MARKET,
       exchange: DEFAULT_EXCHANGE,
       marketType: DEFAULT_MARKET_TYPE,
       sessionMode: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode,
+      sessionTimeZone: SESSION_TIMEZONE,
+      localSessionTimeZone: LOCAL_SESSION_TIMEZONE,
+      executionVenuePrimary: "coinbase_advanced",
+      executionVenueBackup: "kraken_pro",
+      executionMode: "direct_order_book_only",
       alertWindowIds: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows.map((window) => window.id),
       tags: ["crypto", "spot", baseAsset],
     },
   };
 
-  if (strategyKind === "range_breakout") {
+  if (strategyKind === "trend_continuation") {
     return {
       ...common,
-      strategyId: `${symbol.toLowerCase()}-crypto-range-breakout`,
-      name: `${symbol} 5m Range Breakout`,
+      strategyId: `${symbol.toLowerCase()}-crypto-trend-continuation`,
+      name: `${symbol} 5m Trend Continuation`,
       hypothesisSummary:
-        `${symbol} tends to trend after breaking the first 30-minute range inside the highest-liquidity monitoring windows, especially when short-term trend and volume are aligned.`,
-      signalInputs: [{ name: "crypto_range_breakout", type: "technical", source: "computed_signal", weight: 1 }],
+        `${symbol} should only be promoted after the BTC range pilot proves profitable. On true trend days, continuation after a break-and-hold above session structure should outperform fading every push.`,
+      signalInputs: [{ name: "crypto_trend_continuation", type: "technical", source: "computed_signal", weight: 1 }],
       entryRules: [
-        `Enter long on the next open after ${symbol} closes above the alert-window opening range high.`,
-        "Require the short trend to stay positive and volume to expand.",
+        `Enter long only after ${symbol} breaks and holds above session structure, then confirms continuation on a controlled retest.`,
+        "Require trend alignment, expanding range or volume, and no weekend or event lockout.",
       ],
-      exitRules: ["Exit on 0.9% take profit.", "Exit on 0.45% stop loss.", "Exit after 14 bars if follow-through fades."],
-      cooldownRules: ["Wait 4 bars after a range-breakout exit before another entry."],
+      exitRules: [
+        "Exit on breakout failure or a 0.95% continuation target.",
+        "Exit on a 0.50% stop loss.",
+        "Exit after 12 bars if follow-through stalls.",
+      ],
+      cooldownRules: ["Wait 4 bars after a continuation exit before another entry."],
       riskLimits: {
-        maxDrawdownFraction: 0.08,
-        maxDailyLossFraction: 0.02,
+        maxDrawdownFraction: 0.06,
+        reduceSizeAtDrawdownFraction: 0.04,
+        reduceSizeMultiplier: 0.5,
+        maxDailyLossFraction: 0.01,
+        maxWeeklyLossFraction: 0.025,
+        maxDailyLosingTrades: 3,
         maxOpenPositions: 1,
-        maxLossPerTradeFraction: 0.008,
-        minLiquidityUsd: symbol === "SOLUSDT" ? 2500000 : 6000000,
-        maxSpreadFraction: 0.0016,
+        maxLossPerTradeFraction: 0.005,
+        minLiquidityUsd,
+        maxSpreadFraction: symbol === "BTCUSDT" ? 0.0012 : 0.0015,
+        maxCostToTargetFraction: 0.25,
+        assumedRoundTripFeeFraction: 0.001,
+        assumedSlippageFraction,
       },
       simulation: {
         direction: "long",
-        entrySignal: "crypto_range_breakout",
+        entrySignal: "crypto_trend_continuation",
         entryExecution: "next_open",
-        takeProfitFraction: 0.009,
-        stopLossFraction: 0.0045,
-        maxHoldBars: 14,
+        takeProfitFraction: 0.0095,
+        stopLossFraction: 0.005,
+        maxHoldBars: 12,
         cooldownBars: 4,
         maxConcurrentPositions: 1,
-        useSignalStrengthThreshold: 0.7,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.72 : 0.74,
       },
       metadata: {
         ...common.metadata,
-        tags: [...common.metadata.tags, "breakout", "window-open"],
+        tags: [...common.metadata.tags, "trend", "continuation"],
       },
     };
   }
 
-  if (strategyKind === "ema_pullback_continuation") {
+  if (strategyKind === "event_watch") {
     return {
       ...common,
-      strategyId: `${symbol.toLowerCase()}-crypto-ema-pullback-continuation`,
-      name: `${symbol} 5m EMA Pullback Continuation`,
+      strategyId: `${symbol.toLowerCase()}-crypto-event-watch`,
+      name: `${symbol} 5m Event Watch`,
       hypothesisSummary:
-        `${symbol} continuation moves often reset through orderly EMA pullbacks. Reclaiming the fast trend after a shallow dip can offer cleaner long entries than chasing the initial impulse.`,
-      signalInputs: [{ name: "crypto_ema_pullback_continuation", type: "technical", source: "computed_signal", weight: 1 }],
+        `${symbol} stays paper-only until BTC and ETH survive a weak/choppy stretch. This strategy exists to track event-driven dislocations without turning SOL into the core live product.`,
+      signalInputs: [{ name: "crypto_event_watch", type: "technical", source: "computed_signal", weight: 1 }],
       entryRules: [
-        `Enter long when ${symbol} reclaims the 20 EMA after a shallow pullback inside an active window.`,
-        "Require EMA trend alignment, RSI support, and acceptable volume.",
+        `Stand aside by default. Only evaluate ${symbol} when there is a specific chain or market catalyst and the event playbook has been reviewed.`,
+        "Do not promote this setup while BTC phase 1 or ETH phase 2 is still incomplete.",
       ],
-      exitRules: ["Exit on 0.8% take profit.", "Exit on 0.4% stop loss.", "Exit after 16 bars if continuation stalls."],
-      cooldownRules: ["Wait 3 bars after an EMA pullback trade before re-entering."],
+      exitRules: ["Paper-only tracking until explicitly unlocked."],
+      cooldownRules: ["No live re-entry while event risk remains active."],
       riskLimits: {
-        maxDrawdownFraction: 0.08,
-        maxDailyLossFraction: 0.02,
+        maxDrawdownFraction: 0.06,
+        reduceSizeAtDrawdownFraction: 0.04,
+        reduceSizeMultiplier: 0.5,
+        maxDailyLossFraction: 0.01,
+        maxWeeklyLossFraction: 0.025,
+        maxDailyLosingTrades: 3,
         maxOpenPositions: 1,
-        maxLossPerTradeFraction: 0.007,
-        minLiquidityUsd: symbol === "SOLUSDT" ? 2000000 : 4500000,
-        maxSpreadFraction: 0.0018,
+        maxLossPerTradeFraction: 0.005,
+        minLiquidityUsd,
+        maxSpreadFraction: 0.0025,
+        maxCostToTargetFraction: 0.25,
+        assumedRoundTripFeeFraction: 0.001,
+        assumedSlippageFraction: 0.0008,
       },
       simulation: {
         direction: "long",
-        entrySignal: "crypto_ema_pullback_continuation",
+        entrySignal: "crypto_event_watch",
         entryExecution: "next_open",
-        takeProfitFraction: 0.008,
-        stopLossFraction: 0.004,
-        maxHoldBars: 16,
-        cooldownBars: 3,
+        takeProfitFraction: 0.01,
+        stopLossFraction: 0.0055,
+        maxHoldBars: 8,
+        cooldownBars: 8,
         maxConcurrentPositions: 1,
-        useSignalStrengthThreshold: 0.67,
+        useSignalStrengthThreshold: 0.8,
       },
       metadata: {
         ...common.metadata,
-        tags: [...common.metadata.tags, "ema", "pullback"],
+        tags: [...common.metadata.tags, "event", "paper-only"],
       },
     };
   }
 
   return {
     ...common,
-    strategyId: `${symbol.toLowerCase()}-crypto-vwap-reclaim`,
-    name: `${symbol} 5m VWAP Reclaim`,
+    strategyId: `${symbol.toLowerCase()}-crypto-range-mean-reversion`,
+    name: `${symbol} 5m Range Mean Reversion`,
     hypothesisSummary:
-      `${symbol} pullbacks that reclaim alert-window VWAP while the fast trend stays positive can give cleaner continuation entries than chasing raw breakouts.`,
-    signalInputs: [{ name: "crypto_vwap_reclaim", type: "technical", source: "computed_signal", weight: 1 }],
+      `${symbol} is the anchor for the profitability pilot. In defensive, low-conviction tape we want selective long-only fades from session or prior-session lows back toward VWAP or the range midpoint, not broad breakout chasing.`,
+    signalInputs: [{ name: "crypto_range_mean_reversion", type: "technical", source: "computed_signal", weight: 1 }],
     entryRules: [
-      `Enter long when ${symbol} reclaims alert-window VWAP in an active session.`,
-      "Require EMA trend alignment, controlled RSI, and stable volume support.",
+      `Enter long only near ${symbol} session or prior-session lows while price is still inside range and not expanding away from VWAP.`,
+      "Require a rejection candle, contained volume expansion, and no catalyst/event lockout.",
     ],
-    exitRules: ["Exit on 0.75% take profit.", "Exit on 0.45% stop loss.", "Exit after 18 bars if momentum fades."],
-    cooldownRules: ["Wait 3 bars after a VWAP reclaim exit before another entry."],
+    exitRules: [
+      "Exit at session VWAP or range midpoint, whichever is hit first.",
+      "Exit on a 0.45% stop loss.",
+      "Exit after 8 bars if the bounce does not materialize.",
+    ],
+    cooldownRules: ["Wait 4 bars after a range-mean-reversion exit before another entry."],
     riskLimits: {
-      maxDrawdownFraction: 0.08,
-      maxDailyLossFraction: 0.02,
+      maxDrawdownFraction: 0.06,
+      reduceSizeAtDrawdownFraction: 0.04,
+      reduceSizeMultiplier: 0.5,
+      maxDailyLossFraction: 0.01,
+      maxWeeklyLossFraction: 0.025,
+      maxDailyLosingTrades: 3,
       maxOpenPositions: 1,
-      maxLossPerTradeFraction: 0.007,
-      minLiquidityUsd: symbol === "SOLUSDT" ? 2000000 : 4500000,
-      maxSpreadFraction: 0.0017,
+      maxLossPerTradeFraction: 0.0045,
+      minLiquidityUsd,
+      maxSpreadFraction: symbol === "BTCUSDT" ? 0.0012 : 0.0015,
+      maxCostToTargetFraction: 0.25,
+      assumedRoundTripFeeFraction: 0.001,
+      assumedSlippageFraction,
     },
     simulation: {
       direction: "long",
-      entrySignal: "crypto_vwap_reclaim",
+      entrySignal: "crypto_range_mean_reversion",
       entryExecution: "next_open",
-      takeProfitFraction: 0.0075,
+      takeProfitFraction: 0.0065,
       stopLossFraction: 0.0045,
-      maxHoldBars: 18,
-      cooldownBars: 3,
+      maxHoldBars: 8,
+      cooldownBars: 4,
       maxConcurrentPositions: 1,
-      useSignalStrengthThreshold: 0.68,
+      useSignalStrengthThreshold: 0.7,
+      exitTargetMode: "session_vwap_or_range_midpoint",
     },
     metadata: {
       ...common.metadata,
-      tags: [...common.metadata.tags, "vwap", "reclaim"],
+      tags: [...common.metadata.tags, "range", "mean-reversion", "pilot-phase-1"],
     },
   };
 }
 
 const DEFAULT_STRATEGIES = [
-  buildCryptoManagedStrategy({ symbol: "BTCUSDT", strategyKind: "vwap_reclaim" }),
-  buildCryptoManagedStrategy({ symbol: "ETHUSDT", strategyKind: "vwap_reclaim" }),
-  buildCryptoManagedStrategy({ symbol: "SOLUSDT", strategyKind: "vwap_reclaim" }),
-  buildCryptoManagedStrategy({ symbol: "BTCUSDT", strategyKind: "range_breakout" }),
-  buildCryptoManagedStrategy({ symbol: "ETHUSDT", strategyKind: "ema_pullback_continuation" }),
-  buildCryptoManagedStrategy({ symbol: "SOLUSDT", strategyKind: "ema_pullback_continuation" }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "range_mean_reversion",
+    status: "paper_candidate",
+    unlockPhase: "phase_1",
+    maxPositionFraction: 0.35,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "trend_continuation",
+    status: "disabled",
+    unlockPhase: "phase_2",
+    maxPositionFraction: 0.35,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "ETHUSDT",
+    strategyKind: "trend_continuation",
+    status: "disabled",
+    unlockPhase: "phase_2",
+    maxPositionFraction: 0.28,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "SOLUSDT",
+    strategyKind: "event_watch",
+    status: "disabled",
+    unlockPhase: "phase_3",
+    maxPositionFraction: 0.18,
+  }),
 ];
 
 function assertValidStrategySpec(strategy) {
@@ -541,6 +921,11 @@ function synchronizeManagedStrategies(strategies) {
 
   for (const strategy of storedStrategies) {
     if (seen.has(strategy.strategyId)) continue;
+    const isManaged = String(strategy.metadata?.owner || "") === MANAGED_STRATEGY_OWNER;
+    if (isManaged) {
+      changed = true;
+      continue;
+    }
     merged.push(strategy);
   }
 
@@ -666,6 +1051,7 @@ function _readOnlyBundleKey(options = {}) {
     _mtimeMs(WATCHLIST_PATH),
     _mtimeMs(IMPORT_REPORT_PATH),
     _mtimeMs(EXPERIMENT_REPORT_PATH),
+    _mtimeMs(PROFITABILITY_JOURNAL_PATH),
     _directorySignature(BACKTEST_DIR),
     _directorySignature(EXPERIMENTS_DIR),
     _directorySignature(NORMALIZED_1M_DIR),
@@ -681,6 +1067,7 @@ function _readOnlyDayTradingBundle(options = {}) {
   }
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
   const broker = new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
+  const profitabilityJournal = readProfitabilityJournal();
   const bundle = {
     accountId,
     strategies: loadStrategies({ readOnly: true }),
@@ -692,6 +1079,9 @@ function _readOnlyDayTradingBundle(options = {}) {
     lastWatchlist: readJson(WATCHLIST_PATH, null),
     lastImport: readJson(IMPORT_REPORT_PATH, null),
     experimentReport: readJson(EXPERIMENT_REPORT_PATH, null),
+    profitabilityJournal,
+    pilotSummary: buildProfitabilityPilotSummary(profitabilityJournal.entries),
+    operatingPlan: buildOperatingPlan(),
   };
   READ_ONLY_BUNDLE_CACHE.set(cacheKey, bundle);
   return bundle;
@@ -916,6 +1306,48 @@ function computeSessionOpeningRangeHighs(bars, openingRangeBars, getSessionKey) 
   });
 }
 
+function computeSessionRangeContexts(bars, getSessionKey) {
+  let currentSession = null;
+  let sessionHigh = null;
+  let sessionLow = null;
+  let priorSessionHigh = null;
+  let priorSessionLow = null;
+
+  return bars.map((bar) => {
+    const sessionKey = getSessionKey(bar.timestamp);
+    if (!sessionKey) {
+      currentSession = null;
+      sessionHigh = null;
+      sessionLow = null;
+      return null;
+    }
+
+    if (sessionKey !== currentSession) {
+      if (currentSession != null) {
+        priorSessionHigh = sessionHigh;
+        priorSessionLow = sessionLow;
+      }
+      currentSession = sessionKey;
+      sessionHigh = Number(bar.high);
+      sessionLow = Number(bar.low);
+    } else {
+      sessionHigh = Math.max(Number(sessionHigh || Number.NEGATIVE_INFINITY), Number(bar.high));
+      sessionLow = Math.min(Number(sessionLow || Number.POSITIVE_INFINITY), Number(bar.low));
+    }
+
+    return {
+      sessionHigh,
+      sessionLow,
+      priorSessionHigh,
+      priorSessionLow,
+      sessionRangeMidpoint: (
+        Number.isFinite(sessionHigh) &&
+        Number.isFinite(sessionLow)
+      ) ? ((sessionHigh + sessionLow) / 2) : null,
+    };
+  });
+}
+
 function enrichBarsWithSignals(
   bars,
   strategy,
@@ -932,65 +1364,83 @@ function enrichBarsWithSignals(
   const rsi14 = computeRsiSeries(closes, 14);
   const getSessionKey = (timestamp) => buildWindowSessionKey(timestamp, { config, windowMode: normalizedWindowMode });
   const vwap = computeSessionVwapSeries(bars, getSessionKey);
-  const openingRangeBars = 6;
-  const openingRangeHighs = computeSessionOpeningRangeHighs(bars, openingRangeBars, getSessionKey);
+  const sessionContexts = computeSessionRangeContexts(bars, getSessionKey);
   let currentSessionKey = null;
   let currentSessionStartIndex = -1;
 
   return bars.map((bar, index) => {
     const priorClose = index > 0 ? closes[index - 1] : null;
-    const priorVwap = index > 0 ? vwap[index - 1] : null;
-    const priorLow = index > 0 ? lows[index - 1] : null;
     const sessionKey = getSessionKey(bar.timestamp);
     if (sessionKey !== currentSessionKey) {
       currentSessionKey = sessionKey;
       currentSessionStartIndex = sessionKey ? index : -1;
     }
-    const sameSessionAsPrevious = index > 0 && sessionKey != null && sessionKey === getSessionKey(bars[index - 1].timestamp);
     const window = classifyWindow(bar.timestamp, { config, windowMode: normalizedWindowMode });
     const barsSinceSessionStart = sessionKey && currentSessionStartIndex >= 0 ? (index - currentSessionStartIndex) : null;
     const volumeAverage = sma(volumes, 20, index);
     const volumeRatio = volumeAverage && volumeAverage > 0 ? volumes[index] / volumeAverage : null;
     const pctChange = priorClose && priorClose > 0 ? (closes[index] - priorClose) / priorClose : 0;
+    const sessionContext = sessionContexts[index];
+    const priorContext = (
+      index > 0 &&
+      sessionKey != null &&
+      sessionKey === getSessionKey(bars[index - 1].timestamp)
+    ) ? sessionContexts[index - 1] : null;
+    const sessionHighBeforeBar = priorContext?.sessionHigh ?? sessionContext?.sessionHigh ?? null;
+    const sessionLowBeforeBar = priorContext?.sessionLow ?? sessionContext?.sessionLow ?? null;
+    const sessionRangeWidth = (
+      Number.isFinite(sessionHighBeforeBar) &&
+      Number.isFinite(sessionLowBeforeBar) &&
+      closes[index] > 0
+    ) ? ((sessionHighBeforeBar - sessionLowBeforeBar) / closes[index]) : null;
+    const candleRange = Math.max(Number(bar.high) - Number(bar.low), closes[index] * 0.0003);
+    const rejectionStrength = candleRange > 0 ? ((Number(bar.close) - Number(bar.low)) / candleRange) : 0;
+    const priorSessionLow = sessionContext?.priorSessionLow ?? null;
+    const priorSessionHigh = sessionContext?.priorSessionHigh ?? null;
     let signalValue = 0;
 
     if (!window.active || !sessionKey) {
       signalValue = 0;
-    } else if (signalName === "crypto_range_breakout") {
-      const openingRangeHigh = openingRangeHighs[index];
+    } else if (signalName === "crypto_range_mean_reversion") {
+      const nearSessionLow = Number.isFinite(sessionLowBeforeBar)
+        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.0018
+        : false;
+      const nearPriorSessionLow = Number.isFinite(priorSessionLow)
+        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.0022
+        : false;
+      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.55;
+      const rsiRecovering = rsi14[index] != null && rsi14[index] >= 36 && rsi14[index] <= 58;
+      const nearVwap = vwap[index] != null && closes[index] <= (vwap[index] * 1.0025);
+      const containedVolume = volumeRatio == null || volumeRatio <= 1.8;
+      const insideHealthyRange = sessionRangeWidth != null && sessionRangeWidth >= 0.003 && sessionRangeWidth <= 0.02;
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 36;
+      signalValue = (
+        sessionTimingOkay &&
+        insideHealthyRange &&
+        nearVwap &&
+        containedVolume &&
+        rsiRecovering &&
+        rejectionCandle &&
+        (nearSessionLow || nearPriorSessionLow)
+      ) ? Math.min(1, 0.58 + Math.min(Math.abs(pctChange) * 30, 0.18) + Math.min(rejectionStrength * 0.2, 0.18)) : 0;
+    } else if (signalName === "crypto_trend_continuation") {
       const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
-      const brokeRange = barsSinceSessionStart != null &&
-        barsSinceSessionStart >= openingRangeBars &&
-        openingRangeHigh != null &&
-        closes[index] > openingRangeHigh &&
-        (priorClose == null || priorClose <= openingRangeHigh);
-      const volumeBoost = volumeRatio != null ? Math.min(volumeRatio / 1.5, 1) : 0;
-      signalValue = (trendOkay && brokeRange)
-        ? Math.min(1, 0.56 + (volumeBoost * 0.2) + Math.max(0, pctChange * 45))
-        : 0;
-    } else if (signalName === "crypto_vwap_reclaim") {
-      const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
-      const reclaim = vwap[index] != null &&
-        closes[index] > vwap[index] &&
-        lows[index] <= vwap[index] &&
-        (!sameSessionAsPrevious || priorVwap == null || priorClose <= (priorVwap * 1.002));
-      const rsiOkay = rsi14[index] != null && rsi14[index] >= 48 && rsi14[index] <= 70;
-      const volumeSupport = volumeRatio != null && volumeRatio >= 0.85;
-      signalValue = (trendOkay && reclaim && rsiOkay && volumeSupport)
-        ? Math.min(1, 0.56 + Math.min(Math.abs(closes[index] - vwap[index]) / Math.max(closes[index], 1) * 100, 0.22) + 0.14)
-        : 0;
-    } else if (signalName === "crypto_ema_pullback_continuation") {
-      const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
-      const reclaimedFastTrend = ema20[index] != null &&
-        closes[index] > ema20[index] &&
+      const heldAboveFastTrend = ema20[index] != null && closes[index] > ema20[index];
+      const brokePriorSessionHigh = Number.isFinite(priorSessionHigh) &&
+        closes[index] > (priorSessionHigh * 1.0005) &&
         priorClose != null &&
-        priorLow != null &&
-        priorLow <= ema20[index] * 1.0015 &&
-        priorClose <= ema20[index] * 1.002;
-      const rsiOkay = rsi14[index] != null && rsi14[index] >= 50 && rsi14[index] <= 72;
-      const volumeSupport = volumeRatio != null && volumeRatio >= 0.8;
-      signalValue = (trendOkay && reclaimedFastTrend && rsiOkay && volumeSupport)
-        ? Math.min(1, 0.55 + Math.max(0, pctChange * 50) + Math.min(volumeRatio / 3, 0.2))
+        priorClose <= (priorSessionHigh * 1.001);
+      const rsiOkay = rsi14[index] != null && rsi14[index] >= 54 && rsi14[index] <= 74;
+      const volumeBoost = volumeRatio != null && volumeRatio >= 1.05;
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 38;
+      signalValue = (trendOkay && heldAboveFastTrend && brokePriorSessionHigh && rsiOkay && volumeBoost && sessionTimingOkay)
+        ? Math.min(1, 0.6 + Math.max(0, pctChange * 45) + Math.min((volumeRatio || 0) / 6, 0.18))
+        : 0;
+    } else if (signalName === "crypto_event_watch") {
+      const abnormalRange = sessionRangeWidth != null && sessionRangeWidth >= 0.018;
+      const volumeShock = volumeRatio != null && volumeRatio >= 1.7;
+      signalValue = (abnormalRange && volumeShock)
+        ? Math.min(1, 0.62 + Math.min((volumeRatio || 0) / 6, 0.22))
         : 0;
     }
 
@@ -1000,6 +1450,24 @@ function enrichBarsWithSignals(
         ...(bar.signals || {}),
         [signalName]: round(signalValue, 4),
       },
+      indicators: {
+        ...(bar.indicators || {}),
+        ema20: round(ema20[index], 6),
+        ema50: round(ema50[index], 6),
+        rsi14: round(rsi14[index], 4),
+        sessionVwap: round(vwap[index], 6),
+        sessionRangeHigh: round(sessionContext?.sessionHigh, 6),
+        sessionRangeLow: round(sessionContext?.sessionLow, 6),
+        priorSessionHigh: round(priorSessionHigh, 6),
+        priorSessionLow: round(priorSessionLow, 6),
+        sessionRangeMidpoint: round(sessionContext?.sessionRangeMidpoint, 6),
+        sessionRangeWidth: round(sessionRangeWidth, 6),
+        barsSinceSessionStart,
+        volumeRatio: round(volumeRatio, 4),
+        rejectionStrength: round(rejectionStrength, 4),
+        pctChange: round(pctChange, 6),
+      },
+      sessionKey,
       market: DEFAULT_MARKET,
       exchange: DEFAULT_EXCHANGE,
       marketType: DEFAULT_MARKET_TYPE,
@@ -1925,6 +2393,7 @@ async function runDayTradingValidation(options = {}) {
   const bundles = [];
   const report = {
     generatedAt: nowIso(),
+    profitabilityProfileId: PROFITABILITY_PROFILE_ID,
     market: DEFAULT_MARKET,
     exchange: DEFAULT_EXCHANGE,
     marketType: DEFAULT_MARKET_TYPE,
@@ -2494,6 +2963,7 @@ async function buildMorningWatchlist(options = {}) {
 
   const watchlist = {
     generatedAt: nowIso(),
+    profitabilityProfileId: PROFITABILITY_PROFILE_ID,
     evaluatedAt: now,
     market: DEFAULT_MARKET,
     exchange: DEFAULT_EXCHANGE,
@@ -2529,11 +2999,15 @@ function getDayTradingSnapshot(options = {}) {
   });
   const strategies = bundle?.strategies || loadStrategies({ readOnly: true });
   const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
+  const profitabilityJournal = bundle?.profitabilityJournal || readProfitabilityJournal();
+  const lastReport = isArtifactCompatible(bundle?.lastReport) ? bundle.lastReport : null;
+  const lastWatchlist = isArtifactCompatible(bundle?.lastWatchlist) ? bundle.lastWatchlist : null;
 
   return {
     generatedAt: nowIso(),
+    profitabilityProfileId: PROFITABILITY_PROFILE_ID,
     market: DEFAULT_MARKET,
-    marketLabel: "Crypto Spot Research",
+    marketLabel: "Crypto Profitability Pilot",
     exchange: DEFAULT_EXCHANGE,
     marketType: DEFAULT_MARKET_TYPE,
     sessionMode: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode,
@@ -2547,9 +3021,16 @@ function getDayTradingSnapshot(options = {}) {
     }),
     paperAccount: bundle?.paperAccount || broker.getAccountSummary({ accountId }),
     paperSummaries,
-    lastReport: bundle?.lastReport || readJson(REPORT_PATH, null),
-    lastWatchlist: bundle?.lastWatchlist || readJson(WATCHLIST_PATH, null),
+    lastReport,
+    lastWatchlist,
     lastImport: bundle?.lastImport || readJson(IMPORT_REPORT_PATH, null),
+    operatingPlan: bundle?.operatingPlan || buildOperatingPlan(),
+    pilotSummary: bundle?.pilotSummary || buildProfitabilityPilotSummary(profitabilityJournal.entries),
+    profitabilityJournal: {
+      path: PROFITABILITY_JOURNAL_PATH,
+      entryCount: Array.isArray(profitabilityJournal.entries) ? profitabilityJournal.entries.length : 0,
+      schema: buildProfitabilityJournalSchema(),
+    },
   };
 }
 
@@ -2567,11 +3048,17 @@ const __internal = {
     EXPERIMENTS_DIR,
     EXPERIMENT_REPORT_PATH,
     IMPORT_REPORT_PATH,
+    PROFITABILITY_JOURNAL_PATH,
   },
   DEFAULT_CRYPTO_DAY_TRADING_CONFIG,
+  PROFITABILITY_PROFILE_ID,
   buildCryptoManagedStrategy,
   loadStrategies,
   saveStrategies,
+  buildOperatingPlan,
+  buildProfitabilityPilotSummary,
+  readProfitabilityJournal,
+  appendProfitabilityJournalEntry,
   loadNormalizedBars,
   saveNormalizedBars,
   resampleOneMinuteBarsToFiveMinutes,
@@ -2593,5 +3080,6 @@ module.exports = {
   buildMorningWatchlist,
   runDayTradingExperiments,
   importCryptoDayTradingHistory,
+  appendProfitabilityJournalEntry,
   __internal,
 };

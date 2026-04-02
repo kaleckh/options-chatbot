@@ -29,6 +29,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
             {
                 "OPTIONS_PROFIT_STATE_DIR": self.state_dir,
                 "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_db_path,
+                "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_db_path,
                 "OPTIONS_DAILY_TRUTH_AUTO_REFRESH": "0",
             },
             clear=False,

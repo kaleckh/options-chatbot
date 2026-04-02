@@ -1,0 +1,60 @@
+{
+  "action": "no_op",
+  "blockers": [
+    {
+      "code": "forward_ledger_contamination",
+      "finding_count": 2,
+      "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
+      "severity": "blocked"
+    },
+    {
+      "allowed_truth_staleness_business_days": 3,
+      "code": "trusted_truth_stale",
+      "message": "Trusted options truth is too stale for bounded auto-optimization.",
+      "severity": "blocked",
+      "trusted_truth_horizon": "2025-12-15",
+      "truth_staleness_business_days": 78
+    },
+    {
+      "code": "insufficient_eligible_forward_truth",
+      "eligible_event_count": 0,
+      "message": "Not enough matured eligible live-production forward evidence is available.",
+      "required_event_count": 10,
+      "severity": "degraded-watch"
+    },
+    {
+      "code": "insufficient_symbol_forward_truth_qqq",
+      "eligible_event_count": 0,
+      "message": "QQQ does not yet have enough eligible live-production forward evidence.",
+      "required_event_count": 3,
+      "severity": "degraded-watch",
+      "symbol": "QQQ"
+    },
+    {
+      "code": "insufficient_symbol_forward_truth_spy",
+      "eligible_event_count": 0,
+      "message": "SPY does not yet have enough eligible live-production forward evidence.",
+      "required_event_count": 3,
+      "severity": "degraded-watch",
+      "symbol": "SPY"
+    },
+    {
+      "code": "tracked_positions_unavailable",
+      "message": "Tracked positions are unavailable because DATABASE_URL is not configured. Start local Postgres and set DATABASE_URL to enable the supervised options tracker.",
+      "severity": "blocked"
+    },
+    {
+      "closed_position_count": 0,
+      "code": "insufficient_closed_tracked_positions",
+      "message": "Not enough closed tracked positions are available for optimizer supervision.",
+      "required_closed_position_count": 1,
+      "severity": "degraded-watch"
+    }
+  ],
+  "canary_action": null,
+  "candidate_id": "status",
+  "candidate_rankings": [],
+  "measurement_gate_state": "blocked",
+  "reason": "measurement_gate_blocked",
+  "recorded_at": "2026-04-02T16:12:10.587327Z"
+}

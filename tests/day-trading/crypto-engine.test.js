@@ -128,12 +128,9 @@ test("runDayTradingValidation uses trusted crypto fixtures and updates the crypt
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
     const strategies = [
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-breakout"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-ema-pullback-continuation"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-ema-pullback-continuation"),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-trend-continuation", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-trend-continuation", { status: "paper_candidate" }),
     ];
     ctx.engine.__internal.saveStrategies(strategies);
 
@@ -173,14 +170,17 @@ test("runDayTradingValidation uses trusted crypto fixtures and updates the crypt
     });
 
     assert.equal(report.market, "crypto");
-    assert.equal(report.strategiesScanned, 6);
+    assert.equal(report.strategiesScanned, 3);
     assert.equal(report.results[0].marketDataSource, "crypto_fixture");
     assert.equal(report.results[0].trustedMarketData, true);
+    assert.equal(report.profitabilityProfileId, "crypto_profitability_v1");
 
     const snapshot = ctx.engine.getDayTradingSnapshot();
     assert.equal(snapshot.market, "crypto");
     assert.equal(snapshot.lastReport.generatedAt, report.generatedAt);
-    assert.equal(snapshot.scoreboard.totals.strategies, 6);
+    assert.equal(snapshot.scoreboard.totals.strategies, 4);
+    assert.equal(snapshot.operatingPlan.activeSetupId, "btcusdt-crypto-range-mean-reversion");
+    assert.equal(snapshot.pilotSummary.progress.targetTrades, 30);
   } finally {
     ctx.cleanup();
   }
@@ -190,7 +190,7 @@ test("loadCryptoMarketDataForStrategy respects bars=all and window modes on impo
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
     const morningBars = Array.from({ length: 10 }, (_, index) => ({
-      timestamp: new Date(Date.parse("2026-04-01T12:00:00.000Z") + (index * 60 * 1000)).toISOString(),
+      timestamp: new Date(Date.parse("2026-04-01T13:00:00.000Z") + (index * 60 * 1000)).toISOString(),
       symbol: "BTCUSDT",
       open: 100 + (index * 0.1),
       high: 100.2 + (index * 0.1),
@@ -200,7 +200,7 @@ test("loadCryptoMarketDataForStrategy respects bars=all and window modes on impo
       quoteVolume: 1000 + (index * 5),
       tradeCount: 5 + index,
     }));
-    const asiaBars = Array.from({ length: 10 }, (_, index) => ({
+    const offSessionBars = Array.from({ length: 10 }, (_, index) => ({
       timestamp: new Date(Date.parse("2026-04-02T00:00:00.000Z") + (index * 60 * 1000)).toISOString(),
       symbol: "BTCUSDT",
       open: 102 + (index * 0.1),
@@ -211,18 +211,18 @@ test("loadCryptoMarketDataForStrategy respects bars=all and window modes on impo
       quoteVolume: 1100 + (index * 5),
       tradeCount: 6 + index,
     }));
-    ctx.engine.__internal.saveNormalizedBars("BTCUSDT", [...morningBars, ...asiaBars], { source: "unit_test" });
-    const strategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-vwap-reclaim");
+    ctx.engine.__internal.saveNormalizedBars("BTCUSDT", [...morningBars, ...offSessionBars], { source: "unit_test" });
+    const strategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion");
 
     const allHours = await ctx.engine.__internal.loadCryptoMarketDataForStrategy(strategy, {
       bars: "all",
       includeLive: false,
       windowMode: "all_hours",
     });
-    const asiaOnly = await ctx.engine.__internal.loadCryptoMarketDataForStrategy(strategy, {
+    const fixedSession = await ctx.engine.__internal.loadCryptoMarketDataForStrategy(strategy, {
       bars: "all",
       includeLive: false,
-      windowMode: "asia_open",
+      windowMode: "denver_core",
     });
 
     assert.equal(allHours.barsRequested, "all");
@@ -231,10 +231,11 @@ test("loadCryptoMarketDataForStrategy respects bars=all and window modes on impo
     assert.equal(allHours.rawBarCount, 20);
     assert.equal(allHours.derivedBarCount, 4);
     assert.equal(allHours.priceSeries.length, 4);
-    assert.equal(asiaOnly.windowMode, "asia_open");
-    assert.equal(asiaOnly.priceSeries.length, 4);
-    assert.equal(ctx.engine.__internal.classifyWindow("2026-04-01T12:05:00.000Z", { windowMode: "us_morning" }).active, true);
-    assert.equal(ctx.engine.__internal.classifyWindow("2026-04-01T12:05:00.000Z", { windowMode: "asia_open" }).active, false);
+    assert.equal(fixedSession.windowMode, "denver_core");
+    assert.equal(fixedSession.priceSeries.length, 4);
+    assert.equal(ctx.engine.__internal.classifyWindow("2026-04-01T13:05:00.000Z", { windowMode: "denver_core" }).active, true);
+    assert.equal(ctx.engine.__internal.classifyWindow("2026-04-01T12:05:00.000Z", { windowMode: "denver_core" }).active, false);
+    assert.equal(ctx.engine.__internal.classifyWindow("2026-04-05T13:05:00.000Z", { windowMode: "denver_core" }).active, false);
     assert.equal(ctx.engine.__internal.classifyWindow("2026-04-01T15:00:00.000Z", { windowMode: "all_hours" }).active, true);
   } finally {
     ctx.cleanup();
@@ -244,7 +245,7 @@ test("loadCryptoMarketDataForStrategy respects bars=all and window modes on impo
 test("buildMorningWatchlist blocks crypto notify decisions on untrusted data", async () => {
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
-    const strategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-vwap-reclaim", {
+    const strategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", {
       status: "paper_candidate",
     });
     ctx.engine.__internal.saveStrategies([strategy]);
@@ -299,12 +300,9 @@ test("runDayTradingExperiments keeps crypto research on controls only until a fa
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
     const strategies = [
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-breakout"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-ema-pullback-continuation"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-ema-pullback-continuation"),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-trend-continuation", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-trend-continuation", { status: "paper_candidate" }),
     ];
 
     const fixtureMap = {};
@@ -335,13 +333,14 @@ test("runDayTradingExperiments keeps crypto research on controls only until a fa
     }
 
     const report = await ctx.engine.runDayTradingExperiments({
+      strategies,
       windowMode: "scheduled_windows",
       bars: "all",
       marketDataLoader: createMarketDataLoader(fixtureMap),
     });
 
     assert.equal(report.researchMode, "control_first");
-    assert.equal(report.phaseA.controlResults.length, 6);
+    assert.equal(report.phaseA.controlResults.length, 3);
     assert.equal(report.phaseB.unlocked, false);
     assert.equal(report.phaseB.results.length, 0);
   } finally {
@@ -353,17 +352,14 @@ test("runDayTradingExperiments unlocks one narrow challenger batch when a crypto
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
     const strategies = [
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-vwap-reclaim"),
-      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-breakout"),
-      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-ema-pullback-continuation"),
-      createCryptoFixtureStrategy(ctx.engine, "solusdt-crypto-ema-pullback-continuation"),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-trend-continuation", { status: "paper_candidate" }),
+      createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-trend-continuation", { status: "paper_candidate" }),
     ];
 
     const fixtureMap = {};
     for (const strategy of strategies) {
-      const isVwap = strategy.simulation.entrySignal === "crypto_vwap_reclaim";
+      const isRangeMeanReversion = strategy.simulation.entrySignal === "crypto_range_mean_reversion";
       fixtureMap[strategy.strategyId] = {
         ...createMarketDataFixture({
           source: "crypto_fixture_phase_b",
@@ -377,8 +373,8 @@ test("runDayTradingExperiments unlocks one narrow challenger batch when a crypto
             maxHoldBars: strategy.simulation.maxHoldBars,
             takeProfitFraction: strategy.simulation.takeProfitFraction,
             stopLossFraction: strategy.simulation.stopLossFraction,
-            outcomes: isVwap
-              ? Array.from({ length: 8 }, () => "win")
+            outcomes: isRangeMeanReversion
+              ? Array.from({ length: 24 }, () => "win")
               : ["loss", "loss", "win"],
           }),
         }),
@@ -392,6 +388,7 @@ test("runDayTradingExperiments unlocks one narrow challenger batch when a crypto
     }
 
     const report = await ctx.engine.runDayTradingExperiments({
+      strategies,
       windowMode: "scheduled_windows",
       bars: "all",
       marketDataLoader: createMarketDataLoader(fixtureMap),
@@ -400,7 +397,7 @@ test("runDayTradingExperiments unlocks one narrow challenger batch when a crypto
     assert.equal(report.phaseB.unlocked, true);
     assert.equal(report.phaseB.batchShape, "1_control_plus_3_challengers");
     assert.equal(report.phaseB.results.length, 4);
-    assert.equal(report.phaseB.selectedFamilyWindow.strategyFamily, "crypto_vwap_reclaim");
+    assert.equal(report.phaseB.selectedFamilyWindow.strategyFamily, "crypto_range_mean_reversion");
     assert.equal(report.recommendation, "run_narrow_challenger_batch_only");
   } finally {
     ctx.cleanup();
@@ -414,7 +411,7 @@ test("router defaults day trading snapshots to crypto and keeps equities legacy 
     const equitiesSnapshot = ctx.router.getDayTradingSnapshot({ market: "equities_legacy" });
 
     assert.equal(cryptoSnapshot.market, "crypto");
-    assert.equal(cryptoSnapshot.strategies.length, 6);
+    assert.equal(cryptoSnapshot.strategies.length, 4);
     assert.equal(equitiesSnapshot.market, "equities_legacy");
     assert.equal(equitiesSnapshot.strategies.length, 4);
   } finally {

@@ -29,6 +29,7 @@ async function main() {
   const watchlist = await buildMorningWatchlist(args);
   const summary = {
     generatedAt: watchlist.generatedAt,
+    profitabilityProfileId: watchlist.profitabilityProfileId || null,
     market: watchlist.market,
     sessionWindow: watchlist.sessionWindow || null,
     morningWindow: watchlist.morningWindow,

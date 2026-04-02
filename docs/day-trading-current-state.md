@@ -1,6 +1,6 @@
 # Day Trading Current State
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
 ## Critical Rule: Read Code First
 
@@ -34,21 +34,20 @@ This is the default active research track.
 - exchange/data adapter: `binance_us` first, then global Binance fallback if available
 - raw bars: `1m`
 - strategy bars: derived `5m`
-- monitoring windows:
-  - `US Morning` = `08:00-11:00 ET`
-  - `Asia Open` = `20:00-23:00 ET`
+- monitoring window:
+  - `Denver Core` = `07:00-11:00 America/Denver` = `09:00-13:00 ET`
+- trading days:
+  - Monday through Friday only for the profitability pilot
 
 Main code:
 - `src/lib/day-trading/crypto-engine.js`
 - `src/lib/day-trading/index.js`
 
 Managed crypto strategies:
-- `BTCUSDT 5m VWAP Reclaim`
-- `ETHUSDT 5m VWAP Reclaim`
-- `SOLUSDT 5m VWAP Reclaim`
-- `BTCUSDT 5m Range Breakout`
-- `ETHUSDT 5m EMA Pullback Continuation`
-- `SOLUSDT 5m EMA Pullback Continuation`
+- `BTCUSDT 5m Range Mean Reversion` (`paper_candidate`, active phase 1 setup)
+- `BTCUSDT 5m Trend Continuation` (`disabled`, unlock after phase 1)
+- `ETHUSDT 5m Trend Continuation` (`disabled`, unlock after phase 1)
+- `SOLUSDT 5m Event Watch` (`disabled`, paper-only until BTC and ETH prove out)
 
 ### `equities_legacy`
 
@@ -247,8 +246,9 @@ Result on 2026-04-01:
 The day-trading UI now:
 - defaults to `crypto`
 - exposes `equities_legacy` as a selector, not the main lane
+- shows the profitability pilot operating plan, validation gates, and journal KPI dashboard
 - shows market/exchange/session metadata
-- shows the active scheduled windows for crypto
+- shows the fixed weekday session for crypto
 - keeps real notify decisions blocked when data is stale or untrusted
 
 ## Current Recommendation

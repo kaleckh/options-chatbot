@@ -244,6 +244,7 @@ def load_backend_main(db_path: str, database_url: str | None = ""):
     default_env = {
         "DATABASE_URL": database_url or "",
         "FORWARD_OPTIONS_LEDGER_DB_PATH": str(Path(db_path).with_name("forward_tracking_test.db")),
+        "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": str(Path(db_path).with_name("forward_tracking_test.db")),
         "OPTIONS_EVIDENCE_CLASS": "e2e_test",
         "OPTIONS_RUN_MODE": "test_harness",
         "OPTIONS_IS_FIXTURE": "1",

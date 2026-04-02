@@ -739,6 +739,48 @@ function startOfUtcDay(isoString) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
 }
 
+function getTimeZoneDateParts(isoString, timeZone) {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "short",
+    });
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(isoString || Date.now()))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value]),
+    );
+    if (!parts.year || !parts.month || !parts.day) {
+      return null;
+    }
+    return {
+      year: Number(parts.year),
+      month: Number(parts.month),
+      day: Number(parts.day),
+      weekday: String(parts.weekday || ""),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function getPeriodKey(isoString, period = "day", timeZone = "UTC") {
+  const parts = getTimeZoneDateParts(isoString, timeZone);
+  if (!parts) return null;
+  const dayKey = `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+  if (period === "day") return dayKey;
+  if (period !== "week") return dayKey;
+  const weekdayIndex = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
+  if (weekdayIndex < 0) return dayKey;
+  const mondayOffset = (weekdayIndex + 6) % 7;
+  const mondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - mondayOffset);
+  return new Date(mondayUtcMs).toISOString().slice(0, 10);
+}
+
 function sumRealizedPnlForDay(fills = [], accountId, dayStartMs) {
   return fills
     .filter((fill) => fill.accountId === accountId)
@@ -747,6 +789,71 @@ function sumRealizedPnlForDay(fills = [], accountId, dayStartMs) {
       return Number.isFinite(ts) && ts >= dayStartMs;
     })
     .reduce((sum, fill) => sum + Number(fill.realizedPnl || 0), 0);
+}
+
+function sumRealizedPnlForPeriod(fills = [], accountId, isoString, period = "day", timeZone = "UTC") {
+  const targetKey = getPeriodKey(isoString, period, timeZone);
+  if (!targetKey) return 0;
+  return fills
+    .filter((fill) => fill.accountId === accountId)
+    .filter((fill) => getPeriodKey(fill.filledAt, period, timeZone) === targetKey)
+    .reduce((sum, fill) => sum + Number(fill.realizedPnl || 0), 0);
+}
+
+function countClosingLossesForPeriod(fills = [], accountId, isoString, period = "day", timeZone = "UTC") {
+  const targetKey = getPeriodKey(isoString, period, timeZone);
+  if (!targetKey) return 0;
+  return fills
+    .filter((fill) => fill.accountId === accountId)
+    .filter((fill) => String(fill.side || "").toLowerCase() === "sell")
+    .filter((fill) => Number(fill.realizedPnl || 0) < 0)
+    .filter((fill) => getPeriodKey(fill.filledAt, period, timeZone) === targetKey)
+    .length;
+}
+
+function resolveStrategyDrawdownFraction(strategy, accountSummary = {}) {
+  const equity = Number(accountSummary.equity || accountSummary.cash || 0);
+  const startingCash = Number(accountSummary.startingCash || 0);
+  if (!(equity > 0) || !(startingCash > 0)) {
+    return 0;
+  }
+  return Math.max(0, (startingCash - equity) / startingCash);
+}
+
+function resolveDrawdownPositionMultiplier(strategy, accountSummary = {}) {
+  const drawdownFraction = resolveStrategyDrawdownFraction(strategy, accountSummary);
+  const reduceAt = Number(strategy?.riskLimits?.reduceSizeAtDrawdownFraction || 0);
+  const reduceMultiplier = Number(strategy?.riskLimits?.reduceSizeMultiplier || 1);
+  if (reduceAt > 0 && reduceMultiplier > 0 && reduceMultiplier < 1 && drawdownFraction >= reduceAt) {
+    return reduceMultiplier;
+  }
+  return 1;
+}
+
+function resolvePositionFraction(strategy, priorDrawdownFraction = 0) {
+  const maxPositionFraction = Number(strategy?.sizing?.maxPositionFraction || 0);
+  const riskPerTradeFraction = Number(strategy?.sizing?.riskPerTradeFraction || maxPositionFraction || 0);
+  const stopLossFraction = Number(strategy?.simulation?.stopLossFraction || 0);
+  const usesStopBasedSizing = String(strategy?.sizing?.riskSizing || "").toLowerCase() === "stop_based";
+  const reduceAt = Number(strategy?.riskLimits?.reduceSizeAtDrawdownFraction || 0);
+  const reduceMultiplier = Number(strategy?.riskLimits?.reduceSizeMultiplier || 1);
+  const drawdownMultiplier = (
+    reduceAt > 0 &&
+    reduceMultiplier > 0 &&
+    reduceMultiplier < 1 &&
+    priorDrawdownFraction >= reduceAt
+  ) ? reduceMultiplier : 1;
+
+  let positionFraction = riskPerTradeFraction;
+  if (usesStopBasedSizing && stopLossFraction > 0) {
+    positionFraction = riskPerTradeFraction / stopLossFraction;
+  }
+
+  if (maxPositionFraction > 0) {
+    positionFraction = Math.min(positionFraction, maxPositionFraction);
+  }
+
+  return Math.max(0, positionFraction * drawdownMultiplier);
 }
 
 function evaluateTradeRisk(options = {}) {
@@ -766,6 +873,7 @@ function evaluateTradeRisk(options = {}) {
   const notional = quantity * price;
   const equity = Number(accountSummary.equity || accountSummary.cash || 0);
   const positionFraction = equity > 0 ? notional / equity : 0;
+  const timeZone = String(strategy?.metadata?.sessionTimeZone || "UTC");
   const currentPositions = Array.isArray(accountSummary.positions) ? accountSummary.positions : [];
   const strategyPositions = currentPositions.filter((position) => position.strategyId === strategy.strategyId);
 
@@ -807,11 +915,26 @@ function evaluateTradeRisk(options = {}) {
   const dayStartMs = startOfUtcDay(order.timestamp);
   const realizedPnlToday = sumRealizedPnlForDay(ledger.fills || [], accountSummary.accountId, dayStartMs);
   const dailyLossFraction = equity > 0 ? Math.abs(Math.min(0, realizedPnlToday)) / equity : 0;
+  const realizedPnlWeek = sumRealizedPnlForPeriod(ledger.fills || [], accountSummary.accountId, order.timestamp, "week", timeZone);
+  const weeklyLossFraction = equity > 0 ? Math.abs(Math.min(0, realizedPnlWeek)) / equity : 0;
+  const dailyLosingTrades = countClosingLossesForPeriod(ledger.fills || [], accountSummary.accountId, order.timestamp, "day", timeZone);
   if (
     strategy.riskLimits.maxDailyLossFraction != null &&
     dailyLossFraction > Number(strategy.riskLimits.maxDailyLossFraction)
   ) {
     reasons.push("daily_loss_limit_breached");
+  }
+  if (
+    strategy.riskLimits.maxWeeklyLossFraction != null &&
+    weeklyLossFraction > Number(strategy.riskLimits.maxWeeklyLossFraction)
+  ) {
+    reasons.push("weekly_loss_limit_breached");
+  }
+  if (
+    strategy.riskLimits.maxDailyLosingTrades != null &&
+    dailyLosingTrades >= Number(strategy.riskLimits.maxDailyLosingTrades)
+  ) {
+    reasons.push("daily_losing_trade_limit_breached");
   }
 
   if (
@@ -825,12 +948,34 @@ function evaluateTradeRisk(options = {}) {
     }
   }
 
+  if (
+    strategy.riskLimits.maxCostToTargetFraction != null &&
+    strategy.simulation?.takeProfitFraction != null &&
+    Number(strategy.simulation.takeProfitFraction) > 0
+  ) {
+    const spreadFraction = (
+      Number.isFinite(market.bestBid) &&
+      Number.isFinite(market.bestAsk) &&
+      Number(market.bestAsk) > 0
+    ) ? ((Number(market.bestAsk) - Number(market.bestBid)) / Number(market.bestAsk)) : 0;
+    const assumedRoundTripFeeFraction = Number(strategy.riskLimits.assumedRoundTripFeeFraction || 0);
+    const assumedSlippageFraction = Number(strategy.riskLimits.assumedSlippageFraction || 0);
+    const totalEstimatedCostFraction = assumedRoundTripFeeFraction + spreadFraction + assumedSlippageFraction;
+    const maxAllowedCostFraction = Number(strategy.simulation.takeProfitFraction) * Number(strategy.riskLimits.maxCostToTargetFraction);
+    if (totalEstimatedCostFraction > maxAllowedCostFraction) {
+      reasons.push("estimated_round_trip_cost_too_high");
+    }
+  }
+
   return {
     allowed: reasons.length === 0,
     reasons,
     context: {
       realizedPnlToday,
       dailyLossFraction,
+      realizedPnlWeek,
+      weeklyLossFraction,
+      dailyLosingTrades,
       positionFraction,
       openPositions: currentPositions.length,
     },
@@ -866,6 +1011,9 @@ function normalizeBars(priceSeries) {
       close: Number(bar.close),
       volume: bar.volume == null ? null : Number(bar.volume),
       signals: bar.signals && typeof bar.signals === "object" ? bar.signals : {},
+      indicators: bar.indicators && typeof bar.indicators === "object" ? bar.indicators : null,
+      sessionKey: bar.sessionKey == null ? null : String(bar.sessionKey),
+      window: bar.window && typeof bar.window === "object" ? bar.window : null,
     };
 
     if (!normalized.timestamp) throw new Error(`priceSeries[${index}].timestamp is required`);
@@ -901,6 +1049,31 @@ function pickEntryPrice(currentBar, nextBar, entryExecution) {
   return currentBar.close;
 }
 
+function resolveDynamicTakeProfitPrice(position, bar) {
+  const mode = String(position?.exitTargetMode || "").toLowerCase();
+  if (!mode || !bar?.indicators || typeof bar.indicators !== "object") {
+    return null;
+  }
+
+  const candidates = [];
+  if (mode === "session_vwap_or_range_midpoint") {
+    for (const value of [bar.indicators.sessionVwap, bar.indicators.sessionRangeMidpoint]) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > Number(position.entryPrice || 0)) {
+        candidates.push(numeric);
+      }
+    }
+  }
+
+  const fallbackPrice = Number(position.entryPrice) * (1 + Number(position.takeProfitFraction || 0));
+  if (Number.isFinite(fallbackPrice) && fallbackPrice > Number(position.entryPrice || 0)) {
+    candidates.push(fallbackPrice);
+  }
+
+  if (candidates.length === 0) return null;
+  return Math.min(...candidates);
+}
+
 function calculateTradeOutcome(position, bars, feesFraction) {
   let exitBar = bars[bars.length - 1];
   let exitReason = "end_of_series";
@@ -912,7 +1085,8 @@ function calculateTradeOutcome(position, bars, feesFraction) {
     holdBars = i + 1;
 
     const stopPrice = position.entryPrice * (1 - position.stopLossFraction);
-    const takePrice = position.entryPrice * (1 + position.takeProfitFraction);
+    const takePrice = resolveDynamicTakeProfitPrice(position, bar)
+      || (position.entryPrice * (1 + position.takeProfitFraction));
     if (bar.low <= stopPrice) {
       exitBar = bar;
       exitReason = "stop_loss";
@@ -921,7 +1095,7 @@ function calculateTradeOutcome(position, bars, feesFraction) {
     }
     if (bar.high >= takePrice) {
       exitBar = bar;
-      exitReason = "take_profit";
+      exitReason = position.exitTargetMode ? "dynamic_take_profit" : "take_profit";
       exitPrice = takePrice;
       break;
     }
@@ -1051,13 +1225,12 @@ function runBacktest(options = {}) {
       takeProfitFraction: strategy.simulation.takeProfitFraction,
       stopLossFraction: strategy.simulation.stopLossFraction,
       maxHoldBars: strategy.simulation.maxHoldBars,
+      exitTargetMode: strategy.simulation.exitTargetMode,
     }, bars.slice(i + 1), feesFraction);
     outcome.netReturnFraction -= entryExecution.feeFraction;
 
-    const positionFraction = Math.min(
-      strategy.sizing.maxPositionFraction,
-      strategy.sizing.riskPerTradeFraction || strategy.sizing.maxPositionFraction
-    );
+    const priorDrawdownFraction = peakEquity > 0 ? (peakEquity - equity) / peakEquity : 0;
+    const positionFraction = resolvePositionFraction(strategy, priorDrawdownFraction);
     const pnlFractionOfEquity = outcome.netReturnFraction * positionFraction;
     equity *= (1 + pnlFractionOfEquity);
     peakEquity = Math.max(peakEquity, equity);
@@ -2327,7 +2500,17 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
   const threshold = Number(strategy.simulation.useSignalStrengthThreshold || 0);
 
   if (!position && signalValue >= threshold) {
-    const cashToDeploy = Math.min(account.cash, 100);
+    const accountSummary = paperBroker.getAccountSummary({ accountId });
+    const equity = Number(accountSummary.equity || accountSummary.cash || 0);
+    const stopLossFraction = Number(strategy.simulation?.stopLossFraction || 0);
+    const usesStopBasedSizing = String(strategy.sizing?.riskSizing || "").toLowerCase() === "stop_based";
+    const drawdownMultiplier = resolveDrawdownPositionMultiplier(strategy, accountSummary);
+    const maxNotional = equity * Number(strategy.sizing?.maxPositionFraction || 0);
+    const riskBudget = equity * Number(strategy.sizing?.riskPerTradeFraction || 0) * drawdownMultiplier;
+    const targetNotional = usesStopBasedSizing && stopLossFraction > 0
+      ? Math.min(maxNotional || Number.POSITIVE_INFINITY, riskBudget / stopLossFraction)
+      : Math.min(maxNotional || Number.POSITIVE_INFINITY, riskBudget || Number.POSITIVE_INFINITY);
+    const cashToDeploy = Math.min(account.cash, Number.isFinite(targetNotional) ? targetNotional : 100);
     const quantity = cashToDeploy > 0 ? cashToDeploy / lastBar.close : 0;
     if (quantity <= 0) {
       return { action: "skipped", reason: "no_cash" };
@@ -2342,7 +2525,7 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
         price: lastBar.close,
         timestamp: lastBar.timestamp,
       },
-      accountSummary: paperBroker.getAccountSummary({ accountId }),
+      accountSummary,
       ledger: paperBroker.ledger,
       market: marketData.marketSnapshot || {},
     });
@@ -2363,7 +2546,11 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
   }
 
   if (position) {
-    const takeProfitPrice = position.avgEntryPrice * (1 + strategy.simulation.takeProfitFraction);
+    const takeProfitPrice = resolveDynamicTakeProfitPrice({
+      entryPrice: position.avgEntryPrice,
+      takeProfitFraction: strategy.simulation.takeProfitFraction,
+      exitTargetMode: strategy.simulation.exitTargetMode,
+    }, lastBar) || (position.avgEntryPrice * (1 + strategy.simulation.takeProfitFraction));
     const stopLossPrice = position.avgEntryPrice * (1 - strategy.simulation.stopLossFraction);
     if (lastBar.close >= takeProfitPrice || lastBar.close <= stopLossPrice) {
       const riskDecision = evaluateTradeRisk({

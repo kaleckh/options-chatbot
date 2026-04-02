@@ -10,6 +10,7 @@ from typing import Any, Optional
 from forward_options_ledger import (
     PENDING_TRUTH_STATUS,
     _measurement_status_for_event,
+    authoritative_forward_ledger_db_path,
     list_forward_scan_pick_events,
     list_forward_sessions,
 )
@@ -121,7 +122,8 @@ def _normalize_quote_freshness_status(event: dict[str, Any]) -> str:
 
 
 def _load_positions_snapshot() -> dict[str, Any]:
-    repo = create_positions_repository(os.getenv("DATABASE_URL"))
+    database_url = str(os.getenv("DATABASE_URL") or "").strip()
+    repo = create_positions_repository(database_url or None)
     available = bool(getattr(repo, "is_available", False))
     closed_positions: list[dict[str, Any]] = []
     error_message = getattr(repo, "error_message", None)
@@ -135,6 +137,7 @@ def _load_positions_snapshot() -> dict[str, Any]:
         "available": available,
         "error_message": error_message,
         "closed_positions": closed_positions,
+        "database_url_configured": bool(database_url),
     }
 
 
@@ -187,9 +190,10 @@ def _load_forward_evidence(
     forward_db_path: str | Path | None = None,
     recorded_before_utc: str | None = None,
 ) -> dict[str, Any]:
+    resolved_forward_db_path = Path(forward_db_path) if forward_db_path else authoritative_forward_ledger_db_path()
     session_map = {
         int(session["id"]): session
-        for session in list_forward_sessions(limit=5000, db_path=forward_db_path)
+        for session in list_forward_sessions(limit=5000, db_path=resolved_forward_db_path)
     }
     store = HistoricalOptionsStore()
     latest_quote_at_utc = str(
@@ -208,7 +212,7 @@ def _load_forward_evidence(
     }
 
     for event in list_forward_scan_pick_events(
-        db_path=forward_db_path,
+        db_path=resolved_forward_db_path,
         recorded_before_utc=recorded_before_utc,
     ):
         session = session_map.get(int(event.get("session_id") or 0), {})
@@ -314,6 +318,7 @@ def _load_forward_evidence(
             pending_truth_events.append(normalized_event)
 
     return {
+        "db_path": str(resolved_forward_db_path),
         "trusted_truth_horizon": trusted_truth_horizon.isoformat() if trusted_truth_horizon else None,
         "all_events": all_events,
         "eligible_events": eligible_events,
@@ -380,7 +385,7 @@ def evaluate_measurement_gate(
             {
                 "code": "forward_ledger_contamination",
                 "severity": "blocked",
-                "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
+                "message": "Fixture, test, or research evidence is present in the authoritative forward ledger.",
                 "finding_count": len(forward_evidence["contamination_findings"]),
             }
         )
@@ -460,6 +465,7 @@ def evaluate_measurement_gate(
                     positions_snapshot["error_message"]
                     or "Tracked positions storage is unavailable."
                 ),
+                "database_url_configured": bool(positions_snapshot.get("database_url_configured")),
             }
         )
 
@@ -497,6 +503,7 @@ def evaluate_measurement_gate(
                 "required_quote_coverage_pct": float(min_imported_quote_coverage_pct),
             },
             "forward_evidence": {
+                "db_path": forward_evidence.get("db_path"),
                 "eligible_event_count": int(forward_evidence["eligible_event_count"]),
                 "pending_truth_event_count": int(forward_evidence.get("pending_truth_event_count") or 0),
                 "required_event_count": int(min_eligible_forward_events),
@@ -509,6 +516,8 @@ def evaluate_measurement_gate(
             },
             "tracked_positions": {
                 "available": bool(positions_snapshot["available"]),
+                "database_url_configured": bool(positions_snapshot.get("database_url_configured")),
+                "error_message": positions_snapshot.get("error_message"),
                 "closed_position_count": int(realized_metrics["closed_position_count"] or 0),
                 "required_closed_position_count": int(min_closed_tracked_positions),
             },

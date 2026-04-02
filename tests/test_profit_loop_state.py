@@ -29,14 +29,32 @@ class ProfitLoopStateTests(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.state_dir = Path(self._tmp.name) / "profit-loop"
 
-    def test_validate_rejects_missing_top_level_keys(self):
-        with self.assertRaises(ValueError):
-            validate_profit_loop_state({"schema_version": 2})
+    def test_validate_backfills_missing_top_level_keys_for_schema_v2(self):
+        normalized = validate_profit_loop_state({"schema_version": 2})
+        self.assertEqual(normalized["schema_version"], 2)
+        self.assertIsNone(normalized["active_run"])
+        self.assertEqual(normalized["open_issues"], [])
+        self.assertEqual(normalized["resolved_issues"], [])
 
     def test_validate_migrates_schema_v1_payload(self):
         normalized = validate_profit_loop_state(
             {
                 "schema_version": 1,
+                "updated_at": "2026-04-02T12:00:00Z",
+                "latest_operational_health": None,
+                "latest_truth_holdout": None,
+                "latest_profit_validation": None,
+                "open_issues": [],
+                "resolved_issues": [],
+            }
+        )
+        self.assertEqual(normalized["schema_version"], 2)
+        self.assertIsNone(normalized["active_run"])
+
+    def test_validate_schema_v2_payload_backfills_missing_active_run(self):
+        normalized = validate_profit_loop_state(
+            {
+                "schema_version": 2,
                 "updated_at": "2026-04-02T12:00:00Z",
                 "latest_operational_health": None,
                 "latest_truth_holdout": None,

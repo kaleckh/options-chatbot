@@ -23,13 +23,15 @@ The live product loop is:
 The project still contains older prediction surfaces, but the active systematic research focus is now crypto day trading because the real-data loop is cheaper and easier to run honestly there than in listed options.
 
 The day-trading side is currently a research lab, not a production workflow:
-- the active lane is now crypto spot research in `src/lib/day-trading/crypto-engine.js`
+- the active lane is now a crypto spot profitability pilot in `src/lib/day-trading/crypto-engine.js`
 - the older SPY/QQQ Yahoo lab remains available as `equities_legacy` in `src/lib/day-trading/engine.js`
 - the UI surface is `Day Trading` under Strategy with a market selector
 - deterministic replay coverage now exists via `npm run daytrading:test`
 - crypto history can be backfilled via `npm run daytrading:import:crypto`
 - a live crypto watchlist now exists via `npm run daytrading:watch`
 - a control-first crypto experiment loop now exists via `npm run daytrading:experiments`
+- the profitability pilot status can be printed via `npm run daytrading:pilot`
+- manual pilot journal entries can be appended via `npm run daytrading:journal:add -- --timestamp=...`
 
 ## Current Status
 

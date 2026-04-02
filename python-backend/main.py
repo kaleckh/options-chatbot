@@ -73,6 +73,8 @@ from metric_truth_audit import build_metric_truth_report
 from forward_options_ledger import (
     LIVE_PRODUCTION_EVIDENCE_CLASS,
     MANUAL_OBSERVATION_EVIDENCE_CLASS,
+    archive_forward_ledger_db_path,
+    authoritative_forward_ledger_db_path,
     build_forward_scan_snapshot,
     list_forward_scan_pick_events,
     list_forward_sessions,
@@ -165,6 +167,7 @@ def _default_options_profit_status() -> dict[str, Any]:
     blocker = "Options profit cycle has not run yet."
     return {
         "generated_at": datetime.now(UTC).isoformat(),
+        "daily_truth_refresh": None,
         "measurement_gate": {
             "state": "blocked",
             "blockers": [blocker],
@@ -246,6 +249,7 @@ def _read_only_options_profit_status() -> dict[str, Any]:
     )
     return {
         "generated_at": generated_at,
+        "daily_truth_refresh": status_payload.get("daily_truth_refresh"),
         "measurement_gate": measurement_gate,
         "active_incumbents": active_incumbents,
         "current_canary": current_canary,
@@ -496,15 +500,15 @@ def _preferred_results_cache_key(truth_lane: str | None) -> tuple[Any, ...]:
 
 
 def _forward_evidence_cache_key() -> tuple[Any, ...]:
-    ledger_path = os.getenv("FORWARD_OPTIONS_LEDGER_DB_PATH") or os.path.join(
-        ROOT_DIR,
-        "data",
-        "options-validation",
-        "forward_tracking.db",
+    authoritative_path = str(authoritative_forward_ledger_db_path())
+    archive_path = str(archive_forward_ledger_db_path())
+    evidence_path = os.path.join(
+        os.path.dirname(os.path.abspath(authoritative_path)),
+        "forward_evidence_events.jsonl",
     )
-    evidence_path = os.path.join(os.path.dirname(os.path.abspath(ledger_path)), "forward_evidence_events.jsonl")
     return (
-        _artifact_mtime(ledger_path),
+        _artifact_mtime(authoritative_path),
+        _artifact_mtime(archive_path),
         _artifact_mtime(evidence_path),
         _artifact_mtime(wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE),
     )
@@ -675,12 +679,7 @@ def _record_forward_truth_for_position_events(
 
 
 def _forward_evidence_log_path() -> str:
-    ledger_path = os.getenv("FORWARD_OPTIONS_LEDGER_DB_PATH") or os.path.join(
-        ROOT_DIR,
-        "data",
-        "options-validation",
-        "forward_tracking.db",
-    )
+    ledger_path = str(authoritative_forward_ledger_db_path())
     return os.path.join(os.path.dirname(os.path.abspath(ledger_path)), "forward_evidence_events.jsonl")
 
 
@@ -738,20 +737,35 @@ def _latest_artifact_timestamp(path: str) -> str | None:
 
 
 def _build_forward_evidence_report() -> dict[str, Any]:
+    authoritative_db_path = authoritative_forward_ledger_db_path()
+    archive_db_path = archive_forward_ledger_db_path()
     authoritative_events = list_forward_scan_pick_events(
         source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
         eligible_only=True,
+        db_path=authoritative_db_path,
     )
-    observation_events = list_forward_scan_pick_events(source_label=ARCHIVED_FORWARD_SOURCE_LABEL)
-    recent_sessions = list_forward_sessions(limit=25, source_label=ARCHIVED_FORWARD_SOURCE_LABEL)
+    authoritative_all_events = list_forward_scan_pick_events(
+        source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+        db_path=authoritative_db_path,
+    )
+    observation_events = list_forward_scan_pick_events(
+        source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+        db_path=archive_db_path,
+    ) if archive_db_path.resolve() != authoritative_db_path.resolve() else list(authoritative_all_events)
+    recent_sessions = list_forward_sessions(
+        limit=25,
+        source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+        db_path=authoritative_db_path,
+    )
     authoritative_sessions = list_forward_sessions(
         limit=25,
         source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
         evidence_class=LIVE_PRODUCTION_EVIDENCE_CLASS,
         eligibility_status="eligible",
+        db_path=authoritative_db_path,
     )
     authoritative_exact_contract_count = sum(
-        1 for event in authoritative_events if str(event.get("contract_symbol") or "").strip()
+        1 for event in authoritative_all_events if str(event.get("contract_symbol") or "").strip()
     )
     events = _read_forward_evidence_events()
     latest_event = events[-1] if events else None
@@ -765,7 +779,7 @@ def _build_forward_evidence_report() -> dict[str, Any]:
     latest_artifact = load_last_archived_forward_daily_results()
     latest_artifact_path = wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE
     latest_artifact_timestamp = _latest_artifact_timestamp(latest_artifact_path)
-    historical_evidence_available = len(authoritative_events) > 0
+    historical_evidence_available = len(authoritative_all_events) > 0
     latest_capture_created_picks = bool(latest_authoritative_event) and int(latest_authoritative_event.get("scan_pick_count") or 0) > 0
     if latest_capture_created_picks:
         activation_status = "active"
@@ -786,10 +800,11 @@ def _build_forward_evidence_report() -> dict[str, Any]:
         "source_label": ARCHIVED_FORWARD_SOURCE_LABEL,
         "recent_session_count": len(recent_sessions),
         "authoritative_session_count": len(authoritative_sessions),
-        "scan_pick_count": len(authoritative_events),
+        "scan_pick_count": len(authoritative_all_events),
+        "eligible_scan_pick_count": len(authoritative_events),
         "exact_contract_capture_counts": {
             "with_contract_count": authoritative_exact_contract_count,
-            "without_contract_count": max(len(authoritative_events) - authoritative_exact_contract_count, 0),
+            "without_contract_count": max(len(authoritative_all_events) - authoritative_exact_contract_count, 0),
         },
         "forward_truth_recording_failure_count": len(failure_events),
         "latest_archived_forward_artifact_timestamp": latest_artifact_timestamp,
@@ -810,7 +825,10 @@ def _build_forward_evidence_report() -> dict[str, Any]:
         },
         "ledger_summary": {
             "available": historical_evidence_available,
-            "scan_pick_count": len(authoritative_events),
+            "authoritative_db_path": str(authoritative_db_path),
+            "archive_db_path": str(archive_db_path),
+            "scan_pick_count": len(authoritative_all_events),
+            "eligible_scan_pick_count": len(authoritative_events),
             "observation_scan_pick_count": len(observation_events),
             "recent_session_count": len(recent_sessions),
             "authoritative_session_count": len(authoritative_sessions),

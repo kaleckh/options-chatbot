@@ -15,7 +15,9 @@ import type {
   CreateSuggestedTradeRequest,
   CreateTrackedPositionRequest,
   ExposureSnapshot,
+  ForwardEvidenceReport,
   LiveTradePolicy,
+  OptionsProfitStatus,
   PlaybookExitAudit,
   Prediction,
   ScanPick,
@@ -96,6 +98,48 @@ function fmtTruthSource(value?: string | null): string {
   return value ? `Unknown truth source (${value})` : "Unknown truth source";
 }
 
+function fmtCompactLabel(value?: string | null): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "\u2014";
+  return normalized.replaceAll("_", " ");
+}
+
+function fmtUpperLabel(value?: string | null): string {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "\u2014";
+  return normalized.replaceAll("_", " ").toUpperCase();
+}
+
+function contractQualityLabel(pick?: Partial<ScanPick> | null): string {
+  const selectionSource = String(pick?.selection_source || "").trim().toLowerCase();
+  const promotionClass = String(pick?.promotion_class || "").trim().toLowerCase();
+  if (String(pick?.contract_symbol || "").trim()) {
+    if (selectionSource.includes("archived_exact") || selectionSource.includes("exact_contract")) {
+      return "Exact contract";
+    }
+    if (selectionSource.includes("model_target") || promotionClass.includes("bootstrap") || promotionClass.includes("sparse")) {
+      return "Model exact fallback";
+    }
+    if (selectionSource.includes("nearest") || promotionClass.includes("nearest")) {
+      return "Nearest listed";
+    }
+    return "Exact symbol recorded";
+  }
+  if (selectionSource.includes("nearest") || promotionClass.includes("nearest")) {
+    return "Nearest listed";
+  }
+  return "Contract missing";
+}
+
+function quoteContextLabel(pick?: Partial<ScanPick> | null): string {
+  const basis = fmtCompactLabel(pick?.quote_basis);
+  const freshness = fmtCompactLabel(pick?.quote_freshness_status);
+  if (basis === "\u2014" && freshness === "\u2014") return "\u2014";
+  if (basis === "\u2014") return freshness;
+  if (freshness === "\u2014") return basis;
+  return `${basis} / ${freshness}`;
+}
+
 function calcOptionPnlPct(entryPrice?: number | null, exitPrice?: number | null): number | null {
   if (entryPrice == null || exitPrice == null || entryPrice <= 0) return null;
   return ((exitPrice / entryPrice) - 1) * 100;
@@ -111,6 +155,9 @@ export default function PredictionsView() {
   const [guardrailDecisionCounts, setGuardrailDecisionCounts] = useState<Record<string, number> | null>(null);
   const [scanExitAudit, setScanExitAudit] = useState<PlaybookExitAudit | null>(null);
   const [scanCandidateCount, setScanCandidateCount] = useState(0);
+  const [forwardEvidence, setForwardEvidence] = useState<ForwardEvidenceReport | null>(null);
+  const [optionsProfitStatus, setOptionsProfitStatus] = useState<OptionsProfitStatus | null>(null);
+  const [truthHealthError, setTruthHealthError] = useState<string | null>(null);
   const [useRecommendedPolicy, setUseRecommendedPolicy] = useState(true);
   const [scanPlaybook, setScanPlaybook] = useState<string>("short_term");
   const [showBlockedIdeas, setShowBlockedIdeas] = useState(false);
@@ -239,6 +286,40 @@ export default function PredictionsView() {
     }
   }, [showBlockedIdeas, toast, scanPlaybook, useRecommendedPolicy]);
 
+  const fetchTruthHealth = useCallback(async (showToast = false) => {
+    try {
+      const [forwardRes, statusRes] = await Promise.all([
+        fetchWithTimeout("/api/backtest/forward-evidence", undefined, "Forward evidence report"),
+        fetchWithTimeout("/api/options-profit/status", undefined, "Options profit status"),
+      ]);
+      const forwardData = await forwardRes.json();
+      const statusData = await statusRes.json();
+      if (!forwardRes.ok || forwardData.error) {
+        throw new Error(forwardData.error || "Failed to load forward evidence report");
+      }
+      if (!statusRes.ok || statusData.error) {
+        throw new Error(statusData.error || "Failed to load options profit status");
+      }
+      setForwardEvidence((forwardData || null) as ForwardEvidenceReport | null);
+      setOptionsProfitStatus((statusData || null) as OptionsProfitStatus | null);
+      setTruthHealthError(null);
+    } catch (err) {
+      console.error("Failed to load truth health:", err);
+      const message = err instanceof Error ? err.message : "Failed to load truth health.";
+      setTruthHealthError(message);
+      if (showToast) {
+        toast.error(message);
+      }
+    }
+  }, [toast]);
+
+  const refreshScannerSurface = useCallback(async (showToast = false) => {
+    await Promise.all([
+      fetchScanner(showToast),
+      fetchTruthHealth(showToast),
+    ]);
+  }, [fetchScanner, fetchTruthHealth]);
+
   const fetchPositions = useCallback(async (showToast = false) => {
     setPositionsLoading(true);
     try {
@@ -296,7 +377,7 @@ export default function PredictionsView() {
     const load = async () => {
       setLoading(true);
       try {
-        await fetchScanner(false);
+        await refreshScannerSurface(false);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -307,7 +388,7 @@ export default function PredictionsView() {
     return () => {
       mounted = false;
     };
-  }, [fetchScanner]);
+  }, [refreshScannerSurface]);
 
   useEffect(() => {
     if (!LEGACY_PREDICTION_TABS.has(activeSubTab)) return;
@@ -830,6 +911,9 @@ export default function PredictionsView() {
             decisionCounts={scanDecisionCounts}
             guardrailCounts={guardrailDecisionCounts}
             candidateCount={scanCandidateCount}
+            forwardEvidence={forwardEvidence}
+            optionsProfitStatus={optionsProfitStatus}
+            truthHealthError={truthHealthError}
             playbook={scanPlaybook}
             playbooks={availablePlaybooks}
             exposureSnapshot={exposureSnapshot}
@@ -840,7 +924,7 @@ export default function PredictionsView() {
             notes={takeNotes}
             takingTrade={takingTrade}
             savingSuggestedTrade={savingSuggestedTrade}
-            onRefresh={() => void fetchScanner(true)}
+            onRefresh={() => void refreshScannerSurface(true)}
             onPolicyModeChange={setUseRecommendedPolicy}
             onPlaybookChange={setScanPlaybook}
             onShowBlockedIdeasChange={setShowBlockedIdeas}
@@ -921,6 +1005,9 @@ function ScannerTab({
   decisionCounts,
   guardrailCounts,
   candidateCount,
+  forwardEvidence,
+  optionsProfitStatus,
+  truthHealthError,
   playbook,
   playbooks,
   exposureSnapshot,
@@ -952,6 +1039,9 @@ function ScannerTab({
   decisionCounts: Record<string, number> | null;
   guardrailCounts: Record<string, number> | null;
   candidateCount: number;
+  forwardEvidence: ForwardEvidenceReport | null;
+  optionsProfitStatus: OptionsProfitStatus | null;
+  truthHealthError: string | null;
   playbook: string;
   playbooks: ScanPlaybook[];
   exposureSnapshot: ExposureSnapshot | null;
@@ -995,10 +1085,35 @@ function ScannerTab({
   const cautionCount = guardrailCounts?.caution || 0;
   const guardrailBlockedCount = guardrailCounts?.blocked || 0;
   const activePlaybook = playbooks.find((item) => item.id === playbook) || null;
+  const measurementGate = optionsProfitStatus?.measurement_gate;
+  const gateState = String(measurementGate?.state || "unknown").toLowerCase();
+  const importedDailyCheck = measurementGate?.checks?.imported_daily_artifact || null;
+  const forwardGateCheck = measurementGate?.checks?.forward_evidence || null;
+  const trackedPositionsCheck = measurementGate?.checks?.tracked_positions || null;
+  const dailyTruthRefresh = optionsProfitStatus?.daily_truth_refresh || null;
+  const exactContractCount = Number(forwardEvidence?.exact_contract_capture_counts?.with_contract_count || 0);
+  const totalForwardCaptures = Number(forwardEvidence?.scan_pick_count || 0);
+  const exactContractCoveragePct = totalForwardCaptures > 0
+    ? (exactContractCount / totalForwardCaptures) * 100
+    : null;
+  const trackedDbStatus = trackedPositionsCheck?.available
+    ? "READY"
+    : trackedPositionsCheck?.database_url_configured
+      ? "DOWN"
+      : "MISSING";
+  const blockerMessages = (measurementGate?.blockers || [])
+    .map((item) => {
+      if (typeof item === "string") return item;
+      return String(item?.message || item?.code || "").trim();
+    })
+    .filter(Boolean)
+    .slice(0, 3);
 
   const rows = picks.map((pick) => ({
     Ticker: pick.ticker,
     Trade: pick.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
+    Contract: pick.contract_symbol || contractQualityLabel(pick),
+    Quote: quoteContextLabel(pick),
     "Dir. Score": pick.direction_score.toFixed(0),
     Quality: pick.quality_score.toFixed(0),
     Decision: pick.policy_decision
@@ -1137,7 +1252,7 @@ function ScannerTab({
           )}
 
           {exposureSnapshot?.warnings?.length ? (
-            <div className="space-y-1">
+        <div className="space-y-1">
               {exposureSnapshot.warnings.map((line) => (
                 <div key={line} className="text-xs text-text-3">
                   {line}
@@ -1145,6 +1260,76 @@ function ScannerTab({
               ))}
             </div>
           ) : null}
+        </div>
+      )}
+
+      {(forwardEvidence || optionsProfitStatus || truthHealthError) && (
+        <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-text-0">Options Truth Health</div>
+              <p className="text-xs text-text-3 mt-1">
+                This surface summarizes whether current scanner evidence is fresh enough, exact enough, and operationally usable for supervised decisions.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <MetricCard label="Gate" value={fmtUpperLabel(gateState)} />
+              <MetricCard label="Truth Horizon" value={fmtDate(forwardGateCheck?.trusted_truth_horizon as string | null | undefined)} />
+              <MetricCard label="Eligible Live" value={String(forwardGateCheck?.eligible_event_count ?? 0)} />
+              <MetricCard label="Exact Coverage" value={exactContractCoveragePct != null ? `${exactContractCoveragePct.toFixed(0)}%` : "\u2014"} />
+              <MetricCard label="Tracked DB" value={trackedDbStatus} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-1">
+              <div className="text-[11px] uppercase tracking-wide text-text-3">Imported Daily</div>
+              <div className="text-sm text-text-1">
+                {importedDailyCheck?.present && importedDailyCheck?.matches_store
+                  ? `Coverage ${Number(importedDailyCheck.quote_coverage_pct ?? 0).toFixed(1)}%`
+                  : "Artifact missing or stale"}
+              </div>
+              <div className="text-xs text-text-3">
+                Refresh {fmtCompactLabel(dailyTruthRefresh?.status as string | null | undefined)}
+                {dailyTruthRefresh?.stage ? ` · ${fmtCompactLabel(dailyTruthRefresh.stage as string)}` : ""}
+              </div>
+            </div>
+            <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-1">
+              <div className="text-[11px] uppercase tracking-wide text-text-3">Authoritative Forward</div>
+              <div className="text-sm text-text-1">
+                {String(forwardEvidence?.authoritative_session_count ?? 0)} sessions · {String(forwardEvidence?.scan_pick_count ?? 0)} picks
+              </div>
+              <div className="text-xs text-text-3">
+                Pending truth {String(forwardGateCheck?.pending_truth_event_count ?? 0)}
+                {" "}&middot; Artifact {forwardEvidence?.archived_forward_artifact?.available ? "ready" : "waiting"}
+              </div>
+            </div>
+            <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-1">
+              <div className="text-[11px] uppercase tracking-wide text-text-3">Contract Quality</div>
+              <div className="text-sm text-text-1">
+                {exactContractCount}/{totalForwardCaptures || 0} captures kept exact
+              </div>
+              <div className="text-xs text-text-3">
+                Fallback {forwardEvidence?.archived_forward_artifact?.primary_judge_fallback_used ? fmtCompactLabel(forwardEvidence.archived_forward_artifact.primary_judge_fallback_reason) : "none"}
+              </div>
+            </div>
+          </div>
+
+          {truthHealthError && (
+            <div className="bg-red-dim border border-red/30 rounded-lg px-3 py-2 text-xs text-red">
+              {truthHealthError}
+            </div>
+          )}
+
+          {gateState !== "healthy" && blockerMessages.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2 space-y-1">
+              {blockerMessages.map((line) => (
+                <div key={line} className="text-xs text-amber-200">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1302,6 +1487,31 @@ function ScannerTab({
                 {selectedPick.suggested_size_reason && <div>{selectedPick.suggested_size_reason}</div>}
               </div>
             )}
+            <div className="text-xs text-text-2 mt-2 space-y-1">
+              <div className="text-[11px] uppercase tracking-wide text-text-3">Contract And Quote Provenance</div>
+              <div>
+                Contract quality: <strong className="text-text-0">{contractQualityLabel(selectedPick)}</strong>
+                {selectedPick.contract_symbol ? ` · ${selectedPick.contract_symbol}` : ""}
+              </div>
+              <div>
+                Quote: <strong className="text-text-0">{quoteContextLabel(selectedPick)}</strong>
+                {selectedPick.quote_time_et ? ` · ${selectedPick.quote_time_et}` : ""}
+              </div>
+              <div>
+                Selection: <strong className="text-text-0">{fmtCompactLabel(selectedPick.selection_source)}</strong>
+                {" "}&middot; Promotion <strong className="text-text-0">{fmtCompactLabel(selectedPick.promotion_class)}</strong>
+              </div>
+              <div>
+                Entry execution: <strong className="text-text-0">{fmtCompactLabel(selectedPick.entry_execution_basis)}</strong>
+                {" "}&middot; {fmtMoney(selectedPick.entry_execution_price ?? selectedPick.premium ?? selectedPick.est_premium)}
+              </div>
+              <div>
+                Profitability: <strong className="text-text-0">{fmtUpperLabel(selectedPick.profitability_eligibility)}</strong>
+                {selectedPick.profitability_blockers?.length
+                  ? ` · ${selectedPick.profitability_blockers.join(", ")}`
+                  : ""}
+              </div>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="text-xs text-text-2 space-y-1">
@@ -1374,7 +1584,7 @@ function ScannerTab({
         <FinTable
           data={rows}
           badgeCol="Trade"
-          monoCols={["Dir. Score", "Quality", "Size", "Stock", "Premium", "Strike"]}
+          monoCols={["Contract", "Quote", "Dir. Score", "Quality", "Size", "Stock", "Premium", "Strike"]}
           label="Live options scanner picks"
           maxHeight="620px"
         />
@@ -1450,6 +1660,10 @@ function SuggestedTradesTab({
     return {
       Ticker: trade.ticker,
       Trade: trade.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
+      Contract: fmtContractLabel(trade),
+      "Contract Q": contractQualityLabel(trade.source_pick_snapshot),
+      Source: fmtCompactLabel(trade.source_pick_snapshot?.selection_source || trade.source_pick_snapshot?.promotion_class),
+      "Entry Basis": fmtCompactLabel(trade.entry_execution_basis || trade.source_pick_snapshot?.entry_execution_basis),
       Contracts: String(trade.contracts),
       Entry: fmtMoney(trade.entry_option_price),
       [view === "open" ? "Last Px" : "Exit Px"]: fmtMoney(view === "open" ? trade.last_option_price : trade.exit_option_price),
@@ -1595,7 +1809,7 @@ function SuggestedTradesTab({
           data={rows}
           badgeCol="Trade"
           pnlCols={["Hyp. P&L %", "Realized P&L %"]}
-          monoCols={["Contracts", "Entry", "Last Px", "Exit Px"]}
+          monoCols={["Contract", "Contract Q", "Entry Basis", "Contracts", "Entry", "Last Px", "Exit Px"]}
           label="Suggested trades"
           maxHeight="620px"
         />
@@ -1659,6 +1873,9 @@ function TrackedPositionsTab({
     Ticker: position.ticker,
     Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
     Contract: fmtContractLabel(position),
+    "Contract Q": contractQualityLabel(position.source_pick_snapshot),
+    Source: fmtCompactLabel(position.source_pick_snapshot?.selection_source || position.source_pick_snapshot?.promotion_class),
+    "Entry Basis": fmtCompactLabel(position.entry_execution_basis || position.source_pick_snapshot?.entry_execution_basis),
     Contracts: String(position.contracts),
     Entry: fmtMoney(position.entry_option_price),
     "Last Px": fmtMoney(position.last_option_price),
@@ -1764,6 +1981,17 @@ function TrackedPositionsTab({
               {" "}&middot; Last price {fmtMoney(closingPosition.last_option_price)}
               {" "}&middot; Pricing {fmtPricingSource(closingPosition.latest_review?.pricing_source)}
             </div>
+            <div className="text-xs text-text-2 mt-2 space-y-1">
+              <div>
+                Contract quality: <strong className="text-text-0">{contractQualityLabel(closingPosition.source_pick_snapshot)}</strong>
+              </div>
+              <div>
+                Source: <strong className="text-text-0">{fmtCompactLabel(closingPosition.source_pick_snapshot?.selection_source || closingPosition.source_pick_snapshot?.promotion_class)}</strong>
+              </div>
+              <div>
+                Entry basis: <strong className="text-text-0">{fmtCompactLabel(closingPosition.entry_execution_basis || closingPosition.source_pick_snapshot?.entry_execution_basis)}</strong>
+              </div>
+            </div>
             {closingPosition.latest_review?.warnings?.length ? (
               <div className="text-xs text-amber-200 mt-2">
                 {closingPosition.latest_review.warnings[0]}
@@ -1813,7 +2041,7 @@ function TrackedPositionsTab({
           data={rows}
           badgeCol="Trade"
           pnlCols={["P&L %"]}
-          monoCols={["Contract", "Contracts", "Entry", "Last Px"]}
+          monoCols={["Contract", "Contract Q", "Entry Basis", "Contracts", "Entry", "Last Px"]}
           label="Tracked options positions"
           maxHeight="620px"
         />

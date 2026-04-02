@@ -1,4 +1,4 @@
-const { runDayTradingValidation, normalizeDayTradingMarket } = require("../src/lib/day-trading");
+const { getDayTradingSnapshot, runDayTradingValidation, normalizeDayTradingMarket } = require("../src/lib/day-trading");
 
 function parseArgs(argv) {
   const args = {
@@ -35,8 +35,10 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const report = await runDayTradingValidation(args);
+  const snapshot = getDayTradingSnapshot({ market: args.market });
   const summary = {
     generatedAt: report.generatedAt,
+    profitabilityProfileId: report.profitabilityProfileId || null,
     market: report.market,
     windowMode: report.windowMode || args.windowMode,
     barsRequested: report.barsRequested ?? args.bars,
@@ -55,6 +57,7 @@ async function main() {
       vetoReasons: item.vetoReasons,
     })),
     paperAccount: report.paperAccount,
+    pilotSummary: snapshot.pilotSummary || null,
   };
 
   console.log(JSON.stringify(summary, null, 2));

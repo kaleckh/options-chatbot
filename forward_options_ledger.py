@@ -24,6 +24,11 @@ for candidate in (ROOT_DIR, BACKEND_DIR):
 from positions_repository import create_positions_repository  # type: ignore  # noqa: E402
 
 DEFAULT_FORWARD_LEDGER_DB_PATH = ROOT_DIR / "data" / "options-validation" / "forward_tracking.db"
+DEFAULT_AUTHORITATIVE_FORWARD_LEDGER_DB_PATH = (
+    ROOT_DIR / "data" / "options-validation" / "forward_tracking_authoritative.db"
+)
+FORWARD_LEDGER_DB_ENV = "FORWARD_OPTIONS_LEDGER_DB_PATH"
+AUTHORITATIVE_FORWARD_LEDGER_DB_ENV = "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH"
 
 LIVE_PRODUCTION_EVIDENCE_CLASS = "live_production"
 MANUAL_OBSERVATION_EVIDENCE_CLASS = "manual_observation"
@@ -89,9 +94,25 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
 }
 
 
-def _db_path() -> Path:
-    override = os.getenv("FORWARD_OPTIONS_LEDGER_DB_PATH")
+def archive_forward_ledger_db_path() -> Path:
+    override = os.getenv(FORWARD_LEDGER_DB_ENV)
     return Path(override) if override else DEFAULT_FORWARD_LEDGER_DB_PATH
+
+
+def authoritative_forward_ledger_db_path() -> Path:
+    override = os.getenv(AUTHORITATIVE_FORWARD_LEDGER_DB_ENV)
+    if override:
+        return Path(override)
+    legacy_override = os.getenv(FORWARD_LEDGER_DB_ENV)
+    if legacy_override:
+        legacy_path = Path(legacy_override)
+        stem = legacy_path.stem or "forward_tracking"
+        return legacy_path.with_name(f"{stem}_authoritative{legacy_path.suffix or '.db'}")
+    return DEFAULT_AUTHORITATIVE_FORWARD_LEDGER_DB_PATH
+
+
+def _db_path() -> Path:
+    return authoritative_forward_ledger_db_path()
 
 
 def _ensure_table_columns(
@@ -201,6 +222,118 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
         )
         conn.commit()
     return path
+
+
+def migrate_live_production_evidence(
+    *,
+    source_db_path: str | Path | None = None,
+    destination_db_path: str | Path | None = None,
+) -> dict[str, Any]:
+    source_path = init_forward_ledger(source_db_path or archive_forward_ledger_db_path())
+    destination_path = init_forward_ledger(destination_db_path or authoritative_forward_ledger_db_path())
+    if source_path.resolve() == destination_path.resolve():
+        return {
+            "status": "skipped_same_path",
+            "source_db_path": str(source_path),
+            "destination_db_path": str(destination_path),
+            "selected_session_count": 0,
+            "migrated_session_count": 0,
+            "migrated_event_count": 0,
+            "skipped_existing_session_count": 0,
+        }
+
+    with closing(sqlite3.connect(source_path)) as source_conn, closing(sqlite3.connect(destination_path)) as dest_conn:
+        source_conn.row_factory = sqlite3.Row
+        dest_conn.row_factory = sqlite3.Row
+        session_columns = [
+            str(row["name"])
+            for row in source_conn.execute("PRAGMA table_info(forward_sessions)").fetchall()
+            if str(row["name"]) != "id"
+        ]
+        event_columns = [
+            str(row["name"])
+            for row in source_conn.execute("PRAGMA table_info(forward_events)").fetchall()
+            if str(row["name"]) not in {"id", "session_id"}
+        ]
+        selected_sessions = source_conn.execute(
+            """
+            SELECT *
+            FROM forward_sessions
+            WHERE COALESCE(evidence_class, '') = ?
+              AND COALESCE(is_fixture, 0) = 0
+            ORDER BY recorded_at_utc ASC, id ASC
+            """,
+            (LIVE_PRODUCTION_EVIDENCE_CLASS,),
+        ).fetchall()
+
+        migrated_session_count = 0
+        migrated_event_count = 0
+        skipped_existing_session_count = 0
+        for source_session in selected_sessions:
+            existing = dest_conn.execute(
+                """
+                SELECT id
+                FROM forward_sessions
+                WHERE COALESCE(recorded_at_utc, '') = COALESCE(?, '')
+                  AND COALESCE(source_label, '') = COALESCE(?, '')
+                  AND COALESCE(run_id, '') = COALESCE(?, '')
+                  AND COALESCE(evidence_class, '') = COALESCE(?, '')
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (
+                    source_session["recorded_at_utc"],
+                    source_session["source_label"],
+                    source_session["run_id"],
+                    source_session["evidence_class"],
+                ),
+            ).fetchone()
+            if existing is not None:
+                skipped_existing_session_count += 1
+                continue
+
+            insert_placeholders = ", ".join("?" for _ in session_columns)
+            dest_conn.execute(
+                f"""
+                INSERT INTO forward_sessions ({", ".join(session_columns)})
+                VALUES ({insert_placeholders})
+                """,
+                tuple(source_session[column] for column in session_columns),
+            )
+            destination_session_id = int(dest_conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+            migrated_session_count += 1
+
+            source_events = source_conn.execute(
+                """
+                SELECT *
+                FROM forward_events
+                WHERE session_id = ?
+                ORDER BY id ASC
+                """,
+                (int(source_session["id"]),),
+            ).fetchall()
+            event_placeholders = ", ".join("?" for _ in event_columns)
+            for source_event in source_events:
+                dest_conn.execute(
+                    f"""
+                    INSERT INTO forward_events (session_id, {", ".join(event_columns)})
+                    VALUES (?, {event_placeholders})
+                    """,
+                    (destination_session_id, *(source_event[column] for column in event_columns)),
+                )
+                migrated_event_count += 1
+
+        dest_conn.commit()
+
+    return {
+        "status": "migrated",
+        "source_db_path": str(source_path),
+        "destination_db_path": str(destination_path),
+        "selected_session_count": len(selected_sessions),
+        "migrated_session_count": migrated_session_count,
+        "migrated_event_count": migrated_event_count,
+        "skipped_existing_session_count": skipped_existing_session_count,
+    }
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -513,6 +646,16 @@ def _provenance_for_snapshot(
             scan_snapshot.get("quote_freshness_status"),
         ),
     }
+
+
+def _db_path_for_provenance(provenance: dict[str, Any]) -> Path:
+    if (
+        _normalize_evidence_class(provenance.get("evidence_class"))
+        == LIVE_PRODUCTION_EVIDENCE_CLASS
+        and not bool(provenance.get("is_fixture"))
+    ):
+        return authoritative_forward_ledger_db_path()
+    return archive_forward_ledger_db_path()
 
 
 def _eligibility_for_pick(
@@ -1273,7 +1416,6 @@ def record_forward_snapshot(
     source_label: str = "manual_snapshot",
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
-    path = init_forward_ledger(db_path)
     recorded_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     normalized_source_label = str(source_label or "manual_snapshot").strip() or "manual_snapshot"
 
@@ -1286,6 +1428,7 @@ def record_forward_snapshot(
         source_label=normalized_source_label,
         recorded_at_utc=recorded_at_utc,
     )
+    path = init_forward_ledger(db_path or _db_path_for_provenance(provenance))
     positions_available = tracked_positions is not None
     truth_source = _safe_text(policy.get("truth_source"))
     promotion_status = _safe_text(policy.get("promotion_status"))

@@ -70,7 +70,16 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.addCleanup(self.stack.close)
         self.stack.enter_context(patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.market_data_db_path}, clear=False))
         self.stack.enter_context(patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": self.historical_db_path}, clear=False))
-        self.stack.enter_context(patch.dict(os.environ, {"FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path}, clear=False))
+        self.stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                    "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                },
+                clear=False,
+            )
+        )
         self.stack.enter_context(patch.object(wfo, "DEFAULT_WATCHLIST", ["SPY", "QQQ"]))
         self.stack.enter_context(patch.object(wfo, "IMPORTED_VALIDATION_UNIVERSE", ("SPY", "QQQ")))
         self.stack.enter_context(patch.object(wfo, "WFO_RESULTS_FILE", self.synthetic_results_path))
