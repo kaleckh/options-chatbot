@@ -6,6 +6,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import dynamic from "next/dynamic";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
+import StrategyView from "@/components/strategy/StrategyView";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { MetricGridSkeleton } from "@/components/ui/Skeleton";
@@ -32,11 +33,6 @@ function LoadingSkeleton() {
 
 const PredictionsView = dynamic(
   () => import("@/components/predictions/PredictionsView"),
-  { loading: () => <LoadingSkeleton /> }
-);
-
-const StrategyView = dynamic(
-  () => import("@/components/strategy/StrategyView"),
   { loading: () => <LoadingSkeleton /> }
 );
 

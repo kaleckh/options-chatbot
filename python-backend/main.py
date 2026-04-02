@@ -3,6 +3,7 @@ FastAPI backend for the options scanner and research UI.
 Exposes tool dispatch plus scanner, replay, and position endpoints.
 """
 
+import asyncio
 import os
 import sys
 import json
@@ -99,6 +100,10 @@ POSITIONS_REPOSITORY = create_positions_repository(os.getenv("DATABASE_URL"))
 SUGGESTED_TRADES_REPOSITORY = create_suggested_trades_repository(DB_PATH)
 
 
+async def _run_in_worker(fn, /, *args, **kwargs):
+    return await asyncio.to_thread(fn, *args, **kwargs)
+
+
 @contextlib.contextmanager
 def _db():
     conn = sqlite3.connect(DB_PATH)
@@ -123,7 +128,7 @@ async def call_tool_endpoint(tool_name: str, body: dict[str, Any] = {}):
     if not fn:
         raise HTTPException(404, f"Unknown tool: {tool_name}")
     try:
-        result = fn(**body)
+        result = await _run_in_worker(fn, **body)
         return {"result": result}
     except Exception as e:
         return {"result": json.dumps({"error": type(e).__name__, "message": str(e)})}
@@ -519,7 +524,12 @@ async def run_scan_endpoint(body: dict[str, Any] = {}):
     """Run daily top trades scan."""
     n_picks = int(body.get("n_picks", DEFAULT_SCAN_PICKS))
     try:
-        result = _run_supervised_scan_request(body, n_picks=n_picks, include_policy_flags=True)
+        result = await _run_in_worker(
+            _run_supervised_scan_request,
+            body,
+            n_picks=n_picks,
+            include_policy_flags=True,
+        )
         normalized_picks = _normalize_scan_picks(result["picks"])
         normalized_watch_picks = _normalize_scan_picks(result.get("watch_picks") or [])
         forward_truth_meta = {
@@ -528,7 +538,8 @@ async def run_scan_endpoint(body: dict[str, Any] = {}):
             "forward_truth_error": None,
         }
         try:
-            forward_truth_meta = _record_forward_truth_for_scan(
+            forward_truth_meta = await _run_in_worker(
+                _record_forward_truth_for_scan,
                 result=result,
                 normalized_picks=normalized_picks,
             )
@@ -537,9 +548,10 @@ async def run_scan_endpoint(body: dict[str, Any] = {}):
                 "forward_truth_recorded": False,
                 "forward_truth_session_id": None,
                 "forward_truth_error": str(exc),
-            }
+        }
         try:
-            _append_forward_evidence_event(
+            await _run_in_worker(
+                _append_forward_evidence_event,
                 recorded=bool(forward_truth_meta.get("forward_truth_recorded")),
                 session_id=forward_truth_meta.get("forward_truth_session_id"),
                 error=forward_truth_meta.get("forward_truth_error"),

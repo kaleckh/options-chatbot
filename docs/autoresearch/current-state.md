@@ -1,5 +1,14 @@
 # Autoresearch Current State
 
+## Critical Rule: Read Code First
+
+- Never answer questions about the codebase, architecture, or design without reading the actual code first.
+- Do not speculate from naming, memory, or what "makes sense."
+- If asked whether `X` does `Y`, read `X` before answering.
+- If asked why `Z` happens, read the relevant path before answering.
+- If asked about a design decision, read the implementation before claiming what it does.
+- Getting it wrong confidently is worse than saying "let me check."
+
 - Phase: `truth-first-validation-phase`
 - Mode: `validation`
 - Freeze search: `True`

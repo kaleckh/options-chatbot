@@ -26,6 +26,31 @@ import type {
 } from "@/lib/types";
 
 const INDEX_TICKERS = new Set(["QQQ", "SPY", "IWM", "DIA", "XLK"]);
+const REQUEST_TIMEOUT_MS = 15000;
+
+function buildTimeoutError(label: string, timeoutMs: number): Error {
+  return new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s.`);
+}
+
+async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit | undefined,
+  label: string,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw buildTimeoutError(label, timeoutMs);
+    }
+    throw error;
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
 
 function fmtMoney(value?: number | null, digits: number = 2): string {
   if (value == null || Number.isNaN(value)) return "\u2014";
@@ -128,12 +153,12 @@ export default function PredictionsView() {
   const fetchPredictionsData = useCallback(async (showToast = false) => {
     try {
       const [predRes, sectorRes] = await Promise.all([
-        fetch("/api/tools/log_prediction", {
+        fetchWithTimeout("/api/tools/log_prediction", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "list" }),
-        }),
-        fetch("/api/sectors").catch(() => null),
+        }, "Prediction history"),
+        fetchWithTimeout("/api/sectors", undefined, "Sector data").catch(() => null),
       ]);
 
       const predData = await predRes.json();
@@ -156,7 +181,7 @@ export default function PredictionsView() {
   const fetchScanner = useCallback(async (showToast = false) => {
     setScanLoading(true);
     try {
-      const res = await fetch("/api/scan", {
+      const res = await fetchWithTimeout("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -166,7 +191,7 @@ export default function PredictionsView() {
           include_blocked_policy_picks: showBlockedIdeas,
           include_blocked_guardrail_picks: showBlockedIdeas,
         }),
-      });
+      }, "Live scan");
       const data = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to run scan");
@@ -182,9 +207,10 @@ export default function PredictionsView() {
       setExposureSnapshot(data.exposure_snapshot || null);
     } catch (err) {
       console.error("Failed to load scan picks:", err);
+      const message = err instanceof Error ? err.message : "Failed to load scan picks.";
       setScanPicks([]);
       setScanPolicy(null);
-      setScanPolicyError(null);
+      setScanPolicyError(message);
       setScanExitAudit(null);
       setScanDecisionCounts(null);
       setGuardrailDecisionCounts(null);
@@ -192,7 +218,7 @@ export default function PredictionsView() {
       setAvailablePlaybooks([]);
       setExposureSnapshot(null);
       if (showToast) {
-        toast.error(err instanceof Error ? err.message : "Failed to load scan picks.");
+        toast.error(message);
       }
     } finally {
       setScanLoading(false);
@@ -203,8 +229,8 @@ export default function PredictionsView() {
     setPositionsLoading(true);
     try {
       const [openRes, closedRes] = await Promise.all([
-        fetch("/api/positions?status=open"),
-        fetch("/api/positions?status=closed"),
+        fetchWithTimeout("/api/positions?status=open", undefined, "Open tracked positions"),
+        fetchWithTimeout("/api/positions?status=closed", undefined, "Closed tracked positions"),
       ]);
       const openData = await openRes.json();
       const closedData = await closedRes.json();
@@ -235,8 +261,8 @@ export default function PredictionsView() {
     setSuggestedTradesLoading(true);
     try {
       const [openRes, closedRes] = await Promise.all([
-        fetch("/api/suggested-trades?status=open"),
-        fetch("/api/suggested-trades?status=closed"),
+        fetchWithTimeout("/api/suggested-trades?status=open", undefined, "Open suggested trades"),
+        fetchWithTimeout("/api/suggested-trades?status=closed", undefined, "Closed suggested trades"),
       ]);
       const openData = await openRes.json();
       const closedData = await closedRes.json();
@@ -267,21 +293,28 @@ export default function PredictionsView() {
     let mounted = true;
     const load = async () => {
       setLoading(true);
-      await Promise.all([
-        fetchPredictionsData(false),
-        fetchScanner(false),
-        fetchPositions(false),
-        fetchSuggestedTrades(false),
-      ]);
-      if (mounted) {
-        setLoading(false);
+      try {
+        await fetchPredictionsData(false);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
       }
     };
     void load();
     return () => {
       mounted = false;
     };
-  }, [fetchPredictionsData, fetchPositions, fetchScanner, fetchSuggestedTrades]);
+  }, [fetchPredictionsData]);
+
+  useEffect(() => {
+    void fetchScanner(false);
+  }, [fetchScanner]);
+
+  useEffect(() => {
+    void fetchPositions(false);
+    void fetchSuggestedTrades(false);
+  }, [fetchPositions, fetchSuggestedTrades]);
 
   const openTakeTrade = useCallback((pick: ScanPick) => {
     setSelectedPick(pick);
