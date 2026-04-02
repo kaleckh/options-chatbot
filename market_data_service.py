@@ -1078,6 +1078,7 @@ def get_options(
             _request_memo_set(memo_key, value)
             return value
         _record_stat(namespace, "memory_misses")
+        record: Optional[dict[str, Any]] = None
         try:
             record = _load_option_expiries_record(symbol_up)
             if record is not None and record.get("status") == "fresh":
@@ -1092,6 +1093,7 @@ def get_options(
                 _record_stat(namespace, "persistent_misses")
         except Exception:
             _record_stat(namespace, "cache_failures")
+            record = None
         try:
             ticker = _ticker_factory_or_default(ticker_factory)(symbol)
             expiries = list(getattr(ticker, "options", []) or [])
@@ -1105,9 +1107,12 @@ def get_options(
             return expiries
         except Exception as exc:
             _record_stat(namespace, "fallbacks")
-            empty: list[str] = []
-            _request_memo_set(memo_key, empty)
-            return empty
+            if record is not None:
+                fallback_value = _fresh_record_to_value(record)
+                if fallback_value:
+                    _request_memo_set(memo_key, fallback_value)
+                    return fallback_value
+            raise RuntimeError(f"option expiries fetch failed for {symbol_up}: {exc}") from exc
 
     record: Optional[dict[str, Any]] = None
     try:
@@ -1116,21 +1121,21 @@ def get_options(
             status = str(record.get("status") or "error")
             if status == "fresh":
                 _record_stat(namespace, "persistent_hits")
-            elif status == "stale":
+                envelope = _snapshot_envelope(
+                    record.get("value") or [],
+                    record.get("freshness") or _freshness_payload(
+                        status=status,
+                        fetched_at=None,
+                        ttl=_OPTIONS_TTL,
+                        source="sqlite",
+                    ),
+                )
+                _request_memo_set(memo_key, envelope)
+                return envelope
+            if status == "stale":
                 _record_stat(namespace, "persistent_stale_hits")
             else:
                 _record_stat(namespace, "persistent_misses")
-            envelope = _snapshot_envelope(
-                record.get("value") or [],
-                record.get("freshness") or _freshness_payload(
-                    status=status,
-                    fetched_at=None,
-                    ttl=_OPTIONS_TTL,
-                    source="sqlite",
-                ),
-            )
-            _request_memo_set(memo_key, envelope)
-            return envelope
         _record_stat(namespace, "persistent_misses")
     except Exception as exc:
         _record_stat(namespace, "cache_failures")
@@ -1157,6 +1162,20 @@ def get_options(
         return envelope
     except Exception as exc:
         _record_stat(namespace, "fallbacks")
+        if record is not None:
+            envelope = _snapshot_envelope(
+                record.get("value") or [],
+                record.get("freshness") or _freshness_payload(
+                    status=str(record.get("status") or "error"),
+                    fetched_at=None,
+                    ttl=_OPTIONS_TTL,
+                    source=str(record.get("source") or "sqlite"),
+                    error=exc,
+                    stale_reason="network_refresh_failed",
+                ),
+            )
+            _request_memo_set(memo_key, envelope)
+            return envelope
         envelope = _snapshot_envelope(
             [],
             _freshness_payload(
@@ -1202,6 +1221,7 @@ def get_option_chain(
             _request_memo_set(memo_key, cached)
             return cached
         _record_stat(namespace, "memory_misses")
+        record: Optional[dict[str, Any]] = None
         try:
             record = _load_option_chain_record(symbol_up, expiry)
             if record is not None and record.get("status") == "fresh":
@@ -1216,6 +1236,7 @@ def get_option_chain(
                 _record_stat(namespace, "persistent_misses")
         except Exception:
             _record_stat(namespace, "cache_failures")
+            record = None
         try:
             value = _network_fetch()
             _record_stat(namespace, "network_fetches")
@@ -1228,34 +1249,42 @@ def get_option_chain(
             return value
         except Exception as exc:
             _record_stat(namespace, "fallbacks")
-            empty = SimpleNamespace(calls=pd.DataFrame(), puts=pd.DataFrame())
-            _request_memo_set(memo_key, empty)
-            return empty
+            if record is not None:
+                fallback_value = record.get("value")
+                if fallback_value is not None and (
+                    not getattr(fallback_value.calls, "empty", True)
+                    or not getattr(fallback_value.puts, "empty", True)
+                ):
+                    _request_memo_set(memo_key, fallback_value)
+                    return fallback_value
+            raise RuntimeError(f"option chain fetch failed for {symbol_up} {expiry}: {exc}") from exc
 
+    record: Optional[dict[str, Any]] = None
     try:
         record = _load_option_chain_record(symbol_up, expiry)
         if record is not None:
             status = str(record.get("status") or "error")
             if status == "fresh":
                 _record_stat(namespace, "persistent_hits")
+                envelope = _snapshot_envelope(
+                    record["value"],
+                    record.get("freshness") or _freshness_payload(
+                        status=status,
+                        fetched_at=None,
+                        ttl=_OPTION_CHAIN_TTL,
+                        source="sqlite",
+                    ),
+                )
+                _request_memo_set(memo_key, envelope)
+                return envelope
             elif status == "stale":
                 _record_stat(namespace, "persistent_stale_hits")
             else:
                 _record_stat(namespace, "persistent_misses")
-            envelope = _snapshot_envelope(
-                record["value"],
-                record.get("freshness") or _freshness_payload(
-                    status=status,
-                    fetched_at=None,
-                    ttl=_OPTION_CHAIN_TTL,
-                    source="sqlite",
-                ),
-            )
-            _request_memo_set(memo_key, envelope)
-            return envelope
         _record_stat(namespace, "persistent_misses")
     except Exception:
         _record_stat(namespace, "cache_failures")
+        record = None
 
     try:
         value = _network_fetch()
@@ -1277,6 +1306,20 @@ def get_option_chain(
         return envelope
     except Exception as exc:
         _record_stat(namespace, "fallbacks")
+        if record is not None:
+            envelope = _snapshot_envelope(
+                record["value"],
+                record.get("freshness") or _freshness_payload(
+                    status=str(record.get("status") or "error"),
+                    fetched_at=None,
+                    ttl=_OPTION_CHAIN_TTL,
+                    source=str(record.get("source") or "sqlite"),
+                    error=exc,
+                    stale_reason="network_refresh_failed",
+                ),
+            )
+            _request_memo_set(memo_key, envelope)
+            return envelope
         empty = _snapshot_envelope(
             SimpleNamespace(calls=pd.DataFrame(), puts=pd.DataFrame()),
             _freshness_payload(

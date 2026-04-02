@@ -1,6 +1,8 @@
 import argparse
 import json
 import os
+import shutil
+import subprocess
 import sys
 import tempfile
 from contextlib import ExitStack
@@ -20,7 +22,9 @@ if str(TESTS_DIR) not in sys.path:
 import market_data_service as mds
 import options_chatbot as oc
 import wfo_optimizer as wfo
+from forward_options_ledger import DEFAULT_FORWARD_LEDGER_DB_PATH
 from options_algorithm_fixtures import FrozenDateTime, build_options_algorithm_fixture_bundle, load_backend_main
+from positions_repository import MemoryTrackedPositionsRepository
 
 
 def _require_keys(payload: dict, keys: set[str], label: str):
@@ -40,7 +44,9 @@ def _expectancy_loader_for_path(results_path: str):
         bucket_size: int = 10,
         **kwargs,
     ) -> dict | None:
-        truth_lane = str(kwargs.get("truth_lane") or "").strip().lower()
+        if not os.path.exists(results_path):
+            return None
+        truth_lane = str(kwargs.get("truth_lane") or wfo.SYNTHETIC_TRUTH_SOURCE).strip().lower()
         if truth_lane not in {"synthetic", wfo.SYNTHETIC_TRUTH_SOURCE}:
             return None
         return oc.build_expectancy_surface(
@@ -52,6 +58,105 @@ def _expectancy_loader_for_path(results_path: str):
         )
 
     return _loader
+
+
+def _run_git_command(*args: str) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            ["git", *args],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception as exc:
+        return {"ok": False, "stdout": "", "stderr": str(exc)}
+    return {
+        "ok": completed.returncode == 0,
+        "stdout": completed.stdout.strip(),
+        "stderr": completed.stderr.strip(),
+    }
+
+
+def _runtime_context() -> dict[str, Any]:
+    head = _run_git_command("rev-parse", "HEAD")
+    branch = _run_git_command("rev-parse", "--abbrev-ref", "HEAD")
+    diff_stat = _run_git_command("diff", "--stat")
+    changed_files = _run_git_command("diff", "--name-only")
+    uv_path = shutil.which("uv")
+    return {
+        "repo_root": str(ROOT.resolve()),
+        "cwd": str(Path.cwd().resolve()),
+        "script_path": str(Path(__file__).resolve()),
+        "interpreter_path": sys.executable,
+        "python_version": sys.version.split()[0],
+        "venv_active": bool(os.getenv("VIRTUAL_ENV")) or sys.prefix != getattr(sys, "base_prefix", sys.prefix),
+        "virtual_env": os.getenv("VIRTUAL_ENV"),
+        "uv_available": uv_path is not None,
+        "uv_path": uv_path,
+        "git_head": head["stdout"] if head["ok"] else None,
+        "git_branch": branch["stdout"] if branch["ok"] else None,
+        "git_status_available": head["ok"] and branch["ok"],
+        "git_diff_stat": diff_stat["stdout"] if diff_stat["ok"] else None,
+        "git_changed_files": changed_files["stdout"].splitlines() if changed_files["ok"] and changed_files["stdout"] else [],
+    }
+
+
+def _artifact_health(truth_lane_health: dict[str, Any]) -> dict[str, Any]:
+    paths = dict(truth_lane_health.get("paths") or {})
+    synthetic_path = str(Path(paths.get("synthetic_result") or wfo.WFO_RESULTS_FILE).resolve())
+    imported_path = str(Path(paths.get("imported_result") or wfo.OPTIONS_VALIDATION_LATEST_FILE).resolve())
+    imported_daily_path = str(
+        Path(paths.get("imported_daily_result") or wfo.OPTIONS_VALIDATION_DAILY_LATEST_FILE).resolve()
+    )
+    archived_forward_path = str(
+        Path(paths.get("archived_forward_daily_result") or wfo.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE).resolve()
+    )
+    forward_ledger_path = str(Path(DEFAULT_FORWARD_LEDGER_DB_PATH).resolve())
+    return {
+        "wfo_results": {"path": synthetic_path, "present": os.path.exists(synthetic_path)},
+        "imported_validation_latest": {"path": imported_path, "present": os.path.exists(imported_path)},
+        "imported_validation_daily_latest": {
+            "path": imported_daily_path,
+            "present": os.path.exists(imported_daily_path),
+        },
+        "archived_forward_daily_latest": {
+            "path": archived_forward_path,
+            "present": os.path.exists(archived_forward_path),
+        },
+        "forward_truth_db": {"path": forward_ledger_path, "present": os.path.exists(forward_ledger_path)},
+    }
+
+
+def _doc_parity(artifact_health: dict[str, Any]) -> dict[str, Any]:
+    current_state_path = ROOT / "docs" / "current-state.md"
+    text = current_state_path.read_text(encoding="utf8") if current_state_path.exists() else ""
+    claims_imported_daily_validation = "data/options-validation/runs/latest_daily.json" in text
+    claims_forward_holdout = "forward holdout" in text.lower() or "forward_tracking.db" in text
+    mismatches: list[dict[str, Any]] = []
+    if claims_imported_daily_validation and not artifact_health["imported_validation_daily_latest"]["present"]:
+        mismatches.append(
+            {
+                "claim": "imported_daily_validation_documented",
+                "artifact": "imported_validation_daily_latest",
+                "artifact_path": artifact_health["imported_validation_daily_latest"]["path"],
+            }
+        )
+    if claims_forward_holdout and not artifact_health["forward_truth_db"]["present"]:
+        mismatches.append(
+            {
+                "claim": "forward_holdout_documented",
+                "artifact": "forward_truth_db",
+                "artifact_path": artifact_health["forward_truth_db"]["path"],
+            }
+        )
+    return {
+        "current_state_doc_path": str(current_state_path.resolve()),
+        "current_state_doc_present": current_state_path.exists(),
+        "claims_imported_daily_validation": claims_imported_daily_validation,
+        "claims_forward_holdout": claims_forward_holdout,
+        "mismatches": mismatches,
+    }
 
 
 def _run_smoke_sequence(
@@ -139,6 +244,16 @@ def _run_smoke_sequence(
         "backtest experiments",
     )
 
+    calibrated_scan_response = client.post(
+        "/api/scan",
+        json={"n_picks": scan_picks, "use_recommended_policy": False},
+    )
+    if calibrated_scan_response.status_code != 200:
+        raise AssertionError(
+            f"/api/scan (post-backtest) failed with {calibrated_scan_response.status_code}: {calibrated_scan_response.text}"
+        )
+    calibrated_scan_payload = calibrated_scan_response.json()
+
     summary = {
         "scan_picks": len(scan_payload["picks"]),
         "scan_candidate_count": scan_payload.get("candidate_count"),
@@ -152,6 +267,17 @@ def _run_smoke_sequence(
         "scan_policy_fail_closed": scan_payload.get("policy_fail_closed"),
         "scan_top_calibrated_expectancy_pct": (
             scan_payload["picks"][0].get("calibrated_expectancy_pct") if scan_payload["picks"] else None
+        ),
+        "post_backtest_scan_picks": len(calibrated_scan_payload.get("picks") or []),
+        "post_backtest_scan_calibrated_expectancy_count": sum(
+            1
+            for pick in calibrated_scan_payload.get("picks") or []
+            if pick.get("calibrated_expectancy_pct") is not None
+        ),
+        "post_backtest_scan_top_calibrated_expectancy_pct": (
+            calibrated_scan_payload["picks"][0].get("calibrated_expectancy_pct")
+            if calibrated_scan_payload.get("picks")
+            else None
         ),
         "live_policy_truth_source": live_policy_payload.get("truth_source"),
         "live_policy_promotion_status": live_policy_payload.get("scan_policy", {}).get("promotion_status"),
@@ -185,7 +311,8 @@ def _run_live_smoke(
         with patch.object(wfo, "WFO_RESULTS_FILE", results_path), \
              patch.object(wfo, "OPTIONS_VALIDATION_RESULTS_DIR", imported_results_dir), \
              patch.object(wfo, "OPTIONS_VALIDATION_LATEST_FILE", imported_latest_path), \
-             patch.object(oc, "_load_expectancy_surface_for_live", side_effect=_expectancy_loader_for_path(results_path)):
+             patch.object(oc, "_load_expectancy_surface_for_live", side_effect=_expectancy_loader_for_path(results_path)), \
+             patch.object(backend, "POSITIONS_REPOSITORY", MemoryTrackedPositionsRepository()):
             client = TestClient(backend.app)
             try:
                 return _run_smoke_sequence(
@@ -247,6 +374,7 @@ def _run_fixture_smoke(
                 stack.enter_context(
                     patch.object(wfo, "OPTIONS_VALIDATION_DAILY_LATEST_FILE", imported_daily_latest_path)
                 )
+                stack.enter_context(patch.object(backend, "POSITIONS_REPOSITORY", MemoryTrackedPositionsRepository()))
 
                 client = TestClient(backend.app)
                 try:
@@ -295,6 +423,13 @@ def main() -> int:
     )
     summary["mode"] = "fixture" if fixture_mode else "live"
     summary["window_mode"] = "full"
+    summary["runtime_context"] = _runtime_context()
+    summary["truth_lane_health"] = wfo.build_truth_lane_health_summary()
+    summary["truth_lane_health"]["scan_truth_lane"] = summary.get("scan_truth_lane")
+    summary["truth_lane_health"]["live_policy_truth_source"] = summary.get("live_policy_truth_source")
+    summary["truth_lane_health"]["live_policy_promotion_status"] = summary.get("live_policy_promotion_status")
+    summary["artifact_health"] = _artifact_health(summary["truth_lane_health"])
+    summary["doc_parity"] = _doc_parity(summary["artifact_health"])
     print(json.dumps(summary, indent=2))
     return 0
 

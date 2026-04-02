@@ -18,8 +18,9 @@ if str(BACKEND_DIR) not in sys.path:
 
 import options_chatbot as oc
 import market_data_service as mds
+import supervised_scan as ss
 import wfo_optimizer as wfo
-from positions_repository import MemoryTrackedPositionsRepository
+from positions_repository import MemoryTrackedPositionsRepository, UnavailableTrackedPositionsRepository
 from positions_service import build_position_payload
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -55,8 +56,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.imported_results_dir = os.path.join(self._tmp.name, "options_validation_runs")
         self.imported_latest_path = os.path.join(self.imported_results_dir, "latest.json")
         self.imported_daily_latest_path = os.path.join(self.imported_results_dir, "latest_daily.json")
+        self.imported_daily_forward_latest_path = os.path.join(self.imported_results_dir, "latest_daily_forward.json")
         self.historical_db_path = os.path.join(self._tmp.name, "options_history.db")
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
+        self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
         mds.reset_cache_stats()
@@ -69,6 +72,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 {
                     "MARKET_DATA_DB_PATH": self.market_data_db_path,
                     "HISTORICAL_OPTIONS_DB_PATH": self.historical_db_path,
+                    "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
                 },
                 clear=False,
             )
@@ -82,10 +86,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.stack.enter_context(patch.object(mds, "datetime", FrozenDateTime))
         self.stack.enter_context(patch.object(oc, "_market_is_open", return_value=False))
         self.stack.enter_context(patch.object(oc, "_load_expectancy_surface_for_live", return_value=None))
+        self.stack.enter_context(patch.object(self.backend, "POSITIONS_REPOSITORY", MemoryTrackedPositionsRepository()))
         self.stack.enter_context(patch.object(wfo, "WFO_RESULTS_FILE", self.results_path))
         self.stack.enter_context(patch.object(wfo, "OPTIONS_VALIDATION_RESULTS_DIR", self.imported_results_dir))
         self.stack.enter_context(patch.object(wfo, "OPTIONS_VALIDATION_LATEST_FILE", self.imported_latest_path))
         self.stack.enter_context(patch.object(wfo, "OPTIONS_VALIDATION_DAILY_LATEST_FILE", self.imported_daily_latest_path))
+        self.stack.enter_context(
+            patch.object(wfo, "OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE", self.imported_daily_forward_latest_path)
+        )
 
     def _cleanup(self):
         self.stack.close()
@@ -114,6 +122,12 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "avg_volume_20d",
             "avg_dollar_volume_20d",
             "underlying_liquidity_tier",
+            "contract_symbol",
+            "expiry",
+            "selection_source",
+            "promotion_class",
+            "candidate_rank",
+            "quote_basis",
         }
         for pick in picks:
             self.assertTrue(required.issubset(pick.keys()))
@@ -121,19 +135,172 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             self.assertEqual(pick["type"], pick["direction"])
             self.assertIn(pick["type"], {"call", "put"})
 
-        ranked_values = [
-            (
-                pick.get("calibrated_expectancy_pct")
-                if pick.get("calibrated_expectancy_pct") is not None
-                else pick["direction_score"]
-            )
-            for pick in picks
-        ]
-        self.assertEqual(ranked_values, sorted(ranked_values, reverse=True))
+        self.assertEqual(
+            picks,
+            sorted(picks, key=oc._candidate_rank_tuple, reverse=True),
+        )
         returned_tickers = {pick["ticker"] for pick in picks}
         self.assertIn("AAA", returned_tickers)
         self.assertNotIn("ILLQ", returned_tickers)
         self.assertNotIn("FAIL", returned_tickers)
+        self.assertTrue(payload["forward_truth_recorded"])
+        self.assertIsInstance(payload["forward_truth_session_id"], int)
+        self.assertIsNone(payload["forward_truth_error"])
+
+        evidence_response = self.client.get("/api/backtest/forward-evidence")
+        self.assertEqual(evidence_response.status_code, 200)
+        evidence = evidence_response.json()
+        self.assertEqual(evidence["source_label"], "api_scan_auto")
+        self.assertEqual(evidence["recent_session_count"], 1)
+        self.assertGreaterEqual(evidence["scan_pick_count"], len(picks))
+        self.assertTrue(evidence["activation_check"]["active"])
+        self.assertEqual(evidence["forward_truth_recording_failure_count"], 0)
+        self.assertGreater(
+            evidence["exact_contract_capture_counts"]["with_contract_count"],
+            0,
+        )
+
+    def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
+        def _lookup(_surface, *, direction_score, **_kwargs):
+            expectancy = 12.0 if float(direction_score) >= 50.0 else 28.0
+            return {
+                "avg_pnl_pct": expectancy,
+                "avg_pnl_pct_raw": expectancy,
+                "parent_avg_pnl_pct": expectancy,
+                "used_parent_shrinkage": False,
+                "sparse_warning": None,
+                "calibration_density": "dense",
+                "dense_cohort": True,
+                "lookup_source": "regime_direction_dir_quality",
+                "trades": 12,
+                "surface_provenance": {"truth_source": "historical_imported_daily"},
+            }
+
+        with patch.object(oc, "_load_expectancy_surface_for_live", return_value={"available": True}), \
+             patch.object(oc, "lookup_calibrated_expectancy", side_effect=_lookup):
+            response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        picks = payload["picks"]
+        self.assertEqual(len(picks), 2)
+        self.assertTrue(all(pick["calibrated_expectancy_pct"] is not None for pick in picks))
+        self.assertEqual(picks, sorted(picks, key=oc._candidate_rank_tuple, reverse=True))
+        self.assertGreater(picks[0]["calibrated_expectancy_pct"], picks[1]["calibrated_expectancy_pct"])
+
+    def test_scan_fails_closed_when_playbook_exit_audit_errors(self):
+        backtest_response = self.client.post(
+            "/api/backtest",
+            json={"lookback_years": 1, "iv_adj": 1.2, "truth_lane": "synthetic"},
+        )
+        self.assertEqual(backtest_response.status_code, 200)
+
+        with patch.object(ss, "build_playbook_exit_audit", return_value={"error": "exit audit unavailable"}):
+            response = self.client.post(
+                "/api/scan",
+                json={"n_picks": 2, "use_recommended_policy": True, "min_trades": 1, "truth_lane": "synthetic"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["policy_fail_closed"])
+        self.assertEqual(payload["picks"], [])
+        self.assertIn("exit audit unavailable", payload["policy_error"])
+        self.assertEqual(payload["playbook_exit_audit"], None)
+
+    def test_scan_playbook_guardrails_fail_closed_when_positions_storage_is_unavailable(self):
+        unavailable = UnavailableTrackedPositionsRepository("tracked positions unavailable")
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", unavailable):
+            response = self.client.post(
+                "/api/scan",
+                json={
+                    "n_picks": 3,
+                    "playbook": "short_term",
+                    "use_recommended_policy": False,
+                    "include_blocked_guardrail_picks": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["picks"])
+        self.assertFalse(payload["exposure_snapshot"]["available"])
+        self.assertEqual(payload["guardrail_decision_counts"]["blocked"], len(payload["picks"]))
+        for pick in payload["picks"]:
+            self.assertEqual(pick["guardrail_decision"], "blocked")
+            self.assertEqual(pick["suggested_size_tier"], "blocked")
+            self.assertTrue(any("failed closed" in reason.lower() for reason in pick["guardrail_reasons"]))
+
+    def test_scan_endpoint_fail_open_when_forward_truth_recording_fails(self):
+        with patch.object(self.backend, "record_forward_snapshot", side_effect=RuntimeError("ledger down")):
+            response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["picks"])
+        self.assertFalse(payload["forward_truth_recorded"])
+        self.assertIsNone(payload["forward_truth_session_id"])
+        self.assertIn("ledger down", payload["forward_truth_error"])
+
+        evidence_response = self.client.get("/api/backtest/forward-evidence")
+        self.assertEqual(evidence_response.status_code, 200)
+        evidence = evidence_response.json()
+        self.assertEqual(evidence["forward_truth_recording_failure_count"], 1)
+        self.assertFalse(evidence["activation_check"]["active"])
+        self.assertIn("ledger down", evidence["recording_health"]["latest_failure"]["forward_truth_error"])
+
+    def test_archived_forward_backtest_endpoint_returns_clean_insufficient_result_without_scan_evidence(self):
+        response = self.client.post("/api/backtest/archived-forward", json={})
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.json()
+        self.assertTrue(payload["insufficient_archived_evidence"])
+        self.assertEqual(payload["status"], "insufficient_archived_evidence")
+        self.assertEqual(payload["candidate_source"], wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE)
+        self.assertEqual(payload["evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
+
+    def test_forward_evidence_report_marks_latest_zero_pick_scan_as_historical_only(self):
+        first = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+        self.assertEqual(first.status_code, 200)
+        self.assertTrue(first.json()["forward_truth_recorded"])
+
+        empty_scan_result = {
+            "picks": [],
+            "ranked_picks": [],
+            "policy_applied": False,
+            "policy": {},
+            "playbook": {"id": "short_term"},
+            "truth_lane": "historical_imported_daily",
+            "candidate_count": 0,
+            "returned_count": 0,
+            "scan_funnel": {
+                "raw_candidates": 0,
+                "post_policy_visible": 0,
+                "post_guardrails_visible": 0,
+                "returned_picks": 0,
+                "policy_filtered_out": 0,
+                "guardrail_filtered_out": 0,
+                "final_trimmed": 0,
+            },
+            "policy_decision_counts": {},
+            "guardrail_decision_counts": {},
+        }
+        with patch.object(self.backend, "run_supervised_scan", return_value=empty_scan_result):
+            second = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+        self.assertEqual(second.status_code, 200)
+        self.assertTrue(second.json()["forward_truth_recorded"])
+        self.assertEqual(second.json()["picks"], [])
+
+        evidence_response = self.client.get("/api/backtest/forward-evidence")
+        self.assertEqual(evidence_response.status_code, 200)
+        evidence = evidence_response.json()
+        self.assertFalse(evidence["activation_check"]["active"])
+        self.assertEqual(
+            evidence["activation_check"]["status"],
+            "historical_evidence_only_latest_scan_empty",
+        )
+        self.assertTrue(evidence["activation_check"]["historical_evidence_available"])
+        self.assertEqual(evidence["activation_check"]["latest_recorded_scan_pick_count"], 0)
 
     def test_sector_endpoint_reuses_cached_history_between_calls(self):
         sector_tickers = {}
@@ -280,6 +447,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             }.issubset(report.keys())
         )
         self.assertEqual(report["source"]["total_trades"], result["total_trades"])
+        self.assertEqual(report["source"]["evidence_status"], wfo.SYNTHETIC_ONLY_STATUS)
+        self.assertEqual(
+            report["source"]["preferred_evidence_source"]["status"],
+            wfo.SYNTHETIC_ONLY_STATUS,
+        )
         self.assertEqual(
             [row["value"] for row in report["by_direction_score"]],
             ["00-39", "40-49", "50-59", "60-69", "70-79", "80-100"],
@@ -428,15 +600,25 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 "pricing_lane",
                 "playbook",
                 "promotion_status",
+                "managed_lane_status",
+                "truth_window_status",
+                "authoritative_evidence_source",
+                "authoritative_evidence_status",
+                "watch_priority_symbols",
+                "watch_deprioritized_symbols",
             }.issubset(live_policy.keys())
         )
         self.assertIn(live_policy["scan_policy"]["mode"], {"replay_backed_focus", "replay_backed_watch"})
         self.assertTrue(
             {
                 "promotion_status",
+                "managed_lane_status",
+                "truth_window_status",
                 "hard_filters",
                 "preferred_filters",
                 "highlighted_tickers",
+                "watch_priority_symbols",
+                "watch_deprioritized_symbols",
                 "rationale",
                 "warnings",
                 "supporting_slices",
@@ -453,6 +635,9 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("policy", focused_scan)
         self.assertIn("playbook_exit_audit", focused_scan)
         self.assertIn("policy_decision_counts", focused_scan)
+        self.assertIn("watch_picks", focused_scan)
+        self.assertIn("managed_lane_status", focused_scan)
+        self.assertIn("truth_window_status", focused_scan)
         self.assertGreaterEqual(focused_scan["candidate_count"], focused_scan["returned_count"])
         self.assertTrue(
             {
@@ -463,18 +648,20 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 "blocked",
             }.issubset(focused_scan["playbook_exit_audit"].keys())
         )
-        for pick in focused_scan["picks"]:
-            self.assertIn(pick["policy_decision"], {"approved", "watch"})
+        self.assertEqual(focused_scan["picks"], [])
+        for pick in focused_scan["watch_picks"]:
+            self.assertEqual(pick["policy_decision"], "watch")
             self.assertIn("policy_fit_reasons", pick)
             self.assertIn("market_regime", pick)
             self.assertIn("sector", pick)
+            self.assertFalse(pick["managed_eligible"])
 
         hard_filters = live_policy["scan_policy"]["hard_filters"]
         if hard_filters.get("direction_score_min") is not None:
-            for pick in focused_scan["picks"]:
+            for pick in focused_scan["watch_picks"]:
                 self.assertGreaterEqual(pick["direction_score"], hard_filters["direction_score_min"])
         if hard_filters.get("direction_score_max") is not None:
-            for pick in focused_scan["picks"]:
+            for pick in focused_scan["watch_picks"]:
                 self.assertLessEqual(pick["direction_score"], hard_filters["direction_score_max"])
 
         exit_audit_response = self.client.get(
@@ -738,6 +925,57 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(exit_audit_response.status_code, 200)
         self.assertEqual(exit_audit_response.json(), {"error": "No backtest results found"})
 
+    def test_secondary_scan_routes_return_success_payloads_with_policy_context(self):
+        pending = [
+            {
+                **build_tracked_position_scan_pick(self.bundle),
+                "type": "daily_scan",
+                "outcome": None,
+                "current_pnl_pct": 0.0,
+            }
+        ]
+
+        backtest_response = self.client.post(
+            "/api/backtest",
+            json={"lookback_years": 1, "iv_adj": 1.2, "truth_lane": "synthetic"},
+        )
+        self.assertEqual(backtest_response.status_code, 200)
+
+        with patch.object(self.backend, "_load_predictions", return_value=pending):
+            roll_response = self.client.post(
+                "/api/scan/roll",
+                json={"n_picks": 3, "use_recommended_policy": True, "min_trades": 1, "truth_lane": "synthetic"},
+            )
+            recommendations_response = self.client.post(
+                "/api/scan/recommendations",
+                json={"n_picks": 3, "use_recommended_policy": True, "min_trades": 1, "truth_lane": "synthetic"},
+            )
+
+        self.assertEqual(roll_response.status_code, 200)
+        roll_payload = roll_response.json()
+        self.assertIn("rolled", roll_payload)
+        self.assertIn("new", roll_payload)
+        self.assertIn("dropped", roll_payload)
+        self.assertIn("policy_applied", roll_payload)
+        self.assertIn("policy", roll_payload)
+        self.assertIn("playbook", roll_payload)
+        self.assertIn("truth_lane", roll_payload)
+        self.assertIn("watch_picks", roll_payload)
+        self.assertIn("managed_lane_status", roll_payload)
+        self.assertIn("truth_window_status", roll_payload)
+
+        self.assertEqual(recommendations_response.status_code, 200)
+        rec_payload = recommendations_response.json()
+        self.assertIn("active_positions", rec_payload)
+        self.assertIn("new_opportunities", rec_payload)
+        self.assertIn("policy_applied", rec_payload)
+        self.assertIn("policy", rec_payload)
+        self.assertIn("playbook", rec_payload)
+        self.assertIn("truth_lane", rec_payload)
+        self.assertIn("watch_picks", rec_payload)
+        self.assertIn("managed_lane_status", rec_payload)
+        self.assertIn("truth_window_status", rec_payload)
+
     def test_imported_daily_endpoint_hides_stale_artifact_without_backing_store(self):
         os.makedirs(self.imported_results_dir, exist_ok=True)
         with open(self.imported_daily_latest_path, "w", encoding="utf8") as handle:
@@ -786,6 +1024,21 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             policy_response.json(),
             {"error": "No backtest results found for truth_lane=historical_imported_daily"},
         )
+
+    def test_live_policy_default_fallback_is_explicitly_synthetic_when_imported_lanes_are_unavailable(self):
+        backtest_response = self.client.post(
+            "/api/backtest",
+            json={"lookback_years": 1, "iv_adj": 1.2, "truth_lane": "synthetic"},
+        )
+        self.assertEqual(backtest_response.status_code, 200)
+
+        policy_response = self.client.get("/api/backtest/live-policy", params={"min_trades": 1})
+        self.assertEqual(policy_response.status_code, 200)
+        payload = policy_response.json()
+        self.assertEqual(payload["truth_source"], "synthetic_research")
+        self.assertTrue(payload["synthetic_only"])
+        self.assertIn(payload["managed_lane_status"], {wfo.SYNTHETIC_ONLY_STATUS, "blocked_no_approved_symbols"})
+        self.assertIn(payload["truth_window_status"], {"synthetic_only", "unknown"})
 
     def test_fixture_replay_golden_snapshot_stays_stable(self):
         backtest_response = self.client.post(

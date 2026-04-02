@@ -17,7 +17,7 @@ for candidate in (ROOT, BACKEND_DIR):
         sys.path.insert(0, candidate_str)
 
 import options_chatbot as oc
-from forward_options_ledger import record_forward_snapshot
+from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from positions_service import review_open_positions
 from supervised_scan import SCAN_PLAYBOOKS, get_scan_playbook, run_supervised_scan
 from wfo_optimizer import build_live_options_trade_policy, build_playbook_exit_audit
@@ -205,18 +205,28 @@ def main() -> int:
     parser.add_argument("--dte", type=int, help="Optional DTE override for the scan.")
     parser.add_argument("--truth-lane", default=None, help="Optional truth lane override for the replay-backed policy.")
     parser.add_argument("--use-recommended-policy", action="store_true", help="Apply the replay-backed scan policy before recording.")
+    parser.add_argument(
+        "--include-exit-audit",
+        action="store_true",
+        help="Also compute and record the playbook exit audit. Leave off for faster daily maintenance snapshots.",
+    )
     parser.add_argument("--include-blocked-policy-picks", action="store_true", help="Keep policy-blocked ideas in the recorded scan snapshot.")
     parser.add_argument("--include-blocked-guardrail-picks", action="store_true", help="Keep guardrail-blocked ideas in the recorded scan snapshot.")
     parser.add_argument(
         "--champion-manifest",
         default=str(DEFAULT_CHAMPION_MANIFEST),
-        help="Optional champion manifest to shadow-record multiple frozen cohorts.",
+        help="Optional champion manifest used when shadow-recording frozen cohorts.",
+    )
+    parser.add_argument(
+        "--record-frozen-cohorts",
+        action="store_true",
+        help="Shadow-record the frozen cohort set from the champion manifest. Default behavior records only the current live defaults.",
     )
     parser.add_argument(
         "--cohort-id",
         action="append",
         default=[],
-        help="Optional cohort id filter. Repeat to record only selected cohorts from the manifest.",
+        help="Optional cohort id filter. Repeat to shadow-record only selected cohorts from the manifest.",
     )
     parser.add_argument("--json", action="store_true", help="Print the full summary JSON.")
     args = parser.parse_args()
@@ -241,15 +251,21 @@ def main() -> int:
             min_profit_factor=1.05,
             min_directional_accuracy_pct=50.0,
         )
-        exit_audit = build_playbook_exit_audit(
-            playbook=str(playbook.get("id") or "short_term"),
-            truth_lane=args.truth_lane,
-        )
+        if args.include_exit_audit:
+            exit_audit = build_playbook_exit_audit(
+                playbook=str(playbook.get("id") or "short_term"),
+                truth_lane=args.truth_lane,
+            )
+        else:
+            exit_audit = {"error": "Exit audit skipped for this snapshot"}
 
     cohort_snapshots: list[dict] = []
     champion_manifest = None
     manifest_path = Path(args.champion_manifest).expanduser()
-    if manifest_path.exists():
+    should_shadow_record_cohorts = bool(args.record_frozen_cohorts or args.cohort_id)
+    if should_shadow_record_cohorts:
+        if not manifest_path.exists():
+            raise SystemExit(f"Champion manifest not found: {manifest_path}")
         champion_manifest = _load_champion_manifest(manifest_path)
         requested_ids = {str(item).strip() for item in args.cohort_id if str(item).strip()}
         cohorts = [
@@ -305,30 +321,34 @@ def main() -> int:
 
     aggregate_scan_funnel = _aggregate_scan_funnels(list(cohort_funnels.values()))
 
-    scan_snapshot = {
-        "picks": combined_picks,
-        "policy_applied": bool(args.use_recommended_policy),
-        "policy": policy,
-        "playbook_exit_audit": None if exit_audit.get("error") else exit_audit,
-        "playbook_exit_audit_error": exit_audit.get("error"),
-        "policy_decision_counts": policy_counts,
-        "guardrail_decision_counts": guardrail_counts,
-        "candidate_count": sum(int(snapshot.get("candidate_count") or 0) for snapshot in cohort_snapshots),
-        "returned_count": len(combined_picks),
-        "scan_funnel": aggregate_scan_funnel,
-        "playbook": playbook,
-        "cohort_snapshots": cohort_snapshots,
-        "cohort_funnels": cohort_funnels,
-        "cohort_count": len(cohort_snapshots),
-        "cohort_ids": [
+    scan_snapshot = build_forward_scan_snapshot(
+        picks=combined_picks,
+        policy_applied=bool(args.use_recommended_policy),
+        policy=policy,
+        playbook_exit_audit=None if exit_audit.get("error") else exit_audit,
+        playbook_exit_audit_error=exit_audit.get("error"),
+        policy_decision_counts=policy_counts,
+        guardrail_decision_counts=guardrail_counts,
+        candidate_count=sum(int(snapshot.get("candidate_count") or 0) for snapshot in cohort_snapshots),
+        returned_count=len(combined_picks),
+        scan_funnel=aggregate_scan_funnel,
+        playbook=playbook,
+        truth_lane=policy.get("truth_source") if isinstance(policy, dict) else None,
+        cohort_snapshots=cohort_snapshots,
+        cohort_funnels=cohort_funnels,
+        cohort_count=len(cohort_snapshots),
+        cohort_ids=[
             str(item.get("cohort_id") or "").strip()
             for item in cohort_snapshots
             if str(item.get("cohort_id") or "").strip()
         ],
-        "champion_manifest_path": champion_manifest.get("path") if champion_manifest else None,
-    }
-    if not getattr(backend_main.POSITIONS_REPOSITORY, "is_available", False):
-        scan_snapshot["positions_error"] = getattr(backend_main.POSITIONS_REPOSITORY, "error_message", None)
+        champion_manifest_path=champion_manifest.get("path") if champion_manifest else None,
+        positions_error=(
+            getattr(backend_main.POSITIONS_REPOSITORY, "error_message", None)
+            if not getattr(backend_main.POSITIONS_REPOSITORY, "is_available", False)
+            else None
+        ),
+    )
 
     result = record_forward_snapshot(
         scan_snapshot=scan_snapshot,
@@ -352,6 +372,8 @@ def main() -> int:
         "skipped_pick_count": result["skipped_pick_count"],
         "blocked_pick_count": result["blocked_pick_count"],
         "cohort_ids_recorded": result["cohort_ids_recorded"],
+        "requested_cohort_ids": result.get("requested_cohort_ids"),
+        "recording_scope": "frozen_manifest" if champion_manifest else "current_live_defaults",
         "scan_funnel": result.get("scan_funnel"),
         "db_path": result["db_path"],
     }

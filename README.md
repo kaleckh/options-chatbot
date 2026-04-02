@@ -1,6 +1,8 @@
 # Options AI
 
-This repository is currently a supervised options-trading assistant.
+This repository is currently:
+- a supervised options-trading assistant for regular markets
+- a crypto spot day-trading research lab for systematic intraday strategy discovery
 
 The live product loop is:
 1. Run a live options scan.
@@ -9,14 +11,16 @@ The live product loop is:
 4. Let the user choose which trade they actually took.
 5. Track only those taken positions and return `HOLD` or `SELL` on demand.
 
-The project still contains older prediction and day-trading research surfaces, but the active product focus is supervised options trading.
+The project still contains older prediction surfaces, but the active systematic research focus is now crypto day trading because the real-data loop is cheaper and easier to run honestly there than in listed options.
 
 The day-trading side is currently a research lab, not a production workflow:
-- intraday validation lives in `src/lib/day-trading/engine.js`
-- the UI surface is `Day Trading` under Strategy
+- the active lane is now crypto spot research in `src/lib/day-trading/crypto-engine.js`
+- the older SPY/QQQ Yahoo lab remains available as `equities_legacy` in `src/lib/day-trading/engine.js`
+- the UI surface is `Day Trading` under Strategy with a market selector
 - deterministic replay coverage now exists via `npm run daytrading:test`
-- a live morning watchlist now exists via `npm run daytrading:watch`
-- a parameter sweep now exists via `npm run daytrading:experiments`
+- crypto history can be backfilled via `npm run daytrading:import:crypto`
+- a live crypto watchlist now exists via `npm run daytrading:watch`
+- a control-first crypto experiment loop now exists via `npm run daytrading:experiments`
 
 ## Current Status
 
@@ -27,9 +31,10 @@ The day-trading side is currently a research lab, not a production workflow:
 
 The important reality check:
 - The full saved options replay is still weak overall.
-- The latest saved replay in `wfo_results.json` is a `2` year, `pessimistic`, `broad` run with `340` trades, `0.77` profit factor, `-9.95%` average trade P&L, and `43.5%` directional accuracy.
-- The current replay-backed scanner policy is watch-oriented, not promote-ready.
-- The current short-term exit audit has `0` approved trades, so the system should be treated as supervised paper-first infrastructure, not as a solved live strategy.
+- The latest imported-daily broad options truth in `data/options-validation/runs/latest_daily.json` has `237` priced trades, `100%` quote coverage, `0.66` profit factor, and `-10.65%` average trade P&L.
+- The current replay-backed scanner policy is watch/block-oriented, not promote-ready.
+- Broad options optimization is paused; options remain the manual supervised sidecar.
+- The crypto research lane now has `90` days of trusted spot data and a control-first replay loop, but no strategy family is profitable yet.
 
 ## What Works Now
 
@@ -55,9 +60,10 @@ The important reality check:
   - playbook exit audit
 - FastAPI backend plus Next.js frontend.
 - Regression coverage for scan, backtest, policy, guardrails, and tracked-position review flows.
-- Deterministic day-trading engine coverage for replay, risk gates, and validation persistence.
-- A ranked 4-strategy ETF morning watchlist for SPY/QQQ opening-range and VWAP reclaim setups.
-- A day-trading experiment runner that sweeps ETF morning variants and disqualifies synthetic fallback data in strict mode.
+- Deterministic day-trading coverage for both the crypto lane and the older equity lane.
+- A crypto spot day-trading lab with imported `1m` bars, derived `5m` strategy bars, and scheduled ET alert windows.
+- An equities legacy day-trading lab that keeps the older SPY/QQQ Yahoo workflow available for comparison.
+- A day-trading experiment runner that sweeps crypto and legacy equity variants while disqualifying untrusted data in strict mode.
 
 ## What Is Explicitly Not Built
 
@@ -185,10 +191,16 @@ Run one truth-first validation pass against imported history:
 python scripts/autoresearch_cycle.py --slug truth-pass --proposal docs/autoresearch/proposal-template.md --truth-lane historical_imported --watchlist-set docs/autoresearch/truth-first-champions.json --window-mode rolling_6m --require-quote-coverage 70
 ```
 
-Record the daily forward-truth holdout for the frozen champion cohorts:
+Record the daily forward-truth holdout for the current live defaults:
 
 ```bash
-python scripts/record_options_forward_truth.py --source truth-first-forward --use-recommended-policy --champion-manifest docs/autoresearch/truth-first-champions.json
+python scripts/record_options_forward_truth.py --source truth-first-forward --use-recommended-policy
+```
+
+Shadow-record the frozen champion cohorts only when explicitly auditing them:
+
+```bash
+python scripts/record_options_forward_truth.py --source truth-first-forward-frozen --use-recommended-policy --record-frozen-cohorts --champion-manifest docs/autoresearch/truth-first-champions.json
 ```
 
 Run the day-trading deterministic harness:
@@ -197,17 +209,34 @@ Run the day-trading deterministic harness:
 npm run daytrading:test
 ```
 
+Import crypto history:
+
+```bash
+npm run daytrading:import:crypto -- --days=90
+```
+
+Run the crypto validation matrix:
+
+```bash
+npm run daytrading:validate -- --bars=all --window-mode=scheduled_windows
+npm run daytrading:validate -- --bars=all --window-mode=us_morning
+npm run daytrading:validate -- --bars=all --window-mode=asia_open
+npm run daytrading:validate -- --bars=all --window-mode=all_hours
+```
+
 Run the day-trading live watchlist:
 
 ```bash
 npm run daytrading:watch
+npm run daytrading:watch -- --market=equities_legacy
 ```
 
-Run the day-trading experiment sweep:
+Run the control-first crypto experiment loop:
 
 ```bash
 npm run daytrading:experiments
-npm run daytrading:experiments -- --preset=focus16
+npm run daytrading:experiments -- --window-mode=us_morning
+npm run daytrading:experiments -- --market=equities_legacy
 ```
 
 Run tests:
@@ -233,9 +262,9 @@ npm run verify
 
 ## Recommended Next Move
 
-Continue improving the options research truth, not the product plumbing.
+Continue improving the crypto strategy research, not the product plumbing.
 
-The supervised workflow is wired and truthful enough to use paper-first now, but the strategy layer is still weak. The highest-value next work is:
-1. generate a broader options replay slate with comparable lanes and playbooks
-2. keep logging supervised tracked or hypothetical trades manually
-3. only revisit cohort promotion logic after the truth bundle finds a slice worth promoting
+The options workflow is wired and truthful enough to use paper-first now, but broad options optimization is not the best place to spend primary R&D time. The highest-value next work is:
+1. redesign the crypto strategy slate after the 90-day control-first results
+2. keep logging options forward holdout and supervised manual usage
+3. only revisit futures/perps or broader options optimization after one narrow pocket survives a stricter truth gate

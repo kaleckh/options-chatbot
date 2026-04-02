@@ -121,24 +121,124 @@ def _et_date(value: datetime | None) -> datetime | None:
     return value.astimezone(_ET)
 
 
-def _candidate_rank_tuple(pick: dict[str, Any]) -> tuple[float, float, float, int, float]:
+def _candidate_rank_tuple(pick: dict[str, Any]) -> tuple[float, float, float, float, float, float]:
     calibrated = pick.get("calibrated_expectancy_pct")
+    promotable_exact = str(pick.get("promotion_class") or "").strip().lower() == "promotable_exact_contract"
     calibrated_value = (
         float(calibrated or 0.0)
-        if calibrated is not None and str(pick.get("promotion_class") or "").strip().lower() == "promotable_exact_contract"
+        if calibrated is not None and promotable_exact and bool(pick.get("calibration_is_dense"))
         else -9999.0
     )
     return (
+        1 if promotable_exact else 0,
+        1 if bool(pick.get("calibration_is_dense")) else 0,
+        calibrated_value,
         float(pick.get("direction_score", 0.0) or 0.0),
         float(pick.get("quality_score", 0.0) or 0.0),
         float(pick.get("tech_score", 0.0) or 0.0),
-        1 if str(pick.get("promotion_class") or "").strip().lower() == "promotable_exact_contract" else 0,
-        calibrated_value,
     )
+
+
+def _watch_symbol_rank(pick: dict[str, Any], policy: Optional[dict[str, Any]]) -> int:
+    if not policy:
+        return 0
+    decision = str(
+        pick.get("managed_lane_decision")
+        or pick.get("trade_policy_decision")
+        or "watch"
+    ).strip().lower()
+    if decision != "watch":
+        return 0
+    ticker = str(pick.get("ticker") or "").strip().upper()
+    priority = {
+        str(symbol or "").strip().upper()
+        for symbol in policy.get("watch_priority_symbols")
+        or (policy.get("scan_policy") or {}).get("watch_priority_symbols")
+        or []
+        if str(symbol or "").strip()
+    }
+    deprioritized = {
+        str(symbol or "").strip().upper()
+        for symbol in policy.get("watch_deprioritized_symbols")
+        or (policy.get("scan_policy") or {}).get("watch_deprioritized_symbols")
+        or []
+        if str(symbol or "").strip()
+    }
+    if ticker in priority:
+        return 1
+    if ticker in deprioritized:
+        return -1
+    return 0
+
+
+def _normalized_snapshot_status(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text or "unknown"
+
+
+def _managed_pick_block_reason(pick: dict[str, Any], policy: Optional[dict[str, Any]]) -> Optional[str]:
+    if not policy:
+        return "policy_not_applied"
+    if str(policy.get("truth_window_status") or "unknown").strip().lower() == "stale":
+        return "truth_window_stale"
+    promotion_class = str(pick.get("promotion_class") or "").strip().lower()
+    if promotion_class != "promotable_exact_contract":
+        return f"promotion_class:{promotion_class or 'unknown'}"
+    selection_source = str(
+        pick.get("selection_source")
+        or pick.get("contract_selection_source")
+        or ""
+    ).strip().lower()
+    if selection_source != "live_chain_exact_contract":
+        return f"selection_source:{selection_source or 'unknown'}"
+    options_snapshot_status = _normalized_snapshot_status(pick.get("options_snapshot_status"))
+    if options_snapshot_status != "fresh":
+        return f"options_snapshot_status:{options_snapshot_status}"
+    option_chain_status = _normalized_snapshot_status(pick.get("option_chain_status"))
+    if option_chain_status != "fresh":
+        return f"option_chain_status:{option_chain_status}"
+    if str(pick.get("guardrail_decision") or "clear").strip().lower() == "blocked":
+        return "guardrail_decision:blocked"
+    approved_tickers = {
+        str(symbol or "").strip().upper()
+        for symbol in ((policy.get("scan_policy") or {}).get("hard_filters") or {}).get("approved_tickers") or []
+        if str(symbol or "").strip()
+    }
+    ticker = str(pick.get("ticker") or "").strip().upper()
+    if approved_tickers and ticker not in approved_tickers:
+        return "approved_symbol_scope"
+    trade_policy_decision = str(pick.get("trade_policy_decision") or "watch").strip().lower()
+    if trade_policy_decision != "approved":
+        return f"trade_policy_decision:{trade_policy_decision or 'unknown'}"
+    return None
+
+
+def _annotate_managed_pick(pick: dict[str, Any], policy: Optional[dict[str, Any]]) -> dict[str, Any]:
+    annotated = dict(pick)
+    annotated["options_snapshot_status"] = _normalized_snapshot_status(
+        annotated.get("options_snapshot_status")
+    )
+    annotated["option_chain_status"] = _normalized_snapshot_status(
+        annotated.get("option_chain_status")
+    )
+    block_reason = _managed_pick_block_reason(annotated, policy)
+    guardrail_decision = str(annotated.get("guardrail_decision") or "clear").strip().lower()
+    managed_eligible = block_reason is None
+    if managed_eligible:
+        managed_lane_decision = "approved"
+    elif guardrail_decision == "blocked":
+        managed_lane_decision = "blocked"
+    else:
+        managed_lane_decision = "watch"
+    annotated["managed_eligible"] = managed_eligible
+    annotated["managed_block_reason"] = block_reason
+    annotated["managed_lane_decision"] = managed_lane_decision
+    return annotated
 
 
 def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
     context = {
+        "available": True,
         "open_positions": 0,
         "opened_today": 0,
         "ticker_counts": {},
@@ -147,12 +247,14 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         "warnings": [],
     }
     if not getattr(positions_repository, "is_available", False):
+        context["available"] = False
         context["warnings"].append("Tracked positions storage is unavailable, so portfolio guardrails cannot see live open exposure yet.")
         return context
 
     try:
         open_positions = positions_repository.list_positions("open")
     except Exception as exc:
+        context["available"] = False
         context["warnings"].append(f"Could not load tracked positions for guardrails: {exc}")
         return context
 
@@ -266,16 +368,24 @@ def apply_trade_policy_to_scan(
         annotated,
         key=lambda pick: (
             decision_rank.get(str(pick.get("trade_policy_decision") or "watch"), 0),
-            float(pick.get("policy_fit_score", 0.0) or 0.0),
             *_candidate_rank_tuple(pick),
+            _watch_symbol_rank(pick, policy),
+            float(pick.get("policy_fit_score", 0.0) or 0.0),
         ),
         reverse=True,
     )
     if not include_blocked:
         ranked = [pick for pick in ranked if pick.get("trade_policy_decision") != "blocked"]
 
+    approved_picks = [pick for pick in ranked if pick.get("trade_policy_decision") == "approved"]
+    watch_picks = [pick for pick in ranked if pick.get("trade_policy_decision") == "watch"]
+    blocked_picks = [pick for pick in ranked if pick.get("trade_policy_decision") == "blocked"]
+
     return {
         "ranked_picks": ranked,
+        "approved_picks": approved_picks,
+        "watch_picks": watch_picks,
+        "blocked_picks": blocked_picks,
         "candidate_count": len(annotated),
         "decision_counts": counts,
     }
@@ -301,6 +411,9 @@ def annotate_pick_with_guardrails(
 
     blocked: list[str] = []
     cautions: list[str] = []
+
+    if not bool(exposure.get("available", True)):
+        blocked.append("Portfolio guardrails failed closed because tracked-position storage is unavailable.")
 
     allowed_asset_classes = _normalized_label_set(playbook.get("allowed_asset_classes") or [])
     if allowed_asset_classes and asset_class not in allowed_asset_classes:
@@ -383,6 +496,7 @@ def apply_playbook_guardrails(
     *,
     playbook: dict[str, Any],
     positions_repository: Any,
+    policy: Optional[dict[str, Any]] = None,
     include_blocked: bool = False,
 ) -> dict[str, Any]:
     exposure = load_open_position_context(positions_repository)
@@ -399,8 +513,9 @@ def apply_playbook_guardrails(
         key=lambda pick: (
             rank.get(str(pick.get("guardrail_decision") or "clear"), 0),
             size_rank.get(str(pick.get("suggested_size_tier") or "starter"), 0),
-            float(pick.get("policy_fit_score", 0.0) or 0.0),
             *_candidate_rank_tuple(pick),
+            _watch_symbol_rank(pick, policy),
+            float(pick.get("policy_fit_score", 0.0) or 0.0),
         ),
         reverse=True,
     )
@@ -408,6 +523,7 @@ def apply_playbook_guardrails(
         ranked = [pick for pick in ranked if pick.get("guardrail_decision") != "blocked"]
 
     exposure_snapshot = {
+        "available": bool(exposure.get("available", True)),
         "open_positions": exposure["open_positions"],
         "opened_today": exposure["opened_today"],
         "ticker_counts": exposure["ticker_counts"],
@@ -524,6 +640,44 @@ def run_supervised_scan(
         if exit_audit.get("error"):
             exit_audit_error = exit_audit.get("error")
             exit_audit = None
+            scan_funnel = _build_scan_funnel(
+                raw_candidate_count=candidate_count,
+                post_policy_visible_count=0,
+                post_guardrail_visible_count=0,
+                returned_count=0,
+                policy_counts={"approved": 0, "watch": 0, "blocked": candidate_count},
+                guardrail_counts={"clear": 0, "caution": 0, "blocked": 0},
+                policy_applied=False,
+                policy_fail_closed=True,
+                include_blocked_policy_picks=include_blocked_policy_picks,
+                include_blocked_guardrail_picks=include_blocked_guardrail_picks,
+            )
+            return {
+                "picks": [],
+                "watch_picks": [],
+                "ranked_picks": [],
+                "policy_applied": False,
+                "policy_error": str(exit_audit_error),
+                "policy_fail_closed": True,
+                "policy": None,
+                "playbook_exit_audit": None,
+                "playbook_exit_audit_error": exit_audit_error,
+                "policy_decision_counts": {"approved": 0, "watch": 0, "blocked": 0},
+                "guardrail_decision_counts": {"clear": 0, "caution": 0, "blocked": 0},
+                "exposure_snapshot": load_open_position_context(positions_repository),
+                "candidate_count": candidate_count,
+                "returned_count": 0,
+                "scan_funnel": scan_funnel,
+                "playbook": playbook,
+                "playbooks": list(SCAN_PLAYBOOKS.values()),
+                "truth_lane": truth_lane or LIVE_SCAN_TRUTH_LANE,
+                "truth_window_status": "unknown",
+                "managed_lane_status": None,
+                "authoritative_evidence_source": None,
+                "authoritative_evidence_status": None,
+                "watch_priority_symbols": [],
+                "watch_deprioritized_symbols": [],
+            }
         if policy.get("error"):
             policy_error = str(policy.get("error"))
             scan_funnel = _build_scan_funnel(
@@ -540,6 +694,7 @@ def run_supervised_scan(
             )
             return {
                 "picks": [],
+                "watch_picks": [],
                 "ranked_picks": [],
                 "policy_applied": False,
                 "policy_error": policy_error,
@@ -556,6 +711,12 @@ def run_supervised_scan(
                 "playbook": playbook,
                 "playbooks": list(SCAN_PLAYBOOKS.values()),
                 "truth_lane": truth_lane or LIVE_SCAN_TRUTH_LANE,
+                "truth_window_status": "unknown",
+                "managed_lane_status": None,
+                "authoritative_evidence_source": None,
+                "authoritative_evidence_status": None,
+                "watch_priority_symbols": [],
+                "watch_deprioritized_symbols": [],
             }
 
         policy_result = apply_trade_policy_to_scan(
@@ -569,10 +730,40 @@ def run_supervised_scan(
         ranked_for_guardrails,
         playbook=playbook,
         positions_repository=positions_repository,
+        policy=policy,
         include_blocked=include_blocked_guardrail_picks,
     )
     ranked_picks = list(guardrail_result["ranked_picks"])
-    final_picks = ranked_picks[: max(int(n_picks), 0)]
+    truth_window_status = str((policy or {}).get("truth_window_status") or "unknown").strip().lower() or "unknown"
+    managed_lane_status = (policy or {}).get("managed_lane_status")
+    authoritative_evidence_source = (policy or {}).get("authoritative_evidence_source")
+    authoritative_evidence_status = (policy or {}).get("authoritative_evidence_status")
+    watch_priority_symbols = list((policy or {}).get("watch_priority_symbols") or [])
+    watch_deprioritized_symbols = list((policy or {}).get("watch_deprioritized_symbols") or [])
+
+    if use_recommended_policy and policy is not None:
+        ranked_picks = [_annotate_managed_pick(pick, policy) for pick in ranked_picks]
+        approved_picks = [
+            pick for pick in ranked_picks
+            if pick.get("managed_lane_decision") == "approved"
+        ][: max(int(n_picks), 0)]
+        watch_picks = sorted(
+            [
+                pick for pick in ranked_picks
+                if pick.get("managed_lane_decision") == "watch"
+            ],
+            key=lambda pick: (
+                _watch_symbol_rank(pick, policy),
+                *_candidate_rank_tuple(pick),
+                float(pick.get("policy_fit_score", 0.0) or 0.0),
+            ),
+            reverse=True,
+        )
+        final_picks = approved_picks
+    else:
+        ranked_picks = [_annotate_managed_pick(pick, None) for pick in ranked_picks]
+        final_picks = ranked_picks[: max(int(n_picks), 0)]
+        watch_picks = []
     scan_funnel = _build_scan_funnel(
         raw_candidate_count=candidate_count,
         post_policy_visible_count=len(ranked_for_guardrails),
@@ -588,6 +779,7 @@ def run_supervised_scan(
 
     return {
         "picks": final_picks,
+        "watch_picks": watch_picks,
         "ranked_picks": ranked_picks,
         "policy_applied": bool(use_recommended_policy and policy is not None),
         "policy_error": policy_error,
@@ -604,4 +796,10 @@ def run_supervised_scan(
         "playbook": playbook,
         "playbooks": list(SCAN_PLAYBOOKS.values()),
         "truth_lane": truth_lane or LIVE_SCAN_TRUTH_LANE,
+        "truth_window_status": truth_window_status,
+        "managed_lane_status": managed_lane_status,
+        "authoritative_evidence_source": authoritative_evidence_source,
+        "authoritative_evidence_status": authoritative_evidence_status,
+        "watch_priority_symbols": watch_priority_symbols,
+        "watch_deprioritized_symbols": watch_deprioritized_symbols,
     }

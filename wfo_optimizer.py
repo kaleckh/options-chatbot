@@ -62,6 +62,7 @@ from expectancy_calibration import (
     lookup_calibrated_expectancy,
     normalized_market_regime,
 )
+from forward_options_ledger import list_forward_scan_pick_events
 from market_data_service import (
     get_history as _md_get_history,
     get_ticker_info as _md_get_ticker_info,
@@ -110,6 +111,10 @@ OPTIONS_VALIDATION_RESULTS_DIR = os.path.join(
 )
 OPTIONS_VALIDATION_LATEST_FILE = os.path.join(OPTIONS_VALIDATION_RESULTS_DIR, "latest.json")
 OPTIONS_VALIDATION_DAILY_LATEST_FILE = os.path.join(OPTIONS_VALIDATION_RESULTS_DIR, "latest_daily.json")
+OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE = os.path.join(
+    OPTIONS_VALIDATION_RESULTS_DIR,
+    "latest_daily_forward.json",
+)
 IMPORTED_VALIDATION_UNIVERSE = (
     "SPY",
     "QQQ",
@@ -117,6 +122,14 @@ IMPORTED_VALIDATION_UNIVERSE = (
 IMPORTED_TRUTH_SOURCE = "historical_imported"
 IMPORTED_DAILY_TRUTH_SOURCE = "historical_imported_daily"
 SYNTHETIC_TRUTH_SOURCE = "synthetic_research"
+FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE = "forward_ledger_scan"
+ARCHIVED_FORWARD_SOURCE_LABEL = "api_scan_auto"
+PRIMARY_JUDGE_TRADE_CLASS = "exact_archived_contract"
+ARCHIVED_EXACT_PRIMARY_STATUS = "archived_exact_primary"
+ARCHIVED_EXACT_INSUFFICIENT_STATUS = "archived_exact_insufficient"
+MODEL_DAILY_FALLBACK_ONLY_STATUS = "model_daily_fallback_only"
+SYNTHETIC_ONLY_STATUS = "synthetic_only"
+MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES = 25
 MIN_IMPORTED_QUOTE_COVERAGE_PCT = 70.0
 
 
@@ -1681,6 +1694,103 @@ def load_last_synthetic_results() -> Optional[dict]:
     return result
 
 
+def _imported_result_health(path: str, truth_source: str) -> dict[str, Any]:
+    artifact_present = os.path.exists(path)
+    raw_result = _load_json_file(path) if artifact_present else None
+    current_store = _current_imported_store_summary(truth_source)
+    recorded_truth_store = dict((raw_result or {}).get("truth_store") or {})
+
+    status = "loadable"
+    rejection_reason = None
+    if not artifact_present:
+        status = "missing_artifact"
+        rejection_reason = "missing_artifact"
+    elif raw_result is None:
+        status = "unreadable_artifact"
+        rejection_reason = "unreadable_artifact"
+    elif not recorded_truth_store:
+        status = "missing_recorded_truth_store"
+        rejection_reason = "missing_recorded_truth_store"
+    elif current_store is None:
+        status = "missing_current_store"
+        rejection_reason = "missing_current_store"
+    elif not _imported_result_matches_current_store(raw_result, truth_source):
+        status = "store_mismatch"
+        rejection_reason = "store_mismatch"
+
+    return {
+        "truth_source": truth_source,
+        "artifact_path": path,
+        "artifact_present": artifact_present,
+        "artifact_readable": raw_result is not None,
+        "current_store_present": current_store is not None,
+        "recorded_truth_store_present": bool(recorded_truth_store),
+        "loadable": status == "loadable",
+        "status": status,
+        "rejection_reason": rejection_reason,
+        "result_truth_source": _result_truth_source(raw_result) if raw_result else None,
+        "current_store": current_store,
+        "recorded_truth_store": recorded_truth_store or None,
+    }
+
+
+def _archived_forward_result_health() -> dict[str, Any]:
+    health = _imported_result_health(
+        OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE,
+        IMPORTED_DAILY_TRUTH_SOURCE,
+    )
+    raw_result = _load_json_file(OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE)
+    if raw_result and not raw_result.get("candidate_source"):
+        raw_result["candidate_source"] = FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+    loadable_result = load_last_archived_forward_daily_results() if health["loadable"] else None
+    health["candidate_source"] = str((loadable_result or raw_result or {}).get("candidate_source") or "").strip().lower() or None
+    health["has_forward_evidence"] = _has_archived_forward_evidence(loadable_result or raw_result)
+    health["actionable"] = _is_actionable_archived_forward_result(loadable_result)
+    return health
+
+
+def build_truth_lane_health_summary() -> dict[str, Any]:
+    synthetic = load_last_synthetic_results()
+    imported = _imported_result_health(OPTIONS_VALIDATION_LATEST_FILE, IMPORTED_TRUTH_SOURCE)
+    imported_daily = _imported_result_health(
+        OPTIONS_VALIDATION_DAILY_LATEST_FILE,
+        IMPORTED_DAILY_TRUTH_SOURCE,
+    )
+    archived_forward_daily = _archived_forward_result_health()
+    default_result = load_preferred_results_by_truth_lane()
+    default_truth_source = _result_truth_source(default_result) if default_result else None
+    return {
+        "paths": {
+            "synthetic_result": WFO_RESULTS_FILE,
+            "imported_result": OPTIONS_VALIDATION_LATEST_FILE,
+            "imported_daily_result": OPTIONS_VALIDATION_DAILY_LATEST_FILE,
+            "archived_forward_daily_result": OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE,
+        },
+        "default_fallback_order": [
+            "archived_forward_daily",
+            IMPORTED_TRUTH_SOURCE,
+            IMPORTED_DAILY_TRUTH_SOURCE,
+            SYNTHETIC_TRUTH_SOURCE,
+        ],
+        "default_selected_truth_source": default_truth_source,
+        "default_selected_evidence_status": str((default_result or {}).get("evidence_status") or "").strip().lower() or None,
+        "default_selected_candidate_source": str((default_result or {}).get("candidate_source") or "").strip().lower() or None,
+        "synthetic_research": {
+            "truth_source": SYNTHETIC_TRUTH_SOURCE,
+            "artifact_path": WFO_RESULTS_FILE,
+            "artifact_present": os.path.exists(WFO_RESULTS_FILE),
+            "artifact_readable": synthetic is not None,
+            "loadable": synthetic is not None,
+            "status": "loadable" if synthetic is not None else "missing_artifact",
+            "rejection_reason": None if synthetic is not None else "missing_artifact",
+            "result_truth_source": _result_truth_source(synthetic) if synthetic else None,
+        },
+        IMPORTED_TRUTH_SOURCE: imported,
+        IMPORTED_DAILY_TRUTH_SOURCE: imported_daily,
+        "archived_forward_daily": archived_forward_daily,
+    }
+
+
 def _current_imported_store_summary(truth_source: str) -> Optional[dict[str, Any]]:
     try:
         store = HistoricalOptionsStore()
@@ -1730,6 +1840,189 @@ def load_last_imported_daily_results() -> Optional[dict]:
     return _load_imported_result(OPTIONS_VALIDATION_DAILY_LATEST_FILE, IMPORTED_DAILY_TRUTH_SOURCE)
 
 
+def load_last_archived_forward_daily_results() -> Optional[dict]:
+    result = _load_imported_result(
+        OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE,
+        IMPORTED_DAILY_TRUTH_SOURCE,
+    )
+    if result and not result.get("candidate_source"):
+        result["candidate_source"] = FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+    return result
+
+
+def _archived_primary_trade_counts_by_symbol(result: Optional[dict]) -> dict[str, int]:
+    counts: Counter[str] = Counter()
+    for trade in list((result or {}).get("trades") or []):
+        if str(trade.get("entry_contract_resolution") or "").strip().lower() != PRIMARY_JUDGE_TRADE_CLASS:
+            continue
+        ticker = str(trade.get("ticker") or "").strip().upper()
+        if ticker:
+            counts[ticker] += 1
+    return {symbol: int(count) for symbol, count in sorted(counts.items())}
+
+
+def _archived_exact_evidence_is_sufficient(
+    result: Optional[dict],
+    *,
+    min_trades: int = MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES,
+) -> bool:
+    per_symbol = _archived_primary_trade_counts_by_symbol(result)
+    if per_symbol:
+        return max(per_symbol.values()) >= int(min_trades)
+    return int((result or {}).get("primary_judge_trade_count") or 0) >= int(min_trades)
+
+
+def _preferred_evidence_status(
+    result: Optional[dict],
+    *,
+    evidence_mode: str,
+    fallback_used: bool,
+) -> str:
+    if not result:
+        return SYNTHETIC_ONLY_STATUS if fallback_used else MODEL_DAILY_FALLBACK_ONLY_STATUS
+    candidate_source = str(result.get("candidate_source") or "").strip().lower()
+    truth_source = _result_truth_source(result)
+    if candidate_source == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE or evidence_mode == "archived_forward_daily":
+        return (
+            ARCHIVED_EXACT_PRIMARY_STATUS
+            if _archived_exact_evidence_is_sufficient(result)
+            else ARCHIVED_EXACT_INSUFFICIENT_STATUS
+        )
+    if truth_source == SYNTHETIC_TRUTH_SOURCE:
+        return SYNTHETIC_ONLY_STATUS
+    return MODEL_DAILY_FALLBACK_ONLY_STATUS
+
+
+def _has_archived_forward_evidence(result: Optional[dict]) -> bool:
+    if not result or bool(result.get("error")):
+        return False
+    candidate_source = str(result.get("candidate_source") or "").strip().lower()
+    if candidate_source == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE:
+        return True
+    return bool(result.get("insufficient_archived_evidence"))
+
+
+def _is_actionable_archived_forward_result(result: Optional[dict]) -> bool:
+    return bool(result) and not bool(result.get("error")) and not bool(result.get("insufficient_archived_evidence"))
+
+
+def _preferred_truth_window_status(
+    result: Optional[dict],
+    *,
+    evidence_mode: str,
+    evidence_status: str,
+) -> str:
+    if not result:
+        return "unknown"
+    candidate_source = str(result.get("candidate_source") or "").strip().lower()
+    pending_truth_horizon_count = int(result.get("pending_truth_horizon_count") or 0)
+    primary_judge_trade_count = int(result.get("primary_judge_trade_count") or 0)
+    if candidate_source == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE or evidence_mode == "archived_forward_daily":
+        if pending_truth_horizon_count > 0 and primary_judge_trade_count <= 0:
+            return "stale"
+        if evidence_status in {ARCHIVED_EXACT_PRIMARY_STATUS, ARCHIVED_EXACT_INSUFFICIENT_STATUS}:
+            return "current"
+    return "unknown"
+
+
+def _annotate_preferred_result(
+    result: Optional[dict],
+    *,
+    evidence_mode: str,
+    fallback_used: bool,
+) -> Optional[dict]:
+    if not result:
+        return None
+    annotated = dict(result)
+    evidence_status = _preferred_evidence_status(
+        annotated,
+        evidence_mode=evidence_mode,
+        fallback_used=fallback_used,
+    )
+    truth_window_status = _preferred_truth_window_status(
+        annotated,
+        evidence_mode=evidence_mode,
+        evidence_status=evidence_status,
+    )
+    annotated["evidence_status"] = evidence_status
+    annotated["truth_window_status"] = truth_window_status
+    annotated["authoritative_evidence_source"] = evidence_mode
+    annotated["authoritative_evidence_status"] = evidence_status
+    annotated["preferred_evidence_source"] = {
+        "mode": evidence_mode,
+        "fallback_used": bool(fallback_used),
+        "status": evidence_status,
+        "truth_window_status": truth_window_status,
+        "candidate_source": annotated.get("candidate_source") or "model_replay",
+        "primary_judge_trade_class": annotated.get("primary_judge_trade_class"),
+        "primary_judge_trade_count": int(annotated.get("primary_judge_trade_count") or 0),
+        "primary_judge_fallback_used": bool(annotated.get("primary_judge_fallback_used")),
+        "primary_judge_fallback_reason": annotated.get("primary_judge_fallback_reason"),
+        "primary_judge_trade_counts_by_symbol": _archived_primary_trade_counts_by_symbol(annotated),
+    }
+    return annotated
+
+
+def load_preferred_results_by_truth_lane(
+    truth_lane: Optional[str] = None,
+) -> Optional[dict]:
+    normalized = str(truth_lane or "").strip().lower()
+    if normalized == IMPORTED_TRUTH_SOURCE:
+        return _annotate_preferred_result(
+            load_last_imported_results(),
+            evidence_mode="model_imported_intraday",
+            fallback_used=False,
+        )
+    if normalized == IMPORTED_DAILY_TRUTH_SOURCE:
+        archived = load_last_archived_forward_daily_results()
+        if _has_archived_forward_evidence(archived):
+            return _annotate_preferred_result(
+                archived,
+                evidence_mode="archived_forward_daily",
+                fallback_used=False,
+            )
+        fallback = load_last_imported_daily_results()
+        if fallback:
+            return _annotate_preferred_result(
+                fallback,
+                evidence_mode="model_imported_daily_fallback",
+                fallback_used=True,
+            )
+        return None
+    if normalized in {"synthetic", SYNTHETIC_TRUTH_SOURCE, "mid", "pessimistic"}:
+        return _annotate_preferred_result(
+            load_last_synthetic_results(),
+            evidence_mode="synthetic_fallback",
+            fallback_used=False,
+        )
+    archived = load_last_archived_forward_daily_results()
+    if _has_archived_forward_evidence(archived):
+        return _annotate_preferred_result(
+            archived,
+            evidence_mode="archived_forward_daily",
+            fallback_used=False,
+        )
+    imported_intraday = load_last_imported_results()
+    if imported_intraday:
+        return _annotate_preferred_result(
+            imported_intraday,
+            evidence_mode="model_imported_intraday",
+            fallback_used=False,
+        )
+    imported_daily = load_last_imported_daily_results()
+    if imported_daily:
+        return _annotate_preferred_result(
+            imported_daily,
+            evidence_mode="model_imported_daily_fallback",
+            fallback_used=True,
+        )
+    return _annotate_preferred_result(
+        load_last_synthetic_results(),
+        evidence_mode="synthetic_fallback",
+        fallback_used=True,
+    )
+
+
 def load_last_results_by_truth_lane(
     truth_lane: Optional[str] = None,
 ) -> Optional[dict]:
@@ -1752,8 +2045,24 @@ def _save_backtest_result(result: dict) -> dict:
     if _is_imported_truth_source(truth_source):
         os.makedirs(OPTIONS_VALIDATION_RESULTS_DIR, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        source_suffix = "daily" if truth_source == IMPORTED_DAILY_TRUTH_SOURCE else "intraday"
-        latest_path = OPTIONS_VALIDATION_DAILY_LATEST_FILE if truth_source == IMPORTED_DAILY_TRUTH_SOURCE else OPTIONS_VALIDATION_LATEST_FILE
+        is_forward_daily = (
+            truth_source == IMPORTED_DAILY_TRUTH_SOURCE
+            and str(result.get("candidate_source") or "").strip().lower() == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+        )
+        source_suffix = (
+            "daily_forward"
+            if is_forward_daily
+            else ("daily" if truth_source == IMPORTED_DAILY_TRUTH_SOURCE else "intraday")
+        )
+        latest_path = (
+            OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE
+            if is_forward_daily
+            else (
+                OPTIONS_VALIDATION_DAILY_LATEST_FILE
+                if truth_source == IMPORTED_DAILY_TRUTH_SOURCE
+                else OPTIONS_VALIDATION_LATEST_FILE
+            )
+        )
         run_path = os.path.join(
             OPTIONS_VALIDATION_RESULTS_DIR,
             f"{timestamp}_{result.get('playbook', 'broad')}_{source_suffix}.json",
@@ -1769,6 +2078,639 @@ def _save_backtest_result(result: dict) -> dict:
     with open(WFO_RESULTS_FILE, "w", encoding="utf8") as handle:
         json.dump(result, handle, indent=2)
     return result
+
+
+def _parse_forward_entry_date(value: Any) -> Optional[date]:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+
+
+def _archived_sample_date_coverage(
+    picks: Sequence[dict[str, Any]],
+    *,
+    source_label: str,
+) -> dict[str, Any]:
+    entry_dates = sorted(
+        {
+            str(item.get("entry_date") or "").strip()
+            for item in picks
+            if str(item.get("entry_date") or "").strip()
+        }
+    )
+    session_ids = {
+        int(item.get("session_id"))
+        for item in picks
+        if item.get("session_id") is not None
+    }
+    return {
+        "source_label": str(source_label or ARCHIVED_FORWARD_SOURCE_LABEL),
+        "session_count": len(session_ids),
+        "entry_date_count": len(entry_dates),
+        "first_entry_date": entry_dates[0] if entry_dates else None,
+        "last_entry_date": entry_dates[-1] if entry_dates else None,
+    }
+
+
+def _insufficient_archived_forward_result(
+    reason: str,
+    *,
+    source_label: str,
+    archived_picks: Optional[Sequence[dict[str, Any]]] = None,
+    excluded_tickers: Optional[list[dict[str, Any]]] = None,
+    pending_truth_horizon: Optional[Sequence[dict[str, Any]]] = None,
+    truth_store: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    picks = list(archived_picks or [])
+    pending = list(pending_truth_horizon or [])
+    return {
+        "available": False,
+        "status": "insufficient_archived_evidence",
+        "insufficient_archived_evidence": True,
+        "insufficient_reason": str(reason or "missing_archived_scan_pick_evidence"),
+        "mode": "backtest",
+        "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
+        "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+        "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+        "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
+        "evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+        "truth_window_status": "stale" if pending else "unknown",
+        "authoritative_evidence_source": "archived_forward_daily",
+        "authoritative_evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+        "primary_judge_trade_count": 0,
+        "primary_judge_fallback_used": False,
+        "primary_judge_fallback_reason": None,
+        "promotion_trade_count": 0,
+        "non_promotable_trade_count": 0,
+        "quote_coverage_pct": 0.0,
+        "priced_trade_count": 0,
+        "unpriced_trade_count": 0,
+        "candidate_trade_count": len(picks),
+        "pending_truth_horizon_count": len(pending),
+        "promotion_metrics": {
+            **_trade_subset_metrics([], include_exit_reasons=True),
+            "promotion_status": "block",
+            "promoted_symbols": [],
+            "blockers": [
+                "Archived /api/scan exact-contract evidence is unavailable, so promotion remains blocked."
+            ],
+        },
+        "by_symbol": {},
+        "archived_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+        "model_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+        "nearest_listed_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+        "trades": [],
+        "unpriced_trades": [],
+        "excluded_tickers": list(excluded_tickers or []),
+        "pending_truth_horizon_trades": pending,
+        "truth_store": dict(truth_store or {}),
+        "archived_sample_date_coverage": _archived_sample_date_coverage(
+            picks,
+            source_label=source_label,
+        ),
+    }
+
+
+def _build_indicator_arrays(prices: np.ndarray) -> dict[str, np.ndarray]:
+    n = len(prices)
+    if n <= 0:
+        return {
+            "hv30": np.array([], dtype=float),
+            "rsi14": np.array([], dtype=float),
+            "macd": np.array([], dtype=float),
+            "sma20": np.array([], dtype=float),
+            "sma50": np.array([], dtype=float),
+        }
+    hv30 = np.full(n, np.nan)
+    if n > 30:
+        returns = np.diff(np.log(prices))
+        for idx in range(30, n):
+            window = returns[idx - 30: idx]
+            hv30[idx] = float(np.std(window, ddof=1) * math.sqrt(252)) if len(window) >= 2 else np.nan
+
+    rsi14 = np.full(n, 50.0)
+    delta_prices = np.zeros(n)
+    delta_prices[1:] = np.diff(prices)
+    for idx in range(15, n):
+        window = delta_prices[idx - 14: idx]
+        ups = float(np.mean(window[window > 0])) if np.any(window > 0) else 0.0
+        downs = float(np.mean(-window[window < 0])) if np.any(window < 0) else 0.0
+        rsi14[idx] = 100.0 - 100.0 / (1.0 + ups / (downs + 1e-9))
+
+    k12 = 2.0 / 13.0
+    k26 = 2.0 / 27.0
+    ema12 = np.empty(n)
+    ema26 = np.empty(n)
+    ema12[0] = ema26[0] = prices[0]
+    for idx in range(1, n):
+        ema12[idx] = prices[idx] * k12 + ema12[idx - 1] * (1.0 - k12)
+        ema26[idx] = prices[idx] * k26 + ema26[idx - 1] * (1.0 - k26)
+    macd = ema12 - ema26
+
+    sma20 = pd.Series(prices).rolling(20, min_periods=1).mean().to_numpy(dtype=float)
+    sma50 = pd.Series(prices).rolling(50, min_periods=1).mean().to_numpy(dtype=float)
+    return {
+        "hv30": hv30,
+        "rsi14": rsi14,
+        "macd": macd,
+        "sma20": sma20,
+        "sma50": sma50,
+    }
+
+
+def run_archived_forward_daily_backtest(
+    *,
+    source_label: str = ARCHIVED_FORWARD_SOURCE_LABEL,
+) -> dict[str, Any]:
+    archived_picks = list_forward_scan_pick_events(source_label=source_label)
+    if not archived_picks:
+        return _insufficient_archived_forward_result(
+            "no_archived_scan_pick_events",
+            source_label=source_label,
+        )
+
+    store = HistoricalOptionsStore()
+    if not store.has_quotes(snapshot_kind=DAILY_SNAPSHOT_KIND, trusted_only=True):
+        return {
+            "error": (
+                "No trusted imported historical option data found for archived forward validation. "
+                "Import real daily market data first."
+            )
+        }
+
+    imported_truth_store = store.snapshot_summary(DAILY_SNAPSHOT_KIND, trusted_only=True)
+    imported_truth_store["data_trust"] = TRUSTED_DATA_TRUST
+    latest_quote_date: Optional[date] = None
+    latest_quote_at_utc = str(imported_truth_store.get("latest_quote_at_utc") or "").strip()
+    if latest_quote_at_utc:
+        try:
+            latest_quote_date = datetime.fromisoformat(latest_quote_at_utc.replace("Z", "+00:00")).date()
+        except ValueError:
+            latest_quote_date = None
+    available_underlyings = {
+        symbol.upper()
+        for symbol in store.list_available_underlyings(
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+        )
+    }
+
+    filtered_picks: list[dict[str, Any]] = []
+    entry_dates: list[date] = []
+    playbooks_seen: set[str] = set()
+    excluded_tickers: list[dict[str, Any]] = []
+    pending_truth_horizon: list[dict[str, Any]] = []
+    for pick in archived_picks:
+        ticker = str(pick.get("ticker") or "").strip().upper()
+        if not ticker:
+            continue
+        if ticker not in available_underlyings:
+            excluded_tickers.append({"ticker": ticker, "reason": "missing_imported_underlying"})
+            continue
+        entry_date = _parse_forward_entry_date(
+            pick.get("entry_date") or pick.get("quote_time_et") or pick.get("recorded_at_utc")
+        )
+        if entry_date is None:
+            continue
+        current = dict(pick)
+        current["entry_date"] = entry_date.isoformat()
+        if latest_quote_date is not None and entry_date > latest_quote_date:
+            pending_truth_horizon.append(
+                {
+                    **current,
+                    "pending_reason": "entry_date_beyond_trusted_truth_horizon",
+                    "latest_truth_quote_date": latest_quote_date.isoformat(),
+                }
+            )
+            continue
+        filtered_picks.append(current)
+        entry_dates.append(entry_date)
+        playbook_value = str(
+            pick.get("playbook")
+            or pick.get("playbook_id")
+            or pick.get("session_playbook")
+            or ""
+        ).strip()
+        if playbook_value:
+            playbooks_seen.add(playbook_value)
+
+    if not filtered_picks:
+        result = _insufficient_archived_forward_result(
+            "pending_truth_horizon_only" if pending_truth_horizon else "no_archived_picks_in_imported_daily_universe",
+            source_label=source_label,
+            archived_picks=archived_picks,
+            excluded_tickers=excluded_tickers,
+            pending_truth_horizon=pending_truth_horizon,
+            truth_store=imported_truth_store,
+        )
+        return _save_backtest_result(result) if pending_truth_horizon else result
+
+    min_entry_date = min(entry_dates)
+    max_entry_date = max(entry_dates)
+    max_dte = max(
+        int(pick.get("dte") or 0) or 0
+        for pick in filtered_picks
+    )
+    history_start = (pd.Timestamp(min_entry_date) - pd.Timedelta(days=120)).date()
+    history_end = (pd.Timestamp(max_entry_date) + pd.Timedelta(days=max(max_dte, 30) + 10)).date()
+
+    histories: dict[str, pd.DataFrame] = {}
+    ticker_arrays: dict[str, dict[str, Any]] = {}
+    for ticker in sorted({str(pick.get("ticker") or "").upper() for pick in filtered_picks}):
+        hist = _sanitize_replay_history_frame(
+            _cached_history(
+                ticker,
+                start=history_start,
+                end=history_end,
+                interval="1d",
+            )
+        )
+        if hist.empty or "Close" not in hist.columns:
+            excluded_tickers.append({"ticker": ticker, "reason": "missing_underlying_history"})
+            continue
+        closes = hist["Close"].astype(float)
+        prices = closes.to_numpy(dtype=float)
+        indicators = _build_indicator_arrays(prices)
+        normalized_index = _normalize_replay_history_index(closes.index)
+        date_to_idx = {
+            pd.Timestamp(day).date().isoformat(): idx
+            for idx, day in enumerate(normalized_index)
+        }
+        histories[ticker] = hist
+        ticker_arrays[ticker] = {
+            "dates": closes.index,
+            "prices": prices,
+            "date_to_idx": date_to_idx,
+            "hv30": indicators["hv30"],
+            "rsi14": indicators["rsi14"],
+            "macd": indicators["macd"],
+            "sma20": indicators["sma20"],
+            "sma50": indicators["sma50"],
+        }
+
+    priced_trades: list[dict[str, Any]] = []
+    unpriced_candidates: list[dict[str, Any]] = []
+    fallback_trades: list[dict[str, Any]] = []
+
+    for pick in filtered_picks:
+        ticker = str(pick.get("ticker") or "").strip().upper()
+        arrays = ticker_arrays.get(ticker)
+        if arrays is None:
+            unpriced_candidates.append(
+                {
+                    **pick,
+                    "priced": False,
+                    "unpriced_reason": "missing_underlying_history",
+                    "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
+                    "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+                }
+            )
+            continue
+
+        entry_date_text = str(pick.get("entry_date") or "").strip()
+        day_idx = arrays["date_to_idx"].get(entry_date_text)
+        if day_idx is None:
+            unpriced_candidates.append(
+                {
+                    **pick,
+                    "priced": False,
+                    "unpriced_reason": "entry_date_not_in_history",
+                    "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
+                    "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+                }
+            )
+            continue
+
+        ticker_profile = STRATEGY_PROFILES["index"] if ticker.upper() in INDEX_TICKERS else STRATEGY_PROFILE
+        risk_config = dict(ticker_profile.get("risk") or {})
+        prices = arrays["prices"]
+        hv30_value = arrays["hv30"][day_idx] if day_idx < len(arrays["hv30"]) else np.nan
+        hv30 = float(hv30_value) if math.isfinite(float(hv30_value)) else 0.20
+        dte_at_entry = int(
+            pick.get("dte")
+            or max(
+                (
+                    _parse_forward_entry_date(pick.get("expiry")) - _parse_forward_entry_date(entry_date_text)
+                ).days,
+                1,
+            )
+            if pick.get("expiry")
+            else 1
+        )
+        outcome = _simulate_trade_outcome_imported(
+            store=store,
+            ticker=ticker,
+            dates=arrays["dates"],
+            prices=prices,
+            i=int(day_idx),
+            trade_type=str(
+                pick.get("option_type")
+                or pick.get("direction")
+                or pick.get("type")
+                or "call"
+            ).strip().lower(),
+            hv30=hv30,
+            delta_target=abs(float(pick.get("delta") or pick.get("delta_est") or 0.30)),
+            dte_at_entry=max(dte_at_entry, 1),
+            stop_loss_pct=float(pick.get("stop_loss_pct") or risk_config.get("stop_loss_pct") or 45.0),
+            profit_target_pct=float(
+                pick.get("profit_target_pct") or risk_config.get("profit_target_pct") or 100.0
+            ),
+            time_exit_pct=float(pick.get("time_exit_pct") or risk_config.get("time_exit_pct") or 50.0),
+            trailing_profit_pct=float(
+                pick.get("trailing_profit_pct") or risk_config.get("trailing_profit_pct") or 40.0
+            ),
+            trailing_giveback_pct=float(
+                pick.get("trailing_giveback_pct") or risk_config.get("trailing_giveback_pct") or 50.0
+            ),
+            _rsi14=arrays["rsi14"],
+            _macd=arrays["macd"],
+            _sma20=arrays["sma20"],
+            _sma50=arrays["sma50"],
+            tech_at_entry=float(pick.get("tech_score") or 50.0),
+            entry_S0=float(
+                pick.get("underlying_price_at_selection")
+                if pick.get("underlying_price_at_selection") is not None
+                else prices[day_idx]
+            ),
+            iv_adj=1.20,
+            truth_source=IMPORTED_DAILY_TRUTH_SOURCE,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            entry_quote_minute_et=DAILY_QUOTE_MINUTE_ET,
+            entry_window_minutes=0,
+            archived_contract_symbol=pick.get("contract_symbol"),
+            archived_expiry=pick.get("expiry"),
+            archived_strike=pick.get("strike"),
+            archived_option_type=pick.get("option_type") or pick.get("direction"),
+            archived_quote_time_et=pick.get("quote_time_et"),
+            archived_quote_basis=pick.get("quote_basis"),
+            archived_underlying_price_at_selection=pick.get("underlying_price_at_selection"),
+            archived_selection_source=pick.get("selection_source"),
+        )
+
+        trade = {
+            **pick,
+            **outcome,
+            "ticker": ticker,
+            "date": entry_date_text,
+            "type": str(
+                pick.get("option_type")
+                or pick.get("direction")
+                or pick.get("type")
+                or "call"
+            ).strip().lower(),
+            "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+        }
+        if outcome.get("priced"):
+            if str(outcome.get("entry_contract_resolution") or "").strip().lower() != PRIMARY_JUDGE_TRADE_CLASS:
+                fallback_trades.append(trade)
+            priced_trades.append(trade)
+        else:
+            unpriced_candidates.append(trade)
+
+    priced_trade_count = len(priced_trades)
+    unpriced_trade_count = len(unpriced_candidates)
+    candidate_trade_count = priced_trade_count + unpriced_trade_count
+    quote_coverage_pct = round(priced_trade_count / max(candidate_trade_count, 1) * 100.0, 1) if candidate_trade_count else 0.0
+
+    contract_resolution = _contract_resolution_summary(
+        {
+            "priced_trade_count": priced_trade_count,
+            "candidate_trade_count": candidate_trade_count,
+            "trades": priced_trades,
+        }
+    )
+    archived_exact_trades = [
+        trade for trade in priced_trades
+        if str(trade.get("entry_contract_resolution") or "").strip().lower() == "exact_archived_contract"
+    ]
+    model_exact_trades = [
+        trade for trade in priced_trades
+        if str(trade.get("entry_contract_resolution") or "").strip().lower() == "exact_target_contract"
+    ]
+    nearest_listed_trades = [
+        trade for trade in priced_trades
+        if str(trade.get("entry_contract_resolution") or "").strip().lower() == "nearest_listed_contract"
+    ]
+    playbook_id = (
+        sorted(playbooks_seen)[0]
+        if len(playbooks_seen) == 1
+        else FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+    )
+
+    if not priced_trades:
+        promotion_metrics = {
+            **_trade_subset_metrics([], include_exit_reasons=True),
+            "promotion_status": "block",
+            "promoted_symbols": [],
+            "blockers": ["No promotable exact-contract trades were recorded."],
+        }
+        output = {
+            "run_at": datetime.now().isoformat(timespec="seconds"),
+            "mode": "backtest",
+            "profile": "mixed",
+            "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
+            "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+            "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+            "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
+            "evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+            "truth_window_status": "stale" if pending_truth_horizon else "current",
+            "authoritative_evidence_source": "archived_forward_daily",
+            "authoritative_evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+            "lookback_years": round(max((max_entry_date - min_entry_date).days, 0) / 365.25, 2),
+            "playbook": playbook_id,
+            "n_picks": 0,
+            "total_days": len({str(item.get("entry_date") or "") for item in filtered_picks}),
+            "total_trades": 0,
+            "priced_trade_count": 0,
+            "unpriced_trade_count": unpriced_trade_count,
+            "candidate_trade_count": candidate_trade_count,
+            "pending_truth_horizon_count": len(pending_truth_horizon),
+            "quote_coverage_pct": quote_coverage_pct,
+            **contract_resolution,
+            "entry_quote_time_et": _imported_entry_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
+            "exit_quote_time_et": _imported_exit_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
+            "win_rate_pct": 0.0,
+            "full_hit_rate_pct": 0.0,
+            "directional_accuracy_pct": 0.0,
+            "profit_factor": 0.0,
+            "avg_pnl_pct": 0.0,
+            "avg_picks_per_day": 0.0,
+            "sharpe": 0.0,
+            "max_drawdown_pct": 0.0,
+            "selection_source_counts": {},
+            "calibration_summary": _selection_calibration_summary([]),
+            "calibration_density_metrics": _calibration_density_metrics([]),
+            "contract_selection_basis": "archived_exact_contract_with_model_fallback",
+            "exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+            "archived_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+            "model_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
+            "nearest_listed_metrics": _trade_subset_metrics([]),
+            "promotion_metrics": promotion_metrics,
+            "by_symbol": {},
+            "promotion_trade_count": 0,
+            "non_promotable_trade_count": 0,
+            "primary_judge_trade_count": 0,
+            "primary_judge_fallback_used": False,
+            "primary_judge_fallback_reason": None,
+            "archived_sample_date_coverage": _archived_sample_date_coverage(
+                filtered_picks,
+                source_label=source_label,
+            ),
+            "truth_store": imported_truth_store,
+            "replay_calendar": _build_replay_calendar_summary(
+                source=FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+                index=pd.DatetimeIndex(sorted({pd.Timestamp(item["entry_date"]) for item in filtered_picks})),
+                raw_history_date_count=len({str(item.get("entry_date") or "") for item in filtered_picks}),
+                quote_date_count=len({str(item.get("entry_date") or "") for item in filtered_picks}),
+                underlyings=sorted({str(item.get("ticker") or "").upper() for item in filtered_picks}),
+                snapshot_kind=DAILY_SNAPSHOT_KIND,
+            ),
+            "validation_universe": sorted({str(item.get("ticker") or "").upper() for item in filtered_picks}),
+            "eligible_tickers": sorted(histories.keys()),
+            "excluded_tickers": excluded_tickers,
+            "pending_truth_horizon_trades": pending_truth_horizon,
+            "equity_curve": [],
+            "trades": [],
+            "unpriced_trades": unpriced_candidates,
+            "unpriced_trade_diagnostics": _summarize_unpriced_trades(unpriced_candidates),
+        }
+        return _save_backtest_result(output)
+
+    pnl_list = [float(trade.get("pnl_pct") or 0.0) for trade in priced_trades]
+    wins = [pnl for pnl in pnl_list if pnl > 0]
+    losses = [pnl for pnl in pnl_list if pnl <= 0]
+    gross_win = sum(wins)
+    gross_loss = abs(sum(losses))
+    pf = gross_win / max(gross_loss, 0.01)
+    win_rate = len(wins) / len(pnl_list) * 100.0
+    full_hits = sum(1 for trade in priced_trades if trade.get("prediction_outcome") == "hit")
+    directional_hits = sum(1 for trade in priced_trades if trade.get("directional_correct"))
+    full_hit_rate = full_hits / len(priced_trades) * 100.0
+    directional_accuracy = directional_hits / len(priced_trades) * 100.0
+    avg_pnl = sum(pnl_list) / len(pnl_list)
+    sharpe = _sharpe(pnl_list)
+
+    daily_pnl: dict[str, list[float]] = defaultdict(list)
+    selection_source_counts: dict[str, int] = defaultdict(int)
+    for trade in priced_trades:
+        daily_pnl[str(trade.get("date") or "")].append(float(trade.get("pnl_pct") or 0.0))
+        selection_source_counts[str(trade.get("selection_source") or "unknown")] += 1
+
+    eq_curve: list[dict[str, Any]] = []
+    cumulative = 0.0
+    peak = 0.0
+    max_drawdown = 0.0
+    for day in sorted(daily_pnl.keys()):
+        day_mean = float(sum(daily_pnl[day]) / max(len(daily_pnl[day]), 1))
+        cumulative += day_mean
+        peak = max(peak, cumulative)
+        max_drawdown = max(max_drawdown, peak - cumulative)
+        eq_curve.append({"date": day, "cum_pnl_pct": round(cumulative, 2)})
+
+    by_symbol = _by_symbol_trade_metrics(
+        priced_trades,
+        playbook_id=playbook_id,
+    )
+    promotion_metrics = _overall_promotion_metrics(
+        trades=priced_trades,
+        by_symbol=by_symbol,
+        playbook_id=playbook_id,
+    )
+    unique_entry_dates = sorted({str(item.get("entry_date") or "") for item in filtered_picks if str(item.get("entry_date") or "").strip()})
+    output = {
+        "run_at": datetime.now().isoformat(timespec="seconds"),
+        "mode": "backtest",
+        "profile": "mixed",
+        "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
+        "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+        "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+        "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
+        "truth_window_status": "stale" if pending_truth_horizon and not archived_exact_trades else "current",
+        "authoritative_evidence_source": "archived_forward_daily",
+        "lookback_years": round(max((max_entry_date - min_entry_date).days, 0) / 365.25, 2),
+        "playbook": playbook_id,
+        "n_picks": 0,
+        "total_days": len(unique_entry_dates),
+        "total_trades": len(priced_trades),
+        "priced_trade_count": priced_trade_count,
+        "unpriced_trade_count": unpriced_trade_count,
+        "candidate_trade_count": candidate_trade_count,
+        "pending_truth_horizon_count": len(pending_truth_horizon),
+        "quote_coverage_pct": quote_coverage_pct,
+        **contract_resolution,
+        "entry_quote_time_et": _imported_entry_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
+        "exit_quote_time_et": _imported_exit_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
+        "win_rate_pct": round(win_rate, 1),
+        "full_hit_rate_pct": round(full_hit_rate, 1),
+        "directional_accuracy_pct": round(directional_accuracy, 1),
+        "profit_factor": round(pf, 2),
+        "avg_pnl_pct": round(avg_pnl, 2),
+        "avg_picks_per_day": round(len(priced_trades) / max(len(unique_entry_dates), 1), 2),
+        "sharpe": round(sharpe, 2),
+        "max_drawdown_pct": round(max_drawdown, 1),
+        "selection_source_counts": dict(selection_source_counts),
+        "calibration_summary": _selection_calibration_summary(priced_trades),
+        "calibration_density_metrics": _calibration_density_metrics(priced_trades),
+        "contract_selection_basis": "archived_exact_contract_with_model_fallback",
+        "exact_contract_metrics": _trade_subset_metrics(
+            archived_exact_trades + model_exact_trades,
+            include_exit_reasons=True,
+        ),
+        "archived_exact_contract_metrics": _trade_subset_metrics(
+            archived_exact_trades,
+            include_exit_reasons=True,
+        ),
+        "model_exact_contract_metrics": _trade_subset_metrics(
+            model_exact_trades,
+            include_exit_reasons=True,
+        ),
+        "nearest_listed_metrics": _trade_subset_metrics(nearest_listed_trades),
+        "promotion_metrics": promotion_metrics,
+        "by_symbol": by_symbol,
+        "promotion_trade_count": int(promotion_metrics.get("trade_count") or 0),
+        "non_promotable_trade_count": len(
+            [trade for trade in priced_trades if not _is_trade_promotable(trade)]
+        ),
+        "primary_judge_trade_count": len(archived_exact_trades),
+        "primary_judge_fallback_used": bool(fallback_trades),
+        "primary_judge_fallback_reason": "missing_archived_contract_quote" if fallback_trades else None,
+        "archived_sample_date_coverage": _archived_sample_date_coverage(
+            filtered_picks,
+            source_label=source_label,
+        ),
+        "truth_store": imported_truth_store,
+        "replay_calendar": _build_replay_calendar_summary(
+            source=FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+            index=pd.DatetimeIndex([pd.Timestamp(day) for day in unique_entry_dates]),
+            raw_history_date_count=len(unique_entry_dates),
+            quote_date_count=len(unique_entry_dates),
+            underlyings=sorted({str(item.get("ticker") or "").upper() for item in filtered_picks}),
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+        ),
+        "validation_universe": sorted({str(item.get("ticker") or "").upper() for item in filtered_picks}),
+        "eligible_tickers": sorted(histories.keys()),
+        "excluded_tickers": excluded_tickers,
+        "pending_truth_horizon_trades": pending_truth_horizon,
+        "equity_curve": eq_curve,
+        "trades": priced_trades,
+        "unpriced_trades": unpriced_candidates,
+        "unpriced_trade_diagnostics": _summarize_unpriced_trades(unpriced_candidates),
+    }
+    output["evidence_status"] = (
+        ARCHIVED_EXACT_PRIMARY_STATUS
+        if _archived_exact_evidence_is_sufficient(output)
+        else ARCHIVED_EXACT_INSUFFICIENT_STATUS
+    )
+    output["authoritative_evidence_status"] = output["evidence_status"]
+    return _save_backtest_result(output)
 
 
 def _direction_score_bucket(score: float) -> str:
@@ -1921,6 +2863,17 @@ def _result_source_metadata(result: dict, total_trades: int | None = None) -> di
         "unpriced_trade_count": result.get("unpriced_trade_count"),
         "entry_quote_time_et": result.get("entry_quote_time_et"),
         "exit_quote_time_et": result.get("exit_quote_time_et"),
+        "candidate_source": result.get("candidate_source") or "model_replay",
+        "primary_judge_trade_class": result.get("primary_judge_trade_class"),
+        "primary_judge_trade_count": int(result.get("primary_judge_trade_count") or 0),
+        "primary_judge_fallback_used": bool(result.get("primary_judge_fallback_used")),
+        "primary_judge_fallback_reason": result.get("primary_judge_fallback_reason"),
+        "pending_truth_horizon_count": int(result.get("pending_truth_horizon_count") or 0),
+        "preferred_evidence_source": dict(result.get("preferred_evidence_source") or {}),
+        "evidence_status": result.get("evidence_status"),
+        "truth_window_status": result.get("truth_window_status"),
+        "authoritative_evidence_source": result.get("authoritative_evidence_source"),
+        "authoritative_evidence_status": result.get("authoritative_evidence_status"),
         "data_trust": truth_store.get("data_trust"),
         "earliest_quote_at_utc": truth_store.get("earliest_quote_at_utc"),
         "latest_quote_at_utc": truth_store.get("latest_quote_at_utc"),
@@ -2026,11 +2979,16 @@ def _trade_calibration_density(trade: dict) -> str:
     density = str(trade.get("calibration_density") or "").strip().lower()
     if density in {"dense", "sparse"}:
         return density
+    calibration_is_dense = trade.get("calibration_is_dense")
+    if calibration_is_dense is True:
+        return "dense"
+    if calibration_is_dense is False:
+        return "sparse"
     source = str(trade.get("selection_source") or "").strip().lower()
     if source.startswith("replay_calibrated"):
         if trade.get("calibration_sparse_warning"):
             return "sparse"
-        return "dense"
+        return "unknown"
     return "unknown"
 
 
@@ -2564,6 +3522,23 @@ def _score_band_bounds(label: str) -> tuple[Optional[float], Optional[float]]:
         return None, None
 
 
+def _watch_symbol_preferences(by_symbol: dict[str, Any]) -> tuple[list[str], list[str]]:
+    priority: list[str] = []
+    deprioritized: list[str] = []
+    for symbol, metrics in sorted((by_symbol or {}).items()):
+        exact_metrics = dict((metrics or {}).get("exact_contract_metrics") or {})
+        trade_count = int(exact_metrics.get("trade_count") or 0)
+        if trade_count < 20:
+            continue
+        profit_factor = float(exact_metrics.get("profit_factor") or 0.0)
+        avg_pnl_pct = float(exact_metrics.get("avg_pnl_pct") or 0.0)
+        if profit_factor >= 1.0 and avg_pnl_pct > 0:
+            priority.append(symbol)
+        elif profit_factor < 1.0 or avg_pnl_pct <= 0:
+            deprioritized.append(symbol)
+    return priority, deprioritized
+
+
 def build_live_options_trade_policy(
     result: Optional[dict] = None,
     truth_lane: Optional[str] = None,
@@ -2582,7 +3557,7 @@ def build_live_options_trade_policy(
     Blocked inside the supervised options workflow.
     """
     if result is None:
-        result = load_last_results_by_truth_lane(truth_lane)
+        result = load_preferred_results_by_truth_lane(truth_lane)
     requested_truth_lane = str(truth_lane or "").strip().lower()
     if not result and requested_truth_lane:
         return {"error": f"No backtest results found for truth_lane={requested_truth_lane}"}
@@ -2685,6 +3660,28 @@ def build_live_options_trade_policy(
 
     rationale: list[str] = []
     warnings: list[str] = []
+    preferred_evidence = dict(result.get("preferred_evidence_source") or {})
+    evidence_status = str(
+        preferred_evidence.get("status")
+        or result.get("evidence_status")
+        or ""
+    ).strip().lower()
+    truth_window_status = str(
+        preferred_evidence.get("truth_window_status")
+        or result.get("truth_window_status")
+        or "unknown"
+    ).strip().lower() or "unknown"
+    authoritative_evidence_source = str(
+        result.get("authoritative_evidence_source")
+        or preferred_evidence.get("mode")
+        or _result_truth_source(result or {})
+        or "unknown"
+    ).strip().lower()
+    authoritative_evidence_status = str(
+        result.get("authoritative_evidence_status")
+        or evidence_status
+        or "unknown"
+    ).strip().lower()
 
     if preferred_score_band:
         rationale.append(
@@ -2727,6 +3724,17 @@ def build_live_options_trade_policy(
         playbook_id=playbook_id,
         min_profit_factor=min_profit_factor,
     )
+    watch_priority_symbols, watch_deprioritized_symbols = _watch_symbol_preferences(by_symbol)
+    if (
+        not watch_priority_symbols
+        and not watch_deprioritized_symbols
+        and truth_source == IMPORTED_DAILY_TRUTH_SOURCE
+        and str(result.get("candidate_source") or "").strip().lower() == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+    ):
+        fallback_watch_source = load_last_imported_daily_results()
+        fallback_by_symbol = dict((fallback_watch_source or {}).get("by_symbol") or {})
+        if fallback_by_symbol:
+            watch_priority_symbols, watch_deprioritized_symbols = _watch_symbol_preferences(fallback_by_symbol)
     promotion_metrics = _overall_promotion_metrics(
         trades=trades,
         by_symbol=by_symbol,
@@ -2750,13 +3758,35 @@ def build_live_options_trade_policy(
         warnings.append(
             "Only synthetic research results are available for this cohort, so policy confidence remains capped below promote."
         )
+    if evidence_status == ARCHIVED_EXACT_INSUFFICIENT_STATUS:
+        warnings.append(
+            "Archived /api/scan exact-contract evidence is the primary judge, but the current per-symbol archived sample is still below the 25-trade promotion floor."
+        )
+    elif evidence_status == MODEL_DAILY_FALLBACK_ONLY_STATUS and truth_source == IMPORTED_DAILY_TRUTH_SOURCE:
+        warnings.append(
+            "Archived /api/scan exact-contract evidence is unavailable, so policy is falling back to model-derived imported daily replay."
+        )
     if truth_source == IMPORTED_TRUTH_SOURCE:
         warnings.append(
             "Imported intraday validation prices replay-selected contracts with real historical quotes, but contract targeting is still model-derived rather than recovered from archived live scan picks."
         )
     if truth_source == IMPORTED_DAILY_TRUTH_SOURCE:
+        if str(result.get("candidate_source") or "").strip().lower() == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE:
+            warnings.append(
+                "Archived forward /api/scan picks are the primary judge for this policy. Exact archived contracts are priced against imported daily truth before any model fallback is considered."
+            )
+        else:
+            warnings.append(
+                "Imported daily validation prices replay-selected contracts with real end-of-day quotes. It is stronger than synthetic replay, but contract targeting is still model-derived and it does not validate morning fill quality."
+            )
+    pending_truth_horizon_count = int((result or {}).get("pending_truth_horizon_count") or 0)
+    if pending_truth_horizon_count > 0:
         warnings.append(
-            "Imported daily validation prices replay-selected contracts with real end-of-day quotes. It is stronger than synthetic replay, but contract targeting is still model-derived and it does not validate morning fill quality."
+            f"{pending_truth_horizon_count} archived /api/scan pick(s) are newer than the trusted imported daily quote horizon, so they remain pending rather than counting as replay failures."
+        )
+    if truth_window_status == "stale":
+        warnings.append(
+            "Archived forward exact-contract evidence is currently stale versus the trusted imported daily quote horizon, so the managed lane stays blocked until those picks become judgeable."
         )
     if playbook_id == "broad":
         warnings.append(
@@ -2768,7 +3798,32 @@ def build_live_options_trade_policy(
             f"{nearest_contract_match_count} replay trade(s) used the nearest listed historical contract rather than an exact target-contract match."
         )
     synthetic_only = truth_source == SYNTHETIC_TRUTH_SOURCE
-    promotion_status = "block" if synthetic_only else str(promotion_metrics.get("promotion_status") or "block")
+    readiness_blockers: list[str] = []
+    if synthetic_only:
+        readiness_blockers.append("synthetic_only")
+    if str(stability.get("overall_status") or "block").strip().lower() != "promote":
+        readiness_blockers.append("stability_not_promote")
+    if truth_window_status == "stale":
+        readiness_blockers.append("truth_window_stale")
+    if evidence_status in {ARCHIVED_EXACT_INSUFFICIENT_STATUS, MODEL_DAILY_FALLBACK_ONLY_STATUS}:
+        readiness_blockers.append(f"evidence_status:{evidence_status}")
+    base_promotion_status = str(promotion_metrics.get("promotion_status") or "block")
+    if truth_window_status == "stale":
+        promotion_status = "block"
+    elif synthetic_only:
+        promotion_status = "block"
+    elif base_promotion_status == "promote" and readiness_blockers:
+        promotion_status = "watch"
+    else:
+        promotion_status = base_promotion_status
+    if truth_window_status == "stale":
+        managed_lane_status = "blocked_truth_stale"
+    elif promotion_status == "promote":
+        managed_lane_status = "open"
+    elif promoted_symbols:
+        managed_lane_status = "watch_only"
+    else:
+        managed_lane_status = "blocked_no_approved_symbols"
     if promoted_symbols:
         rationale.append(
             f"Promotable exact-contract evidence currently exists for: {', '.join(promoted_symbols)}."
@@ -2785,6 +3840,11 @@ def build_live_options_trade_policy(
         "pricing_lane": (matrix.get("source") or {}).get("pricing_lane"),
         "playbook": (matrix.get("source") or {}).get("playbook"),
         "truth_source": truth_source,
+        "evidence_status": evidence_status or None,
+        "truth_window_status": truth_window_status,
+        "authoritative_evidence_source": authoritative_evidence_source or None,
+        "authoritative_evidence_status": authoritative_evidence_status or None,
+        "preferred_evidence_source": preferred_evidence,
         "quote_coverage_pct": (matrix.get("source") or {}).get("quote_coverage_pct"),
         "priced_trade_count": (matrix.get("source") or {}).get("priced_trade_count"),
         "unpriced_trade_count": (matrix.get("source") or {}).get("unpriced_trade_count"),
@@ -2793,6 +3853,8 @@ def build_live_options_trade_policy(
         "strategy_domain": matrix.get("strategy_domain"),
         "trade_types": matrix.get("trade_types"),
         "promotion_status": promotion_status,
+        "managed_lane_status": managed_lane_status,
+        "readiness_blockers": readiness_blockers,
         "synthetic_only": synthetic_only,
         "overall": overall,
         "stability": stability,
@@ -2803,9 +3865,13 @@ def build_live_options_trade_policy(
         "promotion_trade_count": int(promotion_metrics.get("trade_count") or 0),
         "non_promotable_trade_count": non_promotable_trade_count,
         "calibration_density_metrics": calibration_density_metrics,
+        "watch_priority_symbols": watch_priority_symbols,
+        "watch_deprioritized_symbols": watch_deprioritized_symbols,
         "scan_policy": {
             "mode": "replay_backed_focus" if promotion_status == "promote" else "replay_backed_watch",
             "promotion_status": promotion_status,
+            "managed_lane_status": managed_lane_status,
+            "truth_window_status": truth_window_status,
             "decision_labels": {
                 "approved": "Approved",
                 "watch": "Watch",
@@ -2832,8 +3898,11 @@ def build_live_options_trade_policy(
                 "sectors": preferred_sectors,
             },
             "highlighted_tickers": highlighted_tickers,
+            "watch_priority_symbols": watch_priority_symbols,
+            "watch_deprioritized_symbols": watch_deprioritized_symbols,
             "rationale": rationale,
             "warnings": warnings,
+            "readiness_blockers": readiness_blockers,
             "supporting_slices": {
                 "score_band": preferred_score_band,
                 "asset_regime": preferred_asset_regime,
@@ -2997,7 +4066,7 @@ def build_playbook_exit_audit(
     Replay-validate exits for the cohorts that clear the live trade policy within a playbook window.
     """
     if result is None:
-        result = load_last_results_by_truth_lane(truth_lane)
+        result = load_preferred_results_by_truth_lane(truth_lane)
     if not result:
         return {"error": "No backtest results found"}
 
@@ -3046,6 +4115,11 @@ def build_playbook_exit_audit(
         "lookback_years": policy_bundle.get("lookback_years"),
         "pricing_lane": policy_bundle.get("pricing_lane"),
         "truth_source": policy_bundle.get("truth_source"),
+        "evidence_status": policy_bundle.get("evidence_status"),
+        "truth_window_status": policy_bundle.get("truth_window_status"),
+        "managed_lane_status": policy_bundle.get("managed_lane_status"),
+        "authoritative_evidence_source": policy_bundle.get("authoritative_evidence_source"),
+        "authoritative_evidence_status": policy_bundle.get("authoritative_evidence_status"),
         "quote_coverage_pct": policy_bundle.get("quote_coverage_pct"),
         "priced_trade_count": policy_bundle.get("priced_trade_count"),
         "unpriced_trade_count": policy_bundle.get("unpriced_trade_count"),
@@ -3057,6 +4131,8 @@ def build_playbook_exit_audit(
         "policy_summary": {
             "hard_filters": policy_bundle["scan_policy"].get("hard_filters"),
             "preferred_filters": policy_bundle["scan_policy"].get("preferred_filters"),
+            "watch_priority_symbols": policy_bundle.get("watch_priority_symbols"),
+            "watch_deprioritized_symbols": policy_bundle.get("watch_deprioritized_symbols"),
         },
         "approved": _summarize_policy_audit_bucket("approved", approved),
         "watch": _summarize_policy_audit_bucket("watch", watch),
@@ -3082,6 +4158,15 @@ def _comparison_lane_summary(result: dict) -> dict[str, Any]:
         "lookback_years": source.get("lookback_years"),
         "pricing_lane": source.get("pricing_lane"),
         "truth_source": source.get("truth_source"),
+        "candidate_source": source.get("candidate_source"),
+        "preferred_evidence_source": source.get("preferred_evidence_source"),
+        "evidence_status": source.get("evidence_status"),
+        "truth_window_status": source.get("truth_window_status"),
+        "authoritative_evidence_source": source.get("authoritative_evidence_source"),
+        "authoritative_evidence_status": source.get("authoritative_evidence_status"),
+        "primary_judge_trade_class": source.get("primary_judge_trade_class"),
+        "primary_judge_trade_count": source.get("primary_judge_trade_count"),
+        "pending_truth_horizon_count": source.get("pending_truth_horizon_count"),
         "total_trades": result.get("total_trades"),
         "priced_trade_count": result.get("priced_trade_count", result.get("total_trades")),
         "unpriced_trade_count": result.get("unpriced_trade_count", 0),
@@ -3329,6 +4414,7 @@ def build_truth_lane_comparison(
     preferred_imported_lane = truth_lane if _is_imported_truth_source(truth_lane) else None
     imported = (
         imported_result
+        or load_preferred_results_by_truth_lane(preferred_imported_lane or IMPORTED_DAILY_TRUTH_SOURCE)
         or load_last_results_by_truth_lane(preferred_imported_lane or IMPORTED_TRUTH_SOURCE)
         or load_last_imported_daily_results()
     )

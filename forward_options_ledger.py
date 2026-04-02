@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +18,14 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "cohort_role": "TEXT",
     "policy_state": "TEXT",
     "guardrail_state": "TEXT",
+    "expiry": "TEXT",
+    "strike": "REAL",
+    "option_type": "TEXT",
+    "quote_time_et": "TEXT",
+    "quote_basis": "TEXT",
+    "underlying_price_at_selection": "REAL",
+    "selection_source": "TEXT",
+    "promotion_class": "TEXT",
     "candidate_rank": "INTEGER",
     "option_bid": "REAL",
     "option_ask": "REAL",
@@ -81,6 +89,14 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
                 cohort_role TEXT,
                 policy_state TEXT,
                 guardrail_state TEXT,
+                expiry TEXT,
+                strike REAL,
+                option_type TEXT,
+                quote_time_et TEXT,
+                quote_basis TEXT,
+                underlying_price_at_selection REAL,
+                selection_source TEXT,
+                promotion_class TEXT,
                 candidate_rank INTEGER,
                 option_bid REAL,
                 option_ask REAL,
@@ -125,6 +141,11 @@ def _safe_int(value: Any) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _safe_text(value: Any) -> Optional[str]:
+    text = str(value or "").strip()
+    return text or None
 
 
 def _normalized_scan_funnel(value: Any) -> dict[str, Any]:
@@ -212,6 +233,76 @@ def _pick_contract_symbol(pick: dict[str, Any]) -> Optional[str]:
     )
 
 
+def _pick_option_type(pick: dict[str, Any]) -> Optional[str]:
+    option_type = (
+        pick.get("option_type")
+        or pick.get("direction")
+        or pick.get("type")
+        or pick.get("prediction_type")
+    )
+    normalized = str(option_type or "").strip().lower()
+    return normalized or None
+
+
+def _pick_playbook_id(value: Any) -> Optional[str]:
+    if isinstance(value, dict):
+        return _safe_text(value.get("id") or value.get("playbook_id") or value.get("label"))
+    return _safe_text(value)
+
+
+def build_forward_scan_snapshot(
+    *,
+    picks: list[dict[str, Any]],
+    policy_applied: bool,
+    policy: Optional[dict[str, Any]],
+    policy_error: Any = None,
+    playbook: Any = None,
+    truth_lane: Optional[str] = None,
+    scan_funnel: Any = None,
+    policy_decision_counts: Any = None,
+    guardrail_decision_counts: Any = None,
+    candidate_count: Any = None,
+    returned_count: Any = None,
+    playbook_exit_audit: Any = None,
+    playbook_exit_audit_error: Any = None,
+    exposure_snapshot: Any = None,
+    cohort_snapshots: Optional[list[dict[str, Any]]] = None,
+    cohort_funnels: Optional[dict[str, Any]] = None,
+    cohort_count: Any = None,
+    cohort_ids: Optional[list[str]] = None,
+    champion_manifest_path: Optional[str] = None,
+    positions_error: Optional[str] = None,
+) -> dict[str, Any]:
+    snapshot = {
+        "picks": list(picks or []),
+        "policy_applied": bool(policy_applied),
+        "policy": dict(policy or {}),
+        "policy_error": policy_error,
+        "playbook_exit_audit": playbook_exit_audit,
+        "playbook_exit_audit_error": playbook_exit_audit_error,
+        "policy_decision_counts": dict(policy_decision_counts or {}),
+        "guardrail_decision_counts": dict(guardrail_decision_counts or {}),
+        "candidate_count": int(candidate_count or len(picks or [])),
+        "returned_count": int(returned_count if returned_count is not None else len(picks or [])),
+        "scan_funnel": _normalized_scan_funnel(scan_funnel),
+        "playbook": playbook,
+        "truth_lane": truth_lane,
+        "exposure_snapshot": exposure_snapshot,
+        "cohort_snapshots": list(cohort_snapshots or []),
+        "cohort_funnels": {
+            str(key): _normalized_scan_funnel(value)
+            for key, value in dict(cohort_funnels or {}).items()
+            if str(key).strip()
+        },
+        "cohort_count": int(cohort_count or len(cohort_snapshots or [])),
+        "cohort_ids": [str(item).strip() for item in list(cohort_ids or []) if str(item).strip()],
+        "champion_manifest_path": champion_manifest_path,
+    }
+    if positions_error:
+        snapshot["positions_error"] = str(positions_error)
+    return snapshot
+
+
 def _tracked_position_matches_pick(
     pick: dict[str, Any],
     tracked_positions: list[dict[str, Any]],
@@ -290,30 +381,66 @@ def _event_fields_from_pick(
         or ""
     ).strip() or None
     guardrail_state = str(pick.get("guardrail_decision") or "").strip() or None
+    quote_basis = _safe_text(pick.get("quote_basis"))
+    selection_source = _safe_text(
+        pick.get("selection_source") or pick.get("contract_selection_source")
+    )
+    spread_pct = _safe_float(
+        pick.get("spread_pct")
+        if pick.get("spread_pct") is not None
+        else pick.get("spread_percent")
+    )
+    option_mid = _safe_float(
+        pick.get("mid")
+        if pick.get("mid") is not None
+        else pick.get("premium")
+    )
     return {
         "ticker": str(pick.get("ticker") or "").strip().upper() or None,
         "contract_symbol": _pick_contract_symbol(pick),
         "recommendation": policy_state,
-        "pricing_source": pick.get("pricing_source"),
+        "pricing_source": pick.get("pricing_source") or quote_basis,
         "cohort_id": cohort_id,
         "cohort_role": cohort_role,
         "policy_state": policy_state,
         "guardrail_state": guardrail_state,
+        "expiry": _safe_text(pick.get("expiry")),
+        "strike": _safe_float(
+            pick.get("strike") if pick.get("strike") is not None else pick.get("strike_est")
+        ),
+        "option_type": _pick_option_type(pick),
+        "quote_time_et": _safe_text(pick.get("quote_time_et")),
+        "quote_basis": quote_basis,
+        "underlying_price_at_selection": _safe_float(
+            pick.get("underlying_price_at_selection")
+            if pick.get("underlying_price_at_selection") is not None
+            else (
+                pick.get("stock_price")
+                if pick.get("stock_price") is not None
+                else pick.get("entry_price")
+            )
+        ),
+        "selection_source": selection_source,
+        "promotion_class": _safe_text(pick.get("promotion_class")),
         "candidate_rank": _safe_int(pick.get("candidate_rank")) or int(candidate_rank),
         "option_bid": _safe_float(pick.get("bid")),
         "option_ask": _safe_float(pick.get("ask")),
-        "option_mid": _safe_float(pick.get("mid") if pick.get("mid") is not None else pick.get("premium")),
-        "option_spread_pct": _safe_float(
-            pick.get("spread_pct")
-            if pick.get("spread_pct") is not None
-            else pick.get("spread_percent")
-        ),
+        "option_mid": option_mid,
+        "option_spread_pct": spread_pct,
         "option_iv": _safe_float(
             pick.get("iv_percentile")
             if pick.get("iv_percentile") is not None
-            else pick.get("iv_pct")
+            else (
+                pick.get("iv_pct")
+                if pick.get("iv_pct") is not None
+                else pick.get("iv_rank")
+            )
         ),
-        "option_delta": _safe_float(pick.get("delta")),
+        "option_delta": _safe_float(
+            pick.get("delta")
+            if pick.get("delta") is not None
+            else pick.get("delta_est")
+        ),
         "option_dte": _safe_int(pick.get("dte")),
         "outcome_state": _pick_outcome_state(pick, tracked_positions),
         "payload_json": json.dumps(pick),
@@ -335,6 +462,14 @@ def _insert_forward_event(
     cohort_role: Optional[str] = None,
     policy_state: Optional[str] = None,
     guardrail_state: Optional[str] = None,
+    expiry: Optional[str] = None,
+    strike: Optional[float] = None,
+    option_type: Optional[str] = None,
+    quote_time_et: Optional[str] = None,
+    quote_basis: Optional[str] = None,
+    underlying_price_at_selection: Optional[float] = None,
+    selection_source: Optional[str] = None,
+    promotion_class: Optional[str] = None,
     candidate_rank: Optional[int] = None,
     option_bid: Optional[float] = None,
     option_ask: Optional[float] = None,
@@ -359,6 +494,14 @@ def _insert_forward_event(
             cohort_role,
             policy_state,
             guardrail_state,
+            expiry,
+            strike,
+            option_type,
+            quote_time_et,
+            quote_basis,
+            underlying_price_at_selection,
+            selection_source,
+            promotion_class,
             candidate_rank,
             option_bid,
             option_ask,
@@ -369,7 +512,7 @@ def _insert_forward_event(
             option_dte,
             outcome_state,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             int(session_id),
@@ -383,6 +526,14 @@ def _insert_forward_event(
             cohort_role,
             policy_state,
             guardrail_state,
+            expiry,
+            strike,
+            option_type,
+            quote_time_et,
+            quote_basis,
+            underlying_price_at_selection,
+            selection_source,
+            promotion_class,
             candidate_rank,
             option_bid,
             option_ask,
@@ -395,6 +546,73 @@ def _insert_forward_event(
             payload_json,
         ),
     )
+
+
+def _position_review_event_fields(position: dict[str, Any]) -> dict[str, Any]:
+    latest_review = dict(position.get("latest_review") or {})
+    source = dict(position.get("source_pick_snapshot") or {})
+    return {
+        "ticker": str(position.get("ticker") or source.get("ticker") or "").upper() or None,
+        "contract_symbol": (
+            position.get("contract_symbol")
+            or source.get("contract_symbol")
+            or source.get("contractSymbol")
+        ),
+        "recommendation": latest_review.get("recommendation"),
+        "pricing_source": latest_review.get("pricing_source") or source.get("quote_basis"),
+        "cohort_id": _safe_text(source.get("cohort_id")),
+        "cohort_role": _safe_text(source.get("cohort_role")),
+        "policy_state": _safe_text(source.get("policy_decision") or source.get("trade_policy_decision")),
+        "guardrail_state": _safe_text(source.get("guardrail_decision")),
+        "expiry": _safe_text(source.get("expiry")),
+        "strike": _safe_float(
+            source.get("strike") if source.get("strike") is not None else source.get("strike_est")
+        ),
+        "option_type": _pick_option_type(source),
+        "quote_time_et": _safe_text(source.get("quote_time_et")),
+        "quote_basis": _safe_text(source.get("quote_basis")),
+        "underlying_price_at_selection": _safe_float(
+            source.get("underlying_price_at_selection")
+            if source.get("underlying_price_at_selection") is not None
+            else (
+                source.get("stock_price")
+                if source.get("stock_price") is not None
+                else source.get("entry_price")
+            )
+        ),
+        "selection_source": _safe_text(
+            source.get("selection_source") or source.get("contract_selection_source")
+        ),
+        "promotion_class": _safe_text(source.get("promotion_class")),
+        "candidate_rank": _safe_int(source.get("candidate_rank")),
+        "option_bid": _safe_float(source.get("bid")),
+        "option_ask": _safe_float(source.get("ask")),
+        "option_mid": _safe_float(
+            source.get("mid") if source.get("mid") is not None else source.get("premium")
+        ),
+        "option_spread_pct": _safe_float(
+            source.get("spread_pct")
+            if source.get("spread_pct") is not None
+            else source.get("spread_percent")
+        ),
+        "option_iv": _safe_float(
+            source.get("iv_percentile")
+            if source.get("iv_percentile") is not None
+            else (
+                source.get("iv_pct")
+                if source.get("iv_pct") is not None
+                else source.get("iv_rank")
+            )
+        ),
+        "option_delta": _safe_float(
+            source.get("delta")
+            if source.get("delta") is not None
+            else source.get("delta_est")
+        ),
+        "option_dte": _safe_int(source.get("dte")),
+        "outcome_state": _safe_text(position.get("status")),
+        "payload_json": json.dumps(position),
+    }
 
 
 def record_forward_snapshot(
@@ -417,6 +635,7 @@ def record_forward_snapshot(
         "policy_error": scan_snapshot.get("policy_error"),
         "truth_source": policy.get("truth_source"),
         "promotion_status": policy.get("promotion_status"),
+        "truth_lane": scan_snapshot.get("truth_lane"),
         "candidate_count": scan_snapshot.get("candidate_count"),
         "returned_count": scan_snapshot.get("returned_count"),
         "guardrail_decision_counts": scan_snapshot.get("guardrail_decision_counts"),
@@ -431,6 +650,7 @@ def record_forward_snapshot(
             for key, value in dict(scan_snapshot.get("cohort_funnels") or {}).items()
             if str(key).strip()
         },
+        "positions_error": scan_snapshot.get("positions_error"),
     }
 
     taken_count = 0
@@ -509,35 +729,13 @@ def record_forward_snapshot(
             )
 
         for position in reviewed_positions:
-            latest_review = dict(position.get("latest_review") or {})
-            source = dict(position.get("source_pick_snapshot") or {})
+            fields = _position_review_event_fields(position)
             _insert_forward_event(
                 cursor,
                 session_id=session_id,
                 event_type="position_review",
                 event_key=str(position.get("id") or ""),
-                ticker=str(position.get("ticker") or "").upper() or None,
-                contract_symbol=position.get("contract_symbol") or source.get("contract_symbol") or source.get("contractSymbol"),
-                recommendation=latest_review.get("recommendation"),
-                pricing_source=latest_review.get("pricing_source"),
-                cohort_id=source.get("cohort_id"),
-                cohort_role=source.get("cohort_role"),
-                policy_state=source.get("policy_decision") or source.get("trade_policy_decision"),
-                guardrail_state=source.get("guardrail_decision"),
-                candidate_rank=_safe_int(source.get("candidate_rank")),
-                option_bid=_safe_float(source.get("bid")),
-                option_ask=_safe_float(source.get("ask")),
-                option_mid=_safe_float(source.get("mid") if source.get("mid") is not None else source.get("premium")),
-                option_spread_pct=_safe_float(source.get("spread_pct")),
-                option_iv=_safe_float(
-                    source.get("iv_percentile")
-                    if source.get("iv_percentile") is not None
-                    else source.get("iv_pct")
-                ),
-                option_delta=_safe_float(source.get("delta")),
-                option_dte=_safe_int(source.get("dte")),
-                outcome_state=str(position.get("status") or "").strip() or None,
-                payload_json=json.dumps(position),
+                **fields,
             )
 
         conn.commit()
@@ -555,6 +753,7 @@ def record_forward_snapshot(
         "skipped_pick_count": skipped_count,
         "blocked_pick_count": blocked_count,
         "cohort_ids_recorded": sorted(cohort_ids),
+        "requested_cohort_ids": list(notes.get("requested_cohort_ids") or []),
         "scan_funnel": notes["scan_funnel"],
     }
 
@@ -562,6 +761,7 @@ def record_forward_snapshot(
 def list_forward_sessions(
     limit: int = 20,
     *,
+    source_label: str | None = None,
     db_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     path = init_forward_ledger(db_path)
@@ -571,10 +771,11 @@ def list_forward_sessions(
             """
             SELECT *
             FROM forward_sessions
+            WHERE (? IS NULL OR source_label = ?)
             ORDER BY recorded_at_utc DESC, id DESC
             LIMIT ?
             """,
-            (int(limit),),
+            (_safe_text(source_label), _safe_text(source_label), int(limit)),
         ).fetchall()
     sessions: list[dict[str, Any]] = []
     for row in rows:
@@ -584,13 +785,91 @@ def list_forward_sessions(
     return sessions
 
 
+def list_forward_scan_pick_events(
+    *,
+    recorded_before_utc: str | None = None,
+    source_label: str | None = None,
+    db_path: str | Path | None = None,
+) -> list[dict[str, Any]]:
+    path = init_forward_ledger(db_path)
+    with closing(sqlite3.connect(path)) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            """
+            SELECT
+                fs.id AS session_id,
+                fs.recorded_at_utc,
+                fs.source_label,
+                fs.playbook AS session_playbook,
+                fs.truth_source AS session_truth_source,
+                fs.promotion_status AS session_promotion_status,
+                fe.*
+            FROM forward_events fe
+            JOIN forward_sessions fs
+                ON fs.id = fe.session_id
+            WHERE fe.event_type = 'scan_pick'
+              AND (? IS NULL OR fs.source_label = ?)
+              AND (? IS NULL OR fs.recorded_at_utc < ?)
+            ORDER BY fs.recorded_at_utc ASC, fe.id ASC
+            """,
+            (
+                _safe_text(source_label),
+                _safe_text(source_label),
+                _safe_text(recorded_before_utc),
+                _safe_text(recorded_before_utc),
+            ),
+        ).fetchall()
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        payload = json.loads(str(row["payload_json"] or "{}"))
+        event = {
+            **payload,
+            "session_id": int(row["session_id"]),
+            "recorded_at_utc": row["recorded_at_utc"],
+            "source_label": row["source_label"],
+            "session_playbook": row["session_playbook"],
+            "session_truth_source": row["session_truth_source"],
+            "session_promotion_status": row["session_promotion_status"],
+            "event_key": row["event_key"],
+            "event_id": int(row["id"]),
+            "candidate_rank": _safe_int(payload.get("candidate_rank")) or _safe_int(row["candidate_rank"]),
+            "ticker": str(payload.get("ticker") or row["ticker"] or "").upper() or None,
+            "contract_symbol": payload.get("contract_symbol") or row["contract_symbol"],
+            "expiry": payload.get("expiry") or row["expiry"],
+            "strike": payload.get("strike") if payload.get("strike") is not None else row["strike"],
+            "option_type": payload.get("option_type") or row["option_type"],
+            "quote_time_et": payload.get("quote_time_et") or row["quote_time_et"],
+            "quote_basis": payload.get("quote_basis") or row["quote_basis"],
+            "underlying_price_at_selection": (
+                payload.get("underlying_price_at_selection")
+                if payload.get("underlying_price_at_selection") is not None
+                else row["underlying_price_at_selection"]
+            ),
+            "selection_source": payload.get("selection_source") or row["selection_source"],
+            "promotion_class": payload.get("promotion_class") or row["promotion_class"],
+        }
+        if not event.get("entry_date"):
+            recorded_at_utc = str(row["recorded_at_utc"] or "").strip()
+            if recorded_at_utc:
+                try:
+                    event["entry_date"] = datetime.fromisoformat(
+                        recorded_at_utc.replace("Z", "+00:00")
+                    ).date().isoformat()
+                except ValueError:
+                    pass
+        events.append(event)
+    return events
+
+
 def summarize_forward_holdout(
     *,
     cohort_id: str | None = None,
+    source_label: str | None = None,
     db_path: str | Path | None = None,
 ) -> dict[str, Any]:
     path = init_forward_ledger(db_path)
     normalized_cohort = str(cohort_id or "").strip() or None
+    normalized_source_label = _safe_text(source_label)
 
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
@@ -598,17 +877,22 @@ def summarize_forward_holdout(
             """
             SELECT *
             FROM forward_sessions
+            WHERE (? IS NULL OR source_label = ?)
             ORDER BY recorded_at_utc ASC, id ASC
-            """
+            """,
+            (normalized_source_label, normalized_source_label),
         ).fetchall()
         rows = conn.execute(
             """
             SELECT
                 fe.session_id,
                 fs.recorded_at_utc,
+                fs.playbook,
                 fs.truth_source,
                 fs.promotion_status,
                 fe.event_type,
+                fe.ticker,
+                fe.contract_symbol,
                 fe.recommendation,
                 fe.outcome_state,
                 fe.cohort_id
@@ -616,10 +900,16 @@ def summarize_forward_holdout(
             JOIN forward_sessions fs
                 ON fs.id = fe.session_id
             WHERE fe.event_type IN ('scan_pick', 'position_review')
+              AND (? IS NULL OR fs.source_label = ?)
               AND (? IS NULL OR fe.cohort_id = ?)
             ORDER BY fs.recorded_at_utc ASC, fe.id ASC
             """,
-            (normalized_cohort, normalized_cohort),
+            (
+                normalized_source_label,
+                normalized_source_label,
+                normalized_cohort,
+                normalized_cohort,
+            ),
         ).fetchall()
 
     filtered_sessions: list[sqlite3.Row] = []
@@ -648,6 +938,7 @@ def summarize_forward_holdout(
         return {
             "available": False,
             "cohort_id": normalized_cohort,
+            "source_label": normalized_source_label,
             "db_path": str(path),
             "session_count": 0,
             "scan_pick_count": 0,
@@ -666,6 +957,14 @@ def summarize_forward_holdout(
             "latest_scan_funnel": None,
             "sessions_with_zero_scan_picks": 0,
             "latest_starvation_stage": None,
+            "by_symbol": {},
+            "by_playbook": {},
+            "exact_contract_coverage": {
+                "scan_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+                "taken_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+                "position_review": {"with_contract_count": 0, "missing_contract_count": 0},
+            },
+            "session_contract_coverage": [],
         }
 
     if not rows:
@@ -697,6 +996,7 @@ def summarize_forward_holdout(
         return {
             "available": True,
             "cohort_id": normalized_cohort,
+            "source_label": normalized_source_label,
             "db_path": str(path),
             "session_count": len(filtered_sessions),
             "earliest_recorded_at_utc": earliest.astimezone(UTC).isoformat().replace("+00:00", "Z") if earliest else None,
@@ -717,6 +1017,14 @@ def summarize_forward_holdout(
             "latest_scan_funnel": latest_scan_funnel,
             "sessions_with_zero_scan_picks": sessions_with_zero_scan_picks,
             "latest_starvation_stage": latest_starvation_stage,
+            "by_symbol": {},
+            "by_playbook": {},
+            "exact_contract_coverage": {
+                "scan_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+                "taken_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+                "position_review": {"with_contract_count": 0, "missing_contract_count": 0},
+            },
+            "session_contract_coverage": [],
         }
 
     session_ids: set[int] = set()
@@ -731,6 +1039,23 @@ def summarize_forward_holdout(
     closed_review_count = 0
     recommendation_counts: Counter[str] = Counter()
     status_counts: Counter[str] = Counter()
+    by_symbol: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    by_playbook: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    session_contract_coverage: dict[int, dict[str, Any]] = defaultdict(
+        lambda: {
+            "scan_pick_with_contract_count": 0,
+            "scan_pick_missing_contract_count": 0,
+            "taken_pick_with_contract_count": 0,
+            "taken_pick_missing_contract_count": 0,
+            "review_with_contract_count": 0,
+            "review_missing_contract_count": 0,
+        }
+    )
+    exact_contract_coverage = {
+        "scan_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+        "taken_pick": {"with_contract_count": 0, "missing_contract_count": 0},
+        "position_review": {"with_contract_count": 0, "missing_contract_count": 0},
+    }
 
     for row in rows:
         session_ids.add(int(row["session_id"]))
@@ -750,6 +1075,9 @@ def summarize_forward_holdout(
         event_type = str(row["event_type"] or "").strip().lower()
         recommendation = str(row["recommendation"] or "").strip().upper()
         outcome_state = str(row["outcome_state"] or "").strip().lower()
+        ticker = str(row["ticker"] or "").strip().upper() or "UNKNOWN"
+        playbook = _pick_playbook_id(row["playbook"]) or "unknown"
+        has_contract = bool(str(row["contract_symbol"] or "").strip())
         if recommendation:
             recommendation_counts[recommendation] += 1
         if outcome_state:
@@ -757,16 +1085,46 @@ def summarize_forward_holdout(
 
         if event_type == "scan_pick":
             scan_pick_count += 1
+            by_symbol[ticker]["scan_pick_count"] += 1
+            by_playbook[playbook]["scan_pick_count"] += 1
+            if has_contract:
+                exact_contract_coverage["scan_pick"]["with_contract_count"] += 1
+                session_contract_coverage[int(row["session_id"])]["scan_pick_with_contract_count"] += 1
+            else:
+                exact_contract_coverage["scan_pick"]["missing_contract_count"] += 1
+                session_contract_coverage[int(row["session_id"])]["scan_pick_missing_contract_count"] += 1
             if outcome_state == "taken":
                 taken_pick_count += 1
+                by_symbol[ticker]["taken_pick_count"] += 1
+                by_playbook[playbook]["taken_pick_count"] += 1
+                if has_contract:
+                    exact_contract_coverage["taken_pick"]["with_contract_count"] += 1
+                    session_contract_coverage[int(row["session_id"])]["taken_pick_with_contract_count"] += 1
+                else:
+                    exact_contract_coverage["taken_pick"]["missing_contract_count"] += 1
+                    session_contract_coverage[int(row["session_id"])]["taken_pick_missing_contract_count"] += 1
             elif outcome_state == "blocked":
                 blocked_pick_count += 1
+                by_symbol[ticker]["blocked_pick_count"] += 1
+                by_playbook[playbook]["blocked_pick_count"] += 1
             else:
                 skipped_pick_count += 1
+                by_symbol[ticker]["skipped_pick_count"] += 1
+                by_playbook[playbook]["skipped_pick_count"] += 1
         elif event_type == "position_review":
             review_count += 1
+            by_symbol[ticker]["review_count"] += 1
+            by_playbook[playbook]["review_count"] += 1
+            if has_contract:
+                exact_contract_coverage["position_review"]["with_contract_count"] += 1
+                session_contract_coverage[int(row["session_id"])]["review_with_contract_count"] += 1
+            else:
+                exact_contract_coverage["position_review"]["missing_contract_count"] += 1
+                session_contract_coverage[int(row["session_id"])]["review_missing_contract_count"] += 1
             if outcome_state == "closed":
                 closed_review_count += 1
+                by_symbol[ticker]["closed_review_count"] += 1
+                by_playbook[playbook]["closed_review_count"] += 1
 
     for session_row in filtered_sessions:
         session_id = int(session_row["id"])
@@ -798,6 +1156,7 @@ def summarize_forward_holdout(
     return {
         "available": True,
         "cohort_id": normalized_cohort,
+        "source_label": normalized_source_label,
         "db_path": str(path),
         "session_count": len(filtered_sessions) if filtered_sessions else len(session_ids),
         "earliest_recorded_at_utc": earliest.astimezone(UTC).isoformat().replace("+00:00", "Z") if earliest else None,
@@ -818,4 +1177,17 @@ def summarize_forward_holdout(
         "latest_scan_funnel": latest_scan_funnel,
         "sessions_with_zero_scan_picks": sessions_with_zero_scan_picks,
         "latest_starvation_stage": latest_starvation_stage,
+        "by_symbol": {
+            key: {metric: int(value) for metric, value in sorted(metrics.items())}
+            for key, metrics in sorted(by_symbol.items())
+        },
+        "by_playbook": {
+            key: {metric: int(value) for metric, value in sorted(metrics.items())}
+            for key, metrics in sorted(by_playbook.items())
+        },
+        "exact_contract_coverage": exact_contract_coverage,
+        "session_contract_coverage": [
+            {"session_id": int(session_id), **coverage}
+            for session_id, coverage in sorted(session_contract_coverage.items())
+        ],
     }

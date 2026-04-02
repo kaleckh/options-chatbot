@@ -9,7 +9,7 @@ import json
 import math
 import sqlite3
 import contextlib
-from datetime import datetime
+from datetime import UTC, datetime
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Any
@@ -50,9 +50,14 @@ from market_data_service import (
     reset_cache_stats as _md_reset_cache_stats,
 )
 
+import wfo_optimizer as wfo_module
 from wfo_optimizer import (
+    ARCHIVED_FORWARD_SOURCE_LABEL,
     run_historical_backtest,
+    run_archived_forward_daily_backtest,
     load_last_results_by_truth_lane,
+    load_last_archived_forward_daily_results,
+    load_preferred_results_by_truth_lane,
     build_prediction_replay_report,
     build_options_experiment_matrix,
     build_options_stability_report,
@@ -61,6 +66,12 @@ from wfo_optimizer import (
     build_truth_lane_comparison,
 )
 from metric_truth_audit import build_metric_truth_report
+from forward_options_ledger import (
+    build_forward_scan_snapshot,
+    list_forward_sessions,
+    record_forward_snapshot,
+    summarize_forward_holdout,
+)
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
 from suggested_trades_repository import create_suggested_trades_repository
@@ -188,10 +199,28 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(pick)
     normalized["prediction_type"] = pick.get("type")
     normalized["type"] = pick.get("direction")
+    normalized["direction"] = pick.get("direction") or pick.get("type")
+    normalized["option_type"] = pick.get("option_type") or pick.get("direction") or pick.get("type")
     normalized["contract_symbol"] = pick.get("contract_symbol") or pick.get("contractSymbol")
     normalized["ev"] = pick.get("ev_pct")
-    normalized["strike"] = pick.get("strike_est")
-    normalized["premium"] = pick.get("est_premium")
+    normalized["strike"] = pick.get("strike") if pick.get("strike") is not None else pick.get("strike_est")
+    normalized["premium"] = pick.get("premium") if pick.get("premium") is not None else pick.get("est_premium")
+    normalized["mid"] = pick.get("mid") if pick.get("mid") is not None else normalized["premium"]
+    normalized["delta"] = pick.get("delta") if pick.get("delta") is not None else pick.get("delta_est")
+    normalized["iv_percentile"] = (
+        pick.get("iv_percentile")
+        if pick.get("iv_percentile") is not None
+        else (
+            pick.get("iv_pct")
+            if pick.get("iv_pct") is not None
+            else pick.get("iv_rank")
+        )
+    )
+    normalized["iv_pct"] = (
+        pick.get("iv_pct")
+        if pick.get("iv_pct") is not None
+        else normalized["iv_percentile"]
+    )
     normalized["sector"] = pick.get("sector")
     normalized["market_regime"] = pick.get("market_regime") or scan_pick_market_regime(pick)
     normalized["policy_decision"] = pick.get("trade_policy_decision")
@@ -203,7 +232,208 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["guardrail_reasons"] = pick.get("guardrail_reasons")
     normalized["suggested_size_tier"] = pick.get("suggested_size_tier")
     normalized["suggested_size_reason"] = pick.get("suggested_size_reason")
+    normalized["quote_time_et"] = pick.get("quote_time_et")
+    normalized["quote_basis"] = pick.get("quote_basis")
+    normalized["underlying_price_at_selection"] = (
+        pick.get("underlying_price_at_selection")
+        if pick.get("underlying_price_at_selection") is not None
+        else pick.get("stock_price")
+    )
+    normalized["selection_source"] = (
+        pick.get("selection_source")
+        or pick.get("contract_selection_source")
+    )
+    normalized["promotion_class"] = pick.get("promotion_class")
+    normalized["promotable"] = bool(pick.get("promotable"))
+    normalized["options_snapshot_status"] = pick.get("options_snapshot_status")
+    normalized["option_chain_status"] = pick.get("option_chain_status")
+    normalized["managed_eligible"] = bool(pick.get("managed_eligible"))
+    normalized["managed_block_reason"] = pick.get("managed_block_reason")
+    normalized["bid"] = pick.get("bid")
+    normalized["ask"] = pick.get("ask")
+    normalized["candidate_rank"] = pick.get("candidate_rank")
     return normalized
+
+
+def _normalize_scan_picks(picks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized_picks: list[dict[str, Any]] = []
+    for idx, pick in enumerate(list(picks or []), start=1):
+        normalized = _normalize_scan_pick(pick)
+        normalized["candidate_rank"] = int(normalized.get("candidate_rank") or idx)
+        normalized_picks.append(normalized)
+    return normalized_picks
+
+
+def _record_forward_truth_for_scan(
+    *,
+    result: dict[str, Any],
+    normalized_picks: list[dict[str, Any]],
+) -> dict[str, Any]:
+    tracked_positions = None
+    reviewed_positions: list[dict[str, Any]] = []
+    positions_error = None
+    if getattr(POSITIONS_REPOSITORY, "is_available", False):
+        try:
+            tracked_positions = POSITIONS_REPOSITORY.list_positions("open")
+        except Exception as exc:
+            tracked_positions = []
+            positions_error = f"tracked_positions_snapshot_failed: {exc}"
+        try:
+            reviewed_positions = review_open_positions(POSITIONS_REPOSITORY)
+        except Exception as exc:
+            reviewed_positions = []
+            error_text = f"position_review_failed: {exc}"
+            positions_error = f"{positions_error}; {error_text}" if positions_error else error_text
+    else:
+        positions_error = getattr(POSITIONS_REPOSITORY, "error_message", None)
+
+    scan_snapshot = build_forward_scan_snapshot(
+        picks=normalized_picks,
+        policy_applied=bool(result.get("policy_applied")),
+        policy=result.get("policy"),
+        policy_error=result.get("policy_error"),
+        playbook=result.get("playbook"),
+        truth_lane=result.get("truth_lane"),
+        scan_funnel=result.get("scan_funnel"),
+        policy_decision_counts=result.get("policy_decision_counts"),
+        guardrail_decision_counts=result.get("guardrail_decision_counts"),
+        candidate_count=result.get("candidate_count"),
+        returned_count=result.get("returned_count"),
+        playbook_exit_audit=result.get("playbook_exit_audit"),
+        playbook_exit_audit_error=result.get("playbook_exit_audit_error"),
+        exposure_snapshot=result.get("exposure_snapshot"),
+        positions_error=positions_error,
+    )
+    recorded = record_forward_snapshot(
+        scan_snapshot=scan_snapshot,
+        reviewed_positions=reviewed_positions,
+        tracked_positions=tracked_positions,
+        source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+    )
+    return {
+        "forward_truth_recorded": True,
+        "forward_truth_session_id": recorded.get("session_id"),
+        "forward_truth_error": None,
+    }
+
+
+def _forward_evidence_log_path() -> str:
+    ledger_path = os.getenv("FORWARD_OPTIONS_LEDGER_DB_PATH") or os.path.join(
+        ROOT_DIR,
+        "data",
+        "options-validation",
+        "forward_tracking.db",
+    )
+    return os.path.join(os.path.dirname(os.path.abspath(ledger_path)), "forward_evidence_events.jsonl")
+
+
+def _append_forward_evidence_event(
+    *,
+    recorded: bool,
+    session_id: int | None,
+    error: str | None,
+    picks: list[dict[str, Any]],
+) -> None:
+    payload = {
+        "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "source_label": ARCHIVED_FORWARD_SOURCE_LABEL,
+        "forward_truth_recorded": bool(recorded),
+        "forward_truth_session_id": session_id,
+        "forward_truth_error": str(error) if error else None,
+        "scan_pick_count": len(list(picks or [])),
+        "exact_contract_capture_count": sum(
+            1 for pick in list(picks or []) if str(pick.get("contract_symbol") or "").strip()
+        ),
+    }
+    path = _forward_evidence_log_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf8") as handle:
+        handle.write(json.dumps(payload) + "\n")
+
+
+def _read_forward_evidence_events(limit: int = 200) -> list[dict[str, Any]]:
+    path = _forward_evidence_log_path()
+    if not os.path.exists(path):
+        return []
+    events: list[dict[str, Any]] = []
+    with open(path, "r", encoding="utf8") as handle:
+        for line in handle:
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                events.append(json.loads(raw))
+            except json.JSONDecodeError:
+                continue
+    if limit > 0:
+        return events[-int(limit):]
+    return events
+
+
+def _latest_artifact_timestamp(path: str) -> str | None:
+    if not os.path.exists(path):
+        return None
+    return datetime.fromtimestamp(os.path.getmtime(path)).isoformat(timespec="seconds")
+
+
+def _build_forward_evidence_report() -> dict[str, Any]:
+    summary = summarize_forward_holdout(source_label=ARCHIVED_FORWARD_SOURCE_LABEL)
+    recent_sessions = list_forward_sessions(limit=25, source_label=ARCHIVED_FORWARD_SOURCE_LABEL)
+    events = _read_forward_evidence_events()
+    latest_event = events[-1] if events else None
+    failure_events = [event for event in events if not bool(event.get("forward_truth_recorded"))]
+    latest_failure = failure_events[-1] if failure_events else None
+    latest_artifact = load_last_archived_forward_daily_results()
+    latest_artifact_path = wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE
+    latest_artifact_timestamp = _latest_artifact_timestamp(latest_artifact_path)
+    historical_evidence_available = int(summary.get("scan_pick_count") or 0) > 0
+    latest_capture_created_picks = bool(latest_event) and bool(latest_event.get("forward_truth_recorded")) and int(latest_event.get("scan_pick_count") or 0) > 0
+    if latest_capture_created_picks:
+        activation_status = "active"
+        activation_message = "The latest recorded /api/scan created archived scan_pick evidence."
+    elif historical_evidence_available:
+        activation_status = "historical_evidence_only_latest_scan_empty"
+        activation_message = "Archived forward evidence exists, but the latest recorded /api/scan did not add any scan_pick rows."
+    else:
+        activation_status = "archived_forward_unavailable"
+        activation_message = "No /api/scan scan_pick events are archived yet, so archived-forward profitability remains unavailable."
+    artifact_available = bool(latest_artifact) and not bool(latest_artifact.get("insufficient_archived_evidence"))
+
+    return {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "source_label": ARCHIVED_FORWARD_SOURCE_LABEL,
+        "recent_session_count": len(recent_sessions),
+        "scan_pick_count": int(summary.get("scan_pick_count") or 0),
+        "exact_contract_capture_counts": dict(summary.get("exact_contract_coverage", {}).get("scan_pick") or {}),
+        "forward_truth_recording_failure_count": len(failure_events),
+        "latest_archived_forward_artifact_timestamp": latest_artifact_timestamp,
+        "activation_check": {
+            "active": latest_capture_created_picks,
+            "status": activation_status,
+            "message": activation_message,
+            "historical_evidence_available": historical_evidence_available,
+            "latest_recorded_scan_pick_count": int(latest_event.get("scan_pick_count") or 0) if latest_event else 0,
+        },
+        "recording_health": {
+            "events_logged": len(events),
+            "recorded_success_count": sum(1 for event in events if bool(event.get("forward_truth_recorded"))),
+            "recorded_failure_count": len(failure_events),
+            "latest_event": latest_event,
+            "latest_failure": latest_failure,
+        },
+        "ledger_summary": summary,
+        "archived_forward_artifact": {
+            "available": artifact_available,
+            "path": latest_artifact_path,
+            "run_at": latest_artifact.get("run_at") if latest_artifact else None,
+            "evidence_status": latest_artifact.get("evidence_status") if latest_artifact else None,
+            "primary_judge_trade_count": int(latest_artifact.get("primary_judge_trade_count") or 0) if latest_artifact else 0,
+            "primary_judge_fallback_used": bool(latest_artifact.get("primary_judge_fallback_used")) if latest_artifact else False,
+            "primary_judge_fallback_reason": latest_artifact.get("primary_judge_fallback_reason") if latest_artifact else None,
+            "pending_truth_horizon_count": int(latest_artifact.get("pending_truth_horizon_count") or 0) if latest_artifact else 0,
+            "archived_sample_date_coverage": dict(latest_artifact.get("archived_sample_date_coverage") or {}) if latest_artifact else {},
+        },
+    }
 
 
 def _positions_unavailable_response():
@@ -290,9 +520,38 @@ async def run_scan_endpoint(body: dict[str, Any] = {}):
     n_picks = int(body.get("n_picks", DEFAULT_SCAN_PICKS))
     try:
         result = _run_supervised_scan_request(body, n_picks=n_picks, include_policy_flags=True)
+        normalized_picks = _normalize_scan_picks(result["picks"])
+        normalized_watch_picks = _normalize_scan_picks(result.get("watch_picks") or [])
+        forward_truth_meta = {
+            "forward_truth_recorded": False,
+            "forward_truth_session_id": None,
+            "forward_truth_error": None,
+        }
+        try:
+            forward_truth_meta = _record_forward_truth_for_scan(
+                result=result,
+                normalized_picks=normalized_picks,
+            )
+        except Exception as exc:
+            forward_truth_meta = {
+                "forward_truth_recorded": False,
+                "forward_truth_session_id": None,
+                "forward_truth_error": str(exc),
+            }
+        try:
+            _append_forward_evidence_event(
+                recorded=bool(forward_truth_meta.get("forward_truth_recorded")),
+                session_id=forward_truth_meta.get("forward_truth_session_id"),
+                error=forward_truth_meta.get("forward_truth_error"),
+                picks=normalized_picks,
+            )
+        except Exception:
+            pass
         return {
-            **{key: value for key, value in result.items() if key not in {"picks", "ranked_picks"}},
-            "picks": [_normalize_scan_pick(pick) for pick in result["picks"]],
+            **{key: value for key, value in result.items() if key not in {"picks", "ranked_picks", "watch_picks"}},
+            "picks": normalized_picks,
+            "watch_picks": normalized_watch_picks,
+            **forward_truth_meta,
         }
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -479,10 +738,11 @@ async def get_recommendations(body: dict[str, Any] = {}):
     supervised = _run_supervised_scan_request(body, n_picks=n_picks)
     if supervised.get("policy_fail_closed"):
         return supervised
+    candidates = supervised["picks"] if supervised.get("policy_applied") else supervised["ranked_picks"]
     result = generate_position_recommendations(
         pending,
         n_picks=n_picks,
-        candidates=supervised["ranked_picks"],
+        candidates=candidates,
     )
     return {
         **result,
@@ -490,6 +750,13 @@ async def get_recommendations(body: dict[str, Any] = {}):
         "policy": supervised["policy"],
         "playbook": supervised["playbook"],
         "truth_lane": supervised["truth_lane"],
+        "watch_picks": _normalize_scan_picks(supervised.get("watch_picks") or []),
+        "managed_lane_status": supervised.get("managed_lane_status"),
+        "truth_window_status": supervised.get("truth_window_status"),
+        "authoritative_evidence_source": supervised.get("authoritative_evidence_source"),
+        "authoritative_evidence_status": supervised.get("authoritative_evidence_status"),
+        "watch_priority_symbols": supervised.get("watch_priority_symbols"),
+        "watch_deprioritized_symbols": supervised.get("watch_deprioritized_symbols"),
     }
 
 
@@ -502,10 +769,11 @@ async def roll_picks(body: dict[str, Any] = {}):
     supervised = _run_supervised_scan_request(body, n_picks=n_picks)
     if supervised.get("policy_fail_closed"):
         return supervised
+    candidates = supervised["picks"] if supervised.get("policy_applied") else supervised["ranked_picks"]
     result = roll_forward_daily_picks(
         pending,
         n_picks=n_picks,
-        candidates=supervised["ranked_picks"],
+        candidates=candidates,
     )
     return {
         **result,
@@ -513,6 +781,13 @@ async def roll_picks(body: dict[str, Any] = {}):
         "policy": supervised["policy"],
         "playbook": supervised["playbook"],
         "truth_lane": supervised["truth_lane"],
+        "watch_picks": _normalize_scan_picks(supervised.get("watch_picks") or []),
+        "managed_lane_status": supervised.get("managed_lane_status"),
+        "truth_window_status": supervised.get("truth_window_status"),
+        "authoritative_evidence_source": supervised.get("authoritative_evidence_source"),
+        "authoritative_evidence_status": supervised.get("authoritative_evidence_status"),
+        "watch_priority_symbols": supervised.get("watch_priority_symbols"),
+        "watch_deprioritized_symbols": supervised.get("watch_deprioritized_symbols"),
     }
 
 
@@ -630,6 +905,18 @@ async def run_backtest_endpoint(body: dict[str, Any]):
         raise HTTPException(500, str(e))
 
 
+@app.post("/api/backtest/archived-forward")
+async def run_archived_forward_backtest_endpoint(body: dict[str, Any] = {}):
+    """Run archived-forward exact-contract imported-daily replay over /api/scan picks."""
+    try:
+        result = run_archived_forward_daily_backtest(
+            source_label=str(body.get("source_label") or ARCHIVED_FORWARD_SOURCE_LABEL),
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
 @app.get("/api/backtest/last")
 async def get_last_backtest(truth_lane: str | None = None):
     """Return last saved backtest results."""
@@ -639,11 +926,20 @@ async def get_last_backtest(truth_lane: str | None = None):
     return result
 
 
+@app.get("/api/backtest/forward-evidence")
+async def get_forward_evidence_report():
+    """Return evidence-health for archived /api/scan exact-contract validation."""
+    try:
+        return _build_forward_evidence_report()
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
 @app.get("/api/backtest/report")
 async def get_backtest_report(min_trades: int = 20, truth_lane: str | None = None):
     """Return a grouped replay report from the most recent backtest."""
     result = build_prediction_replay_report(
-        result=load_last_results_by_truth_lane(truth_lane),
+        result=load_preferred_results_by_truth_lane(truth_lane),
         min_trades=min_trades,
     )
     if result.get("error"):
@@ -654,7 +950,7 @@ async def get_backtest_report(min_trades: int = 20, truth_lane: str | None = Non
 @app.get("/api/backtest/metric-truth")
 async def get_metric_truth_report(min_trades: int = 20, bucket_size: int = 10, truth_lane: str | None = None):
     """Return a calibration and profitability truth report from the most recent backtest."""
-    result = load_last_results_by_truth_lane(truth_lane)
+    result = load_preferred_results_by_truth_lane(truth_lane)
     if not result:
         return {"error": "No backtest results found"}
     return build_metric_truth_report(
@@ -668,7 +964,7 @@ async def get_metric_truth_report(min_trades: int = 20, bucket_size: int = 10, t
 async def get_backtest_experiments(body: dict[str, Any] = {}):
     """Return a ranked options-only experiment matrix from the most recent backtest."""
     result = build_options_experiment_matrix(
-        result=load_last_results_by_truth_lane(body.get("truth_lane")),
+        result=load_preferred_results_by_truth_lane(body.get("truth_lane")),
         min_trades=body.get("min_trades", 20),
         score_floors=body.get("score_floors"),
         max_tickers=body.get("max_tickers", 8),
@@ -689,7 +985,7 @@ async def get_backtest_stability(
 ):
     """Return fixed-window and rolling-window stability results for the latest backtest."""
     result = build_options_stability_report(
-        result=load_last_results_by_truth_lane(truth_lane),
+        result=load_preferred_results_by_truth_lane(truth_lane),
         min_trades=min_trades,
         min_profit_factor=min_profit_factor,
     )

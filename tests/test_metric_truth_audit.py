@@ -105,6 +105,23 @@ class MetricTruthAuditTests(unittest.TestCase):
         self.assertEqual(bucket["directional_accuracy_pct"], 50.0)
         self.assertEqual(bucket["calibration_gap_pct"], -22.0)
 
+    def test_non_direction_metric_buckets_do_not_report_calibration_gap(self):
+        result = {
+            "run_at": "2026-03-30T10:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "total_days": 100,
+            "trades": [
+                {"direction_score": 71, "quality_score": 60, "tech_score": 70, "ev": 12, "pnl_pct": 5, "directional_correct": True},
+                {"direction_score": 73, "quality_score": 62, "tech_score": 72, "ev": 13, "pnl_pct": -2, "directional_correct": False},
+            ],
+        }
+
+        report = audit.build_metric_truth_report(result, min_trades=1)
+        quality_bucket = next(item for item in report["metric_buckets"]["quality_score"] if item["label"] == "60-69")
+
+        self.assertNotIn("calibration_gap_pct", quality_bucket)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -108,6 +108,18 @@ class _FailingOptionTicker:
         raise AssertionError("option chain should have been served from persistence")
 
 
+class _ExplodingOptionTicker:
+    def __init__(self, symbol: str):
+        self.symbol = symbol
+
+    @property
+    def options(self):
+        raise RuntimeError("option expiries unavailable")
+
+    def option_chain(self, expiry: str):
+        raise RuntimeError("option chain unavailable")
+
+
 @unittest.skipUnless(MARKET_DATA_SERVICE_AVAILABLE, "market_data_service not available in this checkout")
 class MarketDataServiceTests(unittest.TestCase):
     def setUp(self):
@@ -243,6 +255,36 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(stale_chain.value.calls["strike"].tolist(), fresh_chain.value.calls["strike"].tolist())
         self.assertEqual(stale_chain.value.puts["strike"].tolist(), fresh_chain.value.puts["strike"].tolist())
 
+    def test_option_metadata_refreshes_stale_cache_when_network_is_available(self):
+        service = self._service()
+
+        class _FutureDateTime(FrozenDateTime):
+            @classmethod
+            def now(cls, tz=None):
+                return super().now(tz) + timedelta(minutes=10)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", side_effect=self._make_ticker_factory()), \
+             patch.object(service, "datetime", FrozenDateTime):
+            fresh_options = service.get_options("AAA", include_metadata=True)
+            fresh_chain = service.get_option_chain("AAA", fresh_options.value[0], include_metadata=True)
+
+        service._MEMORY_CACHE.clear()
+        service._SCHEMA_READY.clear()
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", side_effect=self._make_ticker_factory()), \
+             patch.object(service, "datetime", _FutureDateTime):
+            refreshed_options = service.get_options("AAA", include_metadata=True)
+            refreshed_chain = service.get_option_chain("AAA", fresh_options.value[0], include_metadata=True)
+
+        self.assertEqual(refreshed_options.status, "fresh")
+        self.assertEqual(refreshed_chain.status, "fresh")
+        self.assertEqual(refreshed_options.value, fresh_options.value)
+        self.assertEqual(refreshed_chain.value.calls["strike"].tolist(), fresh_chain.value.calls["strike"].tolist())
+        self.assertGreaterEqual(self.ticker.option_calls, 2)
+        self.assertGreaterEqual(self.ticker.option_chain_calls.count(fresh_options.value[0]), 2)
+
     def test_option_metadata_marks_network_failures_as_error(self):
         service = self._service()
         with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
@@ -258,6 +300,16 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertFalse(chain.freshness.fresh)
         self.assertTrue(chain.value.calls.empty)
         self.assertTrue(chain.value.puts.empty)
+
+    def test_non_metadata_option_fetch_raises_when_no_truth_is_available(self):
+        service = self._service()
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", side_effect=lambda symbol: _ExplodingOptionTicker(symbol)), \
+             patch.object(service, "datetime", FrozenDateTime):
+            with self.assertRaisesRegex(RuntimeError, "option expiries fetch failed"):
+                service.get_options("AAA")
+            with self.assertRaisesRegex(RuntimeError, "option chain fetch failed"):
+                service.get_option_chain("AAA", "2026-04-10")
 
     def test_ticker_info_cache_reuses_reference_fields(self):
         service = self._service()

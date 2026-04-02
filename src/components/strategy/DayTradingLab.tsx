@@ -11,6 +11,21 @@ import type {
   DayTradingWatchlist,
 } from "@/lib/types";
 
+type DayTradingMarket = "crypto" | "equities_legacy";
+
+const MARKET_OPTIONS: { value: DayTradingMarket; label: string; description: string }[] = [
+  {
+    value: "crypto",
+    label: "Crypto",
+    description: "Default research lane using free Binance-style spot data.",
+  },
+  {
+    value: "equities_legacy",
+    label: "Equities Legacy",
+    description: "Previous Yahoo-based ETF morning lab kept for comparison.",
+  },
+];
+
 function pct(value: number | null | undefined, digits: number = 1): string {
   if (value == null || Number.isNaN(value)) return "-";
   return `${(value * 100).toFixed(digits)}%`;
@@ -39,6 +54,27 @@ function statusTone(status: string): string {
 
 function watchStatusLabel(status: string): string {
   return status.replace(/_/g, " ");
+}
+
+function marketCopy(market: DayTradingMarket) {
+  if (market === "equities_legacy") {
+    return {
+      title: "Day Trading Lab",
+      description:
+        "Legacy ETF morning lab that tracks SPY/QQQ replay evidence and paper activity. This lane is still available for comparison, but crypto is now the default active research track.",
+      watchlistTitle: "Morning Watchlist",
+      windowActive: "Morning window live",
+      windowInactive: "Outside morning window",
+    };
+  }
+  return {
+    title: "Crypto Day Trading Lab",
+    description:
+      "Default active research lane for BTCUSDT, ETHUSDT, and SOLUSDT. It uses imported Binance-style 1m spot history, derives 5m strategy bars, watches two ET liquidity windows, and blocks notify decisions when live data is stale or untrusted.",
+    watchlistTitle: "Scheduled Window Watchlist",
+    windowActive: "Active crypto window",
+    windowInactive: "Outside scheduled windows",
+  };
 }
 
 function StrategyCard({ strategy }: { strategy: DayTradingStrategySpec }) {
@@ -84,6 +120,7 @@ function StrategyCard({ strategy }: { strategy: DayTradingStrategySpec }) {
 export default function DayTradingLab() {
   const [snapshot, setSnapshot] = useState<DayTradingSnapshot | null>(null);
   const [watchlist, setWatchlist] = useState<DayTradingWatchlist | null>(null);
+  const [market, setMarket] = useState<DayTradingMarket>("crypto");
   const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(true);
   const [watchlistLoading, setWatchlistLoading] = useState(false);
@@ -97,23 +134,25 @@ export default function DayTradingLab() {
       const params = new URLSearchParams({
         bars: String(requestedBars),
         limit: String(requestedLimit),
+        market,
       });
       const res = await fetch(`/api/day-trading/watchlist?${params.toString()}`);
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to load morning watchlist");
+      if (!res.ok) throw new Error(data.error || "Failed to load day-trading watchlist");
       setWatchlist(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load morning watchlist");
+      setError(err instanceof Error ? err.message : "Failed to load day-trading watchlist");
     } finally {
       setWatchlistLoading(false);
     }
-  }, []);
+  }, [market]);
 
   const loadSnapshot = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/day-trading");
+      const params = new URLSearchParams({ market });
+      const res = await fetch(`/api/day-trading?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load day-trading lab");
       setSnapshot(data);
@@ -127,7 +166,7 @@ export default function DayTradingLab() {
     } finally {
       setLoading(false);
     }
-  }, [fetchWatchlist]);
+  }, [fetchWatchlist, market]);
 
   useEffect(() => {
     loadSnapshot();
@@ -140,7 +179,7 @@ export default function DayTradingLab() {
       const res = await fetch("/api/day-trading", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bars, startingCash }),
+        body: JSON.stringify({ market, bars, startingCash }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Validation run failed");
@@ -170,6 +209,8 @@ export default function DayTradingLab() {
   }
 
   const report: DayTradingReport | null = snapshot.lastReport;
+  const selectedMarket = (snapshot.market || market) as DayTradingMarket;
+  const copy = marketCopy(selectedMarket);
   const scoreboardRows = snapshot.scoreboard.items.map((item) => ({
     Strategy: item.strategyName,
     Status: item.status.replace(/_/g, " "),
@@ -209,6 +250,7 @@ export default function DayTradingLab() {
     "Triggered At": item.latestSignalTimestamp
       ? item.latestSignalTimestamp.slice(11, 16)
       : "-",
+    Window: item.sessionWindowLabel || "-",
     Source: item.marketDataSource,
     Warning: item.marketDataWarning || "-",
   })) || [];
@@ -218,11 +260,9 @@ export default function DayTradingLab() {
       <div className="bg-bg-2 border border-border rounded-lg p-4">
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
-            <div className="section-header mt-0 mb-1 border-0 pb-0">Day Trading Lab</div>
+            <div className="section-header mt-0 mb-1 border-0 pb-0">{copy.title}</div>
             <p className="text-sm text-text-3 max-w-3xl">
-              Tracks a small set of ETF morning setups, ranks them by replay evidence, and checks whether they are live now.
-              It fetches Yahoo intraday bars when available, blocks live notify decisions on untrusted fallback data,
-              persists paper trades, and stages strategies through draft, paper, and review states.
+              {copy.description}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -245,7 +285,24 @@ export default function DayTradingLab() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="text-xs text-text-2 block mb-1">Active market</label>
+            <select
+              value={market}
+              onChange={(e) => setMarket(e.target.value as DayTradingMarket)}
+              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
+            >
+              {MARKET_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="mt-1 text-xs text-text-3">
+              {MARKET_OPTIONS.find((option) => option.value === market)?.description}
+            </div>
+          </div>
           <div>
             <label className="text-xs text-text-2 block mb-1">Bars of intraday history</label>
             <input
@@ -307,13 +364,13 @@ export default function DayTradingLab() {
         <div className="space-y-4">
           <div className="section-header flex items-center gap-2">
             <BellRing size={14} />
-            Morning Watchlist
+            {copy.watchlistTitle}
           </div>
           <div className="grid grid-cols-4 gap-3">
             <MetricCard
               label="Notify Now"
               value={String(watchlist.notifyNowCount)}
-              delta={watchlist.morningWindow.activeNow ? "Morning window live" : "Outside morning window"}
+              delta={(watchlist.sessionWindow?.activeNow || watchlist.morningWindow.activeNow) ? copy.windowActive : copy.windowInactive}
             />
             <MetricCard
               label="Strategies Checked"
@@ -326,18 +383,27 @@ export default function DayTradingLab() {
               delta={watchlist.items[0]?.strategyName || "No ranked strategy yet"}
             />
             <MetricCard
-              label="Alert Eligible"
-              value={String(watchlist.items.filter((item) => item.alertEligible).length)}
-              delta={watchlist.items.some((item) => item.alertEligible)
-                ? "Replay-approved setup exists"
-                : "No setup has earned alerts yet"}
+              label={selectedMarket === "crypto" ? "Trusted Data" : "Alert Eligible"}
+              value={String(selectedMarket === "crypto"
+                ? watchlist.items.filter((item) => item.currentDataTrusted).length
+                : watchlist.items.filter((item) => item.alertEligible).length)}
+              delta={selectedMarket === "crypto"
+                ? `${watchlist.sessionWindow?.windows.length || 0} scheduled windows`
+                : (watchlist.items.some((item) => item.alertEligible)
+                  ? "Replay-approved setup exists"
+                  : "No setup has earned alerts yet")}
             />
           </div>
+          {selectedMarket === "crypto" && watchlist.sessionWindow && (
+            <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
+              Windows: {watchlist.sessionWindow.windows.map((window) => `${window.label} ${window.startEt}-${window.endEt} ET`).join(" | ")}
+            </div>
+          )}
           <FinTable
             data={watchlistRows}
             badgeCol="Status"
             rateCols={["Hit Rate"]}
-            monoCols={["Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At"]}
+            monoCols={["Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At", "Window"]}
             maxHeight="360px"
           />
         </div>
@@ -389,6 +455,11 @@ export default function DayTradingLab() {
               value={String(report.paperAccount.positions.length)}
             />
           </div>
+          {selectedMarket === "crypto" && snapshot.lastImport && (
+            <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
+              Latest import: {snapshot.lastImport.results.map((item) => `${item.symbol} ${item.totalBars} x 1m bars`).join(" | ")}
+            </div>
+          )}
           <FinTable
             data={validationRows}
             pnlCols={["Backtest Return"]}

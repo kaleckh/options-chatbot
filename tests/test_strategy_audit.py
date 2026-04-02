@@ -12,6 +12,7 @@ import pandas as pd
 import expectancy_calibration as ec
 import market_data_service as mds
 import options_chatbot as oc
+import supervised_scan as ss
 import wfo_optimizer as wfo
 
 
@@ -1126,6 +1127,27 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         ranked = sorted([sparse_high, dense], key=oc._candidate_rank_tuple, reverse=True)
         self.assertIs(ranked[0], dense)
 
+    def test_live_candidate_rank_prefers_dense_expectancy_within_promotable_exact_cohort(self):
+        lower_expectancy = {
+            "direction_score": 82.0,
+            "quality_score": 88.0,
+            "tech_score": 84.0,
+            "calibrated_expectancy_pct": 12.0,
+            "calibration_is_dense": True,
+            "promotion_class": "promotable_exact_contract",
+        }
+        higher_expectancy = {
+            "direction_score": 71.0,
+            "quality_score": 72.0,
+            "tech_score": 70.0,
+            "calibrated_expectancy_pct": 28.0,
+            "calibration_is_dense": True,
+            "promotion_class": "promotable_exact_contract",
+        }
+
+        ranked = sorted([lower_expectancy, higher_expectancy], key=oc._candidate_rank_tuple, reverse=True)
+        self.assertIs(ranked[0], higher_expectancy)
+
     def test_trade_promotion_class_marks_nearest_sparse_and_bootstrap(self):
         promotable = {
             "entry_contract_resolution": "exact_target_contract",
@@ -1149,6 +1171,22 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(wfo._trade_promotion_class(nearest), "research_nearest_listed")
         self.assertEqual(wfo._trade_promotion_class(sparse), "research_sparse_calibration")
         self.assertEqual(wfo._trade_promotion_class(bootstrap), "research_bootstrap")
+
+    def test_trade_calibration_density_does_not_promote_legacy_missing_density_rows(self):
+        legacy = {
+            "entry_contract_resolution": "exact_target_contract",
+            "selection_source": "replay_calibrated",
+            "calibration_is_dense": False,
+        }
+        missing_density = {
+            "entry_contract_resolution": "exact_target_contract",
+            "selection_source": "replay_calibrated",
+        }
+
+        self.assertEqual(wfo._trade_calibration_density(legacy), "sparse")
+        self.assertEqual(wfo._trade_promotion_class(legacy), "research_sparse_calibration")
+        self.assertEqual(wfo._trade_calibration_density(missing_density), "unknown")
+        self.assertNotEqual(wfo._trade_promotion_class(missing_density), "promotable_exact_contract")
 
     def test_live_policy_splits_symbol_promotion_status(self):
         def _trade(ticker: str, pnl_pct: float) -> dict:
@@ -1212,10 +1250,372 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
              patch.object(wfo, "build_options_stability_report", return_value=stability):
             policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
 
-        self.assertEqual(policy["promotion_status"], "promote")
+        self.assertEqual(policy["promotion_status"], "watch")
         self.assertEqual(policy["by_symbol"]["SPY"]["promotion_metrics"]["promotion_status"], "promote")
         self.assertEqual(policy["by_symbol"]["QQQ"]["promotion_metrics"]["promotion_status"], "block")
+        self.assertIn("stability_not_promote", policy["readiness_blockers"])
         self.assertEqual(policy["scan_policy"]["hard_filters"]["approved_tickers"], ["SPY"])
+
+    def test_live_policy_stays_watch_when_archived_evidence_is_insufficient(self):
+        trade = {
+            "ticker": "SPY",
+            "type": "call",
+            "direction_score": 72.0,
+            "quality_score": 78.0,
+            "tech_score": 80.0,
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "selection_source": "replay_calibrated",
+            "calibration_density": "dense",
+            "entry_contract_resolution": "exact_target_contract",
+            "exit_reason": "target",
+            "directional_correct": True,
+            "pnl_pct": 12.0,
+        }
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "priced_trade_count": 30,
+            "unpriced_trade_count": 0,
+            "trades": [dict(trade) for _ in range(30)],
+            "preferred_evidence_source": {"status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS},
+            "evidence_status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+        }
+        matrix = {
+            "source": {
+                "pricing_lane": "historical_imported_daily",
+                "playbook": "short_term",
+                "quote_coverage_pct": 100.0,
+                "priced_trade_count": 30,
+                "unpriced_trade_count": 0,
+                "nearest_contract_match_count": 0,
+            },
+            "source_run_at": "2026-04-01T12:00:00",
+            "source_mode": "backtest",
+            "lookback_years": 1,
+            "strategy_domain": "options",
+            "trade_types": ["call"],
+            "overall": {"profit_factor": 1.2},
+            "by_category": {
+                "score_bands": [],
+                "asset_class_by_regime": [],
+                "sector": [],
+                "ticker": [],
+            },
+        }
+        stability = {
+            "overall_status": "promote",
+            "promotion_recommendations": {"approved_filters": {}},
+            "recommendations": [],
+        }
+
+        with patch.object(wfo, "build_options_experiment_matrix", return_value=matrix), \
+             patch.object(wfo, "build_options_stability_report", return_value=stability):
+            policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["promotion_status"], "watch")
+        self.assertEqual(policy["managed_lane_status"], "watch_only")
+        self.assertIn(f"evidence_status:{wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS}", policy["readiness_blockers"])
+
+    def test_live_policy_marks_truth_window_stale_and_blocks_managed_lane(self):
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "candidate_source": wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+            "quote_coverage_pct": 0.0,
+            "priced_trade_count": 0,
+            "unpriced_trade_count": 0,
+            "primary_judge_trade_class": "exact_archived_contract",
+            "primary_judge_trade_count": 0,
+            "pending_truth_horizon_count": 4,
+            "trades": [],
+            "preferred_evidence_source": {
+                "mode": "archived_forward_daily",
+                "status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+                "truth_window_status": "stale",
+            },
+            "evidence_status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+            "truth_window_status": "stale",
+            "authoritative_evidence_source": "archived_forward_daily",
+            "authoritative_evidence_status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+        }
+        matrix = {
+            "source": {
+                "pricing_lane": "historical_imported_daily",
+                "playbook": "short_term",
+                "quote_coverage_pct": 0.0,
+                "priced_trade_count": 0,
+                "unpriced_trade_count": 0,
+                "nearest_contract_match_count": 0,
+                "candidate_source": wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+                "evidence_status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
+                "truth_window_status": "stale",
+            },
+            "source_run_at": "2026-04-01T12:00:00",
+            "source_mode": "backtest",
+            "lookback_years": 1,
+            "strategy_domain": "options",
+            "trade_types": ["call"],
+            "overall": {"profit_factor": 0.0},
+            "by_category": {
+                "score_bands": [],
+                "asset_class_by_regime": [],
+                "sector": [],
+                "ticker": [],
+            },
+        }
+        stability = {
+            "overall_status": "promote",
+            "promotion_recommendations": {"approved_filters": {}},
+            "recommendations": [],
+        }
+        fallback_watch_source = {
+            "by_symbol": {
+                "SPY": {"exact_contract_metrics": {"trade_count": 25, "profit_factor": 1.2, "avg_pnl_pct": 4.15}},
+                "QQQ": {"exact_contract_metrics": {"trade_count": 32, "profit_factor": 0.52, "avg_pnl_pct": -17.41}},
+            }
+        }
+
+        with patch.object(wfo, "build_options_experiment_matrix", return_value=matrix), \
+             patch.object(wfo, "build_options_stability_report", return_value=stability), \
+             patch.object(wfo, "load_last_imported_daily_results", return_value=fallback_watch_source):
+            policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["truth_window_status"], "stale")
+        self.assertEqual(policy["managed_lane_status"], "blocked_truth_stale")
+        self.assertEqual(policy["promotion_status"], "block")
+        self.assertEqual(policy["authoritative_evidence_source"], "archived_forward_daily")
+        self.assertEqual(policy["authoritative_evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
+        self.assertEqual(policy["watch_priority_symbols"], ["SPY"])
+        self.assertEqual(policy["watch_deprioritized_symbols"], ["QQQ"])
+        self.assertIn("truth_window_stale", policy["readiness_blockers"])
+
+    def test_supervised_policy_ranking_prefers_dense_expectancy_after_decision(self):
+        policy = {
+            "watch_priority_symbols": ["SPY"],
+            "watch_deprioritized_symbols": ["QQQ"],
+            "scan_policy": {
+                "promotion_status": "promote",
+                "hard_filters": {
+                    "direction_score_min": 0.0,
+                    "tech_score_min": 0.0,
+                    "approved_tickers": ["SPY", "QQQ"],
+                },
+                "preferred_filters": {},
+            }
+        }
+        higher_score_lower_ev = {
+            "ticker": "SPY",
+            "direction": "call",
+            "asset_class": "index",
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+            "direction_score": 82.0,
+            "quality_score": 82.0,
+            "tech_score": 82.0,
+            "promotion_class": "promotable_exact_contract",
+            "calibration_is_dense": True,
+            "calibrated_expectancy_pct": 12.0,
+        }
+        lower_score_higher_ev = {
+            **higher_score_lower_ev,
+            "ticker": "QQQ",
+            "direction_score": 70.0,
+            "quality_score": 70.0,
+            "tech_score": 70.0,
+            "calibrated_expectancy_pct": 28.0,
+        }
+
+        ranked = ss.apply_trade_policy_to_scan(
+            [higher_score_lower_ev, lower_score_higher_ev],
+            policy=policy,
+            include_blocked=False,
+        )["ranked_picks"]
+
+        self.assertEqual([pick["ticker"] for pick in ranked], ["QQQ", "SPY"])
+
+    def test_supervised_policy_watch_priority_prefers_spy_over_qqq(self):
+        policy = {
+            "watch_priority_symbols": ["SPY"],
+            "watch_deprioritized_symbols": ["QQQ"],
+            "scan_policy": {
+                "promotion_status": "watch",
+                "hard_filters": {
+                    "direction_score_min": 0.0,
+                    "tech_score_min": 0.0,
+                    "approved_tickers": [],
+                },
+                "preferred_filters": {},
+                "watch_priority_symbols": ["SPY"],
+                "watch_deprioritized_symbols": ["QQQ"],
+            },
+        }
+        spy = {
+            "ticker": "SPY",
+            "direction": "call",
+            "asset_class": "index",
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+            "direction_score": 72.0,
+            "quality_score": 72.0,
+            "tech_score": 72.0,
+            "promotion_class": "promotable_exact_contract",
+            "calibration_is_dense": True,
+            "calibrated_expectancy_pct": 18.0,
+        }
+        qqq = {
+            **spy,
+            "ticker": "QQQ",
+        }
+
+        ranked = ss.apply_trade_policy_to_scan([qqq, spy], policy=policy, include_blocked=False)["ranked_picks"]
+
+        self.assertEqual([pick["ticker"] for pick in ranked], ["SPY", "QQQ"])
+
+    def test_run_supervised_scan_returns_approved_only_picks_and_separate_watch_picks(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str):
+                return []
+
+        approved_pick = {
+            "ticker": "SPY",
+            "direction": "call",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "spy_ret5": 1.1,
+            "direction_score": 75.0,
+            "quality_score": 74.0,
+            "tech_score": 72.0,
+            "promotion_class": "promotable_exact_contract",
+            "promotable": True,
+            "selection_source": "live_chain_exact_contract",
+            "contract_selection_source": "live_chain_exact_contract",
+            "options_snapshot_status": "fresh",
+            "option_chain_status": "fresh",
+            "calibration_is_dense": True,
+            "calibrated_expectancy_pct": 18.0,
+            "type": "daily_scan",
+            "dte": 7,
+        }
+        watch_pick = {
+            **approved_pick,
+            "ticker": "QQQ",
+            "selection_source": "model_contract_fallback",
+            "contract_selection_source": "model_contract_fallback",
+            "promotion_class": "research_bootstrap",
+            "promotable": False,
+            "calibration_is_dense": False,
+            "calibrated_expectancy_pct": None,
+        }
+        policy = {
+            "promotion_status": "promote",
+            "managed_lane_status": "open",
+            "truth_window_status": "current",
+            "authoritative_evidence_source": "archived_forward_daily",
+            "authoritative_evidence_status": wfo.ARCHIVED_EXACT_PRIMARY_STATUS,
+            "watch_priority_symbols": ["SPY"],
+            "watch_deprioritized_symbols": ["QQQ"],
+            "scan_policy": {
+                "promotion_status": "promote",
+                "managed_lane_status": "open",
+                "truth_window_status": "current",
+                "hard_filters": {
+                    "direction_score_min": 0.0,
+                    "tech_score_min": 0.0,
+                    "approved_tickers": ["SPY"],
+                },
+                "preferred_filters": {},
+                "watch_priority_symbols": ["SPY"],
+                "watch_deprioritized_symbols": ["QQQ"],
+            },
+        }
+
+        with patch.object(ss, "build_live_options_trade_policy", return_value=policy), \
+             patch.object(ss, "build_playbook_exit_audit", return_value={"playbook": "short_term"}):
+            result = ss.run_supervised_scan(
+                scan_func=lambda **_: [approved_pick, watch_pick],
+                positions_repository=_AvailablePositionsRepo(),
+                n_picks=2,
+                watchlist_size=2,
+                playbook_id="short_term",
+                use_recommended_policy=True,
+                truth_lane=wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+                min_trades=1,
+            )
+
+        self.assertTrue(result["policy_applied"])
+        self.assertEqual([pick["ticker"] for pick in result["picks"]], ["SPY"])
+        self.assertEqual([pick["ticker"] for pick in result["watch_picks"]], ["QQQ"])
+        self.assertTrue(result["picks"][0]["managed_eligible"])
+        self.assertFalse(result["watch_picks"][0]["managed_eligible"])
+        self.assertEqual(result["watch_picks"][0]["managed_block_reason"], "promotion_class:research_bootstrap")
+
+    def test_scan_daily_top_trades_skips_equity_when_earnings_lookup_fails(self):
+        with patch.object(oc, "DEFAULT_WATCHLIST", ["AAA", "SPY"]), \
+             patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \
+             patch.object(oc, "_market_is_open", return_value=False), \
+             patch.object(
+                 oc,
+                 "_cached_earnings_dates",
+                 side_effect=lambda symbol: (_ for _ in ()).throw(RuntimeError("earnings unavailable"))
+                 if str(symbol).upper() == "AAA"
+                 else pd.DataFrame(),
+             ):
+            picks = oc.scan_daily_top_trades(n_picks=3)
+
+        self.assertNotIn("AAA", {pick["ticker"] for pick in picks})
+
+    def test_preferred_loader_uses_archived_forward_daily_result_before_model_daily(self):
+        archived = {
+            "truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+            "candidate_source": wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+            "primary_judge_trade_class": "exact_archived_contract",
+            "primary_judge_trade_count": 30,
+        }
+        fallback = {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE}
+        with patch.object(wfo, "load_last_archived_forward_daily_results", return_value=archived), \
+             patch.object(wfo, "load_last_imported_daily_results", return_value=fallback):
+            preferred = wfo.load_preferred_results_by_truth_lane(wfo.IMPORTED_DAILY_TRUTH_SOURCE)
+
+        self.assertEqual(preferred["candidate_source"], wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE)
+        self.assertEqual(preferred["preferred_evidence_source"]["mode"], "archived_forward_daily")
+        self.assertFalse(preferred["preferred_evidence_source"]["fallback_used"])
+        self.assertEqual(preferred["preferred_evidence_source"]["status"], wfo.ARCHIVED_EXACT_PRIMARY_STATUS)
+        self.assertEqual(preferred["evidence_status"], wfo.ARCHIVED_EXACT_PRIMARY_STATUS)
+
+    def test_preferred_loader_keeps_archived_forward_primary_when_insufficient(self):
+        fallback = {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE}
+        with patch.object(
+            wfo,
+            "load_last_archived_forward_daily_results",
+            return_value={
+                "truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+                "candidate_source": wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+                "insufficient_archived_evidence": True,
+                "status": "insufficient_archived_evidence",
+                "pending_truth_horizon_count": 3,
+            },
+        ), \
+             patch.object(wfo, "load_last_imported_daily_results", return_value=fallback):
+            preferred = wfo.load_preferred_results_by_truth_lane(wfo.IMPORTED_DAILY_TRUTH_SOURCE)
+
+        self.assertEqual(preferred["truth_source"], wfo.IMPORTED_DAILY_TRUTH_SOURCE)
+        self.assertEqual(preferred["preferred_evidence_source"]["mode"], "archived_forward_daily")
+        self.assertFalse(preferred["preferred_evidence_source"]["fallback_used"])
+        self.assertEqual(preferred["preferred_evidence_source"]["status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
+        self.assertEqual(preferred["truth_window_status"], "stale")
 
 
 if __name__ == "__main__":

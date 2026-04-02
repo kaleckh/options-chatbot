@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ## Goal
 
@@ -109,17 +109,17 @@ That means the current synthetic baseline is not strong enough to guide broad st
 The current imported daily validation in `data/options-validation/runs/latest_daily.json` is:
 - `truth_source`: `historical_imported_daily`
 - validation universe: `SPY`, `QQQ`
-- `priced_trades`: `11`
-- `unpriced_trades`: `6`
-- `quote_coverage_pct`: `64.7`
-- exact target-contract matches: `3`
-- nearest-listed substitutions: `8`
-- `directional_accuracy_pct`: `9.1`
-- `profit_factor`: `0.00`
-- `avg_pnl_pct`: `-57.95`
+- `priced_trades`: `237`
+- `unpriced_trades`: `0`
+- `quote_coverage_pct`: `100.0`
+- exact target-contract matches: `57`
+- nearest-listed substitutions: `180`
+- `directional_accuracy_pct`: `53.6`
+- `profit_factor`: `0.66`
+- `avg_pnl_pct`: `-10.65`
 - `promotion_status`: `block`
 
-That means free daily real-data validation is working and honest, but it is still not strong enough to justify promotion or trust-by-default behavior.
+That means free daily real-data validation is now adequately covered for the broad imported-daily lane, and it still says the broad options strategy is weak. This is no longer just a support-gap story for the broad baseline.
 
 ### Live policy reality
 
@@ -136,6 +136,8 @@ Forward holdout recording has started, but the live truth tape is still too thin
 - there are still no taken or closed holdout positions
 
 So forward holdout should be collected daily, but not interpreted as meaningful strategy evidence yet.
+
+Daily maintenance should record the current live defaults by default. Shadow-recording the full frozen cohort set is still supported, but it is now an explicit audit action rather than the default daily workflow.
 
 ### Frozen cohort validation reality
 
@@ -178,9 +180,8 @@ That means:
 4. treat current policy output as block/watch-oriented
 5. validate only the frozen `SPY` / `QQQ` cohorts until better truth coverage exists
 
-The next best strategy step is not more UI work and not broad new sweeps. It is support-first validation of the frozen cohort set under the narrowed real-data scope.
-
-Given the current frozen-cohort results, the next sprint should be:
-1. expand real-data support coverage for the narrowed validation universe
-2. keep recording forward holdout daily
-3. only move to strategy redesign after a cohort clears the imported-support floor or fails with adequate support
+The next best repository-wide strategy step is no longer broad options optimization. The primary systematic research lane should be crypto spot day trading, where we now have cheap trusted data, a 90-day replay window, and a control-first research loop. Options should stay in maintenance mode:
+1. keep recording options forward holdout daily
+2. keep the current options truth bundle honest and current
+3. use the options product manually and supervised
+4. only revisit options strategy optimization if a narrower repeatable pocket appears in real or forward evidence

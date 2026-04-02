@@ -248,18 +248,20 @@ def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WIND
 
 def _candidate_rank_tuple(candidate: dict) -> tuple:
     calibrated = candidate.get("calibrated_expectancy_pct")
+    promotable_exact = str(candidate.get("promotion_class") or "").strip().lower() == "promotable_exact_contract"
+    dense_calibration = bool(candidate.get("calibration_is_dense"))
     calibrated_value = (
         float(calibrated)
-        if calibrated is not None and bool(candidate.get("calibration_is_dense"))
+        if calibrated is not None and promotable_exact and dense_calibration
         else -9999.0
     )
     return (
-        1 if str(candidate.get("promotion_class") or "").strip().lower() == "promotable_exact_contract" else 0,
+        1 if promotable_exact else 0,
+        1 if dense_calibration else 0,
+        calibrated_value,
         float(candidate.get("direction_score", 0.0) or 0.0),
         float(candidate.get("quality_score", 0.0) or 0.0),
         float(candidate.get("tech_score", 0.0) or 0.0),
-        1 if bool(candidate.get("calibration_is_dense")) else 0,
-        calibrated_value,
     )
 
 
@@ -3493,7 +3495,7 @@ def scan_daily_top_trades(
                             if 0 <= _days_to_earn <= ticker_target_dte:
                                 _earnings_skip = True  # earnings inside our hold window → skip
                 except Exception:
-                    pass  # can't determine earnings — allow through, chatbot will warn
+                    _earnings_skip = True
                 if _earnings_skip:
                     continue
 
@@ -3641,7 +3643,10 @@ def scan_daily_top_trades(
                 "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
                 "iv_rank":            round(iv_pct, 1),
+                "iv_percentile":      round(iv_pct, 1),
+                "iv_pct":             round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
+                "delta":              round(float(_opt.get("delta") or delta_val), 3),
                 "stock_price":        round(_entry_stock_price, 2),
                 "underlying_price_at_selection": round(_entry_stock_price, 2),
                 "strike_est":         best_strike,   # real market strike — no rounding
@@ -3650,6 +3655,9 @@ def scan_daily_top_trades(
                 "contract_symbol":    _opt.get("contract_symbol"),
                 "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
                 "dte":                actual_dte,
+                "bid":                _opt.get("bid"),
+                "ask":                _opt.get("ask"),
+                "mid":                round(est_premium, 4),
                 "est_premium":        round(est_premium, 4),
                 "stop_loss_pct":      _adj_stop_pct,    # ATR-adjusted (may be wider than base)
                 "profit_target_pct":  _profit_target_pct,
@@ -3671,6 +3679,8 @@ def scan_daily_top_trades(
                 "entry_date":         today_str,
                 "quote_time_et":      today_str,
                 "quote_basis":        _opt.get("quote_basis"),
+                "options_snapshot_status": _opt.get("options_snapshot_status"),
+                "option_chain_status": _opt.get("option_chain_status"),
                 "selection_source":   contract_selection_source,
                 "contract_selection_source": contract_selection_source,
                 "promotion_class":    promotion_class,
@@ -3781,7 +3791,10 @@ def roll_forward_daily_picks(
             for _f in ("direction_score", "tech_score", "quality_score",
                        "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
                        "calibrated_expectancy_pct", "calibration_source", "calibration_trades",
-                       "signal_reasons", "strategy_label", "strategy_comment"):
+                       "signal_reasons", "strategy_label", "strategy_comment",
+                       "selection_source", "contract_selection_source", "promotion_class",
+                       "promotable", "options_snapshot_status", "option_chain_status",
+                       "quote_basis", "quote_time_et", "contract_symbol"):
                 if _f in fresh:
                     updated[_f] = fresh[_f]
             updated["pick_status"]      = "rolled"
@@ -3903,7 +3916,11 @@ def generate_position_recommendations(
                 rec["rec_reason"] = f"Still ranks well — direction score {fresh_score:.0f}%"
                 for _f in ("direction_score", "tech_score", "quality_score",
                            "iv_rank", "ret5", "rsi14", "spy_ret5", "ev_pct",
-                           "signal_reasons", "strategy_label", "strategy_comment"):
+                           "signal_reasons", "strategy_label", "strategy_comment",
+                           "selection_source", "contract_selection_source", "promotion_class",
+                           "promotable", "options_snapshot_status", "option_chain_status",
+                           "quote_basis", "quote_time_et", "contract_symbol",
+                           "calibrated_expectancy_pct", "calibration_source", "calibration_trades"):
                     if _f in fresh:
                         rec[_f] = fresh[_f]
                 hold_keys.add(key)

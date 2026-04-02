@@ -111,7 +111,7 @@ def build_metric_buckets(
     for label in ordered_labels:
         summary = summarize_trade_subset(label, buckets.get(label, []), len(trades))
         summary["sparse"] = summary["trades"] < min_trades
-        if summary["avg_direction_score"] is not None:
+        if metric_key == "direction_score" and summary["avg_direction_score"] is not None:
             realized = (summary["directional_accuracy_pct"] or 0.0) / 100.0
             predicted = summary["avg_direction_score"] / 100.0
             summary["calibration_gap_pct"] = _round((realized - predicted) * 100.0, 1)
@@ -280,6 +280,11 @@ def build_metric_truth_report(
             "pricing_lane": result.get("pricing_lane"),
             "playbook": result.get("playbook"),
             "truth_source": truth_source,
+            "candidate_source": result.get("candidate_source") or "model_replay",
+            "preferred_evidence_source": dict(result.get("preferred_evidence_source") or {}),
+            "evidence_status": result.get("evidence_status"),
+            "primary_judge_trade_class": result.get("primary_judge_trade_class"),
+            "primary_judge_trade_count": int(result.get("primary_judge_trade_count") or 0),
             "quote_coverage_pct": result.get("quote_coverage_pct"),
             "priced_trade_count": result.get("priced_trade_count"),
             "unpriced_trade_count": result.get("unpriced_trade_count"),

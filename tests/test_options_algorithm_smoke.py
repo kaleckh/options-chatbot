@@ -47,8 +47,55 @@ class OptionsAlgorithmSmokeTests(unittest.TestCase):
         self.assertIsNotNone(payload["scan_top_ticker"])
         self.assertEqual(payload["scan_top_guardrail_decision"], "clear")
         self.assertIsNone(payload["scan_top_calibrated_expectancy_pct"])
+        self.assertGreaterEqual(payload["post_backtest_scan_picks"], 1)
+        self.assertGreaterEqual(payload["post_backtest_scan_calibrated_expectancy_count"], 1)
+        self.assertIsNotNone(payload["post_backtest_scan_top_calibrated_expectancy_pct"])
         self.assertIn(payload["live_policy_promotion_status"], {"promote", "watch", "block"})
         self.assertEqual(payload["scan_calibrated_expectancy_count"], 0)
+        self.assertIn("runtime_context", payload)
+        self.assertIn("artifact_health", payload)
+        self.assertIn("truth_lane_health", payload)
+        self.assertIn("doc_parity", payload)
+
+        runtime = payload["runtime_context"]
+        self.assertEqual(runtime["repo_root"], str(smoke.ROOT.resolve()))
+        self.assertTrue(runtime["interpreter_path"])
+        self.assertTrue(runtime["python_version"])
+        self.assertIn("venv_active", runtime)
+        self.assertIn("uv_available", runtime)
+        self.assertIn("git_changed_files", runtime)
+
+        truth_lane_health = payload["truth_lane_health"]
+        self.assertEqual(
+            truth_lane_health["default_fallback_order"],
+            ["archived_forward_daily", "historical_imported", "historical_imported_daily", "synthetic_research"],
+        )
+        self.assertIn(
+            truth_lane_health["default_selected_truth_source"],
+            {"historical_imported_daily", "synthetic_research"},
+        )
+        self.assertEqual(truth_lane_health["synthetic_research"]["status"], "loadable")
+        self.assertIn(
+            truth_lane_health["historical_imported"]["status"],
+            {"missing_artifact", "missing_recorded_truth_store", "missing_current_store", "loadable"},
+        )
+        self.assertIn(
+            truth_lane_health["historical_imported_daily"]["status"],
+            {"missing_artifact", "loadable"},
+        )
+        self.assertIn(
+            truth_lane_health["archived_forward_daily"]["status"],
+            {"missing_artifact", "loadable"},
+        )
+
+        artifact_health = payload["artifact_health"]
+        self.assertTrue(artifact_health["wfo_results"]["present"])
+        self.assertIn("archived_forward_daily_latest", artifact_health)
+        self.assertIn("forward_truth_db", artifact_health)
+
+        doc_parity = payload["doc_parity"]
+        self.assertIn("current_state_doc_present", doc_parity)
+        self.assertIn("mismatches", doc_parity)
 
 
 if __name__ == "__main__":

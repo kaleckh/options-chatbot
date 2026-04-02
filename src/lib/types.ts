@@ -579,6 +579,16 @@ export interface DayTradingStrategySpec {
   hypothesisSummary: string;
   venueType: string;
   status: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
   marketUniverse: {
     symbols: string[];
     category?: string;
@@ -618,6 +628,11 @@ export interface DayTradingStrategySpec {
   metadata?: {
     owner?: string;
     tags?: string[];
+    market?: string;
+    exchange?: string;
+    marketType?: string;
+    sessionMode?: string;
+    alertWindowIds?: string[];
     stageHistory?: {
       from: string;
       to: string;
@@ -699,6 +714,17 @@ export interface DayTradingScoreboard {
 
 export interface DayTradingValidationResult {
   strategyId: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
+  trustedMarketData?: boolean;
   marketDataSource: string;
   marketDataWarning: string | null;
   savedTo: string;
@@ -724,6 +750,16 @@ export interface DayTradingWatchlistItem {
   symbol: string | null;
   timeframe: string | null;
   signalName: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
   liveStatus: string;
   notifyNow: boolean;
   alertEligible: boolean;
@@ -751,6 +787,10 @@ export interface DayTradingWatchlistItem {
   morningWindowActive: boolean;
   dataFresh: boolean;
   currentDataTrusted: boolean;
+  trustedMarketData?: boolean;
+  sessionWindowId?: string | null;
+  sessionWindowLabel?: string | null;
+  sessionActiveNow?: boolean;
   currentPrice: number | null;
   indicators: Record<string, unknown> | null;
   reasons: string[];
@@ -759,11 +799,32 @@ export interface DayTradingWatchlistItem {
 export interface DayTradingWatchlist {
   generatedAt: string;
   evaluatedAt: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
   rankingBasis: string;
   morningWindow: {
     startEt: string;
     cutoffEt: string;
     activeNow: boolean;
+  };
+  sessionWindow?: {
+    activeNow: boolean;
+    activeWindowId: string | null;
+    activeWindowLabel: string | null;
+    windows: {
+      id: string;
+      label: string;
+      startEt: string;
+      endEt: string;
+    }[];
   };
   selectedStrategies: number;
   notifyNowCount: number;
@@ -772,6 +833,16 @@ export interface DayTradingWatchlist {
 
 export interface DayTradingReport {
   generatedAt: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
   strategiesScanned: number;
   results: DayTradingValidationResult[];
   scoreboard: DayTradingScoreboard;
@@ -780,7 +851,24 @@ export interface DayTradingReport {
 
 export interface DayTradingSnapshot {
   generatedAt: string;
+  market?: string;
+  marketLabel?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
   defaultConfig: {
+    market?: string;
+    exchange?: string;
+    marketType?: string;
+    sessionMode?: string;
+    importInterval?: string;
+    strategyTimeframe?: string;
     bars: number;
     startingCash: number;
     feesFraction: number;
@@ -795,4 +883,19 @@ export interface DayTradingSnapshot {
   paperAccount: DayTradingPaperAccount;
   paperSummaries: DayTradingPaperSummary[];
   lastReport: DayTradingReport | null;
+  lastWatchlist?: DayTradingWatchlist | null;
+  lastImport?: {
+    generatedAt: string;
+    symbols: string[];
+    minutes: number;
+    results: {
+      symbol: string;
+      source: string;
+      importedBars: number;
+      totalBars: number;
+      derivedBars: number;
+      startTimestamp: string | null;
+      endTimestamp: string | null;
+    }[];
+  } | null;
 }

@@ -202,7 +202,8 @@ try:
     )
     if supervised.get("policy_fail_closed"):
         raise RuntimeError(supervised.get("policy_error") or "supervised scan failed closed")
-    result = roll_forward_daily_picks(pending, n_picks=5, candidates=supervised["ranked_picks"])
+    candidates = supervised["picks"] if supervised.get("policy_applied") else supervised["ranked_picks"]
+    result = roll_forward_daily_picks(pending, n_picks=5, candidates=candidates)
 except Exception as e:
     logging.error(f"Roll-forward scan failed: {e}")
     sys.exit(1)

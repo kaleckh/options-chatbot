@@ -52,21 +52,21 @@ Latest imported-daily backtest:
 - truth source: `historical_imported_daily`
 - validation universe: `SPY`, `QQQ`
 - lookback years: `1`
-- priced trades: `11`
-- unpriced trades: `6`
-- quote coverage: `64.7%`
-- exact target-contract matches: `3`
-- nearest-listed substitutions: `8`
-- profit factor: `0.00`
-- average trade P&L: `-57.95%`
-- directional accuracy: `9.1%`
+- priced trades: `237`
+- unpriced trades: `0`
+- quote coverage: `100.0%`
+- exact target-contract matches: `57`
+- nearest-listed substitutions: `180`
+- profit factor: `0.66`
+- average trade P&L: `-10.65%`
+- directional accuracy: `53.6%`
 - promotion status: `block`
 
 Why it is blocked:
 
-- quote coverage is below the current `70%` promotion floor
-- the replay is still deeply unprofitable even after switching to real daily quotes
-- the current slice is sparse and bootstrap-driven
+- the replay is still unprofitable even with full daily quote coverage
+- too much of the broad result still comes from nearest-listed substitutions
+- the broad baseline is not strong enough to justify trust-by-default behavior
 
 ## 1Y Synthetic vs Imported-Daily Comparison
 
@@ -79,17 +79,17 @@ Matched broad-playbook comparison on a `1y` run:
   - directional accuracy: `14.3%`
   - quote coverage: `100%` by construction
 - imported daily:
-  - trades: `11`
-  - profit factor: `0.00`
-  - average trade P&L: `-57.95%`
-  - directional accuracy: `9.1%`
-  - quote coverage: `64.7%`
+  - trades: `237`
+  - profit factor: `0.66`
+  - average trade P&L: `-10.65%`
+  - directional accuracy: `53.6%`
+  - quote coverage: `100.0%`
 
 Takeaway:
 
 - the imported daily lane did not rescue the strategy
-- real daily quotes made the result slightly worse on accuracy and profit factor
-- the free daily dataset is useful and honest, but it still leaves a coverage gap
+- real daily quotes improved coverage dramatically but still did not create a profitable broad strategy
+- the free daily dataset is useful and honest, but it now points more toward strategy weakness than data scarcity
 
 ## Product Verdict
 
@@ -116,10 +116,10 @@ Not yet, if "product ready" means ready to trust for profitable options recommen
 Current blockers:
 
 1. Imported daily validation is still blocked.
-2. Quote coverage is `64.7%`, below the `70%` floor.
-3. Daily validation does not prove morning fill quality.
-4. Imported replay still prices replay-selected contracts; it does not recover the exact historical live scan contract from archived scan output.
-5. The validated result is still strongly negative.
+2. Daily validation does not prove morning fill quality.
+3. Imported replay still prices replay-selected contracts; it does not recover the exact historical live scan contract from archived scan output.
+4. The validated result is still negative even with `100%` broad daily quote coverage.
+5. Exact-contract match quality is still weaker than ideal for trust-by-default deployment.
 
 ## Live Smoke Snapshot
 
@@ -128,7 +128,7 @@ Current live smoke output:
 - scan truth lane: `historical_imported_daily`
 - live policy truth source: `historical_imported_daily`
 - live policy promotion status: `block`
-- live policy quote coverage: `64.7%`
+- live policy quote coverage: `100.0%`
 - synthetic backtest truth source: `synthetic_research`
 - live scan returned `0` current candidates at audit time
 
@@ -148,6 +148,6 @@ Current live smoke output:
 ## Recommended Next Steps
 
 1. Keep using the current imported-daily lane as the truth source for free validation.
-2. Improve quote coverage above `70%` before trusting promotion logic.
+2. Treat options strategy optimization as secondary until a narrower pocket earns better exact-contract evidence.
 3. Add an intraday quote lane if morning fill realism becomes the next bottleneck.
-4. Continue treating the product as supervised research support until imported validation produces positive, adequately covered results.
+4. Continue treating the product as supervised research support until imported validation produces positive results in a narrower repeatable slice.

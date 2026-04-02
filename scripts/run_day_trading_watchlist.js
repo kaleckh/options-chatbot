@@ -1,7 +1,8 @@
-const { buildMorningWatchlist } = require("../src/lib/day-trading/engine");
+const { buildMorningWatchlist, normalizeDayTradingMarket } = require("../src/lib/day-trading");
 
 function parseArgs(argv) {
   const args = {
+    market: "crypto",
     bars: undefined,
     limit: undefined,
   };
@@ -15,6 +16,9 @@ function parseArgs(argv) {
       const value = Number(raw.split("=")[1]);
       if (Number.isFinite(value) && value > 0) args.limit = value;
     }
+    if (raw.startsWith("--market=")) {
+      args.market = normalizeDayTradingMarket(raw.split("=")[1]);
+    }
   }
 
   return args;
@@ -25,6 +29,8 @@ async function main() {
   const watchlist = await buildMorningWatchlist(args);
   const summary = {
     generatedAt: watchlist.generatedAt,
+    market: watchlist.market,
+    sessionWindow: watchlist.sessionWindow || null,
     morningWindow: watchlist.morningWindow,
     selectedStrategies: watchlist.selectedStrategies,
     notifyNowCount: watchlist.notifyNowCount,
@@ -44,6 +50,7 @@ async function main() {
       latestSignalTimestamp: item.latestSignalTimestamp,
       marketDataSource: item.marketDataSource,
       marketDataWarning: item.marketDataWarning,
+      sessionWindowId: item.sessionWindowId || null,
     })),
   };
 
