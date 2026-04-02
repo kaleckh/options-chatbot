@@ -5,6 +5,7 @@ import json
 import os
 import re
 import sqlite3
+import weakref
 import threading
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -37,6 +38,10 @@ _INFO_FIELDS = (
     "dayHigh",
     "dayLow",
     "regularMarketVolume",
+    "earningsDate",
+    "earningsTimestamp",
+    "earningsTimestampStart",
+    "earningsTimestampEnd",
 )
 
 _REQUEST_MEMO: ContextVar[Optional[dict[tuple[Any, ...], Any]]] = ContextVar(
@@ -46,6 +51,7 @@ _REQUEST_MEMO: ContextVar[Optional[dict[tuple[Any, ...], Any]]] = ContextVar(
 _MEMORY_CACHE: dict[tuple[Any, ...], tuple[datetime, Any]] = {}
 _CACHE_STATS: dict[str, dict[str, int]] = {}
 _CACHE_LOCK = threading.RLock()
+_THREAD_LOCAL = threading.local()
 _SCHEMA_READY: set[str] = set()
 
 _HISTORY_PERIOD_RE = re.compile(r"^(?P<count>\d+)(?P<unit>d|mo|y)$", re.IGNORECASE)
@@ -128,6 +134,7 @@ def reset_cache_stats() -> dict[str, Any]:
     before = get_cache_stats()
     with _CACHE_LOCK:
         _CACHE_STATS.clear()
+    _close_thread_local_connections()
     after = get_cache_stats()
     return {
         "message": "market-data cache stats reset",
@@ -144,6 +151,104 @@ def _ensure_parent_dir(path: str) -> None:
     parent = os.path.dirname(path)
     if parent:
         os.makedirs(parent, exist_ok=True)
+
+
+def _close_thread_local_connections(*, keep_path: str | None = None) -> None:
+    connections = getattr(_THREAD_LOCAL, "connections", None)
+    if not connections:
+        return
+    keep = os.path.abspath(keep_path) if keep_path else None
+    retained: dict[str, sqlite3.Connection] = {}
+    for path, conn in list(connections.items()):
+        normalized_path = os.path.abspath(str(path))
+        if keep and normalized_path == keep:
+            retained[path] = conn
+            continue
+        try:
+            conn.close()
+        except Exception:
+            pass
+    if retained:
+        _THREAD_LOCAL.connections = retained
+    else:
+        try:
+            delattr(_THREAD_LOCAL, "connections")
+        except AttributeError:
+            pass
+
+
+def _close_sqlite_connection(conn: sqlite3.Connection | None) -> None:
+    if conn is None:
+        return
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+class _SQLiteConnectionProxy:
+    def __init__(self, conn: sqlite3.Connection, *, persistent: bool) -> None:
+        object.__setattr__(self, "_conn", conn)
+        object.__setattr__(self, "_persistent", persistent)
+        object.__setattr__(self, "_closed", False)
+        object.__setattr__(
+            self,
+            "_finalizer",
+            None if persistent else weakref.finalize(self, _close_sqlite_connection, conn),
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(object.__getattribute__(self, "_conn"), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if name in {"_conn", "_persistent", "_closed", "_finalizer"}:
+            object.__setattr__(self, name, value)
+            return
+        setattr(object.__getattribute__(self, "_conn"), name, value)
+
+    def close(self) -> None:
+        if object.__getattribute__(self, "_closed"):
+            return
+        object.__setattr__(self, "_closed", True)
+        if object.__getattribute__(self, "_persistent"):
+            return
+        finalizer = object.__getattribute__(self, "_finalizer")
+        if finalizer is not None and finalizer.alive:
+            finalizer()
+
+    def __enter__(self) -> "_SQLiteConnectionProxy":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
+
+
+def _sqlite_connection() -> sqlite3.Connection:
+    path = _db_path()
+    request_active = _REQUEST_MEMO.get() is not None
+    connections = getattr(_THREAD_LOCAL, "connections", None)
+    if request_active:
+        if connections is None:
+            connections = {}
+            _THREAD_LOCAL.connections = connections
+        else:
+            for existing_path in list(connections.keys()):
+                if os.path.abspath(str(existing_path)) != os.path.abspath(path):
+                    _close_thread_local_connections(keep_path=path)
+                    connections = getattr(_THREAD_LOCAL, "connections", {})
+                    break
+        conn = connections.get(path)
+        if conn is None:
+            _ensure_schema()
+            conn = sqlite3.connect(path)
+            conn.row_factory = sqlite3.Row
+            connections[path] = conn
+        return _SQLiteConnectionProxy(conn, persistent=True)
+
+    _ensure_schema()
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    return _SQLiteConnectionProxy(conn, persistent=False)
 
 
 def _ensure_schema() -> None:
@@ -213,6 +318,7 @@ def request_scope():
         yield _REQUEST_MEMO.get()
     finally:
         _REQUEST_MEMO.reset(token)
+        _close_thread_local_connections()
 
 
 def _request_memo_get(key: tuple[Any, ...]) -> Any:
@@ -284,10 +390,6 @@ def _normalize_history_frame(frame: Optional[pd.DataFrame]) -> pd.DataFrame:
 
 def _ticker_factory_or_default(ticker_factory: Optional[Callable[[str], Any]]) -> Callable[[str], Any]:
     return ticker_factory or yf.Ticker
-
-
-def _download_fn_or_default(download_fn: Optional[Callable[..., Any]]) -> Callable[..., Any]:
-    return download_fn or yf.download
 
 
 def _fetch_history_direct(
@@ -368,21 +470,17 @@ def _business_dates(start_date: date, end_date: date) -> set[str]:
 
 
 def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
-    _ensure_schema()
-    conn = sqlite3.connect(_db_path())
-    try:
-        rows = pd.read_sql_query(
-            """
-            SELECT bar_date, open, high, low, close, adj_close, volume
-            FROM daily_history
-            WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
-            ORDER BY bar_date
-            """,
-            conn,
-            params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
-        )
-    finally:
-        conn.close()
+    conn = _sqlite_connection()
+    rows = pd.read_sql_query(
+        """
+        SELECT bar_date, open, high, low, close, adj_close, volume
+        FROM daily_history
+        WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
+        ORDER BY bar_date
+        """,
+        conn,
+        params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
+    )
     if rows.empty:
         return pd.DataFrame()
     rows["bar_date"] = pd.to_datetime(rows["bar_date"])
@@ -404,7 +502,6 @@ def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
     normalized = _normalize_history_frame(frame)
     if normalized.empty:
         return
-    _ensure_schema()
     fetched_at = _utcnow().isoformat(timespec="seconds")
     rows: list[tuple[Any, ...]] = []
     for ts, row in normalized.iterrows():
@@ -421,27 +518,24 @@ def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
                 fetched_at,
             )
         )
-    conn = sqlite3.connect(_db_path())
-    try:
-        conn.executemany(
-            """
-            INSERT INTO daily_history (
-                symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(symbol, bar_date) DO UPDATE SET
-                open = excluded.open,
-                high = excluded.high,
-                low = excluded.low,
-                close = excluded.close,
-                adj_close = excluded.adj_close,
-                volume = excluded.volume,
-                fetched_at = excluded.fetched_at
-            """,
-            rows,
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    conn = _sqlite_connection()
+    conn.executemany(
+        """
+        INSERT INTO daily_history (
+            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol, bar_date) DO UPDATE SET
+            open = excluded.open,
+            high = excluded.high,
+            low = excluded.low,
+            close = excluded.close,
+            adj_close = excluded.adj_close,
+            volume = excluded.volume,
+            fetched_at = excluded.fetched_at
+        """,
+        rows,
+    )
+    conn.commit()
 
 
 def _as_float(value: Any) -> Optional[float]:
@@ -453,35 +547,38 @@ def _as_float(value: Any) -> Optional[float]:
         return None
 
 
-def _store_json_cache(table: str, symbol: str, payload: dict[str, Any]) -> None:
-    _ensure_schema()
-    conn = sqlite3.connect(_db_path())
-    try:
-        conn.execute(
-            f"""
-            INSERT INTO {table} (symbol, payload_json, fetched_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(symbol) DO UPDATE SET
-                payload_json = excluded.payload_json,
-                fetched_at = excluded.fetched_at
-            """,
-            (symbol.upper(), json.dumps(payload), _utcnow().isoformat(timespec="seconds")),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+def _store_json_cache(
+    table: str,
+    symbol: str,
+    payload: dict[str, Any],
+    *,
+    ttl: timedelta,
+) -> None:
+    conn = _sqlite_connection()
+    conn.execute(
+        f"""
+        INSERT INTO {table} (symbol, payload_json, fetched_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            fetched_at = excluded.fetched_at
+        """,
+        (symbol.upper(), json.dumps(payload), _utcnow().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    _memory_cache_set(("sqlite_json_cache", table, symbol.upper()), payload, ttl)
 
 
 def _load_json_cache(table: str, symbol: str, ttl: timedelta) -> Optional[dict[str, Any]]:
-    _ensure_schema()
-    conn = sqlite3.connect(_db_path())
-    try:
-        row = conn.execute(
-            f"SELECT payload_json, fetched_at FROM {table} WHERE symbol = ?",
-            (symbol.upper(),),
-        ).fetchone()
-    finally:
-        conn.close()
+    cache_key = ("sqlite_json_cache", table, symbol.upper())
+    memo_hit = _memory_cache_get(cache_key)
+    if memo_hit is not None:
+        return memo_hit
+    conn = _sqlite_connection()
+    row = conn.execute(
+        f"SELECT payload_json, fetched_at FROM {table} WHERE symbol = ?",
+        (symbol.upper(),),
+    ).fetchone()
     if row is None:
         return None
     fetched_at = datetime.fromisoformat(str(row[1]))
@@ -491,7 +588,10 @@ def _load_json_cache(table: str, symbol: str, ttl: timedelta) -> Optional[dict[s
         payload = json.loads(str(row[0]))
     except Exception:
         return None
-    return payload if isinstance(payload, dict) else None
+    normalized = payload if isinstance(payload, dict) else None
+    if normalized is not None:
+        _memory_cache_set(cache_key, normalized, ttl)
+    return normalized
 
 
 def _json_safe(value: Any) -> Any:
@@ -620,47 +720,61 @@ def _snapshot_envelope(value: Any, freshness: dict[str, Any]) -> SimpleNamespace
 
 
 def _store_option_expiries(symbol: str, expiries: list[str], *, source: str, error: Optional[Any] = None) -> None:
-    _ensure_schema()
     payload = {"expiries": list(expiries)}
-    conn = sqlite3.connect(_db_path())
-    try:
-        conn.execute(
-            """
-            INSERT INTO option_expiries_cache (symbol, payload_json, fetched_at, source, error_json)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(symbol) DO UPDATE SET
-                payload_json = excluded.payload_json,
-                fetched_at = excluded.fetched_at,
-                source = excluded.source,
-                error_json = excluded.error_json
-            """,
-            (
-                symbol.upper(),
-                json.dumps(_json_safe(payload)),
-                _utcnow().isoformat(timespec="seconds"),
-                str(source),
-                json.dumps(_json_safe(_error_payload(error))) if error is not None else None,
+    conn = _sqlite_connection()
+    conn.execute(
+        """
+        INSERT INTO option_expiries_cache (symbol, payload_json, fetched_at, source, error_json)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(symbol) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            fetched_at = excluded.fetched_at,
+            source = excluded.source,
+            error_json = excluded.error_json
+        """,
+        (
+            symbol.upper(),
+            json.dumps(_json_safe(payload)),
+            _utcnow().isoformat(timespec="seconds"),
+            str(source),
+            json.dumps(_json_safe(_error_payload(error))) if error is not None else None,
+        ),
+    )
+    conn.commit()
+    _memory_cache_set(
+        ("option_expiries_record", symbol.upper()),
+        {
+            "value": list(expiries),
+            "freshness": _freshness_payload(
+                status="fresh",
+                fetched_at=_utcnow(),
+                ttl=_OPTIONS_TTL,
+                source=str(source),
+                error=error,
             ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+            "status": "fresh",
+            "source": str(source),
+            "fetched_at": _utcnow().isoformat(timespec="seconds"),
+            "error": _error_payload(error) if error is not None else None,
+        },
+        _OPTIONS_TTL,
+    )
 
 
 def _load_option_expiries_record(symbol: str) -> Optional[dict[str, Any]]:
-    _ensure_schema()
-    conn = sqlite3.connect(_db_path())
-    try:
-        row = conn.execute(
-            """
-            SELECT payload_json, fetched_at, source, error_json
-            FROM option_expiries_cache
-            WHERE symbol = ?
-            """,
-            (symbol.upper(),),
-        ).fetchone()
-    finally:
-        conn.close()
+    cache_key = ("option_expiries_record", symbol.upper())
+    memo_hit = _memory_cache_get(cache_key)
+    if isinstance(memo_hit, dict):
+        return memo_hit
+    conn = _sqlite_connection()
+    row = conn.execute(
+        """
+        SELECT payload_json, fetched_at, source, error_json
+        FROM option_expiries_cache
+        WHERE symbol = ?
+        """,
+        (symbol.upper(),),
+    ).fetchone()
     if row is None:
         return None
     try:
@@ -687,7 +801,7 @@ def _load_option_expiries_record(symbol: str) -> Optional[dict[str, Any]]:
         source=str(row[2] or "sqlite"),
         error=error,
     )
-    return {
+    record = {
         "value": list(expiries),
         "freshness": freshness,
         "status": freshness["status"],
@@ -695,6 +809,8 @@ def _load_option_expiries_record(symbol: str) -> Optional[dict[str, Any]]:
         "fetched_at": freshness["fetched_at"],
         "error": freshness["error_payload"],
     }
+    _memory_cache_set(cache_key, record, _OPTIONS_TTL)
+    return record
 
 
 def _store_option_chain_snapshot(
@@ -705,51 +821,68 @@ def _store_option_chain_snapshot(
     source: str,
     error: Optional[Any] = None,
 ) -> None:
-    _ensure_schema()
     payload = {
         "calls": _serialize_frame(getattr(chain, "calls", pd.DataFrame())),
         "puts": _serialize_frame(getattr(chain, "puts", pd.DataFrame())),
     }
-    conn = sqlite3.connect(_db_path())
-    try:
-        conn.execute(
-            """
-            INSERT INTO option_chain_snapshot_cache (symbol, expiry, payload_json, fetched_at, source, error_json)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT(symbol, expiry) DO UPDATE SET
-                payload_json = excluded.payload_json,
-                fetched_at = excluded.fetched_at,
-                source = excluded.source,
-                error_json = excluded.error_json
-            """,
-            (
-                symbol.upper(),
-                str(expiry),
-                json.dumps(_json_safe(payload)),
-                _utcnow().isoformat(timespec="seconds"),
-                str(source),
-                json.dumps(_json_safe(_error_payload(error))) if error is not None else None,
+    conn = _sqlite_connection()
+    conn.execute(
+        """
+        INSERT INTO option_chain_snapshot_cache (symbol, expiry, payload_json, fetched_at, source, error_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol, expiry) DO UPDATE SET
+            payload_json = excluded.payload_json,
+            fetched_at = excluded.fetched_at,
+            source = excluded.source,
+            error_json = excluded.error_json
+        """,
+        (
+            symbol.upper(),
+            str(expiry),
+            json.dumps(_json_safe(payload)),
+            _utcnow().isoformat(timespec="seconds"),
+            str(source),
+            json.dumps(_json_safe(_error_payload(error))) if error is not None else None,
+        ),
+    )
+    conn.commit()
+    _memory_cache_set(
+        ("option_chain_record", symbol.upper(), str(expiry)),
+        {
+            "value": SimpleNamespace(
+                calls=getattr(chain, "calls", pd.DataFrame()).copy(deep=True),
+                puts=getattr(chain, "puts", pd.DataFrame()).copy(deep=True),
             ),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+            "freshness": _freshness_payload(
+                status="fresh",
+                fetched_at=_utcnow(),
+                ttl=_OPTION_CHAIN_TTL,
+                source=str(source),
+                error=error,
+            ),
+            "status": "fresh",
+            "source": str(source),
+            "fetched_at": _utcnow().isoformat(timespec="seconds"),
+            "error": _error_payload(error) if error is not None else None,
+        },
+        _OPTION_CHAIN_TTL,
+    )
 
 
 def _load_option_chain_record(symbol: str, expiry: str) -> Optional[dict[str, Any]]:
-    _ensure_schema()
-    conn = sqlite3.connect(_db_path())
-    try:
-        row = conn.execute(
-            """
-            SELECT payload_json, fetched_at, source, error_json
-            FROM option_chain_snapshot_cache
-            WHERE symbol = ? AND expiry = ?
-            """,
-            (symbol.upper(), str(expiry)),
-        ).fetchone()
-    finally:
-        conn.close()
+    cache_key = ("option_chain_record", symbol.upper(), str(expiry))
+    memo_hit = _memory_cache_get(cache_key)
+    if isinstance(memo_hit, dict):
+        return memo_hit
+    conn = _sqlite_connection()
+    row = conn.execute(
+        """
+        SELECT payload_json, fetched_at, source, error_json
+        FROM option_chain_snapshot_cache
+        WHERE symbol = ? AND expiry = ?
+        """,
+        (symbol.upper(), str(expiry)),
+    ).fetchone()
     if row is None:
         return None
     try:
@@ -773,7 +906,7 @@ def _load_option_chain_record(symbol: str, expiry: str) -> Optional[dict[str, An
         source=str(row[2] or "sqlite"),
         error=error,
     )
-    return {
+    record = {
         "value": SimpleNamespace(
             calls=_deserialize_frame((payload or {}).get("calls")),
             puts=_deserialize_frame((payload or {}).get("puts")),
@@ -784,6 +917,8 @@ def _load_option_chain_record(symbol: str, expiry: str) -> Optional[dict[str, An
         "fetched_at": freshness["fetched_at"],
         "error": freshness["error_payload"],
     }
+    _memory_cache_set(cache_key, record, _OPTION_CHAIN_TTL)
+    return record
 
 
 def _ticker_info_payload(info: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -928,31 +1063,75 @@ def download_history_batch(
         _record_stat(namespace, "request_memo_hits")
         return memo_hit
     frames: dict[str, pd.DataFrame] = {}
+    missing_symbols: list[str] = []
+    normalized_window = _normalize_daily_window(period=period)
     try:
-        for symbol in symbols:
+        if normalized_window is None:
+            missing_symbols = symbols[:]
+        else:
+            start_date, end_date = normalized_window
+            for symbol in symbols:
+                cached = _load_daily_history_rows(symbol, start_date, end_date)
+                if cached.empty:
+                    missing_symbols.append(symbol)
+                    continue
+                first_cached = cached.index.min().date()
+                last_cached = cached.index.max().date()
+                if first_cached > start_date or last_cached < end_date:
+                    missing_symbols.append(symbol)
+                    continue
+                frames[symbol] = cached
+    except Exception:
+        _record_stat(namespace, "cache_failures")
+        frames = {}
+        missing_symbols = symbols[:]
+
+    if missing_symbols:
+        for symbol in missing_symbols:
             frame = get_history(
                 symbol,
                 period=period,
                 interval="1d",
                 ticker_factory=ticker_factory,
             )
-            if not frame.empty:
-                frames[symbol] = frame
-    except Exception:
-        _record_stat(namespace, "cache_failures")
-        frames = {}
+            if frame.empty:
+                continue
+            frames[symbol] = frame
+            try:
+                _store_daily_history(symbol, frame)
+            except Exception:
+                _record_stat(namespace, "cache_write_failures")
 
     if not frames:
         _record_stat(namespace, "network_fallbacks")
-        _record_stat(namespace, "network_fetches")
-        download = _download_fn_or_default(download_fn)
-        raw = download(symbols, period=period, progress=False, auto_adjust=auto_adjust)
-        result = raw.copy() if isinstance(raw, pd.DataFrame) else pd.DataFrame()
+        result = pd.DataFrame()
+        for symbol in symbols:
+            frame = _fetch_history_direct(
+                symbol,
+                period=period,
+                interval="1d",
+                ticker_factory=ticker_factory,
+            )
+            if frame.empty:
+                continue
+            if symbol in frames:
+                continue
+            frames[symbol] = frame
+            try:
+                _store_daily_history(symbol, frame)
+            except Exception:
+                _record_stat(namespace, "cache_write_failures")
+        if frames:
+            combined = pd.concat(frames, axis=1).swaplevel(axis=1).sort_index(axis=1)
+            _memory_cache_set(key, combined, _INTRADAY_HISTORY_TTL)
+            _request_memo_set(key, combined)
+            return combined
         _request_memo_set(key, result)
         return result
 
     _record_stat(namespace, "cache_hits")
     combined = pd.concat(frames, axis=1).swaplevel(axis=1).sort_index(axis=1)
+    _memory_cache_set(key, combined, _INTRADAY_HISTORY_TTL)
     _request_memo_set(key, combined)
     return combined
 
@@ -984,7 +1163,7 @@ def get_ticker_info(
         _record_stat(namespace, "network_fetches")
         payload = _ticker_info_payload(info)
         try:
-            _store_json_cache("ticker_info_cache", symbol, payload)
+            _store_json_cache("ticker_info_cache", symbol, payload, ttl=_INFO_TTL)
         except Exception:
             _record_stat(namespace, "cache_write_failures")
             pass
@@ -1038,7 +1217,7 @@ def get_earnings_dates(
             "index": [pd.Timestamp(ts).isoformat() for ts in frame.index]
         } if not frame.empty else {"index": []}
         try:
-            _store_json_cache("earnings_dates_cache", symbol, payload)
+            _store_json_cache("earnings_dates_cache", symbol, payload, ttl=_EARNINGS_TTL)
         except Exception:
             _record_stat(namespace, "cache_write_failures")
             pass

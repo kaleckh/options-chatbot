@@ -9,6 +9,7 @@ from wfo_optimizer import (
     _classify_trade_against_live_policy,
     build_live_options_trade_policy,
     build_playbook_exit_audit,
+    load_preferred_results_by_truth_lane,
 )
 
 
@@ -620,7 +621,9 @@ def run_supervised_scan(
     exit_audit_error = None
 
     if use_recommended_policy:
+        preferred_result = load_preferred_results_by_truth_lane(truth_lane or LIVE_SCAN_TRUTH_LANE)
         policy = build_live_options_trade_policy(
+            result=preferred_result,
             truth_lane=truth_lane or LIVE_SCAN_TRUTH_LANE,
             min_trades=int(min_trades),
             max_tickers=int(max_tickers),
@@ -629,6 +632,8 @@ def run_supervised_scan(
             min_directional_accuracy_pct=float(min_directional_accuracy_pct),
         )
         exit_audit = build_playbook_exit_audit(
+            result=preferred_result,
+            policy_bundle=policy,
             playbook=str(playbook.get("id") or "short_term"),
             truth_lane=truth_lane or LIVE_SCAN_TRUTH_LANE,
             min_trades=int(min_trades),

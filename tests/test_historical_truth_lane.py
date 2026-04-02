@@ -32,6 +32,23 @@ from options_algorithm_fixtures import FrozenDateTime
 
 
 class HistoricalTruthLaneTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls._shared_tmp = tempfile.TemporaryDirectory()
+        shared_root = Path(cls._shared_tmp.name)
+        cls.csv_path = str(shared_root / "historical_quotes.csv")
+        cls.historical_db_path = str(shared_root / "options_history.db")
+        cls.histories = {
+            "SPY": make_validation_history(length=140, start=500.0, step=0.7),
+            "QQQ": make_validation_history(length=140, start=420.0, step=0.8),
+        }
+        write_historical_options_csv(cls.csv_path, cls.histories, strike_span=12)
+        import_historical_option_snapshots(cls.csv_path, "trusted_intraday", db_path=cls.historical_db_path)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._shared_tmp.cleanup()
+
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -40,19 +57,14 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.imported_latest_path = os.path.join(self.imported_results_dir, "latest.json")
         self.imported_daily_latest_path = os.path.join(self.imported_results_dir, "latest_daily.json")
         self.imported_daily_forward_latest_path = os.path.join(self.imported_results_dir, "latest_daily_forward.json")
-        self.historical_db_path = os.path.join(self._tmp.name, "options_history.db")
+        self.historical_db_path = type(self).historical_db_path
         self.empty_historical_db_path = os.path.join(self._tmp.name, "options_history_empty.db")
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
         self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
-        self.csv_path = os.path.join(self._tmp.name, "historical_quotes.csv")
         self.daily_parquet_path = os.path.join(self._tmp.name, "spy_options.parquet")
         self.daily_underlying_path = os.path.join(self._tmp.name, "spy_underlying.parquet")
-        self.histories = {
-            "SPY": make_validation_history(length=140, start=500.0, step=0.7),
-            "QQQ": make_validation_history(length=140, start=420.0, step=0.8),
-        }
-        write_historical_options_csv(self.csv_path, self.histories, strike_span=12)
-        import_historical_option_snapshots(self.csv_path, "trusted_intraday", db_path=self.historical_db_path)
+        self.csv_path = type(self).csv_path
+        self.histories = type(self).histories
 
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
@@ -583,8 +595,14 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                         "entry_date": "2026-04-08",
                     }
                 ],
-                "policy_applied": False,
-                "policy": {},
+                "evidence_class": "live_production",
+                "is_fixture": False,
+                "run_mode": "live",
+                "policy_applied": True,
+                "policy": {
+                    "truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+                    "promotion_status": "watch",
+                },
                 "playbook": {"id": "short_term"},
             },
             reviewed_positions=[],

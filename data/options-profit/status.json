@@ -1,0 +1,56 @@
+{
+  "active_incumbents": {
+    "QQQ": {
+      "active": {
+        "applied_at": "2026-04-02T04:49:15.150974Z",
+        "base_profile": "index",
+        "candidate_id": "QQQ__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "QQQ"
+      },
+      "canary": null,
+      "objective": null,
+      "previous": null,
+      "symbol": "QQQ"
+    },
+    "SPY": {
+      "active": {
+        "applied_at": "2026-04-02T04:49:15.150974Z",
+        "base_profile": "index",
+        "candidate_id": "SPY__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "SPY"
+      },
+      "canary": null,
+      "objective": null,
+      "previous": null,
+      "symbol": "SPY"
+    }
+  },
+  "blockers": [
+    "Options profit cycle has not run yet."
+  ],
+  "current_canary": null,
+  "generated_at": "2026-04-02T04:49:15.150974Z",
+  "last_decision": {
+    "action": "not_started",
+    "summary": "Options profit cycle has not run yet."
+  },
+  "measurement_gate": {
+    "blockers": [
+      "Options profit cycle has not run yet."
+    ],
+    "state": "blocked",
+    "warnings": []
+  }
+}

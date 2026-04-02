@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Activity, BellRing, Loader2, Play, RefreshCw, ShieldCheck, Trophy } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import FinTable from "@/components/ui/FinTable";
@@ -127,9 +127,13 @@ export default function DayTradingLab() {
   const [error, setError] = useState<string | null>(null);
   const [bars, setBars] = useState(3120);
   const [startingCash, setStartingCash] = useState(10000);
+  const snapshotRequestRef = useRef(0);
+  const watchlistRequestRef = useRef(0);
 
   const fetchWatchlist = useCallback(async (requestedBars: number, requestedLimit: number = 4) => {
+    const requestId = ++watchlistRequestRef.current;
     setWatchlistLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         bars: String(requestedBars),
@@ -139,32 +143,49 @@ export default function DayTradingLab() {
       const res = await fetch(`/api/day-trading/watchlist?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load day-trading watchlist");
-      setWatchlist(data);
+      if (requestId === watchlistRequestRef.current) {
+        setWatchlist(data);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load day-trading watchlist");
+      if (requestId === watchlistRequestRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to load day-trading watchlist");
+      }
     } finally {
-      setWatchlistLoading(false);
+      if (requestId === watchlistRequestRef.current) {
+        setWatchlistLoading(false);
+      }
     }
   }, [market]);
 
   const loadSnapshot = useCallback(async () => {
+    const requestId = ++snapshotRequestRef.current;
     setLoading(true);
     setError(null);
+    watchlistRequestRef.current += 1;
+    setWatchlist(null);
+    setWatchlistLoading(false);
     try {
       const params = new URLSearchParams({ market });
       const res = await fetch(`/api/day-trading?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to load day-trading lab");
+      if (requestId !== snapshotRequestRef.current) {
+        return;
+      }
       setSnapshot(data);
       const defaultBars = data.defaultConfig?.bars || 3120;
       const watchlistLimit = data.defaultConfig?.watchlistLimit || 4;
       setBars((current) => current || defaultBars);
       setStartingCash((current) => current || data.defaultConfig?.startingCash || 10000);
-      await fetchWatchlist(defaultBars, watchlistLimit);
+      void fetchWatchlist(defaultBars, watchlistLimit);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load day-trading lab");
+      if (requestId === snapshotRequestRef.current) {
+        setError(err instanceof Error ? err.message : "Failed to load day-trading lab");
+      }
     } finally {
-      setLoading(false);
+      if (requestId === snapshotRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [fetchWatchlist, market]);
 
@@ -184,7 +205,8 @@ export default function DayTradingLab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Validation run failed");
       setSnapshot(data.snapshot);
-      await fetchWatchlist(bars, data.snapshot?.defaultConfig?.watchlistLimit || 4);
+      setWatchlist(null);
+      void fetchWatchlist(bars, data.snapshot?.defaultConfig?.watchlistLimit || 4);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Validation run failed");
     } finally {
@@ -360,52 +382,61 @@ export default function DayTradingLab() {
         />
       </div>
 
-      {watchlist && (
+      {(watchlistLoading || watchlist) && (
         <div className="space-y-4">
           <div className="section-header flex items-center gap-2">
             <BellRing size={14} />
             {copy.watchlistTitle}
           </div>
-          <div className="grid grid-cols-4 gap-3">
-            <MetricCard
-              label="Notify Now"
-              value={String(watchlist.notifyNowCount)}
-              delta={(watchlist.sessionWindow?.activeNow || watchlist.morningWindow.activeNow) ? copy.windowActive : copy.windowInactive}
-            />
-            <MetricCard
-              label="Strategies Checked"
-              value={String(watchlist.selectedStrategies)}
-              delta={watchlist.rankingBasis}
-            />
-            <MetricCard
-              label="Top Hit Rate"
-              value={watchlist.items[0]?.replayEvidence ? pct(watchlist.items[0].replayEvidence.winRate) : "-"}
-              delta={watchlist.items[0]?.strategyName || "No ranked strategy yet"}
-            />
-            <MetricCard
-              label={selectedMarket === "crypto" ? "Trusted Data" : "Alert Eligible"}
-              value={String(selectedMarket === "crypto"
-                ? watchlist.items.filter((item) => item.currentDataTrusted).length
-                : watchlist.items.filter((item) => item.alertEligible).length)}
-              delta={selectedMarket === "crypto"
-                ? `${watchlist.sessionWindow?.windows.length || 0} scheduled windows`
-                : (watchlist.items.some((item) => item.alertEligible)
-                  ? "Replay-approved setup exists"
-                  : "No setup has earned alerts yet")}
-            />
-          </div>
-          {selectedMarket === "crypto" && watchlist.sessionWindow && (
-            <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
-              Windows: {watchlist.sessionWindow.windows.map((window) => `${window.label} ${window.startEt}-${window.endEt} ET`).join(" | ")}
+          {watchlist ? (
+            <>
+              <div className="grid grid-cols-4 gap-3">
+                <MetricCard
+                  label="Notify Now"
+                  value={String(watchlist.notifyNowCount)}
+                  delta={(watchlist.sessionWindow?.activeNow || watchlist.morningWindow.activeNow) ? copy.windowActive : copy.windowInactive}
+                />
+                <MetricCard
+                  label="Strategies Checked"
+                  value={String(watchlist.selectedStrategies)}
+                  delta={watchlist.rankingBasis}
+                />
+                <MetricCard
+                  label="Top Hit Rate"
+                  value={watchlist.items[0]?.replayEvidence ? pct(watchlist.items[0].replayEvidence.winRate) : "-"}
+                  delta={watchlist.items[0]?.strategyName || "No ranked strategy yet"}
+                />
+                <MetricCard
+                  label={selectedMarket === "crypto" ? "Trusted Data" : "Alert Eligible"}
+                  value={String(selectedMarket === "crypto"
+                    ? watchlist.items.filter((item) => item.currentDataTrusted).length
+                    : watchlist.items.filter((item) => item.alertEligible).length)}
+                  delta={selectedMarket === "crypto"
+                    ? `${watchlist.sessionWindow?.windows.length || 0} scheduled windows`
+                    : (watchlist.items.some((item) => item.alertEligible)
+                      ? "Replay-approved setup exists"
+                      : "No setup has earned alerts yet")}
+                />
+              </div>
+              {selectedMarket === "crypto" && watchlist.sessionWindow && (
+                <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
+                  Windows: {watchlist.sessionWindow.windows.map((window) => `${window.label} ${window.startEt}-${window.endEt} ET`).join(" | ")}
+                </div>
+              )}
+              <FinTable
+                data={watchlistRows}
+                badgeCol="Status"
+                rateCols={["Hit Rate"]}
+                monoCols={["Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At", "Window"]}
+                maxHeight="360px"
+              />
+            </>
+          ) : (
+            <div className="bg-bg-2 border border-border rounded-lg px-4 py-4 text-sm text-text-2 flex items-center gap-2">
+              <Loader2 size={14} className="animate-spin" />
+              Loading watchlist...
             </div>
           )}
-          <FinTable
-            data={watchlistRows}
-            badgeCol="Status"
-            rateCols={["Hit Rate"]}
-            monoCols={["Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At", "Window"]}
-            maxHeight="360px"
-          />
         </div>
       )}
 

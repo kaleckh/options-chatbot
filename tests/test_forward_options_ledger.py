@@ -116,6 +116,10 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(result["blocked_pick_count"], 0)
         self.assertEqual(result["requested_cohort_ids"], [])
         self.assertEqual(result["scan_funnel"]["raw_candidates"], 3)
+        self.assertEqual(result["evidence_class"], "unit_test")
+        self.assertTrue(result["is_fixture"])
+        self.assertEqual(result["eligibility_status"], "ineligible")
+        self.assertIn("non_live_evidence_class", result["eligibility_blockers"])
 
         sessions = list_forward_sessions(db_path=self.db_path)
         self.assertEqual(len(sessions), 1)
@@ -123,6 +127,10 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(sessions[0]["scan_picks_count"], 1)
         self.assertEqual(sessions[0]["reviewed_positions_count"], 1)
         self.assertEqual(sessions[0]["notes"]["scan_funnel"]["post_guardrails_visible"], 1)
+        self.assertEqual(sessions[0]["evidence_class"], "unit_test")
+        self.assertTrue(sessions[0]["is_fixture"])
+        self.assertEqual(sessions[0]["eligibility_status"], "ineligible")
+        self.assertIn("non_live_evidence_class", sessions[0]["eligibility_blockers"])
 
         with closing(sqlite3.connect(self.db_path)) as conn:
             row = conn.execute(
@@ -139,7 +147,12 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
                     selection_source,
                     promotion_class,
                     policy_state,
-                    outcome_state
+                    outcome_state,
+                    evidence_class,
+                    is_fixture,
+                    quote_freshness_status,
+                    eligibility_status,
+                    eligibility_blockers
                 FROM forward_events
                 WHERE event_type = 'scan_pick'
                 """
@@ -156,6 +169,11 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(row[9], "promotable_exact_contract")
         self.assertEqual(row[10], "watch")
         self.assertEqual(row[11], "taken")
+        self.assertEqual(row[12], "unit_test")
+        self.assertEqual(row[13], 1)
+        self.assertEqual(row[14], "observed")
+        self.assertEqual(row[15], "ineligible")
+        self.assertIn("non_live_evidence_class", row[16])
 
         summary = summarize_forward_holdout(cohort_id=None, db_path=self.db_path)
         self.assertTrue(summary["available"])
@@ -174,6 +192,10 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(events[0]["contract_symbol"], "SPY260417C00560000")
         self.assertEqual(events[0]["selection_source"], "live_chain_exact_contract")
         self.assertEqual(events[0]["promotion_class"], "promotable_exact_contract")
+        self.assertEqual(events[0]["evidence_class"], "unit_test")
+        self.assertTrue(events[0]["is_fixture"])
+        self.assertEqual(events[0]["eligibility_status"], "ineligible")
+        self.assertIn("non_live_evidence_class", events[0]["eligibility_blockers"])
 
     def test_init_forward_ledger_upgrades_legacy_schema_before_indexing(self):
         with closing(sqlite3.connect(self.db_path)) as conn:
@@ -224,7 +246,110 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertIn("strike", columns)
         self.assertIn("selection_source", columns)
         self.assertIn("promotion_class", columns)
+        self.assertIn("evidence_class", columns)
+        self.assertIn("eligibility_status", columns)
+        self.assertIn("eligibility_blockers", columns)
         self.assertIn("idx_forward_events_cohort", indexes)
+
+    def test_eligible_only_filter_returns_only_live_production_contracts(self):
+        record_forward_snapshot(
+            scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "SPY",
+                        "direction": "call",
+                        "option_type": "call",
+                        "contract_symbol": "SPY260417C00560000",
+                        "expiry": "2026-04-17",
+                        "strike": 560.0,
+                        "quote_time_et": "2026-04-01T09:45:00-04:00",
+                        "quote_basis": "mid",
+                        "selection_source": "live_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                    }
+                ],
+                "policy_applied": True,
+                "policy": {
+                    "truth_source": "historical_imported_daily",
+                    "promotion_status": "watch",
+                },
+                "playbook": {"id": "short_term"},
+                "evidence_class": "live_production",
+                "run_mode": "live",
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="api_scan_auto",
+            db_path=self.db_path,
+        )
+        record_forward_snapshot(
+            scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "QQQ",
+                        "direction": "call",
+                        "option_type": "call",
+                        "contract_symbol": "QQQ260417C00450000",
+                        "expiry": "2026-04-17",
+                        "strike": 450.0,
+                        "quote_time_et": "2026-04-01T09:45:00-04:00",
+                        "quote_basis": "mid",
+                        "selection_source": "fixture_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                    }
+                ],
+                "policy_applied": True,
+                "policy": {
+                    "truth_source": "historical_imported_daily",
+                    "promotion_status": "watch",
+                },
+                "playbook": {"id": "short_term"},
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="fixture_smoke",
+            db_path=self.db_path,
+        )
+        record_forward_snapshot(
+            scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "IWM",
+                        "direction": "put",
+                        "option_type": "put",
+                        "contract_symbol": "IWM260417P00200000",
+                        "expiry": "2026-04-17",
+                        "strike": 200.0,
+                        "quote_time_et": "2026-04-01T09:45:00-04:00",
+                        "quote_basis": "mid",
+                        "selection_source": "live_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                        "quote_freshness_status": "stale",
+                    }
+                ],
+                "policy_applied": True,
+                "policy": {
+                    "truth_source": "historical_imported_daily",
+                    "promotion_status": "watch",
+                },
+                "playbook": {"id": "short_term"},
+                "evidence_class": "live_production",
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="api_scan_auto",
+            db_path=self.db_path,
+        )
+
+        all_events = list_forward_scan_pick_events(db_path=self.db_path)
+        eligible_events = list_forward_scan_pick_events(eligible_only=True, db_path=self.db_path)
+
+        self.assertEqual(len(all_events), 3)
+        self.assertEqual(len(eligible_events), 1)
+        self.assertEqual(eligible_events[0]["ticker"], "SPY")
+        self.assertEqual(eligible_events[0]["evidence_class"], "live_production")
+        self.assertEqual(eligible_events[0]["eligibility_status"], "eligible")
+        self.assertEqual(eligible_events[0]["eligibility_blockers"], [])
 
     def test_summary_counts_recorded_sessions_even_when_no_events_exist(self):
         result = record_forward_snapshot(

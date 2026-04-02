@@ -11,6 +11,7 @@ const REPORT_PATH = path.join(DATA_ROOT, "trading_validation_report.json");
 const BACKTEST_DIR = path.join(DATA_ROOT, "backtests");
 const EXPERIMENTS_DIR = path.join(DATA_ROOT, "experiments");
 const EXPERIMENT_REPORT_PATH = path.join(EXPERIMENTS_DIR, "latest.json");
+const READ_ONLY_BUNDLE_CACHE = new Map();
 
 const DEFAULT_ACCOUNT_ID = "paper-main";
 const MANAGED_STRATEGY_OWNER = "options-chatbot-day-trading";
@@ -346,15 +347,18 @@ function synchronizeManagedStrategies(strategies) {
   };
 }
 
-function loadStrategies() {
+function loadStrategies(options = {}) {
+  const readOnly = Boolean(options.readOnly);
   const stored = readJson(STRATEGIES_PATH, null);
   if (!Array.isArray(stored) || stored.length === 0) {
     const seeded = clone(DEFAULT_STRATEGIES);
-    atomicWriteJsonSync(STRATEGIES_PATH, seeded);
+    if (!readOnly) {
+      atomicWriteJsonSync(STRATEGIES_PATH, seeded);
+    }
     return seeded;
   }
   const synchronized = synchronizeManagedStrategies(stored);
-  if (synchronized.changed) {
+  if (synchronized.changed && !readOnly) {
     atomicWriteJsonSync(STRATEGIES_PATH, synchronized.strategies);
   }
   return synchronized.strategies;
@@ -444,6 +448,7 @@ function simulateExecution(options = {}) {
 class PaperBroker {
   constructor(options = {}) {
     this.ledgerPath = options.ledgerPath || LEDGER_PATH;
+    this.readOnly = Boolean(options.readOnly);
     this.ledger = this._loadLedger();
   }
 
@@ -473,6 +478,18 @@ class PaperBroker {
 
     if (!this.ledger.accounts[accountId]) {
       const startingCash = Number.isFinite(options.startingCash) ? Number(options.startingCash) : DEFAULT_DAY_TRADING_CONFIG.startingCash;
+      if (this.readOnly || options.createIfMissing === false) {
+        return {
+          accountId,
+          startingCash,
+          cash: startingCash,
+          realizedPnl: 0,
+          feesPaid: 0,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          positions: {},
+        };
+      }
       this.ledger.accounts[accountId] = {
         accountId,
         startingCash,
@@ -1138,6 +1155,70 @@ function loadBacktestSummaries() {
       return raw?.summary ? raw : { strategyId: raw?.strategyId, summary: raw };
     })
     .filter((result) => result?.strategyId && result?.summary);
+}
+
+function _mtimeMs(filePath) {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function _directorySignature(dirPath) {
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    let latest = _mtimeMs(dirPath);
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      latest = Math.max(
+        latest,
+        entry.isDirectory() ? _directorySignature(entryPath) : _mtimeMs(entryPath),
+      );
+    }
+    return latest;
+  } catch {
+    return 0;
+  }
+}
+
+function _readOnlyBundleKey(options = {}) {
+  const bars = Number(options.bars) || DEFAULT_DAY_TRADING_CONFIG.bars;
+  const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  return [
+    "legacy",
+    bars,
+    accountId,
+    _mtimeMs(STRATEGIES_PATH),
+    _mtimeMs(LEDGER_PATH),
+    _mtimeMs(REPORT_PATH),
+    _mtimeMs(EXPERIMENT_REPORT_PATH),
+    _directorySignature(BACKTEST_DIR),
+    _directorySignature(EXPERIMENTS_DIR),
+  ].join("::");
+}
+
+function _readOnlyDayTradingBundle(options = {}) {
+  const cacheKey = _readOnlyBundleKey(options);
+  const cached = READ_ONLY_BUNDLE_CACHE.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  const broker = new PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
+  const bundle = {
+    accountId,
+    strategies: loadStrategies({ readOnly: true }),
+    backtests: loadBacktestSummaries(),
+    broker,
+    paperSummaries: broker.getStrategySummaries({ accountId }),
+    paperAccount: broker.getAccountSummary({ accountId }),
+    lastReport: readJson(REPORT_PATH, null),
+    lastWatchlist: readJson(path.join(DATA_ROOT, "watchlist_latest.json"), null),
+    experimentReport: readJson(EXPERIMENT_REPORT_PATH, null),
+  };
+  READ_ONLY_BUNDLE_CACHE.set(cacheKey, bundle);
+  return bundle;
 }
 
 function httpsJson(url) {
@@ -1876,6 +1957,7 @@ async function runDayTradingExperiments(options = {}) {
   const strategies = (options.strategies || loadStrategies()).filter((strategy) => String(strategy.status || "") !== "disabled");
   const bars = Number(options.bars) || DEFAULT_DAY_TRADING_CONFIG.bars;
   const feesFraction = Number.isFinite(options.feesFraction) ? Number(options.feesFraction) : DEFAULT_DAY_TRADING_CONFIG.feesFraction;
+  const persistArtifacts = options.persistArtifacts !== false;
   const marketDataLoader = typeof options.marketDataLoader === "function"
     ? options.marketDataLoader
     : fetchMarketDataForStrategy;
@@ -1893,7 +1975,7 @@ async function runDayTradingExperiments(options = {}) {
   const results = [];
 
   for (const strategy of strategies) {
-    const marketData = await marketDataLoader(strategy, { bars });
+    const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     marketDataByBase.set(strategy.strategyId, marketData);
     const trustedMarketData = marketData?.source !== "sample_fallback";
     const variants = buildDayTradingExperimentVariants(strategy, experimentOptions);
@@ -1990,19 +2072,27 @@ function calculateBarAgeMinutes(latestTimestamp, nowTimestamp) {
 async function buildMorningWatchlist(options = {}) {
   const bars = Number(options.bars) || DEFAULT_DAY_TRADING_CONFIG.bars;
   const limit = Math.max(1, Number(options.limit) || DEFAULT_DAY_TRADING_CONFIG.watchlistLimit || 4);
+  const readOnly = Boolean(options.readOnly);
+  const persistArtifacts = options.persistArtifacts !== false && !readOnly;
+  const bundle = options.artifactBundle || (readOnly ? _readOnlyDayTradingBundle({ ...options, bars }) : null);
   const marketDataLoader = typeof options.marketDataLoader === "function"
     ? options.marketDataLoader
     : fetchMarketDataForStrategy;
-  const strategies = (options.strategies || loadStrategies()).filter((strategy) => String(strategy.status || "") !== "disabled");
+  const strategies = ((bundle?.strategies || options.strategies || loadStrategies({ readOnly })) || [])
+    .filter((strategy) => String(strategy.status || "") !== "disabled");
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
   const now = options.now || nowIso();
   const nowWindow = classifyMorningWindow(now, DEFAULT_DAY_TRADING_CONFIG);
-  const broker = new PaperBroker({ ledgerPath: LEDGER_PATH });
-  broker.ensureAccount({ accountId, startingCash: DEFAULT_DAY_TRADING_CONFIG.startingCash });
-  const paperSummaries = broker.getStrategySummaries({ accountId });
+  const broker = bundle?.broker || new PaperBroker({ ledgerPath: LEDGER_PATH, readOnly });
+  broker.ensureAccount({
+    accountId,
+    startingCash: DEFAULT_DAY_TRADING_CONFIG.startingCash,
+    createIfMissing: readOnly,
+  });
+  const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
   const scoreboard = buildStrategyScoreboard({
     strategies,
-    backtests: loadBacktestSummaries(),
+    backtests: bundle?.backtests || loadBacktestSummaries(),
     paperSummaries,
   });
   const strategyMap = new Map(strategies.map((strategy) => [strategy.strategyId, strategy]));
@@ -2019,7 +2109,7 @@ async function buildMorningWatchlist(options = {}) {
     const strategy = strategyMap.get(candidate.strategyId);
     if (!strategy) continue;
 
-    const marketData = await marketDataLoader(strategy, { bars });
+    const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     const priceSeries = Array.isArray(marketData?.priceSeries) ? marketData.priceSeries : [];
     const lastBar = priceSeries[priceSeries.length - 1] || null;
     const latestSessionDate = lastBar ? getEtParts(lastBar.timestamp)?.date : null;
@@ -2393,15 +2483,20 @@ async function runDayTradingValidation(options = {}) {
 }
 
 function getDayTradingSnapshot(options = {}) {
-  const strategies = loadStrategies();
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
-  const broker = new PaperBroker({ ledgerPath: LEDGER_PATH });
-  broker.ensureAccount({ accountId, startingCash: DEFAULT_DAY_TRADING_CONFIG.startingCash });
-  const paperAccount = broker.getAccountSummary({ accountId });
-  const paperSummaries = broker.getStrategySummaries({ accountId });
+  const bundle = options.artifactBundle || _readOnlyDayTradingBundle(options);
+  const broker = bundle.broker || new PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
+  broker.ensureAccount({
+    accountId,
+    startingCash: DEFAULT_DAY_TRADING_CONFIG.startingCash,
+    createIfMissing: true,
+  });
+  const strategies = bundle.strategies || loadStrategies({ readOnly: true });
+  const paperAccount = bundle.paperAccount || broker.getAccountSummary({ accountId });
+  const paperSummaries = bundle.paperSummaries || broker.getStrategySummaries({ accountId });
   const scoreboard = buildStrategyScoreboard({
     strategies,
-    backtests: loadBacktestSummaries(),
+    backtests: bundle.backtests || loadBacktestSummaries(),
     paperSummaries,
   });
 
@@ -2412,7 +2507,7 @@ function getDayTradingSnapshot(options = {}) {
     scoreboard,
     paperAccount,
     paperSummaries,
-    lastReport: readJson(REPORT_PATH, null),
+    lastReport: bundle.lastReport || readJson(REPORT_PATH, null),
   };
 }
 

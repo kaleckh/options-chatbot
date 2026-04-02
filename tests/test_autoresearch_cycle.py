@@ -60,7 +60,7 @@ def _fake_test_report(*, passed: bool = True) -> dict:
         "generated_at": "2026-03-30T15:00:00",
         "commands": [
             {
-                "command": "npm run verify",
+                "command": "npm run verify:research",
                 "returncode": 0 if passed else 1,
                 "passed": passed,
                 "stdout": "ok",
@@ -175,10 +175,10 @@ class AutoresearchCycleTests(unittest.TestCase):
         packet = json.loads((run_dir / "decision_packet.json").read_text(encoding="utf8"))
         self.assertIn(packet["recommended_verdict"], {"hold", "reject", "promote"})
 
-    def test_verify_gate_collapses_to_a_single_command(self):
+    def test_research_gate_collapses_to_a_single_command(self):
         commands = cycle._mandatory_test_commands()
 
-        self.assertEqual(commands, [["npm", "run", "verify"]])
+        self.assertEqual(commands, [["npm", "run", "verify:research"]])
 
     def test_imported_truth_lane_writes_truth_artifacts_and_watchlist_manifest(self):
         watchlist = self.root / "docs" / "autoresearch" / "truth-first-watchlist.json"

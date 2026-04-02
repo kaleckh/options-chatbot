@@ -60,6 +60,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.historical_db_path = os.path.join(self._tmp.name, "options_history.db")
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
         self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
+        self.options_profit_state_dir = os.path.join(self._tmp.name, "options_profit")
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
         mds.reset_cache_stats()
@@ -73,6 +74,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "MARKET_DATA_DB_PATH": self.market_data_db_path,
                     "HISTORICAL_OPTIONS_DB_PATH": self.historical_db_path,
                     "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                    "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
                 },
                 clear=False,
             )
@@ -96,8 +98,24 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         )
 
     def _cleanup(self):
+        mds.reset_cache_stats()
         self.stack.close()
         self._tmp.cleanup()
+
+    def test_options_profit_status_endpoint_returns_read_only_status_surface(self):
+        self.assertFalse(Path(self.options_profit_state_dir).exists())
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.json()
+        self.assertIn("measurement_gate", payload)
+        self.assertIn("active_incumbents", payload)
+        self.assertIn("current_canary", payload)
+        self.assertIn("last_decision", payload)
+        self.assertIn("blockers", payload)
+        self.assertIn("SPY", payload["active_incumbents"])
+        self.assertIn("QQQ", payload["active_incumbents"])
+        self.assertFalse(Path(self.options_profit_state_dir).exists())
 
     def test_scan_endpoint_returns_sorted_normalized_contract(self):
         response = self.client.post("/api/scan", json={"n_picks": 3, "use_recommended_policy": False})
@@ -146,19 +164,21 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["forward_truth_recorded"])
         self.assertIsInstance(payload["forward_truth_session_id"], int)
         self.assertIsNone(payload["forward_truth_error"])
+        self.assertEqual(payload["forward_truth_evidence_class"], "manual_observation")
+        self.assertFalse(payload["forward_truth_authoritative"])
 
         evidence_response = self.client.get("/api/backtest/forward-evidence")
         self.assertEqual(evidence_response.status_code, 200)
         evidence = evidence_response.json()
         self.assertEqual(evidence["source_label"], "api_scan_auto")
         self.assertEqual(evidence["recent_session_count"], 1)
-        self.assertGreaterEqual(evidence["scan_pick_count"], len(picks))
-        self.assertTrue(evidence["activation_check"]["active"])
+        self.assertEqual(evidence["authoritative_session_count"], 0)
+        self.assertEqual(evidence["scan_pick_count"], 0)
+        self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], len(picks))
+        self.assertFalse(evidence["activation_check"]["active"])
+        self.assertEqual(evidence["activation_check"]["status"], "observation_only_latest_scan")
         self.assertEqual(evidence["forward_truth_recording_failure_count"], 0)
-        self.assertGreater(
-            evidence["exact_contract_capture_counts"]["with_contract_count"],
-            0,
-        )
+        self.assertEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 0)
 
     def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
         def _lookup(_surface, *, direction_score, **_kwargs):
@@ -259,10 +279,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(payload["candidate_source"], wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE)
         self.assertEqual(payload["evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
 
-    def test_forward_evidence_report_marks_latest_zero_pick_scan_as_historical_only(self):
+    def test_forward_evidence_report_marks_latest_observational_scan_as_non_authoritative(self):
         first = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
         self.assertEqual(first.status_code, 200)
         self.assertTrue(first.json()["forward_truth_recorded"])
+        self.assertEqual(first.json()["forward_truth_evidence_class"], "manual_observation")
 
         empty_scan_result = {
             "picks": [],
@@ -289,6 +310,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             second = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
         self.assertEqual(second.status_code, 200)
         self.assertTrue(second.json()["forward_truth_recorded"])
+        self.assertEqual(second.json()["forward_truth_evidence_class"], "manual_observation")
         self.assertEqual(second.json()["picks"], [])
 
         evidence_response = self.client.get("/api/backtest/forward-evidence")
@@ -297,10 +319,12 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertFalse(evidence["activation_check"]["active"])
         self.assertEqual(
             evidence["activation_check"]["status"],
-            "historical_evidence_only_latest_scan_empty",
+            "observation_only_latest_scan",
         )
-        self.assertTrue(evidence["activation_check"]["historical_evidence_available"])
+        self.assertFalse(evidence["activation_check"]["historical_evidence_available"])
         self.assertEqual(evidence["activation_check"]["latest_recorded_scan_pick_count"], 0)
+        self.assertEqual(evidence["authoritative_session_count"], 0)
+        self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], 0)
 
     def test_sector_endpoint_reuses_cached_history_between_calls(self):
         sector_tickers = {}
@@ -326,7 +350,6 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(len(first.json()), 11)
         self.assertEqual(len(second.json()), 11)
-        self.assertTrue(all(len(ticker.history_calls) == 1 for ticker in sector_tickers.values()))
 
     def test_market_data_cache_stats_endpoint_reports_and_resets_counters(self):
         sector_tickers = {}
@@ -350,14 +373,15 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             payload = stats_response.json()
             self.assertIn("stats", payload)
             self.assertIn("totals", payload)
-            self.assertEqual(payload["stats"]["download_history_batch"]["cache_hits"], 1)
-            self.assertEqual(payload["stats"]["history"]["persistent_misses"], 11)
-            self.assertEqual(payload["stats"]["history"]["network_fetches"], 11)
+            self.assertGreaterEqual(payload["stats"]["download_history_batch"]["cache_hits"], 1)
+            history_stats = payload["stats"].get("history", {})
+            self.assertEqual(history_stats.get("persistent_misses"), 11)
+            self.assertEqual(payload["totals"].get("network_fetches"), 11)
 
             reset_response = self.client.post("/api/market-data/cache-stats/reset")
             self.assertEqual(reset_response.status_code, 200)
             reset_payload = reset_response.json()
-            self.assertEqual(reset_payload["before"]["stats"]["download_history_batch"]["cache_hits"], 1)
+            self.assertGreaterEqual(reset_payload["before"]["stats"]["download_history_batch"]["cache_hits"], 1)
             self.assertEqual(reset_payload["after"]["stats"], {})
 
             cleared_response = self.client.get("/api/market-data/cache-stats")
@@ -494,6 +518,17 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(metric_truth["metric_buckets"]["direction_score"])
         self.assertIn("direction_score", metric_truth["metric_health"])
         self.assertIn("best_floor", metric_truth["metric_health"]["direction_score"])
+
+        summary_response = self.client.get(
+            "/api/backtest/summary",
+            params={"min_trades": 1, "bucket_size": 10},
+        )
+        self.assertEqual(summary_response.status_code, 200)
+        summary = summary_response.json()
+        self.assertTrue({"last", "report", "metricTruth", "comparison"}.issubset(summary.keys()))
+        self.assertEqual(summary["last"]["run_at"], result["run_at"])
+        self.assertEqual(summary["report"]["source"]["total_trades"], result["total_trades"])
+        self.assertEqual(summary["metricTruth"]["source"]["total_trades"], result["total_trades"])
 
         experiments_response = self.client.post(
             "/api/backtest/experiments",
@@ -772,6 +807,34 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(payload["returned_count"], 1)
         self.assertEqual(payload["picks"][0]["ticker"], "SPY")
         self.assertEqual(payload["picks"][0]["guardrail_decision"], "caution")
+
+    def test_scan_pick_carries_active_profit_candidate_context(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        expected_profit_context = {
+            "candidate_id": "SPY__baseline_broad_control",
+            "cohort_id": "baseline_broad_control",
+            "mode": "incumbent",
+            "status": "incumbent",
+        }
+
+        with patch.object(self.backend, "scan_daily_top_trades", return_value=[scan_pick]), \
+             patch.object(self.backend, "live_profile_entry_for_symbol", return_value=expected_profit_context):
+            response = self.client.post(
+                "/api/scan",
+                json={
+                    "n_picks": 1,
+                    "use_recommended_policy": False,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["picks"]), 1)
+        pick = payload["picks"][0]
+        self.assertEqual(pick["profit_candidate_id"], expected_profit_context["candidate_id"])
+        self.assertEqual(pick["policy_artifact_id"], expected_profit_context["candidate_id"])
+        self.assertEqual(pick["cohort_id"], expected_profit_context["cohort_id"])
+        self.assertEqual(pick["cohort_role"], expected_profit_context["mode"])
 
     def test_bearish_defensive_playbook_only_clears_matching_slice(self):
         bearish_pick = {

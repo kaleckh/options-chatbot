@@ -348,6 +348,14 @@ def main() -> int:
             if not getattr(backend_main.POSITIONS_REPOSITORY, "is_available", False)
             else None
         ),
+        run_mode="record_options_forward_truth",
+        evidence_class=(
+            "live_production"
+            if str(args.source or "").strip().lower() == "api_scan_auto" and not champion_manifest
+            else "research_backfill"
+        ),
+        is_fixture=bool(champion_manifest),
+        policy_artifact_id=champion_manifest.get("id") if champion_manifest else None,
     )
 
     result = record_forward_snapshot(

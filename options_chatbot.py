@@ -24,15 +24,17 @@ import re
 import json
 import math
 import glob
+import copy
 import shutil
 import subprocess
 from functools import wraps
-from typing import Optional
+from typing import Any, Optional
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import yfinance as yf
+import market_data_service as _mds
 
 from expectancy_calibration import (
     DEFAULT_SHRINKAGE_TRADES,
@@ -51,6 +53,7 @@ from market_data_service import (
     get_ticker_info as _md_get_ticker_info,
     request_scope as _market_data_request_scope,
 )
+from options_profit_state import merge_live_profile
 
 _ET = ZoneInfo("America/New_York")
 
@@ -167,6 +170,37 @@ def _cached_fast_info(symbol: str):
     return _md_get_fast_info(symbol, ticker_factory=yf.Ticker)
 
 
+def _next_earnings_datetime_from_info(info: Optional[dict]) -> datetime | None:
+    if not isinstance(info, dict):
+        return None
+    candidates = (
+        info.get("earningsDate"),
+        info.get("earningsTimestampStart"),
+        info.get("earningsTimestamp"),
+        info.get("earningsTimestampEnd"),
+    )
+    for value in candidates:
+        if value in (None, "", [], ()):
+            continue
+        if isinstance(value, (list, tuple)):
+            nested = next((item for item in value if item not in (None, "")), None)
+            if nested is None:
+                continue
+            value = nested
+        try:
+            if isinstance(value, (int, float)):
+                return datetime.fromtimestamp(float(value), tz=_ET).replace(tzinfo=None)
+            parsed = pd.Timestamp(value)
+            if pd.isna(parsed):
+                continue
+            if parsed.tzinfo is not None:
+                parsed = parsed.tz_convert(_ET)
+            return parsed.to_pydatetime().replace(tzinfo=None)
+        except Exception:
+            continue
+    return None
+
+
 def _fast_info_last_price(fast_info) -> float:
     if not fast_info:
         return 0.0
@@ -187,8 +221,19 @@ def _fast_info_last_price(fast_info) -> float:
 def _market_data_scoped(fn):
     @wraps(fn)
     def _wrapped(*args, **kwargs):
-        with _market_data_request_scope():
-            return fn(*args, **kwargs)
+        try:
+            with _market_data_request_scope():
+                return fn(*args, **kwargs)
+        finally:
+            connections = getattr(getattr(_mds, "_THREAD_LOCAL", None), "connections", None)
+            if isinstance(connections, dict):
+                for path, conn in list(connections.items()):
+                    try:
+                        conn.close()
+                    except Exception:
+                        pass
+                    finally:
+                        connections.pop(path, None)
     return _wrapped
 
 
@@ -331,9 +376,72 @@ def _load_expectancy_surface_for_live(
     )
 
 
+def _compute_tech_score_from_close_series(
+    close_series,
+    option_type: str = "call",
+    *,
+    market_open: Optional[bool] = None,
+) -> tuple[float, float, float]:
+    try:
+        if isinstance(close_series, pd.Series):
+            hist = close_series.dropna()
+            if hist.empty:
+                return 50.0, 50.0, 0.0
+            p = hist.values.astype(float)
+        else:
+            p = np.asarray(close_series, dtype=float)
+            p = p[np.isfinite(p)]
+        if len(p) < 55:
+            return 50.0, 50.0, 0.0
+        n = len(p)
+        is_market_open = _market_is_open() if market_open is None else bool(market_open)
+        idx = n - 2 if is_market_open and n >= 2 else n - 1
+        if idx < 50:
+            return 50.0, 50.0, 0.0
+
+        sma20 = float(np.mean(p[idx - 20 : idx]))
+        sma50 = float(np.mean(p[idx - 50 : idx]))
+        price = float(p[idx])
+
+        diffs = np.diff(p[idx - 15 : idx + 1])
+        avg_up = float(np.mean(diffs[diffs > 0])) if np.any(diffs > 0) else 0.0
+        avg_down = float(np.mean(-diffs[diffs < 0])) if np.any(diffs < 0) else 0.0
+        rs = avg_up / (avg_down + 1e-9)
+        rsi14 = 100.0 - 100.0 / (1.0 + rs)
+
+        k12, k26 = 2.0 / 13.0, 2.0 / 27.0
+        ema12 = ema26 = float(p[0])
+        ema12_prev = ema26_prev = ema12
+        for px in p[1:]:
+            ema12_prev, ema26_prev = ema12, ema26
+            ema12 = float(px) * k12 + ema12 * (1 - k12)
+            ema26 = float(px) * k26 + ema26 * (1 - k26)
+        macd = ema12 - ema26
+        macd_prev = ema12_prev - ema26_prev
+        macd_rising = macd > macd_prev
+
+        trade_type = option_type.lower()
+        if trade_type == "call":
+            trend = (50.0 if price > sma20 else 0.0) + (50.0 if sma20 > sma50 else 0.0)
+            rsi_s = max(0.0, 100.0 - abs(rsi14 - 55.0) * (100.0 / 35.0))
+            macd_s = 100.0 if macd > 0 and macd_rising else (50.0 if macd > 0 else 0.0)
+        else:
+            trend = (50.0 if price < sma20 else 0.0) + (50.0 if sma20 < sma50 else 0.0)
+            rsi_s = max(0.0, 100.0 - abs(rsi14 - 45.0) * (100.0 / 35.0))
+            macd_s = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
+
+        score = trend * 0.40 + rsi_s * 0.35 + macd_s * 0.25
+        ret5 = round(float(price / p[idx - 5] - 1) * 100, 2) if idx >= 5 else 0.0
+        return round(float(score), 1), round(rsi14, 1), ret5
+    except Exception:
+        return 50.0, 50.0, 0.0
+
+
 def _get_profile(ticker: str) -> dict:
     """Return the strategy profile dict for the given ticker."""
-    return STRATEGY_PROFILES[_asset_class(ticker)]
+    base_profile = STRATEGY_PROFILES[_asset_class(ticker)]
+    merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker)
+    return merged_profile
 
 # ─── Risk settings (user can update account_size mid-conversation) ────────────
 # Claude will read/write these via the manage_risk_settings tool.
@@ -2098,6 +2206,7 @@ def log_prediction(
                                 peak_pnl_pct=_peak,
                                 sp=_ee_sp,
                                 spy_ret5=_spy_ret5_grade,
+                                history_frame=hist,
                             )
                             if _should_exit:
                                 exit_price   = latest_close
@@ -2874,9 +2983,15 @@ def backtest_strategy(
 
 # ─── Strategy engine helpers (internal, not exposed as standalone tools) ──────
 
-def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
+def _compute_tech_score_live(
+    symbol: str,
+    option_type: str = "call",
+    *,
+    history_frame: Optional[pd.DataFrame] = None,
+    close_history: Optional[pd.Series] = None,
+) -> float:
     """
-    Fetch recent price history and compute a direction-aware technical setup score (0–100).
+    Fetch recent price history and compute a direction-aware technical setup score (0-100).
 
     Uses the same RSI + MACD + SMA formula as the optimizer's _tech_score():
       40% SMA trend (price / sma20 / sma50 alignment)
@@ -2886,54 +3001,14 @@ def _compute_tech_score_live(symbol: str, option_type: str = "call") -> float:
     Returns 50.0 (neutral) if data cannot be fetched.
     """
     try:
-        hist = _cached_history(symbol, period="90d")["Close"].dropna()
-        if len(hist) < 55:
-            return 50.0
-        p = hist.values.astype(float)
-        n = len(p)
-        idx = n - 2 if _market_is_open() and n >= 2 else n - 1
-        if idx < 50:
-            return 50.0, 50.0, 0.0
-
-        # SMA20 / SMA50
-        sma20 = float(np.mean(p[idx - 20 : idx]))
-        sma50 = float(np.mean(p[idx - 50 : idx]))
-        price = float(p[idx])
-
-        # RSI 14
-        diffs = np.diff(p[idx - 15 : idx + 1])
-        avg_up   = float(np.mean(diffs[diffs > 0])) if np.any(diffs > 0) else 0.0
-        avg_down = float(np.mean(-diffs[diffs < 0])) if np.any(diffs < 0) else 0.0
-        rs   = avg_up / (avg_down + 1e-9)
-        rsi14 = 100.0 - 100.0 / (1.0 + rs)
-
-        # MACD (EMA12 − EMA26)
-        k12, k26 = 2.0 / 13.0, 2.0 / 27.0
-        ema12 = ema26 = float(p[0])
-        ema12_prev = ema26_prev = ema12
-        for px in p[1:]:
-            ema12_prev, ema26_prev = ema12, ema26
-            ema12 = float(px) * k12 + ema12 * (1 - k12)
-            ema26 = float(px) * k26 + ema26 * (1 - k26)
-        macd      = ema12 - ema26
-        macd_prev = ema12_prev - ema26_prev
-        macd_rising = macd > macd_prev
-
-        trade_type = option_type.lower()
-        if trade_type == "call":
-            trend  = (50.0 if price > sma20 else 0.0) + (50.0 if sma20 > sma50 else 0.0)
-            rsi_s  = max(0.0, 100.0 - abs(rsi14 - 55.0) * (100.0 / 35.0))
-            macd_s = 100.0 if macd > 0 and macd_rising else (50.0 if macd > 0 else 0.0)
-        else:
-            trend  = (50.0 if price < sma20 else 0.0) + (50.0 if sma20 < sma50 else 0.0)
-            rsi_s  = max(0.0, 100.0 - abs(rsi14 - 45.0) * (100.0 / 35.0))
-            macd_s = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
-
-        score = trend * 0.40 + rsi_s * 0.35 + macd_s * 0.25
-        ret5 = round(float(price / p[idx - 5] - 1) * 100, 2) if idx >= 5 else 0.0
-        return round(float(score), 1), round(rsi14, 1), ret5
+        if close_history is None:
+            if history_frame is not None and "Close" in history_frame:
+                close_history = history_frame["Close"].dropna()
+            else:
+                close_history = _cached_history(symbol, period="90d")["Close"].dropna()
     except Exception:
         return 50.0, 50.0, 0.0
+    return _compute_tech_score_from_close_series(close_history, option_type, market_open=_market_is_open())
 
 
 def _fetch_best_option(
@@ -2943,6 +3018,8 @@ def _fetch_best_option(
     target_dte: int,
     stock_price: float = 0.0,
     hv30_fallback: float = 0.30,
+    *,
+    return_context: bool = False,
 ) -> dict | None:
     """
     Fetch the real options chain and return the strike/premium closest to delta_target.
@@ -2955,6 +3032,7 @@ def _fetch_best_option(
     """
     best: dict | None = None
     best_diff = 999.0
+    chain_context: dict[str, Any] | None = None
 
     # ── Fetch current stock price if not provided ─────────────────────────────
     _S = stock_price
@@ -2990,6 +3068,15 @@ def _fetch_best_option(
                 raise ValueError("option chain snapshot is not fresh")
             _chain = _chain_snapshot.value
             _df         = _chain.calls if trade_type == "call" else _chain.puts
+            chain_context = {
+                "spot_price": _S,
+                "selected_expiry": _best_exp,
+                "selected_chain": _chain,
+                "selected_chain_snapshot": _chain_snapshot,
+                "expiries_snapshot": _exp_snapshot,
+                "all_expiries": list(_exps),
+                "valid_expiries": list(_valid_exps),
+            }
 
             for _, _row in _df.iterrows():
                 _K    = float(_row.get("strike") or 0)
@@ -3059,6 +3146,8 @@ def _fetch_best_option(
         pass
 
     if best is not None:
+        if return_context and chain_context is not None:
+            best["chain_context"] = chain_context
         return best
 
     # ── BS fallback: real-increment strikes priced on HV30 ───────────────────
@@ -3090,6 +3179,9 @@ def _fetch_best_option(
                 }
     except Exception:
         pass
+
+    if best is not None and return_context and chain_context is not None:
+        best["chain_context"] = chain_context
 
     return best
 
@@ -3193,6 +3285,8 @@ def _check_early_exit(
     peak_pnl_pct: float,
     sp: dict = None,
     spy_ret5: float = 0.0,
+    *,
+    history_frame: Optional[pd.DataFrame] = None,
 ) -> tuple:
     """
     Check whether a pending pick should be exited early based on indicator
@@ -3224,7 +3318,11 @@ def _check_early_exit(
 
     # ── 2-5. Fetch live indicators (one call via existing function) ───────
     try:
-        tech_live, rsi_live, ret5_live = _compute_tech_score_live(ticker, trade_type)
+        tech_live, rsi_live, ret5_live = _compute_tech_score_live(
+            ticker,
+            trade_type,
+            history_frame=history_frame,
+        )
     except Exception:
         return False, ""  # can't compute indicators — skip
 
@@ -3402,6 +3500,10 @@ def scan_daily_top_trades(
             _spy_ret5 = float((_spy_hist.iloc[-1] / _spy_hist.iloc[-6] - 1) * 100)
     except Exception:
         pass
+    try:
+        _vix_close = float(_cached_history("^VIX", period="5d")["Close"].dropna().iloc[-1])
+    except Exception:
+        _vix_close = 20.0
     expectancy_surface = _load_expectancy_surface_for_live(playbook=calibration_playbook)
     market_regime_bucket = normalized_market_regime(spy_ret5=_spy_ret5)
     market_open = _market_is_open()
@@ -3423,7 +3525,8 @@ def scan_daily_top_trades(
             if not liquidity_snapshot["eligible"]:
                 continue
 
-            hist = hist_frame["Close"].dropna().tail(90)
+            close_history = hist_frame["Close"].dropna()
+            hist = close_history.tail(90)
             if len(hist) < 55:
                 continue
             prices = hist.values.astype(float)
@@ -3433,15 +3536,10 @@ def scan_daily_top_trades(
                 continue
             price  = float(prices[signal_idx])
             _entry_stock_price = price
+            _latest_close = float(close_history.iloc[-1]) if not close_history.empty else _entry_stock_price
 
-            # Sector fetch — equity only
-            if _ac == "equity":
-                try:
-                    _sector = _cached_ticker_info(ticker).get("sector")
-                except Exception:
-                    _sector = None
-            else:
-                _sector = None
+            _sector = None
+            _ticker_info: dict = {}
 
             # HV30
             log_rets = np.log(prices[1:] / prices[:-1])
@@ -3470,10 +3568,17 @@ def scan_daily_top_trades(
             trade_type = "call" if bullish else "put"
 
             # Technical setup score — gate early to avoid expensive strike search on weak setups
-            tech, _rsi14_live, _ret5_live = _compute_tech_score_live(ticker, trade_type)
+            tech, _rsi14_live, _ret5_live = _compute_tech_score_from_close_series(
+                hist,
+                trade_type,
+                market_open=market_open,
+            )
             rsi14 = _rsi14_live
             ret5 = _ret5_live
             if tech < ticker_min_tech_score:
+                continue
+            direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
+            if direction_score < ticker_min_confidence:
                 continue
 
             ticker_target_dte = (
@@ -3485,29 +3590,47 @@ def scan_daily_top_trades(
             if _ac == "equity":
                 _earnings_skip = False
                 try:
-                    _ed = _cached_earnings_dates(ticker)
-                    if _ed is not None and not _ed.empty:
-                        _today_dt = datetime.now().replace(tzinfo=None)
-                        _future_ed = _ed[_ed.index.tz_localize(None) >= _today_dt] if _ed.index.tzinfo else _ed[_ed.index >= _today_dt]
-                        if not _future_ed.empty:
-                            _next_earn = _future_ed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
-                            _days_to_earn = (_next_earn - _today_dt).days
-                            if 0 <= _days_to_earn <= ticker_target_dte:
-                                _earnings_skip = True  # earnings inside our hold window → skip
+                    _today_dt = datetime.now().replace(tzinfo=None)
+                    _ticker_info = _cached_ticker_info(ticker) or {}
+                    _sector = _ticker_info.get("sector")
+                    _next_earn = _next_earnings_datetime_from_info(_ticker_info)
+                    if _next_earn is None:
+                        _ed = _cached_earnings_dates(ticker)
+                        if _ed is not None and not _ed.empty:
+                            _future_ed = _ed[_ed.index.tz_localize(None) >= _today_dt] if _ed.index.tzinfo else _ed[_ed.index >= _today_dt]
+                            if not _future_ed.empty:
+                                _next_earn = _future_ed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
+                    if _next_earn is not None:
+                        _days_to_earn = (_next_earn - _today_dt).days
+                        if 0 <= _days_to_earn <= ticker_target_dte:
+                            _earnings_skip = True  # earnings inside our hold window → skip
                 except Exception:
                     _earnings_skip = True
                 if _earnings_skip:
                     continue
 
             # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
-            _opt = _fetch_best_option(
-                ticker,
-                trade_type,
-                float(sp["targets"]["delta_optimal"]),
-                ticker_target_dte,
-                stock_price=_entry_stock_price,
-                hv30_fallback=hv30,
-            )
+            try:
+                _opt = _fetch_best_option(
+                    ticker,
+                    trade_type,
+                    float(sp["targets"]["delta_optimal"]),
+                    ticker_target_dte,
+                    stock_price=_entry_stock_price,
+                    hv30_fallback=hv30,
+                    return_context=True,
+                )
+            except TypeError as exc:
+                if "return_context" not in str(exc):
+                    raise
+                _opt = _fetch_best_option(
+                    ticker,
+                    trade_type,
+                    float(sp["targets"]["delta_optimal"]),
+                    ticker_target_dte,
+                    stock_price=_entry_stock_price,
+                    hv30_fallback=hv30,
+                )
             if _opt is None:
                 continue
 
@@ -3529,12 +3652,18 @@ def scan_daily_top_trades(
             if _liq["is_illiquid"]:
                 continue
 
-            # Direction Score: predicts if stock moves the right way (this is the headline)
-            direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
-
             # IV crush check — same as brain (penalise if strike IV >> HV distribution)
             try:
-                _skew = _calculate_iv_skew(ticker, best_strike, trade_type, actual_exp or "", sp=sp)
+                _skew = _calculate_iv_skew(
+                    ticker,
+                    best_strike,
+                    trade_type,
+                    actual_exp or "",
+                    sp=sp,
+                    spot_price=_latest_close,
+                    history_frame=hist_frame,
+                    chain_context=_opt.get("chain_context"),
+                )
                 _iv_pen = _skew["iv_crush_penalty_pts"]
                 if _iv_pen > 0:
                     direction_score = max(0.0, direction_score - _iv_pen)
@@ -3551,7 +3680,12 @@ def scan_daily_top_trades(
 
             # Market regime — ATR stop widening + defense mode (same as brain)
             try:
-                _regime = _get_market_regime(ticker, sp=sp)
+                _regime = _get_market_regime(
+                    ticker,
+                    sp=sp,
+                    hist_frame=hist_frame,
+                    vix=_vix_close,
+                )
                 _adj_stop_pct  = round(_stop_loss_pct * _regime["stop_loss_mult"], 1)
                 _adj_size_mult = _regime["position_size_mult"]
             except Exception:
@@ -4043,7 +4177,13 @@ def _check_trade_liquidity(
     }
 
 
-def _get_market_regime(symbol: str, sp: dict = None) -> dict:
+def _get_market_regime(
+    symbol: str,
+    sp: dict = None,
+    *,
+    hist_frame: Optional[pd.DataFrame] = None,
+    vix: Optional[float] = None,
+) -> dict:
     """
     VIX + ATR regime detector.
     VIX > 25 → Defense Mode (50% position sizes).
@@ -4053,15 +4193,15 @@ def _get_market_regime(symbol: str, sp: dict = None) -> dict:
         sp = _get_profile(symbol)
     # VIX
     try:
-        vix = float(_cached_history("^VIX", period="5d")["Close"].iloc[-1])
+        vix_value = float(vix) if vix is not None else float(_cached_history("^VIX", period="5d")["Close"].iloc[-1])
     except Exception:
-        vix = 20.0
+        vix_value = 20.0
 
     # ATR (14-day vs 28-day to detect expansion)
     atr_14 = atr_28 = 0.0
     atr_expanding = False
     try:
-        hist = _cached_history(symbol, period="45d")
+        hist = hist_frame if hist_frame is not None else _cached_history(symbol, period="45d")
         hi, lo, cl = hist["High"].values, hist["Low"].values, hist["Close"].values
         trs = [max(hi[i] - lo[i], abs(hi[i] - cl[i-1]), abs(lo[i] - cl[i-1]))
                for i in range(1, len(cl))]
@@ -4074,18 +4214,18 @@ def _get_market_regime(symbol: str, sp: dict = None) -> dict:
     except Exception:
         pass
 
-    defense = vix > sp["filters"]["vix_defense_threshold"]
+    defense = vix_value > sp["filters"]["vix_defense_threshold"]
     stop_mult = sp["filters"]["atr_expansion_stop_mult"] if atr_expanding else 1.0
     pos_mult  = sp["filters"]["defense_position_mult"] if defense else 1.0
 
     notes = []
     if defense:
-        notes.append(f"VIX {vix:.0f} > {sp['filters']['vix_defense_threshold']:.0f} → Defense Mode: position sizes halved")
+        notes.append(f"VIX {vix_value:.0f} > {sp['filters']['vix_defense_threshold']:.0f} → Defense Mode: position sizes halved")
     if atr_expanding:
         notes.append(f"ATR expanding ({atr_14:.3f} > {atr_28:.3f}) → stop-loss widened to {stop_mult:.1f}×")
 
     return {
-        "vix":                    round(vix, 2),
+        "vix":                    round(vix_value, 2),
         "atr_14d":                round(atr_14, 4),
         "atr_28d":                round(atr_28, 4),
         "atr_expanding":          atr_expanding,
@@ -4097,7 +4237,17 @@ def _get_market_regime(symbol: str, sp: dict = None) -> dict:
     }
 
 
-def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expiry: str, sp: dict = None) -> dict:
+def _calculate_iv_skew(
+    symbol: str,
+    target_strike: float,
+    option_type: str,
+    expiry: str,
+    sp: dict = None,
+    *,
+    spot_price: Optional[float] = None,
+    history_frame: Optional[pd.DataFrame] = None,
+    chain_context: Optional[dict[str, Any]] = None,
+) -> dict:
     """
     Vertical skew: (OTM IV − ATM IV) / ATM IV for the target strike.
     Time skew: near-term ATM IV minus next-expiry ATM IV.
@@ -4118,14 +4268,30 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
 
     # Get spot price
     try:
-        spot = float(_cached_history(symbol_name, period="2d")["Close"].iloc[-1])
+        if spot_price is not None:
+            spot = float(spot_price)
+        elif history_frame is not None and "Close" in history_frame:
+            spot = float(history_frame["Close"].dropna().iloc[-1])
+        elif chain_context is not None and chain_context.get("spot_price") is not None:
+            spot = float(chain_context["spot_price"])
+        else:
+            spot = float(_cached_history(symbol_name, period="2d")["Close"].iloc[-1])
     except Exception:
         pass
 
     # Vertical skew from target expiry
     if spot is not None:
         try:
-            chain = _cached_option_chain(symbol_name, expiry)
+            chain = None
+            if chain_context is not None:
+                selected_expiry = str(chain_context.get("selected_expiry") or "").strip()
+                if selected_expiry == str(expiry or "").strip():
+                    chain = chain_context.get("selected_chain")
+                    if chain is None:
+                        snapshot = chain_context.get("selected_chain_snapshot")
+                        chain = getattr(snapshot, "value", snapshot)
+            if chain is None:
+                chain = _cached_option_chain(symbol_name, expiry)
             opts = chain.calls if option_type.lower() == "call" else chain.puts
             opts = opts[opts["impliedVolatility"] > 0]
 
@@ -4141,10 +4307,16 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
     # Time skew: compare near vs next expiry ATM IV
     if spot is not None:
         try:
-            exps = _cached_options(symbol_name)
+            exps = list(chain_context.get("all_expiries") or []) if chain_context else _cached_options(symbol_name)
             if len(exps) >= 2:
                 def _atm_iv(exp):
-                    c = _cached_option_chain(symbol_name, exp)
+                    if chain_context is not None and str(exp).strip() == str(chain_context.get("selected_expiry") or "").strip():
+                        c = chain_context.get("selected_chain")
+                        if c is None:
+                            snapshot = chain_context.get("selected_chain_snapshot")
+                            c = getattr(snapshot, "value", snapshot)
+                    else:
+                        c = _cached_option_chain(symbol_name, exp)
                     o = c.calls if option_type.lower() == "call" else c.puts
                     o = o[o["impliedVolatility"] > 0]
                     r = o.iloc[(o["strike"] - spot).abs().argsort()[:1]]
@@ -4158,8 +4330,9 @@ def _calculate_iv_skew(symbol: str, target_strike: float, option_type: str, expi
     # IV crush check: compare target IV to 30-day HV rolling distribution
     if target_iv is not None:
         try:
-            hist90 = _cached_history(symbol_name, period="120d")
-            log_rets = np.log(hist90["Close"] / hist90["Close"].shift(1)).dropna().values
+            hist90 = history_frame if history_frame is not None else _cached_history(symbol_name, period="120d")
+            close_history = hist90["Close"].dropna() if "Close" in hist90 else pd.Series(dtype=float)
+            log_rets = np.log(close_history / close_history.shift(1)).dropna().values
             windows = [float(np.std(log_rets[i-30:i]) * math.sqrt(252) * 100)
                        for i in range(30, len(log_rets))]
             if windows:

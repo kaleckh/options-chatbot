@@ -22,7 +22,7 @@ if str(TESTS_DIR) not in sys.path:
 import market_data_service as mds
 import options_chatbot as oc
 import wfo_optimizer as wfo
-from forward_options_ledger import DEFAULT_FORWARD_LEDGER_DB_PATH
+from forward_options_ledger import DEFAULT_FORWARD_LEDGER_DB_PATH, init_forward_ledger
 from options_algorithm_fixtures import FrozenDateTime, build_options_algorithm_fixture_bundle, load_backend_main
 from positions_repository import MemoryTrackedPositionsRepository
 
@@ -342,14 +342,20 @@ def _run_fixture_smoke(
         imported_results_dir = os.path.join(tmpdir, "options_validation_runs")
         imported_latest_path = os.path.join(imported_results_dir, "latest.json")
         imported_daily_latest_path = os.path.join(imported_results_dir, "latest_daily.json")
+        forward_ledger_path = os.path.join(tmpdir, "forward_tracking_fixture.db")
         with patch.dict(
             os.environ,
             {
                 "MARKET_DATA_DB_PATH": os.path.join(tmpdir, "market_data.db"),
                 "HISTORICAL_OPTIONS_DB_PATH": os.path.join(tmpdir, "options_history.db"),
+                "FORWARD_OPTIONS_LEDGER_DB_PATH": forward_ledger_path,
+                "OPTIONS_EVIDENCE_CLASS": "fixture_smoke",
+                "OPTIONS_RUN_MODE": "fixture_smoke",
+                "OPTIONS_IS_FIXTURE": "1",
             },
             clear=False,
         ):
+            init_forward_ledger(forward_ledger_path)
             backend = load_backend_main(db_path)
             with ExitStack() as stack:
                 stack.enter_context(patch.object(oc, "DEFAULT_WATCHLIST", bundle.watchlist))
@@ -378,7 +384,7 @@ def _run_fixture_smoke(
 
                 client = TestClient(backend.app)
                 try:
-                    return _run_smoke_sequence(
+                    summary = _run_smoke_sequence(
                         client,
                         scan_picks=scan_picks,
                         lookback_years=lookback_years,
@@ -386,6 +392,8 @@ def _run_fixture_smoke(
                         min_trades=min_trades,
                         policy_truth_lane="synthetic",
                     )
+                    summary["forward_truth_runtime_db_path"] = str(Path(forward_ledger_path).resolve())
+                    return summary
                 finally:
                     client.close()
 
@@ -429,6 +437,13 @@ def main() -> int:
     summary["truth_lane_health"]["live_policy_truth_source"] = summary.get("live_policy_truth_source")
     summary["truth_lane_health"]["live_policy_promotion_status"] = summary.get("live_policy_promotion_status")
     summary["artifact_health"] = _artifact_health(summary["truth_lane_health"])
+    summary["forward_truth_runtime_db_path"] = str(
+        Path(
+            summary.get("forward_truth_runtime_db_path")
+            or os.getenv("FORWARD_OPTIONS_LEDGER_DB_PATH")
+            or DEFAULT_FORWARD_LEDGER_DB_PATH
+        ).resolve()
+    )
     summary["doc_parity"] = _doc_parity(summary["artifact_health"])
     print(json.dumps(summary, indent=2))
     return 0

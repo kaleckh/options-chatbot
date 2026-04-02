@@ -45,16 +45,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
   const fetchRisk = useCallback(async () => {
     try {
-      const res = await fetch("/api/tools/manage_risk_settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
+      const res = await fetch("/api/risk-settings");
       if (res.ok) {
         const data = await res.json();
-        if (data.result) {
-          setRiskSettings(JSON.parse(data.result));
-        }
+        setRiskSettings(data);
       }
     } catch {
       toast.error("Could not load risk settings.");

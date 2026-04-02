@@ -4,11 +4,69 @@ on:
   push:
   pull_request:
 
+env:
+  CI: true
+
 jobs:
-  verify:
+  changes:
     runs-on: ubuntu-latest
-    env:
-      CI: true
+    outputs:
+      frontend: ${{ steps.detect.outputs.frontend }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect frontend-relevant changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${GITHUB_SHA}"
+          fi
+
+          if [[ -z "${base}" || "${base}" == "0000000000000000000000000000000000000000" ]]; then
+            base="$(git rev-list --max-parents=0 HEAD | tail -n 1)"
+          fi
+
+          frontend=false
+          while IFS= read -r file; do
+            [[ -z "${file}" ]] && continue
+            case "${file}" in
+              src/*|public/*|app/*|components/*|styles/*|pages/*|*.css|*.scss|*.tsx|*.ts|*.jsx|*.js|package.json|package-lock.json|next.config.*|tailwind.config.*|postcss.config.*|tsconfig.json|next-env.d.ts)
+                frontend=true
+                break
+                ;;
+            esac
+          done < <(git diff --name-only "${base}" "${head}")
+
+          echo "frontend=${frontend}" >> "${GITHUB_OUTPUT}"
+
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+
+      - name: Run backend tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
+  daytrading-tests:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,5 +88,28 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Run verify gate
-        run: npm run verify
+      - name: Run day-trading tests
+        run: npm run daytrading:test
+
+      - name: Run smoke fixture
+        run: npm run verify:smoke
+
+  frontend-build:
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build

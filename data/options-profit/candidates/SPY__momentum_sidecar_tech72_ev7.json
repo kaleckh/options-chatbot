@@ -1,0 +1,21 @@
+{
+  "base_profile": "index",
+  "candidate_id": "SPY__momentum_sidecar_tech72_ev7",
+  "cohort_id": "momentum_sidecar_tech72_ev7",
+  "created_at": "2026-04-02T04:49:15.123950Z",
+  "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+  "overrides": {
+    "entry": {
+      "min_tech_score": 72.0
+    },
+    "filters": {
+      "min_calibrated_expectancy_pct": 7.0
+    }
+  },
+  "replay_policy_path": null,
+  "replay_validation": {},
+  "role": "momentum_sidecar",
+  "status": "candidate",
+  "symbol": "SPY",
+  "updated_at": "2026-04-02T04:49:15.123950Z"
+}

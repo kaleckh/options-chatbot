@@ -1,0 +1,18 @@
+{
+  "base_profile": "index",
+  "candidate_id": "SPY__broad_direction75",
+  "cohort_id": "broad_direction75",
+  "created_at": "2026-04-02T04:49:15.115943Z",
+  "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+  "overrides": {
+    "entry": {
+      "min_direction_score": 75.0
+    }
+  },
+  "replay_policy_path": null,
+  "replay_validation": {},
+  "role": "broad_challenger",
+  "status": "candidate",
+  "symbol": "SPY",
+  "updated_at": "2026-04-02T04:49:15.115943Z"
+}

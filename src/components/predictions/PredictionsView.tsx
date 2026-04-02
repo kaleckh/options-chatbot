@@ -26,7 +26,8 @@ import type {
 } from "@/lib/types";
 
 const INDEX_TICKERS = new Set(["QQQ", "SPY", "IWM", "DIA", "XLK"]);
-const REQUEST_TIMEOUT_MS = 15000;
+const LEGACY_PREDICTION_TABS = new Set(["pending", "graded", "breakdown", "sim", "sectors"]);
+const REQUEST_TIMEOUT_MS = 30000;
 
 function buildTimeoutError(label: string, timeoutMs: number): Error {
   return new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s.`);
@@ -123,8 +124,12 @@ export default function PredictionsView() {
   const [loading, setLoading] = useState(true);
   const [grading, setGrading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
+  const [predictionsLoaded, setPredictionsLoaded] = useState(false);
+  const [sectorsLoaded, setSectorsLoaded] = useState(false);
+  const [positionsLoaded, setPositionsLoaded] = useState(false);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [positionsError, setPositionsError] = useState<string | null>(null);
+  const [suggestedTradesLoaded, setSuggestedTradesLoaded] = useState(false);
   const [suggestedTradesLoading, setSuggestedTradesLoading] = useState(false);
   const [suggestedTradesError, setSuggestedTradesError] = useState<string | null>(null);
   const [selectedPick, setSelectedPick] = useState<ScanPick | null>(null);
@@ -150,25 +155,34 @@ export default function PredictionsView() {
   const toast = useToast();
   const { guard } = useSubmitGuard();
 
-  const fetchPredictionsData = useCallback(async (showToast = false) => {
+  const fetchPredictionsData = useCallback(async ({
+    includePredictions = true,
+    includeSectors = false,
+    showToast = false,
+  }: {
+    includePredictions?: boolean;
+    includeSectors?: boolean;
+    showToast?: boolean;
+  } = {}) => {
     try {
-      const [predRes, sectorRes] = await Promise.all([
-        fetchWithTimeout("/api/tools/log_prediction", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "list" }),
-        }, "Prediction history"),
-        fetchWithTimeout("/api/sectors", undefined, "Sector data").catch(() => null),
-      ]);
+      const predRequest = includePredictions
+        ? fetchWithTimeout("/api/predictions/history", undefined, "Prediction history")
+        : null;
+      const sectorRequest = includeSectors
+        ? fetchWithTimeout("/api/sectors", undefined, "Sector data").catch(() => null)
+        : null;
 
-      const predData = await predRes.json();
-      if (predData.result) {
-        const parsed = JSON.parse(predData.result);
-        setPredictions(parsed.predictions || []);
+      const [predRes, sectorRes] = await Promise.all([predRequest, sectorRequest]);
+
+      if (includePredictions && predRes) {
+        const predData = await predRes.json();
+        setPredictions(Array.isArray(predData) ? predData : []);
+        setPredictionsLoaded(true);
       }
 
-      if (sectorRes && sectorRes.ok) {
+      if (includeSectors && sectorRes && sectorRes.ok) {
         setSectors(await sectorRes.json());
+        setSectorsLoaded(true);
       }
     } catch (err) {
       console.error("Failed to load predictions:", err);
@@ -228,20 +242,14 @@ export default function PredictionsView() {
   const fetchPositions = useCallback(async (showToast = false) => {
     setPositionsLoading(true);
     try {
-      const [openRes, closedRes] = await Promise.all([
-        fetchWithTimeout("/api/positions?status=open", undefined, "Open tracked positions"),
-        fetchWithTimeout("/api/positions?status=closed", undefined, "Closed tracked positions"),
-      ]);
-      const openData = await openRes.json();
-      const closedData = await closedRes.json();
-      if (!openRes.ok || openData.error) {
-        throw new Error(openData.error || "Failed to load tracked positions");
+      const res = await fetchWithTimeout("/api/positions?status=all&grouped=1", undefined, "Tracked positions");
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to load tracked positions");
       }
-      if (!closedRes.ok || closedData.error) {
-        throw new Error(closedData.error || "Failed to load tracked positions");
-      }
-      setOpenPositions(openData.positions || []);
-      setClosedPositions(closedData.positions || []);
+      setOpenPositions((data.open || []) as TrackedPosition[]);
+      setClosedPositions((data.closed || []) as TrackedPosition[]);
+      setPositionsLoaded(true);
       setPositionsError(null);
     } catch (err) {
       console.error("Failed to load tracked positions:", err);
@@ -260,20 +268,14 @@ export default function PredictionsView() {
   const fetchSuggestedTrades = useCallback(async (showToast = false) => {
     setSuggestedTradesLoading(true);
     try {
-      const [openRes, closedRes] = await Promise.all([
-        fetchWithTimeout("/api/suggested-trades?status=open", undefined, "Open suggested trades"),
-        fetchWithTimeout("/api/suggested-trades?status=closed", undefined, "Closed suggested trades"),
-      ]);
-      const openData = await openRes.json();
-      const closedData = await closedRes.json();
-      if (!openRes.ok || openData.error) {
-        throw new Error(openData.error || "Failed to load suggested trades");
+      const res = await fetchWithTimeout("/api/suggested-trades?status=all&grouped=1", undefined, "Suggested trades");
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to load suggested trades");
       }
-      if (!closedRes.ok || closedData.error) {
-        throw new Error(closedData.error || "Failed to load suggested trades");
-      }
-      setOpenSuggestedTrades(openData.trades || []);
-      setClosedSuggestedTrades(closedData.trades || []);
+      setOpenSuggestedTrades((data.open || []) as SuggestedTrade[]);
+      setClosedSuggestedTrades((data.closed || []) as SuggestedTrade[]);
+      setSuggestedTradesLoaded(true);
       setSuggestedTradesError(null);
     } catch (err) {
       console.error("Failed to load suggested trades:", err);
@@ -294,7 +296,7 @@ export default function PredictionsView() {
     const load = async () => {
       setLoading(true);
       try {
-        await fetchPredictionsData(false);
+        await fetchScanner(false);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -305,16 +307,65 @@ export default function PredictionsView() {
     return () => {
       mounted = false;
     };
-  }, [fetchPredictionsData]);
-
-  useEffect(() => {
-    void fetchScanner(false);
   }, [fetchScanner]);
 
   useEffect(() => {
+    if (!LEGACY_PREDICTION_TABS.has(activeSubTab)) return;
+    const includePredictions = !predictionsLoaded;
+    const includeSectors = activeSubTab === "sectors" && !sectorsLoaded;
+    if (!includePredictions && !includeSectors) return;
+    void fetchPredictionsData({ includePredictions, includeSectors });
+  }, [activeSubTab, fetchPredictionsData, predictionsLoaded, sectorsLoaded]);
+
+  useEffect(() => {
+    if (activeSubTab !== "positions" || positionsLoaded) return;
     void fetchPositions(false);
+  }, [activeSubTab, fetchPositions, positionsLoaded]);
+
+  useEffect(() => {
+    if (activeSubTab !== "suggestions" || suggestedTradesLoaded) return;
     void fetchSuggestedTrades(false);
-  }, [fetchPositions, fetchSuggestedTrades]);
+  }, [activeSubTab, fetchSuggestedTrades, suggestedTradesLoaded]);
+
+  const mergeTrackedPosition = useCallback((position: TrackedPosition) => {
+    setOpenPositions((prev) =>
+      position.status === "open"
+        ? [position, ...prev.filter((item) => item.id !== position.id)]
+        : prev.filter((item) => item.id !== position.id)
+    );
+    setClosedPositions((prev) =>
+      position.status === "closed"
+        ? [position, ...prev.filter((item) => item.id !== position.id)]
+        : prev.filter((item) => item.id !== position.id)
+    );
+  }, []);
+
+  const mergeSuggestedTrade = useCallback((trade: SuggestedTrade) => {
+    setOpenSuggestedTrades((prev) =>
+      trade.status === "open"
+        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
+        : prev.filter((item) => item.id !== trade.id)
+    );
+    setClosedSuggestedTrades((prev) =>
+      trade.status === "closed"
+        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
+        : prev.filter((item) => item.id !== trade.id)
+    );
+  }, []);
+
+  const applyReviewedPositions = useCallback((reviewed: TrackedPosition[]) => {
+    const reviewedById = new globalThis.Map<number, TrackedPosition>(
+      reviewed.map((position) => [position.id, position])
+    );
+    setOpenPositions((prev) => prev.map((position) => reviewedById.get(position.id) ?? position));
+  }, []);
+
+  const applyReviewedSuggestedTrades = useCallback((reviewed: SuggestedTrade[]) => {
+    const reviewedById = new globalThis.Map<number, SuggestedTrade>(
+      reviewed.map((trade) => [trade.id, trade])
+    );
+    setOpenSuggestedTrades((prev) => prev.map((trade) => reviewedById.get(trade.id) ?? trade));
+  }, []);
 
   const openTakeTrade = useCallback((pick: ScanPick) => {
     setSelectedPick(pick);
@@ -358,7 +409,9 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to track position");
         }
-        await fetchPositions(false);
+        if (data.position) {
+          mergeTrackedPosition(data.position as TrackedPosition);
+        }
         cancelTakeTrade();
         setPositionsView("open");
         setActiveSubTab("positions");
@@ -391,7 +444,9 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to save suggested trade");
         }
-        await fetchSuggestedTrades(false);
+        if (data.trade) {
+          mergeSuggestedTrade(data.trade as SuggestedTrade);
+        }
         cancelTakeTrade();
         setSuggestedTradesView("open");
         setActiveSubTab("suggestions");
@@ -417,8 +472,7 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to review tracked positions");
         }
-        setOpenPositions(data.positions || []);
-        await fetchPositions(false);
+        applyReviewedPositions((data.positions || []) as TrackedPosition[]);
         toast.success("Open positions reviewed.");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to review tracked positions.");
@@ -440,11 +494,7 @@ export default function PredictionsView() {
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to review position");
       }
-      const reviewed = (data.positions || []) as TrackedPosition[];
-      setOpenPositions((prev) => prev.map((position) => {
-        const match = reviewed.find((item) => item.id === position.id);
-        return match || position;
-      }));
+      applyReviewedPositions((data.positions || []) as TrackedPosition[]);
       toast.success("Position reviewed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to review position.");
@@ -466,8 +516,7 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to review suggested trades");
         }
-        setOpenSuggestedTrades(data.trades || []);
-        await fetchSuggestedTrades(false);
+        applyReviewedSuggestedTrades((data.trades || []) as SuggestedTrade[]);
         toast.success("Suggested trades reviewed.");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to review suggested trades.");
@@ -489,11 +538,7 @@ export default function PredictionsView() {
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to review suggested trade");
       }
-      const reviewed = (data.trades || []) as SuggestedTrade[];
-      setOpenSuggestedTrades((prev) => prev.map((trade) => {
-        const match = reviewed.find((item) => item.id === trade.id);
-        return match || trade;
-      }));
+      applyReviewedSuggestedTrades((data.trades || []) as SuggestedTrade[]);
       toast.success("Suggested trade reviewed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to review suggested trade.");
@@ -546,7 +591,9 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to close tracked position");
         }
-        await fetchPositions(false);
+        if (data.position) {
+          mergeTrackedPosition(data.position as TrackedPosition);
+        }
         cancelCloseForm();
         toast.success("Tracked position closed.");
       } catch (err) {
@@ -575,7 +622,9 @@ export default function PredictionsView() {
         if (!res.ok || data.error) {
           throw new Error(data.error || "Failed to close suggested trade");
         }
-        await fetchSuggestedTrades(false);
+        if (data.trade) {
+          mergeSuggestedTrade(data.trade as SuggestedTrade);
+        }
         cancelCloseSuggestedTradeForm();
         toast.success("Suggested trade closed.");
       } catch (err) {
@@ -740,12 +789,19 @@ export default function PredictionsView() {
               await guard(async () => {
                 setGrading(true);
                 try {
-                  await fetch("/api/tools/log_prediction", {
+                  const response = await fetch("/api/predictions/grade", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: "grade" }),
+                    body: JSON.stringify({}),
                   });
-                  await fetchPredictionsData(false);
+                  const data = await response.json().catch(() => ({}));
+                  if (!response.ok || data.error) {
+                    throw new Error(data.error || "Failed to grade predictions");
+                  }
+                  await fetchPredictionsData({
+                    includePredictions: true,
+                    includeSectors: activeSubTab === "sectors" && !sectorsLoaded,
+                  });
                   toast.success("Predictions graded successfully.");
                 } catch (err) {
                   console.error("Failed to grade predictions:", err);

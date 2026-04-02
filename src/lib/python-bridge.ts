@@ -9,7 +9,7 @@ import type {
 
 const PYTHON_BACKEND_URL =
   process.env.PYTHON_BACKEND_URL || "http://localhost:8100";
-const PYTHON_BACKEND_TIMEOUT_MS = Number(process.env.PYTHON_BACKEND_TIMEOUT_MS || 15000);
+const PYTHON_BACKEND_TIMEOUT_MS = Number(process.env.PYTHON_BACKEND_TIMEOUT_MS || 30000);
 
 function buildBackendTimeoutError(path: string): Error {
   return new Error(`Python backend request timed out for ${path} after ${Math.round(PYTHON_BACKEND_TIMEOUT_MS / 1000)}s`);
@@ -48,6 +48,26 @@ async function fetchBackendJson<T = Record<string, unknown>>(
   return data as T;
 }
 
+function toJsonBody(value: Record<string, unknown>): string {
+  return JSON.stringify(value);
+}
+
+function toSearchSuffix(params: Record<string, unknown> = {}): string {
+  const search = new URLSearchParams(
+    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
+      if (value != null) acc[key] = String(value);
+      return acc;
+    }, {})
+  );
+  return search.toString() ? `?${search.toString()}` : "";
+}
+
+function normalizeToolResult(result: unknown): string {
+  if (result == null) return "";
+  if (typeof result === "string") return result;
+  return JSON.stringify(result) ?? "";
+}
+
 export async function callTool(
   toolName: string,
   args: Record<string, unknown>
@@ -55,7 +75,7 @@ export async function callTool(
   const res = await fetchBackendResponse(`/api/tools/${toolName}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(args),
+    body: toJsonBody(args),
   });
   if (!res.ok) {
     const text = await res.text();
@@ -65,7 +85,34 @@ export async function callTool(
     });
   }
   const data = await res.json();
-  return data.result;
+  return normalizeToolResult(data.result);
+}
+
+export async function getRiskSettings(): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>("/api/risk");
+}
+
+export async function getProfiles(): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>("/api/profiles");
+}
+
+export async function getPredictionHistory(): Promise<unknown[]> {
+  const data = await fetchBackendJson<unknown[]>("/api/predictions");
+  return data;
+}
+
+export async function gradePredictions(
+  payload: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>("/api/predictions/grade", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: toJsonBody(payload),
+  });
+}
+
+export async function getChangelog(profile: string = "equity"): Promise<unknown[]> {
+  return fetchBackendJson<unknown[]>(`/api/changelog?profile=${encodeURIComponent(profile)}`);
 }
 
 export async function getProfile(
@@ -104,6 +151,10 @@ export async function getTrackedPositions(
     throw new Error(String((data as Record<string, unknown>).error || `Failed to fetch positions: ${res.status}`));
   }
   return data;
+}
+
+export async function getGroupedTrackedPositions(): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>("/api/positions?status=all&grouped=1");
 }
 
 export async function createTrackedPosition(
@@ -161,6 +212,10 @@ export async function getSuggestedTrades(
     throw new Error(String((data as Record<string, unknown>).error || `Failed to fetch suggested trades: ${res.status}`));
   }
   return data;
+}
+
+export async function getGroupedSuggestedTrades(): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>("/api/suggested-trades?status=all&grouped=1");
 }
 
 export async function createSuggestedTrade(
@@ -225,85 +280,49 @@ export async function runScan(
 export async function getLiveTradePolicy(
   params: Record<string, unknown> = {}
 ): Promise<LiveTradePolicy> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<LiveTradePolicy>(`/api/backtest/live-policy${suffix}`);
+  return fetchBackendJson<LiveTradePolicy>(`/api/backtest/live-policy${toSearchSuffix(params)}`);
 }
 
 export async function getBacktestReport(
   params: Record<string, unknown> = {}
 ): Promise<BacktestReplayReport> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<BacktestReplayReport>(`/api/backtest/report${suffix}`);
+  return fetchBackendJson<BacktestReplayReport>(`/api/backtest/report${toSearchSuffix(params)}`);
 }
 
 export async function getMetricTruthReport(
   params: Record<string, unknown> = {}
 ): Promise<MetricTruthReport> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<MetricTruthReport>(`/api/backtest/metric-truth${suffix}`);
+  return fetchBackendJson<MetricTruthReport>(`/api/backtest/metric-truth${toSearchSuffix(params)}`);
 }
 
 export async function getPlaybookExitAudit(
   params: Record<string, unknown> = {}
 ): Promise<PlaybookExitAudit> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<PlaybookExitAudit>(`/api/backtest/exit-audit${suffix}`);
+  return fetchBackendJson<PlaybookExitAudit>(`/api/backtest/exit-audit${toSearchSuffix(params)}`);
 }
 
 export async function getBacktestLast(
   params: Record<string, unknown> = {}
 ): Promise<BacktestResult> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<BacktestResult>(`/api/backtest/last${suffix}`);
+  return fetchBackendJson<BacktestResult>(`/api/backtest/last${toSearchSuffix(params)}`);
 }
 
 export async function getTruthLaneComparison(
   params: Record<string, unknown> = {}
 ): Promise<TruthLaneComparisonReport> {
-  const search = new URLSearchParams(
-    Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
-      if (value != null) acc[key] = String(value);
-      return acc;
-    }, {})
-  );
-  const suffix = search.toString() ? `?${search.toString()}` : "";
-  return fetchBackendJson<TruthLaneComparisonReport>(`/api/backtest/comparison${suffix}`);
+  return fetchBackendJson<TruthLaneComparisonReport>(`/api/backtest/comparison${toSearchSuffix(params)}`);
+}
+
+export async function getBacktestSummary(
+  params: Record<string, unknown> = {}
+): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>(`/api/backtest/summary${toSearchSuffix(params)}`);
 }
 
 export async function runBacktest(
   params: Record<string, unknown>
 ): Promise<BacktestResult> {
-  const res = await fetch(`${PYTHON_BACKEND_URL}/api/backtest`, {
+  const res = await fetchBackendResponse(`/api/backtest`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(params),

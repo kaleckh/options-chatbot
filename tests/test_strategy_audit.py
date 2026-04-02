@@ -401,7 +401,7 @@ class StrategyAuditTests(unittest.TestCase):
 
         with patch.object(oc, "DEFAULT_WATCHLIST", ["SPY", "AAPL"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_fetch_best_option", side_effect=fake_fetch_best_option), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
@@ -421,7 +421,7 @@ class StrategyAuditTests(unittest.TestCase):
     def test_scan_rejects_options_without_live_quotes(self):
         with patch.object(oc, "DEFAULT_WATCHLIST", ["AAPL"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_fetch_best_option", return_value={
                  "strike": 100.0,
@@ -466,7 +466,7 @@ class StrategyAuditTests(unittest.TestCase):
 
         with patch.object(oc, "DEFAULT_WATCHLIST", ["AAPL"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: tickers[symbol]), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_fetch_best_option", return_value={
                  "strike": 100.0,
@@ -549,7 +549,7 @@ class StrategyAuditTests(unittest.TestCase):
                 return _make_close_history(10, 400.0)
 
         with patch.object(oc, "_get_profile", return_value=sp), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
              patch.object(oc, "_get_market_regime", return_value={
@@ -589,7 +589,7 @@ class StrategyAuditTests(unittest.TestCase):
                 return _make_close_history(10, 400.0)
 
         with patch.object(oc, "_get_profile", return_value=sp), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
              patch.object(oc, "_get_market_regime", return_value={
@@ -627,7 +627,7 @@ class StrategyAuditTests(unittest.TestCase):
                 return _make_close_history(10, 400.0)
 
         with patch.object(oc, "_get_profile", return_value=sp), \
-             patch.object(oc, "_compute_tech_score_live", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
              patch.object(oc, "_get_market_regime", return_value={

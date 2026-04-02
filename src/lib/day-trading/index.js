@@ -23,7 +23,10 @@ function withMarketMetadata(payload, market) {
 
 function getDayTradingSnapshot(options = {}) {
   const market = normalizeDayTradingMarket(options.market);
-  return withMarketMetadata(resolveEngine(market).getDayTradingSnapshot(options), market);
+  return withMarketMetadata(resolveEngine(market).getDayTradingSnapshot({
+    ...options,
+    readOnly: true,
+  }), market);
 }
 
 async function runDayTradingValidation(options = {}) {
@@ -33,7 +36,11 @@ async function runDayTradingValidation(options = {}) {
 
 async function buildMorningWatchlist(options = {}) {
   const market = normalizeDayTradingMarket(options.market);
-  return withMarketMetadata(await resolveEngine(market).buildMorningWatchlist(options), market);
+  return withMarketMetadata(await resolveEngine(market).buildMorningWatchlist({
+    ...options,
+    readOnly: true,
+    persistArtifacts: false,
+  }), market);
 }
 
 async function runDayTradingExperiments(options = {}) {

@@ -90,6 +90,12 @@ class SuggestedTradesApiTests(unittest.TestCase):
         self.assertEqual(len(open_payload["trades"]), 1)
         self.assertEqual(open_payload["trades"][0]["status"], "open")
 
+        grouped_open_response = self.client.get("/api/suggested-trades", params={"status": "all", "grouped": 1})
+        self.assertEqual(grouped_open_response.status_code, 200)
+        grouped_open_payload = grouped_open_response.json()
+        self.assertEqual(len(grouped_open_payload["open"]), 1)
+        self.assertEqual(grouped_open_payload["closed"], [])
+
         positions_response = self.client.get("/api/positions", params={"status": "open"})
         self.assertEqual(positions_response.status_code, 200)
         self.assertIn("error", positions_response.json())
@@ -125,6 +131,12 @@ class SuggestedTradesApiTests(unittest.TestCase):
         closed_payload = list_closed_response.json()
         self.assertEqual(len(closed_payload["trades"]), 1)
         self.assertEqual(closed_payload["trades"][0]["status"], "closed")
+
+        grouped_closed_response = self.client.get("/api/suggested-trades", params={"status": "all", "grouped": 1})
+        self.assertEqual(grouped_closed_response.status_code, 200)
+        grouped_closed_payload = grouped_closed_response.json()
+        self.assertEqual(grouped_closed_payload["open"], [])
+        self.assertEqual(len(grouped_closed_payload["closed"]), 1)
 
 
 if __name__ == "__main__":

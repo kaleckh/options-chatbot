@@ -43,9 +43,10 @@ from __future__ import annotations
 import json
 import math
 import os
+import heapq
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
-from functools import wraps
+from functools import lru_cache, wraps
 from itertools import combinations
 from typing import Any, Callable, Optional, Sequence
 
@@ -55,9 +56,12 @@ import yfinance as yf
 
 from expectancy_calibration import (
     DEFAULT_DIRECTION_BUCKET_SIZE,
+    DEFAULT_QUALITY_BUCKET_SIZE,
     DEFAULT_SHRINKAGE_TRADES,
     DEFAULT_SPARSE_WARNING_TRADES,
     DEFAULT_SURFACE_MIN_TRADES,
+    DEFAULT_TECH_BUCKET_SIZE,
+    CalibrationAccumulator,
     build_expectancy_surface_from_trades,
     lookup_calibrated_expectancy,
     normalized_market_regime,
@@ -100,6 +104,7 @@ from options_chatbot import (
     _get_market_regime,
     _compute_direction_score,
     _compute_quality_score,
+    _candidate_rank_tuple,
 )
 
 WFO_RESULTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "wfo_results.json")
@@ -1791,9 +1796,14 @@ def build_truth_lane_health_summary() -> dict[str, Any]:
     }
 
 
-def _current_imported_store_summary(truth_source: str) -> Optional[dict[str, Any]]:
+@lru_cache(maxsize=8)
+def _current_imported_store_summary_cached(
+    truth_source: str,
+    db_path: str,
+    db_mtime_ns: int,
+) -> Optional[dict[str, Any]]:
     try:
-        store = HistoricalOptionsStore()
+        store = HistoricalOptionsStore(db_path)
         summary = store.snapshot_summary(
             _imported_snapshot_kind(truth_source),
             trusted_only=True,
@@ -1805,6 +1815,16 @@ def _current_imported_store_summary(truth_source: str) -> Optional[dict[str, Any
         return None
     summary["data_trust"] = TRUSTED_DATA_TRUST
     return summary
+
+
+def _current_imported_store_summary(truth_source: str) -> Optional[dict[str, Any]]:
+    try:
+        store = HistoricalOptionsStore()
+        db_path = str(store.db_path)
+        db_mtime_ns = int(os.path.getmtime(db_path) * 1_000_000_000)
+    except Exception:
+        return None
+    return _current_imported_store_summary_cached(truth_source, db_path, db_mtime_ns)
 
 
 def _imported_result_matches_current_store(result: Optional[dict], truth_source: str) -> bool:
@@ -2235,8 +2255,18 @@ def _build_indicator_arrays(prices: np.ndarray) -> dict[str, np.ndarray]:
 def run_archived_forward_daily_backtest(
     *,
     source_label: str = ARCHIVED_FORWARD_SOURCE_LABEL,
+    cohort_id: str | None = None,
+    tickers: Optional[list[str]] = None,
+    recorded_after_utc: str | None = None,
+    require_eligible_only: bool = True,
 ) -> dict[str, Any]:
-    archived_picks = list_forward_scan_pick_events(source_label=source_label)
+    archived_picks = list_forward_scan_pick_events(
+        source_label=source_label,
+        recorded_after_utc=recorded_after_utc,
+        eligible_only=require_eligible_only,
+        cohort_id=cohort_id,
+        tickers=tickers,
+    )
     if not archived_picks:
         return _insufficient_archived_forward_result(
             "no_archived_scan_pick_events",
@@ -3187,6 +3217,43 @@ def _rank_experiment_slice(item: dict) -> tuple:
     )
 
 
+def _build_experiment_trade_views(
+    trades: list[dict[str, Any]],
+    *,
+    score_floors: list[int],
+    score_bucket_order: Sequence[str],
+) -> dict[str, Any]:
+    views: dict[str, Any] = {
+        "score_floors": {floor: [] for floor in score_floors},
+        "score_bands": {bucket: [] for bucket in score_bucket_order},
+        "asset_class": {"equity": [], "index": []},
+        "regime": {"bearish": [], "neutral": [], "bullish": [], "unknown": []},
+        "asset_class_by_regime": {
+            (asset_class, regime): []
+            for asset_class in ("equity", "index")
+            for regime in ("bearish", "neutral", "bullish", "unknown")
+        },
+        "ticker_counts": Counter(),
+        "sector_counts": Counter(),
+    }
+    for trade in trades:
+        direction_score = float(trade.get("direction_score", 0.0) or 0.0)
+        asset_class = _trade_asset_class(trade)
+        regime = _normalized_market_regime(trade)
+        ticker = str(trade.get("ticker") or "Unknown").upper()
+        sector = str(trade.get("sector") or "Unknown")
+        views["ticker_counts"][ticker] += 1
+        views["sector_counts"][sector] += 1
+        for floor in score_floors:
+            if direction_score >= floor:
+                views["score_floors"][floor].append(trade)
+        views["score_bands"][_direction_score_bucket(direction_score)].append(trade)
+        views["asset_class"][asset_class].append(trade)
+        views["regime"][regime].append(trade)
+        views["asset_class_by_regime"][(asset_class, regime)].append(trade)
+    return views
+
+
 def build_options_experiment_matrix(
     result: Optional[dict] = None,
     min_trades: int = 20,
@@ -3318,12 +3385,18 @@ def build_options_experiment_matrix(
             min_directional_accuracy_pct,
         )
 
+    trade_views = _build_experiment_trade_views(
+        trades,
+        score_floors=normalized_score_floors,
+        score_bucket_order=score_bucket_order,
+    )
+
     score_floor_slices = _annotate(
         [
             _make_slice(
                 "score_floors",
                 f"Score >= {floor}",
-                [trade for trade in trades if float(trade.get('direction_score', 0.0) or 0.0) >= floor],
+                trade_views["score_floors"].get(floor, []),
                 {"score_floor": floor},
             )
             for floor in normalized_score_floors
@@ -3334,11 +3407,7 @@ def build_options_experiment_matrix(
             _make_slice(
                 "score_bands",
                 f"Score {bucket}",
-                [
-                    trade
-                    for trade in trades
-                    if _direction_score_bucket(float(trade.get('direction_score', 0.0) or 0.0)) == bucket
-                ],
+                trade_views["score_bands"].get(bucket, []),
                 {"score_band": bucket},
             )
             for bucket in score_bucket_order
@@ -3349,7 +3418,7 @@ def build_options_experiment_matrix(
             _make_slice(
                 "asset_class",
                 asset_class.title(),
-                [trade for trade in trades if _trade_asset_class(trade) == asset_class],
+                trade_views["asset_class"].get(asset_class, []),
                 {"asset_class": asset_class},
             )
             for asset_class in ("equity", "index")
@@ -3360,7 +3429,7 @@ def build_options_experiment_matrix(
             _make_slice(
                 "regime",
                 regime.title(),
-                [trade for trade in trades if _normalized_market_regime(trade) == regime],
+                trade_views["regime"].get(regime, []),
                 {"market_regime": regime},
             )
             for regime in ("bearish", "neutral", "bullish", "unknown")
@@ -3374,32 +3443,19 @@ def build_options_experiment_matrix(
                 _make_slice(
                     "asset_class_by_regime",
                     f"{asset_class.title()} + {regime.title()}",
-                    [
-                        trade
-                        for trade in trades
-                        if _trade_asset_class(trade) == asset_class
-                        and _normalized_market_regime(trade) == regime
-                    ],
+                    trade_views["asset_class_by_regime"].get((asset_class, regime), []),
                     {"asset_class": asset_class, "market_regime": regime},
                 )
             )
     asset_class_by_regime_slices = _annotate(asset_class_by_regime_raw)
 
-    ticker_counts: dict[str, int] = {}
-    sector_counts: dict[str, int] = {}
-    for trade in trades:
-        ticker = str(trade.get("ticker") or "Unknown").upper()
-        sector = str(trade.get("sector") or "Unknown")
-        ticker_counts[ticker] = ticker_counts.get(ticker, 0) + 1
-        sector_counts[sector] = sector_counts.get(sector, 0) + 1
-
     top_tickers = [
         ticker
-        for ticker, _count in sorted(ticker_counts.items(), key=lambda item: (-item[1], item[0]))[: max(1, int(max_tickers))]
+        for ticker, _count in sorted(trade_views["ticker_counts"].items(), key=lambda item: (-item[1], item[0]))[: max(1, int(max_tickers))]
     ]
     top_sectors = [
         sector
-        for sector, _count in sorted(sector_counts.items(), key=lambda item: (-item[1], item[0]))[: max(1, int(max_sectors))]
+        for sector, _count in sorted(trade_views["sector_counts"].items(), key=lambda item: (-item[1], item[0]))[: max(1, int(max_sectors))]
     ]
 
     ticker_slices = _annotate(
@@ -4060,6 +4116,7 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
 
 def build_playbook_exit_audit(
     result: Optional[dict] = None,
+    policy_bundle: Optional[dict] = None,
     playbook: str = "short_term",
     truth_lane: Optional[str] = None,
     min_trades: int = 20,
@@ -4077,16 +4134,17 @@ def build_playbook_exit_audit(
     if not result:
         return {"error": "No backtest results found"}
 
-    policy_bundle = build_live_options_trade_policy(
-        result=result,
-        truth_lane=truth_lane,
-        min_trades=min_trades,
-        score_floors=score_floors,
-        max_tickers=max_tickers,
-        max_sectors=max_sectors,
-        min_profit_factor=min_profit_factor,
-        min_directional_accuracy_pct=min_directional_accuracy_pct,
-    )
+    if policy_bundle is None:
+        policy_bundle = build_live_options_trade_policy(
+            result=result,
+            truth_lane=truth_lane,
+            min_trades=min_trades,
+            score_floors=score_floors,
+            max_tickers=max_tickers,
+            max_sectors=max_sectors,
+            min_profit_factor=min_profit_factor,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
+        )
     if policy_bundle.get("error"):
         return policy_bundle
 
@@ -4480,35 +4538,9 @@ def build_truth_lane_comparison(
 def _pick_top_n_daily(candidates: list[dict], n: int) -> list[dict]:
     """
     Pick the top n candidates from a single day's scan results using the exact same
-    sector-diversification logic as the live daily scan (scan_daily_top_trades):
-      - Sort by direction_score descending
-      - Index ETFs accepted without restriction
-      - Equity: max 2 per sector
-      - Two-pass: first pass fills greedily; second pass fills remaining slots from
-        overflow (those skipped for sector concentration), preserving sector rule
+    ranking tuple as the live daily scan plus the same sector-diversification logic.
     """
-    def _rank_tuple(candidate: dict) -> tuple:
-        calibrated = candidate.get("calibrated_expectancy_pct")
-        calibrated_value = (
-            float(calibrated)
-            if calibrated is not None and bool(candidate.get("calibration_is_dense"))
-            else -9999.0
-        )
-        return (
-            1
-            if (
-                str(candidate.get("selection_source") or "").strip().lower() == "replay_calibrated"
-                and bool(candidate.get("calibration_is_dense"))
-            )
-            else 0,
-            float(candidate.get("direction_score", 0.0) or 0.0),
-            float(candidate.get("quality_score", 0.0) or 0.0),
-            float(candidate.get("tech_score", 0.0) or 0.0),
-            1 if bool(candidate.get("calibration_is_dense")) else 0,
-            calibrated_value,
-        )
-
-    sorted_cands = sorted(candidates, key=_rank_tuple, reverse=True)
+    sorted_cands = sorted(candidates, key=_candidate_rank_tuple, reverse=True)
     sector_counts: dict[str, int] = {}
     accepted: list[dict] = []
     overflow: list[dict] = []
@@ -5360,6 +5392,16 @@ def run_historical_backtest(
     calibration_density_aggregate: dict[str, dict[str, Any]] = {}
     calibration_selected_sparse_warnings: Counter[str] = Counter()
     last_expectancy_surface: Optional[dict[str, Any]] = None
+    calibration_accumulator = CalibrationAccumulator(
+        min_trades=calibration_min_trades,
+        bucket_size=DEFAULT_DIRECTION_BUCKET_SIZE,
+        quality_bucket_size=DEFAULT_QUALITY_BUCKET_SIZE,
+        tech_bucket_size=DEFAULT_TECH_BUCKET_SIZE,
+        shrinkage_trades=calibration_shrinkage_trades,
+        sparse_warning_trades=calibration_sparse_warning_trades,
+    )
+    calibration_queue: list[tuple[int, int, dict[str, Any]]] = []
+    calibration_queue_seq = 0
 
     def _ticker_cfg(ticker: str) -> tuple[dict, "TradeEvaluator"]:
         return (idx_config, idx_evaluator) if ticker.upper() in INDEX_TICKERS else (eq_config, eq_evaluator)
@@ -5563,11 +5605,12 @@ def run_historical_backtest(
         # Use prior day's SPY close — at 10:10 AM ET, today's close hasn't happened yet
         _spy_idx = day_idx - 1
         spy_ret5_today = float(spy_ret5_arr[_spy_idx]) if _spy_idx < spy_n else 0.0
-        calibration_pool = _closed_trades_for_calibration(all_trades, day_idx)
         expectancy_surface = None
-        if len(calibration_pool) >= calibration_min_trades:
-            expectancy_surface = build_expectancy_surface_from_trades(
-                calibration_pool,
+        while calibration_queue and int(calibration_queue[0][0]) < int(day_idx):
+            _, _, ready_trade = heapq.heappop(calibration_queue)
+            calibration_accumulator.add_trade(ready_trade)
+        if calibration_accumulator.trade_count >= calibration_min_trades:
+            expectancy_surface = calibration_accumulator.snapshot(
                 source_metadata={
                     "run_at": datetime.now().isoformat(timespec="seconds"),
                     "lookback_years": lookback_years,
@@ -5576,10 +5619,6 @@ def run_historical_backtest(
                     "pricing_lane": pricing_lane,
                     "universe_filters": _replay_underlying_filter_summary(),
                 },
-                min_trades=calibration_min_trades,
-                bucket_size=DEFAULT_DIRECTION_BUCKET_SIZE,
-                shrinkage_trades=calibration_shrinkage_trades,
-                sparse_warning_trades=calibration_sparse_warning_trades,
             )
             if expectancy_surface is not None:
                 calibration_surface_days += 1
@@ -5907,6 +5946,16 @@ def run_historical_backtest(
             trade_record["promotion_class"] = _trade_promotion_class(trade_record)
             trade_record["promotable"] = _is_trade_promotable(trade_record)
             trade_record["non_promotable_reason"] = _trade_non_promotable_reason(trade_record)
+            if _is_exact_contract_resolution(trade_record.get("entry_contract_resolution")):
+                heapq.heappush(
+                    calibration_queue,
+                    (
+                        int(trade_record.get("exit_day_idx", -1) or -1),
+                        calibration_queue_seq,
+                        trade_record,
+                    ),
+                )
+                calibration_queue_seq += 1
             all_trades.append(trade_record)
 
     # ── Aggregate metrics ─────────────────────────────────────────────────────

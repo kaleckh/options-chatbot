@@ -13,6 +13,26 @@ from typing import Any, Optional
 ROOT_DIR = Path(__file__).resolve().parent
 DEFAULT_FORWARD_LEDGER_DB_PATH = ROOT_DIR / "data" / "options-validation" / "forward_tracking.db"
 
+LIVE_PRODUCTION_EVIDENCE_CLASS = "live_production"
+MANUAL_OBSERVATION_EVIDENCE_CLASS = "manual_observation"
+FIXTURE_SMOKE_EVIDENCE_CLASS = "fixture_smoke"
+UNIT_TEST_EVIDENCE_CLASS = "unit_test"
+E2E_TEST_EVIDENCE_CLASS = "e2e_test"
+RESEARCH_BACKFILL_EVIDENCE_CLASS = "research_backfill"
+ELIGIBLE_STATUS = "eligible"
+INELIGIBLE_STATUS = "ineligible"
+
+FORWARD_SESSION_OPTIONAL_COLUMNS: dict[str, str] = {
+    "run_id": "TEXT",
+    "run_mode": "TEXT",
+    "evidence_class": "TEXT",
+    "is_fixture": "INTEGER NOT NULL DEFAULT 0",
+    "policy_artifact_id": "TEXT",
+    "quote_freshness_status": "TEXT",
+    "eligibility_status": "TEXT",
+    "eligibility_blockers": "TEXT NOT NULL DEFAULT '[]'",
+}
+
 FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "cohort_id": "TEXT",
     "cohort_role": "TEXT",
@@ -35,6 +55,14 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "option_delta": "REAL",
     "option_dte": "INTEGER",
     "outcome_state": "TEXT",
+    "run_id": "TEXT",
+    "run_mode": "TEXT",
+    "evidence_class": "TEXT",
+    "is_fixture": "INTEGER NOT NULL DEFAULT 0",
+    "policy_artifact_id": "TEXT",
+    "quote_freshness_status": "TEXT",
+    "eligibility_status": "TEXT",
+    "eligibility_blockers": "TEXT NOT NULL DEFAULT '[]'",
 }
 
 
@@ -73,7 +101,15 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
                 promotion_status TEXT,
                 scan_picks_count INTEGER NOT NULL DEFAULT 0,
                 reviewed_positions_count INTEGER NOT NULL DEFAULT 0,
-                notes_json TEXT NOT NULL DEFAULT '{}'
+                notes_json TEXT NOT NULL DEFAULT '{}',
+                run_id TEXT,
+                run_mode TEXT,
+                evidence_class TEXT,
+                is_fixture INTEGER NOT NULL DEFAULT 0,
+                policy_artifact_id TEXT,
+                quote_freshness_status TEXT,
+                eligibility_status TEXT,
+                eligibility_blockers TEXT NOT NULL DEFAULT '[]'
             );
 
             CREATE TABLE IF NOT EXISTS forward_events (
@@ -106,10 +142,19 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
                 option_delta REAL,
                 option_dte INTEGER,
                 outcome_state TEXT,
+                run_id TEXT,
+                run_mode TEXT,
+                evidence_class TEXT,
+                is_fixture INTEGER NOT NULL DEFAULT 0,
+                policy_artifact_id TEXT,
+                quote_freshness_status TEXT,
+                eligibility_status TEXT,
+                eligibility_blockers TEXT NOT NULL DEFAULT '[]',
                 payload_json TEXT NOT NULL
             );
             """
         )
+        _ensure_table_columns(conn, "forward_sessions", FORWARD_SESSION_OPTIONAL_COLUMNS)
         _ensure_table_columns(conn, "forward_events", FORWARD_EVENT_OPTIONAL_COLUMNS)
         conn.executescript(
             """
@@ -146,6 +191,236 @@ def _safe_int(value: Any) -> Optional[int]:
 def _safe_text(value: Any) -> Optional[str]:
     text = str(value or "").strip()
     return text or None
+
+
+def _json_array(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return list(value)
+    if value in (None, ""):
+        return []
+    try:
+        loaded = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    return list(loaded) if isinstance(loaded, list) else []
+
+
+def _normalized_blockers(value: Any) -> list[str]:
+    blockers: list[str] = []
+    for item in _json_array(value) if not isinstance(value, list) else value:
+        text = _safe_text(item)
+        if text and text not in blockers:
+            blockers.append(text)
+    return blockers
+
+
+def _normalize_evidence_class(
+    value: Any,
+    *,
+    source_label: str | None = None,
+) -> str:
+    normalized = str(value or "").strip().lower()
+    if normalized in {
+        LIVE_PRODUCTION_EVIDENCE_CLASS,
+        MANUAL_OBSERVATION_EVIDENCE_CLASS,
+        FIXTURE_SMOKE_EVIDENCE_CLASS,
+        UNIT_TEST_EVIDENCE_CLASS,
+        E2E_TEST_EVIDENCE_CLASS,
+        RESEARCH_BACKFILL_EVIDENCE_CLASS,
+    }:
+        return normalized
+    label = str(source_label or "").strip().lower()
+    if "manual" in label or "observation" in label:
+        return MANUAL_OBSERVATION_EVIDENCE_CLASS
+    if "fixture" in label or "smoke" in label:
+        return FIXTURE_SMOKE_EVIDENCE_CLASS
+    if "unit_test" in label or "pytest" in label or "unittest" in label:
+        return UNIT_TEST_EVIDENCE_CLASS
+    if "e2e" in label:
+        return E2E_TEST_EVIDENCE_CLASS
+    if "research" in label or "backfill" in label:
+        return RESEARCH_BACKFILL_EVIDENCE_CLASS
+    return LIVE_PRODUCTION_EVIDENCE_CLASS
+
+
+def _default_run_mode(evidence_class: str) -> str:
+    if evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS:
+        return "live"
+    if evidence_class == MANUAL_OBSERVATION_EVIDENCE_CLASS:
+        return "observation"
+    if evidence_class == FIXTURE_SMOKE_EVIDENCE_CLASS:
+        return "fixture"
+    if evidence_class in {UNIT_TEST_EVIDENCE_CLASS, E2E_TEST_EVIDENCE_CLASS}:
+        return "test"
+    return "research"
+
+
+def _normalize_quote_freshness_status(value: Any) -> Optional[str]:
+    normalized = str(value or "").strip().lower()
+    if normalized in {"fresh", "observed", "stale", "unknown"}:
+        return normalized
+    if "stale" in normalized:
+        return "stale"
+    if normalized in {"ok", "ready", "live", "current"} or "fresh" in normalized:
+        return "fresh"
+    if normalized:
+        return "observed"
+    return None
+
+
+def _quote_freshness_status_from_pick(pick: dict[str, Any], fallback: str | None = None) -> str:
+    explicit = _normalize_quote_freshness_status(
+        pick.get("quote_freshness_status")
+        or pick.get("options_snapshot_status")
+        or pick.get("option_chain_status")
+        or fallback
+    )
+    if explicit:
+        return explicit
+    if _safe_text(pick.get("quote_time_et")):
+        return "observed"
+    return "unknown"
+
+
+def _session_quote_freshness_status(
+    picks: list[dict[str, Any]],
+    explicit: Any = None,
+) -> str:
+    normalized = _normalize_quote_freshness_status(explicit)
+    if normalized:
+        return normalized
+    statuses = {
+        _quote_freshness_status_from_pick(pick)
+        for pick in list(picks or [])
+    }
+    if not statuses:
+        return "unknown"
+    if "stale" in statuses:
+        return "stale"
+    if statuses == {"fresh"}:
+        return "fresh"
+    if statuses.issubset({"fresh", "observed"}):
+        return "observed"
+    return "unknown"
+
+
+def _provenance_for_snapshot(
+    scan_snapshot: dict[str, Any],
+    *,
+    source_label: str,
+    recorded_at_utc: str,
+) -> dict[str, Any]:
+    evidence_class = _normalize_evidence_class(
+        scan_snapshot.get("evidence_class"),
+        source_label=source_label,
+    )
+    run_mode = _safe_text(scan_snapshot.get("run_mode")) or _default_run_mode(evidence_class)
+    run_id = _safe_text(scan_snapshot.get("run_id")) or f"{source_label}:{recorded_at_utc}"
+    is_fixture = bool(
+        scan_snapshot.get("is_fixture")
+        if scan_snapshot.get("is_fixture") is not None
+        else evidence_class in {
+            FIXTURE_SMOKE_EVIDENCE_CLASS,
+            UNIT_TEST_EVIDENCE_CLASS,
+            E2E_TEST_EVIDENCE_CLASS,
+        }
+    )
+    policy = dict(scan_snapshot.get("policy") or {})
+    policy_artifact_id = _safe_text(
+        scan_snapshot.get("policy_artifact_id")
+        or policy.get("artifact_id")
+        or policy.get("policy_artifact_id")
+        or scan_snapshot.get("champion_manifest_path")
+    )
+    return {
+        "run_id": run_id,
+        "run_mode": run_mode,
+        "evidence_class": evidence_class,
+        "is_fixture": is_fixture,
+        "policy_artifact_id": policy_artifact_id,
+        "quote_freshness_status": _session_quote_freshness_status(
+            list(scan_snapshot.get("picks") or []),
+            scan_snapshot.get("quote_freshness_status"),
+        ),
+    }
+
+
+def _eligibility_for_pick(
+    pick: dict[str, Any],
+    *,
+    provenance: dict[str, Any],
+    policy_applied: bool,
+    truth_source: str | None,
+    promotion_status: str | None,
+    positions_available: bool,
+    positions_error: str | None,
+) -> tuple[str, list[str], str]:
+    blockers: list[str] = []
+    quote_freshness_status = _quote_freshness_status_from_pick(
+        pick,
+        fallback=provenance.get("quote_freshness_status"),
+    )
+    if provenance.get("evidence_class") != LIVE_PRODUCTION_EVIDENCE_CLASS:
+        blockers.append("non_live_evidence_class")
+    if provenance.get("is_fixture"):
+        blockers.append("fixture_or_test_traffic")
+    if not policy_applied:
+        blockers.append("policy_not_applied")
+    if not truth_source:
+        blockers.append("missing_truth_source")
+    if not promotion_status:
+        blockers.append("missing_promotion_status")
+    if not positions_available:
+        blockers.append("tracked_positions_unavailable")
+    if positions_error:
+        blockers.append("positions_error")
+    if quote_freshness_status == "stale":
+        blockers.append("stale_quote_freshness")
+    elif quote_freshness_status == "unknown":
+        blockers.append("unknown_quote_freshness")
+    if not _safe_text(_pick_contract_symbol(pick)):
+        blockers.append("missing_contract_symbol")
+    return (
+        ELIGIBLE_STATUS if not blockers else INELIGIBLE_STATUS,
+        blockers,
+        quote_freshness_status,
+    )
+
+
+def _session_eligibility(
+    picks: list[dict[str, Any]],
+    *,
+    provenance: dict[str, Any],
+    policy_applied: bool,
+    truth_source: str | None,
+    promotion_status: str | None,
+    positions_available: bool,
+    positions_error: str | None,
+) -> tuple[str, list[str]]:
+    blockers: list[str] = []
+    if provenance.get("evidence_class") != LIVE_PRODUCTION_EVIDENCE_CLASS:
+        blockers.append("non_live_evidence_class")
+    if provenance.get("is_fixture"):
+        blockers.append("fixture_or_test_traffic")
+    if not policy_applied:
+        blockers.append("policy_not_applied")
+    if not truth_source:
+        blockers.append("missing_truth_source")
+    if not promotion_status:
+        blockers.append("missing_promotion_status")
+    if not positions_available:
+        blockers.append("tracked_positions_unavailable")
+    if positions_error:
+        blockers.append("positions_error")
+    if provenance.get("quote_freshness_status") == "stale":
+        blockers.append("stale_quote_freshness")
+    elif provenance.get("quote_freshness_status") == "unknown":
+        blockers.append("unknown_quote_freshness")
+    if not picks:
+        blockers.append("no_scan_picks")
+    elif not any(_safe_text(_pick_contract_symbol(pick)) for pick in picks):
+        blockers.append("missing_contract_symbol")
+    return ELIGIBLE_STATUS if not blockers else INELIGIBLE_STATUS, blockers
 
 
 def _normalized_scan_funnel(value: Any) -> dict[str, Any]:
@@ -272,6 +547,12 @@ def build_forward_scan_snapshot(
     cohort_ids: Optional[list[str]] = None,
     champion_manifest_path: Optional[str] = None,
     positions_error: Optional[str] = None,
+    run_id: Optional[str] = None,
+    run_mode: Optional[str] = None,
+    evidence_class: Optional[str] = None,
+    is_fixture: Optional[bool] = None,
+    policy_artifact_id: Optional[str] = None,
+    quote_freshness_status: Optional[str] = None,
 ) -> dict[str, Any]:
     snapshot = {
         "picks": list(picks or []),
@@ -297,6 +578,12 @@ def build_forward_scan_snapshot(
         "cohort_count": int(cohort_count or len(cohort_snapshots or [])),
         "cohort_ids": [str(item).strip() for item in list(cohort_ids or []) if str(item).strip()],
         "champion_manifest_path": champion_manifest_path,
+        "run_id": _safe_text(run_id),
+        "run_mode": _safe_text(run_mode),
+        "evidence_class": _safe_text(evidence_class),
+        "is_fixture": is_fixture if is_fixture is not None else None,
+        "policy_artifact_id": _safe_text(policy_artifact_id),
+        "quote_freshness_status": _normalize_quote_freshness_status(quote_freshness_status),
     }
     if positions_error:
         snapshot["positions_error"] = str(positions_error)
@@ -372,6 +659,12 @@ def _event_fields_from_pick(
     *,
     candidate_rank: int,
     tracked_positions: list[dict[str, Any]],
+    provenance: dict[str, Any],
+    policy_applied: bool,
+    truth_source: str | None,
+    promotion_status: str | None,
+    positions_available: bool,
+    positions_error: str | None,
 ) -> dict[str, Any]:
     cohort_id = str(pick.get("cohort_id") or "").strip() or None
     cohort_role = str(pick.get("cohort_role") or "").strip() or None
@@ -394,6 +687,15 @@ def _event_fields_from_pick(
         pick.get("mid")
         if pick.get("mid") is not None
         else pick.get("premium")
+    )
+    eligibility_status, eligibility_blockers, quote_freshness_status = _eligibility_for_pick(
+        pick,
+        provenance=provenance,
+        policy_applied=policy_applied,
+        truth_source=truth_source,
+        promotion_status=promotion_status,
+        positions_available=positions_available,
+        positions_error=positions_error,
     )
     return {
         "ticker": str(pick.get("ticker") or "").strip().upper() or None,
@@ -443,6 +745,14 @@ def _event_fields_from_pick(
         ),
         "option_dte": _safe_int(pick.get("dte")),
         "outcome_state": _pick_outcome_state(pick, tracked_positions),
+        "run_id": provenance.get("run_id"),
+        "run_mode": provenance.get("run_mode"),
+        "evidence_class": provenance.get("evidence_class"),
+        "is_fixture": bool(provenance.get("is_fixture")),
+        "policy_artifact_id": provenance.get("policy_artifact_id"),
+        "quote_freshness_status": quote_freshness_status,
+        "eligibility_status": eligibility_status,
+        "eligibility_blockers": json.dumps(eligibility_blockers),
         "payload_json": json.dumps(pick),
     }
 
@@ -479,6 +789,14 @@ def _insert_forward_event(
     option_delta: Optional[float] = None,
     option_dte: Optional[int] = None,
     outcome_state: Optional[str] = None,
+    run_id: Optional[str] = None,
+    run_mode: Optional[str] = None,
+    evidence_class: Optional[str] = None,
+    is_fixture: Optional[bool] = None,
+    policy_artifact_id: Optional[str] = None,
+    quote_freshness_status: Optional[str] = None,
+    eligibility_status: Optional[str] = None,
+    eligibility_blockers: Optional[str] = None,
 ) -> None:
     cursor.execute(
         """
@@ -511,8 +829,16 @@ def _insert_forward_event(
             option_delta,
             option_dte,
             outcome_state,
+            run_id,
+            run_mode,
+            evidence_class,
+            is_fixture,
+            policy_artifact_id,
+            quote_freshness_status,
+            eligibility_status,
+            eligibility_blockers,
             payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             int(session_id),
@@ -543,12 +869,20 @@ def _insert_forward_event(
             option_delta,
             option_dte,
             outcome_state,
+            run_id,
+            run_mode,
+            evidence_class,
+            int(bool(is_fixture)),
+            policy_artifact_id,
+            quote_freshness_status,
+            eligibility_status,
+            eligibility_blockers or "[]",
             payload_json,
         ),
     )
 
 
-def _position_review_event_fields(position: dict[str, Any]) -> dict[str, Any]:
+def _position_review_event_fields(position: dict[str, Any], *, provenance: dict[str, Any]) -> dict[str, Any]:
     latest_review = dict(position.get("latest_review") or {})
     source = dict(position.get("source_pick_snapshot") or {})
     return {
@@ -611,6 +945,14 @@ def _position_review_event_fields(position: dict[str, Any]) -> dict[str, Any]:
         ),
         "option_dte": _safe_int(source.get("dte")),
         "outcome_state": _safe_text(position.get("status")),
+        "run_id": provenance.get("run_id"),
+        "run_mode": provenance.get("run_mode"),
+        "evidence_class": provenance.get("evidence_class"),
+        "is_fixture": bool(provenance.get("is_fixture")),
+        "policy_artifact_id": provenance.get("policy_artifact_id"),
+        "quote_freshness_status": _quote_freshness_status_from_pick(source, fallback=provenance.get("quote_freshness_status")),
+        "eligibility_status": provenance.get("eligibility_status"),
+        "eligibility_blockers": json.dumps(_normalized_blockers(provenance.get("eligibility_blockers"))),
         "payload_json": json.dumps(position),
     }
 
@@ -625,22 +967,42 @@ def record_forward_snapshot(
 ) -> dict[str, Any]:
     path = init_forward_ledger(db_path)
     recorded_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    normalized_source_label = str(source_label or "manual_snapshot").strip() or "manual_snapshot"
 
     picks = list(scan_snapshot.get("picks") or [])
     policy = dict(scan_snapshot.get("policy") or {})
     playbook = str((scan_snapshot.get("playbook") or {}).get("id") or scan_snapshot.get("playbook") or "")
     tracked = list(tracked_positions or [])
+    provenance = _provenance_for_snapshot(
+        scan_snapshot,
+        source_label=normalized_source_label,
+        recorded_at_utc=recorded_at_utc,
+    )
+    positions_available = tracked_positions is not None
+    truth_source = _safe_text(policy.get("truth_source"))
+    promotion_status = _safe_text(policy.get("promotion_status"))
+    session_eligibility_status, session_eligibility_blockers = _session_eligibility(
+        picks,
+        provenance=provenance,
+        policy_applied=bool(scan_snapshot.get("policy_applied")),
+        truth_source=truth_source,
+        promotion_status=promotion_status,
+        positions_available=positions_available,
+        positions_error=_safe_text(scan_snapshot.get("positions_error")),
+    )
+    provenance["eligibility_status"] = session_eligibility_status
+    provenance["eligibility_blockers"] = session_eligibility_blockers
     notes = {
         "policy_applied": bool(scan_snapshot.get("policy_applied")),
         "policy_error": scan_snapshot.get("policy_error"),
-        "truth_source": policy.get("truth_source"),
-        "promotion_status": policy.get("promotion_status"),
+        "truth_source": truth_source,
+        "promotion_status": promotion_status,
         "truth_lane": scan_snapshot.get("truth_lane"),
         "candidate_count": scan_snapshot.get("candidate_count"),
         "returned_count": scan_snapshot.get("returned_count"),
         "guardrail_decision_counts": scan_snapshot.get("guardrail_decision_counts"),
         "policy_decision_counts": scan_snapshot.get("policy_decision_counts"),
-        "positions_available": tracked_positions is not None,
+        "positions_available": positions_available,
         "champion_manifest_path": scan_snapshot.get("champion_manifest_path"),
         "cohort_count": scan_snapshot.get("cohort_count"),
         "requested_cohort_ids": list(scan_snapshot.get("cohort_ids") or []),
@@ -651,6 +1013,14 @@ def record_forward_snapshot(
             if str(key).strip()
         },
         "positions_error": scan_snapshot.get("positions_error"),
+        "run_id": provenance["run_id"],
+        "run_mode": provenance["run_mode"],
+        "evidence_class": provenance["evidence_class"],
+        "is_fixture": provenance["is_fixture"],
+        "policy_artifact_id": provenance["policy_artifact_id"],
+        "quote_freshness_status": provenance["quote_freshness_status"],
+        "eligibility_status": provenance["eligibility_status"],
+        "eligibility_blockers": list(provenance["eligibility_blockers"]),
     }
 
     taken_count = 0
@@ -670,18 +1040,34 @@ def record_forward_snapshot(
                 promotion_status,
                 scan_picks_count,
                 reviewed_positions_count,
-                notes_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                notes_json,
+                run_id,
+                run_mode,
+                evidence_class,
+                is_fixture,
+                policy_artifact_id,
+                quote_freshness_status,
+                eligibility_status,
+                eligibility_blockers
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 recorded_at_utc,
-                str(source_label or "manual_snapshot").strip() or "manual_snapshot",
+                normalized_source_label,
                 playbook or None,
-                policy.get("truth_source"),
-                policy.get("promotion_status"),
+                truth_source,
+                promotion_status,
                 len(picks),
                 len(reviewed_positions),
                 json.dumps(notes),
+                provenance["run_id"],
+                provenance["run_mode"],
+                provenance["evidence_class"],
+                int(bool(provenance["is_fixture"])),
+                provenance["policy_artifact_id"],
+                provenance["quote_freshness_status"],
+                provenance["eligibility_status"],
+                json.dumps(provenance["eligibility_blockers"]),
             ),
         )
         session_id = int(cursor.lastrowid)
@@ -691,6 +1077,14 @@ def record_forward_snapshot(
             session_id=session_id,
             event_type="scan_snapshot",
             event_key=playbook or "scan",
+            run_id=provenance["run_id"],
+            run_mode=provenance["run_mode"],
+            evidence_class=provenance["evidence_class"],
+            is_fixture=provenance["is_fixture"],
+            policy_artifact_id=provenance["policy_artifact_id"],
+            quote_freshness_status=provenance["quote_freshness_status"],
+            eligibility_status=provenance["eligibility_status"],
+            eligibility_blockers=json.dumps(provenance["eligibility_blockers"]),
             payload_json=json.dumps(scan_snapshot),
         )
 
@@ -699,6 +1093,12 @@ def record_forward_snapshot(
                 pick,
                 candidate_rank=idx,
                 tracked_positions=tracked,
+                provenance=provenance,
+                policy_applied=bool(scan_snapshot.get("policy_applied")),
+                truth_source=truth_source,
+                promotion_status=promotion_status,
+                positions_available=positions_available,
+                positions_error=_safe_text(scan_snapshot.get("positions_error")),
             )
             if fields["cohort_id"]:
                 cohort_ids.add(str(fields["cohort_id"]))
@@ -725,11 +1125,19 @@ def record_forward_snapshot(
                 session_id=session_id,
                 event_type="tracked_positions_snapshot",
                 event_key="open_positions",
+                run_id=provenance["run_id"],
+                run_mode=provenance["run_mode"],
+                evidence_class=provenance["evidence_class"],
+                is_fixture=provenance["is_fixture"],
+                policy_artifact_id=provenance["policy_artifact_id"],
+                quote_freshness_status=provenance["quote_freshness_status"],
+                eligibility_status=provenance["eligibility_status"],
+                eligibility_blockers=json.dumps(provenance["eligibility_blockers"]),
                 payload_json=json.dumps(tracked_positions),
             )
 
         for position in reviewed_positions:
-            fields = _position_review_event_fields(position)
+            fields = _position_review_event_fields(position, provenance=provenance)
             _insert_forward_event(
                 cursor,
                 session_id=session_id,
@@ -747,14 +1155,22 @@ def record_forward_snapshot(
         "source_label": source_label,
         "scan_picks_count": len(picks),
         "reviewed_positions_count": len(reviewed_positions),
-        "truth_source": policy.get("truth_source"),
-        "promotion_status": policy.get("promotion_status"),
+        "truth_source": truth_source,
+        "promotion_status": promotion_status,
         "taken_pick_count": taken_count,
         "skipped_pick_count": skipped_count,
         "blocked_pick_count": blocked_count,
         "cohort_ids_recorded": sorted(cohort_ids),
         "requested_cohort_ids": list(notes.get("requested_cohort_ids") or []),
         "scan_funnel": notes["scan_funnel"],
+        "run_id": provenance["run_id"],
+        "run_mode": provenance["run_mode"],
+        "evidence_class": provenance["evidence_class"],
+        "is_fixture": bool(provenance["is_fixture"]),
+        "policy_artifact_id": provenance["policy_artifact_id"],
+        "quote_freshness_status": provenance["quote_freshness_status"],
+        "eligibility_status": provenance["eligibility_status"],
+        "eligibility_blockers": list(provenance["eligibility_blockers"]),
     }
 
 
@@ -762,9 +1178,17 @@ def list_forward_sessions(
     limit: int = 20,
     *,
     source_label: str | None = None,
+    evidence_class: str | None = None,
+    eligibility_status: str | None = None,
     db_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     path = init_forward_ledger(db_path)
+    normalized_evidence_class = (
+        _normalize_evidence_class(evidence_class)
+        if _safe_text(evidence_class)
+        else None
+    )
+    normalized_eligibility_status = _safe_text(eligibility_status)
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
@@ -772,26 +1196,52 @@ def list_forward_sessions(
             SELECT *
             FROM forward_sessions
             WHERE (? IS NULL OR source_label = ?)
+              AND (? IS NULL OR evidence_class = ?)
+              AND (? IS NULL OR eligibility_status = ?)
             ORDER BY recorded_at_utc DESC, id DESC
             LIMIT ?
             """,
-            (_safe_text(source_label), _safe_text(source_label), int(limit)),
+            (
+                _safe_text(source_label),
+                _safe_text(source_label),
+                normalized_evidence_class,
+                normalized_evidence_class,
+                normalized_eligibility_status,
+                normalized_eligibility_status,
+                int(limit),
+            ),
         ).fetchall()
     sessions: list[dict[str, Any]] = []
     for row in rows:
         item = dict(row)
         item["notes"] = json.loads(item.pop("notes_json") or "{}")
+        item["is_fixture"] = bool(item.get("is_fixture"))
+        item["eligibility_blockers"] = _normalized_blockers(item.get("eligibility_blockers"))
         sessions.append(item)
     return sessions
 
 
 def list_forward_scan_pick_events(
     *,
+    recorded_after_utc: str | None = None,
     recorded_before_utc: str | None = None,
     source_label: str | None = None,
+    eligible_only: bool = False,
+    evidence_class: str | None = None,
+    eligibility_status: str | None = None,
+    cohort_id: str | None = None,
+    tickers: Optional[list[str]] = None,
     db_path: str | Path | None = None,
 ) -> list[dict[str, Any]]:
     path = init_forward_ledger(db_path)
+    normalized_evidence_class = (
+        LIVE_PRODUCTION_EVIDENCE_CLASS if eligible_only and not _safe_text(evidence_class)
+        else _normalize_evidence_class(evidence_class) if _safe_text(evidence_class) else None
+    )
+    normalized_eligibility_status = (
+        ELIGIBLE_STATUS if eligible_only and not _safe_text(eligibility_status)
+        else _safe_text(eligibility_status)
+    )
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
@@ -809,17 +1259,34 @@ def list_forward_scan_pick_events(
                 ON fs.id = fe.session_id
             WHERE fe.event_type = 'scan_pick'
               AND (? IS NULL OR fs.source_label = ?)
+              AND (? IS NULL OR fs.recorded_at_utc >= ?)
               AND (? IS NULL OR fs.recorded_at_utc < ?)
+              AND (? IS NULL OR COALESCE(fe.evidence_class, fs.evidence_class) = ?)
+              AND (? IS NULL OR COALESCE(fe.eligibility_status, fs.eligibility_status) = ?)
+              AND (? = 0 OR COALESCE(fe.is_fixture, fs.is_fixture, 0) = 0)
             ORDER BY fs.recorded_at_utc ASC, fe.id ASC
             """,
             (
                 _safe_text(source_label),
                 _safe_text(source_label),
+                _safe_text(recorded_after_utc),
+                _safe_text(recorded_after_utc),
                 _safe_text(recorded_before_utc),
                 _safe_text(recorded_before_utc),
+                normalized_evidence_class,
+                normalized_evidence_class,
+                normalized_eligibility_status,
+                normalized_eligibility_status,
+                int(bool(eligible_only)),
             ),
         ).fetchall()
-    events: list[dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
+    normalized_cohort_id = _safe_text(cohort_id)
+    normalized_tickers = {
+        str(item).strip().upper()
+        for item in list(tickers or [])
+        if str(item).strip()
+    }
     for row in rows:
         payload = json.loads(str(row["payload_json"] or "{}"))
         event = {
@@ -847,6 +1314,18 @@ def list_forward_scan_pick_events(
             ),
             "selection_source": payload.get("selection_source") or row["selection_source"],
             "promotion_class": payload.get("promotion_class") or row["promotion_class"],
+            "run_id": payload.get("run_id") or row["run_id"],
+            "run_mode": payload.get("run_mode") or row["run_mode"],
+            "evidence_class": payload.get("evidence_class") or row["evidence_class"],
+            "is_fixture": bool(payload.get("is_fixture")) if payload.get("is_fixture") is not None else bool(row["is_fixture"]),
+            "policy_artifact_id": payload.get("policy_artifact_id") or row["policy_artifact_id"],
+            "quote_freshness_status": payload.get("quote_freshness_status") or row["quote_freshness_status"],
+            "eligibility_status": payload.get("eligibility_status") or row["eligibility_status"],
+            "eligibility_blockers": _normalized_blockers(
+                payload.get("eligibility_blockers")
+                if payload.get("eligibility_blockers") is not None
+                else row["eligibility_blockers"]
+            ),
         }
         if not event.get("entry_date"):
             recorded_at_utc = str(row["recorded_at_utc"] or "").strip()
@@ -857,6 +1336,10 @@ def list_forward_scan_pick_events(
                     ).date().isoformat()
                 except ValueError:
                     pass
+        if normalized_cohort_id is not None and str(event.get("cohort_id") or "").strip() != normalized_cohort_id:
+            continue
+        if normalized_tickers and str(event.get("ticker") or "").strip().upper() not in normalized_tickers:
+            continue
         events.append(event)
     return events
 

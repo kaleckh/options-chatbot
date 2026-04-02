@@ -223,6 +223,36 @@ class PostgresTrackedPositionsRepository:
             return None
         return _normalize_position_row(row)
 
+    def _fetch_position_by_id_in_conn(self, conn, position_id: int) -> Optional[dict[str, Any]]:
+        query = """
+        SELECT
+            p.*,
+            r.id AS review_id,
+            r.reviewed_at,
+            r.pricing_source,
+            r.current_option_price,
+            r.current_pnl_pct,
+            r.recommendation,
+            r.reason,
+            r.warnings,
+            r.metrics_snapshot
+        FROM tracked_positions p
+        LEFT JOIN LATERAL (
+            SELECT *
+            FROM position_reviews pr
+            WHERE pr.position_id = p.id
+            ORDER BY pr.reviewed_at DESC, pr.id DESC
+            LIMIT 1
+        ) r ON TRUE
+        WHERE p.id = %s
+        """
+        with conn.cursor() as cur:
+            cur.execute(query, (position_id,))
+            row = cur.fetchone()
+        if not row:
+            return None
+        return _normalize_position_row(row)
+
     def create_position(self, payload: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as conn:
             with conn.cursor() as cur:
@@ -288,7 +318,12 @@ class PostgresTrackedPositionsRepository:
                     ),
                 )
                 row = cur.fetchone()
-        return self.get_position(int(row["id"]))  # type: ignore[index]
+                if not row:
+                    raise RuntimeError("Inserted tracked position was not returned.")
+                position = self._fetch_position_by_id_in_conn(conn, int(row["id"]))
+        if position is None:
+            raise RuntimeError(f"Tracked position {int(row['id'])} was not found after creation.")
+        return position
 
     def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
         where_sql = ""
@@ -389,10 +424,10 @@ class PostgresTrackedPositionsRepository:
                         position_id,
                     ),
                 )
-        position = self.get_position(position_id)
-        if position is None:
-            raise RuntimeError(f"Tracked position {position_id} was not found after review save.")
-        return position
+                position = self._fetch_position_by_id_in_conn(conn, position_id)
+                if position is None:
+                    raise RuntimeError(f"Tracked position {position_id} was not found after review save.")
+                return position
 
     def close_position(
         self,
@@ -443,9 +478,12 @@ class PostgresTrackedPositionsRepository:
                     ),
                 )
                 row = cur.fetchone()
-        if not row:
-            return None
-        return self.get_position(position_id)
+                if not row:
+                    return None
+                position = self._fetch_position_by_id_in_conn(conn, position_id)
+                if position is None:
+                    raise RuntimeError(f"Tracked position {position_id} was not found after close.")
+                return position
 
 
 class MemoryTrackedPositionsRepository:

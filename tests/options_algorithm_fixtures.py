@@ -241,9 +241,17 @@ def load_backend_main(db_path: str, database_url: str | None = ""):
         target = db_path if str(path).endswith("chat_history.db") else path
         return original_connect(target, *args, **kwargs)
 
+    default_env = {
+        "DATABASE_URL": database_url or "",
+        "FORWARD_OPTIONS_LEDGER_DB_PATH": str(Path(db_path).with_name("forward_tracking_test.db")),
+        "OPTIONS_EVIDENCE_CLASS": "e2e_test",
+        "OPTIONS_RUN_MODE": "test_harness",
+        "OPTIONS_IS_FIXTURE": "1",
+    }
+
     with patch("sqlite3.connect", side_effect=_connect), patch.dict(
         "os.environ",
-        {"DATABASE_URL": database_url or ""},
+        default_env,
         clear=False,
     ):
         sys.modules[module_name] = module

@@ -1,0 +1,24 @@
+{
+  "base_profile": "index",
+  "candidate_id": "QQQ__broad_ev7_momentum070_exit_time33",
+  "cohort_id": "broad_ev7_momentum070_exit_time33",
+  "created_at": "2026-04-02T04:49:15.133959Z",
+  "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+  "overrides": {
+    "entry": {
+      "entry_momentum_pct": 0.7
+    },
+    "filters": {
+      "min_calibrated_expectancy_pct": 7.0
+    },
+    "risk": {
+      "time_exit_pct": 33.0
+    }
+  },
+  "replay_policy_path": null,
+  "replay_validation": {},
+  "role": "broad_challenger",
+  "status": "candidate",
+  "symbol": "QQQ",
+  "updated_at": "2026-04-02T04:49:15.133959Z"
+}

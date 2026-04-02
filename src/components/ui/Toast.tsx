@@ -5,6 +5,7 @@ import {
   useContext,
   useState,
   useCallback,
+  useMemo,
   useEffect,
   useRef,
 } from "react";
@@ -40,11 +41,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const value: ToastContextValue = {
-    success: useCallback((msg: string) => addToast(msg, "success"), [addToast]),
-    error: useCallback((msg: string) => addToast(msg, "error"), [addToast]),
-    info: useCallback((msg: string) => addToast(msg, "info"), [addToast]),
-  };
+  const success = useCallback((msg: string) => addToast(msg, "success"), [addToast]);
+  const error = useCallback((msg: string) => addToast(msg, "error"), [addToast]);
+  const info = useCallback((msg: string) => addToast(msg, "info"), [addToast]);
+
+  const value: ToastContextValue = useMemo(
+    () => ({ success, error, info }),
+    [success, error, info]
+  );
 
   return (
     <ToastContext.Provider value={value}>
@@ -58,7 +62,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <ToastItem
             key={toast.id}
             toast={toast}
-            onDismiss={() => removeToast(toast.id)}
+            id={toast.id}
+            removeToast={removeToast}
           />
         ))}
       </div>
@@ -68,12 +73,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
 function ToastItem({
   toast,
-  onDismiss,
+  id,
+  removeToast,
 }: {
   toast: ToastItem;
-  onDismiss: () => void;
+  id: number;
+  removeToast: (id: number) => void;
 }) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onDismiss = useCallback(() => removeToast(id), [id, removeToast]);
 
   useEffect(() => {
     timerRef.current = setTimeout(onDismiss, 4000);

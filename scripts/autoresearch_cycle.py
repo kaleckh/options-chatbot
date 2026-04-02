@@ -140,7 +140,7 @@ def _command_display(command: Sequence[str]) -> str:
 
 
 def _mandatory_test_commands() -> list[list[str]]:
-    return [["npm", "run", "verify"]]
+    return [["npm", "run", "verify:research"]]
 
 
 def _resolved_command(command: Sequence[str]) -> list[str]:

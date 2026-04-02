@@ -335,6 +335,224 @@ def _surface_warnings(
     return warnings
 
 
+def _should_include_tech_band_from_counts(
+    without_tech_counts: dict[str, int],
+    with_tech_counts: dict[str, int],
+    *,
+    min_trades: int,
+) -> bool:
+    dense_without = sum(count for count in without_tech_counts.values() if count >= int(min_trades))
+    dense_with = sum(count for count in with_tech_counts.values() if count >= int(min_trades))
+    return dense_with > dense_without
+
+
+def _summarize_group_from_stats(
+    stats: dict[str, Any],
+    *,
+    fields: list[str],
+    field_values: dict[str, Any],
+    level_id: str,
+) -> dict[str, Any]:
+    trades = int(stats.get("trades", 0) or 0)
+    pnl_sum = float(stats.get("pnl_sum", 0.0) or 0.0)
+    gross_win = float(stats.get("gross_win", 0.0) or 0.0)
+    gross_loss = float(stats.get("gross_loss", 0.0) or 0.0)
+    win_count = int(stats.get("win_count", 0) or 0)
+    quality_sum = float(stats.get("quality_sum", 0.0) or 0.0)
+    direction_sum = float(stats.get("direction_sum", 0.0) or 0.0)
+    tech_sum = float(stats.get("tech_sum", 0.0) or 0.0)
+    raw_avg = pnl_sum / max(trades, 1)
+    win_rate = win_count / max(trades, 1) * 100.0
+    return {
+        "level": level_id,
+        "group_key": _group_key(fields, field_values),
+        "fields": list(fields),
+        "field_values": dict(field_values),
+        "market_regime": field_values.get("market_regime"),
+        "direction": field_values.get("direction"),
+        "direction_band": field_values.get("direction_band"),
+        "quality_band": field_values.get("quality_band"),
+        "tech_band": field_values.get("tech_band"),
+        "trades": trades,
+        "avg_pnl_pct_raw": round(raw_avg, 2),
+        "avg_pnl_pct": round(raw_avg, 2),
+        "win_rate_pct_raw": round(win_rate, 1),
+        "win_rate_pct": round(win_rate, 1),
+        "directional_accuracy_pct": round(int(stats.get("directional_hits", 0) or 0) / max(trades, 1) * 100.0, 1),
+        "profit_factor": round(gross_win / max(gross_loss, 0.01), 2),
+        "avg_quality_score": round(quality_sum / max(trades, 1), 1),
+        "avg_direction_score": round(direction_sum / max(trades, 1), 1),
+        "avg_tech_score": round(tech_sum / max(trades, 1), 1),
+    }
+
+
+def _empty_group_stats(field_values: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "trades": 0,
+        "pnl_sum": 0.0,
+        "gross_win": 0.0,
+        "gross_loss": 0.0,
+        "win_count": 0,
+        "directional_hits": 0,
+        "quality_sum": 0.0,
+        "direction_sum": 0.0,
+        "tech_sum": 0.0,
+        "field_values": dict(field_values),
+    }
+
+
+class CalibrationAccumulator:
+    def __init__(
+        self,
+        *,
+        min_trades: int = DEFAULT_SURFACE_MIN_TRADES,
+        bucket_size: int = DEFAULT_DIRECTION_BUCKET_SIZE,
+        quality_bucket_size: int = DEFAULT_QUALITY_BUCKET_SIZE,
+        tech_bucket_size: int = DEFAULT_TECH_BUCKET_SIZE,
+        shrinkage_trades: float = DEFAULT_SHRINKAGE_TRADES,
+        sparse_warning_trades: int = DEFAULT_SPARSE_WARNING_TRADES,
+    ) -> None:
+        self.min_trades = int(min_trades)
+        self.bucket_size = int(bucket_size)
+        self.quality_bucket_size = int(quality_bucket_size)
+        self.tech_bucket_size = int(tech_bucket_size)
+        self.shrinkage_trades = float(shrinkage_trades)
+        self.sparse_warning_trades = int(sparse_warning_trades)
+        self._total_trades = 0
+        self._without_tech_counts: dict[str, int] = defaultdict(int)
+        self._with_tech_counts: dict[str, int] = defaultdict(int)
+        self._level_stats: dict[str, dict[str, dict[str, Any]]] = {}
+        self._all_levels, self._lookup_order = _surface_level_definitions(True)
+
+    @property
+    def trade_count(self) -> int:
+        return self._total_trades
+
+    def add_trade(self, trade: dict[str, Any]) -> dict[str, Any]:
+        normalized = _normalize_trade_for_surface(
+            trade,
+            direction_bucket_size=int(self.bucket_size),
+            quality_bucket_size=int(self.quality_bucket_size),
+            tech_bucket_size=int(self.tech_bucket_size),
+        )
+        self._total_trades += 1
+        base_key = "|".join(
+            [
+                normalized.get("market_regime"),
+                normalized.get("direction"),
+                normalized.get("direction_band"),
+                normalized.get("quality_band"),
+            ]
+        )
+        tech_key = "|".join([base_key, normalized.get("tech_band")])
+        self._without_tech_counts[base_key] += 1
+        self._with_tech_counts[tech_key] += 1
+
+        for level in self._all_levels:
+            fields = list(level["fields"])
+            key = _group_key(fields, normalized)
+            level_nodes = self._level_stats.setdefault(level["id"], {})
+            stats = level_nodes.get(key)
+            if stats is None:
+                field_values = {field: normalized.get(field) for field in fields} if fields else {}
+                stats = _empty_group_stats(field_values)
+                level_nodes[key] = stats
+            stats["trades"] += 1
+            pnl = float(normalized.get("pnl_pct", 0.0) or 0.0)
+            stats["pnl_sum"] += pnl
+            if pnl > 0:
+                stats["gross_win"] += pnl
+                stats["win_count"] += 1
+            else:
+                stats["gross_loss"] += abs(pnl)
+            if normalized.get("directional_correct"):
+                stats["directional_hits"] += 1
+            stats["quality_sum"] += float(normalized.get("quality_score", 0.0) or 0.0)
+            stats["direction_sum"] += float(normalized.get("direction_score", 0.0) or 0.0)
+            stats["tech_sum"] += float(normalized.get("tech_score", 0.0) or 0.0)
+        return normalized
+
+    def snapshot(self, *, source_metadata: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
+        if not self._total_trades:
+            return None
+
+        metadata = dict(source_metadata or {})
+        source_metadata_payload = _surface_source_metadata(metadata)
+        include_tech_band = _should_include_tech_band_from_counts(
+            self._without_tech_counts,
+            self._with_tech_counts,
+            min_trades=self.min_trades,
+        )
+        levels, lookup_order = _surface_level_definitions(include_tech_band)
+        nodes_by_level: dict[str, dict[str, dict[str, Any]]] = {}
+
+        for level in levels:
+            level_id = level["id"]
+            level_nodes = self._level_stats.get(level_id, {})
+            nodes_by_level[level_id] = {
+                key: _summarize_group_from_stats(
+                    stats,
+                    fields=list(level["fields"]),
+                    field_values=dict(stats.get("field_values") or {}),
+                    level_id=level_id,
+                )
+                for key, stats in level_nodes.items()
+            }
+
+        _attach_shrinkage(
+            nodes_by_level,
+            levels,
+            shrinkage_trades=float(self.shrinkage_trades),
+            sparse_warning_trades=int(self.sparse_warning_trades),
+        )
+
+        density_rows = [
+            _level_density(
+                level,
+                nodes_by_level.get(level["id"], {}),
+                total_trades=self._total_trades,
+                min_trades=int(self.min_trades),
+            )
+            for level in levels
+        ]
+        warnings = _surface_warnings(density_rows, min_trades=int(self.min_trades))
+        overall = dict((nodes_by_level.get("overall") or {}).get("overall") or {})
+
+        return {
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "source_mode": metadata.get("mode"),
+            "source_profile": metadata.get("profile"),
+            "source_run_at": metadata.get("run_at"),
+            "source_lookback_years": metadata.get("lookback_years"),
+            "source_n_picks": metadata.get("n_picks"),
+            "source_iv_adj": metadata.get("iv_adj"),
+            "source_pricing_lane": metadata.get("pricing_lane"),
+            "source_playbook": metadata.get("playbook"),
+            "source_truth_source": metadata.get("truth_source"),
+            "source_promotion_status": metadata.get("promotion_status"),
+            "source_quote_coverage_pct": metadata.get("quote_coverage_pct"),
+            "source_strategy_domain": metadata.get("strategy_domain"),
+            "source_contract_selection_basis": metadata.get("contract_selection_basis"),
+            "source_universe_filters": metadata.get("universe_filters"),
+            "source_metadata": source_metadata_payload,
+            "min_trades": int(self.min_trades),
+            "bucket_size": int(self.bucket_size),
+            "direction_bucket_size": int(self.bucket_size),
+            "quality_bucket_size": int(self.quality_bucket_size),
+            "tech_bucket_size": int(self.tech_bucket_size),
+            "shrinkage_trades": float(self.shrinkage_trades),
+            "sparse_warning_trades": int(self.sparse_warning_trades),
+            "include_tech_band": include_tech_band,
+            "lookup_order": list(lookup_order),
+            "levels": nodes_by_level,
+            "overall": overall,
+            "diagnostics": {
+                "level_density": density_rows,
+                "sparse_warnings": warnings,
+            },
+        }
+
+
 def _normalize_trade_for_surface(
     trade: dict[str, Any],
     *,
@@ -421,90 +639,17 @@ def build_expectancy_surface_from_trades(
     if not trades:
         return None
 
-    metadata = dict(source_metadata or {})
-    source_metadata_payload = _surface_source_metadata(metadata)
-    normalized_trades = [
-        _normalize_trade_for_surface(
-            trade,
-            direction_bucket_size=int(bucket_size),
-            quality_bucket_size=int(quality_bucket_size),
-            tech_bucket_size=int(tech_bucket_size),
-        )
-        for trade in trades
-    ]
-    include_tech_band = _should_include_tech_band(
-        normalized_trades,
-        min_trades=int(min_trades),
-        direction_bucket_size=int(bucket_size),
-        quality_bucket_size=int(quality_bucket_size),
-        tech_bucket_size=int(tech_bucket_size),
+    accumulator = CalibrationAccumulator(
+        min_trades=min_trades,
+        bucket_size=bucket_size,
+        quality_bucket_size=quality_bucket_size,
+        tech_bucket_size=tech_bucket_size,
+        shrinkage_trades=shrinkage_trades,
+        sparse_warning_trades=sparse_warning_trades,
     )
-    levels, lookup_order = _surface_level_definitions(include_tech_band)
-    nodes_by_level: dict[str, dict[str, dict[str, Any]]] = {}
-
-    for level in levels:
-        grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-        fields = level["fields"]
-        for trade in normalized_trades:
-            values = {field: trade.get(field) for field in fields}
-            grouped[_group_key(fields, values)].append(trade)
-        nodes_by_level[level["id"]] = {}
-        for key, items in grouped.items():
-            field_values = {field: items[0].get(field) for field in fields} if fields else {}
-            nodes_by_level[level["id"]][key] = _summarize_group(
-                items,
-                fields=fields,
-                field_values=field_values,
-                level_id=level["id"],
-            )
-
-    _attach_shrinkage(
-        nodes_by_level,
-        levels,
-        shrinkage_trades=float(shrinkage_trades),
-        sparse_warning_trades=int(sparse_warning_trades),
-    )
-
-    density_rows = [
-        _level_density(level, nodes_by_level.get(level["id"], {}), total_trades=len(normalized_trades), min_trades=int(min_trades))
-        for level in levels
-    ]
-    warnings = _surface_warnings(density_rows, min_trades=int(min_trades))
-    overall = dict((nodes_by_level.get("overall") or {}).get("overall") or {})
-
-    return {
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "source_mode": metadata.get("mode"),
-        "source_profile": metadata.get("profile"),
-        "source_run_at": metadata.get("run_at"),
-        "source_lookback_years": metadata.get("lookback_years"),
-        "source_n_picks": metadata.get("n_picks"),
-        "source_iv_adj": metadata.get("iv_adj"),
-        "source_pricing_lane": metadata.get("pricing_lane"),
-        "source_playbook": metadata.get("playbook"),
-        "source_truth_source": metadata.get("truth_source"),
-        "source_promotion_status": metadata.get("promotion_status"),
-        "source_quote_coverage_pct": metadata.get("quote_coverage_pct"),
-        "source_strategy_domain": metadata.get("strategy_domain"),
-        "source_contract_selection_basis": metadata.get("contract_selection_basis"),
-        "source_universe_filters": metadata.get("universe_filters"),
-        "source_metadata": source_metadata_payload,
-        "min_trades": int(min_trades),
-        "bucket_size": int(bucket_size),
-        "direction_bucket_size": int(bucket_size),
-        "quality_bucket_size": int(quality_bucket_size),
-        "tech_bucket_size": int(tech_bucket_size),
-        "shrinkage_trades": float(shrinkage_trades),
-        "sparse_warning_trades": int(sparse_warning_trades),
-        "include_tech_band": include_tech_band,
-        "lookup_order": list(lookup_order),
-        "levels": nodes_by_level,
-        "overall": overall,
-        "diagnostics": {
-            "level_density": density_rows,
-            "sparse_warnings": warnings,
-        },
-    }
+    for trade in trades:
+        accumulator.add_trade(trade)
+    return accumulator.snapshot(source_metadata=source_metadata)
 
 
 def build_expectancy_surface(

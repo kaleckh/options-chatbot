@@ -22,6 +22,47 @@ from options_chatbot import (
 )
 
 
+class _ReviewContext:
+    def __init__(self):
+        self._spy_ret5: Optional[float] = None
+        self._profile_cache: dict[str, dict[str, Any]] = {}
+        self._underlying_price_cache: dict[str, Optional[float]] = {}
+        self._available_expiries_cache: dict[str, list[str]] = {}
+        self._option_chain_cache: dict[tuple[str, str], Any] = {}
+
+    def get_spy_ret5(self) -> float:
+        if self._spy_ret5 is None:
+            self._spy_ret5 = _get_spy_ret5()
+        return self._spy_ret5
+
+    def get_profile(self, symbol: str) -> dict[str, Any]:
+        key = str(symbol or "").upper()
+        if key not in self._profile_cache:
+            self._profile_cache[key] = _get_profile(key)
+        return self._profile_cache[key]
+
+    def get_current_underlying_price(self, symbol: str) -> Optional[float]:
+        key = str(symbol or "").upper()
+        if key not in self._underlying_price_cache:
+            self._underlying_price_cache[key] = _get_current_underlying_price(key)
+        return self._underlying_price_cache[key]
+
+    def get_available_expiries(self, symbol: str) -> list[str]:
+        key = str(symbol or "").upper()
+        if key not in self._available_expiries_cache:
+            try:
+                self._available_expiries_cache[key] = list(_cached_options(key) or [])
+            except Exception:
+                self._available_expiries_cache[key] = []
+        return self._available_expiries_cache[key]
+
+    def get_option_chain(self, symbol: str, expiry: str):
+        key = (str(symbol or "").upper(), str(expiry))
+        if key not in self._option_chain_cache:
+            self._option_chain_cache[key] = _cached_option_chain(key[0], key[1])
+        return self._option_chain_cache[key]
+
+
 def _cached_history(
     symbol: str,
     *,
@@ -158,7 +199,8 @@ def _get_current_underlying_price(symbol: str) -> Optional[float]:
     return None
 
 
-def _fetch_option_quote(position: dict[str, Any]) -> dict[str, Any]:
+def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewContext] = None) -> dict[str, Any]:
+    review_context = context or _ReviewContext()
     ticker_symbol = position["ticker"]
     expiry = str(position["expiry"])[:10]
     strike = float(position["strike"])
@@ -169,7 +211,7 @@ def _fetch_option_quote(position: dict[str, Any]) -> dict[str, Any]:
         or (position.get("source_pick_snapshot") or {}).get("contractSymbol")
     )
     warnings: list[str] = []
-    underlying_price = _get_current_underlying_price(ticker_symbol)
+    underlying_price = review_context.get_current_underlying_price(ticker_symbol)
     expiry_date = _parse_date(expiry)
     today = datetime.now().date()
 
@@ -184,7 +226,7 @@ def _fetch_option_quote(position: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        available_expiries = list(_cached_options(ticker_symbol) or [])
+        available_expiries = review_context.get_available_expiries(ticker_symbol)
     except Exception:
         available_expiries = []
         warnings.append("Could not fetch the live options chain for this position.")
@@ -209,7 +251,7 @@ def _fetch_option_quote(position: dict[str, Any]) -> dict[str, Any]:
         }
 
     try:
-        chain = _cached_option_chain(ticker_symbol, expiry)
+        chain = review_context.get_option_chain(ticker_symbol, expiry)
         option_frame = chain.calls if direction == "call" else chain.puts
         if option_frame is None or option_frame.empty:
             warnings.append("The live option chain returned no contracts for this position.")
@@ -359,7 +401,8 @@ def _check_indicator_exit_without_price(pick: dict[str, Any], spy_ret5: float = 
     return False, ""
 
 
-def review_position(position: dict[str, Any]) -> dict[str, Any]:
+def review_position(position: dict[str, Any], context: Optional[_ReviewContext] = None) -> dict[str, Any]:
+    review_context = context or _ReviewContext()
     filled_at = _parse_datetime(position["filled_at"])
     entry_option_price = float(position["entry_option_price"])
     stop_loss_pct = float(position["stop_loss_pct"])
@@ -369,7 +412,7 @@ def review_position(position: dict[str, Any]) -> dict[str, Any]:
     stop_option_price = round(entry_option_price * (1.0 - stop_loss_pct / 100.0), 4)
     target_option_price = round(entry_option_price * (1.0 + profit_target_pct / 100.0), 4)
 
-    pricing = _fetch_option_quote(position)
+    pricing = _fetch_option_quote(position, review_context)
     warnings = list(pricing.get("warnings") or [])
     current_option_price = pricing.get("current_option_price")
     current_pnl_pct = None
@@ -396,8 +439,8 @@ def review_position(position: dict[str, Any]) -> dict[str, Any]:
     source_pick.setdefault("tech_score", source_pick.get("tech_score", 50.0))
     source_pick.setdefault("direction_score", source_pick.get("direction_score", 50.0))
     source_pick.setdefault("ret5", source_pick.get("ret5", 0.0))
-    spy_ret5 = _get_spy_ret5()
-    profile = _get_profile(position["ticker"])
+    spy_ret5 = review_context.get_spy_ret5()
+    profile = review_context.get_profile(position["ticker"])
 
     if pricing.get("expired"):
         recommendation = "SELL"
@@ -471,6 +514,7 @@ def review_position(position: dict[str, Any]) -> dict[str, Any]:
 
 def review_open_positions(repository, position_ids: Optional[list[int]] = None) -> list[dict[str, Any]]:
     with _market_data_request_scope():
+        review_context = _ReviewContext()
         positions = repository.list_positions(status="open")
         if position_ids:
             requested = {int(position_id) for position_id in position_ids}
@@ -478,6 +522,6 @@ def review_open_positions(repository, position_ids: Optional[list[int]] = None) 
 
         reviewed_positions: list[dict[str, Any]] = []
         for position in positions:
-            review = review_position(position)
+            review = review_position(position, review_context)
             reviewed_positions.append(repository.save_review(int(position["id"]), review))
         return reviewed_positions

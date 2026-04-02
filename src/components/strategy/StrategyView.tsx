@@ -35,6 +35,16 @@ function fmtTruthSource(value?: string | null): string {
   return value ? `Unknown truth source (${value})` : "Unknown truth source";
 }
 
+function hasError(payload: unknown): payload is { error: string } {
+  return Boolean(
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "error" in payload &&
+    typeof (payload as { error?: unknown }).error === "string"
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────────────
 
 export default function StrategyView() {
@@ -46,6 +56,8 @@ export default function StrategyView() {
   const [profileType, setProfileType] = useState<"equity" | "index">("equity");
   const [profiles, setProfiles] = useState<Record<string, StrategyProfile> | null>(null);
   const [changelog, setChangelog] = useState<Record<string, unknown>[]>([]);
+  const [profilesLoaded, setProfilesLoaded] = useState(false);
+  const [changelogLoadedProfile, setChangelogLoadedProfile] = useState<"equity" | "index" | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState("");
   const [edits, setEdits] = useState<Record<string, Record<string, unknown>>>({});
@@ -64,22 +76,29 @@ export default function StrategyView() {
 
   const fetchProfiles = useCallback(async () => {
     try {
-      const res = await fetch("/api/tools/manage_risk_settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (data.result) {
-        JSON.parse(data.result);
-        const profilesRes = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_URL || "http://localhost:8100"}/api/profiles`
+      const [equityRes, indexRes] = await Promise.all([
+        fetch("/api/profile?type=equity"),
+        fetch("/api/profile?type=index"),
+      ]);
+      const [equityProfile, indexProfile] = await Promise.all([
+        equityRes.json().catch(() => ({})),
+        indexRes.json().catch(() => ({})),
+      ]);
+      if (!equityRes.ok || hasError(equityProfile)) {
+        throw new Error(
+          hasError(equityProfile) ? equityProfile.error : `Failed to load equity profile (${equityRes.status})`
         );
-        if (profilesRes.ok) {
-          const profilesData = await profilesRes.json();
-          setProfiles(profilesData);
-        }
       }
+      if (!indexRes.ok || hasError(indexProfile)) {
+        throw new Error(
+          hasError(indexProfile) ? indexProfile.error : `Failed to load index profile (${indexRes.status})`
+        );
+      }
+      setProfiles({
+        equity: equityProfile as StrategyProfile,
+        index: indexProfile as StrategyProfile,
+      });
+      setProfilesLoaded(true);
     } catch (err) {
       toast.error(`Failed to load profiles: ${err instanceof Error ? err.message : "unknown error"}`);
     }
@@ -87,11 +106,10 @@ export default function StrategyView() {
 
   const fetchChangelog = useCallback(async () => {
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_PYTHON_URL || "http://localhost:8100"}/api/changelog?profile=${profileType}`
-      );
+      const res = await fetch(`/api/changelog?profile=${profileType}`);
       if (res.ok) {
         setChangelog(await res.json());
+        setChangelogLoadedProfile(profileType);
       }
     } catch (err) {
       toast.error(`Failed to load changelog: ${err instanceof Error ? err.message : "unknown error"}`);
@@ -99,48 +117,56 @@ export default function StrategyView() {
   }, [profileType, toast]);
 
   useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
-
-  useEffect(() => {
-    fetchChangelog();
-  }, [fetchChangelog]);
+    if (activeSubTab !== "brain") return;
+    if (!profilesLoaded) {
+      void fetchProfiles();
+    }
+    if (changelogLoadedProfile !== profileType) {
+      void fetchChangelog();
+    }
+  }, [activeSubTab, changelogLoadedProfile, fetchChangelog, fetchProfiles, profileType, profilesLoaded]);
 
   const loadBacktestArtifacts = useCallback(async (lane: TruthLane) => {
-    const laneQuery = `truth_lane=${encodeURIComponent(lane)}`;
-    const [lastRes, reportRes, truthRes, comparisonRes] = await Promise.all([
-      fetch(`/api/backtest/last?${laneQuery}`),
-      fetch(`/api/backtest/report?${laneQuery}&min_trades=20`),
-      fetch(`/api/backtest/metric-truth?${laneQuery}&min_trades=20&bucket_size=10`),
-      fetch(`/api/backtest/comparison?${laneQuery}`),
-    ]);
+    try {
+      const params = new URLSearchParams({
+        truth_lane: lane,
+        min_trades: "20",
+        bucket_size: "10",
+      });
+      const response = await fetch(`/api/backtest/summary?${params.toString()}`);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || hasError(payload)) {
+        throw new Error(hasError(payload) ? payload.error : `Failed to load ${lane} backtest summary.`);
+      }
 
-    const [lastData, reportData, truthData, comparisonData] = await Promise.all([
-      lastRes.json().catch(() => ({})),
-      reportRes.json().catch(() => ({})),
-      truthRes.json().catch(() => ({})),
-      comparisonRes.json().catch(() => ({})),
-    ]);
+      const lastData = (payload as Record<string, unknown>).last;
+      const reportData = (payload as Record<string, unknown>).report;
+      const truthData = (payload as Record<string, unknown>).metricTruth;
+      const comparisonData = (payload as Record<string, unknown>).comparison;
 
-    const primaryError =
-      !lastRes.ok || (lastData as Record<string, unknown>).error
-        ? String((lastData as Record<string, unknown>).error || `No ${lane} backtest artifact is currently available.`)
-        : !reportRes.ok || (reportData as Record<string, unknown>).error
-          ? String((reportData as Record<string, unknown>).error || `No ${lane} replay report is currently available.`)
-          : !truthRes.ok || (truthData as Record<string, unknown>).error
-            ? String((truthData as Record<string, unknown>).error || `No ${lane} truth report is currently available.`)
-            : null;
+      const primaryError =
+        hasError(lastData)
+          ? lastData.error
+          : hasError(reportData)
+            ? reportData.error
+            : hasError(truthData)
+              ? truthData.error
+              : null;
 
-    setBacktestResult(!lastRes.ok || (lastData as Record<string, unknown>).error ? null : (lastData as BacktestResult));
-    setBacktestReport(!reportRes.ok || (reportData as Record<string, unknown>).error ? null : (reportData as BacktestReplayReport));
-    setMetricTruthReport(!truthRes.ok || (truthData as Record<string, unknown>).error ? null : (truthData as MetricTruthReport));
-    setComparisonReport(
-      !comparisonRes.ok || (comparisonData as Record<string, unknown>).error
-        ? null
-        : (comparisonData as TruthLaneComparisonReport)
-    );
-    setArtifactNotice(primaryError);
-  }, []);
+      setBacktestResult(hasError(lastData) ? null : (lastData as BacktestResult | null));
+      setBacktestReport(hasError(reportData) ? null : (reportData as BacktestReplayReport | null));
+      setMetricTruthReport(hasError(truthData) ? null : (truthData as MetricTruthReport | null));
+      setComparisonReport(hasError(comparisonData) ? null : ((comparisonData ?? null) as TruthLaneComparisonReport | null));
+      setArtifactNotice(primaryError);
+    } catch (err) {
+      setBacktestResult(null);
+      setBacktestReport(null);
+      setMetricTruthReport(null);
+      setComparisonReport(null);
+      setArtifactNotice(err instanceof Error ? err.message : "unknown error");
+      toast.error(`Failed to load backtest artifacts: ${err instanceof Error ? err.message : "unknown error"}`);
+    }
+  }, [toast]);
 
   useEffect(() => {
     if (activeSubTab !== "optimizer") return;
@@ -169,25 +195,24 @@ export default function StrategyView() {
     await saveGuard.guard(async () => {
       setSaving(true);
       try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_PYTHON_URL || "http://localhost:8100"}/api/profile`,
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: profileType,
-              updates: edits,
-              note: saveNote || `${profileType} profile updated`,
-            }),
-          }
-        );
-        if (res.ok) {
-          setEdits({});
-          setSaveNote("");
-          await fetchProfiles();
-          await fetchChangelog();
-          toast.success("Profile saved successfully");
+        const res = await fetch("/api/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: profileType,
+            updates: edits,
+            note: saveNote || `${profileType} profile updated`,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || hasError(data)) {
+          throw new Error(hasError(data) ? data.error : `Failed to save profile (${res.status})`);
         }
+        setEdits({});
+        setSaveNote("");
+        await fetchProfiles();
+        await fetchChangelog();
+        toast.success("Profile saved successfully");
       } catch (err) {
         toast.error(`Failed to save profile: ${err instanceof Error ? err.message : "unknown error"}`);
       } finally {

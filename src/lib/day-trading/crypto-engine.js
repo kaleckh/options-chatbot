@@ -20,6 +20,8 @@ const BACKTEST_DIR = path.join(DATA_ROOT, "backtests");
 const EXPERIMENTS_DIR = path.join(DATA_ROOT, "experiments");
 const EXPERIMENT_REPORT_PATH = path.join(EXPERIMENTS_DIR, "latest.json");
 const IMPORT_REPORT_PATH = path.join(DATA_ROOT, "import_latest.json");
+const READ_ONLY_BUNDLE_CACHE = new Map();
+const NORMALIZED_BARS_CACHE = new Map();
 const DEFAULT_ACCOUNT_ID = "paper-main";
 const MANAGED_STRATEGY_OWNER = "options-chatbot-day-trading-crypto";
 const DEFAULT_MARKET = "crypto";
@@ -548,15 +550,18 @@ function synchronizeManagedStrategies(strategies) {
   };
 }
 
-function loadStrategies() {
+function loadStrategies(options = {}) {
+  const readOnly = Boolean(options.readOnly);
   const stored = readJson(STRATEGIES_PATH, null);
   if (!Array.isArray(stored) || stored.length === 0) {
     const seeded = clone(DEFAULT_STRATEGIES);
-    atomicWriteJsonSync(STRATEGIES_PATH, seeded);
+    if (!readOnly) {
+      atomicWriteJsonSync(STRATEGIES_PATH, seeded);
+    }
     return seeded;
   }
   const synchronized = synchronizeManagedStrategies(stored);
-  if (synchronized.changed) {
+  if (synchronized.changed && !readOnly) {
     atomicWriteJsonSync(STRATEGIES_PATH, synchronized.strategies);
   }
   return synchronized.strategies;
@@ -602,8 +607,94 @@ function loadBacktestSummaries() {
 }
 
 function loadNormalizedBars(symbol) {
-  const payload = readJson(getNormalizedBarsPath(symbol), null);
-  return Array.isArray(payload?.bars) ? payload.bars : [];
+  const filePath = getNormalizedBarsPath(symbol);
+  const cacheKey = `${filePath}::${_mtimeMs(filePath)}`;
+  const cached = NORMALIZED_BARS_CACHE.get(cacheKey);
+  if (cached) {
+    return cached.slice();
+  }
+  const payload = readJson(filePath, null);
+  const bars = Array.isArray(payload?.bars) ? payload.bars : [];
+  NORMALIZED_BARS_CACHE.set(cacheKey, bars.slice());
+  return bars;
+}
+
+function _invalidateNormalizedBarsCache(symbol) {
+  const filePath = getNormalizedBarsPath(symbol);
+  for (const key of Array.from(NORMALIZED_BARS_CACHE.keys())) {
+    if (key.startsWith(`${filePath}::`)) {
+      NORMALIZED_BARS_CACHE.delete(key);
+    }
+  }
+}
+
+function _mtimeMs(filePath) {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function _directorySignature(dirPath) {
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    let latest = _mtimeMs(dirPath);
+    for (const entry of entries) {
+      const entryPath = path.join(dirPath, entry.name);
+      latest = Math.max(
+        latest,
+        entry.isDirectory() ? _directorySignature(entryPath) : _mtimeMs(entryPath),
+      );
+    }
+    return latest;
+  } catch {
+    return 0;
+  }
+}
+
+function _readOnlyBundleKey(options = {}) {
+  const bars = Number(options.bars) || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.bars;
+  const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  return [
+    "crypto",
+    bars,
+    accountId,
+    _mtimeMs(STRATEGIES_PATH),
+    _mtimeMs(LEDGER_PATH),
+    _mtimeMs(REPORT_PATH),
+    _mtimeMs(WATCHLIST_PATH),
+    _mtimeMs(IMPORT_REPORT_PATH),
+    _mtimeMs(EXPERIMENT_REPORT_PATH),
+    _directorySignature(BACKTEST_DIR),
+    _directorySignature(EXPERIMENTS_DIR),
+    _directorySignature(NORMALIZED_1M_DIR),
+    _directorySignature(DERIVED_5M_DIR),
+  ].join("::");
+}
+
+function _readOnlyDayTradingBundle(options = {}) {
+  const cacheKey = _readOnlyBundleKey(options);
+  const cached = READ_ONLY_BUNDLE_CACHE.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+  const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  const broker = new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
+  const bundle = {
+    accountId,
+    strategies: loadStrategies({ readOnly: true }),
+    backtests: loadBacktestSummaries(),
+    broker,
+    paperSummaries: broker.getStrategySummaries({ accountId }),
+    paperAccount: broker.getAccountSummary({ accountId }),
+    lastReport: readJson(REPORT_PATH, null),
+    lastWatchlist: readJson(WATCHLIST_PATH, null),
+    lastImport: readJson(IMPORT_REPORT_PATH, null),
+    experimentReport: readJson(EXPERIMENT_REPORT_PATH, null),
+  };
+  READ_ONLY_BUNDLE_CACHE.set(cacheKey, bundle);
+  return bundle;
 }
 
 function saveNormalizedBars(symbol, bars, metadata = {}) {
@@ -614,6 +705,7 @@ function saveNormalizedBars(symbol, bars, metadata = {}) {
     metadata,
     bars,
   });
+  _invalidateNormalizedBarsCache(symbol);
 }
 
 function saveDerivedBars(symbol, timeframe, bars, windowMode = DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode) {
@@ -1180,6 +1272,7 @@ async function loadCryptoMarketDataForStrategy(strategy, options = {}) {
   const symbol = String(strategy.marketUniverse?.symbols?.[0] || "").toUpperCase();
   const requestedBars = normalizeBarsSelection(options.bars, DEFAULT_CRYPTO_DAY_TRADING_CONFIG.bars);
   const windowMode = normalizeWindowMode(options.windowMode, DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode);
+  const persistArtifacts = options.persistArtifacts !== false && options.readOnly !== true;
   const importedBars = loadNormalizedBars(symbol);
   const rawBarsNeeded = requestedBars === "all"
     ? importedBars.length
@@ -1195,7 +1288,7 @@ async function loadCryptoMarketDataForStrategy(strategy, options = {}) {
     try {
       const live = await fetchRecentLiveOneMinuteBars(symbol, options.livePollMinutes || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.livePollMinutes);
       rawBars = mergeBars(rawBars, live.bars);
-      if (rawBars.length > 0) {
+      if (persistArtifacts && rawBars.length > 0) {
         saveNormalizedBars(symbol, mergeBars(importedBars, live.bars), {
           source: "binance_spot_imported_plus_live",
           liveUpdatedAt: nowIso(),
@@ -1250,7 +1343,9 @@ async function loadCryptoMarketDataForStrategy(strategy, options = {}) {
     DEFAULT_CRYPTO_DAY_TRADING_CONFIG,
     windowMode,
   );
-  saveDerivedBars(symbol, DEFAULT_TIMEFRAME, enrichedBars, windowMode);
+  if (persistArtifacts) {
+    saveDerivedBars(symbol, DEFAULT_TIMEFRAME, enrichedBars, windowMode);
+  }
   const lastBar = enrichedBars[enrichedBars.length - 1] || null;
 
   return {
@@ -2283,19 +2378,27 @@ function getWindowSummary(now) {
 async function buildMorningWatchlist(options = {}) {
   const bars = Number(options.bars) || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.bars;
   const limit = Math.max(1, Number(options.limit) || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.watchlistLimit || 6);
+  const readOnly = Boolean(options.readOnly);
+  const persistArtifacts = options.persistArtifacts !== false && !readOnly;
+  const bundle = options.artifactBundle || (readOnly ? _readOnlyDayTradingBundle({ ...options, bars }) : null);
   const marketDataLoader = typeof options.marketDataLoader === "function"
     ? options.marketDataLoader
     : (strategy, loaderOptions) => loadCryptoMarketDataForStrategy(strategy, { ...loaderOptions, includeLive: true });
-  const strategies = (options.strategies || loadStrategies()).filter((strategy) => String(strategy.status || "") !== "disabled");
+  const strategies = ((bundle?.strategies || options.strategies || loadStrategies({ readOnly })) || [])
+    .filter((strategy) => String(strategy.status || "") !== "disabled");
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
   const now = options.now || nowIso();
   const nowWindow = classifyScheduledWindow(now, DEFAULT_CRYPTO_DAY_TRADING_CONFIG);
-  const broker = new shared.PaperBroker({ ledgerPath: LEDGER_PATH });
-  broker.ensureAccount({ accountId, startingCash: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.startingCash });
-  const paperSummaries = broker.getStrategySummaries({ accountId });
+  const broker = bundle?.broker || new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly });
+  broker.ensureAccount({
+    accountId,
+    startingCash: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.startingCash,
+    createIfMissing: readOnly,
+  });
+  const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
   const scoreboard = shared.buildStrategyScoreboard({
     strategies,
-    backtests: loadBacktestSummaries(),
+    backtests: bundle?.backtests || loadBacktestSummaries(),
     paperSummaries,
   });
   const strategyMap = new Map(strategies.map((strategy) => [strategy.strategyId, strategy]));
@@ -2308,7 +2411,7 @@ async function buildMorningWatchlist(options = {}) {
   for (const candidate of rankedCandidates) {
     const strategy = strategyMap.get(candidate.strategyId);
     if (!strategy) continue;
-    const marketData = await marketDataLoader(strategy, { bars });
+    const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     const trusted = marketData?.trusted !== false;
     const priceSeries = Array.isArray(marketData?.priceSeries) ? marketData.priceSeries : [];
     const lastBar = priceSeries[priceSeries.length - 1] || null;
@@ -2409,16 +2512,23 @@ async function buildMorningWatchlist(options = {}) {
     notifyNowCount: items.filter((item) => item.notifyNow).length,
     items,
   };
-  atomicWriteJsonSync(WATCHLIST_PATH, watchlist);
+  if (persistArtifacts) {
+    atomicWriteJsonSync(WATCHLIST_PATH, watchlist);
+  }
   return watchlist;
 }
 
 function getDayTradingSnapshot(options = {}) {
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
-  const broker = new shared.PaperBroker({ ledgerPath: LEDGER_PATH });
-  broker.ensureAccount({ accountId, startingCash: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.startingCash });
-  const strategies = loadStrategies();
-  const paperSummaries = broker.getStrategySummaries({ accountId });
+  const bundle = options.artifactBundle || _readOnlyDayTradingBundle(options);
+  const broker = bundle?.broker || new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
+  broker.ensureAccount({
+    accountId,
+    startingCash: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.startingCash,
+    createIfMissing: true,
+  });
+  const strategies = bundle?.strategies || loadStrategies({ readOnly: true });
+  const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
 
   return {
     generatedAt: nowIso(),
@@ -2432,14 +2542,14 @@ function getDayTradingSnapshot(options = {}) {
     strategies,
     scoreboard: shared.buildStrategyScoreboard({
       strategies,
-      backtests: loadBacktestSummaries(),
+      backtests: bundle?.backtests || loadBacktestSummaries(),
       paperSummaries,
     }),
-    paperAccount: broker.getAccountSummary({ accountId }),
+    paperAccount: bundle?.paperAccount || broker.getAccountSummary({ accountId }),
     paperSummaries,
-    lastReport: readJson(REPORT_PATH, null),
-    lastWatchlist: readJson(WATCHLIST_PATH, null),
-    lastImport: readJson(IMPORT_REPORT_PATH, null),
+    lastReport: bundle?.lastReport || readJson(REPORT_PATH, null),
+    lastWatchlist: bundle?.lastWatchlist || readJson(WATCHLIST_PATH, null),
+    lastImport: bundle?.lastImport || readJson(IMPORT_REPORT_PATH, null),
   };
 }
 

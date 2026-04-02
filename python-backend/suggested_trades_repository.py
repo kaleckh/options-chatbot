@@ -185,6 +185,35 @@ class SQLiteSuggestedTradesRepository:
             return None
         return _normalize_position_row(dict(row))
 
+    def _fetch_position_by_id_in_conn(self, conn, position_id: int) -> Optional[dict[str, Any]]:
+        query = """
+        SELECT
+            p.*,
+            r.id AS review_id,
+            r.reviewed_at,
+            r.pricing_source,
+            r.current_option_price,
+            r.current_pnl_pct,
+            r.recommendation,
+            r.reason,
+            r.warnings,
+            r.metrics_snapshot
+        FROM suggested_trades p
+        LEFT JOIN suggested_trade_reviews r
+            ON r.id = (
+                SELECT pr.id
+                FROM suggested_trade_reviews pr
+                WHERE pr.position_id = p.id
+                ORDER BY pr.reviewed_at DESC, pr.id DESC
+                LIMIT 1
+            )
+        WHERE p.id = ?
+        """
+        row = conn.execute(query, (position_id,)).fetchone()
+        if not row:
+            return None
+        return _normalize_position_row(dict(row))
+
     def _serialize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         serialized = copy.deepcopy(payload)
         for key in ("expiry", "filled_at", "last_reviewed_at", "closed_at"):
@@ -252,10 +281,10 @@ class SQLiteSuggestedTradesRepository:
                 ),
             )
             position_id = int(cur.lastrowid)
-        position = self.get_position(position_id)
-        if position is None:
-            raise RuntimeError(f"Suggested trade {position_id} was not found after creation.")
-        return position
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+            if position is None:
+                raise RuntimeError(f"Suggested trade {position_id} was not found after creation.")
+            return position
 
     def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
         where_sql = ""
@@ -346,10 +375,10 @@ class SQLiteSuggestedTradesRepository:
                     position_id,
                 ),
             )
-        position = self.get_position(position_id)
-        if position is None:
-            raise RuntimeError(f"Suggested trade {position_id} was not found after review save.")
-        return position
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+            if position is None:
+                raise RuntimeError(f"Suggested trade {position_id} was not found after review save.")
+            return position
 
     def close_position(
         self,
@@ -359,14 +388,14 @@ class SQLiteSuggestedTradesRepository:
         exit_reason: str,
         notes: Optional[str] = None,
     ) -> Optional[dict[str, Any]]:
-        existing = self.get_position(position_id)
-        if existing is None:
-            return None
-        merged_notes = existing.get("notes")
-        if notes:
-            merged_notes = f"{merged_notes}\n{notes}".strip() if merged_notes else notes
-        closed_at_iso = _to_iso(closed_at)
         with self._connect() as conn:
+            existing = self._fetch_position_by_id_in_conn(conn, position_id)
+            if existing is None:
+                return None
+            merged_notes = existing.get("notes")
+            if notes:
+                merged_notes = f"{merged_notes}\n{notes}".strip() if merged_notes else notes
+            closed_at_iso = _to_iso(closed_at)
             conn.execute(
                 """
                 UPDATE suggested_trades
@@ -389,7 +418,10 @@ class SQLiteSuggestedTradesRepository:
                     position_id,
                 ),
             )
-        return self.get_position(position_id)
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+            if position is None:
+                raise RuntimeError(f"Suggested trade {position_id} was not found after close.")
+            return position
 
 
 def create_suggested_trades_repository(db_path: str):

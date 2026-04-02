@@ -88,6 +88,12 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(len(open_payload["positions"]), 1)
         self.assertEqual(open_payload["positions"][0]["status"], "open")
 
+        grouped_open_response = self.client.get("/api/positions", params={"status": "all", "grouped": 1})
+        self.assertEqual(grouped_open_response.status_code, 200)
+        grouped_open_payload = grouped_open_response.json()
+        self.assertEqual(len(grouped_open_payload["open"]), 1)
+        self.assertEqual(grouped_open_payload["closed"], [])
+
         review_response = self.client.post("/api/positions/review", json={})
         self.assertEqual(review_response.status_code, 200)
         reviewed = review_response.json()["positions"][0]
@@ -127,6 +133,12 @@ class TrackedPositionsApiTests(unittest.TestCase):
         closed_payload = list_closed_response.json()
         self.assertEqual(len(closed_payload["positions"]), 1)
         self.assertEqual(closed_payload["positions"][0]["status"], "closed")
+
+        grouped_closed_response = self.client.get("/api/positions", params={"status": "all", "grouped": 1})
+        self.assertEqual(grouped_closed_response.status_code, 200)
+        grouped_closed_payload = grouped_closed_response.json()
+        self.assertEqual(grouped_closed_payload["open"], [])
+        self.assertEqual(len(grouped_closed_payload["closed"]), 1)
 
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
