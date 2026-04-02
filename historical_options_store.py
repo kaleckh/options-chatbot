@@ -1002,7 +1002,13 @@ class HistoricalOptionsStore:
             "snapshot_kind": snapshot_kind,
         }
 
-    def snapshot_summary(self, snapshot_kind: str, *, trusted_only: bool = False) -> dict[str, Any]:
+    def snapshot_summary(
+        self,
+        snapshot_kind: str,
+        *,
+        trusted_only: bool = False,
+        include_available_underlyings: bool = True,
+    ) -> dict[str, Any]:
         normalized_snapshot_kind = str(snapshot_kind)
         with closing(self._connect()) as conn:
             params: list[Any] = [normalized_snapshot_kind]
@@ -1039,9 +1045,13 @@ class HistoricalOptionsStore:
             "earliest_quote_at_utc": str((row["earliest_quote_at_utc"] if row else None) or "") or None,
             "latest_quote_at_utc": str((row["latest_quote_at_utc"] if row else None) or "") or None,
             "latest_imported_at_utc": str((row["latest_imported_at_utc"] if row else None) or "") or None,
-            "available_underlyings": self.list_available_underlyings(
-                snapshot_kind=normalized_snapshot_kind,
-                trusted_only=trusted_only,
+            "available_underlyings": (
+                self.list_available_underlyings(
+                    snapshot_kind=normalized_snapshot_kind,
+                    trusted_only=trusted_only,
+                )
+                if include_available_underlyings
+                else None
             ),
             "source_labels": [item for item in str((row["source_labels"] if row else "") or "").split(",") if item],
             "dataset_kinds": [item for item in str((row["dataset_kinds"] if row else "") or "").split(",") if item],

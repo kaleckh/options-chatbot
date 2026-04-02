@@ -1794,7 +1794,11 @@ def build_truth_lane_health_summary() -> dict[str, Any]:
 def _current_imported_store_summary(truth_source: str) -> Optional[dict[str, Any]]:
     try:
         store = HistoricalOptionsStore()
-        summary = store.snapshot_summary(_imported_snapshot_kind(truth_source), trusted_only=True)
+        summary = store.snapshot_summary(
+            _imported_snapshot_kind(truth_source),
+            trusted_only=True,
+            include_available_underlyings=False,
+        )
     except Exception:
         return None
     if int(summary.get("quote_count", 0) or 0) <= 0:
@@ -1818,8 +1822,11 @@ def _imported_result_matches_current_store(result: Optional[dict], truth_source:
         and int(recorded.get("quote_count", 0) or 0) == int(current.get("quote_count", 0) or 0)
         and int(recorded.get("batch_count", 0) or 0) == int(current.get("batch_count", 0) or 0)
         and str(recorded.get("latest_imported_at_utc") or "") == str(current.get("latest_imported_at_utc") or "")
-        and sorted(str(item) for item in (recorded.get("available_underlyings") or []))
-        == sorted(str(item) for item in (current.get("available_underlyings") or []))
+        and (
+            current.get("available_underlyings") is None
+            or sorted(str(item) for item in (recorded.get("available_underlyings") or []))
+            == sorted(str(item) for item in (current.get("available_underlyings") or []))
+        )
     )
 
 
