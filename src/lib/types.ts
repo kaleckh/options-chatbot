@@ -377,6 +377,7 @@ export interface ForwardEvidenceReport {
     primary_judge_fallback_used?: boolean;
     primary_judge_fallback_reason?: string | null;
     pending_truth_horizon_count?: number | null;
+    contract_resolution_overview?: Record<string, number> | null;
     archived_sample_date_coverage?: Record<string, unknown> | null;
     [key: string]: unknown;
   } | null;

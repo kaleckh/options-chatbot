@@ -842,6 +842,7 @@ def _build_forward_evidence_report() -> dict[str, Any]:
             "primary_judge_fallback_used": bool(latest_artifact.get("primary_judge_fallback_used")) if latest_artifact else False,
             "primary_judge_fallback_reason": latest_artifact.get("primary_judge_fallback_reason") if latest_artifact else None,
             "pending_truth_horizon_count": int(latest_artifact.get("pending_truth_horizon_count") or 0) if latest_artifact else 0,
+            "contract_resolution_overview": dict(latest_artifact.get("contract_resolution_overview") or {}) if latest_artifact else {},
             "archived_sample_date_coverage": dict(latest_artifact.get("archived_sample_date_coverage") or {}) if latest_artifact else {},
         },
     }

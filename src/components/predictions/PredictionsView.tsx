@@ -1096,6 +1096,7 @@ function ScannerTab({
   const exactContractCoveragePct = totalForwardCaptures > 0
     ? (exactContractCount / totalForwardCaptures) * 100
     : null;
+  const contractResolutionOverview = forwardEvidence?.archived_forward_artifact?.contract_resolution_overview || null;
   const trackedDbStatus = trackedPositionsCheck?.available
     ? "READY"
     : trackedPositionsCheck?.database_url_configured
@@ -1312,6 +1313,14 @@ function ScannerTab({
               <div className="text-xs text-text-3">
                 Fallback {forwardEvidence?.archived_forward_artifact?.primary_judge_fallback_used ? fmtCompactLabel(forwardEvidence.archived_forward_artifact.primary_judge_fallback_reason) : "none"}
               </div>
+              {contractResolutionOverview && (
+                <div className="text-xs text-text-3">
+                  Archived {String(contractResolutionOverview.exact_archived_contract ?? 0)}
+                  {" "}&middot; Model {String(contractResolutionOverview.exact_target_contract ?? 0)}
+                  {" "}&middot; Nearest {String(contractResolutionOverview.nearest_listed_contract ?? 0)}
+                  {" "}&middot; Pending {String(contractResolutionOverview.pending_truth_horizon ?? 0)}
+                </div>
+              )}
             </div>
           </div>
 
