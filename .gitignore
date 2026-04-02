@@ -34,6 +34,10 @@ research_runs/
 # Local runtime state
 tmp/
 tmp_public/
+.tmp/
+.codex_tmp/
+.codex_tmp_test/
+.codex-logs/
 chat_history.db
 market_data.db
 *.db-shm
