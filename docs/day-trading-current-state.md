@@ -1,6 +1,6 @@
 # Day Trading Current State
 
-Last updated: 2026-04-02
+Last updated: 2026-04-03
 
 ## Critical Rule: Read Code First
 
@@ -14,16 +14,16 @@ Last updated: 2026-04-02
 ## Goal
 
 The active day-trading goal is now:
-- use the easiest free data source we can trust well enough for research
-- test a small set of intraday strategies honestly
-- only notify when trusted live data says a replay-backed setup is active
-- keep the user in control of the actual trade decision
+- prove a repeatable BTC-first edge net of fees and slippage
+- keep the user in control of execution
+- block low-quality or untrusted live signals instead of forcing trades
+- treat research honesty as more important than trade frequency
 
-This is still not an autonomous execution system.
+This is still a research and supervision system, not an autonomous execution stack.
 
 ## Active Market Split
 
-The day-trading system now has two lanes:
+The day-trading system has two lanes:
 
 ### `crypto`
 
@@ -31,23 +31,35 @@ This is the default active research track.
 
 - universe: `BTCUSDT`, `ETHUSDT`, `SOLUSDT`
 - market type: spot
-- exchange/data adapter: `binance_us` first, then global Binance fallback if available
+- exchange/data adapter: `binance_us` first, then global Binance fallback when available
 - raw bars: `1m`
 - strategy bars: derived `5m`
-- monitoring window:
+- active session:
   - `Denver Core` = `07:00-11:00 America/Denver` = `09:00-13:00 ET`
-- trading days:
-  - Monday through Friday only for the profitability pilot
+- trading days for the profitability pilot:
+  - Monday through Friday only
 
 Main code:
 - `src/lib/day-trading/crypto-engine.js`
 - `src/lib/day-trading/index.js`
 
-Managed crypto strategies:
-- `BTCUSDT 5m Range Mean Reversion` (`paper_candidate`, active phase 1 setup)
-- `BTCUSDT 5m Trend Continuation` (`disabled`, unlock after phase 1)
-- `ETHUSDT 5m Trend Continuation` (`disabled`, unlock after phase 1)
-- `SOLUSDT 5m Event Watch` (`disabled`, paper-only until BTC and ETH prove out)
+Current managed crypto slate:
+- `BTCUSDT 5m Bottom Reclaim`
+  - paper-candidate reversal challenger
+- `BTCUSDT 5m Failed Breakdown Reclaim`
+  - paper-candidate stop-run reversal challenger
+- `BTCUSDT 5m Range Mean Reversion`
+  - active phase-1 BTC setup
+- `BTCUSDT 5m Opening Range Breakout 15m Close`
+  - paper-candidate Denver Core breakout challenger
+- `BTCUSDT 5m Opening Range Breakout 30m Retest`
+  - paper-candidate Denver Core breakout-retest challenger
+- `BTCUSDT 5m Trend Continuation`
+  - locked until the BTC advance gate passes
+- `ETHUSDT 5m Trend Continuation`
+  - locked until BTC clears the advance gate
+- `SOLUSDT 5m Event Watch`
+  - paper-only and disabled for live unlocks until BTC and ETH prove out
 
 ### `equities_legacy`
 
@@ -72,9 +84,38 @@ Scripts:
 - `npm run daytrading:validate`
 - `npm run daytrading:watch`
 - `npm run daytrading:experiments`
+- `npm run daytrading:preflight`
+- `npm run daytrading:pilot`
+- `npm run daytrading:journal:add`
 - `npm run daytrading:test`
 
 `crypto` is now the default market for the scripts and the UI.
+
+## BTC Profitability Guardrails
+
+The active BTC pilot is enforced in the engine and CLI, not just described in docs.
+
+Current defaults:
+- `2` approved BTC entries per `America/Denver` trading day
+- unused approvals expire at `11:00 America/Denver`
+- every eligible BTC entry needs a same-day ticket plus all three manual confirmations:
+  - `setup_match_confirmed`
+  - `headline_lockout_checked`
+  - `maker_limit_plan_confirmed`
+- only ticket-linked BTC entries count toward the pilot sample
+- `<30` eligible BTC trades = sample building
+- `30-49` eligible BTC trades = review checkpoint
+- `50+` eligible BTC trades with all gates passing = ETH unlock candidate
+
+Explicit no-trade blockers for BTC range mean reversion:
+- `mid_range`
+- `expansion`
+- `event_shock_lockout`
+
+Watchlist alerts are also suppressed when:
+- data is stale or untrusted
+- the fixed session is closed
+- the daily approval cap is exhausted
 
 ## Data Stack
 
@@ -82,7 +123,7 @@ Scripts:
 
 The crypto lane uses a free-data-first stack:
 
-- historical backfill via public exchange klines
+- public exchange klines for backfill
 - local normalized `1m` store
 - derived local `5m` bars
 - optional live poll merge for watchlist freshness
@@ -93,25 +134,27 @@ Storage lives under:
 - `data/day-trading/crypto/derived-5m`
 - `data/day-trading/crypto/backtests`
 - `data/day-trading/crypto/experiments`
+- `data/day-trading/crypto/profitability_journal.json`
+- `data/day-trading/crypto/profitability_preflight_tickets.json`
 
-Important implementation detail:
-- on this U.S. machine, `api.binance.com` returned `HTTP 451`
-- the active adapter now prefers `api.binance.us`, which works for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT`
+Implementation detail that matters on this machine:
+- `api.binance.com` has returned `HTTP 451` in this environment
+- the active adapter prefers `api.binance.us`, which works for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT`
 
 ### Equities Legacy
 
 The legacy lane still uses:
 - Yahoo chart data
-- synthetic fallback only for tests/exploration
+- synthetic fallback only for tests and exploration
 
 ## Deterministic Coverage
 
-There is now deterministic Node coverage for both lanes.
+There is deterministic Node coverage for both lanes.
 
-Legacy equity coverage remains in:
+Legacy equity coverage:
 - `tests/day-trading/engine.test.js`
 
-New crypto coverage lives in:
+Crypto coverage:
 - `tests/day-trading/crypto-engine.test.js`
 
 Crypto tests cover:
@@ -119,157 +162,56 @@ Crypto tests cover:
 - CSV/import path
 - validation with trusted fixtures
 - watchlist blocking on untrusted data
+- BTC preflight ticket cap and expiry behavior
+- pilot disqualification accounting
+- explicit `mid_range`, `expansion`, and `event_shock_lockout` blockers
+- `30`-trade review vs `50`-trade advance milestones
 - router defaulting to crypto while keeping equities legacy reachable
 
-## Current Live Crypto Evidence
-
-### Import
-
-Latest command:
-
-```bash
-npm run daytrading:import:crypto -- --days=90
-```
-
-Result on 2026-04-01:
-- imported `129,600` `1m` bars each for:
-  - `BTCUSDT`
-  - `ETHUSDT`
-  - `SOLUSDT`
-- derived `25,921` `5m` bars per symbol
-- data window:
-  - start: `2026-01-01T21:03:00Z`
-  - end: `2026-04-01T21:03:00Z`
-
-### Validation
-
-Latest command pattern:
-
-```bash
-npm run daytrading:validate -- --bars=all --window-mode=<mode>
-```
-
-Result on 2026-04-01 across the full imported history:
-- `6` strategies scanned in every mode
-- all `6` remained `backtest_failed`
-- no paper positions opened
-- all modes used the full `90` day imported span
-
-Window-mode summary:
-- `all_hours`
-  - `1,143` total trades
-  - still clearly negative
-  - best leader: `SOLUSDT 5m VWAP Reclaim`
-  - `-0.0745%` total net return
-  - `34.8%` win rate
-  - `0.53` profit factor
-- `scheduled_windows`
-  - `546` total trades
-  - still clearly negative
-  - best leader: `SOLUSDT 5m VWAP Reclaim`
-  - `-0.0412%` total net return
-  - `40.3%` win rate
-  - `0.68` profit factor
-- `us_morning`
-  - `277` total trades
-  - least bad mode, but still negative
-  - best leader: `SOLUSDT 5m VWAP Reclaim`
-  - `-0.0111%` total net return
-  - `43.3%` win rate
-  - `0.83` profit factor
-- `asia_open`
-  - `269` total trades
-  - still negative
-  - best leader: `BTCUSDT 5m Range Breakout`
-  - `-0.0265%` total net return
-  - `27.6%` win rate
-  - `0.52` profit factor
-
-Takeaway:
-- the extra data did not uncover a hidden winner
-- `us_morning` is less bad than `all_hours`
-- the problem is now clearly strategy edge, not data depth or bar scarcity
-
-### Experiments
-
-Latest command:
-
-```bash
-node scripts/run_day_trading_experiments.js --market=crypto --bars=all --top=10
-```
-
-Result on 2026-04-01:
-- research mode: `control_first`
-- window modes evaluated:
-  - `all_hours`
-  - `scheduled_windows`
-  - `us_morning`
-  - `asia_open`
-- `24` trusted control evaluations
-- `0` narrow challenger variants unlocked
-- recommendation: `strategy_redesign_next_sprint`
-
-What the control-first loop found:
-- every family/window review was still `clearly_negative`
-- no family qualified for the `20`-trade, “not clearly negative” challenger gate
-- the least bad family/window was `crypto_range_breakout` in `us_morning`
-  - `42` trades
-  - `-0.0107%` aggregate net P&L fraction
-  - `0.88` profit factor
-- the biggest losers were the all-hours variants, especially:
-  - `crypto_ema_pullback_continuation`
-    - `731` trades
-    - `-0.7718%` aggregate net P&L fraction
-    - `0.49` profit factor
-  - `crypto_vwap_reclaim`
-    - `285` trades
-    - `-0.2974%` aggregate net P&L fraction
-    - `0.51` profit factor
-
-### Watchlist
-
-Latest command:
-
-```bash
-npm run daytrading:watch -- --bars=720 --limit=4
-```
-
-Result on 2026-04-01:
-- trusted live data loaded successfully from `binance_spot_imported_plus_live`
-- `notifyNowCount: 0`
-- current evaluation was outside both scheduled windows
-- live watchlist stayed locked to `scheduled_windows`
-- no notify decisions came from fallback or untrusted data
-
-## Product Shape
+## Current UI And API Shape
 
 The day-trading UI now:
 - defaults to `crypto`
-- exposes `equities_legacy` as a selector, not the main lane
-- shows the profitability pilot operating plan, validation gates, and journal KPI dashboard
-- shows market/exchange/session metadata
-- shows the fixed weekday session for crypto
-- keeps real notify decisions blocked when data is stale or untrusted
+- keeps `equities_legacy` available behind a selector
+- shows the BTC operating plan, checklist, daily cap state, and milestone progress
+- shows disqualified-vs-eligible journal counts
+- shows compact execution-quality stats from the pilot journal
+- shows watchlist blocker states such as `blocked_mid_range`, `blocked_expansion`, and `blocked_event_shock`
+- keeps live notify decisions blocked when data is stale, untrusted, or regime-blocked
+
+The snapshot and watchlist payloads now expose:
+- operating plan metadata
+- today-gate state
+- milestone state
+- eligibility and disqualification counts
+- execution-quality summary fields
+- regime state, tradeability, and blocker lists on watchlist items
+
+## Historical Context That Led Here
+
+The current BTC-first guardrails were a response to earlier broad crypto validation, not a random pivot.
+
+What the earlier control-first work established:
+- a broad 90-day crypto replay loop was feasible with trusted spot data
+- the broad family/window sweep remained negative overall
+- more data did not reveal a hidden winner
+- the right next move was to narrow the live lane, not widen it
+
+What changed after that work:
+- the live workflow standardized on `scheduled_windows`, `denver_core`, and `all_hours`
+- the active pilot stopped pretending every family was ready for live comparison
+- BTC range mean reversion became the only live phase-1 setup
+- ETH and SOL stayed locked behind explicit evidence gates
 
 ## Current Recommendation
 
-The crypto pivot is real, usable, and now evidence-rich enough to guide the next sprint honestly.
+Keep the crypto lane narrow and honest.
 
-What is solved:
-- easier free data access than equity options or equity intraday research
-- honest local research loop
-- import, validation, experiments, and live watchlist all run on real crypto data
-- full-history `bars=all` validation works
-- window-mode sensitivity is measurable instead of assumed
-- the broad sweep has been replaced with a tighter control-first loop
+That means:
+1. keep BTC spot as the only live pilot lane
+2. use the fixed Denver session and the approval ticket flow
+3. log execution quality, not just outcome PnL
+4. treat the `30`-trade checkpoint as review only
+5. only consider ETH after the `50`-trade gate passes cleanly
 
-What is not solved:
-- no crypto strategy is good enough yet
-- no live alerts should be enabled
-- this is still spot-only research, not futures/perps validation
-
-The next best move is:
-1. keep crypto as the active day-trading research lane
-2. redesign the crypto strategy slate before adding more challengers
-3. keep the watchlist on `scheduled_windows` only
-4. only validate futures/perps mechanics after a spot setup survives the stricter replay gate
+The older equities lab still has value as a reference surface, but it is no longer the repository’s main day-trading research path.

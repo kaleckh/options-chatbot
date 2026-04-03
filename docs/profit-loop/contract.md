@@ -4,11 +4,15 @@ The unattended profit loop is separate from `scripts/autoresearch_cycle.py`.
 
 ## Purpose
 
+- The loop optimizes for `Truthful Improvement`, not forced win rate.
+- `profitability_verdict=improved` is a precision claim:
+  - `100% precision on emitted improved claims`
+  - `0 false-improved claims`
 - `Hourly Operational Health` records system-health blockers and evidence-quality issues.
 - `Weekday Truth Holdout` appends forward-truth evidence and records holdout blockers.
 - `Daily Profit Validation` consumes the shared queue, captures baseline evidence, and either:
   - records a deferred blocker with an explicit next action, or
-  - lands a verified deterministic fix and records the pushed branch + commit.
+  - lands or stages a verified deterministic fix and records the branch + commit metadata when a resolution is claimed.
 
 ## Shared State
 
@@ -28,6 +32,17 @@ Shared state is schema-versioned and now tracks:
 - `open_issues`
 - `resolved_issues`
 
+The repo also keeps a separate BTC profitability pilot surface. Its current docs and scripts surface:
+
+- `dailyTradeCap`
+- `todayGate`
+- `reviewCheckpointTrades`
+- `advanceGateTrades`
+- `milestones`
+- `disqualificationReasons`
+- `executionStats`
+- `ticketPath`
+
 Each snapshot carries separate verdicts for:
 
 - `loop_execution_status`: did the loop step run correctly?
@@ -36,7 +51,7 @@ Each snapshot carries separate verdicts for:
 
 ## Mutation Policy
 
-`Daily Profit Validation` may patch, branch, commit, and push, but only for safe deterministic fixes in these classes:
+`Daily Profit Validation` may patch, branch, and commit, and may push when the execution environment explicitly allows it, but only for safe deterministic fixes in these classes:
 
 - infra or scheduler parity
 - data freshness or persistence
@@ -72,7 +87,22 @@ If freshness fails, validation must write a blocker and stop before any code edi
 - Resolved issues must carry `resolution_branch`, `resolution_commit`, proof commands, and a `before_after_comparison`.
 - A fix is only counted as profitability-positive when replay or forward evidence improves without weakening safety gates.
 - Sparse or worse forward evidence downgrades the result to `inconclusive`, even if replay improved.
+- `recorded-no-candidates` is an evidence blocker, not a successful holdout.
 - Validation proof must be issue-class-specific and may reuse recent operational-health smoke/tests only when the commit, environment, truth lane, and playbook fingerprint match.
+- The first honest `improved` verdict additionally requires:
+  - `latest_operational_health.verdict = healthy`
+  - `latest_truth_holdout.verdict = recorded` with nonzero candidate flow
+  - `measurement_gate.state = healthy`
+  - before/after comparison on the exact same playbook, truth lane, pricing lane, lookback, `n_picks`, and `iv_adj`
+  - replay PF and avg PnL both improve without material drawdown, truth-quality, or safety regressions
+
+## BTC Pilot Boundary
+
+The BTC profitability pilot is documented and exercised separately from the unattended profit loop.
+
+- profit-loop automation should not rewrite the BTC pilot contract
+- BTC pilot state is read through the day-trading scripts and docs, not this automation contract
+- if the BTC approval cap, gate, or milestone semantics change, update the day-trading docs first and only mirror the shared-state implications here
 
 ## Canonical Manual Test
 

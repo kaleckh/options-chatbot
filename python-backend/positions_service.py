@@ -30,7 +30,7 @@ from options_chatbot import (
 class _ReviewContext:
     def __init__(self):
         self._spy_ret5: Optional[float] = None
-        self._profile_cache: dict[str, dict[str, Any]] = {}
+        self._profile_cache: dict[tuple[str, str | None], dict[str, Any]] = {}
         self._underlying_price_cache: dict[str, Optional[float]] = {}
         self._available_expiries_cache: dict[str, list[str]] = {}
         self._option_chain_cache: dict[tuple[str, str], Any] = {}
@@ -40,10 +40,10 @@ class _ReviewContext:
             self._spy_ret5 = _get_spy_ret5()
         return self._spy_ret5
 
-    def get_profile(self, symbol: str) -> dict[str, Any]:
-        key = str(symbol or "").upper()
+    def get_profile(self, symbol: str, direction: str | None = None) -> dict[str, Any]:
+        key = (str(symbol or "").upper(), str(direction or "").lower() or None)
         if key not in self._profile_cache:
-            self._profile_cache[key] = _get_profile(key)
+            self._profile_cache[key] = _get_profile(key[0], key[1])
         return self._profile_cache[key]
 
     def get_current_underlying_price(self, symbol: str) -> Optional[float]:
@@ -239,7 +239,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
     )
     warnings: list[str] = []
     underlying_price = review_context.get_current_underlying_price(ticker_symbol)
-    profile = review_context.get_profile(ticker_symbol)
+    profile = review_context.get_profile(ticker_symbol, direction)
     exit_slippage_pct = float((profile.get("filters") or {}).get("exit_slippage_pct", 0.0))
     expiry_date = _parse_date(expiry)
     today = datetime.now().date()
@@ -386,7 +386,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
 
 def _check_indicator_exit_without_price(pick: dict[str, Any], spy_ret5: float = 0.0, sp: Optional[dict] = None) -> tuple[bool, str]:
     if sp is None:
-        sp = _get_profile(pick.get("ticker", ""))
+        sp = _get_profile(pick.get("ticker", ""), pick.get("direction"))
 
     early_exit_cfg = sp.get("early_exit", {})
     if not early_exit_cfg.get("enabled", False):
@@ -487,7 +487,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     source_pick.setdefault("direction_score", source_pick.get("direction_score", 50.0))
     source_pick.setdefault("ret5", source_pick.get("ret5", 0.0))
     spy_ret5 = review_context.get_spy_ret5()
-    profile = review_context.get_profile(position["ticker"])
+    profile = review_context.get_profile(position["ticker"], position["direction"])
 
     if pricing.get("expired"):
         recommendation = "SELL"

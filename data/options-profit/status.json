@@ -1,175 +1,189 @@
 {
   "active_incumbents": {
     "QQQ": {
-      "applied_at": "2026-04-02T04:49:15.148972Z",
-      "base_profile": "index",
-      "candidate_id": "QQQ__baseline_broad_control",
-      "cohort_id": "baseline_broad_control",
-      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-      "mode": "incumbent",
-      "overrides": {},
-      "source": "bootstrap_default",
-      "status": "incumbent",
-      "symbol": "QQQ"
+      "call": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "QQQ__call__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "call",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "QQQ"
+      },
+      "put": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "QQQ__put__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "put",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "QQQ"
+      }
     },
     "SPY": {
-      "applied_at": "2026-04-02T04:49:15.148972Z",
-      "base_profile": "index",
-      "candidate_id": "SPY__baseline_broad_control",
-      "cohort_id": "baseline_broad_control",
-      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-      "mode": "incumbent",
-      "overrides": {},
-      "source": "bootstrap_default",
-      "status": "incumbent",
-      "symbol": "SPY"
+      "call": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "SPY__call__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "call",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "SPY"
+      },
+      "put": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "SPY__put__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "put",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "SPY"
+      }
     }
   },
   "blockers": [
     {
-      "code": "forward_ledger_contamination",
-      "finding_count": 2,
-      "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
-      "severity": "blocked"
-    },
-    {
-      "allowed_truth_staleness_business_days": 3,
-      "code": "trusted_truth_stale",
-      "message": "Trusted options truth is too stale for bounded auto-optimization.",
+      "code": "daily_truth_refresh_failed",
+      "error": "OPTIONS_DAILY_TRUTH_AUTO_REFRESH disabled the mandatory imported-daily refresh step.",
+      "manifest_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\daily_truth_import_manifest.json",
+      "manifest_source": "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST",
+      "message": "The mandatory imported-daily truth refresh failed, so the options profit cycle cannot trust the current measurement horizon.",
       "severity": "blocked",
-      "trusted_truth_horizon": "2025-12-15",
-      "truth_staleness_business_days": 78
-    },
-    {
-      "code": "insufficient_eligible_forward_truth",
-      "eligible_event_count": 0,
-      "message": "Not enough matured eligible live-production forward evidence is available.",
-      "required_event_count": 10,
-      "severity": "degraded-watch"
-    },
-    {
-      "code": "insufficient_symbol_forward_truth_qqq",
-      "eligible_event_count": 0,
-      "message": "QQQ does not yet have enough eligible live-production forward evidence.",
-      "required_event_count": 3,
-      "severity": "degraded-watch",
-      "symbol": "QQQ"
-    },
-    {
-      "code": "insufficient_symbol_forward_truth_spy",
-      "eligible_event_count": 0,
-      "message": "SPY does not yet have enough eligible live-production forward evidence.",
-      "required_event_count": 3,
-      "severity": "degraded-watch",
-      "symbol": "SPY"
-    },
-    {
-      "code": "tracked_positions_unavailable",
-      "message": "Tracked positions are unavailable because DATABASE_URL is not configured. Start local Postgres and set DATABASE_URL to enable the supervised options tracker.",
-      "severity": "blocked"
-    },
-    {
-      "closed_position_count": 0,
-      "code": "insufficient_closed_tracked_positions",
-      "message": "Not enough closed tracked positions are available for optimizer supervision.",
-      "required_closed_position_count": 1,
-      "severity": "degraded-watch"
+      "stage": "preflight"
     }
   ],
   "candidate_rankings": [],
-  "current_canary": null,
-  "generated_at": "2026-04-02T16:12:10.593332Z",
+  "current_canary": {
+    "QQQ": {
+      "call": null,
+      "put": null
+    },
+    "SPY": {
+      "call": null,
+      "put": null
+    }
+  },
+  "daily_truth_refresh": {
+    "auto_refresh": false,
+    "commands": [],
+    "env_files_loaded": [
+      "C:\\Users\\kalec\\options-chatbot\\.env.local"
+    ],
+    "error": "OPTIONS_DAILY_TRUTH_AUTO_REFRESH disabled the mandatory imported-daily refresh step.",
+    "manifest_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\daily_truth_import_manifest.json",
+    "manifest_source": "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST",
+    "refresh_config": {
+      "iv_adj": 1.2,
+      "lookback_years": 2,
+      "n_picks": 1,
+      "playbook": "broad",
+      "pricing_lane": "pessimistic"
+    },
+    "stage": "preflight",
+    "stage_timeouts": {
+      "artifact_refresh": 1800,
+      "heartbeat_seconds": 60,
+      "import": 600
+    },
+    "status": "failed"
+  },
+  "generated_at": "2026-04-03T09:48:48.605102Z",
   "last_decision": {
     "action": "no_op",
     "reason": "measurement_gate_blocked"
   },
-  "last_decision_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-profit\\decisions\\20260402_161210_status.json",
+  "last_decision_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-profit\\decisions\\20260403_094848_status.json",
   "measurement_gate": {
     "blockers": [
       {
-        "code": "forward_ledger_contamination",
-        "finding_count": 2,
-        "message": "Fixture, test, or research evidence is present in the shared forward ledger.",
-        "severity": "blocked"
-      },
-      {
-        "allowed_truth_staleness_business_days": 3,
-        "code": "trusted_truth_stale",
-        "message": "Trusted options truth is too stale for bounded auto-optimization.",
+        "code": "daily_truth_refresh_failed",
+        "error": "OPTIONS_DAILY_TRUTH_AUTO_REFRESH disabled the mandatory imported-daily refresh step.",
+        "manifest_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\daily_truth_import_manifest.json",
+        "manifest_source": "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST",
+        "message": "The mandatory imported-daily truth refresh failed, so the options profit cycle cannot trust the current measurement horizon.",
         "severity": "blocked",
-        "trusted_truth_horizon": "2025-12-15",
-        "truth_staleness_business_days": 78
-      },
-      {
-        "code": "insufficient_eligible_forward_truth",
-        "eligible_event_count": 0,
-        "message": "Not enough matured eligible live-production forward evidence is available.",
-        "required_event_count": 10,
-        "severity": "degraded-watch"
-      },
-      {
-        "code": "insufficient_symbol_forward_truth_qqq",
-        "eligible_event_count": 0,
-        "message": "QQQ does not yet have enough eligible live-production forward evidence.",
-        "required_event_count": 3,
-        "severity": "degraded-watch",
-        "symbol": "QQQ"
-      },
-      {
-        "code": "insufficient_symbol_forward_truth_spy",
-        "eligible_event_count": 0,
-        "message": "SPY does not yet have enough eligible live-production forward evidence.",
-        "required_event_count": 3,
-        "severity": "degraded-watch",
-        "symbol": "SPY"
-      },
-      {
-        "code": "tracked_positions_unavailable",
-        "message": "Tracked positions are unavailable because DATABASE_URL is not configured. Start local Postgres and set DATABASE_URL to enable the supervised options tracker.",
-        "severity": "blocked"
-      },
-      {
-        "closed_position_count": 0,
-        "code": "insufficient_closed_tracked_positions",
-        "message": "Not enough closed tracked positions are available for optimizer supervision.",
-        "required_closed_position_count": 1,
-        "severity": "degraded-watch"
+        "stage": "preflight"
       }
     ],
     "checks": {
-      "forward_evidence": {
-        "by_symbol": {
-          "QQQ": {
-            "eligible": 0,
-            "ineligible": 1
-          },
-          "SPY": {
-            "eligible": 0,
-            "ineligible": 54
-          }
+      "daily_truth_refresh": {
+        "auto_refresh": false,
+        "commands": [],
+        "env_files_loaded": [
+          "C:\\Users\\kalec\\options-chatbot\\.env.local"
+        ],
+        "error": "OPTIONS_DAILY_TRUTH_AUTO_REFRESH disabled the mandatory imported-daily refresh step.",
+        "manifest_path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\daily_truth_import_manifest.json",
+        "manifest_source": "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST",
+        "refresh_config": {
+          "iv_adj": 1.2,
+          "lookback_years": 2,
+          "n_picks": 1,
+          "playbook": "broad",
+          "pricing_lane": "pessimistic"
         },
-        "contamination_finding_count": 2,
+        "stage": "preflight",
+        "stage_timeouts": {
+          "artifact_refresh": 1800,
+          "heartbeat_seconds": 60,
+          "import": 600
+        },
+        "status": "failed"
+      },
+      "forward_evidence": {
+        "by_symbol": {},
+        "contamination_finding_count": 0,
+        "db_path": null,
         "eligible_event_count": 0,
-        "existing_symbol_floor": 25,
-        "required_event_count": 10,
+        "existing_symbol_floor": null,
+        "pending_truth_event_count": 0,
+        "required_event_count": null,
         "stale_metadata_finding_count": 0,
-        "trusted_truth_horizon": "2025-12-15",
-        "truth_staleness_business_days": 78
+        "trusted_truth_horizon": null,
+        "truth_staleness_business_days": null
       },
       "imported_daily_artifact": {
-        "matches_store": true,
-        "path": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\runs\\latest_daily.json",
-        "present": true,
-        "quote_coverage_pct": 100.0,
-        "required_quote_coverage_pct": 70.0
+        "matches_store": false,
+        "path": null,
+        "present": false,
+        "quote_coverage_pct": null,
+        "required_quote_coverage_pct": null
       },
       "tracked_positions": {
         "available": false,
         "closed_position_count": 0,
-        "required_closed_position_count": 1
+        "database_url_configured": true,
+        "error_message": null,
+        "required_closed_position_count": null
       }
     },
     "state": "blocked"
   },
-  "previous_status_generated_at": "2026-04-02T16:05:49.239185Z"
+  "measurement_progress": {
+    "closed_tracked_positions": 0,
+    "current_blocking_codes": [
+      "daily_truth_refresh_failed"
+    ],
+    "eligible_event_count": 0,
+    "eligible_events_by_symbol": {},
+    "trusted_truth_horizon": null
+  },
+  "previous_status_generated_at": "2026-04-02T20:11:28.333447Z",
+  "version": 2
 }

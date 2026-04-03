@@ -26,19 +26,38 @@ function requireNumber(args, key, label) {
   return value;
 }
 
+function requireBoolean(args, key, label) {
+  const raw = String(args[key] || "").trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(raw)) return true;
+  if (["false", "0", "no", "n"].includes(raw)) return false;
+  throw new Error(`${label} must be true or false (--${key}=true|false)`);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const payload = {
+    ticketId: requireString(args, "ticket-id", "ticket id"),
     tradeTimestamp: requireString(args, "timestamp", "timestamp"),
     sessionLabel: String(args.session || "Denver Core").trim(),
     symbol: requireString(args, "symbol", "symbol").toUpperCase(),
     regime: requireString(args, "regime", "regime").toLowerCase(),
     setupId: requireString(args, "setup", "setup"),
     side: requireString(args, "side", "side").toLowerCase(),
+    setup_match_confirmed: requireBoolean(args, "setup-match-confirmed", "setup match confirmed"),
+    headline_lockout_checked: requireBoolean(args, "headline-lockout-checked", "headline lockout checked"),
+    maker_limit_plan_confirmed: requireBoolean(args, "maker-limit-plan-confirmed", "maker limit plan confirmed"),
     plannedEntryPrice: requireNumber(args, "entry", "entry"),
+    actualEntryPrice: requireNumber(args, "actual-entry", "actual entry"),
     stopPrice: requireNumber(args, "stop", "stop"),
     targetPrice: requireNumber(args, "target", "target"),
+    actualExitPrice: requireNumber(args, "actual-exit", "actual exit"),
     orderType: requireString(args, "order-type", "order type"),
+    entryLiquidityRole: requireString(args, "entry-liquidity-role", "entry liquidity role"),
+    exitLiquidityRole: requireString(args, "exit-liquidity-role", "exit liquidity role"),
+    entryFillRatio: requireNumber(args, "entry-fill-ratio", "entry fill ratio"),
+    exitFillRatio: requireNumber(args, "exit-fill-ratio", "exit fill ratio"),
+    exitReason: requireString(args, "exit-reason", "exit reason").toLowerCase(),
+    stopExecutionQuality: requireString(args, "stop-execution-quality", "stop execution quality").toLowerCase(),
     sizeUsd: requireNumber(args, "size-usd", "size usd"),
     feesUsd: requireNumber(args, "fees-usd", "fees usd"),
     spreadSlippageUsd: requireNumber(args, "slippage-usd", "slippage usd"),

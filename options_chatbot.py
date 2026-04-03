@@ -342,6 +342,33 @@ def _live_pick_promotion_class(
     return "research_bootstrap"
 
 
+def _select_live_expectancy(
+    *,
+    calibration_lookup: Optional[dict],
+    direction_score: float,
+    profit_target_pct: float,
+    stop_loss_pct: float,
+    min_calibrated_expectancy_pct: float,
+    min_ev_return_pct: float,
+) -> tuple[float | None, dict | None, str]:
+    dense_calibration = (
+        calibration_lookup
+        if calibration_lookup is not None and bool(calibration_lookup.get("dense_cohort"))
+        else None
+    )
+    if dense_calibration is not None:
+        ev_pct = float(dense_calibration.get("avg_pnl_pct"))
+        if ev_pct < float(min_calibrated_expectancy_pct):
+            return None, dense_calibration, "replay_calibrated"
+        return ev_pct, dense_calibration, "replay_calibrated"
+
+    p_win = max(0.0, min(float(direction_score) / 100.0, 1.0))
+    ev_pct = p_win * float(profit_target_pct) - (1.0 - p_win) * float(stop_loss_pct)
+    if ev_pct < float(min_ev_return_pct):
+        return None, None, "bootstrap_heuristic"
+    return ev_pct, None, "bootstrap_heuristic"
+
+
 def _should_mark_non_executable_quote(profitability_blockers: Any) -> bool:
     blockers = {
         str(item or "").strip().lower()
@@ -455,10 +482,10 @@ def _compute_tech_score_from_close_series(
         return 50.0, 50.0, 0.0
 
 
-def _get_profile(ticker: str) -> dict:
+def _get_profile(ticker: str, direction: str | None = None) -> dict:
     """Return the strategy profile dict for the given ticker."""
     base_profile = STRATEGY_PROFILES[_asset_class(ticker)]
-    merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker)
+    merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker, direction)
     return merged_profile
 
 # ─── Risk settings (user can update account_size mid-conversation) ────────────
@@ -3484,6 +3511,33 @@ def _generate_trade_strategy(
         "comment":      comment,
     }
 
+SCAN_FUNNEL_DROP_KEYS = (
+    "min_history",
+    "history_or_liquidity",
+    "signal_index",
+    "momentum",
+    "tech_score",
+    "direction_score",
+    "earnings",
+    "option_liquidity",
+    "iv_crush_penalty",
+    "ev_floor",
+    "guardrails",
+    "exceptions",
+)
+
+
+def _empty_scan_drop_counts() -> dict[str, int]:
+    return {key: 0 for key in SCAN_FUNNEL_DROP_KEYS}
+
+
+def _bump_scan_drop(drop_counts: dict[str, int], key: str, amount: int = 1) -> None:
+    normalized_key = str(key or "").strip()
+    if normalized_key not in drop_counts:
+        return
+    drop_counts[normalized_key] = int(drop_counts.get(normalized_key) or 0) + max(int(amount or 0), 0)
+
+
 @_market_data_scoped
 def scan_daily_top_trades(
     n_picks: int = DEFAULT_SCAN_PICKS,
@@ -3511,6 +3565,7 @@ def scan_daily_top_trades(
     min_tech_score_override = min_tech_score
     # Entry gates from STRATEGY_PROFILE — overridable by caller for testing
     candidates: list[dict] = []
+    scan_drop_counts = _empty_scan_drop_counts()
 
     # Fetch SPY regime data once for all tickers
     _spy_ret5 = 0.0
@@ -3530,33 +3585,41 @@ def scan_daily_top_trades(
 
     for ticker in DEFAULT_WATCHLIST:
         _ac = _asset_class(ticker)
-        sp  = _get_profile(ticker)
-        ticker_min_confidence = (
-            float(sp["entry"].get("min_direction_score", 35.0))
-            if min_confidence_override is None else float(min_confidence_override)
-        )
-        ticker_min_tech_score = (
-            float(sp["entry"].get("min_tech_score", 55.0))
-            if min_tech_score_override is None else float(min_tech_score_override)
-        )
+        base_sp = _get_profile(ticker)
+        call_sp = _get_profile(ticker, "call")
+        put_sp = _get_profile(ticker, "put")
         try:
             hist_frame = _cached_history(ticker, period="400d")
             liquidity_snapshot = _underlying_liquidity_snapshot(hist_frame)
             if not liquidity_snapshot["eligible"]:
+                _bump_scan_drop(scan_drop_counts, "history_or_liquidity")
                 continue
 
             close_history = hist_frame["Close"].dropna()
             hist = close_history.tail(90)
             if len(hist) < 55:
+                _bump_scan_drop(scan_drop_counts, "min_history")
                 continue
             prices = hist.values.astype(float)
             n      = len(prices)
             signal_idx = n - 2 if market_open and n >= 2 else n - 1
             if signal_idx < 50:
+                _bump_scan_drop(scan_drop_counts, "signal_index")
                 continue
             price  = float(prices[signal_idx])
             _entry_stock_price = price
             _latest_close = float(close_history.iloc[-1]) if not close_history.empty else _entry_stock_price
+            _live_underlying_price = _latest_close
+            if market_open:
+                try:
+                    _fast_info = _cached_fast_info(ticker)
+                    _fast_price = _fast_info_last_price(_fast_info)
+                    if _fast_price > 0:
+                        _live_underlying_price = float(_fast_price)
+                except Exception:
+                    pass
+            if _live_underlying_price <= 0:
+                _live_underlying_price = _entry_stock_price
 
             _sector = None
             _ticker_info: dict = {}
@@ -3565,6 +3628,7 @@ def scan_daily_top_trades(
             log_rets = np.log(prices[1:] / prices[:-1])
             hv30 = float(np.std(log_rets[signal_idx - 30 : signal_idx]) * math.sqrt(252))
             if hv30 <= 0:
+                _bump_scan_drop(scan_drop_counts, "history_or_liquidity")
                 continue
 
             # IV percentile (rank of today's hv30 vs 90-day rolling hv30 history)
@@ -3580,12 +3644,21 @@ def scan_daily_top_trades(
             sma20 = float(np.mean(prices[signal_idx - 20 : signal_idx]))
             sma50 = float(np.mean(prices[signal_idx - 50 : signal_idx]))
 
-            _mom_thr = float(sp.get("entry", {}).get("entry_momentum_pct", 0.5))
-            bullish = ret5 >  _mom_thr and price > sma20
-            bearish = ret5 < -_mom_thr and price < sma20
+            bullish = ret5 > float(call_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price > sma20
+            bearish = ret5 < -float(put_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price < sma20
             if not bullish and not bearish:
+                _bump_scan_drop(scan_drop_counts, "momentum")
                 continue
             trade_type = "call" if bullish else "put"
+            sp = call_sp if trade_type == "call" else put_sp
+            ticker_min_confidence = (
+                float(sp["entry"].get("min_direction_score", 35.0))
+                if min_confidence_override is None else float(min_confidence_override)
+            )
+            ticker_min_tech_score = (
+                float(sp["entry"].get("min_tech_score", 55.0))
+                if min_tech_score_override is None else float(min_tech_score_override)
+            )
 
             # Technical setup score — gate early to avoid expensive strike search on weak setups
             tech, _rsi14_live, _ret5_live = _compute_tech_score_from_close_series(
@@ -3596,9 +3669,11 @@ def scan_daily_top_trades(
             rsi14 = _rsi14_live
             ret5 = _ret5_live
             if tech < ticker_min_tech_score:
+                _bump_scan_drop(scan_drop_counts, "tech_score")
                 continue
             direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
             if direction_score < ticker_min_confidence:
+                _bump_scan_drop(scan_drop_counts, "direction_score")
                 continue
 
             ticker_target_dte = (
@@ -3627,6 +3702,7 @@ def scan_daily_top_trades(
                 except Exception:
                     _earnings_skip = True
                 if _earnings_skip:
+                    _bump_scan_drop(scan_drop_counts, "earnings")
                     continue
 
             # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
@@ -3636,7 +3712,7 @@ def scan_daily_top_trades(
                     trade_type,
                     float(sp["targets"]["delta_optimal"]),
                     ticker_target_dte,
-                    stock_price=_entry_stock_price,
+                    stock_price=_live_underlying_price,
                     hv30_fallback=hv30,
                     return_context=True,
                 )
@@ -3648,10 +3724,11 @@ def scan_daily_top_trades(
                     trade_type,
                     float(sp["targets"]["delta_optimal"]),
                     ticker_target_dte,
-                    stock_price=_entry_stock_price,
+                    stock_price=_live_underlying_price,
                     hv30_fallback=hv30,
                 )
             if _opt is None:
+                _bump_scan_drop(scan_drop_counts, "option_liquidity")
                 continue
 
             best_strike = _opt["strike"]
@@ -3670,9 +3747,11 @@ def scan_daily_top_trades(
                 sp=sp,
             )
             if _liq["is_illiquid"]:
+                _bump_scan_drop(scan_drop_counts, "option_liquidity")
                 continue
 
             # IV crush check — same as brain (penalise if strike IV >> HV distribution)
+            _iv_pen = 0.0
             try:
                 _skew = _calculate_iv_skew(
                     ticker,
@@ -3680,7 +3759,7 @@ def scan_daily_top_trades(
                     trade_type,
                     actual_exp or "",
                     sp=sp,
-                    spot_price=_latest_close,
+                    spot_price=_live_underlying_price,
                     history_frame=hist_frame,
                     chain_context=_opt.get("chain_context"),
                 )
@@ -3691,6 +3770,10 @@ def scan_daily_top_trades(
                 pass
 
             if direction_score < ticker_min_confidence:
+                _bump_scan_drop(
+                    scan_drop_counts,
+                    "iv_crush_penalty" if "_iv_pen" in locals() and float(_iv_pen or 0.0) > 0 else "direction_score",
+                )
                 continue
 
             # Per-ticker profile values
@@ -3725,13 +3808,17 @@ def scan_daily_top_trades(
                 require_positive=True,
                 allow_overall=False,
             )
-            calibration = (
-                calibration_lookup
-                if calibration_lookup is not None and bool(calibration_lookup.get("dense_cohort"))
-                else None
+            min_heuristic_ev = float(sp["filters"].get("min_ev_return_pct", _min_empirical_ev))
+            ev_pct, calibration, expectancy_selection_source = _select_live_expectancy(
+                calibration_lookup=calibration_lookup,
+                direction_score=direction_score,
+                profit_target_pct=_profit_target_pct,
+                stop_loss_pct=_adj_stop_pct,
+                min_calibrated_expectancy_pct=_min_empirical_ev,
+                min_ev_return_pct=min_heuristic_ev,
             )
-            ev_pct = float(calibration.get("avg_pnl_pct")) if calibration else None
-            if ev_pct is not None and ev_pct < _min_empirical_ev:
+            if ev_pct is None:
+                _bump_scan_drop(scan_drop_counts, "ev_floor")
                 continue
 
             # Build human-readable signal reasons
@@ -3776,10 +3863,10 @@ def scan_daily_top_trades(
                 est_premium=est_premium,
                 stop_loss_pct=_adj_stop_pct,   # ATR-widened stop if volatility expanding
                 profit_target_pct=_profit_target_pct,
-                stock_price=_entry_stock_price,
+                stock_price=_live_underlying_price,
                 delta_est=delta_val,
             )
-            target_move_pct = round(abs((strategy["stock_tp"] / _entry_stock_price - 1) * 100), 2) if _entry_stock_price else None
+            target_move_pct = round(abs((strategy["stock_tp"] / _live_underlying_price - 1) * 100), 2) if _live_underlying_price else None
 
             contract_selection_source = _live_contract_selection_source(_opt)
             has_exact_contract = contract_selection_source == "live_chain_exact_contract"
@@ -3824,8 +3911,9 @@ def scan_daily_top_trades(
                 "iv_pct":             round(iv_pct, 1),
                 "delta_est":          round(delta_val, 2),
                 "delta":              round(float(_opt.get("delta") or delta_val), 3),
-                "stock_price":        round(_entry_stock_price, 2),
-                "underlying_price_at_selection": round(_entry_stock_price, 2),
+                "stock_price":        round(_live_underlying_price, 2),
+                "current_spot":       round(_live_underlying_price, 2),
+                "underlying_price_at_selection": round(_live_underlying_price, 2),
                 "strike_est":         best_strike,   # real market strike — no rounding
                 "strike":             best_strike,
                 "expiry":             actual_exp or target_str,
@@ -3846,7 +3934,8 @@ def scan_daily_top_trades(
                 "profit_target_pct":  _profit_target_pct,
                 "atr_stop_widened":   _adj_stop_pct != _stop_loss_pct,
                 "ev_pct":             round(ev_pct, 1) if ev_pct is not None else None,
-                "calibrated_expectancy_pct": round(ev_pct, 2) if ev_pct is not None else None,
+                "calibrated_expectancy_pct": round(float(calibration.get("avg_pnl_pct")), 2) if calibration is not None else None,
+                "expectancy_selection_source": expectancy_selection_source,
                 "calibration_source": calibration_lookup.get("lookup_source") if calibration_lookup else None,
                 "calibration_trades": calibration_lookup.get("trades") if calibration_lookup else None,
                 "calibration_raw_expectancy_pct": calibration_lookup.get("avg_pnl_pct_raw") if calibration_lookup else None,
@@ -3896,9 +3985,11 @@ def scan_daily_top_trades(
                 "quote_age_hours":    _opt.get("quote_age_hours"),
             })
         except Exception:
+            _bump_scan_drop(scan_drop_counts, "exceptions")
             continue
 
     candidates.sort(key=_candidate_rank_tuple, reverse=True)
+    scan_daily_top_trades._last_scan_drop_counts = dict(scan_drop_counts)
 
     # ── Sector concentration: equity picks — max 2 from same sector ───────────
     _sector_counts: dict[str, int] = {}

@@ -25,6 +25,7 @@
     "daytrading:experiments": "node scripts/run_day_trading_experiments.js --market=crypto",
     "daytrading:import:crypto": "node scripts/import_crypto_day_trading_history.js",
     "daytrading:pilot": "node scripts/run_day_trading_pilot.js",
+    "daytrading:preflight": "node scripts/run_day_trading_preflight.js",
     "daytrading:journal:add": "node scripts/log_day_trading_journal_entry.js",
     "daytrading:test": "node --test tests/day-trading/*.test.js",
     "options:smoke": "python scripts/options_algorithm_smoke.py",

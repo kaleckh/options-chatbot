@@ -282,6 +282,39 @@ export interface OptionsProfitGateBlocker {
   [key: string]: unknown;
 }
 
+export interface OptionsProfitSideEntry {
+  symbol?: string | null;
+  direction?: "call" | "put" | string | null;
+  candidate_id?: string | null;
+  cohort_id?: string | null;
+  base_profile?: string | null;
+  overrides?: Record<string, unknown> | null;
+  source?: string | null;
+  mode?: string | null;
+  status?: string | null;
+  applied_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface OptionsProfitCurrentCanary {
+  symbol?: string | null;
+  direction?: "call" | "put" | string | null;
+  candidate_id?: string | null;
+  started_at?: string | null;
+  required_outcomes?: number | null;
+  [key: string]: unknown;
+}
+
+export interface OptionsProfitCandidateRanking {
+  candidate_id?: string | null;
+  symbol?: string | null;
+  direction?: "call" | "put" | string | null;
+  eligible?: boolean;
+  blockers?: string[];
+  delta_vs_incumbent?: number | null;
+  [key: string]: unknown;
+}
+
 export interface OptionsProfitStatus {
   generated_at?: string | null;
   daily_truth_refresh?: {
@@ -329,11 +362,11 @@ export interface OptionsProfitStatus {
       [key: string]: unknown;
     } | null;
   };
-  active_incumbents?: Record<string, unknown>;
-  current_canary?: Record<string, unknown> | null;
+  active_incumbents?: Record<string, Record<string, OptionsProfitSideEntry>>;
+  current_canary?: Record<string, Record<string, OptionsProfitCurrentCanary | null>> | null;
   last_decision?: Record<string, unknown> | null;
   blockers?: Array<string | OptionsProfitGateBlocker>;
-  candidate_rankings?: Record<string, unknown>[];
+  candidate_rankings?: OptionsProfitCandidateRanking[];
   [key: string]: unknown;
 }
 
@@ -898,6 +931,117 @@ export interface DayTradingPilotBreakdown {
   netPnlUsd: number;
 }
 
+export interface DayTradingChecklistItem {
+  key: string;
+  label: string;
+  description?: string;
+  required: boolean;
+}
+
+export interface DayTradingTodayGate {
+  localDate: string | null;
+  dailyTradeCap: number;
+  reservedTickets: number;
+  usedTickets: number;
+  expiredTickets: number;
+  approvedEntries: number;
+  remainingApprovals: number;
+  activeSessionWindow: boolean;
+  blocked: boolean;
+  reasons: string[];
+}
+
+export interface DayTradingProfitabilityTicket {
+  ticketId: string;
+  strategyId: string;
+  symbol: string;
+  approvedAt: string | null;
+  usedAt: string | null;
+  localTradeDate: string | null;
+  sessionLabel: string | null;
+  storedStatus: string;
+  lifecycleStatus: string;
+  regimeState: string | null;
+  tradeable: boolean;
+  checklistFlags: Record<string, boolean>;
+}
+
+export interface DayTradingProfitabilityTicketsSummary {
+  path: string;
+  totalTickets: number;
+  todayDate: string | null;
+  todayGate: DayTradingTodayGate;
+  todaysTickets: DayTradingProfitabilityTicket[];
+  recentTickets: DayTradingProfitabilityTicket[];
+}
+
+export interface DayTradingArtifactHealth {
+  checkedAt: string;
+  status: string;
+  configuredWindowIds: string[];
+  strategyWindowIds: string[];
+  watchlistWindowIds: string[];
+  lastWatchlistGeneratedAt: string | null;
+  warnings: string[];
+}
+
+export interface DayTradingProfitabilityJournalEntrySummary {
+  entryId: string;
+  ticketId: string;
+  tradeTimestamp: string | null;
+  loggedAt: string | null;
+  symbol: string;
+  regime: string;
+  setupId: string;
+  side: string;
+  pnlR: number | null;
+  pnlUsd: number | null;
+  ruleAdherenceScore: number | null;
+  mistakeTag: string;
+  stopExecutionQuality: string;
+  roundTripCostBps: number | null;
+  pilotEligible: boolean;
+  pilotDisqualificationReasons: string[];
+  note: string;
+}
+
+export interface DayTradingProfitabilityJournalSummary {
+  path: string;
+  ticketPath?: string;
+  entryCount: number;
+  schema: Array<{
+    key: string;
+    label: string;
+    required: boolean;
+  }>;
+  lastLoggedAt: string | null;
+  recentEntries: DayTradingProfitabilityJournalEntrySummary[];
+}
+
+export interface DayTradingPilotMilestone {
+  id: string;
+  label: string;
+  targetTrades: number;
+  completedTrades: number;
+  remainingTrades: number;
+  reached: boolean;
+  status: string;
+  description: string;
+}
+
+export interface DayTradingPilotDisqualificationReason {
+  reason: string;
+  count: number;
+}
+
+export interface DayTradingPilotExecutionStats {
+  makerShare: number | null;
+  averageEntrySlippageBps: number | null;
+  averageExitSlippageBps: number | null;
+  partialFillRate: number | null;
+  stopSlipRate: number | null;
+}
+
 export interface DayTradingOperatingPlan {
   profileId: string;
   objective: string;
@@ -931,6 +1075,13 @@ export interface DayTradingOperatingPlan {
     pauseAtDrawdownFraction: number;
     maxCostToTargetFraction: number;
   };
+  dailyTradeCap?: {
+    limit: number;
+    countedBy: string;
+    unusedTicketExpiry: string;
+    timeZone: string;
+  };
+  preTradeChecklist?: DayTradingChecklistItem[];
   regimeChecklist: {
     range: string[];
     trend: string[];
@@ -957,6 +1108,8 @@ export interface DayTradingPilotSummary {
   journalStats: {
     totalEntries: number;
     phaseOneEntries: number;
+    eligibleTradeCount?: number;
+    disqualifiedTradeCount?: number;
     wins: number;
     losses: number;
     expectancyR: number | null;
@@ -966,6 +1119,13 @@ export interface DayTradingPilotSummary {
     maxDrawdownR: number;
     dominantTradeShare: number | null;
   };
+  reviewCheckpointTrades?: number;
+  advanceGateTrades?: number;
+  todayGate?: DayTradingTodayGate;
+  preTradeChecklist?: DayTradingChecklistItem[];
+  milestones?: DayTradingPilotMilestone[];
+  disqualificationReasons?: DayTradingPilotDisqualificationReason[];
+  executionStats?: DayTradingPilotExecutionStats;
   breakdownByRegime: DayTradingPilotBreakdown[];
   breakdownBySetup: DayTradingPilotBreakdown[];
   gates: DayTradingPilotGate[];
@@ -1045,6 +1205,10 @@ export interface DayTradingWatchlistItem {
   barsSinceTrigger: number | null;
   barAgeMinutes: number | null;
   morningWindowActive: boolean;
+  regimeState?: string;
+  tradeable?: boolean;
+  regimeBlockers?: string[];
+  approvalSlotsRemaining?: number | null;
   dataFresh: boolean;
   currentDataTrusted: boolean;
   trustedMarketData?: boolean;
@@ -1089,6 +1253,7 @@ export interface DayTradingWatchlist {
   };
   selectedStrategies: number;
   notifyNowCount: number;
+  todayGate?: DayTradingTodayGate;
   items: DayTradingWatchlistItem[];
 }
 
@@ -1163,13 +1328,7 @@ export interface DayTradingSnapshot {
   } | null;
   operatingPlan?: DayTradingOperatingPlan;
   pilotSummary?: DayTradingPilotSummary;
-  profitabilityJournal?: {
-    path: string;
-    entryCount: number;
-    schema: Array<{
-      key: string;
-      label: string;
-      required: boolean;
-    }>;
-  };
+  profitabilityJournal?: DayTradingProfitabilityJournalSummary;
+  profitabilityTickets?: DayTradingProfitabilityTicketsSummary;
+  artifactHealth?: DayTradingArtifactHealth;
 }

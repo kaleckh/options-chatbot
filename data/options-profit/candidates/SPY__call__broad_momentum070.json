@@ -1,0 +1,19 @@
+{
+  "base_profile": "index",
+  "candidate_id": "SPY__call__broad_momentum070",
+  "cohort_id": "broad_momentum070",
+  "created_at": "2026-04-03T18:36:13.686491Z",
+  "direction": "call",
+  "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+  "overrides": {
+    "entry": {
+      "entry_momentum_pct": 0.7
+    }
+  },
+  "replay_policy_path": null,
+  "replay_validation": {},
+  "role": "broad_challenger",
+  "status": "candidate",
+  "symbol": "SPY",
+  "updated_at": "2026-04-03T18:36:13.686491Z"
+}

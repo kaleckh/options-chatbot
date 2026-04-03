@@ -48,13 +48,13 @@ function Header({ onMenuClick }: HeaderProps) {
 
         <div className="hidden md:flex gap-2 items-center">
           <span className="inline-block px-2 py-0.5 rounded bg-accent-dim text-accent text-2xs font-semibold tracking-wide uppercase font-mono">
-            Scanner First
+            Options Desk
           </span>
           <span className="inline-block px-2 py-0.5 rounded bg-bg-4 text-text-2 text-2xs font-medium tracking-wide uppercase font-mono">
-            Solo Workflow
+            Crypto Pilot
           </span>
           <span className="inline-block px-2 py-0.5 rounded bg-bg-4 text-text-2 text-2xs font-medium tracking-wide uppercase font-mono">
-            Single-Leg 5-35 DTE
+            Guardrails On
           </span>
         </div>
       </div>

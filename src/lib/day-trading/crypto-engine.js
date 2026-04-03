@@ -21,6 +21,7 @@ const EXPERIMENTS_DIR = path.join(DATA_ROOT, "experiments");
 const EXPERIMENT_REPORT_PATH = path.join(EXPERIMENTS_DIR, "latest.json");
 const IMPORT_REPORT_PATH = path.join(DATA_ROOT, "import_latest.json");
 const PROFITABILITY_JOURNAL_PATH = path.join(DATA_ROOT, "profitability_journal.json");
+const PROFITABILITY_TICKETS_PATH = path.join(DATA_ROOT, "profitability_preflight_tickets.json");
 const READ_ONLY_BUNDLE_CACHE = new Map();
 const NORMALIZED_BARS_CACHE = new Map();
 const DEFAULT_ACCOUNT_ID = "paper-main";
@@ -33,6 +34,13 @@ const DEFAULT_INTERVAL = "1m";
 const DEFAULT_TIMEFRAME = "5m";
 const LOCAL_SESSION_TIMEZONE = "America/Denver";
 const SESSION_TIMEZONE = "America/New_York";
+const BTC_PROFITABILITY_SETUP_ID = "btcusdt-crypto-range-mean-reversion";
+const BTC_PROFITABILITY_SYMBOL = "BTCUSDT";
+const PROFITABILITY_REVIEW_TARGET = 30;
+const PROFITABILITY_ADVANCE_TARGET = 50;
+const PROFITABILITY_DAILY_TRADE_CAP = 2;
+const EVENT_SHOCK_LOCKOUT_BARS = 6;
+const LOCAL_SESSION_END_MINUTES = (11 * 60);
 const BINANCE_API_ROOTS = [
   process.env.DAY_TRADING_CRYPTO_API_ROOT || "https://api.binance.us",
   "https://api.binance.com",
@@ -47,11 +55,24 @@ const ET_FORMATTER = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   hour12: false,
 });
+const LOCAL_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: LOCAL_SESSION_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  weekday: "short",
+  hour12: false,
+});
 const DEFAULT_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"];
 const TRADING_WEEKDAYS = new Set(["Mon", "Tue", "Wed", "Thu", "Fri"]);
 const VALID_WINDOW_MODES = new Set(["all_hours", "scheduled_windows", "denver_core"]);
 const RESEARCH_WINDOW_MODES = ["scheduled_windows", "denver_core", "all_hours"];
 const FROZEN_CRYPTO_FAMILIES = new Set([
+  "crypto_bottom_reclaim",
+  "crypto_failed_breakdown_reclaim",
+  "crypto_opening_range_breakout",
   "crypto_range_mean_reversion",
   "crypto_trend_continuation",
 ]);
@@ -98,6 +119,24 @@ const VALID_STATUSES = new Set([
   "disabled",
 ]);
 const CRYPTO_EXPERIMENT_LIBRARY = {
+  crypto_bottom_reclaim: {
+    signalThresholds: [0.7, 0.76, 0.82],
+    takeProfitFractions: [0.006, 0.007, 0.008],
+    stopLossFractions: [0.0035, 0.0042, 0.005],
+    maxHoldBars: [5, 6, 8],
+  },
+  crypto_failed_breakdown_reclaim: {
+    signalThresholds: [0.68, 0.74, 0.8],
+    takeProfitFractions: [0.006, 0.007, 0.008],
+    stopLossFractions: [0.0038, 0.0046, 0.0052],
+    maxHoldBars: [5, 6, 8],
+  },
+  crypto_opening_range_breakout: {
+    signalThresholds: [0.68, 0.74, 0.8],
+    takeProfitFractions: [0.007, 0.0085, 0.01],
+    stopLossFractions: [0.0038, 0.0045, 0.0052],
+    maxHoldBars: [6, 8, 10],
+  },
   crypto_range_mean_reversion: {
     signalThresholds: [0.64, 0.7, 0.76],
     takeProfitFractions: [0.0055, 0.0065, 0.0075],
@@ -111,6 +150,26 @@ const CRYPTO_EXPERIMENT_LIBRARY = {
     maxHoldBars: [8, 12, 16],
   },
 };
+const PROFITABILITY_PRETRADE_CHECKLIST = [
+  {
+    key: "setup_match_confirmed",
+    label: "Setup match confirmed",
+    description: "The trade matches the BTC range mean-reversion playbook exactly.",
+    required: true,
+  },
+  {
+    key: "headline_lockout_checked",
+    label: "Headline lockout checked",
+    description: "No fresh catalyst, exploit, or macro event is invalidating the fade.",
+    required: true,
+  },
+  {
+    key: "maker_limit_plan_confirmed",
+    label: "Maker limit plan confirmed",
+    description: "Entry uses a maker/post-only plan instead of a routine market order.",
+    required: true,
+  },
+];
 
 function clone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -209,6 +268,35 @@ function getEtParts(timestamp) {
     minute: Number(parts.minute),
     weekday: parts.weekday,
   };
+}
+
+function getLocalParts(timestamp) {
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = Object.fromEntries(
+    LOCAL_FORMATTER.formatToParts(date)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    hour: Number(parts.hour),
+    minute: Number(parts.minute),
+    weekday: parts.weekday,
+  };
+}
+
+function getLocalMinutesSinceMidnight(timestamp) {
+  const parts = getLocalParts(timestamp);
+  if (!parts) return null;
+  return (parts.hour * 60) + parts.minute;
+}
+
+function isDuringLocalTradingSession(timestamp) {
+  const parts = getLocalParts(timestamp);
+  if (!parts || !TRADING_WEEKDAYS.has(parts.weekday)) return false;
+  const minutesSinceMidnight = (parts.hour * 60) + parts.minute;
+  return minutesSinceMidnight >= (7 * 60) && minutesSinceMidnight < LOCAL_SESSION_END_MINUTES;
 }
 
 function classifyScheduledWindow(timestamp, config = DEFAULT_CRYPTO_DAY_TRADING_CONFIG) {
@@ -348,18 +436,34 @@ function normalizeCsvPathInput(value) {
     .filter(Boolean);
 }
 
+function buildProfitabilityChecklistSchema() {
+  return clone(PROFITABILITY_PRETRADE_CHECKLIST);
+}
+
 function buildProfitabilityJournalSchema() {
   return [
+    { key: "ticketId", label: "Approval ticket", required: true },
     { key: "tradeTimestamp", label: "Trade time", required: true },
     { key: "sessionLabel", label: "Session", required: true },
     { key: "symbol", label: "Coin", required: true },
     { key: "regime", label: "Regime", required: true },
     { key: "setupId", label: "Setup ID", required: true },
+    { key: "setup_match_confirmed", label: "Setup match confirmed", required: true },
+    { key: "headline_lockout_checked", label: "Headline lockout checked", required: true },
+    { key: "maker_limit_plan_confirmed", label: "Maker limit plan confirmed", required: true },
     { key: "side", label: "Side", required: true },
     { key: "plannedEntryPrice", label: "Planned entry", required: true },
+    { key: "actualEntryPrice", label: "Actual entry", required: true },
     { key: "stopPrice", label: "Stop", required: true },
     { key: "targetPrice", label: "Target", required: true },
+    { key: "actualExitPrice", label: "Actual exit", required: true },
     { key: "orderType", label: "Order type", required: true },
+    { key: "entryLiquidityRole", label: "Entry liquidity role", required: true },
+    { key: "exitLiquidityRole", label: "Exit liquidity role", required: true },
+    { key: "entryFillRatio", label: "Entry fill ratio", required: true },
+    { key: "exitFillRatio", label: "Exit fill ratio", required: true },
+    { key: "exitReason", label: "Exit reason", required: true },
+    { key: "stopExecutionQuality", label: "Stop execution quality", required: true },
     { key: "sizeUsd", label: "Size (USD)", required: true },
     { key: "feesUsd", label: "Fees (USD)", required: true },
     { key: "spreadSlippageUsd", label: "Spread + slippage (USD)", required: true },
@@ -369,6 +473,11 @@ function buildProfitabilityJournalSchema() {
     { key: "ruleAdherenceScore", label: "Rule adherence", required: true },
     { key: "mistakeTag", label: "Mistake tag", required: true },
     { key: "note", label: "Post-trade note", required: true },
+    { key: "pilotEligible", label: "Pilot eligible", required: false },
+    { key: "pilotDisqualificationReasons", label: "Pilot disqualification reasons", required: false },
+    { key: "entrySlippageBps", label: "Entry slippage (bps)", required: false },
+    { key: "exitSlippageBps", label: "Exit slippage (bps)", required: false },
+    { key: "roundTripCostBps", label: "Round-trip cost (bps)", required: false },
   ];
 }
 
@@ -397,25 +506,448 @@ function readProfitabilityJournal() {
     ...stored,
     profileId: PROFITABILITY_PROFILE_ID,
     schema: buildProfitabilityJournalSchema(),
-    entries: Array.isArray(stored?.entries) ? stored.entries : [],
+    entries: Array.isArray(stored?.entries)
+      ? stored.entries.map((entry) => ({
+        ...entry,
+        pilotEligible: entry?.pilotEligible === true,
+        pilotDisqualificationReasons: Array.isArray(entry?.pilotDisqualificationReasons)
+          ? entry.pilotDisqualificationReasons
+          : (entry?.pilotEligible === true ? [] : ["legacy_entry_missing_guardrails"]),
+      }))
+      : [],
+  };
+}
+
+function serializeProfitabilityJournalEntry(entry = {}) {
+  return {
+    entryId: String(entry.entryId || ""),
+    ticketId: String(entry.ticketId || ""),
+    tradeTimestamp: entry.tradeTimestamp || null,
+    loggedAt: entry.loggedAt || null,
+    symbol: String(entry.symbol || "").toUpperCase(),
+    regime: String(entry.regime || ""),
+    setupId: String(entry.setupId || ""),
+    side: String(entry.side || ""),
+    pnlR: Number.isFinite(Number(entry.pnlR)) ? Number(entry.pnlR) : null,
+    pnlUsd: Number.isFinite(Number(entry.pnlUsd)) ? Number(entry.pnlUsd) : null,
+    ruleAdherenceScore: normalizeRuleAdherenceScore(entry.ruleAdherenceScore),
+    mistakeTag: String(entry.mistakeTag || "none"),
+    stopExecutionQuality: String(entry.stopExecutionQuality || ""),
+    roundTripCostBps: Number.isFinite(Number(entry.roundTripCostBps)) ? Number(entry.roundTripCostBps) : null,
+    pilotEligible: entry.pilotEligible === true,
+    pilotDisqualificationReasons: Array.isArray(entry.pilotDisqualificationReasons)
+      ? [...entry.pilotDisqualificationReasons]
+      : [],
+    note: String(entry.note || ""),
+  };
+}
+
+function buildProfitabilityJournalSummary(journal, options = {}) {
+  const recentLimit = Math.max(1, Number(options.recentLimit) || 6);
+  const entries = Array.isArray(journal?.entries) ? journal.entries : [];
+  const recentEntries = entries
+    .slice()
+    .sort((left, right) => String(right.tradeTimestamp || right.loggedAt || "").localeCompare(String(left.tradeTimestamp || left.loggedAt || "")))
+    .slice(0, recentLimit)
+    .map((entry) => serializeProfitabilityJournalEntry(entry));
+
+  return {
+    path: PROFITABILITY_JOURNAL_PATH,
+    ticketPath: PROFITABILITY_TICKETS_PATH,
+    entryCount: entries.length,
+    schema: buildProfitabilityJournalSchema(),
+    lastLoggedAt: recentEntries[0]?.loggedAt || null,
+    recentEntries,
+  };
+}
+
+function defaultProfitabilityTicketStore() {
+  return {
+    version: 1,
+    profileId: PROFITABILITY_PROFILE_ID,
+    generatedAt: nowIso(),
+    dailyTradeCap: PROFITABILITY_DAILY_TRADE_CAP,
+    checklist: buildProfitabilityChecklistSchema(),
+    tickets: [],
+  };
+}
+
+function readProfitabilityTicketStore() {
+  const fallback = defaultProfitabilityTicketStore();
+  const stored = readJson(PROFITABILITY_TICKETS_PATH, fallback);
+  return {
+    ...fallback,
+    ...stored,
+    profileId: PROFITABILITY_PROFILE_ID,
+    dailyTradeCap: PROFITABILITY_DAILY_TRADE_CAP,
+    checklist: buildProfitabilityChecklistSchema(),
+    tickets: Array.isArray(stored?.tickets) ? stored.tickets : [],
+  };
+}
+
+function saveProfitabilityTicketStore(store) {
+  atomicWriteJsonSync(PROFITABILITY_TICKETS_PATH, {
+    ...defaultProfitabilityTicketStore(),
+    ...store,
+    generatedAt: nowIso(),
+    profileId: PROFITABILITY_PROFILE_ID,
+    dailyTradeCap: PROFITABILITY_DAILY_TRADE_CAP,
+    checklist: buildProfitabilityChecklistSchema(),
+    tickets: Array.isArray(store?.tickets) ? store.tickets : [],
+  });
+}
+
+function resolveChecklistFlags(input = {}) {
+  const resolve = (key) => input[key] === true;
+  return {
+    setup_match_confirmed: resolve("setup_match_confirmed"),
+    headline_lockout_checked: resolve("headline_lockout_checked"),
+    maker_limit_plan_confirmed: resolve("maker_limit_plan_confirmed"),
+  };
+}
+
+function getChecklistFailures(flags = {}) {
+  return buildProfitabilityChecklistSchema()
+    .filter((item) => item.required && flags[item.key] !== true)
+    .map((item) => `manual_checklist_incomplete:${item.key}`);
+}
+
+function getTicketLifecycle(ticket = {}, referenceTimestamp = nowIso()) {
+  const localDate = String(ticket.localTradeDate || "");
+  const referenceLocal = getLocalParts(referenceTimestamp);
+  if (!referenceLocal || !localDate) {
+    return { status: "invalid", expired: false, localDate };
+  }
+  const expired = (
+    referenceLocal.date > localDate ||
+    (referenceLocal.date === localDate && ((referenceLocal.hour * 60) + referenceLocal.minute) >= LOCAL_SESSION_END_MINUTES)
+  );
+  if (String(ticket.status || "") === "used") {
+    return { status: "used", expired: false, localDate };
+  }
+  if (expired) {
+    return { status: "expired", expired: true, localDate };
+  }
+  return { status: "approved", expired: false, localDate };
+}
+
+function calculateSpreadFraction(snapshot = {}, referencePrice = 0) {
+  const bestBid = Number(snapshot.bestBid);
+  const bestAsk = Number(snapshot.bestAsk);
+  if (Number.isFinite(bestBid) && Number.isFinite(bestAsk) && bestBid > 0 && bestAsk >= bestBid) {
+    const mid = (bestBid + bestAsk) / 2;
+    if (mid > 0) {
+      return (bestAsk - bestBid) / mid;
+    }
+  }
+  return referencePrice > 0 ? 0 : null;
+}
+
+function resolvePlannedTakeProfitPrice(strategy, bar, entryPrice) {
+  const mode = String(strategy?.simulation?.exitTargetMode || "").toLowerCase();
+  const numericEntry = Number(entryPrice);
+  const candidates = [];
+  if (mode === "session_vwap_or_range_midpoint" && bar?.indicators) {
+    for (const value of [bar.indicators.sessionVwap, bar.indicators.sessionRangeMidpoint]) {
+      const numeric = Number(value);
+      if (Number.isFinite(numeric) && numeric > numericEntry) {
+        candidates.push(numeric);
+      }
+    }
+  }
+  const fallback = numericEntry * (1 + Number(strategy?.simulation?.takeProfitFraction || 0));
+  if (Number.isFinite(fallback) && fallback > numericEntry) {
+    candidates.push(fallback);
+  }
+  return candidates.length > 0 ? Math.min(...candidates) : null;
+}
+
+function buildCostProfile(strategy, marketSnapshot = {}, bar) {
+  const entryPrice = Number(bar?.close || 0);
+  const targetPrice = resolvePlannedTakeProfitPrice(strategy, bar, entryPrice);
+  const spreadFraction = calculateSpreadFraction(marketSnapshot, entryPrice);
+  const feeFraction = Number(strategy?.riskLimits?.assumedRoundTripFeeFraction || 0);
+  const slippageFraction = Number(strategy?.riskLimits?.assumedSlippageFraction || 0);
+  const estimatedCostFraction = feeFraction + slippageFraction + (Number.isFinite(spreadFraction) ? spreadFraction : 0);
+  const grossTargetFraction = (
+    Number.isFinite(targetPrice) &&
+    entryPrice > 0 &&
+    targetPrice > entryPrice
+  ) ? ((targetPrice - entryPrice) / entryPrice) : null;
+  const costToTargetFraction = (
+    Number.isFinite(grossTargetFraction) &&
+    grossTargetFraction > 0
+  ) ? (estimatedCostFraction / grossTargetFraction) : null;
+  const allowed = (
+    Number.isFinite(costToTargetFraction) &&
+    costToTargetFraction <= Number(strategy?.riskLimits?.maxCostToTargetFraction || 0)
+  );
+
+  return {
+    entryPrice: round(entryPrice, 8),
+    targetPrice: Number.isFinite(targetPrice) ? round(targetPrice, 8) : null,
+    spreadFraction: Number.isFinite(spreadFraction) ? round(spreadFraction, 6) : null,
+    estimatedCostFraction: round(estimatedCostFraction, 6),
+    grossTargetFraction: Number.isFinite(grossTargetFraction) ? round(grossTargetFraction, 6) : null,
+    costToTargetFraction: Number.isFinite(costToTargetFraction) ? round(costToTargetFraction, 6) : null,
+    allowed,
+  };
+}
+
+function buildTodayGate(ticketStore, options = {}) {
+  const now = options.now || nowIso();
+  const local = getLocalParts(now);
+  const dailyTradeCap = Number(ticketStore?.dailyTradeCap || PROFITABILITY_DAILY_TRADE_CAP);
+  if (!local) {
+    return {
+      localDate: null,
+      dailyTradeCap,
+      reservedTickets: 0,
+      usedTickets: 0,
+      expiredTickets: 0,
+      approvedEntries: 0,
+      remainingApprovals: dailyTradeCap,
+      activeSessionWindow: false,
+      blocked: true,
+      reasons: ["invalid_timestamp"],
+    };
+  }
+
+  const todaysTickets = (ticketStore?.tickets || [])
+    .filter((ticket) => String(ticket.strategyId || "") === BTC_PROFITABILITY_SETUP_ID)
+    .filter((ticket) => String(ticket.symbol || "").toUpperCase() === BTC_PROFITABILITY_SYMBOL)
+    .filter((ticket) => String(ticket.localTradeDate || "") === local.date)
+    .map((ticket) => ({ ...ticket, lifecycle: getTicketLifecycle(ticket, now) }));
+
+  const reservedTickets = todaysTickets.filter((ticket) => ticket.lifecycle.status === "approved").length;
+  const usedTickets = todaysTickets.filter((ticket) => ticket.lifecycle.status === "used").length;
+  const expiredTickets = todaysTickets.filter((ticket) => ticket.lifecycle.status === "expired").length;
+  const approvedEntries = reservedTickets + usedTickets;
+  const remainingApprovals = Math.max(0, dailyTradeCap - approvedEntries);
+  const activeSessionWindow = isDuringLocalTradingSession(now);
+  const reasons = [];
+  if (!TRADING_WEEKDAYS.has(local.weekday)) reasons.push("outside_trading_days");
+  if (!activeSessionWindow) reasons.push("outside_fixed_session");
+  if (remainingApprovals <= 0) reasons.push("daily_trade_cap_reached");
+
+  return {
+    localDate: local.date,
+    dailyTradeCap,
+    reservedTickets,
+    usedTickets,
+    expiredTickets,
+    approvedEntries,
+    remainingApprovals,
+    activeSessionWindow,
+    blocked: reasons.length > 0,
+    reasons,
+  };
+}
+
+function normalizeAlertWindowIds(entries = []) {
+  return [...new Set(
+    entries
+      .map((entry) => String(entry || "").trim())
+      .filter(Boolean),
+  )].sort();
+}
+
+function buildArtifactHealth(options = {}) {
+  const strategies = Array.isArray(options.strategies) ? options.strategies : [];
+  const lastWatchlist = options.lastWatchlist || null;
+  const configuredWindowIds = normalizeAlertWindowIds(
+    (DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows || []).map((window) => window.id),
+  );
+  const strategyWindowIds = normalizeAlertWindowIds(
+    strategies.flatMap((strategy) => strategy?.metadata?.alertWindowIds || []),
+  );
+  const watchlistWindowIds = normalizeAlertWindowIds(
+    (lastWatchlist?.alertWindows || []).map((window) => window?.id),
+  );
+  const warnings = [];
+
+  const windowMismatchMessage = (label, expected, actual) => {
+    const expectedText = expected.length > 0 ? expected.join(", ") : "none";
+    const actualText = actual.length > 0 ? actual.join(", ") : "none";
+    return `${label} still reference ${actualText} while the live pilot uses ${expectedText}.`;
+  };
+
+  if (strategyWindowIds.length > 0 && strategyWindowIds.join("|") !== configuredWindowIds.join("|")) {
+    warnings.push(windowMismatchMessage("Saved strategy artifacts", configuredWindowIds, strategyWindowIds));
+  }
+  if (watchlistWindowIds.length > 0 && watchlistWindowIds.join("|") !== configuredWindowIds.join("|")) {
+    warnings.push(windowMismatchMessage("The latest watchlist artifact", configuredWindowIds, watchlistWindowIds));
+  }
+  return {
+    checkedAt: nowIso(),
+    status: warnings.length > 0 ? "warning" : "aligned",
+    configuredWindowIds,
+    strategyWindowIds,
+    watchlistWindowIds,
+    lastWatchlistGeneratedAt: lastWatchlist?.generatedAt || null,
+    warnings,
+  };
+}
+
+function serializeProfitabilityTicket(ticket, lifecycle = getTicketLifecycle(ticket)) {
+  return {
+    ticketId: String(ticket?.ticketId || ""),
+    strategyId: String(ticket?.strategyId || ""),
+    symbol: String(ticket?.symbol || "").toUpperCase(),
+    approvedAt: ticket?.approvedAt || null,
+    usedAt: ticket?.usedAt || null,
+    localTradeDate: ticket?.localTradeDate || null,
+    sessionLabel: ticket?.sessionLabel || null,
+    storedStatus: String(ticket?.status || "unknown"),
+    lifecycleStatus: lifecycle.status,
+    regimeState: ticket?.systemGateSnapshot?.regimeState || null,
+    tradeable: ticket?.systemGateSnapshot?.tradeable === true,
+    checklistFlags: {
+      ...resolveChecklistFlags(ticket?.checklistFlags || {}),
+    },
+  };
+}
+
+function buildProfitabilityTicketSummary(ticketStore, options = {}) {
+  const now = options.now || nowIso();
+  const local = getLocalParts(now);
+  const allTickets = (ticketStore?.tickets || [])
+    .filter((ticket) => String(ticket?.strategyId || "") === BTC_PROFITABILITY_SETUP_ID)
+    .filter((ticket) => String(ticket?.symbol || "").toUpperCase() === BTC_PROFITABILITY_SYMBOL)
+    .map((ticket) => serializeProfitabilityTicket(ticket, getTicketLifecycle(ticket, now)))
+    .sort((left, right) => String(right.approvedAt || "").localeCompare(String(left.approvedAt || "")));
+  const todaysTickets = local
+    ? allTickets.filter((ticket) => String(ticket.localTradeDate || "") === local.date)
+    : [];
+
+  return {
+    path: PROFITABILITY_TICKETS_PATH,
+    totalTickets: allTickets.length,
+    todayDate: local?.date || null,
+    todayGate: buildTodayGate(ticketStore, { now }),
+    todaysTickets,
+    recentTickets: allTickets.slice(0, 8),
+  };
+}
+
+function normalizeLiquidityRole(value, fallback = "unknown") {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (["maker", "post_only", "post-only"].includes(normalized)) return "maker";
+  if (["taker", "marketable"].includes(normalized)) return "taker";
+  return normalized;
+}
+
+function calculateSignedSlippageBps(actualPrice, referencePrice, side) {
+  const actual = Number(actualPrice);
+  const reference = Number(referencePrice);
+  if (!Number.isFinite(actual) || !Number.isFinite(reference) || reference <= 0) return null;
+  const raw = ((actual - reference) / reference) * 10000;
+  return side === "sell" ? (raw * -1) : raw;
+}
+
+function buildEntryExecutionMetrics(entry = {}) {
+  const entrySlippageBps = calculateSignedSlippageBps(entry.actualEntryPrice, entry.plannedEntryPrice, "buy");
+  const exitReferencePrice = String(entry.exitReason || "") === "stop_loss"
+    ? entry.stopPrice
+    : entry.targetPrice;
+  const exitSlippageBps = calculateSignedSlippageBps(entry.actualExitPrice, exitReferencePrice, "sell");
+  const roundTripCostBps = Number(entry.sizeUsd) > 0
+    ? (((Number(entry.feesUsd || 0) + Number(entry.spreadSlippageUsd || 0)) / Number(entry.sizeUsd)) * 10000)
+    : null;
+
+  let stopExecutionQuality = String(entry.stopExecutionQuality || "").trim().toLowerCase();
+  if (!stopExecutionQuality) {
+    if (String(entry.exitReason || "") === "stop_loss") {
+      if (exitSlippageBps == null) {
+        stopExecutionQuality = "unknown";
+      } else if (exitSlippageBps < -0.5) {
+        stopExecutionQuality = "slipped";
+      } else if (exitSlippageBps > 0.5) {
+        stopExecutionQuality = "better_than_stop";
+      } else {
+        stopExecutionQuality = "clean";
+      }
+    } else {
+      stopExecutionQuality = "not_applicable";
+    }
+  }
+
+  return {
+    entrySlippageBps: entrySlippageBps == null ? null : round(entrySlippageBps, 3),
+    exitSlippageBps: exitSlippageBps == null ? null : round(exitSlippageBps, 3),
+    roundTripCostBps: roundTripCostBps == null ? null : round(roundTripCostBps, 3),
+    stopExecutionQuality,
   };
 }
 
 function appendProfitabilityJournalEntry(input = {}) {
   const journal = readProfitabilityJournal();
+  const ticketStore = readProfitabilityTicketStore();
+  const entryId = `pilot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const checklistFlags = resolveChecklistFlags(input);
+  const checklistFailures = getChecklistFailures(checklistFlags);
+  const ticketId = String(input.ticketId || "").trim();
+  const tradeTimestamp = String(input.tradeTimestamp || input.timestamp || nowIso());
+  const localTradeParts = getLocalParts(tradeTimestamp);
+  const ticket = (ticketStore.tickets || []).find((candidate) => candidate.ticketId === ticketId) || null;
+  const pilotDisqualificationReasons = [];
+  if (String(input.setupId || "") !== BTC_PROFITABILITY_SETUP_ID || String(input.symbol || "").toUpperCase() !== BTC_PROFITABILITY_SYMBOL) {
+    pilotDisqualificationReasons.push("non_phase_one_setup");
+  }
+  if (!ticketId) {
+    pilotDisqualificationReasons.push("missing_ticket_id");
+  } else if (!ticket) {
+    pilotDisqualificationReasons.push("ticket_not_found");
+  } else {
+    const lifecycle = getTicketLifecycle(ticket, tradeTimestamp);
+    if (lifecycle.status === "expired") {
+      pilotDisqualificationReasons.push("ticket_expired");
+    }
+    if (String(ticket.status || "") === "used") {
+      pilotDisqualificationReasons.push("ticket_already_used");
+    }
+    if (String(ticket.strategyId || "") !== String(input.setupId || "")) {
+      pilotDisqualificationReasons.push("ticket_setup_mismatch");
+    }
+    if (String(ticket.symbol || "").toUpperCase() !== String(input.symbol || "").toUpperCase()) {
+      pilotDisqualificationReasons.push("ticket_symbol_mismatch");
+    }
+    if (String(ticket.localTradeDate || "") !== String(localTradeParts?.date || "")) {
+      pilotDisqualificationReasons.push("ticket_trade_day_mismatch");
+    }
+  }
+  if (!isDuringLocalTradingSession(tradeTimestamp)) {
+    pilotDisqualificationReasons.push("trade_outside_session");
+  }
+  pilotDisqualificationReasons.push(...checklistFailures);
+
   const entry = {
-    entryId: `pilot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    entryId,
     loggedAt: nowIso(),
-    tradeTimestamp: String(input.tradeTimestamp || input.timestamp || nowIso()),
+    ticketId,
+    tradeTimestamp,
+    localTradeDate: localTradeParts?.date || null,
     sessionLabel: String(input.sessionLabel || "Denver Core"),
     symbol: String(input.symbol || "").toUpperCase(),
     regime: String(input.regime || "").toLowerCase(),
     setupId: String(input.setupId || ""),
+    setup_match_confirmed: checklistFlags.setup_match_confirmed,
+    headline_lockout_checked: checklistFlags.headline_lockout_checked,
+    maker_limit_plan_confirmed: checklistFlags.maker_limit_plan_confirmed,
     side: String(input.side || "").toLowerCase(),
     plannedEntryPrice: Number(input.plannedEntryPrice),
+    actualEntryPrice: Number(input.actualEntryPrice),
     stopPrice: Number(input.stopPrice),
     targetPrice: Number(input.targetPrice),
+    actualExitPrice: Number(input.actualExitPrice),
     orderType: String(input.orderType || ""),
+    entryLiquidityRole: normalizeLiquidityRole(input.entryLiquidityRole),
+    exitLiquidityRole: normalizeLiquidityRole(input.exitLiquidityRole),
+    entryFillRatio: Number(input.entryFillRatio),
+    exitFillRatio: Number(input.exitFillRatio),
+    exitReason: String(input.exitReason || "").toLowerCase(),
+    stopExecutionQuality: String(input.stopExecutionQuality || "").trim().toLowerCase(),
     sizeUsd: Number(input.sizeUsd),
     feesUsd: Number(input.feesUsd || 0),
     spreadSlippageUsd: Number(input.spreadSlippageUsd || 0),
@@ -426,14 +958,32 @@ function appendProfitabilityJournalEntry(input = {}) {
     mistakeTag: String(input.mistakeTag || "none"),
     note: String(input.note || ""),
   };
+  const executionMetrics = buildEntryExecutionMetrics(entry);
+  entry.entrySlippageBps = executionMetrics.entrySlippageBps;
+  entry.exitSlippageBps = executionMetrics.exitSlippageBps;
+  entry.roundTripCostBps = executionMetrics.roundTripCostBps;
+  entry.stopExecutionQuality = executionMetrics.stopExecutionQuality;
+  entry.pilotEligible = pilotDisqualificationReasons.length === 0;
+  entry.pilotDisqualificationReasons = [...new Set(pilotDisqualificationReasons)];
+
+  if (entry.pilotEligible && ticket) {
+    ticket.status = "used";
+    ticket.usedAt = entry.loggedAt;
+    ticket.usedByEntryId = entry.entryId;
+    saveProfitabilityTicketStore(ticketStore);
+  }
 
   journal.entries.push(entry);
   journal.generatedAt = nowIso();
   atomicWriteJsonSync(PROFITABILITY_JOURNAL_PATH, journal);
   return {
     journal,
+    ticketStore,
     entry,
-    summary: buildProfitabilityPilotSummary(journal.entries),
+    summary: buildProfitabilityPilotSummary(journal.entries, {
+      ticketStore,
+      now: entry.tradeTimestamp,
+    }),
   };
 }
 
@@ -487,28 +1037,71 @@ function buildEntryBreakdown(entries = [], key) {
     .sort((left, right) => Number(right.netPnlUsd || 0) - Number(left.netPnlUsd || 0));
 }
 
-function buildProfitabilityPilotSummary(entries = []) {
-  const allEntries = Array.isArray(entries) ? entries.slice() : [];
-  const phaseOneEntries = allEntries.filter((entry) => (
-    String(entry.setupId || "") === "btcusdt-crypto-range-mean-reversion" &&
-    String(entry.symbol || "").toUpperCase() === "BTCUSDT"
+function buildDisqualificationBreakdown(entries = []) {
+  const counts = new Map();
+  for (const entry of entries) {
+    for (const reason of entry.pilotDisqualificationReasons || []) {
+      counts.set(reason, (counts.get(reason) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([reason, count]) => ({ reason, count }))
+    .sort((left, right) => right.count - left.count || String(left.reason).localeCompare(String(right.reason)));
+}
+
+function computeExecutionStats(entries = []) {
+  const withEntrySlippage = entries.filter((entry) => Number.isFinite(entry.entrySlippageBps));
+  const withExitSlippage = entries.filter((entry) => Number.isFinite(entry.exitSlippageBps));
+  const makerEligible = entries.filter((entry) => entry.entryLiquidityRole);
+  const stopEntries = entries.filter((entry) => String(entry.exitReason || "") === "stop_loss");
+  const partialEntries = entries.filter((entry) => (
+    Number(entry.entryFillRatio || 0) < 0.999 || Number(entry.exitFillRatio || 0) < 0.999
   ));
-  const tradeCount = phaseOneEntries.length;
-  const wins = phaseOneEntries.filter((entry) => Number(entry.pnlR || 0) > 0).length;
-  const losses = phaseOneEntries.filter((entry) => Number(entry.pnlR || 0) < 0).length;
+
+  const averageAbs = (items, key) => {
+    if (items.length === 0) return null;
+    return items.reduce((sum, item) => sum + Math.abs(Number(item[key] || 0)), 0) / items.length;
+  };
+
+  return {
+    makerShare: makerEligible.length > 0
+      ? makerEligible.filter((entry) => entry.entryLiquidityRole === "maker").length / makerEligible.length
+      : null,
+    averageEntrySlippageBps: averageAbs(withEntrySlippage, "entrySlippageBps"),
+    averageExitSlippageBps: averageAbs(withExitSlippage, "exitSlippageBps"),
+    partialFillRate: entries.length > 0 ? partialEntries.length / entries.length : null,
+    stopSlipRate: stopEntries.length > 0
+      ? stopEntries.filter((entry) => String(entry.stopExecutionQuality || "") === "slipped").length / stopEntries.length
+      : null,
+  };
+}
+
+function buildProfitabilityPilotSummary(entries = [], options = {}) {
+  const allEntries = Array.isArray(entries) ? entries.slice() : [];
+  const ticketStore = options.ticketStore || readProfitabilityTicketStore();
+  const now = options.now || nowIso();
+  const eligibleEntries = allEntries.filter((entry) => (
+    String(entry.setupId || "") === BTC_PROFITABILITY_SETUP_ID &&
+    String(entry.symbol || "").toUpperCase() === BTC_PROFITABILITY_SYMBOL &&
+    entry.pilotEligible === true
+  ));
+  const disqualifiedEntries = allEntries.filter((entry) => entry.pilotEligible === false);
+  const tradeCount = eligibleEntries.length;
+  const wins = eligibleEntries.filter((entry) => Number(entry.pnlR || 0) > 0).length;
+  const losses = eligibleEntries.filter((entry) => Number(entry.pnlR || 0) < 0).length;
   const expectancyR = tradeCount > 0
-    ? phaseOneEntries.reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0) / tradeCount
+    ? eligibleEntries.reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0) / tradeCount
     : null;
-  const netPnlUsd = phaseOneEntries.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
-  const profitFactor = computeProfitFactorFromEntries(phaseOneEntries);
+  const netPnlUsd = eligibleEntries.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+  const profitFactor = computeProfitFactorFromEntries(eligibleEntries);
   const ruleAdherenceRate = tradeCount > 0
-    ? phaseOneEntries.reduce((sum, entry) => sum + Number(entry.ruleAdherenceScore || 0), 0) / tradeCount / 100
+    ? eligibleEntries.reduce((sum, entry) => sum + Number(entry.ruleAdherenceScore || 0), 0) / tradeCount / 100
     : null;
-  const maxDrawdownR = computeMaxDrawdownR(phaseOneEntries);
-  const grossPositivePnl = phaseOneEntries
+  const maxDrawdownR = computeMaxDrawdownR(eligibleEntries);
+  const grossPositivePnl = eligibleEntries
     .filter((entry) => Number(entry.pnlUsd || 0) > 0)
     .reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
-  const dominantTradePnl = phaseOneEntries.reduce((best, entry) => (
+  const dominantTradePnl = eligibleEntries.reduce((best, entry) => (
     Math.max(best, Number(entry.pnlUsd || 0))
   ), 0);
   const dominantTradeShare = grossPositivePnl > 0 ? dominantTradePnl / grossPositivePnl : null;
@@ -539,7 +1132,7 @@ function buildProfitabilityPilotSummary(entries = []) {
       label: "Max drawdown < 4R",
       target: "< 4R",
       passed: tradeCount > 0 && maxDrawdownR < 4,
-      actual: `${maxDrawdownR.toFixed(2)}R`,
+      actual: tradeCount === 0 ? "-" : `${maxDrawdownR.toFixed(2)}R`,
     },
     {
       id: "outlier",
@@ -549,18 +1142,57 @@ function buildProfitabilityPilotSummary(entries = []) {
       actual: dominantTradeShare == null ? "-" : `${(dominantTradeShare * 100).toFixed(1)}%`,
     },
   ];
+  const allAdvanceGatesPassed = gates.every((gate) => gate.passed);
+  const milestones = [
+    {
+      id: "review_30",
+      label: "30-trade review checkpoint",
+      targetTrades: PROFITABILITY_REVIEW_TARGET,
+      completedTrades: tradeCount,
+      remainingTrades: Math.max(0, PROFITABILITY_REVIEW_TARGET - tradeCount),
+      reached: tradeCount >= PROFITABILITY_REVIEW_TARGET,
+      status: tradeCount >= PROFITABILITY_REVIEW_TARGET ? "reached" : "pending",
+      description: "Informational checkpoint only. BTC-only stays in force after review.",
+    },
+    {
+      id: "advance_50",
+      label: "50-trade advance gate",
+      targetTrades: PROFITABILITY_ADVANCE_TARGET,
+      completedTrades: tradeCount,
+      remainingTrades: Math.max(0, PROFITABILITY_ADVANCE_TARGET - tradeCount),
+      reached: tradeCount >= PROFITABILITY_ADVANCE_TARGET,
+      status: tradeCount < PROFITABILITY_ADVANCE_TARGET
+        ? "pending"
+        : (allAdvanceGatesPassed ? "ready" : "hold"),
+      description: "ETH stays locked until 50 eligible BTC trades and every acceptance gate passes.",
+    },
+  ];
+
+  let phase = "sample_building";
+  if (tradeCount >= PROFITABILITY_ADVANCE_TARGET) {
+    phase = allAdvanceGatesPassed ? "advance_ready" : "hold_redesign";
+  } else if (tradeCount >= PROFITABILITY_REVIEW_TARGET) {
+    phase = "review_checkpoint";
+  }
 
   return {
     profileId: PROFITABILITY_PROFILE_ID,
-    phase: tradeCount >= 30 && gates.every((gate) => gate.passed) ? "phase_2_ready" : "phase_1_btc_only",
+    phase,
     progress: {
       completedTrades: tradeCount,
-      targetTrades: 30,
-      remainingTrades: Math.max(0, 30 - tradeCount),
+      targetTrades: PROFITABILITY_ADVANCE_TARGET,
+      remainingTrades: Math.max(0, PROFITABILITY_ADVANCE_TARGET - tradeCount),
     },
+    reviewCheckpointTrades: PROFITABILITY_REVIEW_TARGET,
+    advanceGateTrades: PROFITABILITY_ADVANCE_TARGET,
+    todayGate: buildTodayGate(ticketStore, { now }),
+    preTradeChecklist: buildProfitabilityChecklistSchema(),
+    milestones,
     journalStats: {
       totalEntries: allEntries.length,
       phaseOneEntries: tradeCount,
+      eligibleTradeCount: tradeCount,
+      disqualifiedTradeCount: disqualifiedEntries.length,
       wins,
       losses,
       expectancyR,
@@ -570,12 +1202,18 @@ function buildProfitabilityPilotSummary(entries = []) {
       maxDrawdownR,
       dominantTradeShare,
     },
-    breakdownByRegime: buildEntryBreakdown(allEntries, "regime"),
-    breakdownBySetup: buildEntryBreakdown(allEntries, "setupId"),
+    disqualificationReasons: buildDisqualificationBreakdown(disqualifiedEntries),
+    executionStats: computeExecutionStats(eligibleEntries),
+    breakdownByRegime: buildEntryBreakdown(eligibleEntries, "regime"),
+    breakdownBySetup: buildEntryBreakdown(eligibleEntries, "setupId"),
     gates,
-    nextUnlock: tradeCount >= 30 && gates.every((gate) => gate.passed)
-      ? "Enable BTC and ETH trend continuation for phase 2."
-      : "Keep BTC-only mean reversion live and finish the 30-trade pilot.",
+    nextUnlock: tradeCount >= PROFITABILITY_ADVANCE_TARGET && allAdvanceGatesPassed
+      ? "ETH trend continuation can be reviewed for unlock."
+      : tradeCount >= PROFITABILITY_ADVANCE_TARGET
+        ? "Hold BTC-only. The 50-trade gate is complete but one or more acceptance checks still fail."
+        : tradeCount >= PROFITABILITY_REVIEW_TARGET
+          ? "Review the first 30 eligible BTC trades, then continue building toward the 50-trade advance gate."
+          : "Keep BTC-only mean reversion live and keep building eligible sample size.",
   };
 }
 
@@ -583,7 +1221,7 @@ function buildOperatingPlan() {
   return {
     profileId: PROFITABILITY_PROFILE_ID,
     objective: "Prove a repeatable BTC-first edge net of fees and slippage before unlocking ETH or SOL.",
-    activeSetupId: "btcusdt-crypto-range-mean-reversion",
+    activeSetupId: BTC_PROFITABILITY_SETUP_ID,
     activeSetupLabel: "BTC 5m Range Mean Reversion",
     defaultRegimeBias: "Range mean reversion or no-trade",
     marketStanceAsOf: "2026-04-02",
@@ -595,8 +1233,8 @@ function buildOperatingPlan() {
       weekdaysOnly: true,
     },
     instruments: {
-      liveNow: ["BTCUSDT"],
-      nextPhase: ["BTCUSDT", "ETHUSDT"],
+      liveNow: [BTC_PROFITABILITY_SYMBOL],
+      nextPhase: [BTC_PROFITABILITY_SYMBOL, "ETHUSDT"],
       paperOnly: ["SOLUSDT"],
     },
     execution: {
@@ -613,19 +1251,26 @@ function buildOperatingPlan() {
       pauseAtDrawdownFraction: 0.06,
       maxCostToTargetFraction: 0.25,
     },
+    dailyTradeCap: {
+      limit: PROFITABILITY_DAILY_TRADE_CAP,
+      countedBy: "Approved BTC entries per America/Denver trading day",
+      unusedTicketExpiry: "11:00 America/Denver",
+      timeZone: LOCAL_SESSION_TIMEZONE,
+    },
+    preTradeChecklist: buildProfitabilityChecklistSchema(),
     regimeChecklist: {
       range: [
-        "BTC is still inside session or prior-session range.",
-        "ETF, basis, and funding backdrop is mixed or muted.",
+        "BTC is still inside session or prior-session range and not back through the midpoint.",
+        "No expansion or event-shock blocker is active.",
         "No fresh catalyst is pushing price away from VWAP.",
       ],
       trend: [
         "BTC breaks and holds above session structure with expanding range or volume.",
         "Only continuation setups are allowed; stop fading every move.",
-        "ETH can mirror only after BTC phase 1 passes.",
+        "ETH can mirror only after the BTC 50-trade gate passes.",
       ],
       event: [
-        "Any exploit, macro shock, or abnormal expansion locks new trades for 30 minutes.",
+        "Any exploit, macro shock, or abnormal expansion starts a 6-bar mean-reversion lockout.",
         "BTC and ETH only. SOL stays no-trade unless paper review explicitly unlocks it.",
       ],
     },
@@ -633,6 +1278,124 @@ function buildOperatingPlan() {
       path: PROFITABILITY_JOURNAL_PATH,
       fields: buildProfitabilityJournalSchema(),
     },
+  };
+}
+
+function buildProfitabilitySystemGate({ strategy, marketData, ticketStore, now = nowIso() }) {
+  const lastBar = marketData?.priceSeries?.[marketData.priceSeries.length - 1] || null;
+  const sessionWindow = classifyScheduledWindow(now, DEFAULT_CRYPTO_DAY_TRADING_CONFIG);
+  const barAgeMinutes = calculateBarAgeMinutes(lastBar?.timestamp, now);
+  const dataFresh = barAgeMinutes != null && barAgeMinutes <= DEFAULT_CRYPTO_DAY_TRADING_CONFIG.maxBarAgeMinutes;
+  const regimeBlockers = Array.isArray(lastBar?.indicators?.regimeBlockers) ? lastBar.indicators.regimeBlockers : [];
+  const tradeable = lastBar?.indicators?.tradeable === true;
+  const regimeState = String(lastBar?.indicators?.regimeState || "unknown");
+  const todayGate = buildTodayGate(ticketStore, { now });
+  const reasons = [];
+
+  if (!sessionWindow.active) reasons.push("outside_fixed_session");
+  if (marketData?.trusted === false) reasons.push("untrusted_market_data");
+  if (!dataFresh) reasons.push("stale_market_data");
+  if (!lastBar) reasons.push("missing_live_bar");
+  if (!tradeable) {
+    if (regimeBlockers.length > 0) {
+      reasons.push(...regimeBlockers);
+    } else {
+      reasons.push("regime_not_tradeable");
+    }
+  }
+
+  const costProfile = buildCostProfile(strategy, marketData?.marketSnapshot || {}, lastBar);
+  if (!costProfile.allowed) reasons.push("cost_cap_blocked");
+  if (todayGate.remainingApprovals <= 0) reasons.push("daily_trade_cap_reached");
+
+  return {
+    allowed: reasons.length === 0,
+    reasons: [...new Set(reasons)],
+    regimeState,
+    tradeable,
+    regimeBlockers,
+    dataFresh,
+    barAgeMinutes,
+    lastBarTimestamp: lastBar?.timestamp || null,
+    sessionWindow,
+    todayGate,
+    costProfile,
+  };
+}
+
+async function requestProfitabilityPreflightTicket(options = {}) {
+  const now = String(options.now || nowIso());
+  const strategyId = String(options.strategyId || BTC_PROFITABILITY_SETUP_ID);
+  const strategies = options.strategies || loadStrategies({ readOnly: true });
+  const strategy = strategies.find((candidate) => candidate.strategyId === strategyId);
+  if (!strategy) {
+    throw new Error(`Unknown profitability strategy: ${strategyId}`);
+  }
+
+  const checklistFlags = resolveChecklistFlags(options);
+  const checklistFailures = getChecklistFailures(checklistFlags);
+  const ticketStore = readProfitabilityTicketStore();
+  const marketDataLoader = typeof options.marketDataLoader === "function"
+    ? options.marketDataLoader
+    : (targetStrategy, loaderOptions) => loadCryptoMarketDataForStrategy(targetStrategy, {
+      ...loaderOptions,
+      includeLive: true,
+      persistArtifacts: false,
+    });
+  const marketData = await marketDataLoader(strategy, {
+    bars: options.bars || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.bars,
+    persistArtifacts: false,
+  });
+  const systemGate = buildProfitabilitySystemGate({ strategy, marketData, ticketStore, now });
+  const blockedReasons = [...new Set([...checklistFailures, ...systemGate.reasons])];
+  if (blockedReasons.length > 0) {
+    return {
+      approved: false,
+      blocked: true,
+      reasons: blockedReasons,
+      checklistFlags,
+      systemGate,
+      ticket: null,
+      ticketStore,
+    };
+  }
+
+  const local = getLocalParts(now);
+  const ticket = {
+    ticketId: `preflight_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    profileId: PROFITABILITY_PROFILE_ID,
+    strategyId,
+    symbol: String(strategy.marketUniverse?.symbols?.[0] || BTC_PROFITABILITY_SYMBOL).toUpperCase(),
+    approvedAt: now,
+    status: "approved",
+    sessionLabel: "Denver Core",
+    localTradeDate: local?.date || null,
+    checklistFlags,
+    systemGateSnapshot: {
+      regimeState: systemGate.regimeState,
+      tradeable: systemGate.tradeable,
+      regimeBlockers: systemGate.regimeBlockers,
+      costProfile: systemGate.costProfile,
+      sessionWindow: systemGate.sessionWindow,
+    },
+  };
+
+  const nextStore = {
+    ...ticketStore,
+    tickets: [...(ticketStore.tickets || []), ticket],
+  };
+  saveProfitabilityTicketStore(nextStore);
+  return {
+    approved: true,
+    blocked: false,
+    reasons: [],
+    checklistFlags,
+    systemGate: {
+      ...systemGate,
+      todayGate: buildTodayGate(nextStore, { now }),
+    },
+    ticket,
+    ticketStore: nextStore,
   };
 }
 
@@ -644,6 +1407,11 @@ function buildCryptoManagedStrategy(options = {}) {
   const symbol = String(options.symbol || "BTCUSDT").toUpperCase();
   const baseAsset = symbol.replace(/USDT$/i, "").toLowerCase();
   const strategyKind = String(options.strategyKind || "range_mean_reversion");
+  const breakoutVariant = String(options.breakoutVariant || "breakout_close");
+  const openingRangeBars = Math.max(1, Math.round(Number(options.openingRangeBars || (
+    breakoutVariant === "breakout_retest" ? 6 : 3
+  ))));
+  const openingRangeMinutes = openingRangeBars * 5;
   const liveStatus = String(options.status || "draft");
   const unlockPhase = String(options.unlockPhase || "phase_1");
   const maxPositionFraction = Number(options.maxPositionFraction || (
@@ -791,6 +1559,172 @@ function buildCryptoManagedStrategy(options = {}) {
     };
   }
 
+  if (strategyKind === "bottom_reclaim") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-bottom-reclaim`,
+      name: `${symbol} 5m Bottom Reclaim`,
+      hypothesisSummary:
+        `${symbol} should occasionally offer cleaner reversal entries than the base range pilot when a sweep of session lows tags the lower Bollinger band, momentum refuses to confirm the new low, and a fast oversold reset turns back up on rising volume.`,
+      signalInputs: [{ name: "crypto_bottom_reclaim", type: "technical", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Enter long only after ${symbol} sweeps session or prior-session lows, touches the lower Bollinger band, and prints a bullish RSI divergence.`,
+        "Require a Stoch RSI cross up from oversold, a three-bar volume ramp into the reclaim, a rejection candle, and no event-shock lockout.",
+      ],
+      exitRules: [
+        "Exit at session VWAP or range midpoint, whichever is hit first.",
+        "Exit on a 0.42% stop loss.",
+        "Exit after 6 bars if the reclaim stalls.",
+      ],
+      cooldownRules: ["Wait 5 bars after a bottom-reclaim exit before another entry."],
+      riskLimits: {
+        maxDrawdownFraction: 0.06,
+        reduceSizeAtDrawdownFraction: 0.04,
+        reduceSizeMultiplier: 0.5,
+        maxDailyLossFraction: 0.01,
+        maxWeeklyLossFraction: 0.025,
+        maxDailyLosingTrades: 3,
+        maxOpenPositions: 1,
+        maxLossPerTradeFraction: 0.0042,
+        minLiquidityUsd,
+        maxSpreadFraction: symbol === "BTCUSDT" ? 0.0012 : 0.0015,
+        maxCostToTargetFraction: 0.25,
+        assumedRoundTripFeeFraction: 0.001,
+        assumedSlippageFraction,
+      },
+      simulation: {
+        direction: "long",
+        entrySignal: "crypto_bottom_reclaim",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.007,
+        stopLossFraction: 0.0042,
+        maxHoldBars: 6,
+        cooldownBars: 5,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.76 : 0.78,
+        exitTargetMode: "session_vwap_or_range_midpoint",
+      },
+      metadata: {
+        ...common.metadata,
+        tags: [...common.metadata.tags, "bottom", "reversal", "bollinger", "stoch-rsi", "research-phase-1"],
+      },
+    };
+  }
+
+  if (strategyKind === "failed_breakdown_reclaim") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-failed-breakdown-reclaim`,
+      name: `${symbol} 5m Failed Breakdown Reclaim`,
+      hypothesisSummary:
+        `${symbol} should occasionally reverse more cleanly after a true stop-run than after a soft sweep. We want a tighter state machine than bottom reclaim: break support, close back above it immediately, then hold the reclaim on the next bar while the move is still near session structure.`,
+      signalInputs: [{ name: "crypto_failed_breakdown_reclaim", type: "technical", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Enter long only after ${symbol} breaks below session, prior-session, or prior swing support, then closes back above that broken level and holds the reclaim on the next bar.`,
+        "Require the move to stay near support, confirm on usable volume, and avoid the event-shock lockout.",
+      ],
+      exitRules: [
+        "Exit at session VWAP or range midpoint, whichever is hit first.",
+        "Exit on a 0.46% stop loss.",
+        "Exit after 6 bars if the reclaim loses follow-through.",
+      ],
+      cooldownRules: ["Wait 6 bars after a failed-breakdown-reclaim exit before another entry."],
+      riskLimits: {
+        maxDrawdownFraction: 0.06,
+        reduceSizeAtDrawdownFraction: 0.04,
+        reduceSizeMultiplier: 0.5,
+        maxDailyLossFraction: 0.01,
+        maxWeeklyLossFraction: 0.025,
+        maxDailyLosingTrades: 3,
+        maxOpenPositions: 1,
+        maxLossPerTradeFraction: 0.0046,
+        minLiquidityUsd,
+        maxSpreadFraction: symbol === "BTCUSDT" ? 0.0012 : 0.0015,
+        maxCostToTargetFraction: 0.25,
+        assumedRoundTripFeeFraction: 0.001,
+        assumedSlippageFraction,
+      },
+      simulation: {
+        direction: "long",
+        entrySignal: "crypto_failed_breakdown_reclaim",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.007,
+        stopLossFraction: 0.0046,
+        maxHoldBars: 6,
+        cooldownBars: 6,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.74 : 0.76,
+        exitTargetMode: "session_vwap_or_range_midpoint",
+      },
+      metadata: {
+        ...common.metadata,
+        tags: [...common.metadata.tags, "failed-breakdown", "reclaim", "reversal", "research-phase-1"],
+      },
+    };
+  }
+
+  if (strategyKind === "opening_range_breakout") {
+    const variantToken = breakoutVariant === "breakout_retest" ? "retest" : "close";
+    const variantLabel = breakoutVariant === "breakout_retest" ? "Retest" : "Close";
+    const takeProfitFraction = breakoutVariant === "breakout_retest" ? 0.008 : 0.0085;
+    const stopLossFraction = breakoutVariant === "breakout_retest" ? 0.0042 : 0.0045;
+    const maxHoldBars = breakoutVariant === "breakout_retest" ? 10 : 8;
+    const signalThreshold = breakoutVariant === "breakout_retest" ? 0.74 : 0.72;
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-opening-range-breakout-${variantToken}`,
+      name: `${symbol} 5m Opening Range Breakout ${openingRangeMinutes}m ${variantLabel}`,
+      hypothesisSummary:
+        `${symbol} should sometimes trend cleanly out of the Denver Core open after price defines a tight early range, clears the range high, and either keeps going immediately or confirms the move with a controlled retest.`,
+      signalInputs: [{ name: "crypto_opening_range_breakout", type: "technical", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Enter long only after ${symbol} finishes the first ${openingRangeMinutes} minutes of the Denver Core session and confirms a breakout above the opening-range high.`,
+        breakoutVariant === "breakout_retest"
+          ? "Require the first break to hold and reclaim the opening-range high on a retest with trend and VWAP still aligned."
+          : "Require a decisive close above the opening-range high with trend and VWAP aligned.",
+      ],
+      exitRules: [
+        "Exit on failed breakout back through the opening range.",
+        `Exit on a ${(takeProfitFraction * 100).toFixed(2)}% take-profit target.`,
+        `Exit on a ${(stopLossFraction * 100).toFixed(2)}% stop loss or after ${maxHoldBars} bars if the move stalls.`,
+      ],
+      cooldownRules: ["Wait 4 bars after an opening-range-breakout exit before another entry."],
+      riskLimits: {
+        maxDrawdownFraction: 0.06,
+        reduceSizeAtDrawdownFraction: 0.04,
+        reduceSizeMultiplier: 0.5,
+        maxDailyLossFraction: 0.01,
+        maxWeeklyLossFraction: 0.025,
+        maxDailyLosingTrades: 3,
+        maxOpenPositions: 1,
+        maxLossPerTradeFraction: stopLossFraction,
+        minLiquidityUsd,
+        maxSpreadFraction: symbol === "BTCUSDT" ? 0.0012 : 0.0015,
+        maxCostToTargetFraction: 0.25,
+        assumedRoundTripFeeFraction: 0.001,
+        assumedSlippageFraction,
+      },
+      simulation: {
+        direction: "long",
+        entrySignal: "crypto_opening_range_breakout",
+        entryExecution: "next_open",
+        takeProfitFraction,
+        stopLossFraction,
+        maxHoldBars,
+        cooldownBars: 4,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: signalThreshold,
+      },
+      metadata: {
+        ...common.metadata,
+        openingRangeBars,
+        openingRangeMinutes,
+        openingRangeVariant: breakoutVariant,
+        tags: [...common.metadata.tags, "opening-range", "breakout", variantToken, "research-phase-1"],
+      },
+    };
+  }
+
   return {
     ...common,
     strategyId: `${symbol.toLowerCase()}-crypto-range-mean-reversion`,
@@ -845,10 +1779,42 @@ function buildCryptoManagedStrategy(options = {}) {
 const DEFAULT_STRATEGIES = [
   buildCryptoManagedStrategy({
     symbol: "BTCUSDT",
+    strategyKind: "bottom_reclaim",
+    status: "paper_candidate",
+    unlockPhase: "phase_1_research",
+    maxPositionFraction: 0.2,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "failed_breakdown_reclaim",
+    status: "paper_candidate",
+    unlockPhase: "phase_1_research",
+    maxPositionFraction: 0.2,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
     strategyKind: "range_mean_reversion",
     status: "paper_candidate",
     unlockPhase: "phase_1",
     maxPositionFraction: 0.35,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "opening_range_breakout",
+    breakoutVariant: "breakout_close",
+    openingRangeBars: 3,
+    status: "paper_candidate",
+    unlockPhase: "phase_1_research",
+    maxPositionFraction: 0.18,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "opening_range_breakout",
+    breakoutVariant: "breakout_retest",
+    openingRangeBars: 6,
+    status: "paper_candidate",
+    unlockPhase: "phase_1_research",
+    maxPositionFraction: 0.18,
   }),
   buildCryptoManagedStrategy({
     symbol: "BTCUSDT",
@@ -956,6 +1922,16 @@ function saveStrategies(strategies) {
   atomicWriteJsonSync(STRATEGIES_PATH, strategies.map(assertValidStrategySpec));
 }
 
+function saveStrategiesIfChanged(currentStrategies, nextStrategies) {
+  const normalizedCurrent = currentStrategies.map(assertValidStrategySpec);
+  const normalizedNext = nextStrategies.map(assertValidStrategySpec);
+  if (JSON.stringify(normalizedCurrent) === JSON.stringify(normalizedNext)) {
+    return false;
+  }
+  atomicWriteJsonSync(STRATEGIES_PATH, normalizedNext);
+  return true;
+}
+
 function getNormalizedBarsPath(symbol) {
   return path.join(NORMALIZED_1M_DIR, `${String(symbol || "").toUpperCase()}.json`);
 }
@@ -1052,6 +2028,7 @@ function _readOnlyBundleKey(options = {}) {
     _mtimeMs(IMPORT_REPORT_PATH),
     _mtimeMs(EXPERIMENT_REPORT_PATH),
     _mtimeMs(PROFITABILITY_JOURNAL_PATH),
+    _mtimeMs(PROFITABILITY_TICKETS_PATH),
     _directorySignature(BACKTEST_DIR),
     _directorySignature(EXPERIMENTS_DIR),
     _directorySignature(NORMALIZED_1M_DIR),
@@ -1068,6 +2045,7 @@ function _readOnlyDayTradingBundle(options = {}) {
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
   const broker = new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
   const profitabilityJournal = readProfitabilityJournal();
+  const profitabilityTicketStore = readProfitabilityTicketStore();
   const bundle = {
     accountId,
     strategies: loadStrategies({ readOnly: true }),
@@ -1080,7 +2058,10 @@ function _readOnlyDayTradingBundle(options = {}) {
     lastImport: readJson(IMPORT_REPORT_PATH, null),
     experimentReport: readJson(EXPERIMENT_REPORT_PATH, null),
     profitabilityJournal,
-    pilotSummary: buildProfitabilityPilotSummary(profitabilityJournal.entries),
+    profitabilityTicketStore,
+    pilotSummary: buildProfitabilityPilotSummary(profitabilityJournal.entries, {
+      ticketStore: profitabilityTicketStore,
+    }),
     operatingPlan: buildOperatingPlan(),
   };
   READ_ONLY_BUNDLE_CACHE.set(cacheKey, bundle);
@@ -1221,6 +2202,17 @@ function sma(values, period, index) {
   return sum / period;
 }
 
+function smaFinite(values, period, index) {
+  if (index + 1 < period) return null;
+  let sum = 0;
+  for (let i = index - period + 1; i <= index; i += 1) {
+    const value = values[i];
+    if (!Number.isFinite(value)) return null;
+    sum += value;
+  }
+  return sum / period;
+}
+
 function computeEmaSeries(values, period) {
   const multiplier = 2 / (period + 1);
   const result = new Array(values.length).fill(null);
@@ -1261,6 +2253,92 @@ function computeRsiSeries(closes, period = 14) {
   return result;
 }
 
+function computeStdDevSeries(values, period = 20) {
+  const result = new Array(values.length).fill(null);
+  for (let i = period - 1; i < values.length; i += 1) {
+    const mean = smaFinite(values, period, i);
+    if (!Number.isFinite(mean)) continue;
+    let variance = 0;
+    let valid = true;
+    for (let j = i - period + 1; j <= i; j += 1) {
+      const value = values[j];
+      if (!Number.isFinite(value)) {
+        valid = false;
+        break;
+      }
+      variance += (value - mean) ** 2;
+    }
+    if (!valid) continue;
+    result[i] = Math.sqrt(variance / period);
+  }
+  return result;
+}
+
+function computeBollingerBandsSeries(values, period = 20, stdDevMultiplier = 2) {
+  const basis = new Array(values.length).fill(null);
+  const upper = new Array(values.length).fill(null);
+  const lower = new Array(values.length).fill(null);
+  const stdDev = computeStdDevSeries(values, period);
+  for (let i = period - 1; i < values.length; i += 1) {
+    const mean = smaFinite(values, period, i);
+    const deviation = stdDev[i];
+    if (!Number.isFinite(mean) || !Number.isFinite(deviation)) continue;
+    basis[i] = mean;
+    upper[i] = mean + (stdDevMultiplier * deviation);
+    lower[i] = mean - (stdDevMultiplier * deviation);
+  }
+  return { basis, upper, lower };
+}
+
+function computeStochRsiSeries(rsiValues, period = 14, smoothK = 3, smoothD = 3) {
+  const raw = new Array(rsiValues.length).fill(null);
+  for (let i = period - 1; i < rsiValues.length; i += 1) {
+    let minRsi = Number.POSITIVE_INFINITY;
+    let maxRsi = Number.NEGATIVE_INFINITY;
+    let valid = true;
+    for (let j = i - period + 1; j <= i; j += 1) {
+      const value = rsiValues[j];
+      if (!Number.isFinite(value)) {
+        valid = false;
+        break;
+      }
+      minRsi = Math.min(minRsi, value);
+      maxRsi = Math.max(maxRsi, value);
+    }
+    if (!valid || !Number.isFinite(rsiValues[i])) continue;
+    raw[i] = maxRsi === minRsi ? 0 : ((rsiValues[i] - minRsi) / (maxRsi - minRsi)) * 100;
+  }
+
+  const k = new Array(rsiValues.length).fill(null);
+  const d = new Array(rsiValues.length).fill(null);
+  for (let i = 0; i < rsiValues.length; i += 1) {
+    k[i] = smaFinite(raw, smoothK, i);
+    d[i] = smaFinite(k, smoothD, i);
+  }
+  return { raw, k, d };
+}
+
+function findPriorConfirmedSwingLowIndex(lows, index, lookback = 18, swingWindow = 2) {
+  const latestCandidate = index - swingWindow - 1;
+  if (latestCandidate < swingWindow) return null;
+  const start = Math.max(swingWindow, latestCandidate - lookback + 1);
+  for (let candidate = latestCandidate; candidate >= start; candidate -= 1) {
+    const center = lows[candidate];
+    if (!Number.isFinite(center)) continue;
+    let isSwingLow = true;
+    for (let offset = 1; offset <= swingWindow; offset += 1) {
+      const left = lows[candidate - offset];
+      const right = lows[candidate + offset];
+      if (!Number.isFinite(left) || !Number.isFinite(right) || center > left || center > right) {
+        isSwingLow = false;
+        break;
+      }
+    }
+    if (isSwingLow) return candidate;
+  }
+  return null;
+}
+
 function computeSessionVwapSeries(bars, getSessionKey) {
   let currentSession = null;
   let cumulativeVolume = 0;
@@ -1283,26 +2361,47 @@ function computeSessionVwapSeries(bars, getSessionKey) {
   });
 }
 
-function computeSessionOpeningRangeHighs(bars, openingRangeBars, getSessionKey) {
+function computeSessionOpeningRangeContexts(bars, openingRangeBars, getSessionKey) {
   let currentSession = null;
   let sessionStartIndex = -1;
   let openingRangeHigh = null;
+  let openingRangeLow = null;
   return bars.map((bar, index) => {
     const sessionKey = getSessionKey(bar.timestamp);
     if (!sessionKey) {
       currentSession = null;
       sessionStartIndex = -1;
       openingRangeHigh = null;
-      return null;
+      openingRangeLow = null;
+      return {
+        openingRangeHigh: null,
+        openingRangeLow: null,
+        openingRangeWidthPct: null,
+        openingRangeComplete: false,
+        barsSinceSessionStart: null,
+      };
     }
     if (sessionKey !== currentSession) {
       currentSession = sessionKey;
       sessionStartIndex = index;
       openingRangeHigh = Number(bar.high);
+      openingRangeLow = Number(bar.low);
     } else if ((index - sessionStartIndex) < openingRangeBars) {
       openingRangeHigh = Math.max(Number(openingRangeHigh || Number.NEGATIVE_INFINITY), Number(bar.high));
+      openingRangeLow = Math.min(Number(openingRangeLow || Number.POSITIVE_INFINITY), Number(bar.low));
     }
-    return openingRangeHigh;
+    const barsSinceSessionStart = index - sessionStartIndex;
+    return {
+      openingRangeHigh,
+      openingRangeLow,
+      openingRangeWidthPct: (
+        Number.isFinite(openingRangeHigh) &&
+        Number.isFinite(openingRangeLow) &&
+        Number(bar.close) > 0
+      ) ? ((openingRangeHigh - openingRangeLow) / Number(bar.close)) : null,
+      openingRangeComplete: barsSinceSessionStart >= (openingRangeBars - 1),
+      barsSinceSessionStart,
+    };
   });
 }
 
@@ -1348,6 +2447,110 @@ function computeSessionRangeContexts(bars, getSessionKey) {
   });
 }
 
+function resolveBrokenReferenceLevel(options = {}) {
+  const low = Number(options.low);
+  if (!Number.isFinite(low)) return null;
+  const candidates = [
+    { kind: "session_low", level: Number(options.sessionLowBeforeBar) },
+    { kind: "prior_session_low", level: Number(options.priorSessionLow) },
+    { kind: "prior_swing_low", level: Number(options.priorSwingLow) },
+  ];
+  for (const candidate of candidates) {
+    if (!Number.isFinite(candidate.level) || candidate.level <= 0) continue;
+    if (low < candidate.level) {
+      return {
+        kind: candidate.kind,
+        level: candidate.level,
+        depthPct: (candidate.level - low) / candidate.level,
+      };
+    }
+  }
+  return null;
+}
+
+function buildFailedBreakdownState(options = {}) {
+  const index = Number(options.index);
+  const bars = options.bars || [];
+  const lows = options.lows || [];
+  const closes = options.closes || [];
+  const rsi14 = options.rsi14 || [];
+  const bollinger20 = options.bollinger20 || { lower: [] };
+  const sessionContexts = options.sessionContexts || [];
+  const getSessionKey = typeof options.getSessionKey === "function" ? options.getSessionKey : () => null;
+
+  if (!(index > 0)) {
+    return {
+      brokenReferenceLevel: null,
+      brokenReferenceKind: null,
+      breakdownDepthPct: null,
+      previousBullishRsiDivergence: false,
+      previousLowerBandTouched: false,
+      reclaimCloseConfirmed: false,
+      reclaimHoldConfirmed: false,
+    };
+  }
+
+  const previousSessionKey = getSessionKey(bars[index - 1].timestamp);
+  const previousPreviousSessionContext = (
+    index > 1 &&
+    previousSessionKey != null &&
+    previousSessionKey === getSessionKey(bars[index - 2].timestamp)
+  ) ? sessionContexts[index - 2] : null;
+  const previousSessionLowBeforeBar = previousPreviousSessionContext?.sessionLow ?? null;
+  const previousSessionContext = sessionContexts[index - 1] || null;
+  const previousPriorSessionLow = previousSessionContext?.priorSessionLow ?? null;
+  const previousPriorSwingLowIndex = findPriorConfirmedSwingLowIndex(lows, index - 1, 20, 2);
+  const previousPriorSwingLow = previousPriorSwingLowIndex != null ? lows[previousPriorSwingLowIndex] : null;
+  const previousPriorSwingLowRsi14 = previousPriorSwingLowIndex != null ? rsi14[previousPriorSwingLowIndex] : null;
+  const breakdown = resolveBrokenReferenceLevel({
+    sessionLowBeforeBar: previousSessionLowBeforeBar,
+    priorSessionLow: previousPriorSessionLow,
+    priorSwingLow: previousPriorSwingLow,
+    low: lows[index - 1],
+  });
+  const previousBullishRsiDivergence = (
+    Number.isFinite(previousPriorSwingLow) &&
+    Number.isFinite(previousPriorSwingLowRsi14) &&
+    Number.isFinite(rsi14[index - 1]) &&
+    lows[index - 1] < (previousPriorSwingLow * 0.9995) &&
+    rsi14[index - 1] >= (previousPriorSwingLowRsi14 + 2.5)
+  );
+  const previousLowerBandTouched = Number.isFinite(bollinger20.lower[index - 1])
+    ? lows[index - 1] <= (bollinger20.lower[index - 1] * 1.005)
+    : false;
+  const previousCandleRange = Math.max(
+    Number(bars[index - 1].high) - Number(bars[index - 1].low),
+    closes[index - 1] * 0.0003,
+  );
+  const previousRejectionStrength = previousCandleRange > 0
+    ? ((Number(bars[index - 1].close) - Number(bars[index - 1].low)) / previousCandleRange)
+    : null;
+  const reclaimCloseConfirmed = Boolean(
+    breakdown &&
+    breakdown.depthPct >= 0.0006 &&
+    closes[index - 1] > breakdown.level &&
+    previousRejectionStrength != null &&
+    previousRejectionStrength >= 0.52
+  );
+  const reclaimHoldConfirmed = Boolean(
+    breakdown &&
+    reclaimCloseConfirmed &&
+    lows[index] >= (breakdown.level * 0.999) &&
+    closes[index] >= breakdown.level &&
+    closes[index] > Number(bars[index].open)
+  );
+
+  return {
+    brokenReferenceLevel: breakdown?.level ?? null,
+    brokenReferenceKind: breakdown?.kind ?? null,
+    breakdownDepthPct: breakdown?.depthPct ?? null,
+    previousBullishRsiDivergence,
+    previousLowerBandTouched,
+    reclaimCloseConfirmed,
+    reclaimHoldConfirmed,
+  };
+}
+
 function enrichBarsWithSignals(
   bars,
   strategy,
@@ -1362,11 +2565,26 @@ function enrichBarsWithSignals(
   const ema20 = computeEmaSeries(closes, 20);
   const ema50 = computeEmaSeries(closes, 50);
   const rsi14 = computeRsiSeries(closes, 14);
+  const bollinger20 = computeBollingerBandsSeries(closes, 20, 2);
+  const stochRsi14 = computeStochRsiSeries(rsi14, 14, 3, 3);
   const getSessionKey = (timestamp) => buildWindowSessionKey(timestamp, { config, windowMode: normalizedWindowMode });
+  const openingRangeBars = Math.max(1, Math.round(Number(
+    strategy.metadata?.openingRangeBars ||
+    strategy.simulation?.openingRangeBars ||
+    3
+  )));
+  const getOpeningRangeSessionKey = (timestamp) => buildWindowSessionKey(timestamp, {
+    config,
+    windowMode: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode,
+  });
   const vwap = computeSessionVwapSeries(bars, getSessionKey);
   const sessionContexts = computeSessionRangeContexts(bars, getSessionKey);
+  const openingRangeContexts = computeSessionOpeningRangeContexts(bars, openingRangeBars, getOpeningRangeSessionKey);
+  const openingRangeSessionContexts = computeSessionRangeContexts(bars, getOpeningRangeSessionKey);
+  const openingRangeSessionVwap = computeSessionVwapSeries(bars, getOpeningRangeSessionKey);
   let currentSessionKey = null;
   let currentSessionStartIndex = -1;
+  let eventShockLockoutRemaining = 0;
 
   return bars.map((bar, index) => {
     const priorClose = index > 0 ? closes[index - 1] : null;
@@ -1376,11 +2594,16 @@ function enrichBarsWithSignals(
       currentSessionStartIndex = sessionKey ? index : -1;
     }
     const window = classifyWindow(bar.timestamp, { config, windowMode: normalizedWindowMode });
+    const openingRangeWindow = classifyScheduledWindow(bar.timestamp, config);
     const barsSinceSessionStart = sessionKey && currentSessionStartIndex >= 0 ? (index - currentSessionStartIndex) : null;
     const volumeAverage = sma(volumes, 20, index);
     const volumeRatio = volumeAverage && volumeAverage > 0 ? volumes[index] / volumeAverage : null;
+    const previousVolumeAverage = index > 0 ? sma(volumes, 20, index - 1) : null;
+    const previousVolumeRatio = previousVolumeAverage && previousVolumeAverage > 0 ? volumes[index - 1] / previousVolumeAverage : null;
     const pctChange = priorClose && priorClose > 0 ? (closes[index] - priorClose) / priorClose : 0;
     const sessionContext = sessionContexts[index];
+    const openingRangeContext = openingRangeContexts[index];
+    const openingRangeSessionContext = openingRangeSessionContexts[index];
     const priorContext = (
       index > 0 &&
       sessionKey != null &&
@@ -1388,19 +2611,49 @@ function enrichBarsWithSignals(
     ) ? sessionContexts[index - 1] : null;
     const sessionHighBeforeBar = priorContext?.sessionHigh ?? sessionContext?.sessionHigh ?? null;
     const sessionLowBeforeBar = priorContext?.sessionLow ?? sessionContext?.sessionLow ?? null;
+    const openingRangePriorContext = (
+      index > 0 &&
+      getOpeningRangeSessionKey(bar.timestamp) != null &&
+      getOpeningRangeSessionKey(bar.timestamp) === getOpeningRangeSessionKey(bars[index - 1].timestamp)
+    ) ? openingRangeSessionContexts[index - 1] : null;
+    const openingRangeSessionHighBeforeBar = openingRangePriorContext?.sessionHigh ?? openingRangeSessionContext?.sessionHigh ?? null;
+    const openingRangeSessionLowBeforeBar = openingRangePriorContext?.sessionLow ?? openingRangeSessionContext?.sessionLow ?? null;
+    const priorSwingLowIndex = findPriorConfirmedSwingLowIndex(lows, index, 20, 2);
+    const priorSwingLow = priorSwingLowIndex != null ? lows[priorSwingLowIndex] : null;
+    const priorSwingLowRsi14 = priorSwingLowIndex != null ? rsi14[priorSwingLowIndex] : null;
+    const bullishRsiDivergence = (
+      Number.isFinite(priorSwingLow) &&
+      Number.isFinite(priorSwingLowRsi14) &&
+      Number.isFinite(rsi14[index]) &&
+      lows[index] < (priorSwingLow * 0.9995) &&
+      rsi14[index] >= (priorSwingLowRsi14 + 2.5)
+    );
     const sessionRangeWidth = (
       Number.isFinite(sessionHighBeforeBar) &&
       Number.isFinite(sessionLowBeforeBar) &&
       closes[index] > 0
     ) ? ((sessionHighBeforeBar - sessionLowBeforeBar) / closes[index]) : null;
+    const openingRangeSessionRangeWidth = (
+      Number.isFinite(openingRangeSessionHighBeforeBar) &&
+      Number.isFinite(openingRangeSessionLowBeforeBar) &&
+      closes[index] > 0
+    ) ? ((openingRangeSessionHighBeforeBar - openingRangeSessionLowBeforeBar) / closes[index]) : null;
     const candleRange = Math.max(Number(bar.high) - Number(bar.low), closes[index] * 0.0003);
     const rejectionStrength = candleRange > 0 ? ((Number(bar.close) - Number(bar.low)) / candleRange) : 0;
     const priorSessionLow = sessionContext?.priorSessionLow ?? null;
     const priorSessionHigh = sessionContext?.priorSessionHigh ?? null;
+    const abnormalRange = sessionRangeWidth != null && sessionRangeWidth >= 0.018;
+    const volumeShock = volumeRatio != null && volumeRatio >= 1.7;
+    const eventShockTrigger = Boolean(window.active && sessionKey && abnormalRange && volumeShock);
+    const eventShockBlocked = eventShockTrigger || eventShockLockoutRemaining > 0;
     let signalValue = 0;
+    let regimeState = window.active && sessionKey ? "monitoring" : "outside_fixed_session";
+    let tradeable = false;
+    const regimeBlockers = [];
 
     if (!window.active || !sessionKey) {
       signalValue = 0;
+      regimeBlockers.push("outside_fixed_session");
     } else if (signalName === "crypto_range_mean_reversion") {
       const nearSessionLow = Number.isFinite(sessionLowBeforeBar)
         ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.0018
@@ -1410,19 +2663,238 @@ function enrichBarsWithSignals(
         : false;
       const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.55;
       const rsiRecovering = rsi14[index] != null && rsi14[index] >= 36 && rsi14[index] <= 58;
-      const nearVwap = vwap[index] != null && closes[index] <= (vwap[index] * 1.0025);
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0025);
+      const nearVwap = vwap[index] != null && !movingAwayFromVwap;
       const containedVolume = volumeRatio == null || volumeRatio <= 1.8;
-      const insideHealthyRange = sessionRangeWidth != null && sessionRangeWidth >= 0.003 && sessionRangeWidth <= 0.02;
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.02 || !containedVolume;
+      const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
+      const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
+      const midRangeBlocked = (!(nearSessionLow || nearPriorSessionLow)) || crossedMidpoint;
       const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 36;
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (expansionBlocked) regimeBlockers.push("expansion");
+      if (midRangeBlocked) regimeBlockers.push("mid_range");
+      if (!rangeReady) regimeBlockers.push("range_not_ready");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable
+        ? "range_tradeable"
+        : (eventShockBlocked
+          ? "range_blocked_event_shock_lockout"
+          : (expansionBlocked
+            ? "range_blocked_expansion"
+            : (midRangeBlocked ? "range_blocked_mid_range" : "range_monitoring")));
       signalValue = (
+        tradeable &&
         sessionTimingOkay &&
-        insideHealthyRange &&
+        rangeReady &&
         nearVwap &&
-        containedVolume &&
         rsiRecovering &&
         rejectionCandle &&
         (nearSessionLow || nearPriorSessionLow)
       ) ? Math.min(1, 0.58 + Math.min(Math.abs(pctChange) * 30, 0.18) + Math.min(rejectionStrength * 0.2, 0.18)) : 0;
+    } else if (signalName === "crypto_bottom_reclaim") {
+      const nearSessionLow = Number.isFinite(sessionLowBeforeBar)
+        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.0018
+        : false;
+      const nearPriorSessionLow = Number.isFinite(priorSessionLow)
+        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.0022
+        : false;
+      const lowerBandTouched = Number.isFinite(bollinger20.lower[index])
+        ? lows[index] <= (bollinger20.lower[index] * 1.005)
+        : false;
+      const stochCrossUp = (
+        Number.isFinite(stochRsi14.k[index]) &&
+        Number.isFinite(stochRsi14.k[index - 1]) &&
+        stochRsi14.k[index] > stochRsi14.k[index - 1] &&
+        stochRsi14.k[index - 1] <= 35 &&
+        stochRsi14.k[index] <= 75
+      );
+      const volumeRamp = index >= 3
+        ? (
+          (volumes[index - 2] > volumes[index - 3] && volumes[index - 1] > volumes[index - 2] && volumes[index] > volumes[index - 1]) ||
+          (volumes[index] > volumes[index - 1] && volumes[index - 1] > volumes[index - 3])
+        )
+        : false;
+      const volumeConfirmed = volumeRamp && volumeRatio != null && volumeRatio >= 1.02 && volumeRatio <= 2.8;
+      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.58;
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0018);
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+      const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
+      const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
+      const midRangeBlocked = (!(nearSessionLow || nearPriorSessionLow)) || crossedMidpoint;
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 8 && barsSinceSessionStart <= 32;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.022 || (volumeRatio != null && volumeRatio > 2.8);
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (expansionBlocked) regimeBlockers.push("expansion");
+      if (midRangeBlocked) regimeBlockers.push("mid_range");
+      if (!rangeReady) regimeBlockers.push("range_not_ready");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable
+        ? "bottom_reclaim_tradeable"
+        : (eventShockBlocked
+          ? "bottom_reclaim_blocked_event_shock_lockout"
+          : (expansionBlocked
+            ? "bottom_reclaim_blocked_expansion"
+            : (midRangeBlocked ? "bottom_reclaim_blocked_mid_range" : "bottom_reclaim_monitoring")));
+      const confluenceCount = [
+        lowerBandTouched,
+        bullishRsiDivergence,
+        stochCrossUp,
+        volumeConfirmed,
+        rejectionCandle,
+      ].filter(Boolean).length;
+      const setupConfirmed = rejectionCandle && confluenceCount >= 3 && (lowerBandTouched || bullishRsiDivergence);
+      const divergenceStrength = bullishRsiDivergence && Number.isFinite(priorSwingLowRsi14) && Number.isFinite(rsi14[index])
+        ? Math.min(Math.max(rsi14[index] - priorSwingLowRsi14, 0) / 20, 0.16)
+        : 0;
+      const stochLift = Number.isFinite(stochRsi14.k[index]) && Number.isFinite(stochRsi14.d[index])
+        ? Math.min(Math.max(stochRsi14.k[index] - stochRsi14.d[index], 0) / 100, 0.08)
+        : 0;
+      signalValue = (
+        tradeable &&
+        setupConfirmed &&
+        (nearSessionLow || nearPriorSessionLow)
+      ) ? Math.min(
+        1,
+        0.42 +
+        (confluenceCount * 0.1) +
+        divergenceStrength +
+        stochLift +
+        Math.min(rejectionStrength * 0.1, 0.08),
+      ) : 0;
+    } else if (signalName === "crypto_failed_breakdown_reclaim") {
+      const failedBreakdownState = buildFailedBreakdownState({
+        index,
+        bars,
+        lows,
+        closes,
+        rsi14,
+        bollinger20,
+        sessionContexts,
+        getSessionKey,
+      });
+      const stochRecovery = (
+        Number.isFinite(stochRsi14.k[index]) &&
+        Number.isFinite(stochRsi14.d[index]) &&
+        stochRsi14.k[index] >= stochRsi14.d[index] &&
+        stochRsi14.k[index] >= 24 &&
+        stochRsi14.k[index] <= 82
+      );
+      const volumeConfirmed = [volumeRatio, previousVolumeRatio]
+        .some((value) => value != null && value >= 0.95 && value <= 3.2);
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0018);
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+      const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
+      const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
+      const midRangeBlocked = (
+        failedBreakdownState.brokenReferenceKind == null ||
+        crossedMidpoint
+      );
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 8 && barsSinceSessionStart <= 34;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.024 || (volumeRatio != null && volumeRatio > 3.2);
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (expansionBlocked) regimeBlockers.push("expansion");
+      if (midRangeBlocked) regimeBlockers.push("mid_range");
+      if (!rangeReady) regimeBlockers.push("range_not_ready");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable
+        ? "failed_breakdown_reclaim_tradeable"
+        : (eventShockBlocked
+          ? "failed_breakdown_reclaim_blocked_event_shock_lockout"
+          : (expansionBlocked
+            ? "failed_breakdown_reclaim_blocked_expansion"
+            : (midRangeBlocked ? "failed_breakdown_reclaim_blocked_mid_range" : "failed_breakdown_reclaim_monitoring")));
+      const confluenceCount = [
+        failedBreakdownState.previousBullishRsiDivergence,
+        failedBreakdownState.previousLowerBandTouched,
+        stochRecovery,
+        volumeConfirmed,
+        closes[index] > Number(bar.open),
+      ].filter(Boolean).length;
+      const depthStrength = failedBreakdownState.breakdownDepthPct != null
+        ? Math.min(Math.max(failedBreakdownState.breakdownDepthPct - 0.0006, 0) / 0.01, 0.16)
+        : 0;
+      signalValue = (
+        tradeable &&
+        failedBreakdownState.reclaimCloseConfirmed &&
+        failedBreakdownState.reclaimHoldConfirmed &&
+        confluenceCount >= 2
+      ) ? Math.min(
+        1,
+        0.46 +
+        (confluenceCount * 0.08) +
+        depthStrength +
+        Math.min(rejectionStrength * 0.1, 0.08),
+      ) : 0;
+    } else if (signalName === "crypto_opening_range_breakout") {
+      const openingRangeVariant = String(strategy.metadata?.openingRangeVariant || "breakout_close");
+      const openingRangeHigh = openingRangeContext?.openingRangeHigh ?? null;
+      const openingRangeWidthPct = openingRangeContext?.openingRangeWidthPct ?? null;
+      const openingRangeComplete = openingRangeContext?.openingRangeComplete === true;
+      const openingRangeBarsSinceSessionStart = openingRangeContext?.barsSinceSessionStart ?? null;
+      const orbVwap = openingRangeSessionVwap[index];
+      const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
+      const aboveVwap = orbVwap != null && closes[index] > orbVwap;
+      const rangeUsable = openingRangeWidthPct != null && openingRangeWidthPct >= 0.0012 && openingRangeWidthPct <= 0.012;
+      const sessionTimingOkay = openingRangeBarsSinceSessionStart != null &&
+        openingRangeBarsSinceSessionStart >= openingRangeBars &&
+        openingRangeBarsSinceSessionStart <= 24;
+      const breakoutBufferFraction = openingRangeWidthPct != null
+        ? Math.min(Math.max(openingRangeWidthPct * 0.08, 0.0004), 0.0012)
+        : 0.0006;
+      const breakoutLevel = Number.isFinite(openingRangeHigh)
+        ? openingRangeHigh * (1 + breakoutBufferFraction)
+        : null;
+      const breakoutCloseSignal = Boolean(
+        openingRangeComplete &&
+        Number.isFinite(breakoutLevel) &&
+        priorClose != null &&
+        priorClose <= breakoutLevel &&
+        closes[index] > breakoutLevel
+      );
+      const breakoutRetestSignal = Boolean(
+        openingRangeComplete &&
+        Number.isFinite(openingRangeHigh) &&
+        priorClose != null &&
+        priorClose > (openingRangeHigh * 1.0004) &&
+        Number(bar.low) <= (openingRangeHigh * 1.0015) &&
+        closes[index] >= (openingRangeHigh * 1.0002) &&
+        closes[index] > Number(bar.open) &&
+        rejectionStrength >= 0.55
+      );
+      const volumeConfirmed = volumeRatio != null && volumeRatio >= (openingRangeVariant === "breakout_retest" ? 0.95 : 1.05);
+      if (!openingRangeWindow.active) regimeBlockers.push("outside_fixed_session");
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (!openingRangeComplete) regimeBlockers.push("opening_range_not_complete");
+      if (!rangeUsable) regimeBlockers.push("opening_range_not_usable");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      if (!(trendOkay && aboveVwap)) regimeBlockers.push("trend_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable
+        ? `opening_range_breakout_tradeable_${openingRangeVariant}`
+        : (eventShockBlocked
+          ? "opening_range_breakout_blocked_event_shock_lockout"
+          : (!openingRangeWindow.active
+            ? "opening_range_breakout_blocked_outside_fixed_session"
+            : "opening_range_breakout_monitoring"));
+      const openingRangeSignal = openingRangeVariant === "breakout_retest"
+        ? breakoutRetestSignal
+        : breakoutCloseSignal;
+      signalValue = (
+        tradeable &&
+        volumeConfirmed &&
+        openingRangeSignal
+      ) ? Math.min(
+        1,
+        0.58 +
+        Math.min((volumeRatio || 0) / 6, 0.2) +
+        Math.min((openingRangeWidthPct || 0) * 8, 0.08) +
+        Math.max(0, pctChange * 40),
+      ) : 0;
     } else if (signalName === "crypto_trend_continuation") {
       const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
       const heldAboveFastTrend = ema20[index] != null && closes[index] > ema20[index];
@@ -1433,16 +2905,50 @@ function enrichBarsWithSignals(
       const rsiOkay = rsi14[index] != null && rsi14[index] >= 54 && rsi14[index] <= 74;
       const volumeBoost = volumeRatio != null && volumeRatio >= 1.05;
       const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 38;
+      tradeable = trendOkay && heldAboveFastTrend;
+      regimeState = tradeable ? "trend_tradeable" : "trend_monitoring";
       signalValue = (trendOkay && heldAboveFastTrend && brokePriorSessionHigh && rsiOkay && volumeBoost && sessionTimingOkay)
         ? Math.min(1, 0.6 + Math.max(0, pctChange * 45) + Math.min((volumeRatio || 0) / 6, 0.18))
         : 0;
     } else if (signalName === "crypto_event_watch") {
-      const abnormalRange = sessionRangeWidth != null && sessionRangeWidth >= 0.018;
-      const volumeShock = volumeRatio != null && volumeRatio >= 1.7;
+      regimeState = eventShockTrigger ? "event_shock" : "event_monitoring";
+      tradeable = false;
+      if (eventShockTrigger) regimeBlockers.push("event_shock_lockout");
       signalValue = (abnormalRange && volumeShock)
         ? Math.min(1, 0.62 + Math.min((volumeRatio || 0) / 6, 0.22))
         : 0;
     }
+
+    if (eventShockTrigger) {
+      eventShockLockoutRemaining = EVENT_SHOCK_LOCKOUT_BARS;
+    } else if (eventShockLockoutRemaining > 0) {
+      eventShockLockoutRemaining -= 1;
+    }
+
+    const failedBreakdownState = signalName === "crypto_failed_breakdown_reclaim"
+      ? buildFailedBreakdownState({
+        index,
+        bars,
+        lows,
+        closes,
+        rsi14,
+        bollinger20,
+        sessionContexts,
+        getSessionKey,
+      })
+      : null;
+    const signalSessionVwap = signalName === "crypto_opening_range_breakout"
+      ? openingRangeSessionVwap[index]
+      : vwap[index];
+    const signalSessionContext = signalName === "crypto_opening_range_breakout"
+      ? openingRangeSessionContext
+      : sessionContext;
+    const signalSessionRangeWidth = signalName === "crypto_opening_range_breakout"
+      ? openingRangeSessionRangeWidth
+      : sessionRangeWidth;
+    const signalBarsSinceSessionStart = signalName === "crypto_opening_range_breakout"
+      ? (openingRangeContext?.barsSinceSessionStart ?? null)
+      : barsSinceSessionStart;
 
     return {
       ...bar,
@@ -1455,17 +2961,60 @@ function enrichBarsWithSignals(
         ema20: round(ema20[index], 6),
         ema50: round(ema50[index], 6),
         rsi14: round(rsi14[index], 4),
-        sessionVwap: round(vwap[index], 6),
-        sessionRangeHigh: round(sessionContext?.sessionHigh, 6),
-        sessionRangeLow: round(sessionContext?.sessionLow, 6),
-        priorSessionHigh: round(priorSessionHigh, 6),
-        priorSessionLow: round(priorSessionLow, 6),
-        sessionRangeMidpoint: round(sessionContext?.sessionRangeMidpoint, 6),
-        sessionRangeWidth: round(sessionRangeWidth, 6),
-        barsSinceSessionStart,
+        bollingerBasis20: round(bollinger20.basis[index], 6),
+        bollingerUpper20: round(bollinger20.upper[index], 6),
+        bollingerLower20: round(bollinger20.lower[index], 6),
+        stochRsiK: round(stochRsi14.k[index], 4),
+        stochRsiD: round(stochRsi14.d[index], 4),
+        sessionVwap: round(signalSessionVwap, 6),
+        sessionRangeHigh: round(signalSessionContext?.sessionHigh, 6),
+        sessionRangeLow: round(signalSessionContext?.sessionLow, 6),
+        priorSessionHigh: round(signalSessionContext?.priorSessionHigh, 6),
+        priorSessionLow: round(signalSessionContext?.priorSessionLow, 6),
+        sessionRangeMidpoint: round(signalSessionContext?.sessionRangeMidpoint, 6),
+        sessionRangeWidth: round(signalSessionRangeWidth, 6),
+        barsSinceSessionStart: signalBarsSinceSessionStart,
         volumeRatio: round(volumeRatio, 4),
         rejectionStrength: round(rejectionStrength, 4),
         pctChange: round(pctChange, 6),
+        priorSwingLow: round(priorSwingLow, 6),
+        priorSwingLowRsi14: round(priorSwingLowRsi14, 4),
+        openingRangeHigh: signalName === "crypto_opening_range_breakout" ? round(openingRangeContext?.openingRangeHigh, 6) : null,
+        openingRangeLow: signalName === "crypto_opening_range_breakout" ? round(openingRangeContext?.openingRangeLow, 6) : null,
+        openingRangeWidthPct: signalName === "crypto_opening_range_breakout" ? round(openingRangeContext?.openingRangeWidthPct, 6) : null,
+        openingRangeComplete: signalName === "crypto_opening_range_breakout" ? openingRangeContext?.openingRangeComplete === true : null,
+        openingRangeVariant: signalName === "crypto_opening_range_breakout"
+          ? String(strategy.metadata?.openingRangeVariant || "breakout_close")
+          : null,
+        bullishRsiDivergence: signalName === "crypto_bottom_reclaim" ? bullishRsiDivergence : null,
+        bottomReclaimLowerBandTouched: signalName === "crypto_bottom_reclaim" ? Number.isFinite(bollinger20.lower[index]) && lows[index] <= (bollinger20.lower[index] * 1.005) : null,
+        bottomReclaimStochRecovery: signalName === "crypto_bottom_reclaim"
+          ? (
+            Number.isFinite(stochRsi14.k[index]) &&
+            Number.isFinite(stochRsi14.k[index - 1]) &&
+            stochRsi14.k[index] > stochRsi14.k[index - 1] &&
+            stochRsi14.k[index - 1] <= 35 &&
+            stochRsi14.k[index] <= 75
+          )
+          : null,
+        bottomReclaimVolumeRamp: signalName === "crypto_bottom_reclaim"
+          ? (
+            index >= 3 &&
+            (
+              (volumes[index - 2] > volumes[index - 3] && volumes[index - 1] > volumes[index - 2] && volumes[index] > volumes[index - 1]) ||
+              (volumes[index] > volumes[index - 1] && volumes[index - 1] > volumes[index - 3])
+            )
+          )
+          : null,
+        brokenReferenceLevel: signalName === "crypto_failed_breakdown_reclaim" ? round(failedBreakdownState?.brokenReferenceLevel, 6) : null,
+        brokenReferenceKind: signalName === "crypto_failed_breakdown_reclaim" ? failedBreakdownState?.brokenReferenceKind || null : null,
+        breakdownDepthPct: signalName === "crypto_failed_breakdown_reclaim" ? round(failedBreakdownState?.breakdownDepthPct, 6) : null,
+        reclaimCloseConfirmed: signalName === "crypto_failed_breakdown_reclaim" ? failedBreakdownState?.reclaimCloseConfirmed === true : null,
+        reclaimHoldConfirmed: signalName === "crypto_failed_breakdown_reclaim" ? failedBreakdownState?.reclaimHoldConfirmed === true : null,
+        regimeState,
+        tradeable,
+        regimeBlockers,
+        eventShockLockoutActive: eventShockBlocked,
       },
       sessionKey,
       market: DEFAULT_MARKET,
@@ -2373,7 +3922,8 @@ function summarizeExperimentLeaders(results, groupKey, limit = 3) {
 
 async function runDayTradingValidation(options = {}) {
   const useCustomStrategies = Array.isArray(options.strategies);
-  const strategies = (useCustomStrategies ? options.strategies : loadStrategies())
+  const strategyUniverse = useCustomStrategies ? options.strategies : loadStrategies();
+  const strategies = strategyUniverse
     .filter((strategy) => FROZEN_CRYPTO_FAMILIES.has(String(strategy.simulation?.entrySignal || "")))
     .filter((strategy) => String(strategy.status || "") !== "disabled");
   const bars = normalizeBarsSelection(options.bars, DEFAULT_CRYPTO_DAY_TRADING_CONFIG.bars);
@@ -2508,10 +4058,14 @@ async function runDayTradingValidation(options = {}) {
     });
   }
 
-  saveStrategies(nextStrategies);
+  const updatedStrategyMap = new Map(nextStrategies.map((strategy) => [strategy.strategyId, strategy]));
+  const persistedStrategies = strategyUniverse.map((strategy) => updatedStrategyMap.get(strategy.strategyId) || strategy);
+  if (!useCustomStrategies) {
+    saveStrategiesIfChanged(strategyUniverse, persistedStrategies);
+  }
   report.paperAccount = broker.getAccountSummary({ accountId });
   report.scoreboard = shared.buildStrategyScoreboard({
-    strategies: loadStrategies(),
+    strategies: persistedStrategies,
     backtests: loadBacktestSummaries(),
     paperSummaries: broker.getStrategySummaries({ accountId }),
   });
@@ -2858,6 +4412,8 @@ async function buildMorningWatchlist(options = {}) {
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
   const now = options.now || nowIso();
   const nowWindow = classifyScheduledWindow(now, DEFAULT_CRYPTO_DAY_TRADING_CONFIG);
+  const profitabilityTicketStore = bundle?.profitabilityTicketStore || readProfitabilityTicketStore();
+  const todayGate = buildTodayGate(profitabilityTicketStore, { now });
   const broker = bundle?.broker || new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly });
   broker.ensureAccount({
     accountId,
@@ -2876,10 +4432,9 @@ async function buildMorningWatchlist(options = {}) {
     .sort(compareWatchlistCandidates)
     .slice(0, limit);
 
-  const items = [];
-  for (const candidate of rankedCandidates) {
+  const items = (await Promise.all(rankedCandidates.map(async (candidate) => {
     const strategy = strategyMap.get(candidate.strategyId);
-    if (!strategy) continue;
+    if (!strategy) return null;
     const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     const trusted = marketData?.trusted !== false;
     const priceSeries = Array.isArray(marketData?.priceSeries) ? marketData.priceSeries : [];
@@ -2906,6 +4461,13 @@ async function buildMorningWatchlist(options = {}) {
     const barAgeMinutes = calculateBarAgeMinutes(lastBar?.timestamp, now);
     const dataFresh = barAgeMinutes != null && barAgeMinutes <= DEFAULT_CRYPTO_DAY_TRADING_CONFIG.maxBarAgeMinutes;
     const alertEligible = candidate.backtest?.eligibleForPromotion === true;
+    const regimeState = String(lastBar?.indicators?.regimeState || "unknown");
+    const tradeable = lastBar?.indicators?.tradeable === true;
+    const regimeBlockers = Array.isArray(lastBar?.indicators?.regimeBlockers) ? lastBar.indicators.regimeBlockers : [];
+    const gateBlockedReasons = [...regimeBlockers];
+    if (strategy.strategyId === BTC_PROFITABILITY_SETUP_ID && todayGate.remainingApprovals <= 0) {
+      gateBlockedReasons.push("daily_trade_cap_reached");
+    }
 
     let liveStatus = "inactive";
     let notifyNow = false;
@@ -2913,6 +4475,16 @@ async function buildMorningWatchlist(options = {}) {
       liveStatus = "untrusted_data";
     } else if (!dataFresh) {
       liveStatus = "stale";
+    } else if (strategy.strategyId === BTC_PROFITABILITY_SETUP_ID && todayGate.remainingApprovals <= 0) {
+      liveStatus = "blocked_daily_cap";
+    } else if (!tradeable && regimeBlockers.length > 0) {
+      liveStatus = regimeBlockers.includes("event_shock_lockout")
+        ? "blocked_event_shock"
+        : regimeBlockers.includes("expansion")
+          ? "blocked_expansion"
+          : regimeBlockers.includes("mid_range")
+            ? "blocked_mid_range"
+            : "blocked_regime";
     } else if (latestSignal && latestSignal.window.active && nowWindow.active && latestSessionKey != null && latestSessionKey === nowSessionKey && barsSinceTrigger != null && barsSinceTrigger <= DEFAULT_CRYPTO_DAY_TRADING_CONFIG.notifyLookbackBars) {
       liveStatus = barsSinceTrigger === 0 ? "triggered_now" : "triggered_recently";
       notifyNow = alertEligible;
@@ -2922,7 +4494,7 @@ async function buildMorningWatchlist(options = {}) {
       liveStatus = "tracking";
     }
 
-    items.push({
+    return {
       strategyId: strategy.strategyId,
       strategyName: strategy.name,
       symbol: strategy.marketUniverse?.symbols?.[0] || null,
@@ -2953,13 +4525,20 @@ async function buildMorningWatchlist(options = {}) {
       barsSinceTrigger,
       barAgeMinutes,
       morningWindowActive: nowWindow.active,
+      regimeState,
+      tradeable,
+      regimeBlockers,
+      approvalSlotsRemaining: strategy.strategyId === BTC_PROFITABILITY_SETUP_ID ? todayGate.remainingApprovals : null,
       dataFresh,
       currentDataTrusted: trusted,
       sessionWindowId: latestSignal?.window?.windowId || lastBarWindow.windowId || null,
       sessionWindowLabel: latestSignal?.window?.windowLabel || lastBarWindow.windowLabel || null,
       sessionActiveNow: nowWindow.active,
-    });
-  }
+      currentPrice: lastBar?.close || null,
+      indicators: lastBar?.indicators || null,
+      reasons: [...new Set(gateBlockedReasons)],
+    };
+  }))).filter(Boolean);
 
   const watchlist = {
     generatedAt: nowIso(),
@@ -2977,6 +4556,7 @@ async function buildMorningWatchlist(options = {}) {
       cutoffEt: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows[0].endEt,
       activeNow: nowWindow.active,
     },
+    todayGate,
     sessionWindow: getWindowSummary(now),
     selectedStrategies: items.length,
     notifyNowCount: items.filter((item) => item.notifyNow).length,
@@ -2990,6 +4570,7 @@ async function buildMorningWatchlist(options = {}) {
 
 function getDayTradingSnapshot(options = {}) {
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  const now = options.now || nowIso();
   const bundle = options.artifactBundle || _readOnlyDayTradingBundle(options);
   const broker = bundle?.broker || new shared.PaperBroker({ ledgerPath: LEDGER_PATH, readOnly: true });
   broker.ensureAccount({
@@ -3000,8 +4581,19 @@ function getDayTradingSnapshot(options = {}) {
   const strategies = bundle?.strategies || loadStrategies({ readOnly: true });
   const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
   const profitabilityJournal = bundle?.profitabilityJournal || readProfitabilityJournal();
+  const profitabilityTicketStore = bundle?.profitabilityTicketStore || readProfitabilityTicketStore();
   const lastReport = isArtifactCompatible(bundle?.lastReport) ? bundle.lastReport : null;
   const lastWatchlist = isArtifactCompatible(bundle?.lastWatchlist) ? bundle.lastWatchlist : null;
+  const pilotSummary = buildProfitabilityPilotSummary(profitabilityJournal.entries, {
+    ticketStore: profitabilityTicketStore,
+    now,
+  });
+  const profitabilityTickets = buildProfitabilityTicketSummary(profitabilityTicketStore, { now });
+  const profitabilityJournalSummary = buildProfitabilityJournalSummary(profitabilityJournal);
+  const artifactHealth = buildArtifactHealth({
+    strategies,
+    lastWatchlist,
+  });
 
   return {
     generatedAt: nowIso(),
@@ -3025,12 +4617,10 @@ function getDayTradingSnapshot(options = {}) {
     lastWatchlist,
     lastImport: bundle?.lastImport || readJson(IMPORT_REPORT_PATH, null),
     operatingPlan: bundle?.operatingPlan || buildOperatingPlan(),
-    pilotSummary: bundle?.pilotSummary || buildProfitabilityPilotSummary(profitabilityJournal.entries),
-    profitabilityJournal: {
-      path: PROFITABILITY_JOURNAL_PATH,
-      entryCount: Array.isArray(profitabilityJournal.entries) ? profitabilityJournal.entries.length : 0,
-      schema: buildProfitabilityJournalSchema(),
-    },
+    pilotSummary,
+    profitabilityJournal: profitabilityJournalSummary,
+    profitabilityTickets,
+    artifactHealth,
   };
 }
 
@@ -3049,6 +4639,7 @@ const __internal = {
     EXPERIMENT_REPORT_PATH,
     IMPORT_REPORT_PATH,
     PROFITABILITY_JOURNAL_PATH,
+    PROFITABILITY_TICKETS_PATH,
   },
   DEFAULT_CRYPTO_DAY_TRADING_CONFIG,
   PROFITABILITY_PROFILE_ID,
@@ -3057,8 +4648,13 @@ const __internal = {
   saveStrategies,
   buildOperatingPlan,
   buildProfitabilityPilotSummary,
+  buildProfitabilityJournalSummary,
+  buildProfitabilityTicketSummary,
+  buildArtifactHealth,
   readProfitabilityJournal,
+  readProfitabilityTicketStore,
   appendProfitabilityJournalEntry,
+  requestProfitabilityPreflightTicket,
   loadNormalizedBars,
   saveNormalizedBars,
   resampleOneMinuteBarsToFiveMinutes,
@@ -3068,6 +4664,7 @@ const __internal = {
   loadCryptoMarketDataForStrategy,
   classifyScheduledWindow,
   classifyWindow,
+  computeSessionOpeningRangeContexts,
   normalizeWindowMode,
   normalizeBarsSelection,
   resolveExperimentWindowModes,
@@ -3081,5 +4678,6 @@ module.exports = {
   runDayTradingExperiments,
   importCryptoDayTradingHistory,
   appendProfitabilityJournalEntry,
+  requestProfitabilityPreflightTicket,
   __internal,
 };

@@ -111,6 +111,7 @@ def _normalized_scan_funnel(value: dict | None) -> dict:
         "policy_fail_closed": bool(payload.get("policy_fail_closed")),
         "include_blocked_policy_picks": bool(payload.get("include_blocked_policy_picks")),
         "include_blocked_guardrail_picks": bool(payload.get("include_blocked_guardrail_picks")),
+        "drop_counts": dict(payload.get("drop_counts") or {}),
     }
 
 
@@ -130,6 +131,8 @@ def _aggregate_scan_funnels(values: list[dict]) -> dict:
             "final_trimmed",
         ):
             aggregate[key] += int(current.get(key) or 0)
+        for key, count in dict(current.get("drop_counts") or {}).items():
+            aggregate["drop_counts"][str(key)] = aggregate["drop_counts"].get(str(key), 0) + int(count or 0)
         for key, count in dict(current.get("policy_counts") or {}).items():
             aggregate["policy_counts"][str(key)] = aggregate["policy_counts"].get(str(key), 0) + int(count or 0)
         for key, count in dict(current.get("guardrail_counts") or {}).items():
@@ -228,6 +231,12 @@ def main() -> int:
         default=[],
         help="Optional cohort id filter. Repeat to shadow-record only selected cohorts from the manifest.",
     )
+    parser.add_argument(
+        "--watchlist-symbol",
+        action="append",
+        default=[],
+        help="Optional explicit watchlist override. Repeat to constrain the scan to a fixed symbol set without using frozen cohorts.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the full summary JSON.")
     args = parser.parse_args()
 
@@ -287,6 +296,11 @@ def main() -> int:
                 )
             )
     else:
+        watchlist_symbols = [
+            str(symbol).strip().upper()
+            for symbol in list(args.watchlist_symbol or [])
+            if str(symbol).strip()
+        ] or [str(symbol).strip().upper() for symbol in oc.DEFAULT_WATCHLIST]
         default_cohort = {
             "id": "live_default",
             "role": "current_live_defaults",
@@ -297,7 +311,7 @@ def main() -> int:
             _run_scan_for_cohort(
                 backend_main=backend_main,
                 cohort=default_cohort,
-                watchlist_symbols=[str(symbol).strip().upper() for symbol in oc.DEFAULT_WATCHLIST],
+                watchlist_symbols=watchlist_symbols,
                 args=args,
                 playbook=playbook,
                 policy=policy,

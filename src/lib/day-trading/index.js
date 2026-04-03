@@ -56,6 +56,10 @@ async function appendCryptoProfitabilityJournalEntry(entry) {
   return cryptoEngine.appendProfitabilityJournalEntry(entry);
 }
 
+async function requestCryptoProfitabilityPreflightTicket(options = {}) {
+  return cryptoEngine.requestProfitabilityPreflightTicket(options);
+}
+
 module.exports = {
   DEFAULT_DAY_TRADING_CONFIG: {
     crypto: cryptoEngine.DEFAULT_DAY_TRADING_CONFIG,
@@ -68,6 +72,7 @@ module.exports = {
   runDayTradingExperiments,
   importCryptoDayTradingHistory,
   appendCryptoProfitabilityJournalEntry,
+  requestCryptoProfitabilityPreflightTicket,
   __markets: {
     crypto: cryptoEngine,
     equities_legacy: equitiesLegacyEngine,

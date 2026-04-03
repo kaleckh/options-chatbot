@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import tempfile
 from pathlib import Path
 
 
@@ -12,6 +11,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from profit_loop_automation import run_profit_loop_canary
+from workspace_tempdir import WorkspaceTempDir
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -26,7 +26,7 @@ def main(argv: list[str] | None = None) -> int:
 
     state_dir = args.state_dir
     if args.temp_state_dir:
-        state_dir = tempfile.mkdtemp(prefix="profit-loop-canary-")
+        state_dir = WorkspaceTempDir(prefix="profit-loop-canary").name
 
     result = run_profit_loop_canary(state_dir=state_dir, dry_run=bool(args.dry_run))
     print(json.dumps(result, indent=2))

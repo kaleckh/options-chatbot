@@ -172,6 +172,25 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(first["Close"].tolist(), second["Close"].tolist())
         self.assertGreaterEqual(len(self.ticker.history_calls), 2)
 
+    def test_recent_refresh_failures_return_cached_daily_history(self):
+        service = self._service()
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", side_effect=self._make_ticker_factory()), \
+             patch.object(service, "datetime", FrozenDateTime):
+            seeded = service.get_history("AAA", period="10d", interval="1d")
+
+        self.assertFalse(seeded.empty)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "_fetch_history_direct", side_effect=RuntimeError("recent refresh unavailable")), \
+             patch.object(service, "datetime", FrozenDateTime):
+            recovered = service.get_history("AAA", period="10d", interval="1d")
+
+        self.assertEqual(seeded["Close"].tolist(), recovered["Close"].tolist())
+        history_stats = service.get_cache_stats()["stats"]["history"]
+        self.assertEqual(history_stats["full_refresh_failures"], 1)
+        self.assertEqual(history_stats["stale_cache_returns"], 1)
+
     def test_ttl_cache_reuses_options_and_fast_info(self):
         service = self._service()
         with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \

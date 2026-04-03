@@ -4,7 +4,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -25,6 +24,7 @@ import wfo_optimizer as wfo
 from forward_options_ledger import DEFAULT_FORWARD_LEDGER_DB_PATH, init_forward_ledger
 from options_algorithm_fixtures import FrozenDateTime, build_options_algorithm_fixture_bundle, load_backend_main
 from positions_repository import MemoryTrackedPositionsRepository
+from workspace_tempdir import WorkspaceTempDir
 
 
 def _require_keys(payload: dict, keys: set[str], label: str):
@@ -58,6 +58,19 @@ def _expectancy_loader_for_path(results_path: str):
         )
 
     return _loader
+
+
+def _fixture_truth_store_db_path() -> str | None:
+    daily_result = wfo._load_json_file(wfo.OPTIONS_VALIDATION_DAILY_LATEST_FILE)
+    truth_store = dict((daily_result or {}).get("truth_store") or {})
+    candidate = str(truth_store.get("db_path") or "").strip()
+    if candidate and os.path.exists(candidate):
+        return candidate
+    summary = wfo._current_imported_store_summary(wfo.IMPORTED_DAILY_TRUTH_SOURCE)
+    candidate = str((summary or {}).get("db_path") or "").strip()
+    if candidate and os.path.exists(candidate):
+        return candidate
+    return None
 
 
 def _run_git_command(*args: str) -> dict[str, Any]:
@@ -255,6 +268,7 @@ def _run_smoke_sequence(
     calibrated_scan_payload = calibrated_scan_response.json()
 
     summary = {
+        "requested_policy_truth_lane": policy_truth_lane,
         "scan_picks": len(scan_payload["picks"]),
         "scan_candidate_count": scan_payload.get("candidate_count"),
         "scan_returned_count": scan_payload.get("returned_count"),
@@ -280,6 +294,7 @@ def _run_smoke_sequence(
             else None
         ),
         "live_policy_truth_source": live_policy_payload.get("truth_source"),
+        "live_policy_error": live_policy_payload.get("error"),
         "live_policy_promotion_status": live_policy_payload.get("scan_policy", {}).get("promotion_status"),
         "live_policy_quote_coverage_pct": live_policy_payload.get("quote_coverage_pct"),
         "scan_calibrated_expectancy_count": sum(
@@ -301,7 +316,7 @@ def _run_live_smoke(
     iv_adj: float,
     min_trades: int,
 ) -> dict[str, Any]:
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with WorkspaceTempDir(prefix="options-algorithm-smoke-live") as tmpdir:
         db_path = os.path.join(tmpdir, "chat_history.db")
         results_path = os.path.join(tmpdir, "wfo_results.json")
         imported_results_dir = os.path.join(tmpdir, "options_validation_runs")
@@ -336,18 +351,16 @@ def _run_fixture_smoke(
 ) -> dict[str, Any]:
     bundle = build_options_algorithm_fixture_bundle()
 
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with WorkspaceTempDir(prefix="options-algorithm-smoke-fixture") as tmpdir:
         db_path = os.path.join(tmpdir, "chat_history.db")
         results_path = os.path.join(tmpdir, "wfo_results.json")
-        imported_results_dir = os.path.join(tmpdir, "options_validation_runs")
-        imported_latest_path = os.path.join(imported_results_dir, "latest.json")
-        imported_daily_latest_path = os.path.join(imported_results_dir, "latest_daily.json")
         forward_ledger_path = os.path.join(tmpdir, "forward_tracking_fixture.db")
+        fixture_truth_store_db_path = _fixture_truth_store_db_path()
         with patch.dict(
             os.environ,
             {
                 "MARKET_DATA_DB_PATH": os.path.join(tmpdir, "market_data.db"),
-                "HISTORICAL_OPTIONS_DB_PATH": os.path.join(tmpdir, "options_history.db"),
+                "HISTORICAL_OPTIONS_DB_PATH": fixture_truth_store_db_path or os.path.join(tmpdir, "options_history.db"),
                 "FORWARD_OPTIONS_LEDGER_DB_PATH": forward_ledger_path,
                 "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": forward_ledger_path,
                 "OPTIONS_EVIDENCE_CLASS": "fixture_smoke",
@@ -376,11 +389,6 @@ def _run_fixture_smoke(
                     )
                 )
                 stack.enter_context(patch.object(wfo, "WFO_RESULTS_FILE", results_path))
-                stack.enter_context(patch.object(wfo, "OPTIONS_VALIDATION_RESULTS_DIR", imported_results_dir))
-                stack.enter_context(patch.object(wfo, "OPTIONS_VALIDATION_LATEST_FILE", imported_latest_path))
-                stack.enter_context(
-                    patch.object(wfo, "OPTIONS_VALIDATION_DAILY_LATEST_FILE", imported_daily_latest_path)
-                )
                 stack.enter_context(patch.object(backend, "POSITIONS_REPOSITORY", MemoryTrackedPositionsRepository()))
 
                 client = TestClient(backend.app)
@@ -391,9 +399,10 @@ def _run_fixture_smoke(
                         lookback_years=lookback_years,
                         iv_adj=iv_adj,
                         min_trades=min_trades,
-                        policy_truth_lane="synthetic",
+                        policy_truth_lane=str(getattr(backend, "LIVE_SCAN_TRUTH_LANE", "historical_imported_daily")),
                     )
                     summary["forward_truth_runtime_db_path"] = str(Path(forward_ledger_path).resolve())
+                    summary["fixture_truth_store_db_path"] = fixture_truth_store_db_path
                     return summary
                 finally:
                     client.close()

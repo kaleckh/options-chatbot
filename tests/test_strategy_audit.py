@@ -418,6 +418,52 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(requested_dtes["AAPL"], int(oc.STRATEGY_PROFILES["equity"]["targets"]["dte_optimal"]))
         self.assertTrue(any(pick["ticker"] == "SPY" and pick["dte"] == 19 for pick in picks))
 
+    def test_scan_uses_live_current_spot_for_contract_selection_when_market_is_open(self):
+        requested_prices = {}
+
+        def fake_fetch_best_option(ticker, trade_type, delta_target, target_dte, stock_price=0.0, hv30_fallback=0.30, **kwargs):
+            requested_prices[ticker] = stock_price
+            return {
+                "strike": 100.0,
+                "premium": 1.5,
+                "bid": 1.49,
+                "ask": 1.51,
+                "expiry": "2026-04-17",
+                "dte": 19,
+                "delta": 0.30,
+            }
+
+        with patch.object(oc, "DEFAULT_WATCHLIST", ["SPY"]), \
+             patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \
+             patch.object(oc, "_market_is_open", return_value=True), \
+             patch.object(oc, "_cached_fast_info", return_value={"last_price": 250.0}), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
+             patch.object(oc, "_fetch_best_option", side_effect=fake_fetch_best_option), \
+             patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
+             patch.object(oc, "_generate_trade_strategy", return_value={
+                 "label": "Hold to target",
+                 "comment": "Uses live spot",
+                 "sl_option_px": 1.0,
+                 "tp_option_px": 3.0,
+                 "stock_sl": 245.0,
+                 "stock_tp": 260.0,
+             }), \
+             patch.object(oc, "_get_market_regime", return_value={
+                 "position_size_mult": 1.0,
+                 "stop_loss_mult": 1.0,
+                 "regime_notes": ["Normal market conditions"],
+                 "defense_mode": False,
+                 "vix": 18.0,
+             }):
+            picks = oc.scan_daily_top_trades(n_picks=1)
+
+        self.assertEqual(requested_prices["SPY"], 250.0)
+        self.assertEqual(picks[0]["stock_price"], 250.0)
+        self.assertEqual(picks[0]["current_spot"], 250.0)
+        self.assertEqual(picks[0]["underlying_price_at_selection"], 250.0)
+        self.assertNotEqual(picks[0]["entry_price"], picks[0]["stock_price"])
+
     def test_scan_rejects_options_without_live_quotes(self):
         with patch.object(oc, "DEFAULT_WATCHLIST", ["AAPL"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \

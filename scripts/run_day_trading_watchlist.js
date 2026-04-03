@@ -33,6 +33,7 @@ async function main() {
     market: watchlist.market,
     sessionWindow: watchlist.sessionWindow || null,
     morningWindow: watchlist.morningWindow,
+    todayGate: watchlist.todayGate || null,
     selectedStrategies: watchlist.selectedStrategies,
     notifyNowCount: watchlist.notifyNowCount,
     items: watchlist.items.map((item) => ({
@@ -41,6 +42,10 @@ async function main() {
       liveStatus: item.liveStatus,
       notifyNow: item.notifyNow,
       alertEligible: item.alertEligible,
+      regimeState: item.regimeState || null,
+      tradeable: item.tradeable === true,
+      regimeBlockers: item.regimeBlockers || [],
+      approvalSlotsRemaining: item.approvalSlotsRemaining ?? null,
       currentDataTrusted: item.currentDataTrusted,
       barAgeMinutes: item.barAgeMinutes,
       currentSignalValue: item.currentSignalValue,

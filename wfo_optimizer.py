@@ -3654,9 +3654,13 @@ def build_live_options_trade_policy(
     gates plus soft preferences that can label live scan picks as Approved / Watch /
     Blocked inside the supervised options workflow.
     """
+    requested_truth_lane = str(truth_lane or "").strip().lower()
     if result is None:
         result = load_preferred_results_by_truth_lane(truth_lane)
-    requested_truth_lane = str(truth_lane or "").strip().lower()
+    if requested_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE:
+        result_truth_source = _result_truth_source(result) if result else ""
+        if not result or result_truth_source != IMPORTED_DAILY_TRUTH_SOURCE:
+            return {"error": f"No backtest results found for truth_lane={requested_truth_lane}"}
     if not result and requested_truth_lane:
         return {"error": f"No backtest results found for truth_lane={requested_truth_lane}"}
     matrix = build_options_experiment_matrix(
@@ -6273,6 +6277,8 @@ def run_historical_backtest(
         "truth_source":      normalized_truth_lane,
         "lookback_years":    lookback_years,
         "iv_adj":            iv_adj,
+        "requested_pricing_lane": pricing_lane,
+        "effective_pricing_lane": effective_pricing_lane,
         "pricing_lane":      effective_pricing_lane,
         "playbook":          replay_playbook["id"],
         "n_picks":           n_picks,

@@ -1,7 +1,6 @@
 import json
 import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -18,6 +17,7 @@ from forward_options_ledger import build_forward_scan_snapshot, record_forward_s
 from historical_options_fixtures import make_validation_history, write_daily_options_parquet
 from historical_options_store import HistoricalOptionsStore, import_daily_option_parquet
 from options_profit_gate import evaluate_measurement_gate
+from workspace_tempdir import WorkspaceTempDir
 
 
 class _StubRepo:
@@ -36,7 +36,7 @@ class _StubRepo:
 
 class OptionsProfitGateTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = WorkspaceTempDir(prefix="options-profit-gate")
         self.addCleanup(self._tmp.cleanup)
         self.tmpdir = Path(self._tmp.name)
         self.db_path = self.tmpdir / "options_history.db"
@@ -201,6 +201,100 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertEqual(result["state"], "degraded-watch")
         self.assertIn("insufficient_eligible_forward_truth", blocker_codes)
         self.assertIn("insufficient_closed_tracked_positions", blocker_codes)
+
+    def test_gate_returns_healthy_when_truth_forward_evidence_and_positions_are_ready(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [{} for _ in range(12)],
+            "eligible_event_count": 12,
+            "pending_truth_events": [],
+            "pending_truth_event_count": 0,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {
+                "SPY": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+                "QQQ": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+            },
+        }
+        closed_positions = [
+            {
+                "contract_symbol": "SPY240101C00500000",
+                "entry_execution_price": 2.0,
+                "exit_execution_price": 3.0,
+                "net_pnl_pct": 50.0,
+                "gross_pnl_pct": 50.0,
+                "net_pnl_usd": 100.0,
+                "gross_pnl_usd": 100.0,
+            }
+        ]
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True, closed_positions=closed_positions)):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=10,
+                            min_eligible_events_per_symbol=3,
+                            min_closed_tracked_positions=1,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
+                        )
+
+        self.assertEqual(result["state"], "healthy")
+        self.assertEqual(result["blockers"], [])
+        self.assertTrue(result["checks"]["tracked_positions"]["available"])
+        self.assertEqual(result["checks"]["forward_evidence"]["eligible_event_count"], 12)
+        self.assertEqual(result["checks"]["forward_evidence"]["trusted_truth_horizon"], "2026-04-01")
+        self.assertIn("requested_manifest_inputs", result["checks"]["forward_evidence"])
+        self.assertIn("daily_truth_source_latest_mtime_utc", result["checks"]["forward_evidence"])
+        self.assertIn("daily_truth_source_stale", result["checks"]["forward_evidence"])
+        self.assertIn("requested_manifest_inputs", result["checks"]["imported_daily_artifact"])
+        self.assertIn("daily_truth_source_latest_mtime_utc", result["checks"]["imported_daily_artifact"])
+        self.assertIn("daily_truth_source_stale", result["checks"]["imported_daily_artifact"])
+
+    def test_gate_blocks_when_tracked_positions_are_unavailable(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [{} for _ in range(12)],
+            "eligible_event_count": 12,
+            "pending_truth_events": [],
+            "pending_truth_event_count": 0,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {
+                "SPY": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+                "QQQ": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+            },
+        }
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch(
+                        "options_profit_gate.create_positions_repository",
+                        return_value=_StubRepo(
+                            available=False,
+                            error_message="Tracked positions are unavailable because DATABASE_URL is not configured.",
+                        ),
+                    ):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=10,
+                            min_eligible_events_per_symbol=3,
+                            min_closed_tracked_positions=1,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
+                        )
+
+        blocker_codes = [item["code"] for item in result["blockers"]]
+        self.assertEqual(result["state"], "blocked")
+        self.assertIn("tracked_positions_unavailable", blocker_codes)
+        self.assertFalse(result["checks"]["tracked_positions"]["available"])
 
 
 if __name__ == "__main__":

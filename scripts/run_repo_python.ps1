@@ -29,6 +29,65 @@ function Get-StableFileStamp([string[]]$Paths) {
     return ($parts -join "`n")
 }
 
+function Enable-ProcessGitSafeDirectory([string]$SafeDirectory) {
+    $trackedNames = New-Object System.Collections.Generic.HashSet[string]
+    $backup = @{}
+
+    foreach ($entry in (Get-ChildItem Env: | Where-Object { $_.Name -like "GIT_CONFIG_*" })) {
+        $trackedNames.Add($entry.Name) | Out-Null
+        $backup[$entry.Name] = [Environment]::GetEnvironmentVariable($entry.Name, "Process")
+    }
+
+    $trackedNames.Add("GIT_CONFIG_COUNT") | Out-Null
+    if (-not $backup.ContainsKey("GIT_CONFIG_COUNT")) {
+        $backup["GIT_CONFIG_COUNT"] = [Environment]::GetEnvironmentVariable("GIT_CONFIG_COUNT", "Process")
+    }
+
+    $existingCount = 0
+    $rawCount = [Environment]::GetEnvironmentVariable("GIT_CONFIG_COUNT", "Process")
+    if (-not [string]::IsNullOrWhiteSpace($rawCount)) {
+        try {
+            $existingCount = [int]$rawCount
+        }
+        catch {
+            $existingCount = 0
+        }
+    }
+
+    $newIndex = $existingCount
+    $keyName = "GIT_CONFIG_KEY_$newIndex"
+    $valueName = "GIT_CONFIG_VALUE_$newIndex"
+    foreach ($name in @($keyName, $valueName)) {
+        $trackedNames.Add($name) | Out-Null
+        if (-not $backup.ContainsKey($name)) {
+            $backup[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+        }
+    }
+
+    [Environment]::SetEnvironmentVariable("GIT_CONFIG_COUNT", [string]($existingCount + 1), "Process")
+    [Environment]::SetEnvironmentVariable($keyName, "safe.directory", "Process")
+    [Environment]::SetEnvironmentVariable($valueName, $SafeDirectory, "Process")
+
+    return @{
+        TrackedNames = @($trackedNames)
+        Backup = $backup
+    }
+}
+
+function Restore-ProcessGitEnvironment($Snapshot) {
+    if (-not $Snapshot) {
+        return
+    }
+
+    foreach ($name in @($Snapshot.TrackedNames)) {
+        $previous = $null
+        if ($Snapshot.Backup.ContainsKey($name)) {
+            $previous = $Snapshot.Backup[$name]
+        }
+        [Environment]::SetEnvironmentVariable($name, $previous, "Process")
+    }
+}
+
 function Get-CanonicalRepoRoot([string]$RepoRoot) {
     $worktreeOutput = & git -C $RepoRoot worktree list --porcelain 2>$null
     if ($LASTEXITCODE -ne 0 -or -not $worktreeOutput) {
@@ -70,73 +129,84 @@ function Sync-ValidationArtifacts([string]$CanonicalRoot, [string]$RepoRoot) {
     }
 
     Write-Host "Syncing validation artifacts from $CanonicalRoot"
-    if (Test-Path -LiteralPath $targetValidationRoot) {
-        Copy-Item -LiteralPath (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
+    try {
+        if (Test-Path -LiteralPath $targetValidationRoot) {
+            Copy-Item -LiteralPath (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
+        }
+        else {
+            Copy-Item -LiteralPath $sourceValidationRoot -Destination $targetValidationRoot -Recurse -Force
+        }
     }
-    else {
-        Copy-Item -LiteralPath $sourceValidationRoot -Destination $targetValidationRoot -Recurse -Force
+    catch {
+        Write-Warning "Validation artifact sync failed and will be skipped: $($_.Exception.Message)"
     }
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDir ".."))
-$canonicalRoot = Get-CanonicalRepoRoot -RepoRoot $repoRoot
-
-if (-not $SkipArtifactSync) {
-    Sync-ValidationArtifacts -CanonicalRoot $canonicalRoot -RepoRoot $repoRoot
-}
-
-$venvRoot = Join-Path $repoRoot ".venv"
-$venvPython = Join-Path $venvRoot "Scripts\python.exe"
-$stampPath = Join-Path $venvRoot ".automation-deps-stamp"
-$requirements = @(
-    (Join-Path $repoRoot "requirements.txt"),
-    (Join-Path $repoRoot "pyproject.toml"),
-    (Join-Path $repoRoot "python-backend\requirements.txt")
-) | Where-Object { Test-Path -LiteralPath $_ }
-$currentStamp = Get-StableFileStamp -Paths $requirements
-
-if (-not (Test-Path -LiteralPath $venvPython)) {
-    $bootstrap = Get-SystemPythonCommand
-    Write-Host "Creating repo-local virtualenv at $venvRoot"
-    if ($bootstrap.Length -gt 1) {
-        & $bootstrap[0] $bootstrap[1..($bootstrap.Length - 1)] -m venv $venvRoot
-    }
-    else {
-        & $bootstrap[0] -m venv $venvRoot
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create repo-local virtualenv."
-    }
-}
-
-$previousStamp = if (Test-Path -LiteralPath $stampPath) { (Get-Content -LiteralPath $stampPath -Raw).TrimEnd("`r", "`n") } else { "" }
-$normalizedCurrentStamp = $currentStamp.TrimEnd("`r", "`n")
-if ($ForceInstall -or $previousStamp -ne $normalizedCurrentStamp) {
-    $installArgs = @(
-        "-m", "pip", "--disable-pip-version-check", "install",
-        "-r", (Join-Path $repoRoot "requirements.txt"),
-        "-r", (Join-Path $repoRoot "python-backend\requirements.txt")
-    )
-    Write-Host "Installing repo Python dependencies into $venvRoot"
-    & $venvPython @installArgs
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install repo Python dependencies."
-    }
-    Set-Content -LiteralPath $stampPath -Value $normalizedCurrentStamp -Encoding UTF8 -NoNewline
-}
-
-if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
-    Write-Output $venvPython
-    exit 0
-}
-
-$env:PYTHONUTF8 = "1"
-Push-Location $repoRoot
+$gitEnvSnapshot = Enable-ProcessGitSafeDirectory -SafeDirectory $repoRoot
 try {
-    & $venvPython @CommandArgs
-    exit $LASTEXITCODE
+    $canonicalRoot = Get-CanonicalRepoRoot -RepoRoot $repoRoot
+
+    if (-not $SkipArtifactSync) {
+        Sync-ValidationArtifacts -CanonicalRoot $canonicalRoot -RepoRoot $repoRoot
+    }
+
+    $venvRoot = Join-Path $repoRoot ".venv"
+    $venvPython = Join-Path $venvRoot "Scripts\python.exe"
+    $stampPath = Join-Path $venvRoot ".automation-deps-stamp"
+    $requirements = @(
+        (Join-Path $repoRoot "requirements.txt"),
+        (Join-Path $repoRoot "pyproject.toml"),
+        (Join-Path $repoRoot "python-backend\requirements.txt")
+    ) | Where-Object { Test-Path -LiteralPath $_ }
+    $currentStamp = Get-StableFileStamp -Paths $requirements
+
+    if (-not (Test-Path -LiteralPath $venvPython)) {
+        $bootstrap = Get-SystemPythonCommand
+        Write-Host "Creating repo-local virtualenv at $venvRoot"
+        if ($bootstrap.Length -gt 1) {
+            & $bootstrap[0] $bootstrap[1..($bootstrap.Length - 1)] -m venv $venvRoot
+        }
+        else {
+            & $bootstrap[0] -m venv $venvRoot
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to create repo-local virtualenv."
+        }
+    }
+
+    $previousStamp = if (Test-Path -LiteralPath $stampPath) { (Get-Content -LiteralPath $stampPath -Raw).TrimEnd("`r", "`n") } else { "" }
+    $normalizedCurrentStamp = $currentStamp.TrimEnd("`r", "`n")
+    if ($ForceInstall -or $previousStamp -ne $normalizedCurrentStamp) {
+        $installArgs = @(
+            "-m", "pip", "--disable-pip-version-check", "install",
+            "-r", (Join-Path $repoRoot "requirements.txt"),
+            "-r", (Join-Path $repoRoot "python-backend\requirements.txt")
+        )
+        Write-Host "Installing repo Python dependencies into $venvRoot"
+        & $venvPython @installArgs
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install repo Python dependencies."
+        }
+        Set-Content -LiteralPath $stampPath -Value $normalizedCurrentStamp -Encoding UTF8 -NoNewline
+    }
+
+    if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
+        Write-Output $venvPython
+        exit 0
+    }
+
+    $env:PYTHONUTF8 = "1"
+    Push-Location $repoRoot
+    try {
+        & $venvPython @CommandArgs
+        exit $LASTEXITCODE
+    }
+    finally {
+        Pop-Location
+    }
 }
 finally {
-    Pop-Location
+    Restore-ProcessGitEnvironment -Snapshot $gitEnvSnapshot
 }

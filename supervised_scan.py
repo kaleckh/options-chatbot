@@ -15,6 +15,20 @@ from wfo_optimizer import (
 
 _ET = ZoneInfo("America/New_York")
 LIVE_SCAN_TRUTH_LANE = IMPORTED_DAILY_TRUTH_SOURCE
+SCAN_FUNNEL_DROP_KEYS = (
+    "min_history",
+    "history_or_liquidity",
+    "signal_index",
+    "momentum",
+    "tech_score",
+    "direction_score",
+    "earnings",
+    "option_liquidity",
+    "iv_crush_penalty",
+    "ev_floor",
+    "guardrails",
+    "exceptions",
+)
 
 
 SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
@@ -98,6 +112,14 @@ def _normalized_label_set(values: list[Any]) -> set[str]:
         if text:
             labels.add(text)
     return labels
+
+
+def _normalized_scan_drop_counts(value: Optional[dict[str, Any]]) -> dict[str, int]:
+    payload = dict(value or {})
+    normalized = {key: 0 for key in SCAN_FUNNEL_DROP_KEYS}
+    for key in SCAN_FUNNEL_DROP_KEYS:
+        normalized[key] = int(payload.get(key) or 0)
+    return normalized
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -552,6 +574,7 @@ def _build_scan_funnel(
     policy_fail_closed: bool,
     include_blocked_policy_picks: bool,
     include_blocked_guardrail_picks: bool,
+    drop_counts: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     normalized_policy_counts = {
         "approved": int((policy_counts or {}).get("approved") or 0),
@@ -567,6 +590,8 @@ def _build_scan_funnel(
     post_policy_visible = max(int(post_policy_visible_count or 0), 0)
     post_guardrails_visible = max(int(post_guardrail_visible_count or 0), 0)
     returned_picks = max(int(returned_count or 0), 0)
+    normalized_drop_counts = _normalized_scan_drop_counts(drop_counts)
+    normalized_drop_counts["guardrails"] += max(post_policy_visible - post_guardrails_visible, 0)
     return {
         "raw_candidates": raw_candidates,
         "post_policy_visible": post_policy_visible,
@@ -581,6 +606,7 @@ def _build_scan_funnel(
         "policy_fail_closed": bool(policy_fail_closed),
         "include_blocked_policy_picks": bool(include_blocked_policy_picks),
         "include_blocked_guardrail_picks": bool(include_blocked_guardrail_picks),
+        "drop_counts": normalized_drop_counts,
     }
 
 
@@ -611,6 +637,7 @@ def run_supervised_scan(
             calibration_playbook=str(playbook.get("calibration_playbook") or "broad"),
         )
     )
+    scan_drop_counts = _normalized_scan_drop_counts(getattr(scan_func, "_last_scan_drop_counts", None))
     candidate_count = len(raw_picks)
 
     policy = None
@@ -656,6 +683,7 @@ def run_supervised_scan(
                 policy_fail_closed=True,
                 include_blocked_policy_picks=include_blocked_policy_picks,
                 include_blocked_guardrail_picks=include_blocked_guardrail_picks,
+                drop_counts=scan_drop_counts,
             )
             return {
                 "picks": [],
@@ -696,6 +724,7 @@ def run_supervised_scan(
                 policy_fail_closed=True,
                 include_blocked_policy_picks=include_blocked_policy_picks,
                 include_blocked_guardrail_picks=include_blocked_guardrail_picks,
+                drop_counts=scan_drop_counts,
             )
             return {
                 "picks": [],
@@ -780,6 +809,7 @@ def run_supervised_scan(
         policy_fail_closed=False,
         include_blocked_policy_picks=include_blocked_policy_picks,
         include_blocked_guardrail_picks=include_blocked_guardrail_picks,
+        drop_counts=scan_drop_counts,
     )
 
     return {

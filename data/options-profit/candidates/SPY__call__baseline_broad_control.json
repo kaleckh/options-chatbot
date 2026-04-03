@@ -1,0 +1,15 @@
+{
+  "base_profile": "index",
+  "candidate_id": "SPY__call__baseline_broad_control",
+  "cohort_id": "baseline_broad_control",
+  "created_at": "2026-04-03T18:36:13.669474Z",
+  "direction": "call",
+  "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+  "overrides": {},
+  "replay_policy_path": null,
+  "replay_validation": {},
+  "role": "control",
+  "status": "candidate",
+  "symbol": "SPY",
+  "updated_at": "2026-04-03T18:36:13.669474Z"
+}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -16,11 +15,12 @@ from options_profit_state import (
     load_profit_status,
     save_live_profile_state,
 )
+from workspace_tempdir import WorkspaceTempDir
 
 
 class OptionsProfitCycleTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = WorkspaceTempDir(prefix="options-profit-cycle")
         self.addCleanup(self._tmp.cleanup)
         self.state_dir = os.path.join(self._tmp.name, "options_profit")
         self.forward_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
@@ -40,18 +40,22 @@ class OptionsProfitCycleTests(unittest.TestCase):
     def test_live_profile_overlay_applies_only_to_target_symbol(self):
         ensure_options_profit_state()
         current = load_live_profile_state(refresh=True)
-        current["symbols"]["SPY"]["overrides"] = {
+        current["symbols"]["SPY"]["call"]["overrides"] = {
             "entry": {"min_tech_score": 91.0},
             "filters": {"min_calibrated_expectancy_pct": 11.0},
         }
         save_live_profile_state(current)
 
-        spy_profile = oc._get_profile("SPY")
-        qqq_profile = oc._get_profile("QQQ")
+        spy_call_profile = oc._get_profile("SPY", "call")
+        spy_put_profile = oc._get_profile("SPY", "put")
+        neutral_spy_profile = oc._get_profile("SPY")
+        qqq_call_profile = oc._get_profile("QQQ", "call")
 
-        self.assertEqual(spy_profile["entry"]["min_tech_score"], 91.0)
-        self.assertEqual(spy_profile["filters"]["min_calibrated_expectancy_pct"], 11.0)
-        self.assertNotEqual(qqq_profile["entry"]["min_tech_score"], 91.0)
+        self.assertEqual(spy_call_profile["entry"]["min_tech_score"], 91.0)
+        self.assertEqual(spy_call_profile["filters"]["min_calibrated_expectancy_pct"], 11.0)
+        self.assertNotEqual(spy_put_profile["entry"]["min_tech_score"], 91.0)
+        self.assertNotEqual(neutral_spy_profile["entry"]["min_tech_score"], 91.0)
+        self.assertNotEqual(qqq_call_profile["entry"]["min_tech_score"], 91.0)
 
     def test_profit_cycle_bootstraps_and_records_read_only_when_gate_is_unhealthy(self):
         result = run_options_profit_cycle()
@@ -65,11 +69,12 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertIn("SPY", incumbents["symbols"])
         self.assertIn("QQQ", incumbents["symbols"])
 
-    def test_profit_cycle_keeps_qqq_challenger_shadow_only(self):
+    def test_profit_cycle_keeps_put_challenger_shadow_only(self):
         ensure_options_profit_state()
         shadow_candidate = {
-            "candidate_id": "QQQ__shadow_winner",
+            "candidate_id": "QQQ__put__shadow_winner",
             "symbol": "QQQ",
+            "direction": "put",
             "base_profile": "index",
             "overrides": {"entry": {"min_tech_score": 88.0}},
             "evaluation": {
@@ -98,11 +103,12 @@ class OptionsProfitCycleTests(unittest.TestCase):
             result = run_options_profit_cycle()
 
         self.assertEqual(result["decision"]["action"], "no_op")
-        self.assertEqual(result["decision"]["reason"], "no_eligible_live_symbol_challenger")
+        self.assertEqual(result["decision"]["reason"], "no_eligible_symbol_side_challenger")
         ranking = result["status"]["candidate_rankings"][0]
         self.assertEqual(ranking["symbol"], "QQQ")
+        self.assertEqual(ranking["direction"], "put")
         self.assertFalse(ranking["eligible"])
-        self.assertIn("shadow_only_symbol", ranking["blockers"])
+        self.assertIn("shadow_only_side", ranking["blockers"])
 
 
 if __name__ == "__main__":

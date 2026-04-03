@@ -9,7 +9,7 @@ wheels/
 # Virtual environments
 .venv
 
-# Environment variables / secrets — never commit these
+# Environment variables / secrets - never commit these
 .env
 .env.*
 config.yaml
@@ -32,9 +32,12 @@ data/options-validation/
 research_runs/
 
 # Local runtime state
+data/options-profit/decisions/
 tmp/
 tmp_public/
 .tmp/
+.tmp-test/
+.tmp-test-workspaces/
 .codex_tmp/
 .codex_tmp_test/
 .codex-logs/

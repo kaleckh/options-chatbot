@@ -135,12 +135,13 @@ def _read_json_artifact(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _default_profit_symbol_entry(symbol: str) -> dict[str, Any]:
+def _default_profit_side_entry(symbol: str, direction: str) -> dict[str, Any]:
     normalized_symbol = str(symbol).strip().upper()
-    candidate_id = f"{normalized_symbol}__baseline_broad_control"
-    active = {
+    normalized_direction = str(direction).strip().lower()
+    return {
         "symbol": normalized_symbol,
-        "candidate_id": candidate_id,
+        "direction": normalized_direction,
+        "candidate_id": f"{normalized_symbol}__{normalized_direction}__baseline_broad_control",
         "cohort_id": "baseline_broad_control",
         "base_profile": "index",
         "overrides": {},
@@ -150,18 +151,21 @@ def _default_profit_symbol_entry(symbol: str) -> dict[str, Any]:
         "status": "incumbent",
         "applied_at": None,
     }
-    return {
-        "symbol": normalized_symbol,
-        "active": active,
-        "previous": None,
-        "canary": None,
-        "objective": None,
-    }
 
 
 def _default_options_profit_status() -> dict[str, Any]:
     active_incumbents = {
-        symbol: _default_profit_symbol_entry(symbol)
+        symbol: {
+            direction: _default_profit_side_entry(symbol, direction)
+            for direction in ("call", "put")
+        }
+        for symbol in _OPTIONS_PROFIT_SYMBOLS
+    }
+    current_canary = {
+        symbol: {
+            direction: None
+            for direction in ("call", "put")
+        }
         for symbol in _OPTIONS_PROFIT_SYMBOLS
     }
     blocker = "Options profit cycle has not run yet."
@@ -174,7 +178,7 @@ def _default_options_profit_status() -> dict[str, Any]:
             "warnings": [],
         },
         "active_incumbents": active_incumbents,
-        "current_canary": None,
+        "current_canary": current_canary,
         "last_decision": {
             "action": "not_started",
             "summary": blocker,
@@ -216,16 +220,26 @@ def _read_only_options_profit_status() -> dict[str, Any]:
     live_profile = _read_json_artifact(state_dir / "live_profile.json") or {}
     incumbents_payload = _read_json_artifact(state_dir / "incumbents.json") or {}
     decision_payload = _read_latest_options_profit_decision(state_dir) or {}
+    incumbent_symbols = dict(incumbents_payload.get("symbols") or {})
+    incumbent_active = {
+        symbol: {
+            direction: dict(((((incumbent_symbols.get(symbol) or {}).get(direction) or {}).get("active")) or {}))
+            for direction in ("call", "put")
+        }
+        for symbol in _OPTIONS_PROFIT_SYMBOLS
+    }
 
     active_incumbents = (
         status_payload.get("active_incumbents")
-        or incumbents_payload.get("symbols")
         or live_profile.get("symbols")
+        or incumbent_active
         or default_status["active_incumbents"]
     )
     current_canary = (
         status_payload.get("current_canary")
+        or incumbents_payload.get("current_canary")
         or decision_payload.get("current_canary")
+        or default_status["current_canary"]
     )
     last_decision = (
         status_payload.get("last_decision")
@@ -394,10 +408,11 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["quote_time_et"] = pick.get("quote_time_et")
     normalized["quote_basis"] = pick.get("quote_basis")
     normalized["quote_freshness_status"] = pick.get("quote_freshness_status")
+    normalized["expectancy_selection_source"] = pick.get("expectancy_selection_source")
     normalized["underlying_price_at_selection"] = (
         pick.get("underlying_price_at_selection")
         if pick.get("underlying_price_at_selection") is not None
-        else pick.get("stock_price")
+        else (pick.get("current_spot") if pick.get("current_spot") is not None else pick.get("stock_price"))
     )
     normalized["selection_source"] = (
         pick.get("selection_source")
@@ -419,7 +434,10 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["profitability_eligibility"] = pick.get("profitability_eligibility")
     normalized["profitability_blockers"] = pick.get("profitability_blockers")
     normalized["candidate_rank"] = pick.get("candidate_rank")
-    live_profit_entry = live_profile_entry_for_symbol(str(normalized.get("ticker") or ""))
+    live_profit_entry = live_profile_entry_for_symbol(
+        str(normalized.get("ticker") or ""),
+        str(normalized.get("direction") or ""),
+    )
     if live_profit_entry:
         normalized["profit_candidate_id"] = (
             pick.get("profit_candidate_id")

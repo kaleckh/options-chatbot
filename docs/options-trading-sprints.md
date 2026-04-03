@@ -1,8 +1,13 @@
 # Options Trading Sprints
 
-Goal: simple, supervised, profitable options trades.
+Goal: simple, supervised options maintenance and controlled trade evaluation.
 
-Last updated: 2026-03-30
+Last updated: 2026-04-03
+
+This document is options-only.
+
+For the active crypto research lane, read:
+- `docs/day-trading-current-state.md`
 
 The product loop stays intentionally narrow:
 1. Scan for live options trades.
@@ -10,6 +15,8 @@ The product loop stays intentionally narrow:
 3. Let the user choose which trade they actually took.
 4. Track the position and return HOLD or SELL.
 5. Compare real tracked outcomes against replay expectations.
+
+The active crypto profitability pilot now lives separately in the day-trading docs and scripts. This file stays focused on the options maintenance lane.
 
 ## Sprint 1: Replay-Backed Trade Policy
 
@@ -117,3 +124,7 @@ Success bar:
 - The policy can evolve from actual supervised usage instead of static backtests.
 - Weak cohorts can be paused without changing the whole system.
 - New tickers and slices enter through probation instead of immediately going live.
+
+Note:
+- this remains an options maintenance roadmap, not the primary systematic research lane
+- the primary active research lane is the crypto spot profitability pilot

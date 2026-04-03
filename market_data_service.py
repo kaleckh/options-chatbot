@@ -979,6 +979,8 @@ def get_history(
     start_date, end_date = normalized_window
     try:
         cached = _load_daily_history_rows(symbol, start_date, end_date)
+        first_cached: date | None = None
+        last_cached: date | None = None
         if cached.empty:
             _record_stat(namespace, "persistent_misses")
             needs_full_refresh = True
@@ -990,33 +992,58 @@ def get_history(
                 _record_stat(namespace, "persistent_partial_hits")
             else:
                 _record_stat(namespace, "persistent_hits")
-        touches_recent = end_date >= _recent_refresh_start()
+        recent_refresh_start = _recent_refresh_start()
+        touches_recent = end_date >= recent_refresh_start
+        stale_recent_tail_only = bool(
+            not cached.empty
+            and first_cached is not None
+            and last_cached is not None
+            and first_cached <= (start_date + timedelta(days=7))
+            and touches_recent
+            and last_cached >= (max(start_date, recent_refresh_start) - timedelta(days=1))
+        )
 
         if needs_full_refresh:
             _record_stat(namespace, "full_refreshes")
             _record_stat(namespace, "network_fetches")
-            fetched = _fetch_history_direct(
-                symbol,
-                start=start_date.isoformat(),
-                end=(end_date + timedelta(days=1)).isoformat(),
-                interval="1d",
-                ticker_factory=ticker_factory,
-            )
-            if not fetched.empty:
-                _store_daily_history(symbol, fetched)
+            try:
+                fetched = _fetch_history_direct(
+                    symbol,
+                    start=start_date.isoformat(),
+                    end=(end_date + timedelta(days=1)).isoformat(),
+                    interval="1d",
+                    ticker_factory=ticker_factory,
+                )
+                if not fetched.empty:
+                    _store_daily_history(symbol, fetched)
+            except Exception:
+                if stale_recent_tail_only:
+                    _record_stat(namespace, "full_refresh_failures")
+                    _record_stat(namespace, "stale_cache_returns")
+                    _request_memo_set(key, cached)
+                    return _normalize_history_frame(cached)
+                raise
         elif touches_recent:
             _record_stat(namespace, "recent_refreshes")
             _record_stat(namespace, "network_fetches")
-            refresh_start = max(start_date, _recent_refresh_start())
-            fetched = _fetch_history_direct(
-                symbol,
-                start=refresh_start.isoformat(),
-                end=(end_date + timedelta(days=1)).isoformat(),
-                interval="1d",
-                ticker_factory=ticker_factory,
-            )
-            if not fetched.empty:
-                _store_daily_history(symbol, fetched)
+            refresh_start = max(start_date, recent_refresh_start)
+            try:
+                fetched = _fetch_history_direct(
+                    symbol,
+                    start=refresh_start.isoformat(),
+                    end=(end_date + timedelta(days=1)).isoformat(),
+                    interval="1d",
+                    ticker_factory=ticker_factory,
+                )
+                if not fetched.empty:
+                    _store_daily_history(symbol, fetched)
+            except Exception:
+                if not cached.empty:
+                    _record_stat(namespace, "recent_refresh_failures")
+                    _record_stat(namespace, "stale_cache_returns")
+                    _request_memo_set(key, cached)
+                    return _normalize_history_frame(cached)
+                raise
 
         frame = _load_daily_history_rows(symbol, start_date, end_date)
         if frame.empty:

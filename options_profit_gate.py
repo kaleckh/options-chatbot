@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Optional
+
+import pyarrow.parquet as pq
 
 from forward_options_ledger import (
     PENDING_TRUTH_STATUS,
@@ -23,6 +25,7 @@ from wfo_optimizer import (
     _imported_result_matches_current_store,
     _load_json_file,
 )
+from local_env import load_local_env
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -31,6 +34,8 @@ for candidate in (ROOT_DIR, BACKEND_DIR):
     candidate_str = str(candidate)
     if candidate_str not in sys.path:
         sys.path.insert(0, candidate_str)
+
+_ENV_FILES_LOADED = load_local_env(ROOT_DIR)
 
 from positions_repository import create_positions_repository  # type: ignore  # noqa: E402
 
@@ -48,6 +53,9 @@ DEFAULT_MIN_ELIGIBLE_FORWARD_EVENTS = 10
 DEFAULT_MIN_ELIGIBLE_EVENTS_PER_SYMBOL = 3
 DEFAULT_MIN_CLOSED_TRACKED_POSITIONS = 1
 DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS = 3
+DAILY_TRUTH_IMPORT_MANIFEST_ENV = "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"
+LEGACY_DAILY_TRUTH_IMPORT_MANIFEST_ENV = "HISTORICAL_OPTIONS_IMPORT_MANIFEST"
+DEFAULT_DAILY_TRUTH_IMPORT_MANIFEST = ROOT_DIR / "data" / "options-validation" / "daily_truth_import_manifest.json"
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -70,6 +78,150 @@ def _parse_date(value: Any) -> Optional[date]:
             return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
         except ValueError:
             return None
+
+
+def _resolve_daily_truth_import_manifest() -> tuple[str | None, str | None]:
+    for env_name in (DAILY_TRUTH_IMPORT_MANIFEST_ENV, LEGACY_DAILY_TRUTH_IMPORT_MANIFEST_ENV):
+        raw = str(os.getenv(env_name) or "").strip()
+        if not raw:
+            continue
+        if raw.startswith(("http://", "https://")):
+            return raw, env_name
+        path = Path(raw)
+        if not path.is_absolute():
+            path = ROOT_DIR / path
+        return str(path.resolve()), env_name
+    if DEFAULT_DAILY_TRUTH_IMPORT_MANIFEST.exists():
+        return str(DEFAULT_DAILY_TRUTH_IMPORT_MANIFEST.resolve()), "default_manifest"
+    return None, None
+
+
+def _load_manifest_entries(manifest_path: str | None) -> list[dict[str, Any]]:
+    if not manifest_path:
+        return []
+    try:
+        payload = json.loads(Path(manifest_path).read_text(encoding="utf8"))
+    except Exception:
+        return []
+    if isinstance(payload, list):
+        entries = payload
+    else:
+        entries = payload.get("imports")
+    if not isinstance(entries, list):
+        return []
+    return [dict(entry) for entry in entries if isinstance(entry, dict)]
+
+
+def _resolve_manifest_entry_path(value: Any) -> Path | None:
+    raw = str(value or "").strip()
+    if not raw or raw.startswith(("http://", "https://")):
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = ROOT_DIR / path
+    return path.resolve()
+
+
+def _normalize_source_horizon_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if hasattr(value, "to_pydatetime"):
+        value = value.to_pydatetime()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+
+
+def _parquet_source_horizon(path: Path, *, date_column: str = "date") -> date | None:
+    try:
+        parquet = pq.ParquetFile(path)
+    except Exception:
+        return None
+    names = list(parquet.schema_arrow.names)
+    if date_column not in names:
+        return None
+    column_index = names.index(date_column)
+    latest: date | None = None
+    try:
+        for row_group_index in range(parquet.metadata.num_row_groups):
+            stats = parquet.metadata.row_group(row_group_index).column(column_index).statistics
+            candidate = _normalize_source_horizon_date(getattr(stats, "max", None))
+            if candidate is None:
+                latest = None
+                break
+            if latest is None or candidate > latest:
+                latest = candidate
+        if latest is not None:
+            return latest
+    except Exception:
+        latest = None
+    try:
+        table = pq.read_table(path, columns=[date_column], use_threads=False)
+    except Exception:
+        return None
+    values = [
+        _normalize_source_horizon_date(item)
+        for item in table.column(date_column).to_pylist()
+    ]
+    values = [item for item in values if item is not None]
+    return max(values) if values else None
+
+
+def _daily_truth_source_freshness(
+    *,
+    current_date: date,
+    max_trusted_truth_staleness_business_days: int,
+) -> dict[str, Any]:
+    manifest_path, manifest_source = _resolve_daily_truth_import_manifest()
+    entries = _load_manifest_entries(manifest_path)
+    requested_manifest_inputs: list[str] = []
+    latest_input_mtime_utc: datetime | None = None
+    latest_source_horizon: date | None = None
+    for entry in entries:
+        for key in ("input", "underlying_input"):
+            candidate = _resolve_manifest_entry_path(entry.get(key))
+            if candidate is None:
+                continue
+            requested_manifest_inputs.append(str(candidate))
+            if not candidate.exists():
+                continue
+            modified = datetime.fromtimestamp(candidate.stat().st_mtime, tz=UTC)
+            if latest_input_mtime_utc is None or modified > latest_input_mtime_utc:
+                latest_input_mtime_utc = modified
+            if candidate.suffix.lower() == ".parquet":
+                source_horizon = _parquet_source_horizon(candidate)
+                if source_horizon is not None and (latest_source_horizon is None or source_horizon > latest_source_horizon):
+                    latest_source_horizon = source_horizon
+    source_staleness = _business_days_stale(
+        latest_input_mtime_utc.date() if latest_input_mtime_utc is not None else None,
+        current_date,
+    )
+    source_horizon_staleness = _business_days_stale(latest_source_horizon, current_date)
+    effective_source_staleness = source_horizon_staleness if latest_source_horizon is not None else source_staleness
+    return {
+        "manifest_path": manifest_path,
+        "manifest_source": manifest_source,
+        "requested_manifest_inputs": requested_manifest_inputs,
+        "daily_truth_source_latest_mtime_utc": (
+            latest_input_mtime_utc.isoformat().replace("+00:00", "Z")
+            if latest_input_mtime_utc is not None
+            else None
+        ),
+        "daily_truth_source_horizon": latest_source_horizon.isoformat() if latest_source_horizon else None,
+        "daily_truth_source_stale": (
+            effective_source_staleness is not None
+            and effective_source_staleness > int(max_trusted_truth_staleness_business_days)
+        ),
+        "source_horizon_staleness_business_days": source_horizon_staleness,
+    }
 
 
 def _normalize_evidence_class(value: Any, *, source_label: str = "") -> str:
@@ -342,6 +494,11 @@ def evaluate_measurement_gate(
     max_trusted_truth_staleness_business_days: int = DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS,
 ) -> dict[str, Any]:
     blockers: list[dict[str, Any]] = []
+    current_truth_date = _parse_date(recorded_before_utc) or datetime.now(UTC).date()
+    source_freshness = _daily_truth_source_freshness(
+        current_date=current_truth_date,
+        max_trusted_truth_staleness_business_days=int(max_trusted_truth_staleness_business_days),
+    )
 
     raw_imported_daily = _load_json_file(OPTIONS_VALIDATION_DAILY_LATEST_FILE)
     imported_daily_matches_store = _imported_result_matches_current_store(
@@ -377,7 +534,6 @@ def evaluate_measurement_gate(
         forward_db_path=forward_db_path,
         recorded_before_utc=recorded_before_utc,
     )
-    current_truth_date = _parse_date(recorded_before_utc) or datetime.now().date()
     trusted_truth_horizon = _parse_date(forward_evidence.get("trusted_truth_horizon"))
     trusted_truth_staleness = _business_days_stale(trusted_truth_horizon, current_truth_date)
     if forward_evidence["contamination_findings"]:
@@ -501,6 +657,11 @@ def evaluate_measurement_gate(
                 "matches_store": imported_daily_matches_store,
                 "quote_coverage_pct": quote_coverage_pct,
                 "required_quote_coverage_pct": float(min_imported_quote_coverage_pct),
+                "manifest_path": source_freshness.get("manifest_path"),
+                "manifest_source": source_freshness.get("manifest_source"),
+                "requested_manifest_inputs": list(source_freshness.get("requested_manifest_inputs") or []),
+                "daily_truth_source_latest_mtime_utc": source_freshness.get("daily_truth_source_latest_mtime_utc"),
+                "daily_truth_source_stale": bool(source_freshness.get("daily_truth_source_stale")),
             },
             "forward_evidence": {
                 "db_path": forward_evidence.get("db_path"),
@@ -509,6 +670,9 @@ def evaluate_measurement_gate(
                 "required_event_count": int(min_eligible_forward_events),
                 "trusted_truth_horizon": forward_evidence["trusted_truth_horizon"],
                 "truth_staleness_business_days": trusted_truth_staleness,
+                "requested_manifest_inputs": list(source_freshness.get("requested_manifest_inputs") or []),
+                "daily_truth_source_latest_mtime_utc": source_freshness.get("daily_truth_source_latest_mtime_utc"),
+                "daily_truth_source_stale": bool(source_freshness.get("daily_truth_source_stale")),
                 "by_symbol": forward_evidence["by_symbol"],
                 "contamination_finding_count": len(forward_evidence["contamination_findings"]),
                 "stale_metadata_finding_count": len(forward_evidence["stale_metadata_events"]),

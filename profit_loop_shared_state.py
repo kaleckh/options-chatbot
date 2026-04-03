@@ -61,6 +61,7 @@ REQUIRED_ISSUE_KEYS = {
     "resolved_at",
     "resolution_branch",
     "resolution_commit",
+    "resolution_kind",
     "claim_run_id",
     "claimed_at",
     "claim_expires_at",
@@ -264,13 +265,33 @@ def _infer_profitability_verdict(snapshot: dict[str, Any] | None) -> str:
     return "unproven"
 
 
+def _normalize_snapshot_evidence_status(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized == "degraded":
+        return "inconclusive"
+    if normalized in EVIDENCE_STATUSES:
+        return normalized
+    return None
+
+
 def _snapshot_default_fields(snapshot: dict[str, Any] | None) -> dict[str, Any] | None:
     if snapshot is None:
         return None
     payload = copy.deepcopy(dict(snapshot))
-    payload.setdefault("loop_execution_status", _infer_loop_execution_status(payload))
-    payload.setdefault("evidence_status", _infer_evidence_status(payload))
-    payload.setdefault("profitability_verdict", _infer_profitability_verdict(payload))
+    loop_execution_status = str(payload.get("loop_execution_status") or "").strip().lower()
+    if loop_execution_status not in LOOP_EXECUTION_STATUSES:
+        loop_execution_status = _infer_loop_execution_status(payload)
+    payload["loop_execution_status"] = loop_execution_status
+    payload["evidence_status"] = (
+        _normalize_snapshot_evidence_status(payload.get("evidence_status"))
+        or _infer_evidence_status(payload)
+    )
+    profitability_verdict = str(payload.get("profitability_verdict") or "").strip().lower()
+    if profitability_verdict not in PROFITABILITY_VERDICTS:
+        profitability_verdict = _infer_profitability_verdict(payload)
+    payload["profitability_verdict"] = profitability_verdict
     payload.setdefault("proof_reuse", [])
     payload.setdefault("evidence_complete", False)
     return payload
@@ -284,6 +305,7 @@ def _migrate_issue(issue: dict[str, Any]) -> dict[str, Any]:
     migrated.setdefault("proof_bundle_dir", None)
     migrated.setdefault("proof_commands", [])
     migrated.setdefault("before_after_comparison", None)
+    migrated.setdefault("resolution_kind", None)
     return migrated
 
 
@@ -338,6 +360,7 @@ def _normalize_issue(
         "resolved_at": payload.get("resolved_at", base.get("resolved_at")),
         "resolution_branch": payload.get("resolution_branch", base.get("resolution_branch")),
         "resolution_commit": payload.get("resolution_commit", base.get("resolution_commit")),
+        "resolution_kind": payload.get("resolution_kind", base.get("resolution_kind")),
         "claim_run_id": payload.get("claim_run_id", base.get("claim_run_id")),
         "claimed_at": payload.get("claimed_at", base.get("claimed_at")),
         "claim_expires_at": payload.get("claim_expires_at", base.get("claim_expires_at")),
@@ -531,10 +554,12 @@ def expire_stale_leases(
     state: dict[str, Any],
     *,
     now: datetime | None = None,
-) -> bool:
+) -> dict[str, Any]:
     current_time = now or _utc_now()
     current_iso = current_time.isoformat().replace("+00:00", "Z")
     changed = False
+    expired_run: dict[str, Any] | None = None
+    reopened_issue_ids: list[str] = []
 
     active = dict(state.get("active_run") or {})
     if active and str(active.get("status") or "").strip().lower() == "running" and _is_expired(
@@ -542,7 +567,12 @@ def expire_stale_leases(
     ):
         active["status"] = "expired"
         active["heartbeat_at"] = current_iso
-        state["active_run"] = active
+        active["lease_expires_at"] = current_iso
+        state["active_run"] = None
+        changed = True
+        expired_run = dict(active)
+    elif active and str(active.get("status") or "").strip().lower() in RUN_STATUSES.difference({"running"}):
+        state["active_run"] = None
         changed = True
 
     refreshed_open: list[dict[str, Any]] = []
@@ -557,11 +587,17 @@ def expire_stale_leases(
             normalized["claim_expires_at"] = None
             normalized["last_seen_at"] = current_iso
             changed = True
+            reopened_issue_ids.append(str(normalized.get("issue_id") or "").strip())
         refreshed_open.append(normalized)
     if changed:
         state["open_issues"] = refreshed_open
         state["updated_at"] = current_iso
-    return changed
+    return {
+        "changed": changed,
+        "expired_run": expired_run,
+        "reopened_issue_ids": reopened_issue_ids,
+        "expired_at": current_iso,
+    }
 
 
 def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any]:
@@ -570,9 +606,25 @@ def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any
     if payload is None:
         return initialize_profit_loop_state(state_dir)
     normalized = validate_profit_loop_state(payload)
-    changed = expire_stale_leases(normalized)
-    if changed or int(payload.get("schema_version") or 1) != SCHEMA_VERSION:
+    lease_recovery = expire_stale_leases(normalized)
+    if lease_recovery["changed"] or int(payload.get("schema_version") or 1) != SCHEMA_VERSION:
         save_profit_loop_state(normalized, state_dir=state_dir)
+    expired_run = dict(lease_recovery.get("expired_run") or {})
+    if expired_run:
+        append_run_ledger(
+            {
+                "run_id": expired_run.get("run_id"),
+                "automation_id": expired_run.get("automation_id"),
+                "ran_at": lease_recovery.get("expired_at"),
+                "verdict": "recovered-expired-lease",
+                "loop_execution_status": "blocked",
+                "evidence_status": "untrusted",
+                "profitability_verdict": "unproven",
+                "phase": expired_run.get("phase"),
+                "reopened_issue_ids": list(lease_recovery.get("reopened_issue_ids") or []),
+            },
+            state_dir=state_dir,
+        )
     return normalized
 
 
@@ -662,6 +714,7 @@ def upsert_open_issue(
     normalized["resolved_at"] = None
     normalized["resolution_branch"] = None
     normalized["resolution_commit"] = None
+    normalized["resolution_kind"] = None
     normalized["claim_run_id"] = None
     normalized["claimed_at"] = None
     normalized["claim_expires_at"] = None
@@ -677,6 +730,67 @@ def upsert_open_issue(
     state["resolved_issues"] = resolved_issues
     state["updated_at"] = current_time
     return normalized
+
+
+def reconcile_source_open_issues(
+    state: dict[str, Any],
+    *,
+    source_automation: str,
+    active_issue_ids: list[str] | set[str] | tuple[str, ...],
+    now_iso: str | None = None,
+    resolution_note: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_source = str(source_automation or "").strip()
+    if not normalized_source:
+        raise ValueError("source_automation is required to reconcile issues")
+    current_time = str(now_iso or utc_now_iso())
+    active_ids = {str(issue_id).strip() for issue_id in list(active_issue_ids or []) if str(issue_id).strip()}
+    open_issues = list(state.get("open_issues") or [])
+    resolved_issues = list(state.get("resolved_issues") or [])
+    remaining_open: list[dict[str, Any]] = []
+    cleared: list[dict[str, Any]] = []
+
+    for item in open_issues:
+        issue = dict(item)
+        if str(issue.get("source_automation") or "").strip() != normalized_source:
+            remaining_open.append(issue)
+            continue
+        issue_id = str(issue.get("issue_id") or "").strip()
+        if issue_id in active_ids:
+            remaining_open.append(issue)
+            continue
+        resolved_index = _find_issue_index(resolved_issues, issue_id)
+        if resolved_index is not None:
+            resolved_issues.pop(resolved_index)
+        resolution_reason = str(resolution_note or "").strip() or f"{normalized_source} no longer observes this blocker."
+        resolved = _normalize_issue(
+            issue
+            | {
+                "status": "resolved",
+                "last_seen_at": current_time,
+                "resolved_at": current_time,
+                "resolution_kind": "no_longer_observed",
+                "deferred_reason": None,
+                "claim_run_id": None,
+                "claimed_at": None,
+                "claim_expires_at": None,
+                "before_after_comparison": {
+                    "resolution_kind": "no_longer_observed",
+                    "resolved_by_source": normalized_source,
+                    "resolution_reason": resolution_reason,
+                },
+            },
+            now_iso=current_time,
+            existing=issue,
+        )
+        resolved_issues.append(resolved)
+        cleared.append(resolved)
+
+    if cleared:
+        state["open_issues"] = remaining_open
+        state["resolved_issues"] = resolved_issues
+        state["updated_at"] = current_time
+    return cleared
 
 
 def claim_issue(
@@ -768,6 +882,23 @@ def resolve_issue(
     now_iso: str | None = None,
 ) -> dict[str, Any]:
     current_time = str(now_iso or utc_now_iso())
+    normalized_branch = str(resolution_branch or "").strip()
+    normalized_commit = str(resolution_commit or "").strip()
+    if not normalized_branch:
+        raise ValueError("resolution_branch is required to resolve an issue")
+    if not normalized_commit:
+        raise ValueError("resolution_commit is required to resolve an issue")
+    proof_bundle_raw = str(proof_bundle_dir or "").strip()
+    if not proof_bundle_raw:
+        raise ValueError("proof_bundle_dir is required to resolve an issue")
+    proof_dir = Path(proof_bundle_raw)
+    if not proof_dir.exists() or not proof_dir.is_dir():
+        raise ValueError(f"proof_bundle_dir does not exist or is not a directory: {proof_dir}")
+    proof_commands = [str(item).strip() for item in list(proof_commands or []) if str(item).strip()]
+    if not proof_commands:
+        raise ValueError("proof_commands are required to resolve an issue")
+    if before_after_comparison is None:
+        raise ValueError("before_after_comparison is required to resolve an issue")
     open_issues = list(state.get("open_issues") or [])
     resolved_issues = list(state.get("resolved_issues") or [])
     index = _find_issue_index(open_issues, issue_id)
@@ -779,13 +910,16 @@ def resolve_issue(
             "status": "resolved",
             "last_seen_at": current_time,
             "last_validation_attempt_at": current_time,
-            "resolved_at": current_time,
-            "resolution_branch": str(resolution_branch or "").strip() or None,
-            "resolution_commit": str(resolution_commit or "").strip() or None,
+                "resolved_at": current_time,
+                "resolution_branch": normalized_branch,
+            "resolution_commit": normalized_commit,
+            "resolution_kind": "proof_resolved",
             "deferred_reason": None,
-            "proof_bundle_dir": proof_bundle_dir,
-            "proof_commands": list(proof_commands or []),
-            "before_after_comparison": copy.deepcopy(before_after_comparison) if before_after_comparison is not None else None,
+            "proof_bundle_dir": str(proof_dir),
+            "proof_commands": proof_commands,
+            "before_after_comparison": copy.deepcopy(before_after_comparison),
+            "claim_run_id": None,
+            "claimed_at": None,
             "claim_expires_at": None,
         },
         now_iso=current_time,
@@ -905,6 +1039,22 @@ def complete_active_run(
     state["active_run"] = active
     state["updated_at"] = current_time
     return copy.deepcopy(active)
+
+
+def clear_active_run(
+    state: dict[str, Any],
+    *,
+    run_id: str | None = None,
+    now_iso: str | None = None,
+) -> dict[str, Any] | None:
+    active = _normalize_active_run(state.get("active_run")) if state.get("active_run") else None
+    if active is None:
+        return None
+    if run_id is not None and active.get("run_id") != str(run_id).strip():
+        raise ValueError(f"Cannot clear unknown active run: {run_id}")
+    state["active_run"] = None
+    state["updated_at"] = str(now_iso or utc_now_iso())
+    return active
 
 
 def issue_sort_key(issue: dict[str, Any]) -> tuple[int, int, int, str]:
@@ -1038,7 +1188,7 @@ def validation_prerequisite_blockers(
     validation = dict(state.get("latest_profit_validation") or {})
     validation_run_status = str(validation.get("run_status") or "").strip().lower()
     validation_time = _parse_iso_datetime(validation.get("ran_at"))
-    if validation_run_status == "running" and validation_time is not None:
+    if validation_run_status == "running":
         blockers.append(
             {
                 "code": "stale_profit_validation_snapshot",

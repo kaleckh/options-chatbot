@@ -2,28 +2,61 @@
   "generated_at": "2026-04-02T04:49:15.148972Z",
   "symbols": {
     "QQQ": {
-      "applied_at": "2026-04-02T04:49:15.148972Z",
-      "base_profile": "index",
-      "candidate_id": "QQQ__baseline_broad_control",
-      "cohort_id": "baseline_broad_control",
-      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-      "mode": "incumbent",
-      "overrides": {},
-      "source": "bootstrap_default",
-      "status": "incumbent",
-      "symbol": "QQQ"
+      "call": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "QQQ__call__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "call",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "QQQ"
+      },
+      "put": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "QQQ__put__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "put",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "QQQ"
+      }
     },
     "SPY": {
-      "applied_at": "2026-04-02T04:49:15.148972Z",
-      "base_profile": "index",
-      "candidate_id": "SPY__baseline_broad_control",
-      "cohort_id": "baseline_broad_control",
-      "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
-      "mode": "incumbent",
-      "overrides": {},
-      "source": "bootstrap_default",
-      "status": "incumbent",
-      "symbol": "SPY"
+      "call": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "SPY__call__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "call",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "SPY"
+      },
+      "put": {
+        "applied_at": "2026-04-02T04:49:15.148972Z",
+        "base_profile": "index",
+        "candidate_id": "SPY__put__baseline_broad_control",
+        "cohort_id": "baseline_broad_control",
+        "direction": "put",
+        "manifest_source": "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\truth-first-champions.json",
+        "mode": "incumbent",
+        "overrides": {},
+        "source": "bootstrap_default",
+        "status": "incumbent",
+        "symbol": "SPY"
+      }
     }
-  }
+  },
+  "version": 2
 }

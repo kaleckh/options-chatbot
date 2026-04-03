@@ -10,8 +10,8 @@
 - Getting it wrong confidently is worse than saying "let me check."
 
 This repository is currently:
-- a supervised options-trading assistant for regular markets
-- a crypto spot day-trading research lab for systematic intraday strategy discovery
+- a supervised options-trading assistant in maintenance mode
+- a crypto spot day-trading profitability pilot for systematic intraday strategy discovery
 
 The live product loop is:
 1. Run a live options scan.
@@ -20,9 +20,9 @@ The live product loop is:
 4. Let the user choose which trade they actually took.
 5. Track only those taken positions and return `HOLD` or `SELL` on demand.
 
-The project still contains older prediction surfaces, but the active systematic research focus is now crypto day trading because the real-data loop is cheaper and easier to run honestly there than in listed options.
+The project still contains older prediction surfaces, but the active systematic research focus is now crypto day trading because the real-data loop is cheaper and easier to run honestly there than in listed options. Options remain supervised maintenance while the crypto pilot carries the active research loop.
 
-The day-trading side is currently a research lab, not a production workflow:
+The day-trading side is currently a profitability pilot, not a production workflow:
 - the active lane is now a crypto spot profitability pilot in `src/lib/day-trading/crypto-engine.js`
 - the older SPY/QQQ Yahoo lab remains available as `equities_legacy` in `src/lib/day-trading/engine.js`
 - the UI surface is `Day Trading` under Strategy with a market selector
@@ -31,13 +31,15 @@ The day-trading side is currently a research lab, not a production workflow:
 - a live crypto watchlist now exists via `npm run daytrading:watch`
 - a control-first crypto experiment loop now exists via `npm run daytrading:experiments`
 - the profitability pilot status can be printed via `npm run daytrading:pilot`
-- manual pilot journal entries can be appended via `npm run daytrading:journal:add -- --timestamp=...`
+- BTC pre-trade approvals can now be requested via `npm run daytrading:preflight`
+- manual pilot journal entries now require a same-day ticket plus execution details via `npm run daytrading:journal:add -- --ticket-id=...`
 
 ## Current Status
 
 - `Sprint 1` is complete: replay-backed trade policy on the scanner.
 - `Sprint 2` is complete in practical form: playbooks, portfolio guardrails, simple size tiers, and a playbook exit-audit report.
 - `Sprint 3` is complete: the options truth-first pass that tightened tracked-position integrity and aligned the docs/UI to the real saved artifacts.
+- options strategy optimization is now maintenance-only while the crypto profitability pilot remains active
 - Live cohort scorecards are intentionally deferred until tracked outcomes and replay truth are stronger.
 
 The important reality check:
@@ -171,6 +173,24 @@ Run the app:
 npm run dev
 ```
 
+Run the frontend only:
+
+```bash
+npm run dev:next
+```
+
+Run the backend only:
+
+```bash
+npm run dev:python
+```
+
+Force a clean Next.js build:
+
+```bash
+npm run build:clean
+```
+
 Bring Postgres up/down:
 
 ```bash
@@ -230,8 +250,7 @@ Run the crypto validation matrix:
 
 ```bash
 npm run daytrading:validate -- --bars=all --window-mode=scheduled_windows
-npm run daytrading:validate -- --bars=all --window-mode=us_morning
-npm run daytrading:validate -- --bars=all --window-mode=asia_open
+npm run daytrading:validate -- --bars=all --window-mode=denver_core
 npm run daytrading:validate -- --bars=all --window-mode=all_hours
 ```
 
@@ -242,11 +261,23 @@ npm run daytrading:watch
 npm run daytrading:watch -- --market=equities_legacy
 ```
 
+Request a BTC pilot pre-trade approval ticket:
+
+```bash
+npm run daytrading:preflight -- --setup-match-confirmed=true --headline-lockout-checked=true --maker-limit-plan-confirmed=true
+```
+
+Record an approved BTC pilot trade:
+
+```bash
+npm run daytrading:journal:add -- --ticket-id=<ticket> --timestamp=2026-04-02T13:45:00.000Z --symbol=BTCUSDT --regime=range --setup=btcusdt-crypto-range-mean-reversion --side=buy --setup-match-confirmed=true --headline-lockout-checked=true --maker-limit-plan-confirmed=true --entry=100 --actual-entry=100.01 --stop=99.6 --target=100.8 --actual-exit=100.72 --order-type=limit --entry-liquidity-role=maker --exit-liquidity-role=maker --entry-fill-ratio=1 --exit-fill-ratio=1 --exit-reason=target_hit --stop-execution-quality=not_applicable --size-usd=1000 --fees-usd=1 --slippage-usd=1 --pnl-r=1.8 --pnl-usd=18 --screenshot=C:\\trades\\btc.png --rule-adherence=100 --mistake-tag=none --note=\"BTC pilot trade\"
+```
+
 Run the control-first crypto experiment loop:
 
 ```bash
 npm run daytrading:experiments
-npm run daytrading:experiments -- --window-mode=us_morning
+npm run daytrading:experiments -- --window-mode=scheduled_windows
 npm run daytrading:experiments -- --market=equities_legacy
 ```
 
@@ -254,6 +285,18 @@ Run tests:
 
 ```bash
 npm run verify
+```
+
+Run the faster default verification gate:
+
+```bash
+npm run verify:fast
+```
+
+Run the unattended profit-loop canary:
+
+```bash
+npm run profit-loop:canary
 ```
 
 ## Documentation
@@ -269,7 +312,7 @@ npm run verify
 - `docs/autoresearch/truth-first-champions.json`
   - frozen validation cohorts, replay watchlist universe, and research-only parameter overrides for the truth-first phase.
 - `docs/day-trading-current-state.md`
-  - current ETF morning strategy slate, live watcher behavior, experiment evidence, and day-trading guidance.
+  - current crypto profitability pilot, live watcher behavior, experiment evidence, and day-trading guidance.
 
 ## Recommended Next Move
 

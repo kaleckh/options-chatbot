@@ -368,6 +368,16 @@ function saveStrategies(strategies) {
   atomicWriteJsonSync(STRATEGIES_PATH, strategies.map(assertValidStrategySpec));
 }
 
+function saveStrategiesIfChanged(currentStrategies, nextStrategies) {
+  const normalizedCurrent = currentStrategies.map(assertValidStrategySpec);
+  const normalizedNext = nextStrategies.map(assertValidStrategySpec);
+  if (JSON.stringify(normalizedCurrent) === JSON.stringify(normalizedNext)) {
+    return false;
+  }
+  atomicWriteJsonSync(STRATEGIES_PATH, normalizedNext);
+  return true;
+}
+
 function defaultVenueConfig() {
   return {
     feeFraction: 0.0002,
@@ -2277,10 +2287,9 @@ async function buildMorningWatchlist(options = {}) {
     .sort(compareWatchlistCandidates)
     .slice(0, limit);
 
-  const items = [];
-  for (const candidate of rankedCandidates) {
+  const items = (await Promise.all(rankedCandidates.map(async (candidate) => {
     const strategy = strategyMap.get(candidate.strategyId);
-    if (!strategy) continue;
+    if (!strategy) return null;
 
     const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     const priceSeries = Array.isArray(marketData?.priceSeries) ? marketData.priceSeries : [];
@@ -2327,7 +2336,7 @@ async function buildMorningWatchlist(options = {}) {
       liveStatus = "tracking";
     }
 
-    items.push({
+    return {
       strategyId: strategy.strategyId,
       strategyName: strategy.name,
       symbol: strategy.marketUniverse?.symbols?.[0] || null,
@@ -2370,8 +2379,8 @@ async function buildMorningWatchlist(options = {}) {
           ? `latest_trigger:${latestSignal.bar.timestamp}`
           : `signal_below_threshold:${round(lastBarSignalValue - threshold, 4)}`,
       ],
-    });
-  }
+    };
+  }))).filter(Boolean);
 
   return {
     generatedAt: nowIso(),
@@ -2655,7 +2664,7 @@ async function runDayTradingValidation(options = {}) {
   });
 
   if (!useCustomStrategies) {
-    saveStrategies(updatedStrategies);
+    saveStrategiesIfChanged(strategyUniverse, updatedStrategies);
   }
 
   report.scoreboard = buildStrategyScoreboard({

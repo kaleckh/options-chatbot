@@ -1,6 +1,5 @@
 import os
 import sys
-import tempfile
 import unittest
 import json
 from contextlib import ExitStack
@@ -34,12 +33,13 @@ from options_algorithm_fixtures import (
     load_backend_main,
     make_history,
 )
+from workspace_tempdir import WorkspaceTempDir
 
 
 class OptionsAlgorithmApiE2ETests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls._backend_tmp = tempfile.TemporaryDirectory()
+        cls._backend_tmp = WorkspaceTempDir(prefix="options-api-e2e-backend")
         db_path = os.path.join(cls._backend_tmp.name, "chat_history.db")
         cls.backend = load_backend_main(db_path)
         cls.client = TestClient(cls.backend.app)
@@ -50,7 +50,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         cls._backend_tmp.cleanup()
 
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = WorkspaceTempDir(prefix="options-api-e2e")
         self.bundle = build_options_algorithm_fixture_bundle()
         self.results_path = os.path.join(self._tmp.name, "wfo_results.json")
         self.imported_results_dir = os.path.join(self._tmp.name, "options_validation_runs")
@@ -116,6 +116,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("blockers", payload)
         self.assertIn("SPY", payload["active_incumbents"])
         self.assertIn("QQQ", payload["active_incumbents"])
+        self.assertIn("call", payload["active_incumbents"]["SPY"])
+        self.assertIn("put", payload["active_incumbents"]["SPY"])
         self.assertFalse(Path(self.options_profit_state_dir).exists())
 
     def test_scan_endpoint_returns_sorted_normalized_contract(self):
@@ -215,8 +217,19 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         picks = payload["picks"]
         self.assertEqual(len(picks), 2)
         self.assertTrue(all(pick["calibrated_expectancy_pct"] is not None for pick in picks))
+        self.assertTrue(all(pick["expectancy_selection_source"] == "replay_calibrated" for pick in picks))
         self.assertEqual(picks, sorted(picks, key=oc._candidate_rank_tuple, reverse=True))
         self.assertGreater(picks[0]["calibrated_expectancy_pct"], picks[1]["calibrated_expectancy_pct"])
+
+    def test_scan_endpoint_records_bootstrap_expectancy_source_when_dense_calibration_is_missing(self):
+        response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+        self.assertEqual(response.status_code, 200)
+
+        payload = response.json()
+        picks = payload["picks"]
+        self.assertTrue(picks)
+        self.assertTrue(all(pick["expectancy_selection_source"] == "bootstrap_heuristic" for pick in picks))
+        self.assertTrue(all(pick["ev"] is not None for pick in picks))
 
     def test_scan_fails_closed_when_playbook_exit_audit_errors(self):
         backtest_response = self.client.post(
@@ -823,7 +836,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
     def test_scan_pick_carries_active_profit_candidate_context(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         expected_profit_context = {
-            "candidate_id": "SPY__baseline_broad_control",
+            "candidate_id": "SPY__call__baseline_broad_control",
             "cohort_id": "baseline_broad_control",
             "mode": "incumbent",
             "status": "incumbent",
@@ -1097,6 +1110,25 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(policy_response.status_code, 200)
         self.assertEqual(
             policy_response.json(),
+            {"error": "No backtest results found for truth_lane=historical_imported_daily"},
+        )
+
+    def test_live_policy_explicit_imported_lane_refuses_caller_supplied_synthetic_result(self):
+        backtest_response = self.client.post(
+            "/api/backtest",
+            json={"lookback_years": 1, "iv_adj": 1.2, "truth_lane": "synthetic"},
+        )
+        self.assertEqual(backtest_response.status_code, 200)
+        synthetic_result = backtest_response.json()
+
+        policy = wfo.build_live_options_trade_policy(
+            result=synthetic_result,
+            truth_lane="historical_imported_daily",
+            min_trades=1,
+        )
+
+        self.assertEqual(
+            policy,
             {"error": "No backtest results found for truth_lane=historical_imported_daily"},
         )
 

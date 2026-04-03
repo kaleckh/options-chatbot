@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-01
+Last updated: 2026-04-03
 
 ## Critical Rule: Read Code First
 
@@ -21,6 +21,15 @@ The active product goal is still simple:
 
 This is supervised decision support, not autonomous trading.
 
+## Repository Split
+
+The repo now has a deliberate split:
+- options are the supervised product lane and remain in maintenance mode
+- crypto day trading is the active systematic research lane
+
+For the crypto side, read:
+- `docs/day-trading-current-state.md`
+
 ## Primary Workflow
 
 ### 1. Scanner
@@ -31,7 +40,7 @@ The real options workflow now starts here and is ordered this way in the UI:
 1. `Scanner`
 2. `Tracked Positions`
 3. `Suggested Trades`
-4. legacy prediction analytics tabs after that
+4. legacy analytics tabs after that
 
 The scanner supports:
 - `Replay-Backed Focus` vs `All Qualifying`
@@ -180,7 +189,7 @@ That means no frozen cohort has earned promotion or even a clean “strategy red
 
 ## Current Recommendation
 
-Use the options system as supervised paper-first infrastructure, not as a solved strategy.
+Use the options system as supervised maintenance infrastructure, not as a solved strategy.
 
 That means:
 1. scan live ideas
@@ -189,7 +198,7 @@ That means:
 4. treat current policy output as block/watch-oriented
 5. validate only the frozen `SPY` / `QQQ` cohorts until better truth coverage exists
 
-The next best repository-wide strategy step is no longer broad options optimization. The primary systematic research lane should be crypto spot day trading, where we now have cheap trusted data, a 90-day replay window, and a control-first research loop. Options should stay in maintenance mode:
+The next best repository-wide strategy step is no longer broad options optimization. The primary systematic research lane is crypto spot day trading, where we now have cheap trusted data, a 90-day replay window, and a control-first research loop. Options should stay in maintenance mode:
 1. keep recording options forward holdout daily
 2. keep the current options truth bundle honest and current
 3. use the options product manually and supervised
