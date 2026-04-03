@@ -570,6 +570,7 @@ def _rollback_canary(
     updated_live.setdefault("symbols", {})
     updated_live["symbols"].setdefault(symbol, {})
     previous_active["mode"] = "incumbent"
+    previous_active["status"] = "incumbent"
     previous_active["applied_at"] = utc_now_iso()
     previous_active["direction"] = direction
     updated_live["symbols"][symbol][direction] = previous_active
@@ -619,12 +620,16 @@ def _finalize_canary(
     observed: dict[str, Any],
     observed_score: float,
     incumbents: dict[str, Any],
+    live_profile: dict[str, Any],
 ) -> dict[str, Any]:
+    now = utc_now_iso()
     finalized = copy.deepcopy(incumbents)
     finalized.setdefault("symbols", {})
     finalized["symbols"].setdefault(symbol, {})
     finalized["symbols"][symbol][direction]["canary"] = None
     finalized["symbols"][symbol][direction]["active"]["mode"] = "incumbent"
+    finalized["symbols"][symbol][direction]["active"]["status"] = "incumbent"
+    finalized["symbols"][symbol][direction]["active"]["applied_at"] = now
     finalized["symbols"][symbol][direction]["objective"] = {
         "forward_exact_contract": {},
         "tracked_realized": observed,
@@ -632,6 +637,20 @@ def _finalize_canary(
     }
     finalized["current_canary"] = _current_canary_map(finalized)
     write_incumbents(finalized)
+
+    updated_live = copy.deepcopy(live_profile)
+    updated_live.setdefault("symbols", {})
+    updated_live["symbols"].setdefault(symbol, {})
+    live_entry = copy.deepcopy(updated_live["symbols"][symbol].get(direction) or default_symbol_manifest(symbol, direction))
+    live_entry["symbol"] = symbol
+    live_entry["direction"] = direction
+    live_entry["candidate_id"] = candidate_id or live_entry.get("candidate_id")
+    live_entry["mode"] = "incumbent"
+    live_entry["status"] = "incumbent"
+    live_entry["applied_at"] = now
+    updated_live["symbols"][symbol][direction] = live_entry
+    write_live_profile(updated_live)
+
     write_decision(
         {
             "action": "finalize_canary",
@@ -719,6 +738,7 @@ def _maybe_finalize_or_rollback_canaries(
                 observed=observed,
                 observed_score=observed_score,
                 incumbents=current_incumbents,
+                live_profile=current_live_profile,
             )
             actions.append(action)
             current_incumbents = load_incumbents()

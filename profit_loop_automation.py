@@ -1233,6 +1233,14 @@ def _validation_baseline_artifact_path(proof_dir: Path) -> Path:
     return proof_dir / "validation_baseline.json"
 
 
+def _shared_replay_matrix_artifact_path(
+    proof_fingerprint: str,
+    *,
+    state_dir: str | Path | None = None,
+) -> Path:
+    return shared_state_dir(state_dir) / "replay-matrix-cache" / f"{str(proof_fingerprint).strip()}.json"
+
+
 def _load_validation_baseline_artifact(proof_dir: Path) -> dict[str, Any]:
     artifact = _read_json_artifact(_validation_baseline_artifact_path(proof_dir))
     if artifact is None:
@@ -1538,7 +1546,6 @@ def _capture_validation_baseline(
     replay_matrix_assessment = None
     if proof_plan["needs_replay_matrix"]:
         replay_artifact_path = proof_dir / "replay_matrix.json"
-        replay_artifact = _read_json_artifact(replay_artifact_path)
         replay_fingerprint = _validation_fingerprint(
             commit_sha=context["commit_sha"],
             env_hash=context["env_hash"],
@@ -1548,22 +1555,35 @@ def _capture_validation_baseline(
             pricing_spec="matrix",
             modules=proof_plan["modules"],
         )
+        shared_replay_artifact_path = _shared_replay_matrix_artifact_path(
+            replay_fingerprint,
+            state_dir=state_dir,
+        )
+        replay_artifact = _read_json_artifact(replay_artifact_path)
+        shared_replay_artifact = (
+            replay_artifact
+            if replay_artifact and replay_artifact.get("proof_fingerprint") == replay_fingerprint
+            else _read_json_artifact(shared_replay_artifact_path)
+        )
         if replay_artifact and replay_artifact.get("proof_fingerprint") == replay_fingerprint:
             replay_cases = list(replay_artifact.get("replay_cases") or [])
             proof_reuse.append("proof_bundle.replay_matrix")
+        elif shared_replay_artifact and shared_replay_artifact.get("proof_fingerprint") == replay_fingerprint:
+            replay_cases = list(shared_replay_artifact.get("replay_cases") or [])
+            _write_json_artifact(replay_artifact_path, dict(shared_replay_artifact))
+            proof_reuse.append("shared_state.replay_matrix")
         else:
             replay_cases = _baseline_replay_matrix(
                 playbook=str(proof_plan["playbook"]),
                 truth_lane=str(proof_plan["truth_lane"]),
             )
-            _write_json_artifact(
-                replay_artifact_path,
-                {
-                    "run_id": run_id,
-                    "proof_fingerprint": replay_fingerprint,
-                    "replay_cases": replay_cases,
-                },
-            )
+            replay_payload = {
+                "run_id": run_id,
+                "proof_fingerprint": replay_fingerprint,
+                "replay_cases": replay_cases,
+            }
+            _write_json_artifact(replay_artifact_path, replay_payload)
+            _write_json_artifact(shared_replay_artifact_path, replay_payload)
         replay_matrix_assessment = _replay_matrix_assessment(replay_cases)
 
     holdout_evidence = None

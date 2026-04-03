@@ -10,6 +10,8 @@ from unittest.mock import patch
 from profit_loop_automation import (
     _load_local_env,
     _proof_context,
+    _capture_validation_baseline,
+    _shared_replay_matrix_artifact_path,
     _require_daily_truth_refresh,
     _validation_fingerprint,
     defer_profit_validation_issue,
@@ -669,6 +671,140 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(deferred["status"], "deferred")
         self.assertEqual(deferred["deferred_reason"], "no_safe_fix_plan")
         self.assertTrue(str(deferred["next_action"]).strip())
+
+    def test_capture_validation_baseline_reuses_shared_replay_matrix_cache(self):
+        state = load_profit_loop_state(self.state_dir)
+        proof_context = {
+            "commit_sha": "abc1234",
+            "env_hash": "env456",
+            "base_fingerprint": "match",
+            "env_files_loaded": [],
+        }
+        proof_plan_modules = ["tests.test_metric_truth_audit", "tests.test_wfo_optimizer_calibration"]
+        state["latest_operational_health"] = {
+            "ran_at": "2026-04-02T11:30:00Z",
+            "verdict": "healthy",
+            "loop_execution_status": "healthy",
+            "results": {
+                "smoke_summary": {"scan_truth_lane": "historical_imported_daily"},
+                "unittest_passed": True,
+                "executed_test_modules": proof_plan_modules,
+            },
+            "proof_context": {"base_fingerprint": "match"},
+        }
+        state["latest_truth_holdout"] = {
+            "ran_at": "2026-04-02T11:45:00Z",
+            "verdict": "recorded",
+            "loop_execution_status": "healthy",
+            "results": {"daily_truth_refresh": {"status": "refreshed"}},
+        }
+        save_profit_loop_state(state, state_dir=self.state_dir)
+
+        replay_fingerprint = _validation_fingerprint(
+            commit_sha=proof_context["commit_sha"],
+            env_hash=proof_context["env_hash"],
+            truth_lane="historical_imported_daily",
+            playbook="broad",
+            blocker_class="replay_matrix_suspicious",
+            pricing_spec="matrix",
+            modules=proof_plan_modules,
+        )
+        replay_cases = [
+            {
+                "lookback_years": 1,
+                "requested_pricing_lane": "mid",
+                "effective_pricing_lane": "historical_imported_daily",
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 70},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 70,
+                "profit_factor": 0.45,
+                "avg_pnl_pct": -21.27,
+                "directional_accuracy_pct": 50.0,
+                "max_drawdown_pct": 100.0,
+                "error": None,
+            },
+            {
+                "lookback_years": 2,
+                "requested_pricing_lane": "mid",
+                "effective_pricing_lane": "historical_imported_daily",
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 354,
+                "profit_factor": 0.48,
+                "avg_pnl_pct": -20.03,
+                "directional_accuracy_pct": 41.5,
+                "max_drawdown_pct": 100.0,
+                "error": None,
+            },
+            {
+                "lookback_years": 1,
+                "requested_pricing_lane": "pessimistic",
+                "effective_pricing_lane": "historical_imported_daily",
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 70},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 70,
+                "profit_factor": 0.45,
+                "avg_pnl_pct": -21.27,
+                "directional_accuracy_pct": 50.0,
+                "max_drawdown_pct": 100.0,
+                "error": None,
+            },
+            {
+                "lookback_years": 2,
+                "requested_pricing_lane": "pessimistic",
+                "effective_pricing_lane": "historical_imported_daily",
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 354,
+                "profit_factor": 0.48,
+                "avg_pnl_pct": -20.03,
+                "directional_accuracy_pct": 41.5,
+                "max_drawdown_pct": 100.0,
+                "error": None,
+            },
+        ]
+        shared_cache_path = _shared_replay_matrix_artifact_path(replay_fingerprint, state_dir=self.state_dir)
+        shared_cache_path.parent.mkdir(parents=True, exist_ok=True)
+        shared_cache_path.write_text(
+            json.dumps(
+                {
+                    "run_id": "seeded-replay",
+                    "proof_fingerprint": replay_fingerprint,
+                    "replay_cases": replay_cases,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf8",
+        )
+
+        issue = {
+            "issue_id": "replay-matrix-collapsed-results",
+            "blocker_class": "replay_matrix_suspicious",
+        }
+        with patch("profit_loop_automation._proof_context", return_value=proof_context), \
+             patch(
+                 "profit_loop_automation._run_proof_modules",
+                 return_value={"record": {"command": "", "passed": True, "stdout": "", "stderr": ""}, "passed": True, "count": 0, "module_status": {}},
+             ), \
+             patch("profit_loop_automation._baseline_replay_matrix", side_effect=AssertionError("shared replay cache should be reused")):
+            baseline = _capture_validation_baseline(
+                issue=issue,
+                state=state,
+                run_id="daily-profit-validation-run",
+                state_dir=self.state_dir,
+                dry_run=False,
+            )
+
+        proof_replay_path = self.state_dir / "runs" / "daily-profit-validation-run" / "replay_matrix.json"
+        self.assertEqual(baseline["replay_cases"], replay_cases)
+        self.assertIn("shared_state.replay_matrix", baseline["proof_reuse"])
+        self.assertTrue(proof_replay_path.exists())
 
     def test_profit_validation_resolve_records_branch_commit_and_proof(self):
         state = load_profit_loop_state(self.state_dir)

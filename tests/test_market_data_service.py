@@ -1,7 +1,6 @@
 import importlib.util
 import os
 import sqlite3
-import tempfile
 import unittest
 from datetime import timedelta
 from pathlib import Path
@@ -21,6 +20,7 @@ if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
 from options_algorithm_fixtures import FrozenDateTime, make_history, make_option_frame
+from workspace_tempdir import WorkspaceTempDir
 
 
 SERVICE_SPEC = importlib.util.find_spec("market_data_service")
@@ -123,7 +123,7 @@ class _ExplodingOptionTicker:
 @unittest.skipUnless(MARKET_DATA_SERVICE_AVAILABLE, "market_data_service not available in this checkout")
 class MarketDataServiceTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = WorkspaceTempDir(prefix="market-data-service")
         self.addCleanup(self._tmp.cleanup)
         self.db_path = os.path.join(self._tmp.name, "market_data.db")
         self.history_df = make_history(length=320, start=100.0, step=0.7, wave=1.5, volume=8_000_000)

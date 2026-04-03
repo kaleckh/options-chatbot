@@ -990,10 +990,25 @@ export interface DayTradingProfitabilityJournalEntrySummary {
   ticketId: string;
   tradeTimestamp: string | null;
   loggedAt: string | null;
+  localTradeDate?: string | null;
+  sessionLabel?: string | null;
   symbol: string;
   regime: string;
   setupId: string;
   side: string;
+  orderType?: string;
+  entryLiquidityRole?: string;
+  exitLiquidityRole?: string;
+  entryFillRatio?: number | null;
+  exitFillRatio?: number | null;
+  plannedEntryPrice?: number | null;
+  actualEntryPrice?: number | null;
+  stopPrice?: number | null;
+  targetPrice?: number | null;
+  actualExitPrice?: number | null;
+  sizeUsd?: number | null;
+  feesUsd?: number | null;
+  spreadSlippageUsd?: number | null;
   pnlR: number | null;
   pnlUsd: number | null;
   ruleAdherenceScore: number | null;
@@ -1003,6 +1018,18 @@ export interface DayTradingProfitabilityJournalEntrySummary {
   pilotEligible: boolean;
   pilotDisqualificationReasons: string[];
   note: string;
+}
+
+export interface DayTradingProfitabilityJournalAggregate {
+  label: string;
+  totalEntries: number;
+  eligibleEntries: number;
+  disqualifiedEntries: number;
+  netPnlUsd: number;
+  eligibleNetPnlUsd: number;
+  expectancyR: number | null;
+  winRate: number | null;
+  ruleAdherenceRate: number | null;
 }
 
 export interface DayTradingProfitabilityJournalSummary {
@@ -1015,7 +1042,111 @@ export interface DayTradingProfitabilityJournalSummary {
     required: boolean;
   }>;
   lastLoggedAt: string | null;
+  todayDate?: string | null;
+  todayEntryCount?: number;
+  todayEntries?: DayTradingProfitabilityJournalEntrySummary[];
   recentEntries: DayTradingProfitabilityJournalEntrySummary[];
+  recentEligibleEntries?: DayTradingProfitabilityJournalEntrySummary[];
+  today?: DayTradingProfitabilityJournalAggregate | null;
+  trailingWeek?: DayTradingProfitabilityJournalAggregate | null;
+  byDate?: DayTradingProfitabilityJournalAggregate[];
+  byMistakeTag?: DayTradingProfitabilityJournalAggregate[];
+}
+
+export interface DayTradingExperimentVariantResult {
+  variantId: string;
+  strategyId: string;
+  strategyName: string;
+  baseStrategyId?: string | null;
+  strategyFamily?: string | null;
+  symbol?: string | null;
+  timeframe?: string | null;
+  market?: string | null;
+  exchange?: string | null;
+  marketType?: string | null;
+  sessionMode?: string | null;
+  windowMode?: string | null;
+  windowModeLabel?: string | null;
+  variantLabel?: string | null;
+  challengerKind?: string | null;
+  trustedMarketData?: boolean;
+  marketDataSource?: string | null;
+  marketDataWarning?: string | null;
+  raw1mBarCountUsed?: number | null;
+  derived5mBarCountUsed?: number | null;
+  imported1mBarCountUsed?: number | null;
+  importedSpanUsed?: {
+    startTimestamp?: string | null;
+    endTimestamp?: string | null;
+  } | null;
+  usedSpan?: {
+    startTimestamp?: string | null;
+    endTimestamp?: string | null;
+  } | null;
+  latestBarTimestamp?: string | null;
+  experimentScore?: number | null;
+  summary?: {
+    eligibleForPromotion?: boolean;
+    profitFactor?: number | null;
+    totalNetReturnFraction?: number | null;
+    winRate?: number | null;
+    tradeCount?: number | null;
+    vetoReasons?: string[];
+  } | null;
+  parameters?: Record<string, unknown> | null;
+}
+
+export interface DayTradingExperimentReport {
+  generatedAt: string;
+  market?: string;
+  exchange?: string;
+  marketType?: string;
+  sessionMode?: string;
+  windowModesEvaluated?: string[];
+  alertWindows?: {
+    id: string;
+    label: string;
+    startEt: string;
+    endEt: string;
+  }[];
+  barsRequested?: number;
+  feesFraction?: number;
+  strictMarketData?: boolean;
+  scope?: string;
+  researchMode?: string;
+  strategiesTested?: number;
+  controlStrategiesTested?: number;
+  variantsTested?: number;
+  trustedVariantCount?: number;
+  untrustedVariantCount?: number;
+  eligibleVariantCount?: number;
+  marketDataUsage?: Record<string, unknown> | null;
+  tradeCountBySymbol?: Record<string, number>;
+  tradeCountByWindowMode?: Record<string, number>;
+  pnlShareBySymbol?: Record<string, number>;
+  pnlShareByWindowMode?: Record<string, number>;
+  leaders?: DayTradingExperimentVariantResult[];
+  phaseA?: {
+    description?: string;
+    familyWindowReviews?: Record<string, unknown>[];
+    controlResults?: DayTradingExperimentVariantResult[];
+  };
+  phaseB?: {
+    unlocked?: boolean;
+    reason?: string;
+    selectedFamilyWindow?: {
+      strategyFamily?: string;
+      windowMode?: string;
+      windowModeLabel?: string;
+    } | null;
+    selectedControlStrategyId?: string | null;
+    batchShape?: string | null;
+    results?: DayTradingExperimentVariantResult[];
+  };
+  recommendation?: string;
+  nextSprintDefault?: string;
+  notes?: string[];
+  results?: DayTradingExperimentVariantResult[];
 }
 
 export interface DayTradingPilotMilestone {
@@ -1128,8 +1259,32 @@ export interface DayTradingPilotSummary {
   executionStats?: DayTradingPilotExecutionStats;
   breakdownByRegime: DayTradingPilotBreakdown[];
   breakdownBySetup: DayTradingPilotBreakdown[];
+  breakdownByMistakeTag?: DayTradingPilotBreakdown[];
   gates: DayTradingPilotGate[];
   nextUnlock: string;
+}
+
+export interface DayTradingOperatorConsoleSnapshot {
+  generatedAt: string;
+  now: string;
+  sessionWindow: {
+    windowMode: string;
+    activeNow: boolean;
+    activeWindowId: string | null;
+    activeWindowLabel: string | null;
+    windows: {
+      id: string;
+      label: string;
+      startEt: string;
+      endEt: string;
+    }[];
+  };
+  todayGate: DayTradingTodayGate;
+  pilotPhase: string;
+  nextUnlock: string;
+  journal: DayTradingProfitabilityJournalSummary;
+  experimentReport?: DayTradingExperimentReport | null;
+  artifactHealth?: DayTradingArtifactHealth | null;
 }
 
 export interface DayTradingValidationResult {
@@ -1218,6 +1373,10 @@ export interface DayTradingWatchlistItem {
   currentPrice: number | null;
   indicators: Record<string, unknown> | null;
   reasons: string[];
+  priorityScore?: number | null;
+  priorityReasons?: string[];
+  prioritySignals?: Record<string, unknown>;
+  pilotSignals?: Record<string, unknown>;
 }
 
 export interface DayTradingWatchlist {
@@ -1235,6 +1394,7 @@ export interface DayTradingWatchlist {
     endEt: string;
   }[];
   rankingBasis: string;
+  rankingMethod?: string;
   morningWindow: {
     startEt: string;
     cutoffEt: string;
@@ -1254,6 +1414,8 @@ export interface DayTradingWatchlist {
   selectedStrategies: number;
   notifyNowCount: number;
   todayGate?: DayTradingTodayGate;
+  pilotSummary?: Partial<DayTradingPilotSummary> | null;
+  journalSummary?: DayTradingProfitabilityJournalSummary | null;
   items: DayTradingWatchlistItem[];
 }
 
@@ -1331,4 +1493,6 @@ export interface DayTradingSnapshot {
   profitabilityJournal?: DayTradingProfitabilityJournalSummary;
   profitabilityTickets?: DayTradingProfitabilityTicketsSummary;
   artifactHealth?: DayTradingArtifactHealth;
+  experimentReport?: DayTradingExperimentReport | null;
+  operatorConsole?: DayTradingOperatorConsoleSnapshot;
 }

@@ -12,6 +12,7 @@ import pandas as pd
 import expectancy_calibration as ec
 import market_data_service as mds
 import options_chatbot as oc
+import options_profitability_forensics as opf
 import supervised_scan as ss
 import wfo_optimizer as wfo
 
@@ -587,6 +588,7 @@ class StrategyAuditTests(unittest.TestCase):
         sp["risk"]["stop_loss_pct"] = 42.0
         sp["risk"]["profit_target_pct"] = 88.0
         sp["filters"]["min_ev_return_pct"] = 12.0
+        profile_calls = []
 
         class _EvalTicker:
             earnings_dates = pd.DataFrame()
@@ -594,7 +596,11 @@ class StrategyAuditTests(unittest.TestCase):
             def history(self, period="10d", start=None, end=None, interval=None):
                 return _make_close_history(10, 400.0)
 
-        with patch.object(oc, "_get_profile", return_value=sp), \
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            return sp
+
+        with patch.object(oc, "_get_profile", side_effect=fake_get_profile), \
              patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
@@ -624,6 +630,7 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(result["adjusted_parameters"]["stop_loss_pct"], 42.0)
         self.assertEqual(result["adjusted_parameters"]["profit_target_pct"], 88.0)
         self.assertEqual(result["expected_value"]["required_ev_pct"], 12.0)
+        self.assertEqual(profile_calls[0], ("SPY", "call"))
 
     def test_evaluate_trade_signal_blocks_missing_quotes(self):
         sp = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
@@ -705,6 +712,298 @@ class StrategyAuditTests(unittest.TestCase):
         reasons = set(result["liquidity"]["reasons"])
         self.assertTrue({"wide_spread", "low_contract_volume", "low_open_interest", "stale_quote"}.issubset(reasons))
         self.assertIn("Contract blocked:", result["liquidity"]["flag"])
+
+    def test_pending_pick_grading_uses_direction_aware_profile(self):
+        profile_calls = []
+        sp = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        sp["early_exit"]["enabled"] = False
+        predictions = [
+            {
+                "id": 1,
+                "ticker": "SPY",
+                "direction": "call",
+                "type": "daily_scan",
+                "entry_date": "2025-03-20",
+                "entry_price": 100.0,
+                "target_date": "2025-03-31",
+                "est_premium": 2.0,
+                "delta_est": 0.3,
+                "stop_loss_pct": 50.0,
+                "profit_target_pct": 100.0,
+            }
+        ]
+        ticker_hist = pd.DataFrame(
+            {
+                "Open": [100.2, 100.5],
+                "High": [101.0, 101.1],
+                "Low": [99.8, 100.0],
+                "Close": [100.8, 100.9],
+            },
+            index=pd.to_datetime(["2025-03-21", "2025-03-24"]),
+        )
+        spy_hist = pd.DataFrame(
+            {"Close": [400.0, 401.0, 402.0, 403.0, 404.0, 405.0]},
+            index=pd.date_range("2025-03-14", periods=6, freq="B"),
+        )
+
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            return copy.deepcopy(sp)
+
+        def fake_history(symbol, *args, **kwargs):
+            return spy_hist if str(symbol).upper() == "SPY" and kwargs.get("period") == "10d" else ticker_hist
+
+        with patch.object(oc, "datetime", _StrategyAuditDateTime), \
+             patch.object(oc, "_load_predictions", return_value=copy.deepcopy(predictions)), \
+             patch.object(oc, "_save_predictions"), \
+             patch.object(oc, "_cached_history", side_effect=fake_history), \
+             patch.object(oc, "_cached_options", return_value=[]), \
+             patch.object(oc, "_get_profile", side_effect=fake_get_profile):
+            oc.log_prediction(action="grade")
+
+        self.assertIn(("SPY", "call"), profile_calls)
+
+    def test_check_early_exit_maps_bullish_and_bearish_to_side_profiles(self):
+        profile_calls = []
+        sp = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        sp["early_exit"]["enabled"] = False
+
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            return copy.deepcopy(sp)
+
+        with patch.object(oc, "_get_profile", side_effect=fake_get_profile):
+            oc._check_early_exit({"ticker": "SPY", "direction": "bullish"}, 10.0, 12.0)
+            oc._check_early_exit({"ticker": "SPY", "direction": "bearish"}, 10.0, 12.0)
+
+        self.assertIn(("SPY", "call"), profile_calls)
+        self.assertIn(("SPY", "put"), profile_calls)
+
+    def test_calculate_iv_skew_uses_option_side_profile_when_profile_missing(self):
+        profile_calls = []
+        sp = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        price_history = pd.DataFrame(
+            {"Close": [499.0, 500.0, 501.0]},
+            index=pd.date_range("2025-03-19", periods=3, freq="B"),
+        )
+        put_chain = type(
+            "Chain",
+            (),
+            {
+                "calls": pd.DataFrame({"strike": [500.0], "impliedVolatility": [0.2]}),
+                "puts": pd.DataFrame({"strike": [500.0], "impliedVolatility": [0.24]}),
+            },
+        )()
+
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            return copy.deepcopy(sp)
+
+        with patch.object(oc, "_get_profile", side_effect=fake_get_profile), \
+             patch.object(oc, "_cached_history", return_value=price_history), \
+             patch.object(oc, "_cached_option_chain", return_value=put_chain), \
+             patch.object(oc, "_cached_options", return_value=["2026-04-17"]):
+            oc._calculate_iv_skew("SPY", 500.0, "put", "2026-04-17")
+
+        self.assertIn(("SPY", "put"), profile_calls)
+
+    def test_backtest_strategy_uses_side_specific_profile_for_explicit_option_type(self):
+        profile_calls = []
+        sp = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        short_history = pd.DataFrame(
+            {
+                "Open": [100.0 + i for i in range(20)],
+                "High": [100.5 + i for i in range(20)],
+                "Low": [99.5 + i for i in range(20)],
+                "Close": [100.0 + i for i in range(20)],
+                "Volume": [8_000_000.0 for _ in range(20)],
+            },
+            index=pd.date_range("2025-01-01", periods=20, freq="B"),
+        )
+
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            return copy.deepcopy(sp)
+
+        with patch.object(oc, "_get_profile", side_effect=fake_get_profile), \
+             patch.object(oc, "_cached_history", return_value=short_history):
+            result = json.loads(oc.backtest_strategy("SPY", option_type="call", lookback_days=5))
+
+        self.assertIn("error", result)
+        self.assertEqual(profile_calls[0], ("SPY", "call"))
+        self.assertNotIn(("SPY", None), profile_calls)
+
+    def test_backtest_strategy_signal_stays_neutral_until_side_is_selected(self):
+        profile_calls = []
+        neutral_profile = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        call_profile = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        put_profile = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        call_profile["entry"]["min_tech_score"] = 0.0
+        call_profile["entry"]["min_direction_score"] = 0.0
+        call_profile["filters"]["min_ev_return_pct"] = -100.0
+        put_profile["entry"]["min_tech_score"] = 0.0
+        put_profile["entry"]["min_direction_score"] = 99.0
+        put_profile["filters"]["min_ev_return_pct"] = 99.0
+        history = pd.DataFrame(
+            {
+                "Open": [100.0 + i for i in range(120)],
+                "High": [100.5 + i for i in range(120)],
+                "Low": [99.5 + i for i in range(120)],
+                "Close": [100.0 + i for i in range(120)],
+                "Volume": [8_000_000.0 for _ in range(120)],
+            },
+            index=pd.date_range("2024-01-01", periods=120, freq="B"),
+        )
+
+        def fake_get_profile(symbol, direction=None):
+            profile_calls.append((symbol, direction))
+            if direction == "call":
+                return copy.deepcopy(call_profile)
+            if direction == "put":
+                return copy.deepcopy(put_profile)
+            return copy.deepcopy(neutral_profile)
+
+        def fake_bs_greeks(S, K, T, r, vol, trade_type):
+            return {"delta": 0.30, "bs_price": 1.0}
+
+        with patch.object(oc, "_get_profile", side_effect=fake_get_profile), \
+             patch.object(oc, "_cached_history", return_value=history), \
+             patch.object(oc, "_cached_earnings_dates", return_value=pd.DataFrame()), \
+             patch.object(oc, "_bs_greeks", side_effect=fake_bs_greeks):
+            result = json.loads(oc.backtest_strategy("SPY", option_type="signal", lookback_days=10))
+
+        self.assertNotIn("error", result)
+        self.assertEqual(profile_calls[0], ("SPY", None))
+        self.assertIn(("SPY", "call"), profile_calls)
+
+    def test_profitability_forensics_groups_core_options_slices(self):
+        result = {
+            "run_at": "2026-04-03T14:18:04",
+            "mode": "backtest",
+            "lookback_years": 2,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "broad",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 99.2,
+            "priced_trade_count": 6,
+            "trades": [
+                {
+                    "ticker": "SPY",
+                    "type": "call",
+                    "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 82.0,
+                    "quality_score": 72.0,
+                    "tech_score": 71.0,
+                    "dte": 7,
+                    "exit_reason": "target",
+                    "pnl_pct": 25.0,
+                    "directional_correct": True,
+                },
+                {
+                    "ticker": "SPY",
+                    "type": "call",
+                    "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 76.0,
+                    "quality_score": 70.0,
+                    "tech_score": 68.0,
+                    "dte": 9,
+                    "exit_reason": "stop",
+                    "pnl_pct": -15.0,
+                    "directional_correct": False,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "put",
+                    "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 61.0,
+                    "quality_score": 65.0,
+                    "tech_score": 62.0,
+                    "dte": 18,
+                    "exit_reason": "stop",
+                    "pnl_pct": -35.0,
+                    "directional_correct": False,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "call",
+                    "selection_source": "replay_calibrated",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 84.0,
+                    "quality_score": 74.0,
+                    "tech_score": 73.0,
+                    "dte": 14,
+                    "exit_reason": "target",
+                    "pnl_pct": 18.0,
+                    "directional_correct": True,
+                },
+                {
+                    "ticker": "SPY",
+                    "type": "put",
+                    "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 58.0,
+                    "quality_score": 60.0,
+                    "tech_score": 59.0,
+                    "dte": 24,
+                    "exit_reason": "time_exit",
+                    "pnl_pct": -12.0,
+                    "directional_correct": True,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "call",
+                    "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 45.0,
+                    "quality_score": 55.0,
+                    "tech_score": 54.0,
+                    "dte": 28,
+                    "exit_reason": "time_exit",
+                    "pnl_pct": -8.0,
+                    "directional_correct": False,
+                },
+            ],
+        }
+
+        report = opf.build_options_profitability_forensics(result, min_trades=1)
+
+        self.assertTrue(
+            {
+                "generated_at",
+                "source",
+                "quality_bar",
+                "overall",
+                "exactness_view",
+                "category_order",
+                "by_category",
+                "best_dense_slices",
+                "worst_dense_slices",
+                "blockers",
+                "recommendations",
+            }.issubset(report.keys())
+        )
+        self.assertEqual(
+            report["category_order"],
+            [
+                "symbol",
+                "side",
+                "symbol_side",
+                "selection_source",
+                "contract_resolution",
+                "score_bands",
+                "dte_bucket",
+                "exit_reason",
+            ],
+        )
+        self.assertTrue(report["by_category"]["symbol"])
+        self.assertTrue(report["by_category"]["side"])
+        self.assertIn("exact_only", report["exactness_view"])
+        self.assertEqual(report["exactness_view"]["exact_only"]["trades"], 3)
+        self.assertEqual(report["exactness_view"]["nearest_only"]["trades"], 3)
+        self.assertTrue(any(item["value"] == "SPY:call" for item in report["by_category"]["symbol_side"]))
 
     def test_historical_backtest_uses_spy_aligned_open_series(self):
         spy_dates = pd.date_range("2024-01-01", periods=100, freq="B")

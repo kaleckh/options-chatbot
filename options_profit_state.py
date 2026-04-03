@@ -137,6 +137,11 @@ def _candidate_direction_from_id(candidate_id: str) -> str | None:
     return direction
 
 
+def _candidate_direction_from_payload(payload: Any) -> str | None:
+    current = dict(payload or {}) if isinstance(payload, dict) else {}
+    return _candidate_direction_from_id(str(current.get("candidate_id") or ""))
+
+
 def _cohort_id_from_candidate_id(candidate_id: str) -> str | None:
     _, _, cohort_id = _candidate_parts(candidate_id)
     return cohort_id
@@ -272,8 +277,7 @@ def _ensure_side_candidate(symbol: str, direction: str, seed: dict[str, Any] | N
         payload["status"] = str(seed.get("status") or payload["status"])
         payload["replay_policy_path"] = seed.get("replay_policy_path")
         payload["replay_validation"] = copy.deepcopy(dict(seed.get("replay_validation") or {}))
-    save_candidate(payload)
-    return load_candidate(candidate_id) or _normalize_candidate(payload)
+    return _normalize_candidate(payload)
 
 
 def _default_live_symbol_side_entry(symbol: str, direction: str) -> dict[str, Any]:
@@ -427,8 +431,42 @@ def _normalize_canary_metadata(symbol: str, direction: str, entry: Any) -> dict[
     if not entry:
         return None
     current = copy.deepcopy(dict(entry or {}))
-    current["symbol"] = str(current.get("symbol") or symbol).strip().upper()
-    current["direction"] = _normalize_direction(current.get("direction")) or _normalize_direction(direction) or "call"
+    normalized_symbol = str(current.get("symbol") or symbol).strip().upper()
+    normalized_direction = (
+        _normalize_direction(current.get("direction"))
+        or _candidate_direction_from_payload(current)
+        or _normalize_direction(direction)
+        or "call"
+    )
+    current["symbol"] = normalized_symbol
+    current["direction"] = normalized_direction
+    candidate = _ensure_side_candidate(normalized_symbol, normalized_direction, current)
+    current["candidate_id"] = candidate.get("candidate_id") or current.get("candidate_id")
+    current["cohort_id"] = candidate.get("cohort_id") or current.get("cohort_id")
+    return current
+
+
+def _normalize_legacy_rollout_metadata(symbol: str, direction: str, entry: Any) -> dict[str, Any] | None:
+    candidate_direction = _candidate_direction_from_payload(entry)
+    if candidate_direction != _normalize_direction(direction):
+        return None
+    return _normalize_canary_metadata(symbol, direction, entry)
+
+
+def _normalize_legacy_objective(symbol: str, direction: str, entry: Any) -> dict[str, Any] | None:
+    candidate_direction = _candidate_direction_from_payload(entry)
+    if candidate_direction != _normalize_direction(direction):
+        return None
+    current = copy.deepcopy(dict(entry or {}))
+    candidate = _ensure_side_candidate(symbol, direction, current)
+    if current.get("candidate_id") is not None:
+        current["candidate_id"] = candidate.get("candidate_id") or current.get("candidate_id")
+    if current.get("cohort_id") is not None:
+        current["cohort_id"] = candidate.get("cohort_id") or current.get("cohort_id")
+    if current.get("symbol") is not None:
+        current["symbol"] = str(symbol).strip().upper()
+    if current.get("direction") is not None:
+        current["direction"] = _normalize_direction(direction) or "call"
     return current
 
 
@@ -495,10 +533,15 @@ def _normalize_incumbents_state(payload: dict[str, Any] | None) -> tuple[dict[st
                     "canary": None,
                     "objective": None,
                 }
-            raw_direction_map = {
-                direction: copy.deepcopy(legacy_state)
-                for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS
-            }
+            raw_direction_map = {}
+            for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS:
+                raw_direction_map[direction] = {
+                    "symbol": symbol,
+                    "active": copy.deepcopy(legacy_state.get("active")),
+                    "previous": copy.deepcopy(legacy_state.get("previous")),
+                    "canary": _normalize_legacy_rollout_metadata(symbol, direction, legacy_state.get("canary")),
+                    "objective": _normalize_legacy_objective(symbol, direction, legacy_state.get("objective")),
+                }
         normalized_symbols[symbol] = {
             direction: _normalize_incumbent_side_state(symbol, direction, dict(raw_direction_map.get(direction) or {}))
             for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS
@@ -567,7 +610,7 @@ def _normalize_status_state(payload: dict[str, Any] | None) -> tuple[dict[str, A
             legacy_symbol = str(raw_canary.get("symbol") or "").strip().upper()
             if legacy_symbol in ALLOWED_OPTIONS_PROFIT_SYMBOLS:
                 for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS:
-                    normalized_canary[legacy_symbol][direction] = _normalize_canary_metadata(
+                    normalized_canary[legacy_symbol][direction] = _normalize_legacy_rollout_metadata(
                         legacy_symbol,
                         direction,
                         raw_canary,
@@ -626,11 +669,176 @@ def ensure_options_profit_state() -> Path:
     return state_dir
 
 
+def normalize_live_profile_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    normalized, _ = _normalize_live_profile_state(payload)
+    return normalized
+
+
+def normalize_incumbents_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    normalized, _ = _normalize_incumbents_state(payload)
+    return normalized
+
+
+def normalize_profit_status_payload(payload: dict[str, Any] | None) -> dict[str, Any]:
+    normalized, _ = _normalize_status_state(payload)
+    return normalized
+
+
+def _raw_has_symbol_side_entry(raw_symbols: Any, symbol: str, direction: str) -> bool:
+    symbols = dict(raw_symbols or {}) if isinstance(raw_symbols, dict) else {}
+    raw_symbol_value = symbols.get(symbol)
+    if not raw_symbol_value:
+        return False
+    if _looks_like_direction_map(raw_symbol_value):
+        return bool(dict(raw_symbol_value or {}).get(direction))
+    return True
+
+
+def _raw_has_current_canary_side(raw_canary: Any, symbol: str, direction: str) -> bool:
+    if not isinstance(raw_canary, dict):
+        return False
+    if any(candidate_symbol in raw_canary for candidate_symbol in ALLOWED_OPTIONS_PROFIT_SYMBOLS):
+        symbol_canary = raw_canary.get(symbol)
+        if _looks_like_direction_map(symbol_canary):
+            return bool(dict(symbol_canary or {}).get(direction))
+        return False
+    legacy_symbol = str(raw_canary.get("symbol") or "").strip().upper()
+    if legacy_symbol != symbol:
+        return False
+    return _candidate_direction_from_payload(raw_canary) == _normalize_direction(direction)
+
+
+def _raw_incumbents_has_canary(raw_symbols: Any, symbol: str, direction: str) -> bool:
+    symbols = dict(raw_symbols or {}) if isinstance(raw_symbols, dict) else {}
+    raw_symbol_value = symbols.get(symbol)
+    if not raw_symbol_value:
+        return False
+    if _looks_like_direction_map(raw_symbol_value):
+        side_state = dict((raw_symbol_value or {}).get(direction) or {})
+        return bool(side_state.get("canary"))
+    state = dict(raw_symbol_value or {})
+    if state and "active" not in state:
+        state = {
+            "symbol": symbol,
+            "active": state,
+            "previous": None,
+            "canary": None,
+            "objective": None,
+        }
+    return _candidate_direction_from_payload(state.get("canary")) == _normalize_direction(direction)
+
+
+def build_read_only_profit_status_view(
+    *,
+    status_payload: dict[str, Any] | None,
+    incumbents_payload: dict[str, Any] | None,
+    live_profile_payload: dict[str, Any] | None,
+    decision_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    raw_status = dict(status_payload or {})
+    raw_incumbents = dict(incumbents_payload or {})
+    raw_live_profile = dict(live_profile_payload or {})
+    raw_decision = dict(decision_payload or {})
+
+    normalized_status = normalize_profit_status_payload(raw_status)
+    normalized_incumbents = normalize_incumbents_payload(raw_incumbents)
+    normalized_live_profile = normalize_live_profile_payload(raw_live_profile)
+    normalized_decision_canary = normalize_profit_status_payload(
+        {"current_canary": raw_decision.get("current_canary")}
+    )["current_canary"]
+    defaults = _default_status_payload()
+
+    raw_status_active = dict(raw_status.get("active_incumbents") or {})
+    raw_incumbent_symbols = dict(raw_incumbents.get("symbols") or {})
+    raw_live_symbols = dict(raw_live_profile.get("symbols") or {})
+    raw_status_canary = raw_status.get("current_canary")
+    raw_decision_canary = raw_decision.get("current_canary")
+
+    active_incumbents: dict[str, dict[str, Any]] = {}
+    current_canary: dict[str, dict[str, Any] | None] = {}
+    for symbol in ALLOWED_OPTIONS_PROFIT_SYMBOLS:
+        active_incumbents[symbol] = {}
+        current_canary[symbol] = {}
+        for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS:
+            status_active = (
+                copy.deepcopy(normalized_status["active_incumbents"][symbol][direction])
+                if _raw_has_symbol_side_entry(raw_status_active, symbol, direction)
+                else None
+            )
+            incumbent_active = (
+                copy.deepcopy(normalized_incumbents["symbols"][symbol][direction]["active"])
+                if _raw_has_symbol_side_entry(raw_incumbent_symbols, symbol, direction)
+                else None
+            )
+            live_active = (
+                copy.deepcopy(normalized_live_profile["symbols"][symbol][direction])
+                if _raw_has_symbol_side_entry(raw_live_symbols, symbol, direction)
+                else None
+            )
+            active_incumbents[symbol][direction] = (
+                status_active
+                or incumbent_active
+                or live_active
+                or copy.deepcopy(defaults["active_incumbents"][symbol][direction])
+            )
+
+            status_canary = (
+                copy.deepcopy(normalized_status["current_canary"][symbol][direction])
+                if _raw_has_current_canary_side(raw_status_canary, symbol, direction)
+                else None
+            )
+            incumbent_canary = (
+                copy.deepcopy(normalized_incumbents["current_canary"][symbol][direction])
+                if _raw_incumbents_has_canary(raw_incumbent_symbols, symbol, direction)
+                else None
+            )
+            decision_canary = (
+                copy.deepcopy(normalized_decision_canary[symbol][direction])
+                if _raw_has_current_canary_side(raw_decision_canary, symbol, direction)
+                else None
+            )
+            current_canary[symbol][direction] = status_canary or incumbent_canary or decision_canary
+
+    measurement_gate = (
+        copy.deepcopy(dict(raw_status.get("measurement_gate") or {}))
+        or copy.deepcopy(dict(raw_decision.get("measurement_gate") or {}))
+        or copy.deepcopy(dict(defaults.get("measurement_gate") or {}))
+    )
+    last_decision = (
+        copy.deepcopy(dict(raw_status.get("last_decision") or {}))
+        or copy.deepcopy(raw_decision)
+        or copy.deepcopy(dict(defaults.get("last_decision") or {}))
+    )
+    blockers = (
+        list(raw_status.get("blockers") or [])
+        or list(measurement_gate.get("blockers") or [])
+        or list(defaults.get("blockers") or [])
+    )
+    candidate_rankings = (
+        copy.deepcopy(list(normalized_status.get("candidate_rankings") or []))
+        if "candidate_rankings" in raw_status
+        else []
+    )
+    return {
+        "generated_at": (
+            str(raw_status.get("generated_at") or "")
+            or str(raw_decision.get("generated_at") or "")
+            or str(defaults.get("generated_at") or _utc_now())
+        ),
+        "daily_truth_refresh": copy.deepcopy(raw_status.get("daily_truth_refresh")),
+        "measurement_gate": measurement_gate,
+        "active_incumbents": active_incumbents,
+        "current_canary": current_canary,
+        "last_decision": last_decision,
+        "blockers": blockers,
+        "candidate_rankings": candidate_rankings,
+    }
+
+
 def load_incumbents_state() -> dict[str, Any]:
     ensure_options_profit_state()
     payload = _load_json(incumbents_path())
-    normalized, _ = _normalize_incumbents_state(payload)
-    return normalized
+    return normalize_incumbents_payload(payload)
 
 
 def save_incumbents_state(payload: dict[str, Any]) -> Path:
@@ -684,8 +892,7 @@ def save_live_profile_state(payload: dict[str, Any]) -> Path:
 def load_profit_status() -> dict[str, Any]:
     ensure_options_profit_state()
     payload = _load_json(status_path())
-    normalized, _ = _normalize_status_state(payload)
-    return normalized
+    return normalize_profit_status_payload(payload)
 
 
 def save_profit_status(payload: dict[str, Any]) -> Path:

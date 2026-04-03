@@ -70,6 +70,7 @@ from wfo_optimizer import (
     build_truth_lane_comparison,
 )
 from metric_truth_audit import build_metric_truth_report
+from options_profitability_forensics import build_options_profitability_forensics
 from forward_options_ledger import (
     LIVE_PRODUCTION_EVIDENCE_CLASS,
     MANUAL_OBSERVATION_EVIDENCE_CLASS,
@@ -89,7 +90,7 @@ from supervised_scan import (
     run_supervised_scan,
     scan_pick_market_regime,
 )
-from options_profit_state import live_profile_entry_for_symbol
+from options_profit_state import build_read_only_profit_status_view, live_profile_entry_for_symbol
 
 app = FastAPI(title="Options Chatbot Backend")
 
@@ -212,64 +213,16 @@ def _read_latest_options_profit_decision(state_dir: Path) -> dict[str, Any] | No
 
 def _read_only_options_profit_status() -> dict[str, Any]:
     state_dir = _options_profit_state_dir()
-    default_status = _default_options_profit_status()
     status_payload = _read_json_artifact(state_dir / "status.json") or {}
-    if status_payload:
-        return status_payload
-
     live_profile = _read_json_artifact(state_dir / "live_profile.json") or {}
     incumbents_payload = _read_json_artifact(state_dir / "incumbents.json") or {}
     decision_payload = _read_latest_options_profit_decision(state_dir) or {}
-    incumbent_symbols = dict(incumbents_payload.get("symbols") or {})
-    incumbent_active = {
-        symbol: {
-            direction: dict(((((incumbent_symbols.get(symbol) or {}).get(direction) or {}).get("active")) or {}))
-            for direction in ("call", "put")
-        }
-        for symbol in _OPTIONS_PROFIT_SYMBOLS
-    }
-
-    active_incumbents = (
-        status_payload.get("active_incumbents")
-        or live_profile.get("symbols")
-        or incumbent_active
-        or default_status["active_incumbents"]
+    return build_read_only_profit_status_view(
+        status_payload=status_payload,
+        incumbents_payload=incumbents_payload,
+        live_profile_payload=live_profile,
+        decision_payload=decision_payload,
     )
-    current_canary = (
-        status_payload.get("current_canary")
-        or incumbents_payload.get("current_canary")
-        or decision_payload.get("current_canary")
-        or default_status["current_canary"]
-    )
-    last_decision = (
-        status_payload.get("last_decision")
-        or decision_payload
-        or default_status["last_decision"]
-    )
-    measurement_gate = (
-        status_payload.get("measurement_gate")
-        or decision_payload.get("measurement_gate")
-        or default_status["measurement_gate"]
-    )
-    blockers = (
-        status_payload.get("blockers")
-        or measurement_gate.get("blockers")
-        or default_status["blockers"]
-    )
-    generated_at = (
-        status_payload.get("generated_at")
-        or decision_payload.get("generated_at")
-        or default_status["generated_at"]
-    )
-    return {
-        "generated_at": generated_at,
-        "daily_truth_refresh": status_payload.get("daily_truth_refresh"),
-        "measurement_gate": measurement_gate,
-        "active_incumbents": active_incumbents,
-        "current_canary": current_canary,
-        "last_decision": last_decision,
-        "blockers": blockers,
-    }
 
 
 @contextlib.contextmanager
@@ -896,6 +849,16 @@ def _build_backtest_experiments(body: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _build_backtest_profitability_forensics(
+    min_trades: int,
+    truth_lane: str | None,
+) -> dict[str, Any]:
+    return build_options_profitability_forensics(
+        result=_cached_preferred_results_by_truth_lane(truth_lane),
+        min_trades=min_trades,
+    )
+
+
 def _build_backtest_stability(
     min_trades: int,
     min_profit_factor: float,
@@ -975,6 +938,21 @@ def _cached_backtest_experiments(body: dict[str, Any]) -> dict[str, Any]:
         json.dumps(body, sort_keys=True, default=str),
     )
     return _cached_readonly_report(key, lambda: _build_backtest_experiments(body))
+
+
+def _cached_backtest_profitability_forensics(
+    min_trades: int,
+    truth_lane: str | None,
+) -> dict[str, Any]:
+    key = (
+        "backtest_profitability_forensics",
+        _preferred_results_cache_key(truth_lane),
+        int(min_trades),
+    )
+    return _cached_readonly_report(
+        key,
+        lambda: _build_backtest_profitability_forensics(min_trades, truth_lane),
+    )
 
 
 def _cached_backtest_stability(
@@ -1071,6 +1049,7 @@ def _build_backtest_summary(
         "last": _cached_last_results_by_truth_lane(truth_lane) or {"error": "No backtest results found"},
         "report": _cached_backtest_report(truth_lane, min_trades),
         "metricTruth": _cached_metric_truth_report(truth_lane, min_trades, bucket_size),
+        "profitabilityForensics": _cached_backtest_profitability_forensics(min_trades, truth_lane),
         "comparison": _cached_truth_lane_comparison_report(truth_lane),
     }
 
@@ -1643,6 +1622,15 @@ async def get_metric_truth_report(min_trades: int = 20, bucket_size: int = 10, t
 async def get_backtest_experiments(body: dict[str, Any] = {}):
     """Return a ranked options-only experiment matrix from the most recent backtest."""
     result = await _run_in_worker(_cached_backtest_experiments, body)
+    if result.get("error"):
+        return result
+    return result
+
+
+@app.get("/api/backtest/profitability-forensics")
+async def get_backtest_profitability_forensics(min_trades: int = 20, truth_lane: str | None = None):
+    """Return slice-based profitability forensics from the most recent backtest."""
+    result = await _run_in_worker(_cached_backtest_profitability_forensics, min_trades, truth_lane)
     if result.get("error"):
         return result
     return result

@@ -118,7 +118,78 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("QQQ", payload["active_incumbents"])
         self.assertIn("call", payload["active_incumbents"]["SPY"])
         self.assertIn("put", payload["active_incumbents"]["SPY"])
+        self.assertTrue(payload["active_incumbents"]["SPY"]["call"]["candidate_id"].startswith("SPY__call__"))
+        self.assertTrue(payload["active_incumbents"]["QQQ"]["put"]["candidate_id"].startswith("QQQ__put__"))
         self.assertFalse(Path(self.options_profit_state_dir).exists())
+
+    def test_options_profit_status_endpoint_normalizes_legacy_symbol_status_artifact(self):
+        state_dir = Path(self.options_profit_state_dir)
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "active_incumbents": {
+                        "SPY": {
+                            "symbol": "SPY",
+                            "candidate_id": "SPY__broad_ev7",
+                            "cohort_id": "broad_ev7",
+                            "base_profile": "index",
+                            "overrides": {"entry": {"min_tech_score": 88.0}},
+                            "source": "legacy_test",
+                            "mode": "incumbent",
+                            "status": "incumbent",
+                        }
+                    },
+                    "current_canary": {"symbol": "SPY", "candidate_id": "SPY__broad_ev7"},
+                    "last_decision": {"action": "legacy_status"},
+                    "blockers": [],
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["active_incumbents"]["SPY"]["call"]["candidate_id"], "SPY__call__broad_ev7")
+        self.assertEqual(payload["active_incumbents"]["SPY"]["put"]["candidate_id"], "SPY__put__broad_ev7")
+        self.assertEqual(payload["active_incumbents"]["SPY"]["call"]["overrides"]["entry"]["min_tech_score"], 88.0)
+        self.assertIsNone(payload["current_canary"]["SPY"]["call"])
+        self.assertIsNone(payload["current_canary"]["SPY"]["put"])
+        self.assertTrue(payload["active_incumbents"]["QQQ"]["call"]["candidate_id"].startswith("QQQ__call__"))
+
+    def test_options_profit_status_endpoint_fills_partial_state_with_default_side_entries(self):
+        state_dir = Path(self.options_profit_state_dir)
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "incumbents.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "symbols": {
+                        "SPY": {
+                            "call": {
+                                "symbol": "SPY",
+                                "direction": "call",
+                                "active": {},
+                            }
+                        }
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertTrue(payload["active_incumbents"]["SPY"]["call"]["candidate_id"].startswith("SPY__call__"))
+        self.assertTrue(payload["active_incumbents"]["SPY"]["put"]["candidate_id"].startswith("SPY__put__"))
+        self.assertTrue(payload["active_incumbents"]["QQQ"]["call"]["candidate_id"].startswith("QQQ__call__"))
 
     def test_scan_endpoint_returns_sorted_normalized_contract(self):
         response = self.client.post("/api/scan", json={"n_picks": 3, "use_recommended_policy": False})
@@ -544,16 +615,43 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("direction_score", metric_truth["metric_health"])
         self.assertIn("best_floor", metric_truth["metric_health"]["direction_score"])
 
+        profitability_forensics_response = self.client.get(
+            "/api/backtest/profitability-forensics",
+            params={"min_trades": 1},
+        )
+        self.assertEqual(profitability_forensics_response.status_code, 200)
+        profitability_forensics = profitability_forensics_response.json()
+        self.assertTrue(
+            {
+                "source",
+                "quality_bar",
+                "overall",
+                "exactness_view",
+                "category_order",
+                "by_category",
+                "best_dense_slices",
+                "worst_dense_slices",
+                "blockers",
+                "recommendations",
+            }.issubset(profitability_forensics.keys())
+        )
+        self.assertEqual(profitability_forensics["source"]["total_trades"], result["total_trades"])
+        self.assertIn("symbol", profitability_forensics["by_category"])
+        self.assertIn("side", profitability_forensics["by_category"])
+        self.assertIn("contract_resolution", profitability_forensics["by_category"])
+        self.assertIn("exact_only", profitability_forensics["exactness_view"])
+
         summary_response = self.client.get(
             "/api/backtest/summary",
             params={"min_trades": 1, "bucket_size": 10},
         )
         self.assertEqual(summary_response.status_code, 200)
         summary = summary_response.json()
-        self.assertTrue({"last", "report", "metricTruth", "comparison"}.issubset(summary.keys()))
+        self.assertTrue({"last", "report", "metricTruth", "profitabilityForensics", "comparison"}.issubset(summary.keys()))
         self.assertEqual(summary["last"]["run_at"], result["run_at"])
         self.assertEqual(summary["report"]["source"]["total_trades"], result["total_trades"])
         self.assertEqual(summary["metricTruth"]["source"]["total_trades"], result["total_trades"])
+        self.assertEqual(summary["profitabilityForensics"]["source"]["total_trades"], result["total_trades"])
 
         experiments_response = self.client.post(
             "/api/backtest/experiments",

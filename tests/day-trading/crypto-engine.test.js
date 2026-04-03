@@ -130,6 +130,36 @@ function createTradeablePreflightMarketData(timestamp, overrides = {}) {
   };
 }
 
+function createPriorityExperimentMarketData(timestamp, overrides = {}) {
+  return {
+    source: overrides.source || "crypto_priority_experiment_fixture",
+    symbol: overrides.symbol || "BTCUSDT",
+    trusted: overrides.trusted !== false,
+    market: "crypto",
+    exchange: overrides.exchange || "fixture",
+    marketType: "spot",
+    sessionMode: "scheduled_windows",
+    alertWindows: overrides.alertWindows || [{
+      id: "denver_core",
+      label: "Denver Core",
+      startEt: "09:00",
+      endEt: "13:00",
+    }],
+    marketSnapshot: overrides.marketSnapshot || TIGHT_LIQUIDITY_SNAPSHOT,
+    priceSeries: overrides.priceSeries || [createCryptoBar(timestamp, {
+      symbol: overrides.symbol || "BTCUSDT",
+      close: overrides.close ?? 100,
+      signals: overrides.signals || { crypto_range_mean_reversion: 0.84 },
+      indicators: overrides.indicators || {
+        regimeState: "range_tradeable",
+        tradeable: true,
+        regimeBlockers: [],
+      },
+    })],
+    ...overrides,
+  };
+}
+
 function buildPilotEntry(index, overrides = {}) {
   const timestamp = new Date(Date.parse("2026-04-01T13:30:00.000Z") + (index * 5 * 60 * 1000)).toISOString();
   return {
@@ -1041,6 +1071,71 @@ test("blocked watchlist items never raise notify-now alerts", async () => {
   }
 });
 
+test("pilot-aware watchlist ranking favors trusted, fresh, tradeable BTC pilot signals over stale blocked candidates", async () => {
+  const ctx = loadCryptoEngineWithTempDataRoot();
+  try {
+    const now = "2026-04-01T13:35:00.000Z";
+    const pilotStrategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", {
+      status: "paper_candidate",
+    });
+    const challengerStrategy = createCryptoFixtureStrategy(ctx.engine, "ethusdt-crypto-trend-continuation", {
+      status: "paper_candidate",
+    });
+    ctx.engine.__internal.saveStrategies([pilotStrategy, challengerStrategy]);
+
+    const marketDataLoader = async (strategy) => {
+      if (strategy.strategyId === pilotStrategy.strategyId) {
+        return createPriorityExperimentMarketData(now, {
+          symbol: "BTCUSDT",
+          trusted: true,
+          indicators: {
+            regimeState: "range_tradeable",
+            tradeable: true,
+            regimeBlockers: [],
+          },
+          signals: {
+            crypto_range_mean_reversion: 0.91,
+          },
+        });
+      }
+
+      return createPriorityExperimentMarketData("2026-04-01T13:05:00.000Z", {
+        symbol: "ETHUSDT",
+        trusted: false,
+        indicators: {
+          regimeState: "event_shocked",
+          tradeable: false,
+          regimeBlockers: ["event_shock_lockout", "expansion"],
+        },
+        signals: {
+          crypto_trend_continuation: 0.52,
+        },
+      });
+    };
+
+    const watchlist = await ctx.engine.buildMorningWatchlist({
+      bars: 40,
+      limit: 2,
+      now,
+      marketDataLoader,
+    });
+
+    assert.equal(watchlist.rankingMethod, "pilot_aware_priority");
+    assert.ok(watchlist.pilotSummary);
+    assert.ok(watchlist.journalSummary);
+    assert.equal(watchlist.items[0].strategyId, pilotStrategy.strategyId);
+    assert.equal(watchlist.items[0].prioritySignals.strategyType, "pilot");
+    assert.equal(watchlist.items[0].prioritySignals.trustedData, true);
+    assert.equal(watchlist.items[0].prioritySignals.tradeable, true);
+    assert.ok(watchlist.items[0].priorityScore > watchlist.items[1].priorityScore);
+    assert.equal(watchlist.items[1].prioritySignals.trustedData, false);
+    assert.equal(watchlist.items[1].priorityReasons.includes("untrusted_data"), true);
+    assert.equal(watchlist.items[1].priorityReasons.includes("blocker:event_shock_lockout"), true);
+  } finally {
+    ctx.cleanup();
+  }
+});
+
 test("pilot summary uses a 30-trade review checkpoint and a 50-trade advance gate", () => {
   const ctx = loadCryptoEngineWithTempDataRoot();
   try {
@@ -1075,6 +1170,71 @@ test("pilot summary uses a 30-trade review checkpoint and a 50-trade advance gat
     assert.equal(summary50.milestones[1].status, "ready");
     assert.ok(summary50.nextUnlock.includes("ETH"));
     assert.equal(summary50.progress.targetTrades, 50);
+  } finally {
+    ctx.cleanup();
+  }
+});
+
+test("pilot summary surfaces mistake-tag breakdown and operator console includes experiment state", async () => {
+  const ctx = loadCryptoEngineWithTempDataRoot();
+  try {
+    const entries = [
+      buildPilotEntry(1, { mistakeTag: "none", pnlUsd: 120, pnlR: 0.6 }),
+      buildPilotEntry(2, { mistakeTag: "late_entry", pnlUsd: -20, pnlR: -0.1 }),
+    ];
+    const summary = ctx.engine.__internal.buildProfitabilityPilotSummary(entries, {
+      ticketStore: ctx.engine.__internal.readProfitabilityTicketStore(),
+      now: "2026-04-02T13:30:00.000Z",
+    });
+    assert.ok(summary.breakdownByMistakeTag.some((bucket) => bucket.label === "none"));
+    assert.ok(summary.breakdownByMistakeTag.some((bucket) => bucket.label === "late_entry"));
+
+    const strategy = createCryptoFixtureStrategy(ctx.engine, "btcusdt-crypto-range-mean-reversion", {
+      status: "paper_candidate",
+    });
+    const report = await ctx.engine.runDayTradingExperiments({
+      strategies: [strategy],
+      bars: 40,
+      scope: "research",
+      researchMode: "control_first",
+      strictMarketData: true,
+      marketDataLoader: async () => createPriorityExperimentMarketData("2026-04-01T13:35:00.000Z", {
+        symbol: "BTCUSDT",
+        trusted: true,
+        signals: { crypto_range_mean_reversion: 0.9 },
+      }),
+    });
+    const snapshot = ctx.engine.getDayTradingSnapshot({ now: report.generatedAt });
+
+    assert.equal(snapshot.experimentReport.generatedAt, report.generatedAt);
+    assert.equal(snapshot.experimentReport.scope, "research");
+    assert.equal(snapshot.experimentReport.researchMode, "control_first");
+    assert.equal(snapshot.operatorConsole.experimentReport.generatedAt, report.generatedAt);
+    assert.equal(snapshot.operatorConsole.journal.entryCount, snapshot.profitabilityJournal.entryCount);
+    assert.equal(snapshot.operatorConsole.todayGate.remainingApprovals, snapshot.profitabilityTickets.todayGate.remainingApprovals);
+  } finally {
+    ctx.cleanup();
+  }
+});
+
+test("profitability journal summary includes today, trailing-week, and mistake-tag rollups", () => {
+  const ctx = loadCryptoEngineWithTempDataRoot();
+  try {
+    const summary = ctx.engine.__internal.buildProfitabilityJournalSummary({
+      entries: [
+        buildPilotEntry(1, { loggedAt: "2026-04-02T13:35:00.000Z", tradeTimestamp: "2026-04-02T13:35:00.000Z", mistakeTag: "none", pnlUsd: 120, pnlR: 0.6 }),
+        buildPilotEntry(2, { loggedAt: "2026-04-02T13:40:00.000Z", tradeTimestamp: "2026-04-02T13:40:00.000Z", mistakeTag: "late_entry", pnlUsd: -30, pnlR: -0.2, pilotEligible: false, pilotDisqualificationReasons: ["late_entry"] }),
+        buildPilotEntry(3, { loggedAt: "2026-03-31T13:35:00.000Z", tradeTimestamp: "2026-03-31T13:35:00.000Z", mistakeTag: "none", pnlUsd: 50, pnlR: 0.3 }),
+      ],
+    }, {
+      todayDate: "2026-04-02",
+      recentLimit: 8,
+    });
+
+    assert.equal(summary.today.totalEntries, 2);
+    assert.equal(summary.trailingWeek.totalEntries, 3);
+    assert.ok(summary.byDate.some((bucket) => bucket.label === "2026-04-02"));
+    assert.ok(summary.byMistakeTag.some((bucket) => bucket.label === "late_entry"));
   } finally {
     ctx.cleanup();
   }

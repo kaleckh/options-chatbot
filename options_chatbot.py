@@ -488,6 +488,15 @@ def _get_profile(ticker: str, direction: str | None = None) -> dict:
     merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker, direction)
     return merged_profile
 
+
+def _normalize_profile_direction(direction: Any) -> str | None:
+    value = str(direction or "").strip().lower()
+    if value in {"call", "bullish"}:
+        return "call"
+    if value in {"put", "bearish"}:
+        return "put"
+    return None
+
 # ─── Risk settings (user can update account_size mid-conversation) ────────────
 # Claude will read/write these via the manage_risk_settings tool.
 # risk_settings is a live alias for STRATEGY_PROFILE["risk"] — defined after STRATEGY_PROFILE below
@@ -2217,7 +2226,10 @@ def log_prediction(
                         p.pop("current_option_px", None)  # don't show a made-up price
 
                     # ── Smart early exit check ────────────────────────────────
-                    _ee_sp  = _get_profile(p.get("ticker", ""))
+                    _ee_sp  = _get_profile(
+                        p.get("ticker", ""),
+                        _normalize_profile_direction(p.get("direction") or p.get("type")),
+                    )
                     _ee_cfg = _ee_sp.get("early_exit", {})
                     _days_held_total = (today.date() - entry_dt.date()).days
 
@@ -2612,20 +2624,55 @@ def backtest_strategy(
     try:
         # Resolve defaults from the symbol's active profile.
         symbol_up = symbol.upper()
-        _profile = _get_profile(symbol)
+        requested_direction = _normalize_profile_direction(option_type)
+        neutral_profile = _get_profile(symbol) if requested_direction is None else None
+        call_profile = _get_profile(symbol, "call") if requested_direction in {None, "call"} else None
+        put_profile = _get_profile(symbol, "put") if requested_direction in {None, "put"} else None
+
+        def _trade_profile(trade_direction: str | None) -> dict:
+            normalized_direction = _normalize_profile_direction(trade_direction)
+            if normalized_direction == "call":
+                return call_profile or _get_profile(symbol, "call")
+            if normalized_direction == "put":
+                return put_profile or _get_profile(symbol, "put")
+            return neutral_profile or _get_profile(symbol)
+
+        default_profile = _trade_profile(requested_direction)
         if dte_at_entry is None:
-            dte_at_entry = max(DTE_MIN, min(DTE_MAX, int(_profile["targets"]["dte_optimal"])))
-        if delta_target      is None: delta_target      = _profile["targets"]["delta_optimal"]
-        if stop_loss_pct     is None: stop_loss_pct     = _profile["risk"]["stop_loss_pct"]
-        if profit_target_pct is None: profit_target_pct = _profile["risk"]["profit_target_pct"]
-        if vix_max           is None: vix_max           = _profile["filters"]["vix_defense_threshold"]
+            if requested_direction:
+                dte_at_entry = max(DTE_MIN, min(DTE_MAX, int(default_profile["targets"]["dte_optimal"])))
+            else:
+                dte_at_entry = max(
+                    DTE_MIN,
+                    min(
+                        DTE_MAX,
+                        max(
+                            int(_trade_profile(None)["targets"]["dte_optimal"]),
+                            int(_trade_profile("call")["targets"]["dte_optimal"]),
+                            int(_trade_profile("put")["targets"]["dte_optimal"]),
+                        ),
+                    ),
+                )
 
-        # Dollar sizing: explicit param → risk_settings account → fallback $1 000
-        if position_size_dollars is None:
-            acct = _profile["risk"].get("account_size") or 0
-            position_size_dollars = acct * 0.10 if acct else 1_000.0
+        if requested_direction:
+            if delta_target is None:
+                delta_target = default_profile["targets"]["delta_optimal"]
+            if stop_loss_pct is None:
+                stop_loss_pct = default_profile["risk"]["stop_loss_pct"]
+            if profit_target_pct is None:
+                profit_target_pct = default_profile["risk"]["profit_target_pct"]
+            if vix_max is None:
+                vix_max = default_profile["filters"]["vix_defense_threshold"]
+            if position_size_dollars is None:
+                acct = default_profile["risk"].get("account_size") or 0
+                position_size_dollars = acct * 0.10 if acct else 1_000.0
 
-        fetch_days = lookback_days + dte_at_entry + 120
+        summary_profile = default_profile if requested_direction else _trade_profile(None)
+        summary_min_tech = float(summary_profile["entry"].get("min_tech_score", 55.0))
+        summary_min_dir = float(summary_profile["entry"].get("min_direction_score", 35.0))
+        summary_min_ev = float(summary_profile["filters"].get("min_ev_return_pct", 10.0))
+
+        fetch_days = lookback_days + int(dte_at_entry) + 120
         hist = _cached_history(symbol_up, period=f"{fetch_days}d")
         if hist.empty or len(hist) < 80:
             return json.dumps({"error": f"Not enough price history for {symbol}"})
@@ -2668,13 +2715,11 @@ def backtest_strategy(
         skipped    = {"no_signal": 0, "vix_filter": 0, "hv_rank_filter": 0,
                       "no_valid_strike": 0, "tech_score": 0, "ev_gate": 0, "earnings": 0}
 
-        # Pull thresholds from the correct profile for this ticker
-        _sp        = _get_profile(symbol)
-        _min_tech  = float(_sp["entry"].get("min_tech_score", 55.0))
-        _min_dir   = float(_sp["entry"].get("min_direction_score", 35.0))
-        _min_ev    = float(_sp["filters"].get("min_ev_return_pct", 10.0))
+        neutral_selection_profile = _trade_profile(None)
+        neutral_min_tech = float(neutral_selection_profile["entry"].get("min_tech_score", 55.0))
+        neutral_min_dir = float(neutral_selection_profile["entry"].get("min_direction_score", 35.0))
 
-        for i in range(50, min(n - dte_at_entry - 1, lookback_days + 50)):
+        for i in range(50, min(n - int(dte_at_entry) - 1, lookback_days + 50)):
             S0 = float(closes.iloc[i])
 
             # ── HV calculations ────────────────────────────────────────────────
@@ -2686,24 +2731,7 @@ def backtest_strategy(
             if hv30 <= 0:
                 continue
 
-            # ── Filter 1: VIX proxy (SPY HV30 as market vol regime) ────────────
             spy_idx_now = min(int(i * len(spy_closes) / n), len(spy_closes) - 1)
-            spy_hv  = spy_hv_by_idx.get(spy_idx_now, 0)
-            if spy_hv > vix_max:
-                skipped["vix_filter"] += 1
-                continue
-
-            # ── Earnings gate: skip if known earnings fall within hold window ─────
-            if _earnings_date_strs:
-                _bar_dt = datetime.strptime(str(closes.index[i])[:10], "%Y-%m-%d")
-                _earn_skip = any(
-                    0 <= (datetime.strptime(_es, "%Y-%m-%d") - _bar_dt).days <= dte_at_entry
-                    for _es in _earnings_date_strs
-                    if len(_es) == 10
-                )
-                if _earn_skip:
-                    skipped["earnings"] += 1
-                    continue
 
             # ── Filter 2: HV rank proxy — skip if vol is historically expensive ──
             hv_hist_idx = i - 30
@@ -2765,27 +2793,83 @@ def backtest_strategy(
                 _best_dir, _best_ds, _best_ts = None, -1.0, 0.0
                 for _tt in ("call", "put"):
                     _ts = _tech_score_bt(_tt)
-                    if _ts < _min_tech:
+                    if _ts < neutral_min_tech:
                         continue
-                    _ds = _compute_direction_score(_ts, _tt, rsi14, ret5, spy_ret5, sp=_sp)
-                    if _ds >= _min_dir and _ds > _best_ds:
+                    _ds = _compute_direction_score(_ts, _tt, rsi14, ret5, spy_ret5, sp=neutral_selection_profile)
+                    if _ds >= neutral_min_dir and _ds > _best_ds:
                         _best_ds, _best_dir, _best_ts = _ds, _tt, _ts
                 if _best_dir is None:
                     skipped["no_signal"] += 1
                     continue
-                trade_type      = _best_dir
-                tech_score      = _best_ts
-                direction_score = _best_ds
+                trade_type = _best_dir
+                tech_score = _best_ts
             else:
-                trade_type  = option_type
-                tech_score  = _tech_score_bt(trade_type)
-                if tech_score < _min_tech:
-                    skipped["tech_score"] += 1
-                    continue
-                direction_score = _compute_direction_score(
-                    tech_score, trade_type, rsi14, ret5, spy_ret5, sp=_sp)
-                if direction_score < _min_dir:
-                    skipped["no_signal"] += 1
+                trade_type = requested_direction or option_type
+                tech_score = _tech_score_bt(trade_type)
+
+            trade_profile = _trade_profile(trade_type)
+            local_dte_at_entry = int(dte_at_entry) if dte_at_entry is not None else max(
+                DTE_MIN,
+                min(DTE_MAX, int(trade_profile["targets"]["dte_optimal"])),
+            )
+            local_delta_target = (
+                float(delta_target)
+                if delta_target is not None
+                else float(trade_profile["targets"]["delta_optimal"])
+            )
+            local_stop_loss_pct = (
+                float(stop_loss_pct)
+                if stop_loss_pct is not None
+                else float(trade_profile["risk"]["stop_loss_pct"])
+            )
+            local_profit_target_pct = (
+                float(profit_target_pct)
+                if profit_target_pct is not None
+                else float(trade_profile["risk"]["profit_target_pct"])
+            )
+            local_vix_max = (
+                float(vix_max)
+                if vix_max is not None
+                else float(trade_profile["filters"]["vix_defense_threshold"])
+            )
+            trade_position_dollars = (
+                float(position_size_dollars)
+                if position_size_dollars is not None
+                else float((trade_profile["risk"].get("account_size") or 0) * 0.10 or 1_000.0)
+            )
+            trade_min_tech = float(trade_profile["entry"].get("min_tech_score", 55.0))
+            trade_min_dir = float(trade_profile["entry"].get("min_direction_score", 35.0))
+            trade_min_ev = float(trade_profile["filters"].get("min_ev_return_pct", 10.0))
+
+            if tech_score < trade_min_tech:
+                skipped["tech_score"] += 1
+                continue
+            direction_score = _compute_direction_score(
+                tech_score,
+                trade_type,
+                rsi14,
+                ret5,
+                spy_ret5,
+                sp=trade_profile,
+            )
+            if direction_score < trade_min_dir:
+                skipped["no_signal"] += 1
+                continue
+
+            spy_hv  = spy_hv_by_idx.get(spy_idx_now, 0)
+            if spy_hv > local_vix_max:
+                skipped["vix_filter"] += 1
+                continue
+
+            if _earnings_date_strs:
+                _bar_dt = datetime.strptime(str(closes.index[i])[:10], "%Y-%m-%d")
+                _earn_skip = any(
+                    0 <= (datetime.strptime(_es, "%Y-%m-%d") - _bar_dt).days <= local_dte_at_entry
+                    for _es in _earnings_date_strs
+                    if len(_es) == 10
+                )
+                if _earn_skip:
+                    skipped["earnings"] += 1
                     continue
 
             # IV crush proxy: z-score of current HV30 vs trailing HV distribution
@@ -2797,22 +2881,22 @@ def backtest_strategy(
                 _hv_std  = float(np.std(_hv_slice))
                 if _hv_std > 0:
                     _hv_z = (hv30 * 100 - _hv_mean) / _hv_std
-                    if _hv_z >= _sp["filters"]["iv_crush_z_threshold"]:
-                        _crush_pen = _sp["filters"]["iv_crush_confidence_penalty"]
+                    if _hv_z >= trade_profile["filters"]["iv_crush_z_threshold"]:
+                        _crush_pen = trade_profile["filters"]["iv_crush_confidence_penalty"]
                         direction_score = max(0.0, direction_score - _crush_pen)
-                        if direction_score < _min_dir:
+                        if direction_score < trade_min_dir:
                             skipped["no_signal"] += 1
                             continue
 
             # EV gate — same as live scanner
             _p_win = direction_score / 100.0
-            _ev    = _p_win * profit_target_pct - (1.0 - _p_win) * stop_loss_pct
-            if require_signal and _ev < _min_ev:
+            _ev    = _p_win * local_profit_target_pct - (1.0 - _p_win) * local_stop_loss_pct
+            if require_signal and _ev < trade_min_ev:
                 skipped["ev_gate"] += 1
                 continue
 
             # Position sizing — direction_score drives allocation (same 7–40% scale)
-            _risk = _sp["risk"]
+            _risk = trade_profile["risk"]
             lo = float(_risk["min_position_pct"]) / 100
             hi = float(_risk["max_position_pct"]) / 100
             conf_pct = lo + (direction_score / 100.0) * (hi - lo)
@@ -2820,7 +2904,7 @@ def backtest_strategy(
             if acct:
                 trade_dollars = round(acct * conf_pct, 2)
             else:
-                trade_dollars = round(position_size_dollars * conf_pct, 2)
+                trade_dollars = round(trade_position_dollars * conf_pct, 2)
 
             # ATR stop widening — same multiplier as brain (_get_market_regime)
             _tr_vals = []
@@ -2832,10 +2916,10 @@ def backtest_strategy(
             _atr14 = float(np.mean(_tr_vals[-14:])) if len(_tr_vals) >= 14 else 0.0
             _atr28 = float(np.mean(_tr_vals)) if _tr_vals else _atr14
             _atr_expanding = _atr14 > _atr28 * 1.05
-            _stop_mult = float(_sp["filters"]["atr_expansion_stop_mult"]) if _atr_expanding else 1.0
+            _stop_mult = float(trade_profile["filters"]["atr_expansion_stop_mult"]) if _atr_expanding else 1.0
 
             # ── Strike selection: find strike closest to delta_target ───────────
-            T = dte_at_entry / 365.0
+            T = local_dte_at_entry / 365.0
             best_strike = None
             best_delta_diff = 999
             for offset_pct in [x * 0.5 for x in range(-10, 16)]:  # -5% to +7.5% in 0.5% steps
@@ -2844,7 +2928,7 @@ def backtest_strategy(
                 if not g:
                     continue
                 d = abs(g.get("delta", 0))
-                diff = abs(d - delta_target)
+                diff = abs(d - local_delta_target)
                 if diff < best_delta_diff:
                     best_delta_diff = diff
                     best_strike = K_cand
@@ -2856,19 +2940,19 @@ def backtest_strategy(
 
             K        = best_strike
             entry_px = best_entry_g["bs_price"]
-            stop_px  = entry_px * (1 - (stop_loss_pct / 100) * _stop_mult)
-            target_px = entry_px * (1 + profit_target_pct / 100)
+            stop_px  = entry_px * (1 - (local_stop_loss_pct / 100) * _stop_mult)
+            target_px = entry_px * (1 + local_profit_target_pct / 100)
 
             # ── Simulate holding through DTE ───────────────────────────────────
             exit_px     = None
             exit_reason = "expired"
 
-            for d in range(1, dte_at_entry + 1):
+            for d in range(1, local_dte_at_entry + 1):
                 fi = i + d
                 if fi >= n:
                     break
                 S_now = float(closes.iloc[fi])
-                T_now = max((dte_at_entry - d) / 365.0, 0)
+                T_now = max((local_dte_at_entry - d) / 365.0, 0)
 
                 if T_now <= 0:
                     exit_px = max(0.0, S_now - K) if trade_type == "call" else max(0.0, K - S_now)
@@ -2880,22 +2964,27 @@ def backtest_strategy(
 
                 if opt_now <= stop_px:
                     exit_px = opt_now
-                    exit_reason = f"stop_loss ({stop_loss_pct}%)"
+                    exit_reason = f"stop_loss ({local_stop_loss_pct}%)"
                     break
                 if opt_now >= target_px:
                     exit_px = target_px              # cap at limit price, like a real limit order
-                    exit_reason = f"profit_target ({profit_target_pct}%)"
+                    exit_reason = f"profit_target ({local_profit_target_pct}%)"
                     break
 
             if exit_px is None:
-                fi = min(i + dte_at_entry, n - 1)
+                fi = min(i + local_dte_at_entry, n - 1)
                 S_exp    = float(closes.iloc[fi])
                 intrinsic = max(0.0, S_exp - K) if trade_type == "call" else max(0.0, K - S_exp)
                 # Cap at profit target — mirrors live behaviour where a limit order
                 # would have filled before expiry if the option reached the target
                 exit_px  = min(intrinsic, target_px)
 
-            quality_score = _compute_quality_score(hv_rank, abs(best_entry_g.get("delta", 0)), dte_at_entry, sp=_sp)
+            quality_score = _compute_quality_score(
+                hv_rank,
+                abs(best_entry_g.get("delta", 0)),
+                local_dte_at_entry,
+                sp=trade_profile,
+            )
 
             pnl_pct     = round((exit_px / entry_px - 1) * 100, 1)
             pnl_dollars = round(trade_dollars * pnl_pct / 100, 2)
@@ -2911,6 +3000,7 @@ def backtest_strategy(
                 "pnl_pct":          pnl_pct,
                 "pnl_dollars":      pnl_dollars,
                 "position_dollars": trade_dollars,
+                "profit_target_pct": local_profit_target_pct,
                 "hv30_as_iv":       round(hv30 * 100, 1),
                 "signal_5d_ret":    round(ret5, 2),
                 "direction_score":  round(direction_score, 1),
@@ -2928,7 +3018,7 @@ def backtest_strategy(
 
         wins    = [t for t in simulated if t["pnl_pct"] > 0]
         losses  = [t for t in simulated if t["pnl_pct"] <= 0]
-        doubles = [t for t in simulated if t["pnl_pct"] >= profit_target_pct]
+        doubles = [t for t in simulated if t["pnl_pct"] >= float(t.get("profit_target_pct") or 0.0)]
         stopped = [t for t in simulated if "stop_loss" in t["exit_reason"]]
 
         avg_pnl  = round(sum(t["pnl_pct"] for t in simulated) / len(simulated), 1)
@@ -2994,9 +3084,9 @@ def backtest_strategy(
                 "days_skipped_no_strike":       skipped["no_valid_strike"],
                 "days_traded":                  len(simulated),
                 "score_gates": {
-                    "min_tech_score":       _min_tech,
-                    "min_direction_score":  _min_dir,
-                    "min_ev_return_pct":    _min_ev,
+                    "min_tech_score":       summary_min_tech,
+                    "min_direction_score":  summary_min_dir,
+                    "min_ev_return_pct":    summary_min_ev,
                 },
             },
             "results": {
@@ -3342,7 +3432,10 @@ def _check_early_exit(
     Returns (should_exit: bool, reason_detail: str).
     """
     if sp is None:
-        sp = _get_profile(pick.get("ticker", ""))
+        sp = _get_profile(
+            pick.get("ticker", ""),
+            _normalize_profile_direction(pick.get("direction") or pick.get("type")),
+        )
 
     ee = sp.get("early_exit", {})
     if not ee.get("enabled", False):
@@ -4396,7 +4489,7 @@ def _calculate_iv_skew(
     """
     symbol_name = str(symbol)
     if sp is None:
-        sp = _get_profile(symbol_name)
+        sp = _get_profile(symbol_name, _normalize_profile_direction(option_type))
     spot = None
     atm_iv = target_iv = None
     vertical_skew = 0.0
@@ -4599,7 +4692,7 @@ def evaluate_trade_signal(
       5. EV formula — (P_win × avg_win) − (P_loss × avg_loss) using delta as P_win proxy
     """
     try:
-        _eval_sp = _get_profile(symbol)
+        _eval_sp = _get_profile(symbol, _normalize_profile_direction(option_type))
         out: dict = {
             "symbol":      symbol.upper(),
             "option_type": option_type,

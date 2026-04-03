@@ -524,10 +524,25 @@ function serializeProfitabilityJournalEntry(entry = {}) {
     ticketId: String(entry.ticketId || ""),
     tradeTimestamp: entry.tradeTimestamp || null,
     loggedAt: entry.loggedAt || null,
+    localTradeDate: String(entry.localTradeDate || ""),
+    sessionLabel: String(entry.sessionLabel || ""),
     symbol: String(entry.symbol || "").toUpperCase(),
     regime: String(entry.regime || ""),
     setupId: String(entry.setupId || ""),
     side: String(entry.side || ""),
+    orderType: String(entry.orderType || ""),
+    entryLiquidityRole: String(entry.entryLiquidityRole || ""),
+    exitLiquidityRole: String(entry.exitLiquidityRole || ""),
+    entryFillRatio: Number.isFinite(Number(entry.entryFillRatio)) ? Number(entry.entryFillRatio) : null,
+    exitFillRatio: Number.isFinite(Number(entry.exitFillRatio)) ? Number(entry.exitFillRatio) : null,
+    plannedEntryPrice: Number.isFinite(Number(entry.plannedEntryPrice)) ? Number(entry.plannedEntryPrice) : null,
+    actualEntryPrice: Number.isFinite(Number(entry.actualEntryPrice)) ? Number(entry.actualEntryPrice) : null,
+    stopPrice: Number.isFinite(Number(entry.stopPrice)) ? Number(entry.stopPrice) : null,
+    targetPrice: Number.isFinite(Number(entry.targetPrice)) ? Number(entry.targetPrice) : null,
+    actualExitPrice: Number.isFinite(Number(entry.actualExitPrice)) ? Number(entry.actualExitPrice) : null,
+    sizeUsd: Number.isFinite(Number(entry.sizeUsd)) ? Number(entry.sizeUsd) : null,
+    feesUsd: Number.isFinite(Number(entry.feesUsd)) ? Number(entry.feesUsd) : null,
+    spreadSlippageUsd: Number.isFinite(Number(entry.spreadSlippageUsd)) ? Number(entry.spreadSlippageUsd) : null,
     pnlR: Number.isFinite(Number(entry.pnlR)) ? Number(entry.pnlR) : null,
     pnlUsd: Number.isFinite(Number(entry.pnlUsd)) ? Number(entry.pnlUsd) : null,
     ruleAdherenceScore: normalizeRuleAdherenceScore(entry.ruleAdherenceScore),
@@ -542,14 +557,98 @@ function serializeProfitabilityJournalEntry(entry = {}) {
   };
 }
 
+function getEntryLocalDate(entry = {}) {
+  const explicit = String(entry.localTradeDate || "").trim();
+  if (explicit) return explicit;
+  return getLocalParts(entry.tradeTimestamp || entry.loggedAt || nowIso())?.date || null;
+}
+
+function aggregateProfitabilityJournalEntries(entries = []) {
+  const list = Array.isArray(entries) ? entries : [];
+  const eligibleEntries = list.filter((entry) => entry.pilotEligible === true);
+  const disqualifiedEntries = list.filter((entry) => entry.pilotEligible === false);
+  const totalPnlUsd = list.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+  const eligiblePnlUsd = eligibleEntries.reduce((sum, entry) => sum + Number(entry.pnlUsd || 0), 0);
+  const expectancyR = eligibleEntries.length > 0
+    ? eligibleEntries.reduce((sum, entry) => sum + Number(entry.pnlR || 0), 0) / eligibleEntries.length
+    : null;
+  const winRate = eligibleEntries.length > 0
+    ? eligibleEntries.filter((entry) => Number(entry.pnlR || 0) > 0).length / eligibleEntries.length
+    : null;
+  const ruleAdherenceRate = list.length > 0
+    ? list.reduce((sum, entry) => sum + Number(normalizeRuleAdherenceScore(entry.ruleAdherenceScore) || 0), 0) / list.length / 100
+    : null;
+
+  return {
+    totalEntries: list.length,
+    eligibleEntries: eligibleEntries.length,
+    disqualifiedEntries: disqualifiedEntries.length,
+    netPnlUsd: round(totalPnlUsd, 2),
+    eligibleNetPnlUsd: round(eligiblePnlUsd, 2),
+    expectancyR: expectancyR == null ? null : round(expectancyR, 3),
+    winRate: winRate == null ? null : round(winRate, 4),
+    ruleAdherenceRate: ruleAdherenceRate == null ? null : round(ruleAdherenceRate, 4),
+  };
+}
+
 function buildProfitabilityJournalSummary(journal, options = {}) {
   const recentLimit = Math.max(1, Number(options.recentLimit) || 6);
   const entries = Array.isArray(journal?.entries) ? journal.entries : [];
+  const todayDate = String(options.todayDate || getLocalParts(options.now || nowIso())?.date || "");
+  const todayEntries = todayDate
+    ? entries.filter((entry) => getEntryLocalDate(entry) === todayDate)
+    : [];
+  const trailingDateSet = new Set();
+  if (todayDate) {
+    const current = new Date(`${todayDate}T00:00:00`);
+    for (let offset = 0; offset < 7; offset += 1) {
+      const next = new Date(current);
+      next.setDate(current.getDate() - offset);
+      trailingDateSet.add([
+        next.getFullYear(),
+        String(next.getMonth() + 1).padStart(2, "0"),
+        String(next.getDate()).padStart(2, "0"),
+      ].join("-"));
+    }
+  }
+  const trailingWeekEntries = trailingDateSet.size > 0
+    ? entries.filter((entry) => trailingDateSet.has(getEntryLocalDate(entry)))
+    : [];
   const recentEntries = entries
     .slice()
     .sort((left, right) => String(right.tradeTimestamp || right.loggedAt || "").localeCompare(String(left.tradeTimestamp || left.loggedAt || "")))
     .slice(0, recentLimit)
     .map((entry) => serializeProfitabilityJournalEntry(entry));
+  const recentEligibleEntries = entries
+    .filter((entry) => entry.pilotEligible === true)
+    .slice()
+    .sort((left, right) => String(right.tradeTimestamp || right.loggedAt || "").localeCompare(String(left.tradeTimestamp || left.loggedAt || "")))
+    .slice(0, recentLimit)
+    .map((entry) => serializeProfitabilityJournalEntry(entry));
+  const byDate = [...new Set(entries.map((entry) => getEntryLocalDate(entry)).filter(Boolean))]
+    .sort((left, right) => String(right).localeCompare(String(left)))
+    .map((date) => {
+      const groupedEntries = entries.filter((entry) => getEntryLocalDate(entry) === date);
+      return {
+        label: date,
+        ...aggregateProfitabilityJournalEntries(groupedEntries),
+      };
+    })
+    .slice(0, 7);
+  const byMistakeTag = [...new Set(entries.map((entry) => String(entry.mistakeTag || "none")))]
+    .sort((left, right) => String(left).localeCompare(String(right)))
+    .map((mistakeTag) => {
+      const groupedEntries = entries.filter((entry) => String(entry.mistakeTag || "none") === mistakeTag);
+      return {
+        label: mistakeTag,
+        ...aggregateProfitabilityJournalEntries(groupedEntries),
+      };
+    })
+    .sort((left, right) => (
+      Number(right.totalEntries || 0) - Number(left.totalEntries || 0) ||
+      Number(right.disqualifiedEntries || 0) - Number(left.disqualifiedEntries || 0) ||
+      String(left.label).localeCompare(String(right.label))
+    ));
 
   return {
     path: PROFITABILITY_JOURNAL_PATH,
@@ -557,7 +656,24 @@ function buildProfitabilityJournalSummary(journal, options = {}) {
     entryCount: entries.length,
     schema: buildProfitabilityJournalSchema(),
     lastLoggedAt: recentEntries[0]?.loggedAt || null,
+    todayDate: todayDate || null,
+    todayEntryCount: todayEntries.length,
+    todayEntries: todayEntries
+      .slice()
+      .sort((left, right) => String(right.tradeTimestamp || right.loggedAt || "").localeCompare(String(left.tradeTimestamp || left.loggedAt || "")))
+      .map((entry) => serializeProfitabilityJournalEntry(entry)),
     recentEntries,
+    recentEligibleEntries,
+    today: {
+      label: todayDate || "today",
+      ...aggregateProfitabilityJournalEntries(todayEntries),
+    },
+    trailingWeek: {
+      label: "Trailing 7 days",
+      ...aggregateProfitabilityJournalEntries(trailingWeekEntries),
+    },
+    byDate,
+    byMistakeTag,
   };
 }
 
@@ -827,6 +943,38 @@ function buildProfitabilityTicketSummary(ticketStore, options = {}) {
     todayGate: buildTodayGate(ticketStore, { now }),
     todaysTickets,
     recentTickets: allTickets.slice(0, 8),
+  };
+}
+
+function readLatestExperimentReport() {
+  return readJson(EXPERIMENT_REPORT_PATH, null);
+}
+
+function buildOperatorConsoleSnapshot(options = {}) {
+  const now = options.now || nowIso();
+  const ticketStore = options.ticketStore || readProfitabilityTicketStore();
+  const journal = options.journal || readProfitabilityJournal();
+  const pilotSummary = options.pilotSummary || buildProfitabilityPilotSummary(journal.entries, {
+    ticketStore,
+    now,
+  });
+  const journalSummary = buildProfitabilityJournalSummary(journal, {
+    todayDate: getLocalParts(now)?.date || null,
+    recentLimit: 8,
+  });
+  return {
+    generatedAt: nowIso(),
+    now,
+    sessionWindow: getWindowSummary(now),
+    todayGate: buildTodayGate(ticketStore, { now }),
+    pilotPhase: pilotSummary.phase,
+    nextUnlock: pilotSummary.nextUnlock,
+    journal: journalSummary,
+    experimentReport: options.experimentReport || readLatestExperimentReport(),
+    artifactHealth: options.artifactHealth || buildArtifactHealth({
+      strategies: options.strategies || [],
+      lastWatchlist: options.lastWatchlist || null,
+    }),
   };
 }
 
@@ -1206,6 +1354,7 @@ function buildProfitabilityPilotSummary(entries = [], options = {}) {
     executionStats: computeExecutionStats(eligibleEntries),
     breakdownByRegime: buildEntryBreakdown(eligibleEntries, "regime"),
     breakdownBySetup: buildEntryBreakdown(eligibleEntries, "setupId"),
+    breakdownByMistakeTag: buildEntryBreakdown(eligibleEntries, "mistakeTag"),
     gates,
     nextUnlock: tradeCount >= PROFITABILITY_ADVANCE_TARGET && allAdvanceGatesPassed
       ? "ETH trend continuation can be reviewed for unlock."
@@ -3418,7 +3567,97 @@ function scoreWatchlistEvidence(scoreboardItem) {
   );
 }
 
+function scorePilotWatchlistCandidate(options = {}) {
+  const strategy = options.strategy || {};
+  const candidate = options.candidate || {};
+  const todayGate = options.todayGate || {};
+  const tradeable = options.tradeable === true;
+  const trusted = options.trusted !== false;
+  const dataFresh = options.dataFresh === true;
+  const alertEligible = options.alertEligible === true;
+  const barsSinceTrigger = Number.isFinite(Number(options.barsSinceTrigger)) ? Number(options.barsSinceTrigger) : null;
+  const currentSignalValue = Number(options.currentSignalValue || 0);
+  const signalThreshold = Number(options.signalThreshold || 0);
+  const regimeBlockers = Array.isArray(options.regimeBlockers) ? options.regimeBlockers : [];
+  const notes = [];
+  let score = Number(candidate.evidenceScore || scoreWatchlistEvidence(candidate));
+
+  if (String(strategy.strategyId || "") === BTC_PROFITABILITY_SETUP_ID) {
+    score += 450;
+    notes.push("phase_1_btc");
+  } else if (String(strategy.metadata?.unlockPhase || "") !== "phase_1") {
+    score -= 120;
+    notes.push("locked_phase");
+  }
+
+  if (trusted) {
+    score += 180;
+    notes.push("trusted_data");
+  } else {
+    score -= 600;
+  }
+
+  if (dataFresh) {
+    score += 120;
+    notes.push("fresh_bars");
+  } else {
+    score -= 180;
+  }
+
+  if (tradeable) {
+    score += 260;
+    notes.push("tradeable_now");
+  } else if (regimeBlockers.length > 0) {
+    score -= Math.min(180, regimeBlockers.length * 45);
+  }
+
+  if (alertEligible) {
+    score += 120;
+    notes.push("replay_eligible");
+  }
+
+  if (barsSinceTrigger != null) {
+    score += Math.max(0, 180 - (barsSinceTrigger * 45));
+    if (barsSinceTrigger <= 1) {
+      notes.push("recent_trigger");
+    }
+  }
+
+  if (signalThreshold > 0) {
+    if (currentSignalValue >= signalThreshold) {
+      score += 90;
+    } else {
+      const gap = Math.max(0, signalThreshold - currentSignalValue);
+      score += Math.max(0, 50 - (gap * 100));
+    }
+  }
+
+  const candidateStatus = String(candidate.status || "");
+  if (candidateStatus === "candidate_live") score += 120;
+  else if (candidateStatus === "promotion_review") score += 70;
+  else if (candidateStatus === "paper_live") score += 40;
+  else if (candidateStatus === "backtest_failed") score -= 140;
+
+  if (String(strategy.strategyId || "") === BTC_PROFITABILITY_SETUP_ID) {
+    if (Number(todayGate.remainingApprovals || 0) > 0) {
+      score += 110;
+      notes.push("approval_slots_open");
+    } else {
+      score -= 260;
+    }
+  }
+
+  return {
+    pilotPriorityScore: round(score, 4),
+    rankingNotes: notes.slice(0, 4),
+  };
+}
+
 function compareWatchlistCandidates(left, right) {
+  const leftPilotPriority = Number(left?.pilotPriorityScore || 0);
+  const rightPilotPriority = Number(right?.pilotPriorityScore || 0);
+  if (rightPilotPriority !== leftPilotPriority) return rightPilotPriority - leftPilotPriority;
+
   const leftBacktest = left?.backtest || {};
   const rightBacktest = right?.backtest || {};
   const leftEligible = leftBacktest.eligibleForPromotion === true ? 1 : 0;
@@ -3438,6 +3677,209 @@ function compareWatchlistCandidates(left, right) {
   if (rightTradeCount !== leftTradeCount) return rightTradeCount - leftTradeCount;
 
   return Number(right?.score || 0) - Number(left?.score || 0);
+}
+
+function buildWatchlistPriorityProfile(item, context = {}) {
+  const reasons = [];
+  const pilotSummary = context.pilotSummary || null;
+  const todayGate = context.todayGate || null;
+  const prioritySignals = {
+    trustedData: item.currentDataTrusted === true,
+    dataFresh: item.dataFresh === true,
+    tradeable: item.tradeable === true,
+    notifyNow: item.notifyNow === true,
+    alertEligible: item.alertEligible === true,
+    approvalSlotsRemaining: Number(item.approvalSlotsRemaining ?? todayGate?.remainingApprovals ?? 0),
+    barsSinceTrigger: Number.isFinite(Number(item.barsSinceTrigger)) ? Number(item.barsSinceTrigger) : null,
+    signalGap: Number.isFinite(Number(item.currentSignalValue)) && Number.isFinite(Number(item.signalThreshold))
+      ? round(Number(item.currentSignalValue) - Number(item.signalThreshold), 4)
+      : null,
+    regimeBlockers: Array.isArray(item.regimeBlockers) ? item.regimeBlockers.slice() : [],
+    liveStatus: String(item.liveStatus || ""),
+    strategyType: item.strategyId === BTC_PROFITABILITY_SETUP_ID ? "pilot" : "candidate",
+  };
+
+  let score = Number(item.evidenceScore || 0) * 0.25 + Number(item.score || 0) * 0.1;
+
+  if (prioritySignals.trustedData) {
+    score += 120;
+    reasons.push("trusted_data");
+  } else {
+    score -= 240;
+    reasons.push("untrusted_data");
+  }
+
+  if (prioritySignals.dataFresh) {
+    score += 90;
+    reasons.push("fresh_data");
+  } else {
+    score -= 180;
+    reasons.push("stale_data");
+  }
+
+  if (prioritySignals.tradeable) {
+    score += 120;
+    reasons.push("tradeable");
+  } else {
+    score -= 180;
+    reasons.push("not_tradeable");
+  }
+
+  if (prioritySignals.notifyNow) {
+    score += 180;
+    reasons.push("notify_now");
+  } else if (prioritySignals.alertEligible) {
+    score += 60;
+    reasons.push("alert_eligible");
+  } else {
+    score -= 20;
+  }
+
+  if (prioritySignals.approvalSlotsRemaining > 0) {
+    score += 80;
+    reasons.push("approval_slots_available");
+  } else if (item.strategyId === BTC_PROFITABILITY_SETUP_ID) {
+    score -= 240;
+    reasons.push("approval_slots_exhausted");
+  }
+
+  if (prioritySignals.strategyType === "pilot") {
+    score += 120;
+    reasons.push("btc_pilot");
+  } else {
+    score -= 30;
+  }
+
+  if (prioritySignals.liveStatus === "triggered_now") {
+    score += 160;
+    reasons.push("triggered_now");
+  } else if (prioritySignals.liveStatus === "triggered_recently") {
+    score += 120;
+    reasons.push("triggered_recently");
+  } else if (prioritySignals.liveStatus === "triggered_this_window") {
+    score += 70;
+    reasons.push("triggered_this_window");
+  } else if (prioritySignals.liveStatus === "tracking") {
+    score += 40;
+    reasons.push("tracking");
+  } else if (String(prioritySignals.liveStatus).startsWith("blocked")) {
+    score -= 80;
+    reasons.push(prioritySignals.liveStatus);
+  }
+
+  for (const blocker of prioritySignals.regimeBlockers) {
+    switch (String(blocker)) {
+      case "event_shock_lockout":
+        score -= 180;
+        break;
+      case "expansion":
+        score -= 120;
+        break;
+      case "mid_range":
+        score -= 90;
+        break;
+      case "timing_not_ready":
+        score -= 70;
+        break;
+      case "range_not_ready":
+        score -= 60;
+        break;
+      default:
+        score -= 40;
+        break;
+    }
+    reasons.push(`blocker:${blocker}`);
+  }
+
+  if (prioritySignals.signalGap != null) {
+    if (prioritySignals.signalGap >= 0.12) {
+      score += 50;
+      reasons.push("signal_above_threshold");
+    } else if (prioritySignals.signalGap >= 0) {
+      score += 25;
+    } else {
+      score -= 20;
+      reasons.push("signal_below_threshold");
+    }
+  }
+
+  if (prioritySignals.barsSinceTrigger != null) {
+    const barsSinceTrigger = Math.max(0, Math.min(25, prioritySignals.barsSinceTrigger));
+    score += Math.max(0, 35 - (barsSinceTrigger * 1.4));
+  }
+
+  const executionStats = pilotSummary?.executionStats || {};
+  if (Number.isFinite(Number(executionStats.makerShare))) {
+    score += (Number(executionStats.makerShare) - 0.5) * 70;
+  }
+  if (Number.isFinite(Number(executionStats.averageEntrySlippageBps))) {
+    score -= Math.min(Math.max(Number(executionStats.averageEntrySlippageBps), 0), 10) * 3;
+  }
+  if (Number.isFinite(Number(executionStats.averageExitSlippageBps))) {
+    score -= Math.min(Math.max(Number(executionStats.averageExitSlippageBps), 0), 10) * 2;
+  }
+  if (Number.isFinite(Number(executionStats.stopSlipRate))) {
+    score -= Number(executionStats.stopSlipRate) * 80;
+  }
+
+  const ruleAdherenceRate = pilotSummary?.journalStats?.ruleAdherenceRate;
+  if (Number.isFinite(Number(ruleAdherenceRate))) {
+    score += (Number(ruleAdherenceRate) - 0.85) * 160;
+  }
+
+  const disqualificationCount = Number(pilotSummary?.journalStats?.disqualifiedTradeCount || 0);
+  if (disqualificationCount > 0) {
+    score -= Math.min(disqualificationCount, 20) * 1.5;
+  }
+
+  const realizedPnl = Number(item.paperEvidence?.realizedPnl || 0) + Number(item.paperEvidence?.unrealizedPnl || 0);
+  if (realizedPnl > 0) {
+    score += Math.min(realizedPnl / 25, 30);
+  } else if (realizedPnl < 0) {
+    score += Math.max(realizedPnl / 25, -30);
+  }
+
+  return {
+    priorityScore: round(score, 4),
+    priorityReasons: [...new Set(reasons)],
+    prioritySignals,
+  };
+}
+
+function comparePilotAwareWatchlistCandidates(left, right) {
+  const leftPriority = Number(left?.priorityScore || 0);
+  const rightPriority = Number(right?.priorityScore || 0);
+  if (rightPriority !== leftPriority) return rightPriority - leftPriority;
+
+  const leftNotify = left?.notifyNow === true ? 1 : 0;
+  const rightNotify = right?.notifyNow === true ? 1 : 0;
+  if (rightNotify !== leftNotify) return rightNotify - leftNotify;
+
+  const leftEligible = left?.alertEligible === true ? 1 : 0;
+  const rightEligible = right?.alertEligible === true ? 1 : 0;
+  if (rightEligible !== leftEligible) return rightEligible - leftEligible;
+
+  const leftTradeable = left?.tradeable === true ? 1 : 0;
+  const rightTradeable = right?.tradeable === true ? 1 : 0;
+  if (rightTradeable !== leftTradeable) return rightTradeable - leftTradeable;
+
+  const leftTrusted = left?.currentDataTrusted === true ? 1 : 0;
+  const rightTrusted = right?.currentDataTrusted === true ? 1 : 0;
+  if (rightTrusted !== leftTrusted) return rightTrusted - leftTrusted;
+
+  const leftFresh = left?.dataFresh === true ? 1 : 0;
+  const rightFresh = right?.dataFresh === true ? 1 : 0;
+  if (rightFresh !== leftFresh) return rightFresh - leftFresh;
+
+  const leftSlots = Number(left?.approvalSlotsRemaining ?? 0);
+  const rightSlots = Number(right?.approvalSlotsRemaining ?? 0);
+  if (rightSlots !== leftSlots) return rightSlots - leftSlots;
+
+  const leftSignal = Number(left?.currentSignalValue || 0);
+  const rightSignal = Number(right?.currentSignalValue || 0);
+  if (rightSignal !== leftSignal) return rightSignal - leftSignal;
+
+  return compareWatchlistCandidates(left, right);
 }
 
 function getTradePnlFraction(trade) {
@@ -4341,7 +4783,8 @@ async function runDayTradingExperiments(options = {}) {
     barsRequested: bars,
     feesFraction,
     strictMarketData,
-    researchMode: "control_first",
+    scope: String(options.scope || "snapshot"),
+    researchMode: String(options.researchMode || "control_first"),
     strategiesTested: strategies.length,
     controlStrategiesTested: controlResults.length,
     variantsTested: controlResults.length + phaseBResults.length,
@@ -4421,18 +4864,22 @@ async function buildMorningWatchlist(options = {}) {
     createIfMissing: readOnly,
   });
   const paperSummaries = bundle?.paperSummaries || broker.getStrategySummaries({ accountId });
+  const profitabilityJournal = bundle?.profitabilityJournal || readProfitabilityJournal();
+  const pilotSummary = buildProfitabilityPilotSummary(profitabilityJournal.entries, {
+    ticketStore: profitabilityTicketStore,
+    now,
+  });
+  const journalSummary = buildProfitabilityJournalSummary(profitabilityJournal, {
+    todayDate: getLocalParts(now)?.date || null,
+    recentLimit: 8,
+  });
   const scoreboard = shared.buildStrategyScoreboard({
     strategies,
     backtests: bundle?.backtests || loadBacktestSummaries(),
     paperSummaries,
   });
   const strategyMap = new Map(strategies.map((strategy) => [strategy.strategyId, strategy]));
-  const rankedCandidates = scoreboard.items
-    .map((item) => ({ ...item, evidenceScore: round(scoreWatchlistEvidence(item), 4) }))
-    .sort(compareWatchlistCandidates)
-    .slice(0, limit);
-
-  const items = (await Promise.all(rankedCandidates.map(async (candidate) => {
+  const evaluatedCandidates = (await Promise.all(scoreboard.items.map(async (candidate) => {
     const strategy = strategyMap.get(candidate.strategyId);
     if (!strategy) return null;
     const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
@@ -4494,7 +4941,7 @@ async function buildMorningWatchlist(options = {}) {
       liveStatus = "tracking";
     }
 
-    return {
+    const baseItem = {
       strategyId: strategy.strategyId,
       strategyName: strategy.name,
       symbol: strategy.marketUniverse?.symbols?.[0] || null,
@@ -4538,7 +4985,28 @@ async function buildMorningWatchlist(options = {}) {
       indicators: lastBar?.indicators || null,
       reasons: [...new Set(gateBlockedReasons)],
     };
+    const priority = buildWatchlistPriorityProfile(baseItem, {
+      pilotSummary,
+      todayGate,
+      now,
+    });
+    return {
+      ...baseItem,
+      ...priority,
+      pilotSignals: {
+        currentSessionActive: nowWindow.active,
+        activeWindow: nowWindow.label || nowWindow.windowLabel || null,
+        approvalSlotsRemaining: todayGate.remainingApprovals,
+        pilotPhase: pilotSummary.phase,
+        ruleAdherenceRate: pilotSummary.journalStats.ruleAdherenceRate,
+        makerShare: pilotSummary.executionStats?.makerShare ?? null,
+      },
+    };
   }))).filter(Boolean);
+
+  const items = evaluatedCandidates
+    .sort(comparePilotAwareWatchlistCandidates)
+    .slice(0, limit);
 
   const watchlist = {
     generatedAt: nowIso(),
@@ -4551,6 +5019,7 @@ async function buildMorningWatchlist(options = {}) {
     windowMode: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.sessionMode,
     alertWindows: clone(DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows),
     rankingBasis: "replay_backed_watchlist",
+    rankingMethod: "pilot_aware_priority",
     morningWindow: {
       startEt: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows[0].startEt,
       cutoffEt: DEFAULT_CRYPTO_DAY_TRADING_CONFIG.alertWindows[0].endEt,
@@ -4558,6 +5027,15 @@ async function buildMorningWatchlist(options = {}) {
     },
     todayGate,
     sessionWindow: getWindowSummary(now),
+    pilotSummary: {
+      phase: pilotSummary.phase,
+      progress: pilotSummary.progress,
+      nextUnlock: pilotSummary.nextUnlock,
+      journalStats: pilotSummary.journalStats,
+      executionStats: pilotSummary.executionStats || null,
+      disqualificationReasons: pilotSummary.disqualificationReasons || [],
+    },
+    journalSummary,
     selectedStrategies: items.length,
     notifyNowCount: items.filter((item) => item.notifyNow).length,
     items,
@@ -4584,6 +5062,7 @@ function getDayTradingSnapshot(options = {}) {
   const profitabilityTicketStore = bundle?.profitabilityTicketStore || readProfitabilityTicketStore();
   const lastReport = isArtifactCompatible(bundle?.lastReport) ? bundle.lastReport : null;
   const lastWatchlist = isArtifactCompatible(bundle?.lastWatchlist) ? bundle.lastWatchlist : null;
+  const experimentReport = bundle?.experimentReport || readLatestExperimentReport();
   const pilotSummary = buildProfitabilityPilotSummary(profitabilityJournal.entries, {
     ticketStore: profitabilityTicketStore,
     now,
@@ -4591,6 +5070,16 @@ function getDayTradingSnapshot(options = {}) {
   const profitabilityTickets = buildProfitabilityTicketSummary(profitabilityTicketStore, { now });
   const profitabilityJournalSummary = buildProfitabilityJournalSummary(profitabilityJournal);
   const artifactHealth = buildArtifactHealth({
+    strategies,
+    lastWatchlist,
+  });
+  const operatorConsole = buildOperatorConsoleSnapshot({
+    now,
+    ticketStore: profitabilityTicketStore,
+    journal: profitabilityJournal,
+    pilotSummary,
+    experimentReport,
+    artifactHealth,
     strategies,
     lastWatchlist,
   });
@@ -4621,6 +5110,8 @@ function getDayTradingSnapshot(options = {}) {
     profitabilityJournal: profitabilityJournalSummary,
     profitabilityTickets,
     artifactHealth,
+    experimentReport,
+    operatorConsole,
   };
 }
 
@@ -4651,8 +5142,10 @@ const __internal = {
   buildProfitabilityJournalSummary,
   buildProfitabilityTicketSummary,
   buildArtifactHealth,
+  buildOperatorConsoleSnapshot,
   readProfitabilityJournal,
   readProfitabilityTicketStore,
+  readLatestExperimentReport,
   appendProfitabilityJournalEntry,
   requestProfitabilityPreflightTicket,
   loadNormalizedBars,

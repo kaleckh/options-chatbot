@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, AlertTriangle, BellRing, CheckCircle2, FileText, Loader2, Play, RefreshCw, ShieldCheck, Ticket, Trophy } from "lucide-react";
+import { Activity, AlertTriangle, BellRing, CalendarClock, CheckCircle2, Clock3, FileText, Loader2, Play, RefreshCw, ShieldCheck, Ticket, Trophy } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import FinTable from "@/components/ui/FinTable";
 import type {
   DayTradingProfitabilityTicket,
+  DayTradingExperimentReport,
   DayTradingReport,
   DayTradingOperatingPlan,
   DayTradingPilotSummary,
@@ -94,6 +95,17 @@ type JournalResult = {
 };
 type JournalResponse = JournalResult & {
   snapshot: DayTradingSnapshot;
+};
+type JournalAggregateSummary = {
+  label: string;
+  totalEntries: number;
+  eligibleEntries: number;
+  disqualifiedEntries: number;
+  netPnlUsd: number;
+  eligibleNetPnlUsd: number;
+  expectancyR: number | null;
+  winRate: number | null;
+  ruleAdherenceRate: number | null;
 };
 
 const DEFAULT_PREFLIGHT_CHECKLIST: PreflightChecklistState = {
@@ -257,6 +269,217 @@ function toDateTimeLocalValue(value: string | null | undefined): string {
   return date.toISOString().slice(0, 16);
 }
 
+function formatDurationMinutes(totalMinutes: number): string {
+  const rounded = Math.max(0, Math.round(totalMinutes));
+  const hours = Math.floor(rounded / 60);
+  const minutes = rounded % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${pad(minutes)}m`;
+}
+
+function formatAgeLabel(value: string | null | undefined, nowMs: number = Date.now()): string {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  const deltaMs = nowMs - parsed.getTime();
+  if (deltaMs < 0) return "just now";
+  const deltaSeconds = Math.floor(deltaMs / 1000);
+  if (deltaSeconds < 60) return `${deltaSeconds}s ago`;
+  const deltaMinutes = Math.floor(deltaSeconds / 60);
+  if (deltaMinutes < 60) return `${deltaMinutes}m ago`;
+  const hours = Math.floor(deltaMinutes / 60);
+  const minutes = deltaMinutes % 60;
+  if (hours < 24) return minutes === 0 ? `${hours}h ago` : `${hours}h ${minutes}m ago`;
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return remainingHours === 0 ? `${days}d ago` : `${days}d ${remainingHours}h ago`;
+}
+
+function parseClockMinutes(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const normalized = value.trim().toUpperCase();
+  const ampmMatch = normalized.match(/^(\d{1,2})(?::(\d{2}))?(?::\d{2})?\s*([AP]M)$/);
+  if (ampmMatch) {
+    let hours = Number(ampmMatch[1]);
+    const minutes = Number(ampmMatch[2] || "0");
+    const suffix = ampmMatch[3];
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    hours = hours % 12;
+    if (suffix === "PM") hours += 12;
+    return hours * 60 + minutes;
+  }
+  const twentyFourHourMatch = normalized.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (twentyFourHourMatch) {
+    const hours = Number(twentyFourHourMatch[1]);
+    const minutes = Number(twentyFourHourMatch[2]);
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    return hours * 60 + minutes;
+  }
+  const compactMatch = normalized.match(/^(\d{3,4})$/);
+  if (compactMatch) {
+    const digits = compactMatch[1];
+    const hours = Number(digits.slice(0, digits.length - 2));
+    const minutes = Number(digits.slice(-2));
+    if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+    return hours * 60 + minutes;
+  }
+  return null;
+}
+
+function getTimeZoneMinutes(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || "0");
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || "0");
+  return hour * 60 + minute;
+}
+
+function getSessionClock(
+  session: DayTradingOperatingPlan["session"] | undefined,
+  sessionWindow: DayTradingWatchlist["sessionWindow"] | undefined,
+  now: Date
+) {
+  const timeZone = session?.sessionTimeZone || "America/New_York";
+  const windows = sessionWindow?.windows?.length
+    ? sessionWindow.windows
+    : (() => {
+        const match = session?.localWindow?.match(/(\d{1,2}(?::\d{2})?\s*[AP]M?|\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}(?::\d{2})?\s*[AP]M?|\d{1,2}:\d{2})/i);
+        if (!match) return [];
+        return [{
+          id: "session-local-window",
+          label: session?.localWindow || "Session Window",
+          startEt: match[1].replace(/\s+/g, " ").trim(),
+          endEt: match[2].replace(/\s+/g, " ").trim(),
+        }];
+      })();
+  const currentMinutes = getTimeZoneMinutes(now, timeZone);
+  const currentLabel = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  }).format(now);
+
+  const parsedWindows = windows
+    .map((window) => {
+      const startMinutes = parseClockMinutes(window.startEt);
+      const endMinutes = parseClockMinutes(window.endEt);
+      if (startMinutes == null || endMinutes == null) return null;
+      return { ...window, startMinutes, endMinutes };
+    })
+    .filter(Boolean) as Array<{ id: string; label: string; startEt: string; endEt: string; startMinutes: number; endMinutes: number }>;
+
+  const activeWindow = sessionWindow?.activeWindowLabel
+    ? parsedWindows.find((window) => window.id === sessionWindow.activeWindowId || window.label === sessionWindow.activeWindowLabel) || null
+    : parsedWindows.find((window) => window.startMinutes <= currentMinutes && currentMinutes < window.endMinutes) || null;
+
+  const nextWindow = parsedWindows.find((window) => window.startMinutes > currentMinutes) || parsedWindows[0] || null;
+  const active = Boolean(activeWindow);
+  const minutesToClose = activeWindow ? Math.max(0, activeWindow.endMinutes - currentMinutes) : null;
+  const minutesToOpen = nextWindow
+    ? nextWindow.startMinutes > currentMinutes
+      ? nextWindow.startMinutes - currentMinutes
+      : (24 * 60 - currentMinutes) + nextWindow.startMinutes
+    : null;
+
+  return {
+    timeZone,
+    currentLabel,
+    active,
+    activeWindowLabel: activeWindow?.label || sessionWindow?.activeWindowLabel || null,
+    nextWindowLabel: active ? null : nextWindow?.label || null,
+    countdown: active
+      ? minutesToClose == null
+        ? "live"
+        : `${formatDurationMinutes(minutesToClose)} remaining`
+      : minutesToOpen == null
+        ? "session closed"
+        : `${formatDurationMinutes(minutesToOpen)} until next open`,
+    windowLabels: parsedWindows.map((window) => `${window.label} ${window.startEt}-${window.endEt} ET`),
+  };
+}
+
+function isSameLocalDay(left: string | null | undefined, right: Date): boolean {
+  if (!left) return false;
+  const leftDate = new Date(left);
+  if (Number.isNaN(leftDate.getTime())) return false;
+  return leftDate.toDateString() === right.toDateString();
+}
+
+function isWithinDays(left: string | null | undefined, right: Date, days: number): boolean {
+  if (!left) return false;
+  const leftDate = new Date(left);
+  if (Number.isNaN(leftDate.getTime())) return false;
+  const deltaMs = right.getTime() - leftDate.getTime();
+  return deltaMs >= 0 && deltaMs <= days * 24 * 60 * 60 * 1000;
+}
+
+function summarizeJournalEntries(entries: NonNullable<DayTradingSnapshot["profitabilityJournal"]>["recentEntries"]) {
+  const totalPnlUsd = entries.reduce((sum, entry) => sum + (entry.pnlUsd || 0), 0);
+  const totalPnlR = entries.reduce((sum, entry) => sum + (entry.pnlR || 0), 0);
+  const totalAdherence = entries.reduce((sum, entry) => sum + (entry.ruleAdherenceScore || 0), 0);
+  const eligibleCount = entries.filter((entry) => entry.pilotEligible).length;
+  const disqualifiedCount = entries.filter((entry) => !entry.pilotEligible).length;
+  return {
+    trades: entries.length,
+    totalPnlUsd,
+    totalPnlR,
+    avgPnlUsd: entries.length ? totalPnlUsd / entries.length : null,
+    avgPnlR: entries.length ? totalPnlR / entries.length : null,
+    avgAdherence: entries.length ? totalAdherence / entries.length : null,
+    eligibleCount,
+    disqualifiedCount,
+  };
+}
+
+function mapSummaryToAggregate(summary: ReturnType<typeof summarizeJournalEntries>, label: string): JournalAggregateSummary {
+  const eligibleDenominator = Math.max(1, summary.eligibleCount);
+  return {
+    label,
+    totalEntries: summary.trades,
+    eligibleEntries: summary.eligibleCount,
+    disqualifiedEntries: summary.disqualifiedCount,
+    netPnlUsd: summary.totalPnlUsd,
+    eligibleNetPnlUsd: summary.totalPnlUsd,
+    expectancyR: summary.avgPnlR,
+    winRate: null,
+    ruleAdherenceRate: summary.avgAdherence == null ? null : summary.avgAdherence / 100,
+  };
+}
+
+function buildAggregateReviewRows(items: JournalAggregateSummary[] | undefined, labelKey: string) {
+  return (items || []).map((item) => ({
+    [labelKey]: labelize(item.label),
+    Trades: String(item.totalEntries || 0),
+    "Net PnL": money(item.netPnlUsd, 2),
+    "Eligible PnL": money(item.eligibleNetPnlUsd, 2),
+    "Avg R": item.expectancyR == null ? "-" : item.expectancyR.toFixed(2),
+    "Win Rate": pct(item.winRate),
+    Adherence: pct(item.ruleAdherenceRate),
+    Eligible: `${item.eligibleEntries || 0}/${item.totalEntries || 0}`,
+    Disqualified: String(item.disqualifiedEntries || 0),
+  }));
+}
+
+function experimentReportFromPayload(payload: unknown): DayTradingExperimentReport | null {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
+  const record = payload as Record<string, unknown>;
+  const nested = record.report || record.experimentReport || (record.snapshot && typeof record.snapshot === "object" ? (record.snapshot as Record<string, unknown>).experimentReport : null);
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    return nested as DayTradingExperimentReport;
+  }
+  if ("generatedAt" in record && ("results" in record || "leaders" in record || "recommendation" in record)) {
+    return record as unknown as DayTradingExperimentReport;
+  }
+  return null;
+}
+
 function marketCopy(market: DayTradingMarket) {
   if (market === "equities_legacy") {
     return {
@@ -341,6 +564,19 @@ export default function DayTradingLab() {
   const [journalForm, setJournalForm] = useState<JournalFormState>(() => buildJournalDraft());
   const [bars, setBars] = useState(MARKET_INPUT_DEFAULTS.crypto.bars);
   const [startingCash, setStartingCash] = useState(MARKET_INPUT_DEFAULTS.crypto.startingCash);
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [watchlistAutoRefresh, setWatchlistAutoRefresh] = useState(true);
+  const [experimentReport, setExperimentReport] = useState<DayTradingExperimentReport | null>(null);
+  const [experimentLoading, setExperimentLoading] = useState(false);
+  const [experimentRunning, setExperimentRunning] = useState(false);
+  const [experimentError, setExperimentError] = useState<string | null>(null);
+  const [experimentForm, setExperimentForm] = useState({
+    scope: "snapshot",
+    researchMode: "control_first",
+    windowMode: "fixed_session",
+    strictMarketData: true,
+    barsRequested: String(MARKET_INPUT_DEFAULTS.crypto.bars),
+  });
   const snapshotRequestRef = useRef(0);
   const watchlistRequestRef = useRef(0);
   const marketInputsRef = useRef<Record<DayTradingMarket, MarketInputState>>({
@@ -397,7 +633,14 @@ export default function DayTradingLab() {
     setJournalResult(null);
     setJournalTicketId("");
     setJournalForm(buildJournalDraft());
+    setExperimentReport(null);
+    setExperimentError(null);
   }, [market]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowTick(Date.now()), 15000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const loadSnapshot = useCallback(async () => {
     const requestId = ++snapshotRequestRef.current;
@@ -415,6 +658,7 @@ export default function DayTradingLab() {
         return;
       }
       setSnapshot(data);
+      setExperimentReport(data.experimentReport || null);
       syncJournalTicketState(data, journalTicketId);
       const targetMarket = (data.market || market) as DayTradingMarket;
       const defaultBars = data.defaultConfig?.bars || 3120;
@@ -449,6 +693,36 @@ export default function DayTradingLab() {
     loadSnapshot();
   }, [loadSnapshot]);
 
+  useEffect(() => {
+    setExperimentForm((current) => ({
+      ...current,
+      barsRequested: String(bars),
+    }));
+  }, [bars]);
+
+  useEffect(() => {
+    if (market !== "crypto") return;
+    const sessionActive = Boolean(
+      watchlist?.sessionWindow?.activeNow
+      || watchlist?.morningWindow.activeNow
+      || snapshot?.pilotSummary?.todayGate?.activeSessionWindow
+    );
+    if (!watchlistAutoRefresh || !sessionActive) return;
+    const timer = window.setInterval(() => {
+      void fetchWatchlist(bars, snapshot?.defaultConfig?.watchlistLimit || 4);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [
+    bars,
+    fetchWatchlist,
+    market,
+    snapshot?.pilotSummary?.todayGate?.activeSessionWindow,
+    snapshot?.defaultConfig?.watchlistLimit,
+    watchlist?.morningWindow.activeNow,
+    watchlist?.sessionWindow?.activeNow,
+    watchlistAutoRefresh,
+  ]);
+
   const runValidation = async () => {
     setRunning(true);
     setError(null);
@@ -461,6 +735,7 @@ export default function DayTradingLab() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Validation run failed");
       setSnapshot(data.snapshot);
+      setExperimentReport(data.snapshot?.experimentReport || null);
       syncJournalTicketState(data.snapshot, journalTicketId);
       setWatchlist(null);
       void fetchWatchlist(bars, data.snapshot?.defaultConfig?.watchlistLimit || 4);
@@ -492,6 +767,7 @@ export default function DayTradingLab() {
       setPreflightResult(data.result);
       setJournalResult(null);
       setSnapshot(data.snapshot);
+      setExperimentReport(data.snapshot?.experimentReport || null);
       syncJournalTicketState(data.snapshot, data.result.ticket?.ticketId || journalTicketId);
       setWatchlist(null);
       void fetchWatchlist(bars, data.snapshot?.defaultConfig?.watchlistLimit || 4);
@@ -564,6 +840,69 @@ export default function DayTradingLab() {
     }
   };
 
+  const loadExperimentReport = async () => {
+    setExperimentLoading(true);
+    setExperimentError(null);
+    try {
+      const params = new URLSearchParams({
+        market,
+        scope: experimentForm.scope,
+        researchMode: experimentForm.researchMode,
+        windowMode: experimentForm.windowMode,
+        strictMarketData: String(experimentForm.strictMarketData),
+        barsRequested: experimentForm.barsRequested || String(bars),
+      });
+      const res = await fetch(`/api/day-trading/experiments?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || "Failed to load experiment report");
+      }
+      const nextReport = experimentReportFromPayload(data);
+      if (!nextReport) {
+        throw new Error("Experiment report payload was missing");
+      }
+      setExperimentReport(nextReport);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load experiment report";
+      setExperimentError(message);
+    } finally {
+      setExperimentLoading(false);
+    }
+  };
+
+  const runExperimentSweep = async () => {
+    setExperimentRunning(true);
+    setExperimentError(null);
+    try {
+      const res = await fetch("/api/day-trading/experiments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          market,
+          scope: experimentForm.scope,
+          researchMode: experimentForm.researchMode,
+          windowMode: experimentForm.windowMode,
+          strictMarketData: experimentForm.strictMarketData,
+          barsRequested: Number(experimentForm.barsRequested || bars),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string }).error || "Failed to run experiment sweep");
+      }
+      const nextReport = experimentReportFromPayload(data);
+      if (!nextReport) {
+        throw new Error("Experiment sweep did not return a report");
+      }
+      setExperimentReport(nextReport);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to run experiment sweep";
+      setExperimentError(message);
+    } finally {
+      setExperimentRunning(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-text-3">
@@ -615,9 +954,13 @@ export default function DayTradingLab() {
   const watchlistRows = watchlist?.items.map((item) => ({
     Strategy: item.strategyName,
     Symbol: item.symbol || "-",
+    Priority: item.priorityScore == null ? "-" : item.priorityScore.toFixed(1),
     Status: item.notifyNow ? "notify now" : watchStatusLabel(item.liveStatus),
     Regime: labelize(item.regimeState),
     Tradeable: item.tradeable ? "yes" : "no",
+    "Why Now": item.priorityReasons && item.priorityReasons.length > 0
+      ? item.priorityReasons.slice(0, 3).map((reason) => reasonLabel(reason)).join(", ")
+      : "-",
     Blockers: item.regimeBlockers && item.regimeBlockers.length > 0 ? item.regimeBlockers.map((reason) => labelize(reason)).join(", ") : "-",
     "Slots Left": item.approvalSlotsRemaining != null ? String(item.approvalSlotsRemaining) : "-",
     "Replay Ready": item.alertEligible ? "yes" : "no",
@@ -717,15 +1060,105 @@ export default function DayTradingLab() {
     Tradeable: ticket.tradeable ? "yes" : "no",
     Checklist: Object.values(ticket.checklistFlags || {}).every(Boolean) ? "complete" : "incomplete",
   })) || [];
-  const recentJournalRows = (snapshot.profitabilityJournal?.recentEntries || []).map((entry) => ({
+  const currentTime = new Date(nowTick);
+  const sessionClock = getSessionClock(operatingPlan?.session, watchlist?.sessionWindow, currentTime);
+  const profitabilityJournal = snapshot.profitabilityJournal || null;
+  const reviewEntries = [...(snapshot.profitabilityJournal?.recentEntries || [])].sort((left, right) => {
+    const leftTime = new Date(left.loggedAt || left.tradeTimestamp || 0).getTime();
+    const rightTime = new Date(right.loggedAt || right.tradeTimestamp || 0).getTime();
+    return rightTime - leftTime;
+  });
+  const todayReviewEntries = reviewEntries.filter((entry) => isSameLocalDay(entry.loggedAt || entry.tradeTimestamp, currentTime));
+  const weekReviewEntries = reviewEntries.filter((entry) => isWithinDays(entry.loggedAt || entry.tradeTimestamp, currentTime, 7));
+  const todayReviewSummary = profitabilityJournal?.today || mapSummaryToAggregate(summarizeJournalEntries(todayReviewEntries), "today");
+  const weekReviewSummary = profitabilityJournal?.trailingWeek || mapSummaryToAggregate(summarizeJournalEntries(weekReviewEntries), "Trailing 7 days");
+  const buildJournalRows = (entries: typeof reviewEntries) => entries.map((entry) => ({
     Logged: timeLabel(entry.loggedAt || entry.tradeTimestamp),
     Ticket: entry.ticketId ? entry.ticketId.slice(-8) : "-",
+    Symbol: entry.symbol || "-",
     Regime: labelize(entry.regime),
+    Setup: labelize(entry.setupId),
     "PnL (R)": entry.pnlR == null ? "-" : entry.pnlR.toFixed(2),
     "PnL ($)": money(entry.pnlUsd, 2),
-    Eligible: entry.pilotEligible ? "yes" : "no",
+    Adherence: entry.ruleAdherenceScore == null ? "-" : `${entry.ruleAdherenceScore.toFixed(1)}%`,
     Mistake: labelize(entry.mistakeTag),
+    Eligible: entry.pilotEligible ? "yes" : "no",
+    Notes: entry.note || "-",
   }));
+  const buildGroupedRows = (entries: typeof reviewEntries, groupKey: "Regime" | "Mistake Tag") => {
+    const grouped = new Map<string, typeof reviewEntries>();
+    entries.forEach((entry) => {
+      const key = groupKey === "Regime" ? labelize(entry.regime) : labelize(entry.mistakeTag);
+      const bucket = grouped.get(key) || [];
+      bucket.push(entry);
+      grouped.set(key, bucket);
+    });
+    return Array.from(grouped.entries())
+      .map(([label, items]) => {
+        const summary = summarizeJournalEntries(items);
+        const netPnl = money(summary.totalPnlUsd, 2);
+        return {
+          [groupKey]: label,
+          Trades: String(summary.trades),
+          "Net PnL": netPnl,
+          "Avg PnL": money(summary.avgPnlUsd, 2),
+          "Avg R": summary.avgPnlR == null ? "-" : summary.avgPnlR.toFixed(2),
+          "Avg Adherence": summary.avgAdherence == null ? "-" : `${summary.avgAdherence.toFixed(1)}%`,
+          Eligible: summary.trades === 0 ? "-" : `${summary.eligibleCount}/${summary.trades}`,
+          Disqualified: String(summary.disqualifiedCount),
+        };
+      })
+      .sort((left, right) => {
+        const leftPnl = parseFloat(String(left["Net PnL"]).replace(/[^0-9.-]/g, "")) || 0;
+        const rightPnl = parseFloat(String(right["Net PnL"]).replace(/[^0-9.-]/g, "")) || 0;
+        return rightPnl - leftPnl;
+      });
+  };
+  const regimeReviewRows = buildGroupedRows(reviewEntries, "Regime");
+  const mistakeReviewRows = profitabilityJournal?.byMistakeTag?.length
+    ? buildAggregateReviewRows(profitabilityJournal.byMistakeTag, "Mistake Tag")
+    : buildGroupedRows(reviewEntries, "Mistake Tag");
+  const dateReviewRows = profitabilityJournal?.byDate?.length
+    ? buildAggregateReviewRows(profitabilityJournal.byDate, "Date")
+    : [];
+  const snapshotAgeLabel = formatAgeLabel(snapshot.generatedAt, nowTick);
+  const watchlistAgeLabel = formatAgeLabel(watchlist?.generatedAt, nowTick);
+  const journalAgeLabel = formatAgeLabel(snapshot.profitabilityJournal?.lastLoggedAt, nowTick);
+  const activeExperimentReport = experimentReport || snapshot.experimentReport || null;
+  const experimentResultRows = (activeExperimentReport?.leaders || activeExperimentReport?.results || []).map((variant) => ({
+    Variant: variant.variantLabel || variant.variantId.slice(-8),
+    Strategy: variant.strategyName,
+    Score: variant.experimentScore == null ? "-" : variant.experimentScore.toFixed(1),
+    PF: variant.summary?.profitFactor == null ? "-" : variant.summary.profitFactor.toFixed(2),
+    Return: variant.summary?.totalNetReturnFraction == null ? "-" : pct(variant.summary.totalNetReturnFraction),
+    "Win Rate": variant.summary?.winRate == null ? "-" : pct(variant.summary.winRate),
+    Trades: String(variant.summary?.tradeCount ?? 0),
+    Window: variant.windowModeLabel || variant.windowMode || "-",
+    Data: variant.trustedMarketData ? "trusted" : "untrusted",
+    Vetoes: variant.summary?.vetoReasons?.length ? variant.summary.vetoReasons.join(", ") : "-",
+  })).sort((left, right) => (Number(right.Score) || 0) - (Number(left.Score) || 0));
+  const experimentMetrics = activeExperimentReport ? [
+    {
+      label: "Variants Tested",
+      value: String(activeExperimentReport.variantsTested ?? activeExperimentReport.results?.length ?? 0),
+      delta: `Generated ${formatAgeLabel(activeExperimentReport.generatedAt, nowTick)}`,
+    },
+    {
+      label: "Eligible Variants",
+      value: String(activeExperimentReport.eligibleVariantCount ?? 0),
+      delta: `${activeExperimentReport.trustedVariantCount ?? 0} trusted`,
+    },
+    {
+      label: "Control Strategies",
+      value: String(activeExperimentReport.controlStrategiesTested ?? 0),
+      delta: activeExperimentReport.sessionMode || "Session not specified",
+    },
+    {
+      label: "Windows Reviewed",
+      value: String(activeExperimentReport.windowModesEvaluated?.length || 0),
+      delta: activeExperimentReport.researchMode || "Research mode unset",
+    },
+  ] : [];
   const artifactWindowCopy = artifactHealth && artifactHealth.warnings.length > 0
     ? `Live windows ${artifactHealth.configuredWindowIds.join(", ") || "none"} | strategy artifacts ${artifactHealth.strategyWindowIds.join(", ") || "none"} | watchlist artifact ${artifactHealth.watchlistWindowIds.join(", ") || "none"}`
     : null;
@@ -748,12 +1181,31 @@ export default function DayTradingLab() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => loadSnapshot()}
+              disabled={loading}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border bg-bg-3 text-text-1 text-sm font-medium hover:bg-bg-4 disabled:opacity-50 transition-all"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Clock3 size={14} />}
+              {loading ? "Reloading..." : "Refresh Snapshot"}
+            </button>
+            <button
               onClick={() => fetchWatchlist(bars, snapshot?.defaultConfig?.watchlistLimit || 4)}
               disabled={watchlistLoading}
               className="flex items-center gap-2 px-4 py-2.5 rounded-md border border-border bg-bg-3 text-text-1 text-sm font-medium hover:bg-bg-4 disabled:opacity-50 transition-all"
             >
               {watchlistLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               {watchlistLoading ? "Refreshing..." : "Refresh Watchlist"}
+            </button>
+            <button
+              onClick={() => setWatchlistAutoRefresh((current) => !current)}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-md border text-sm font-medium transition-all ${
+                watchlistAutoRefresh
+                  ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+                  : "border-border bg-bg-3 text-text-1 hover:bg-bg-4"
+              }`}
+            >
+              <CalendarClock size={14} />
+              {watchlistAutoRefresh ? "Auto-Poll On" : "Auto-Poll Off"}
             </button>
             <button
               onClick={runValidation}
@@ -862,6 +1314,97 @@ export default function DayTradingLab() {
           </div>
         </div>
       )}
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.25fr_0.75fr] gap-4">
+        <div className="rounded-lg border border-border bg-bg-2 p-4 space-y-4">
+          <div className="section-header mt-0 flex items-center gap-2">
+            <Clock3 size={14} />
+            Live Operator Console
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <MetricCard
+              label="Session"
+              value={sessionClock.active ? "Live" : "Closed"}
+              delta={`${sessionClock.activeWindowLabel || sessionClock.nextWindowLabel || "No session window"} - ${sessionClock.countdown}`}
+            />
+            <MetricCard
+              label="Snapshot Age"
+              value={snapshotAgeLabel}
+              delta={`Captured ${snapshot.generatedAt.slice(0, 16).replace("T", " ")}`}
+            />
+            <MetricCard
+              label="Watchlist Age"
+              value={watchlist ? watchlistAgeLabel : "-"}
+              delta={market === "crypto" && watchlistAutoRefresh
+                ? (sessionClock.active ? "Auto-polling during active window" : "Waiting for the next active window")
+                : "Manual refresh only"}
+            />
+            <MetricCard
+              label="Journal Age"
+              value={journalAgeLabel}
+              delta={`${reviewEntries.length} recent entries in the snapshot`}
+            />
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs text-text-2">
+            <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+              Now: {sessionClock.currentLabel}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+              Time zone: {sessionClock.timeZone}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+              Session windows: {sessionClock.windowLabels.length ? sessionClock.windowLabels.join(" | ") : operatingPlan?.session.localWindow || "n/a"}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-bg-2 p-4 space-y-3">
+          <div className="section-header mt-0 flex items-center gap-2">
+            <RefreshCw size={14} />
+            Refresh Controls
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <button
+              onClick={() => loadSnapshot()}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 rounded-md border border-border bg-bg-3 px-4 py-3 text-text-1 hover:bg-bg-4 disabled:opacity-50"
+            >
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Clock3 size={14} />}
+              Reload snapshot
+            </button>
+            <button
+              onClick={() => fetchWatchlist(bars, snapshot?.defaultConfig?.watchlistLimit || 4)}
+              disabled={watchlistLoading}
+              className="flex items-center justify-center gap-2 rounded-md border border-border bg-bg-3 px-4 py-3 text-text-1 hover:bg-bg-4 disabled:opacity-50"
+            >
+              {watchlistLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+              Reload watchlist
+            </button>
+            <button
+              onClick={() => setWatchlistAutoRefresh((current) => !current)}
+              className={`flex items-center justify-center gap-2 rounded-md border px-4 py-3 font-medium ${
+                watchlistAutoRefresh
+                  ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/15"
+                  : "border-border bg-bg-3 text-text-1 hover:bg-bg-4"
+              }`}
+            >
+              <CalendarClock size={14} />
+              {watchlistAutoRefresh ? "Auto-poll on" : "Auto-poll off"}
+            </button>
+            <button
+              onClick={runValidation}
+              disabled={running}
+              className="flex items-center justify-center gap-2 rounded-md bg-gradient-to-r from-accent to-blue-600 px-4 py-3 font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {running ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+              Run validation
+            </button>
+          </div>
+          <div className="text-xs text-text-3">
+            Watchlist polling is automatic only while the active window is live.
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-4 gap-3">
         <MetricCard
@@ -1544,6 +2087,92 @@ export default function DayTradingLab() {
               ))}
             </div>
           </div>
+
+          <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
+            <div>
+              <div className="section-header mt-0 flex items-center gap-2">
+                <FileText size={14} />
+                Session Review
+              </div>
+              <p className="text-sm text-text-2">
+                The review surfaces below use the recent journal sample already in the snapshot, grouped by day, week, regime, and mistake tag.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              <MetricCard
+                label="Recent Sample"
+                value={String(reviewEntries.length)}
+                delta="Snapshot-backed only"
+              />
+              <MetricCard
+                label="Today"
+                value={String(todayReviewSummary.totalEntries)}
+                delta={`${money(todayReviewSummary.netPnlUsd, 2)} net / ${todayReviewSummary.ruleAdherenceRate == null ? "-" : `${(todayReviewSummary.ruleAdherenceRate * 100).toFixed(1)}% adherence`}`}
+              />
+              <MetricCard
+                label="Week"
+                value={String(weekReviewSummary.totalEntries)}
+                delta={`${money(weekReviewSummary.netPnlUsd, 2)} net / ${weekReviewSummary.disqualifiedEntries} disqualified`}
+              />
+              <MetricCard
+                label="Session Window"
+                value={sessionClock.active ? "Live" : "Idle"}
+                delta={sessionClock.activeWindowLabel || sessionClock.nextWindowLabel || "No active window"}
+              />
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-text-3">Today</div>
+                <FinTable
+                  data={buildJournalRows(todayReviewEntries)}
+                  monoCols={["Logged", "Ticket", "Symbol", "Regime", "Setup", "PnL (R)", "PnL ($)", "Adherence"]}
+                  maxHeight="280px"
+                />
+              </div>
+              <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-text-3">This Week</div>
+                <FinTable
+                  data={buildJournalRows(weekReviewEntries)}
+                  monoCols={["Logged", "Ticket", "Symbol", "Regime", "Setup", "PnL (R)", "PnL ($)", "Adherence"]}
+                  maxHeight="280px"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              {dateReviewRows.length > 0 && (
+                <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                  <div className="text-xs uppercase tracking-wide text-text-3">By Day</div>
+                  <FinTable
+                    data={dateReviewRows}
+                    pnlCols={["Net PnL", "Eligible PnL"]}
+                    rateCols={["Win Rate", "Adherence"]}
+                    monoCols={["Trades", "Avg R", "Eligible", "Disqualified"]}
+                    maxHeight="280px"
+                  />
+                </div>
+              )}
+              <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-text-3">By Regime</div>
+                <FinTable
+                  data={regimeReviewRows}
+                  pnlCols={["Net PnL", "Avg PnL"]}
+                  rateCols={["Avg Adherence"]}
+                  monoCols={["Trades", "Avg R", "Eligible", "Disqualified"]}
+                  maxHeight="280px"
+                />
+              </div>
+              <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-text-3">By Mistake Tag</div>
+                <FinTable
+                  data={mistakeReviewRows}
+                  pnlCols={["Net PnL", "Avg PnL"]}
+                  rateCols={["Avg Adherence"]}
+                  monoCols={["Trades", "Avg R", "Eligible", "Disqualified"]}
+                  maxHeight="280px"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1610,7 +2239,7 @@ export default function DayTradingLab() {
                 data={watchlistRows}
                 badgeCol="Status"
                 rateCols={["Hit Rate"]}
-                monoCols={["Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At", "Window", "Slots Left"]}
+                monoCols={["Priority", "Trades", "Profit Factor", "Signal / Threshold", "Bar Age", "Triggered At", "Window", "Slots Left"]}
                 maxHeight="360px"
               />
             </>
@@ -1683,6 +2312,227 @@ export default function DayTradingLab() {
           />
         </div>
       )}
+
+      <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
+        <div>
+          <div className="section-header mt-0 flex items-center gap-2">
+            <Trophy size={14} />
+            Experiment Console
+          </div>
+          <p className="text-sm text-text-2 max-w-4xl">
+            Run or reload crypto experiment sweeps without dropping to scripts. The lane now sends the selected scope label, window mode, strict-data setting, and requested bar count through the in-app workflow.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+          <div>
+            <label className="text-xs text-text-2 block mb-1">Scope</label>
+            <select
+              value={experimentForm.scope}
+              onChange={(e) => setExperimentForm((current) => ({ ...current, scope: e.target.value }))}
+              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
+            >
+              <option value="snapshot">Snapshot</option>
+              <option value="backtest">Backtest</option>
+              <option value="research">Research</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-2 block mb-1">Research mode</label>
+            <input
+              value={experimentForm.researchMode}
+              onChange={(e) => setExperimentForm((current) => ({ ...current, researchMode: e.target.value }))}
+              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
+              placeholder="phase_a"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-2 block mb-1">Window mode</label>
+            <select
+              value={experimentForm.windowMode}
+              onChange={(e) => setExperimentForm((current) => ({ ...current, windowMode: e.target.value }))}
+              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
+            >
+              <option value="fixed_session">Fixed session</option>
+              <option value="full_day">Full day</option>
+              <option value="alert_window">Alert window</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-text-2 block mb-1">Bars requested</label>
+            <input
+              type="number"
+              min={48}
+              max={12000}
+              step={78}
+              value={experimentForm.barsRequested}
+              onChange={(e) => setExperimentForm((current) => ({ ...current, barsRequested: e.target.value }))}
+              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
+            />
+          </div>
+        </div>
+
+        <label className="flex items-center gap-3 text-sm text-text-1">
+          <input
+            type="checkbox"
+            checked={experimentForm.strictMarketData}
+            onChange={(e) => setExperimentForm((current) => ({ ...current, strictMarketData: e.target.checked }))}
+          />
+          Strict market data
+        </label>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={loadExperimentReport}
+            disabled={experimentLoading}
+            className="flex items-center gap-2 rounded-md border border-border bg-bg-3 px-4 py-2.5 text-sm font-medium text-text-1 hover:bg-bg-4 disabled:opacity-50"
+          >
+            {experimentLoading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            Load report
+          </button>
+          <button
+            onClick={runExperimentSweep}
+            disabled={experimentRunning}
+            className="flex items-center gap-2 rounded-md bg-gradient-to-r from-accent to-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {experimentRunning ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />}
+            Run sweep
+          </button>
+          <div className="text-xs text-text-3">
+            Backend response can either populate the snapshot directly or return a dedicated experiment report payload.
+          </div>
+        </div>
+
+        {experimentError && (
+          <div className="text-sm text-amber-200 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+            {experimentError}
+          </div>
+        )}
+
+        {activeExperimentReport ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+              {experimentMetrics.map((metric) => (
+                <MetricCard
+                  key={metric.label}
+                  label={metric.label}
+                  value={metric.value}
+                  delta={metric.delta}
+                />
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_0.85fr] gap-4">
+              <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                <div className="text-xs uppercase tracking-wide text-text-3">Leaders</div>
+                <FinTable
+                  data={experimentResultRows}
+                  pnlCols={["Return"]}
+                  rateCols={["Win Rate"]}
+                  monoCols={["Score", "PF", "Trades", "Window", "Data"]}
+                  maxHeight="320px"
+                />
+              </div>
+              <div className="space-y-3">
+                <div className="bg-bg-3 border border-border rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-text-3 mb-2">Recommendation</div>
+                  <div className="text-sm text-text-1 leading-relaxed">
+                    {activeExperimentReport.recommendation || "No recommendation supplied yet."}
+                  </div>
+                </div>
+                <div className="bg-bg-3 border border-border rounded-lg p-3">
+                  <div className="text-xs uppercase tracking-wide text-text-3 mb-2">Next Sprint Default</div>
+                  <div className="text-sm text-text-1 leading-relaxed">
+                    {activeExperimentReport.nextSprintDefault || "No sprint default supplied yet."}
+                  </div>
+                </div>
+                {activeExperimentReport.notes && activeExperimentReport.notes.length > 0 && (
+                  <div className="bg-bg-3 border border-border rounded-lg p-3">
+                    <div className="text-xs uppercase tracking-wide text-text-3 mb-2">Notes</div>
+                    <div className="flex flex-wrap gap-2 text-xs text-text-2">
+                      {activeExperimentReport.notes.map((note) => (
+                        <span key={note} className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+                          {note}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {(activeExperimentReport.phaseA || activeExperimentReport.phaseB) && (
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {activeExperimentReport.phaseA && (
+                  <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-text-3">Phase A</div>
+                    <div className="text-sm text-text-1">{activeExperimentReport.phaseA.description || "Phase A results loaded."}</div>
+                    {activeExperimentReport.phaseA.controlResults && activeExperimentReport.phaseA.controlResults.length > 0 && (
+                      <FinTable
+                        data={activeExperimentReport.phaseA.controlResults.map((variant) => ({
+                          Variant: variant.variantLabel || variant.variantId.slice(-8),
+                          Strategy: variant.strategyName,
+                          Score: variant.experimentScore == null ? "-" : variant.experimentScore.toFixed(1),
+                          PF: variant.summary?.profitFactor == null ? "-" : variant.summary.profitFactor.toFixed(2),
+                          Return: variant.summary?.totalNetReturnFraction == null ? "-" : pct(variant.summary.totalNetReturnFraction),
+                        }))}
+                        pnlCols={["Return"]}
+                        monoCols={["Score", "PF"]}
+                        maxHeight="220px"
+                      />
+                    )}
+                  </div>
+                )}
+                {activeExperimentReport.phaseB && (
+                  <div className="bg-bg-3 border border-border rounded-lg p-3 space-y-3">
+                    <div className="text-xs uppercase tracking-wide text-text-3">Phase B</div>
+                    <div className="text-sm text-text-1">
+                      {activeExperimentReport.phaseB.unlocked
+                        ? "Phase B is unlocked."
+                        : activeExperimentReport.phaseB.reason || "Phase B is not yet unlocked."}
+                    </div>
+                    <div className="text-xs text-text-2 flex flex-wrap gap-2">
+                      {activeExperimentReport.phaseB.selectedFamilyWindow?.strategyFamily && (
+                        <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+                          Family: {activeExperimentReport.phaseB.selectedFamilyWindow.strategyFamily}
+                        </span>
+                      )}
+                      {activeExperimentReport.phaseB.selectedFamilyWindow?.windowModeLabel && (
+                        <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+                          Window: {activeExperimentReport.phaseB.selectedFamilyWindow.windowModeLabel}
+                        </span>
+                      )}
+                      {activeExperimentReport.phaseB.batchShape && (
+                        <span className="rounded-full border border-white/10 bg-black/10 px-3 py-1">
+                          Batch: {activeExperimentReport.phaseB.batchShape}
+                        </span>
+                      )}
+                    </div>
+                    {activeExperimentReport.phaseB.results && activeExperimentReport.phaseB.results.length > 0 && (
+                      <FinTable
+                        data={activeExperimentReport.phaseB.results.map((variant) => ({
+                          Variant: variant.variantLabel || variant.variantId.slice(-8),
+                          Strategy: variant.strategyName,
+                          Score: variant.experimentScore == null ? "-" : variant.experimentScore.toFixed(1),
+                          PF: variant.summary?.profitFactor == null ? "-" : variant.summary.profitFactor.toFixed(2),
+                          Return: variant.summary?.totalNetReturnFraction == null ? "-" : pct(variant.summary.totalNetReturnFraction),
+                        }))}
+                        pnlCols={["Return"]}
+                        monoCols={["Score", "PF"]}
+                        maxHeight="220px"
+                      />
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border bg-bg-3/70 px-4 py-5 text-sm text-text-2">
+            No experiment report is loaded yet. Use the controls above to view the latest sweep or run a fresh one.
+          </div>
+        )}
+      </div>
     </div>
   );
 }

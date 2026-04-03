@@ -1,6 +1,5 @@
 import os
 import sys
-import tempfile
 import unittest
 from pathlib import Path
 
@@ -26,11 +25,12 @@ from historical_options_fixtures import (
     write_historical_options_csv,
     write_underlying_daily_parquet,
 )
+from workspace_tempdir import WorkspaceTempDir
 
 
 class HistoricalOptionsStoreTests(unittest.TestCase):
     def setUp(self):
-        self._tmp = tempfile.TemporaryDirectory()
+        self._tmp = WorkspaceTempDir(prefix="historical-options-store")
         self.addCleanup(self._tmp.cleanup)
         self.db_path = os.path.join(self._tmp.name, "options_history.db")
         self.csv_path = os.path.join(self._tmp.name, "snapshots.csv")

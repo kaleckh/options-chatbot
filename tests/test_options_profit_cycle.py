@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from options_profit_state import (
     load_incumbents_state,
     load_live_profile_state,
     load_profit_status,
+    save_incumbents_state,
     save_live_profile_state,
 )
 from workspace_tempdir import WorkspaceTempDir
@@ -109,6 +111,173 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertEqual(ranking["direction"], "put")
         self.assertFalse(ranking["eligible"])
         self.assertIn("shadow_only_side", ranking["blockers"])
+
+    def test_profit_cycle_clears_legacy_symbol_canary_before_pending_evaluation(self):
+        state_root = Path(self.state_dir)
+        state_root.mkdir(parents=True, exist_ok=True)
+        (state_root / "live_profile.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "symbols": {
+                        "SPY": {
+                            "symbol": "SPY",
+                            "candidate_id": "SPY__broad_ev7",
+                            "cohort_id": "broad_ev7",
+                            "base_profile": "index",
+                            "overrides": {},
+                            "source": "legacy_test",
+                            "mode": "canary",
+                            "status": "candidate",
+                        }
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+        (state_root / "incumbents.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "symbols": {
+                        "SPY": {
+                            "symbol": "SPY",
+                            "active": {
+                                "symbol": "SPY",
+                                "candidate_id": "SPY__broad_ev7",
+                                "cohort_id": "broad_ev7",
+                                "base_profile": "index",
+                                "overrides": {},
+                                "source": "legacy_test",
+                                "mode": "canary",
+                                "status": "candidate",
+                            },
+                            "previous": None,
+                            "canary": {
+                                "symbol": "SPY",
+                                "candidate_id": "SPY__broad_ev7",
+                                "required_outcomes": 1,
+                            },
+                            "objective": {"objective_score": 1.25},
+                        }
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+        (state_root / "status.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "active_incumbents": {
+                        "SPY": {
+                            "symbol": "SPY",
+                            "candidate_id": "SPY__broad_ev7",
+                            "cohort_id": "broad_ev7",
+                            "base_profile": "index",
+                            "overrides": {},
+                            "source": "legacy_test",
+                            "mode": "canary",
+                            "status": "candidate",
+                        }
+                    },
+                    "current_canary": {"symbol": "SPY", "candidate_id": "SPY__broad_ev7"},
+                    "candidate_rankings": [],
+                    "last_decision": {"action": "legacy"},
+                    "blockers": [],
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=[]):
+            result = run_options_profit_cycle()
+
+        self.assertEqual(result["decision"]["action"], "no_op")
+        self.assertFalse(any(action.get("action") == "canary_pending" for action in result["canary_actions"]))
+        status = load_profit_status()
+        self.assertIsNone(status["current_canary"]["SPY"]["call"])
+        self.assertIsNone(status["current_canary"]["SPY"]["put"])
+
+    def test_finalize_canary_resets_live_profile_mode_to_incumbent(self):
+        ensure_options_profit_state()
+        live_profile = load_live_profile_state(refresh=True)
+        candidate_id = "SPY__call__broad_ev7"
+        live_profile["symbols"]["SPY"]["call"].update(
+            {
+                "candidate_id": candidate_id,
+                "cohort_id": "broad_ev7",
+                "mode": "canary",
+                "status": "candidate",
+                "source": "test_canary",
+            }
+        )
+        save_live_profile_state(live_profile)
+
+        incumbents = load_incumbents_state()
+        incumbents["symbols"]["SPY"]["call"] = {
+            "symbol": "SPY",
+            "direction": "call",
+            "active": dict(live_profile["symbols"]["SPY"]["call"]),
+            "previous": {
+                "symbol": "SPY",
+                "direction": "call",
+                "candidate_id": "SPY__call__baseline_broad_control",
+                "cohort_id": "baseline_broad_control",
+                "base_profile": "index",
+                "overrides": {},
+                "manifest_source": None,
+                "source": "bootstrap_default",
+                "mode": "incumbent",
+                "status": "incumbent",
+                "applied_at": "2026-04-01T00:00:00Z",
+            },
+            "canary": {
+                "candidate_id": candidate_id,
+                "symbol": "SPY",
+                "direction": "call",
+                "required_outcomes": 1,
+                "baseline_objective": {"objective_score": -100.0},
+            },
+            "objective": {"objective_score": 0.0},
+        }
+        save_incumbents_state(incumbents)
+
+        closed_positions = [
+            {
+                "ticker": "SPY",
+                "direction": "call",
+                "contract_symbol": "SPY260417C00500000",
+                "net_pnl_pct": 15.0,
+                "source_pick_snapshot": {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "profit_candidate_id": candidate_id,
+                    "contract_symbol": "SPY260417C00500000",
+                },
+            }
+        ]
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=closed_positions):
+            result = run_options_profit_cycle()
+
+        self.assertTrue(any(action.get("action") == "finalize_canary" for action in result["canary_actions"]))
+        refreshed_live = load_live_profile_state(refresh=True)
+        refreshed_status = load_profit_status()
+        self.assertEqual(refreshed_live["symbols"]["SPY"]["call"]["mode"], "incumbent")
+        self.assertEqual(refreshed_live["symbols"]["SPY"]["call"]["status"], "incumbent")
+        self.assertIsNone(refreshed_status["current_canary"]["SPY"]["call"])
+        self.assertEqual(refreshed_status["active_incumbents"]["SPY"]["call"]["mode"], "incumbent")
+        self.assertEqual(refreshed_status["active_incumbents"]["SPY"]["call"]["status"], "incumbent")
 
 
 if __name__ == "__main__":
