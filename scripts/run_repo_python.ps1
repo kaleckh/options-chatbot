@@ -29,13 +29,25 @@ function Get-StableFileStamp([string[]]$Paths) {
     return ($parts -join "`n")
 }
 
+function Get-ProcessEnvironmentVariableNames([string]$Prefix) {
+    $names = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
+    $environment = [System.Environment]::GetEnvironmentVariables("Process")
+    foreach ($name in $environment.Keys) {
+        $stringName = [string]$name
+        if ([string]::IsNullOrEmpty($Prefix) -or $stringName.StartsWith($Prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $null = $names.Add($stringName)
+        }
+    }
+    return @($names)
+}
+
 function Enable-ProcessGitSafeDirectory([string]$SafeDirectory) {
-    $trackedNames = New-Object System.Collections.Generic.HashSet[string]
+    $trackedNames = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
     $backup = @{}
 
-    foreach ($entry in (Get-ChildItem Env: | Where-Object { $_.Name -like "GIT_CONFIG_*" })) {
-        $trackedNames.Add($entry.Name) | Out-Null
-        $backup[$entry.Name] = [Environment]::GetEnvironmentVariable($entry.Name, "Process")
+    foreach ($name in (Get-ProcessEnvironmentVariableNames -Prefix "GIT_CONFIG_")) {
+        $trackedNames.Add($name) | Out-Null
+        $backup[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
     }
 
     $trackedNames.Add("GIT_CONFIG_COUNT") | Out-Null
