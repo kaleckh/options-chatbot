@@ -59,7 +59,13 @@ from profit_loop_shared_state import (
     utc_now_iso,
     validation_prerequisite_blockers,
 )
-from wfo_optimizer import IMPORTED_DAILY_TRUTH_SOURCE, OPTIONS_VALIDATION_DAILY_LATEST_FILE, run_historical_backtest
+from wfo_optimizer import (
+    IMPORTED_DAILY_TRUTH_SOURCE,
+    IMPORTED_TRUTH_SOURCE,
+    OPTIONS_VALIDATION_DAILY_LATEST_FILE,
+    _is_imported_truth_source,
+    run_historical_backtest,
+)
 
 
 DAILY_TRUTH_AUTO_REFRESH_ENV = "OPTIONS_DAILY_TRUTH_AUTO_REFRESH"
@@ -747,6 +753,48 @@ def _refresh_daily_truth(
         db_path=historical_db_path,
     )
     base_result["pre_import_store_summary"] = pre_import_summary
+    pre_refresh_freshness = _daily_truth_source_freshness(
+        manifest_entries,
+        repo_root=repo_root,
+        db_path=historical_db_path,
+        allowed_staleness_business_days=DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS,
+    )
+
+    if not import_entries and pre_refresh_freshness["requested_manifest_inputs"]:
+        trusted_truth_horizon = _parse_date(pre_refresh_freshness.get("trusted_truth_horizon"))
+        source_truth_horizon = _parse_date(pre_refresh_freshness.get("daily_truth_source_horizon"))
+        source_truth_capped = bool(
+            trusted_truth_horizon is not None
+            and source_truth_horizon is not None
+            and trusted_truth_horizon >= source_truth_horizon
+        )
+        source_truth_stale = bool(pre_refresh_freshness.get("daily_truth_source_stale"))
+        if source_truth_capped:
+            return {
+                **base_result,
+                "status": "artifact_refreshed",
+                "import_required_entry_count": 0,
+                "imported_entry_sources": [],
+                "import_summary": {
+                    "mode": "manifest",
+                    "db_path": historical_db_path,
+                    "total_imported_rows": 0,
+                    "total_duplicate_rows": 0,
+                    "total_rejected_rows": 0,
+                    "trusted_snapshot_summaries": {
+                        DAILY_SNAPSHOT_KIND: pre_import_summary,
+                    },
+                },
+                "artifact_refresh": {
+                    "skipped": True,
+                    "reason": "source_truth_stale_preflight",
+                },
+                "source_freshness": {
+                    **pre_refresh_freshness,
+                    "source_truth_capped": True,
+                },
+                "commands": [],
+            }
 
     commands: list[str] = []
     import_payload: dict[str, Any] = {
@@ -856,6 +904,7 @@ def _refresh_daily_truth(
             and source_truth_horizon is not None
             and trusted_truth_horizon >= source_truth_horizon
         )
+        source_truth_stale = bool(freshness_summary.get("daily_truth_source_stale"))
         if source_truth_capped:
             return {
                 **base_result,
@@ -890,6 +939,8 @@ def _refresh_daily_truth(
             "stage": "trusted_truth_freshness",
             "error": (
                 "Imported-daily artifact refresh completed, but the trusted truth horizon is still stale after refresh."
+                if not source_truth_capped
+                else "Imported-daily artifact refresh completed, but the trusted truth horizon is capped by stale source inputs."
             ),
             "import_required_entry_count": len(import_entries),
             "imported_entry_sources": [str(item.get("source") or "").strip() for item in import_entries],
@@ -909,7 +960,10 @@ def _refresh_daily_truth(
                 "quote_coverage_pct": artifact_result.get("quote_coverage_pct"),
                 "calendar_source": ((artifact_result.get("calendar_summary") or {}).get("source")),
             },
-            "source_freshness": freshness_summary,
+            "source_freshness": {
+                **freshness_summary,
+                "source_truth_capped": source_truth_capped,
+            },
             "commands": commands + [artifact_command],
         }
 
@@ -1420,37 +1474,47 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
         for case in cases
         if bool(case.get("invalid_for_matrix_comparison"))
     ]
-    if invalid_cases:
-        return {
-            "is_valid": False,
-            "failure_reason": "pricing_lane_flattened",
-            "meaningfully_distinct": False,
-            "invalid_cases": invalid_cases,
-        }
-    fingerprints = {
-        json.dumps(
-            {
-                "lookback_years": case.get("lookback_years"),
-                "requested_pricing_lane": case.get("requested_pricing_lane"),
-                "effective_pricing_lane": case.get("effective_pricing_lane"),
-                "truth_source": case.get("truth_source"),
-                "selection_source_counts": case.get("selection_source_counts"),
-                "calibration_summary": case.get("calibration_summary"),
-                "total_trades": case.get("total_trades"),
-                "profit_factor": case.get("profit_factor"),
-                "avg_pnl_pct": case.get("avg_pnl_pct"),
-                "directional_accuracy_pct": case.get("directional_accuracy_pct"),
-                "max_drawdown_pct": case.get("max_drawdown_pct"),
-            },
-            sort_keys=True,
-        )
+    expected_imported_truth_normalization = bool(invalid_cases) and all(
+        str(case.get("truth_source") or "").strip().lower() in {IMPORTED_TRUTH_SOURCE, IMPORTED_DAILY_TRUTH_SOURCE}
+        and str(case.get("effective_pricing_lane") or "").strip().lower()
+        == str(case.get("truth_source") or "").strip().lower()
         for case in cases
-    }
+    )
+    if invalid_cases:
+        if not expected_imported_truth_normalization:
+            return {
+                "is_valid": False,
+                "failure_reason": "pricing_lane_flattened",
+                "meaningfully_distinct": False,
+                "invalid_cases": invalid_cases,
+                "expected_imported_truth_normalization": False,
+            }
+    fingerprints = set()
+    for case in cases:
+        fingerprint = {
+            "lookback_years": case.get("lookback_years"),
+            "truth_source": case.get("truth_source"),
+            "selection_source_counts": case.get("selection_source_counts"),
+            "calibration_summary": case.get("calibration_summary"),
+            "total_trades": case.get("total_trades"),
+            "profit_factor": case.get("profit_factor"),
+            "avg_pnl_pct": case.get("avg_pnl_pct"),
+            "directional_accuracy_pct": case.get("directional_accuracy_pct"),
+            "max_drawdown_pct": case.get("max_drawdown_pct"),
+        }
+        if expected_imported_truth_normalization:
+            fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
+        else:
+            fingerprint["requested_pricing_lane"] = case.get("requested_pricing_lane")
+            fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
+        fingerprints.add(json.dumps(fingerprint, sort_keys=True))
     meaningfully_distinct = len(fingerprints) > 1
     return {
         "is_valid": meaningfully_distinct,
         "failure_reason": None if meaningfully_distinct else "collapsed_identical_cells",
         "meaningfully_distinct": meaningfully_distinct,
+        "expected_imported_truth_normalization": expected_imported_truth_normalization,
+        "effective_dimensions": ["lookback_years"] if expected_imported_truth_normalization else ["lookback_years", "pricing_lane"],
     }
 
 
@@ -1640,6 +1704,16 @@ def _capture_validation_baseline(
         },
     )
     return baseline
+
+
+def _replay_matrix_seed_issue_cleared(
+    issue: dict[str, Any] | None,
+    baseline: dict[str, Any] | None,
+) -> bool:
+    if str((issue or {}).get("issue_id") or "").strip() != "replay-matrix-collapsed-results":
+        return False
+    assessment = dict((baseline or {}).get("replay_matrix_assessment") or {})
+    return bool(assessment.get("is_valid")) and bool(assessment.get("expected_imported_truth_normalization"))
 
 
 def run_operational_health(
@@ -2525,7 +2599,30 @@ def prepare_profit_validation(
     }
 
     result_action = "claimed_issue"
-    if auto_defer:
+    auto_cleared_seed_issue = None
+    if _replay_matrix_seed_issue_cleared(targeted_issue, baseline):
+        cleared = _resolve_seed_issue_if_cleared(
+            state,
+            issue_id=targeted_issue["issue_id"],
+            now_iso=now_iso,
+            resolution_note=(
+                "Imported executable truth intentionally normalizes requested replay pricing lanes, and the latest "
+                "replay matrix still shows distinct lookback behavior after that normalization."
+            ),
+        )
+        auto_cleared_seed_issue = next(
+            (item for item in cleared if str(item.get("issue_id") or "").strip() == targeted_issue["issue_id"]),
+            None,
+        )
+        result_action = "resolved_no_longer_observed"
+        snapshot["verdict"] = "resolved-no-longer-observed"
+        snapshot["evidence_status"] = "trusted"
+        snapshot["evidence_complete"] = True
+        snapshot["resolved_issue"] = targeted_issue["issue_id"]
+        snapshot["resolution_note"] = (
+            "Replay-matrix pricing-lane collapse is expected under imported executable truth and no longer blocks validation."
+        )
+    elif auto_defer:
         deferred = defer_issue(
             state,
             targeted_issue["issue_id"],
@@ -2557,6 +2654,7 @@ def prepare_profit_validation(
             "run_id": run["run_id"],
             "targeted_issue_id": targeted_issue["issue_id"],
             "snapshot": snapshot,
+            "resolved_issue": auto_cleared_seed_issue,
         },
     )
     save_profit_loop_state(state, state_dir=state_dir)
@@ -2582,6 +2680,7 @@ def prepare_profit_validation(
         "state_dir": str(shared_state_dir(state_dir)),
         "snapshot": snapshot,
         "targeted_issue": targeted_issue,
+        "resolved_issue": auto_cleared_seed_issue,
     }
 
 

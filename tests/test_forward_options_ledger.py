@@ -7,6 +7,7 @@ from datetime import date
 from unittest.mock import patch
 
 from forward_options_ledger import (
+    _trusted_truth_horizon_for_db,
     init_forward_ledger,
     list_forward_scan_pick_events,
     list_forward_sessions,
@@ -212,6 +213,18 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertTrue(events[0]["is_fixture"])
         self.assertEqual(events[0]["eligibility_status"], "ineligible")
         self.assertIn("non_live_evidence_class", events[0]["eligibility_blockers"])
+
+    def test_trusted_truth_horizon_uses_requested_db_path(self):
+        _trusted_truth_horizon_for_db.cache_clear()
+        with patch("forward_options_ledger.HistoricalOptionsStore") as store_cls:
+            store_cls.return_value.snapshot_summary.return_value = {
+                "latest_quote_at_utc": "2026-04-02T00:00:00Z",
+            }
+            horizon = _trusted_truth_horizon_for_db(self.db_path)
+
+        self.assertEqual(horizon, date(2026, 4, 2))
+        store_cls.assert_called_once_with(self.db_path)
+        _trusted_truth_horizon_for_db.cache_clear()
 
     def test_init_forward_ledger_upgrades_legacy_schema_before_indexing(self):
         with closing(sqlite3.connect(self.db_path)) as conn:

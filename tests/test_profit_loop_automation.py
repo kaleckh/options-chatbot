@@ -11,6 +11,8 @@ from profit_loop_automation import (
     _load_local_env,
     _proof_context,
     _capture_validation_baseline,
+    _replay_matrix_assessment,
+    _refresh_daily_truth,
     _shared_replay_matrix_artifact_path,
     _require_daily_truth_refresh,
     _validation_fingerprint,
@@ -521,10 +523,66 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertIsNone(state["active_run"])
         self.assertTrue(any(item["issue_id"] == "daily-truth-refresh-failed" for item in state["open_issues"]))
 
+    def test_truth_holdout_opens_freshness_issue_when_source_capped_truth_is_stale(self):
+        refresh_result = {
+            "status": "failed",
+            "stage": "trusted_truth_freshness",
+            "error": "Imported-daily artifact refresh completed, but the trusted truth horizon is capped by stale source inputs.",
+            "manifest_source": "env",
+            "manifest_path": "C:/tmp/manifest.json",
+            "source_freshness": {
+                "source_truth_capped": True,
+                "daily_truth_source_stale": True,
+                "trusted_truth_horizon": "2025-12-15",
+                "daily_truth_source_horizon": "2025-12-15",
+            },
+            "commands": ["python profit_loop_automation.py daily-truth-refresh-artifact --json"],
+        }
+
+        result = run_truth_holdout(state_dir=self.state_dir, daily_truth_refresh=refresh_result)
+
+        state = load_profit_loop_state(self.state_dir)
+        self.assertEqual(result["snapshot"]["verdict"], "blocked-daily-truth-refresh")
+        self.assertTrue(any(item["issue_id"] == "daily-truth-refresh-freshness-stale" for item in state["open_issues"]))
+
     def test_require_daily_truth_refresh_accepts_artifact_refresh_without_new_import(self):
         refresh_result = {"status": "artifact_refreshed", "commands": ["run_historical_backtest ..."]}
         result = _require_daily_truth_refresh(refresh_result=refresh_result)
         self.assertEqual(result["status"], "artifact_refreshed")
+
+    def test_refresh_daily_truth_accepts_stale_source_when_truth_is_capped(self):
+        artifact_result = {
+            "result_path": "C:/artifact.json",
+            "truth_source": "historical_imported_daily",
+            "total_trades": 42,
+            "profit_factor": 1.1,
+            "quote_coverage_pct": 95.0,
+            "calendar_summary": {"source": "cached"},
+        }
+        artifact_record = {"command": "python profit_loop_automation.py daily-truth-refresh-artifact --json"}
+        freshness_summary = {
+            "requested_manifest_inputs": ["C:/tmp/qqq_options.parquet"],
+            "daily_truth_source_latest_mtime_utc": "2026-04-03T12:00:00Z",
+            "daily_truth_source_horizon": "2025-12-15",
+            "daily_truth_source_stale": True,
+            "source_horizon_staleness_business_days": 79,
+            "trusted_truth_horizon": "2025-12-15",
+            "truth_staleness_business_days": 79,
+            "allowed_truth_staleness_business_days": 3,
+        }
+        with patch("profit_loop_automation._env_flag", return_value=True), \
+             patch("profit_loop_automation._resolve_daily_truth_import_manifest", return_value=("C:/tmp/manifest.json", "env")), \
+             patch("profit_loop_automation._load_manifest_entries", return_value=[{"source": "qqq_options", "input": "C:/tmp/qqq_options.parquet"}]), \
+             patch("profit_loop_automation._daily_truth_entries_needing_import", return_value=([], {"latest_quote_at_utc": "2025-12-15T00:00:00Z"})), \
+             patch("profit_loop_automation._run_daily_truth_artifact_refresh", return_value=(artifact_result, artifact_record)) as artifact_refresh_mock, \
+             patch("profit_loop_automation._daily_truth_source_freshness", return_value=freshness_summary):
+            result = _refresh_daily_truth(repo_root=self.state_dir)
+
+        self.assertEqual(result["status"], "artifact_refreshed")
+        self.assertTrue(result["source_freshness"]["source_truth_capped"])
+        self.assertEqual(result["artifact_refresh"]["reason"], "source_truth_stale_preflight")
+        self.assertTrue(result["artifact_refresh"]["skipped"])
+        artifact_refresh_mock.assert_not_called()
 
     def test_truth_holdout_accepts_artifact_refresh_without_blocking(self):
         policy_payload = {
@@ -672,6 +730,56 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(deferred["deferred_reason"], "no_safe_fix_plan")
         self.assertTrue(str(deferred["next_action"]).strip())
 
+    def test_profit_validation_auto_clears_expected_imported_truth_replay_seed_issue(self):
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"ran_at": "2026-04-02T11:30:00Z", "verdict": "healthy"}
+        state["latest_truth_holdout"] = {"ran_at": "2026-04-02T11:45:00Z", "verdict": "recorded"}
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "replay-matrix-collapsed-results",
+                "source_automation": "seed",
+                "severity": "medium",
+                "blocker_class": "replay_matrix_suspicious",
+                "summary": "Matrix collapsed",
+                "evidence": ["all four cells match"],
+                "suggested_fix_targets": ["wfo_optimizer.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+
+        refresh_result = {"status": "refreshed", "commands": []}
+        baseline = {
+            "validation_tests_passed": True,
+            "validation_test_count": 2,
+            "smoke_summary": {"scan_truth_lane": "historical_imported_daily"},
+            "replay_cases": [{}],
+            "replay_matrix_assessment": {
+                "is_valid": True,
+                "failure_reason": None,
+                "meaningfully_distinct": True,
+                "expected_imported_truth_normalization": True,
+                "effective_dimensions": ["lookback_years"],
+            },
+            "proof_plan": {"needs_replay_matrix": True, "needs_holdout": False},
+            "proof_reuse": [],
+            "proof_context": {"base_fingerprint": "match"},
+            "holdout_evidence": None,
+        }
+        with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]), \
+             patch("profit_loop_automation._capture_validation_baseline", return_value=baseline):
+            result = prepare_profit_validation(state_dir=self.state_dir, auto_defer=True, daily_truth_refresh=refresh_result)
+
+        self.assertEqual(result["action"], "resolved_no_longer_observed")
+        self.assertEqual(result["snapshot"]["verdict"], "resolved-no-longer-observed")
+        self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
+        state = load_profit_loop_state(self.state_dir)
+        self.assertFalse(any(item["issue_id"] == "replay-matrix-collapsed-results" for item in state["open_issues"]))
+        resolved = next(item for item in state["resolved_issues"] if item["issue_id"] == "replay-matrix-collapsed-results")
+        self.assertEqual(resolved["resolution_kind"], "no_longer_observed")
+
     def test_capture_validation_baseline_reuses_shared_replay_matrix_cache(self):
         state = load_profit_loop_state(self.state_dir)
         proof_context = {
@@ -722,6 +830,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -21.27,
                 "directional_accuracy_pct": 50.0,
                 "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": True,
                 "error": None,
             },
             {
@@ -736,6 +845,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -20.03,
                 "directional_accuracy_pct": 41.5,
                 "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": True,
                 "error": None,
             },
             {
@@ -750,6 +860,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -21.27,
                 "directional_accuracy_pct": 50.0,
                 "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": True,
                 "error": None,
             },
             {
@@ -764,6 +875,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -20.03,
                 "directional_accuracy_pct": 41.5,
                 "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": True,
                 "error": None,
             },
         ]
@@ -805,6 +917,79 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(baseline["replay_cases"], replay_cases)
         self.assertIn("shared_state.replay_matrix", baseline["proof_reuse"])
         self.assertTrue(proof_replay_path.exists())
+        self.assertTrue(baseline["replay_matrix_assessment"]["is_valid"])
+        self.assertTrue(baseline["replay_matrix_assessment"]["expected_imported_truth_normalization"])
+
+    def test_replay_matrix_assessment_accepts_imported_truth_execution_normalization(self):
+        assessment = _replay_matrix_assessment(
+            [
+                {
+                    "lookback_years": 1,
+                    "requested_pricing_lane": "mid",
+                    "effective_pricing_lane": "historical_imported_daily",
+                    "truth_source": "historical_imported_daily",
+                    "selection_source_counts": {"bootstrap_heuristic": 70},
+                    "calibration_summary": {"status": "sparse_calibrated"},
+                    "total_trades": 70,
+                    "profit_factor": 0.45,
+                    "avg_pnl_pct": -21.27,
+                    "directional_accuracy_pct": 50.0,
+                    "max_drawdown_pct": 100.0,
+                    "invalid_for_matrix_comparison": True,
+                    "error": None,
+                },
+                {
+                    "lookback_years": 1,
+                    "requested_pricing_lane": "pessimistic",
+                    "effective_pricing_lane": "historical_imported_daily",
+                    "truth_source": "historical_imported_daily",
+                    "selection_source_counts": {"bootstrap_heuristic": 70},
+                    "calibration_summary": {"status": "sparse_calibrated"},
+                    "total_trades": 70,
+                    "profit_factor": 0.45,
+                    "avg_pnl_pct": -21.27,
+                    "directional_accuracy_pct": 50.0,
+                    "max_drawdown_pct": 100.0,
+                    "invalid_for_matrix_comparison": True,
+                    "error": None,
+                },
+                {
+                    "lookback_years": 2,
+                    "requested_pricing_lane": "mid",
+                    "effective_pricing_lane": "historical_imported_daily",
+                    "truth_source": "historical_imported_daily",
+                    "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
+                    "calibration_summary": {"status": "sparse_calibrated"},
+                    "total_trades": 354,
+                    "profit_factor": 0.48,
+                    "avg_pnl_pct": -20.03,
+                    "directional_accuracy_pct": 41.5,
+                    "max_drawdown_pct": 100.0,
+                    "invalid_for_matrix_comparison": True,
+                    "error": None,
+                },
+                {
+                    "lookback_years": 2,
+                    "requested_pricing_lane": "pessimistic",
+                    "effective_pricing_lane": "historical_imported_daily",
+                    "truth_source": "historical_imported_daily",
+                    "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
+                    "calibration_summary": {"status": "sparse_calibrated"},
+                    "total_trades": 354,
+                    "profit_factor": 0.48,
+                    "avg_pnl_pct": -20.03,
+                    "directional_accuracy_pct": 41.5,
+                    "max_drawdown_pct": 100.0,
+                    "invalid_for_matrix_comparison": True,
+                    "error": None,
+                },
+            ]
+        )
+
+        self.assertTrue(assessment["is_valid"])
+        self.assertIsNone(assessment["failure_reason"])
+        self.assertTrue(assessment["expected_imported_truth_normalization"])
+        self.assertEqual(assessment["effective_dimensions"], ["lookback_years"])
 
     def test_profit_validation_resolve_records_branch_commit_and_proof(self):
         state = load_profit_loop_state(self.state_dir)

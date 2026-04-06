@@ -73,6 +73,17 @@ def _infer_data_trust(source_label: Any, input_path: Any, dataset_kind: Any) -> 
     return TRUSTED_DATA_TRUST
 
 
+def _dataset_kind_for_snapshot_kind(snapshot_kind: str | None) -> str | None:
+    normalized = str(snapshot_kind or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized == str(DAILY_SNAPSHOT_KIND).lower():
+        return "daily_parquet"
+    if normalized == str(INTRADAY_SNAPSHOT_KIND).lower():
+        return "intraday_csv"
+    return None
+
+
 def _index_columns(conn: sqlite3.Connection, index_name: str) -> list[str]:
     rows = conn.execute(f"PRAGMA index_info('{index_name}')").fetchall()
     return [str(row[2]) for row in rows]
@@ -872,21 +883,32 @@ class HistoricalOptionsStore:
 
     def list_available_underlyings(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> list[str]:
         with closing(self._connect()) as conn:
+            if not trusted_only:
+                query = "SELECT DISTINCT underlying FROM option_quote_snapshots"
+                clauses: list[str] = []
+                params: list[Any] = []
+                if snapshot_kind:
+                    clauses.append("snapshot_kind = ?")
+                    params.append(str(snapshot_kind))
+                if clauses:
+                    query += f" WHERE {' AND '.join(clauses)}"
+                query += " ORDER BY underlying"
+                rows = conn.execute(query, tuple(params)).fetchall()
+                return [str(row["underlying"]) for row in rows]
+
             query = """
                 SELECT DISTINCT q.underlying
                 FROM option_quote_snapshots q
                 JOIN import_batches b ON b.id = q.source_batch_id
             """
-            clauses: list[str] = []
-            params: list[Any] = []
+            clauses = []
+            params = []
             if snapshot_kind:
                 clauses.append("q.snapshot_kind = ?")
                 params.append(str(snapshot_kind))
-            if trusted_only:
-                clauses.append("b.data_trust = ?")
-                params.append(TRUSTED_DATA_TRUST)
-            if clauses:
-                query += f" WHERE {' AND '.join(clauses)}"
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
+            query += f" WHERE {' AND '.join(clauses)}"
             query += " ORDER BY q.underlying"
             rows = conn.execute(query, tuple(params)).fetchall()
         return [str(row["underlying"]) for row in rows]
@@ -1011,51 +1033,121 @@ class HistoricalOptionsStore:
     ) -> dict[str, Any]:
         normalized_snapshot_kind = str(snapshot_kind)
         with closing(self._connect()) as conn:
-            params: list[Any] = [normalized_snapshot_kind]
-            trust_clause = ""
+            dataset_kind = _dataset_kind_for_snapshot_kind(normalized_snapshot_kind)
+            batch_clauses = ["imported_rows > 0"]
+            batch_params: list[Any] = []
+            if dataset_kind:
+                batch_clauses.append("dataset_kind = ?")
+                batch_params.append(dataset_kind)
             if trusted_only:
-                trust_clause = " AND b.data_trust = ?"
-                params.append(TRUSTED_DATA_TRUST)
-            row = conn.execute(
+                batch_clauses.append("data_trust = ?")
+                batch_params.append(TRUSTED_DATA_TRUST)
+            batch_row = conn.execute(
                 f"""
                 SELECT
-                    COUNT(*) AS quote_count,
-                    COUNT(DISTINCT source_batch_id) AS batch_count,
-                    MIN(as_of_utc) AS earliest_quote_at_utc,
-                    MAX(as_of_utc) AS latest_quote_at_utc,
-                    MAX(b.imported_at_utc) AS latest_imported_at_utc,
-                    GROUP_CONCAT(DISTINCT b.source_label) AS source_labels,
-                    GROUP_CONCAT(DISTINCT b.dataset_kind) AS dataset_kinds,
-                    GROUP_CONCAT(DISTINCT b.data_trust) AS trust_levels
-                FROM option_quote_snapshots q
-                LEFT JOIN import_batches b
-                  ON b.id = q.source_batch_id
-                WHERE q.snapshot_kind = ?
-                {trust_clause}
+                    COALESCE(SUM(imported_rows), 0) AS quote_count,
+                    COUNT(*) AS batch_count,
+                    MAX(imported_at_utc) AS latest_imported_at_utc,
+                    GROUP_CONCAT(DISTINCT source_label) AS source_labels,
+                    GROUP_CONCAT(DISTINCT dataset_kind) AS dataset_kinds,
+                    GROUP_CONCAT(DISTINCT data_trust) AS trust_levels
+                FROM import_batches
+                WHERE {' AND '.join(batch_clauses)}
                 """,
-                tuple(params),
+                tuple(batch_params),
             ).fetchone()
 
-        quote_count = int((row["quote_count"] if row else 0) or 0)
+            quote_count = int((batch_row["quote_count"] if batch_row else 0) or 0)
+            if quote_count <= 0:
+                return {
+                    "db_path": str(self.db_path),
+                    "snapshot_kind": normalized_snapshot_kind,
+                    "quote_count": 0,
+                    "batch_count": 0,
+                    "earliest_quote_at_utc": None,
+                    "latest_quote_at_utc": None,
+                    "latest_imported_at_utc": None,
+                    "available_underlyings": [] if include_available_underlyings else None,
+                    "source_labels": [],
+                    "dataset_kinds": [],
+                    "trust_levels": [TRUSTED_DATA_TRUST] if trusted_only else [],
+                    "trusted_only": trusted_only,
+                }
+
+            trust_filter_redundant = True
+            if trusted_only and dataset_kind:
+                untrusted_count_row = conn.execute(
+                    """
+                    SELECT COUNT(*)
+                    FROM import_batches
+                    WHERE imported_rows > 0
+                      AND dataset_kind = ?
+                      AND data_trust != ?
+                    """,
+                    (dataset_kind, TRUSTED_DATA_TRUST),
+                ).fetchone()
+                trust_filter_redundant = int((untrusted_count_row[0] if untrusted_count_row else 0) or 0) == 0
+
+            if trust_filter_redundant:
+                earliest_row = conn.execute(
+                    """
+                    SELECT as_of_utc
+                    FROM option_quote_snapshots
+                    WHERE snapshot_kind = ?
+                    ORDER BY as_of_utc ASC
+                    LIMIT 1
+                    """,
+                    (normalized_snapshot_kind,),
+                ).fetchone()
+                latest_row = conn.execute(
+                    """
+                    SELECT as_of_utc
+                    FROM option_quote_snapshots
+                    WHERE snapshot_kind = ?
+                    ORDER BY as_of_utc DESC
+                    LIMIT 1
+                    """,
+                    (normalized_snapshot_kind,),
+                ).fetchone()
+                earliest_quote_at_utc = str((earliest_row["as_of_utc"] if earliest_row else None) or "") or None
+                latest_quote_at_utc = str((latest_row["as_of_utc"] if latest_row else None) or "") or None
+            else:
+                params: list[Any] = [normalized_snapshot_kind]
+                row = conn.execute(
+                    """
+                    SELECT
+                        MIN(q.as_of_utc) AS earliest_quote_at_utc,
+                        MAX(q.as_of_utc) AS latest_quote_at_utc
+                    FROM option_quote_snapshots q
+                    JOIN import_batches b
+                      ON b.id = q.source_batch_id
+                    WHERE q.snapshot_kind = ?
+                      AND b.data_trust = ?
+                    """,
+                    tuple(params + [TRUSTED_DATA_TRUST]),
+                ).fetchone()
+                earliest_quote_at_utc = str((row["earliest_quote_at_utc"] if row else None) or "") or None
+                latest_quote_at_utc = str((row["latest_quote_at_utc"] if row else None) or "") or None
+
         return {
             "db_path": str(self.db_path),
             "snapshot_kind": normalized_snapshot_kind,
             "quote_count": quote_count,
-            "batch_count": int((row["batch_count"] if row else 0) or 0),
-            "earliest_quote_at_utc": str((row["earliest_quote_at_utc"] if row else None) or "") or None,
-            "latest_quote_at_utc": str((row["latest_quote_at_utc"] if row else None) or "") or None,
-            "latest_imported_at_utc": str((row["latest_imported_at_utc"] if row else None) or "") or None,
+            "batch_count": int((batch_row["batch_count"] if batch_row else 0) or 0),
+            "earliest_quote_at_utc": earliest_quote_at_utc,
+            "latest_quote_at_utc": latest_quote_at_utc,
+            "latest_imported_at_utc": str((batch_row["latest_imported_at_utc"] if batch_row else None) or "") or None,
             "available_underlyings": (
                 self.list_available_underlyings(
                     snapshot_kind=normalized_snapshot_kind,
-                    trusted_only=trusted_only,
+                    trusted_only=(trusted_only and not trust_filter_redundant),
                 )
                 if include_available_underlyings
                 else None
             ),
-            "source_labels": [item for item in str((row["source_labels"] if row else "") or "").split(",") if item],
-            "dataset_kinds": [item for item in str((row["dataset_kinds"] if row else "") or "").split(",") if item],
-            "trust_levels": [item for item in str((row["trust_levels"] if row else "") or "").split(",") if item],
+            "source_labels": [item for item in str((batch_row["source_labels"] if batch_row else "") or "").split(",") if item],
+            "dataset_kinds": [item for item in str((batch_row["dataset_kinds"] if batch_row else "") or "").split(",") if item],
+            "trust_levels": [item for item in str((batch_row["trust_levels"] if batch_row else "") or "").split(",") if item],
             "trusted_only": trusted_only,
         }
 

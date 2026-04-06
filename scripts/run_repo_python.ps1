@@ -29,6 +29,58 @@ function Get-StableFileStamp([string[]]$Paths) {
     return ($parts -join "`n")
 }
 
+function Get-RepoTempRoot([string]$RepoRoot) {
+    $repoName = Split-Path -Leaf $RepoRoot
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
+        return Join-Path $env:CODEX_HOME ".tmp\repo-python\$repoName"
+    }
+
+    $systemTemp = [System.IO.Path]::GetTempPath().TrimEnd('\')
+    return Join-Path $systemTemp "codex-repo-python\$repoName"
+}
+
+function Set-RepoTempEnvironment([string]$RepoRoot) {
+    $tempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
+    $tmpPath = Join-Path $tempRoot "tmp"
+    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
+
+    foreach ($path in @($tempRoot, $tmpPath, $pipBuildTracker)) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            New-Item -ItemType Directory -Path $path -Force | Out-Null
+        }
+    }
+
+    $names = @("TMP", "TEMP", "TMPDIR", "PIP_BUILD_TRACKER")
+    $backup = @{}
+    foreach ($name in $names) {
+        $backup[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+    }
+
+    [Environment]::SetEnvironmentVariable("TMP", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("TEMP", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("TMPDIR", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("PIP_BUILD_TRACKER", $pipBuildTracker, "Process")
+
+    return @{
+        Names = $names
+        Backup = $backup
+    }
+}
+
+function Restore-RepoTempEnvironment($Snapshot) {
+    if (-not $Snapshot) {
+        return
+    }
+
+    foreach ($name in @($Snapshot.Names)) {
+        $previous = $null
+        if ($Snapshot.Backup.ContainsKey($name)) {
+            $previous = $Snapshot.Backup[$name]
+        }
+        [Environment]::SetEnvironmentVariable($name, $previous, "Process")
+    }
+}
+
 function Get-ProcessEnvironmentVariableNames([string]$Prefix) {
     $names = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
     $environment = [System.Environment]::GetEnvironmentVariables("Process")
@@ -157,6 +209,7 @@ function Sync-ValidationArtifacts([string]$CanonicalRoot, [string]$RepoRoot) {
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDir ".."))
 $gitEnvSnapshot = Enable-ProcessGitSafeDirectory -SafeDirectory $repoRoot
+$tempEnvSnapshot = Set-RepoTempEnvironment -RepoRoot $repoRoot
 try {
     $canonicalRoot = Get-CanonicalRepoRoot -RepoRoot $repoRoot
 
@@ -220,5 +273,6 @@ try {
     }
 }
 finally {
+    Restore-RepoTempEnvironment -Snapshot $tempEnvSnapshot
     Restore-ProcessGitEnvironment -Snapshot $gitEnvSnapshot
 }

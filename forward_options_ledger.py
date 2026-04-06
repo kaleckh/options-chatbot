@@ -396,8 +396,9 @@ def _parse_date(value: Any) -> Optional[date]:
 @lru_cache(maxsize=8)
 def _trusted_truth_horizon_for_db(db_path_hint: str) -> Optional[date]:
     try:
+        resolved_db_path = str(db_path_hint or "").strip() or None
         latest_quote_at_utc = str(
-            HistoricalOptionsStore().snapshot_summary(
+            HistoricalOptionsStore(resolved_db_path).snapshot_summary(
                 DAILY_SNAPSHOT_KIND,
                 trusted_only=True,
             ).get("latest_quote_at_utc")

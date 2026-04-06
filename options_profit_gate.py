@@ -12,6 +12,7 @@ import pyarrow.parquet as pq
 from forward_options_ledger import (
     PENDING_TRUTH_STATUS,
     _measurement_status_for_event,
+    archive_forward_ledger_db_path,
     authoritative_forward_ledger_db_path,
     list_forward_scan_pick_events,
     list_forward_sessions,
@@ -337,6 +338,87 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
     }
 
 
+def _forward_ledger_runtime_diagnostics(
+    *,
+    db_path: str | Path,
+    recorded_before_utc: str | None = None,
+) -> dict[str, Any]:
+    resolved_db_path = Path(db_path)
+    base_result = {
+        "db_path": str(resolved_db_path),
+        "session_count": 0,
+        "scan_pick_event_count": 0,
+        "live_production_session_count": 0,
+        "live_production_zero_pick_session_count": 0,
+        "live_production_event_count": 0,
+        "eligible_live_production_event_count": 0,
+        "pending_truth_live_production_event_count": 0,
+        "ineligible_live_production_event_count": 0,
+    }
+    try:
+        sessions = list_forward_sessions(limit=5000, db_path=resolved_db_path)
+        events = list_forward_scan_pick_events(
+            db_path=resolved_db_path,
+            recorded_before_utc=recorded_before_utc,
+        )
+    except Exception as exc:
+        return {
+            **base_result,
+            "error": str(exc),
+        }
+
+    live_session_count = 0
+    live_zero_pick_session_count = 0
+    for session in sessions:
+        notes = dict(session.get("notes") or {})
+        source_label = str(session.get("source_label") or "").strip()
+        evidence_class = _normalize_evidence_class(
+            session.get("evidence_class")
+            or notes.get("evidence_class")
+            or session.get("run_mode")
+            or notes.get("run_mode"),
+            source_label=source_label,
+        )
+        if evidence_class != LIVE_EVIDENCE_CLASS or bool(session.get("is_fixture")):
+            continue
+        live_session_count += 1
+        if int(session.get("scan_picks_count") or 0) <= 0:
+            live_zero_pick_session_count += 1
+
+    live_event_count = 0
+    eligible_live_event_count = 0
+    pending_live_event_count = 0
+    ineligible_live_event_count = 0
+    for event in events:
+        source_label = str(event.get("source_label") or "").strip()
+        evidence_class = _normalize_evidence_class(
+            event.get("evidence_class") or event.get("run_mode"),
+            source_label=source_label,
+        )
+        if evidence_class != LIVE_EVIDENCE_CLASS or bool(event.get("is_fixture")):
+            continue
+        live_event_count += 1
+        eligibility_status = str(event.get("eligibility_status") or "").strip().lower()
+        if eligibility_status == "eligible":
+            eligible_live_event_count += 1
+        elif eligibility_status == PENDING_TRUTH_STATUS:
+            pending_live_event_count += 1
+        else:
+            ineligible_live_event_count += 1
+
+    return {
+        **base_result,
+        "session_count": len(sessions),
+        "scan_pick_event_count": len(events),
+        "live_production_session_count": live_session_count,
+        "live_production_zero_pick_session_count": live_zero_pick_session_count,
+        "live_production_event_count": live_event_count,
+        "eligible_live_production_event_count": eligible_live_event_count,
+        "pending_truth_live_production_event_count": pending_live_event_count,
+        "ineligible_live_production_event_count": ineligible_live_event_count,
+    }
+
+
 def _load_forward_evidence(
     *,
     forward_db_path: str | Path | None = None,
@@ -362,6 +444,28 @@ def _load_forward_evidence(
         symbol: {"eligible": 0, "pending_truth": 0, "ineligible": 0}
         for symbol in TARGET_SYMBOLS
     }
+    requested_ledger_diagnostics = _forward_ledger_runtime_diagnostics(
+        db_path=resolved_forward_db_path,
+        recorded_before_utc=recorded_before_utc,
+    )
+    authoritative_db_path = authoritative_forward_ledger_db_path()
+    archive_db_path = archive_forward_ledger_db_path()
+    authoritative_ledger_diagnostics = (
+        requested_ledger_diagnostics
+        if resolved_forward_db_path.resolve() == authoritative_db_path.resolve()
+        else _forward_ledger_runtime_diagnostics(
+            db_path=authoritative_db_path,
+            recorded_before_utc=recorded_before_utc,
+        )
+    )
+    archive_ledger_diagnostics = (
+        requested_ledger_diagnostics
+        if resolved_forward_db_path.resolve() == archive_db_path.resolve()
+        else _forward_ledger_runtime_diagnostics(
+            db_path=archive_db_path,
+            recorded_before_utc=recorded_before_utc,
+        )
+    )
 
     for event in list_forward_scan_pick_events(
         db_path=resolved_forward_db_path,
@@ -480,6 +584,9 @@ def _load_forward_evidence(
         "contamination_findings": contamination_findings,
         "stale_metadata_events": stale_metadata_events,
         "by_symbol": by_symbol,
+        "requested_ledger_diagnostics": requested_ledger_diagnostics,
+        "authoritative_ledger_diagnostics": authoritative_ledger_diagnostics,
+        "archive_ledger_diagnostics": archive_ledger_diagnostics,
     }
 
 
@@ -672,11 +779,15 @@ def evaluate_measurement_gate(
                 "truth_staleness_business_days": trusted_truth_staleness,
                 "requested_manifest_inputs": list(source_freshness.get("requested_manifest_inputs") or []),
                 "daily_truth_source_latest_mtime_utc": source_freshness.get("daily_truth_source_latest_mtime_utc"),
+                "daily_truth_source_horizon": source_freshness.get("daily_truth_source_horizon"),
                 "daily_truth_source_stale": bool(source_freshness.get("daily_truth_source_stale")),
                 "by_symbol": forward_evidence["by_symbol"],
                 "contamination_finding_count": len(forward_evidence["contamination_findings"]),
                 "stale_metadata_finding_count": len(forward_evidence["stale_metadata_events"]),
                 "existing_symbol_floor": int(MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES),
+                "requested_ledger_diagnostics": forward_evidence.get("requested_ledger_diagnostics"),
+                "authoritative_ledger_diagnostics": forward_evidence.get("authoritative_ledger_diagnostics"),
+                "archive_ledger_diagnostics": forward_evidence.get("archive_ledger_diagnostics"),
             },
             "tracked_positions": {
                 "available": bool(positions_snapshot["available"]),

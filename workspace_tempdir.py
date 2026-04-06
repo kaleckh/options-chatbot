@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import os
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
 
 _ROOT = Path(__file__).resolve().parent
-_TEMP_ROOT = _ROOT / ".tmp-test-workspaces"
+
+
+def _default_temp_root() -> Path:
+    codex_home = os.environ.get("CODEX_HOME")
+    repo_name = _ROOT.name
+    if codex_home:
+        return Path(codex_home).expanduser() / ".tmp" / "workspace-tempdirs" / repo_name
+    return Path(tempfile.gettempdir()) / f"{repo_name}-workspace-tempdirs"
+
+
+_TEMP_ROOT = _default_temp_root()
 
 
 class WorkspaceTempDir:

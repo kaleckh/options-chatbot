@@ -153,6 +153,33 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertEqual(intraday_summary["trust_levels"], ["trusted"])
         self.assertEqual(daily_summary["trust_levels"], ["trusted"])
 
+    def test_snapshot_summary_excludes_duplicate_only_batches(self):
+        first_result = import_daily_option_parquet(
+            self.daily_parquet_path,
+            "spy_daily_primary",
+            underlying="SPY",
+            underlying_input=self.underlying_parquet_path,
+            db_path=self.db_path,
+        )
+        duplicate_result = import_daily_option_parquet(
+            self.daily_parquet_path,
+            "spy_daily_duplicate",
+            underlying="SPY",
+            underlying_input=self.underlying_parquet_path,
+            db_path=self.db_path,
+        )
+
+        self.assertGreater(first_result["imported_rows"], 0)
+        self.assertEqual(duplicate_result["imported_rows"], 0)
+        self.assertGreater(duplicate_result["duplicate_rows"], 0)
+
+        store = HistoricalOptionsStore(self.db_path)
+        daily_summary = store.snapshot_summary(DAILY_SNAPSHOT_KIND)
+
+        self.assertEqual(daily_summary["batch_count"], 1)
+        self.assertEqual(daily_summary["source_labels"], ["spy_daily_primary"])
+        self.assertEqual(daily_summary["quote_count"], first_result["imported_rows"])
+
     def test_shared_quote_dates_can_intersect_underlyings_for_trusted_daily_data(self):
         histories = {
             "SPY": make_validation_history(length=14, start=500.0, step=0.8),

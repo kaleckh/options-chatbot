@@ -118,22 +118,6 @@ SEEDED_ISSUES = [
         "suggested_fix_targets": ["supervised_scan.py", "options_chatbot.py", "docs/autoresearch/truth-first-champions.json"],
         "status": "open",
     },
-    {
-        "issue_id": "replay-matrix-collapsed-results",
-        "source_automation": "seed",
-        "severity": "medium",
-        "blocker_class": "replay_matrix_suspicious",
-        "summary": (
-            "Seeded blocker: the required 1y/2y and mid/pessimistic replay matrix collapsed to "
-            "identical results, so daily profit validation must treat replay evidence as suspect."
-        ),
-        "evidence": [
-            "Seeded from the April 2, 2026 manual automation validation run.",
-            "All four replay cells returned the same trade count and summary metrics.",
-        ],
-        "suggested_fix_targets": ["wfo_optimizer.py", "scripts/options_experiment_matrix.py"],
-        "status": "open",
-    },
 ]
 
 

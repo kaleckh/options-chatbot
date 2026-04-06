@@ -568,6 +568,15 @@ class ProfitLoopStateTests(unittest.TestCase):
         self.assertTrue((self.state_dir / "profit-loop-runs.jsonl").exists())
         self.assertEqual(events[0]["automation_id"], "hourly-operational-health")
 
+    def test_state_initialization_does_not_seed_replay_matrix_issue(self):
+        ensure_profit_loop_state(self.state_dir)
+        state = load_profit_loop_state(self.state_dir)
+
+        issue_ids = {item["issue_id"] for item in state["open_issues"]}
+        self.assertIn("truth-lane-live-policy-mismatch", issue_ids)
+        self.assertIn("forward-holdout-no-raw-candidates", issue_ids)
+        self.assertNotIn("replay-matrix-collapsed-results", issue_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

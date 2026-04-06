@@ -202,6 +202,57 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertIn("insufficient_eligible_forward_truth", blocker_codes)
         self.assertIn("insufficient_closed_tracked_positions", blocker_codes)
 
+    def test_gate_surfaces_archive_live_evidence_when_authoritative_ledger_is_empty(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        authoritative_path = self.tmpdir / "authoritative_forward_tracking.db"
+        archive_path = self.tmpdir / "archive_forward_tracking.db"
+        self._write_valid_daily_artifact(artifact_path)
+
+        snapshot = build_forward_scan_snapshot(
+            picks=[
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "expiry": "2026-04-10",
+                    "strike": 500.0,
+                    "quote_time_et": "2026-04-01 10:15 ET",
+                    "quote_basis": "mid",
+                }
+            ],
+            policy_applied=True,
+            policy={"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+            truth_lane="historical_imported_daily",
+        )
+        record_forward_snapshot(
+            scan_snapshot=snapshot,
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="live_production",
+            db_path=archive_path,
+        )
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate.authoritative_forward_ledger_db_path", return_value=authoritative_path), \
+                     patch("options_profit_gate.archive_forward_ledger_db_path", return_value=archive_path), \
+                     patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True)):
+                    result = evaluate_measurement_gate(
+                        min_eligible_forward_events=0,
+                        min_eligible_events_per_symbol=0,
+                        min_closed_tracked_positions=0,
+                    )
+
+        self.assertEqual(result["state"], "healthy")
+        self.assertEqual(
+            result["checks"]["forward_evidence"]["authoritative_ledger_diagnostics"]["live_production_event_count"],
+            0,
+        )
+        self.assertEqual(
+            result["checks"]["forward_evidence"]["archive_ledger_diagnostics"]["live_production_event_count"],
+            1,
+        )
+
     def test_gate_returns_healthy_when_truth_forward_evidence_and_positions_are_ready(self):
         artifact_path = self.tmpdir / "latest_daily.json"
         self._write_valid_daily_artifact(artifact_path)
