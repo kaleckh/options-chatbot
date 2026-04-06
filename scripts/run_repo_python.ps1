@@ -39,6 +39,15 @@ function Get-RepoTempRoot([string]$RepoRoot) {
     return Join-Path $systemTemp "codex-repo-python\$repoName"
 }
 
+function Test-VenvHasPip([string]$PythonPath) {
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        return $false
+    }
+
+    & $PythonPath -m pip --version *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
 function Set-RepoTempEnvironment([string]$RepoRoot) {
     $tempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
     $tmpPath = Join-Path $tempRoot "tmp"
@@ -226,6 +235,11 @@ try {
         (Join-Path $repoRoot "python-backend\requirements.txt")
     ) | Where-Object { Test-Path -LiteralPath $_ }
     $currentStamp = Get-StableFileStamp -Paths $requirements
+
+    if ((Test-Path -LiteralPath $venvPython) -and -not (Test-VenvHasPip -PythonPath $venvPython)) {
+        Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
+        Remove-Item -LiteralPath $venvRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
 
     if (-not (Test-Path -LiteralPath $venvPython)) {
         $bootstrap = Get-SystemPythonCommand
