@@ -145,6 +145,9 @@ class UnavailableTrackedPositionsRepository:
     ) -> Optional[dict[str, Any]]:
         raise RuntimeError(self.error_message)
 
+    def get_realized_pnl_since(self, since: datetime) -> float:
+        return 0.0
+
 
 class PostgresTrackedPositionsRepository:
     def __init__(self, database_url: str):
@@ -813,6 +816,20 @@ class PostgresTrackedPositionsRepository:
                     raise RuntimeError(f"Tracked position {position_id} was not found after close.")
                 return position
 
+    def get_realized_pnl_since(self, since: datetime) -> float:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(net_pnl_usd), 0) AS total_pnl_usd
+                    FROM tracked_positions
+                    WHERE status = 'closed' AND closed_at >= %s
+                    """,
+                    (since,),
+                )
+                row = cur.fetchone()
+                return float(row["total_pnl_usd"]) if row else 0.0
+
 
 class MemoryTrackedPositionsRepository:
     def __init__(self):
@@ -963,6 +980,17 @@ class MemoryTrackedPositionsRepository:
             position["notes"] = f"{existing}\n{notes}".strip() if existing else notes
         position["updated_at"] = closed_at
         return self.get_position(position_id)  # type: ignore[arg-type]
+
+    def get_realized_pnl_since(self, since: datetime) -> float:
+        total = 0.0
+        for position in self._positions:
+            if position.get("status") == "closed":
+                closed_at = position.get("closed_at")
+                if closed_at is not None and closed_at >= since:
+                    pnl = position.get("net_pnl_usd")
+                    if pnl is not None:
+                        total += float(pnl)
+        return total
 
 
 def create_positions_repository(database_url: Optional[str]):

@@ -567,6 +567,11 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "max_drawdown_pct":    15.0,
             "dte_0_max_pct":        0.5,
             "time_exit_pct":       50.0,
+            "daily_loss_limit_pct":  2.0,
+            "weekly_loss_limit_pct": 5.0,
+            "max_concurrent_positions": 3,
+            "max_positions_per_ticker": 1,
+            "max_correlated_index_positions": 1,
         },
         "entry": {
             "entry_momentum_pct":  0.50,
@@ -660,6 +665,11 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "max_drawdown_pct":    15.0,
             "dte_0_max_pct":        0.5,
             "time_exit_pct":       50.0,
+            "daily_loss_limit_pct":  2.0,
+            "weekly_loss_limit_pct": 5.0,
+            "max_concurrent_positions": 3,
+            "max_positions_per_ticker": 1,
+            "max_correlated_index_positions": 1,
         },
         "entry": {
             "entry_momentum_pct":  0.30,   # indexes need less momentum to signal
@@ -1685,6 +1695,12 @@ def manage_risk_settings(
     # ── Confidence target params ──────────────────────────────────────────────
     delta_target: float = None,
     dte_target: int = None,
+    # ── Portfolio guardrail params ────────────────────────────────────────────
+    daily_loss_limit_pct: float = None,
+    weekly_loss_limit_pct: float = None,
+    max_concurrent_positions: int = None,
+    max_positions_per_ticker: int = None,
+    max_correlated_index_positions: int = None,
 ) -> str:
     """
     View or update any part of the unified strategy profile (risk rules, entry filters,
@@ -1732,6 +1748,11 @@ def manage_risk_settings(
         _apply(tgt, "delta_optimal", delta_target)
     if dte_target is not None:
         _apply(tgt, "dte_optimal", dte_target)
+    _apply(rsk, "daily_loss_limit_pct",          daily_loss_limit_pct)
+    _apply(rsk, "weekly_loss_limit_pct",         weekly_loss_limit_pct)
+    _apply(rsk, "max_concurrent_positions",      max_concurrent_positions)
+    _apply(rsk, "max_positions_per_ticker",      max_positions_per_ticker)
+    _apply(rsk, "max_correlated_index_positions", max_correlated_index_positions)
 
     # ── Build full profile snapshot ───────────────────────────────────────────
     acct = rsk.get("account_size")
@@ -4632,6 +4653,9 @@ def generate_position_recommendations(
     # ── Fill remaining slots with new opportunities ───────────────────────────
     slots_available = max(0, n_picks - len([r for r in active_positions
                                              if r["recommendation"] == "HOLD"]))
+    max_concurrent = int(STRATEGY_PROFILE.get("risk", {}).get("max_concurrent_positions", 3))
+    open_count = len([r for r in active_positions if r["recommendation"] == "HOLD"])
+    slots_available = min(slots_available, max(0, max_concurrent - open_count))
     used_keys = {(r["ticker"], r["direction"]) for r in active_positions}
     new_opportunities: list[dict] = []
     for c in all_candidates:
@@ -5484,6 +5508,12 @@ TOOLS = [
                 # ── Targets (confidence scoring) ──────────────────────────────
                 "delta_target":    {"type": "number",  "description": "Optimal delta for peak confidence score, e.g. 0.30 (default 0.30)"},
                 "dte_target":      {"type": "integer", "description": "Optimal DTE at entry for peak confidence score, e.g. 7 (default 7)"},
+                # ── Portfolio guardrails ──────────────────────────────────────
+                "daily_loss_limit_pct":          {"type": "number",  "description": "Stop opening new trades after losing this % of account in a single day (default 2.0)"},
+                "weekly_loss_limit_pct":         {"type": "number",  "description": "Stop opening new trades after losing this % of account in a single week (default 5.0)"},
+                "max_concurrent_positions":      {"type": "integer", "description": "Maximum number of open positions at any time (default 3)"},
+                "max_positions_per_ticker":      {"type": "integer", "description": "Maximum open positions per ticker (default 1)"},
+                "max_correlated_index_positions": {"type": "integer", "description": "Maximum open positions across correlated indexes SPY/QQQ/IWM/DIA (default 1)"},
             },
             "required": [],
         },
