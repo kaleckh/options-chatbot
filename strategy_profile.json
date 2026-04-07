@@ -3,7 +3,7 @@
   "targets": {
     "delta_optimal": 0.3,
     "delta_falloff": 0.2,
-    "dte_optimal": 12,
+    "dte_optimal": 25,
     "dte_falloff": 15,
     "iv_percentile_max": 50
   },

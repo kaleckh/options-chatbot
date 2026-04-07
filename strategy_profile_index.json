@@ -1,0 +1,11 @@
+{
+  "targets": {
+    "dte_optimal": 25
+  },
+  "spread": {
+    "max_width_pct": 10.0,
+    "stop_loss_pct": 90.0,
+    "profit_target_pct": 150.0,
+    "time_exit_pct": 55.0
+  }
+}
