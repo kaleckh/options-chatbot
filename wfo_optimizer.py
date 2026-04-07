@@ -5084,6 +5084,244 @@ def _pick_top_n_daily(candidates: list[dict], n: int) -> list[dict]:
     return accepted
 
 
+def _simulate_spread_outcome_hist(
+    prices: np.ndarray,
+    i: int,
+    trade_type: str,
+    hv30: float,
+    long_delta_target: float,
+    short_delta_target: float,
+    dte_at_entry: int,
+    stop_loss_pct: float,
+    profit_target_pct: float,
+    time_exit_pct: float,
+    trailing_profit_pct: float,
+    trailing_giveback_pct: float,
+    max_width_pct: float = 5.0,
+    _rsi14: np.ndarray = None,
+    _macd: np.ndarray = None,
+    _sma20: np.ndarray = None,
+    _sma50: np.ndarray = None,
+    tech_at_entry: float = 50.0,
+    entry_S0: Optional[float] = None,
+    iv_adj: float = 1.20,
+    entry_slippage_pct: float = 0.0,
+    exit_slippage_pct: float = 0.0,
+    pricing_lane: str = "pessimistic",
+) -> Optional[dict]:
+    """
+    Simulate a vertical spread trade (bull call or bear put spread).
+
+    Long leg: buy at long_delta_target (e.g. 0.50 — near ATM)
+    Short leg: sell at short_delta_target (e.g. 0.20 — OTM wing)
+
+    Net debit = long_premium - short_premium
+    Max profit = spread_width - net_debit (capped)
+    Max loss = net_debit (capped — this is the key advantage over single-leg)
+
+    Exit based on spread value (net mark-to-market of both legs).
+    """
+    n = len(prices)
+    S0 = float(entry_S0) if entry_S0 is not None else float(prices[i])
+    T = dte_at_entry / 365.0
+    time_exit_day = max(1, math.ceil(dte_at_entry * time_exit_pct / 100))
+    _iv = hv30 * iv_adj
+
+    # Find long leg (higher delta, closer to ATM)
+    long_strike = None
+    long_g = None
+    long_diff = 999.0
+    for K in _market_strike_grid(S0):
+        g = _bs_greeks(S0, K, T, RISK_FREE_RATE, _iv, trade_type)
+        if not g:
+            continue
+        diff = abs(abs(g.get("delta", 0)) - long_delta_target)
+        if diff < long_diff:
+            long_diff = diff
+            long_strike = K
+            long_g = g
+
+    if long_strike is None or not long_g or long_g.get("bs_price", 0) < 0.01:
+        return None
+
+    # Find short leg (lower delta, more OTM)
+    short_strike = None
+    short_g = None
+    short_diff = 999.0
+    for K in _market_strike_grid(S0):
+        g = _bs_greeks(S0, K, T, RISK_FREE_RATE, _iv, trade_type)
+        if not g:
+            continue
+        diff = abs(abs(g.get("delta", 0)) - short_delta_target)
+        if diff < short_diff:
+            # Ensure short strike is more OTM than long strike
+            if trade_type == "call" and K <= long_strike:
+                continue
+            if trade_type == "put" and K >= long_strike:
+                continue
+            short_diff = diff
+            short_strike = K
+            short_g = g
+
+    if short_strike is None or not short_g:
+        return None
+
+    # Validate spread width
+    spread_width = abs(long_strike - short_strike)
+    if spread_width <= 0 or (spread_width / S0 * 100) > max_width_pct:
+        return None
+
+    use_pessimistic = str(pricing_lane or "pessimistic").strip().lower() != "mid"
+    entry_slip = float(entry_slippage_pct) / 100.0 if use_pessimistic else 0.0
+    exit_slip = float(exit_slippage_pct) / 100.0 if use_pessimistic else 0.0
+
+    # Entry: buy long (pay ask = higher), sell short (receive bid = lower)
+    long_entry_px = long_g["bs_price"] * (1.0 + entry_slip)
+    short_entry_px = short_g["bs_price"] * max(0.0, 1.0 - entry_slip)
+    net_debit = long_entry_px - short_entry_px
+
+    if net_debit <= 0.01:
+        return None
+
+    # Max profit and loss for the spread
+    max_profit_per_share = spread_width - net_debit
+    max_loss_per_share = net_debit  # This is the key: max loss is capped at net debit
+
+    # Stop and target in absolute spread value terms
+    stop_value = net_debit * (1.0 - stop_loss_pct / 100.0)      # exit if spread value drops to this
+    target_value = net_debit * (1.0 + profit_target_pct / 100.0) # exit if spread value rises to this
+    # Cap target at max possible spread value
+    target_value = min(target_value, spread_width * (1.0 - exit_slip))
+
+    trail_activate_pct = max(0.0, float(trailing_profit_pct))
+    trail_giveback_pct = max(0.0, float(trailing_giveback_pct))
+    high_watermark = net_debit
+    trail_active = False
+    trail_stop_value = 0.0
+
+    exit_spread_value = net_debit
+    exit_reason = "expired"
+    exit_stock_px = S0
+    exit_day_idx = min(i + max(1, dte_at_entry), n - 1)
+
+    for d in range(1, dte_at_entry + 1):
+        fi = i + d
+        if fi >= n:
+            break
+        S_now = float(prices[fi])
+        T_now = max((dte_at_entry - d) / 365.0, 0)
+
+        if T_now <= 0:
+            # At expiry: intrinsic values
+            if trade_type == "call":
+                long_intrinsic = max(0.0, S_now - long_strike)
+                short_intrinsic = max(0.0, S_now - short_strike)
+            else:
+                long_intrinsic = max(0.0, long_strike - S_now)
+                short_intrinsic = max(0.0, short_strike - S_now)
+            spread_value = (long_intrinsic - short_intrinsic) * (1.0 - exit_slip)
+            exit_spread_value = max(0.0, spread_value)
+            exit_reason = "expired"
+            exit_stock_px = S_now
+            exit_day_idx = fi
+            break
+
+        # Mark-to-market both legs
+        long_g2 = _bs_greeks(S_now, long_strike, T_now, RISK_FREE_RATE, _iv, trade_type)
+        short_g2 = _bs_greeks(S_now, short_strike, T_now, RISK_FREE_RATE, _iv, trade_type)
+        long_now = (long_g2.get("bs_price", 0.0) if long_g2 else 0.0) * (1.0 - exit_slip)
+        short_now = (short_g2.get("bs_price", 0.0) if short_g2 else 0.0) * (1.0 + exit_slip)
+        spread_value = max(0.0, long_now - short_now)
+
+        if spread_value > high_watermark:
+            high_watermark = spread_value
+
+        current_pnl_pct = ((spread_value / net_debit) - 1.0) * 100.0 if net_debit > 0 else 0.0
+        peak_pnl_pct = ((high_watermark / net_debit) - 1.0) * 100.0 if net_debit > 0 else 0.0
+
+        # Trailing stop activation
+        if not trail_active and peak_pnl_pct >= trail_activate_pct:
+            trail_active = True
+        if trail_active and peak_pnl_pct > 0.0:
+            retained = peak_pnl_pct * max(0.0, 1.0 - trail_giveback_pct / 100.0)
+            trail_stop_value = net_debit * (1.0 + retained / 100.0)
+
+        effective_stop = max(stop_value, trail_stop_value) if trail_active else stop_value
+
+        # Stop check
+        if spread_value <= effective_stop:
+            exit_spread_value = spread_value
+            exit_reason = "trailing_stop" if trail_active else "stop"
+            exit_stock_px = S_now
+            exit_day_idx = fi
+            break
+
+        # Target check
+        if spread_value >= target_value:
+            exit_spread_value = min(spread_value, target_value)
+            exit_reason = "target"
+            exit_stock_px = S_now
+            exit_day_idx = fi
+            break
+
+        # Time exit
+        if d >= time_exit_day:
+            exit_spread_value = spread_value
+            exit_reason = "time_exit"
+            exit_stock_px = S_now
+            exit_day_idx = fi
+            break
+
+    # P&L calculation
+    gross_pnl_per_share = exit_spread_value - net_debit
+    gross_pnl_usd = gross_pnl_per_share * 100  # 1 contract = 100 shares
+    # Spread fees: 2 legs on entry + 2 on exit = 4 sides
+    fee_total = 4 * DEFAULT_COMMISSION_PER_CONTRACT_USD
+    net_pnl_usd = gross_pnl_usd - fee_total
+    capital_at_risk = net_debit * 100
+    gross_pnl_pct = (gross_pnl_per_share / net_debit * 100.0) if net_debit > 0 else 0.0
+    net_pnl_pct = (net_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else 0.0
+
+    stock_move_pct = (exit_stock_px / S0 - 1.0) * 100 if S0 > 0 else 0.0
+    directional_correct = (
+        (trade_type == "call" and stock_move_pct > 0)
+        or (trade_type == "put" and stock_move_pct < 0)
+    )
+
+    return {
+        "entry_px": round(net_debit, 4),
+        "exit_px": round(exit_spread_value, 4),
+        "pnl_pct": round(net_pnl_pct, 2),
+        "gross_pnl_pct": round(gross_pnl_pct, 2),
+        "net_pnl_pct": round(net_pnl_pct, 2),
+        "gross_pnl_usd": round(gross_pnl_usd, 2),
+        "net_pnl_usd": round(net_pnl_usd, 2),
+        "fee_total_usd": round(fee_total, 2),
+        "entry_fee_total_usd": round(fee_total / 2, 2),
+        "exit_fee_total_usd": round(fee_total / 2, 2),
+        "exit_reason": exit_reason,
+        "exit_fill_basis": "spread_model_mark",
+        "strike": round(long_strike, 2),
+        "short_strike": round(short_strike, 2),
+        "spread_width": round(spread_width, 2),
+        "net_debit": round(net_debit, 4),
+        "max_profit": round(max_profit_per_share, 4),
+        "max_loss": round(net_debit, 4),
+        "delta_val": round(abs(long_g.get("delta", 0)), 4),
+        "short_delta_val": round(abs(short_g.get("delta", 0)), 4) if short_g else None,
+        "stock_px": round(S0, 2),
+        "exit_stock_px": round(exit_stock_px, 2),
+        "stock_move_pct": round(stock_move_pct, 2),
+        "directional_correct": directional_correct,
+        "exit_day_idx": exit_day_idx,
+        "entry_day_idx": i,
+        "hv30": round(hv30, 4),
+        "iv_adj": iv_adj,
+        "strategy_type": "vertical_spread",
+        "priced": True,
+    }
+
+
 def _simulate_trade_outcome_hist(
     prices: np.ndarray,
     i: int,
@@ -5802,6 +6040,13 @@ def _build_profile_config(sp: dict) -> tuple[dict, "TradeEvaluator"]:
         "min_calibrated_expectancy_pct": float(sp["filters"].get("min_calibrated_expectancy_pct", 0.0)),
         "entry_slippage_pct": float(sp["filters"].get("entry_slippage_pct", 0.0)),
         "exit_slippage_pct": float(sp["filters"].get("exit_slippage_pct", 0.0)),
+        "strategy_type":     str(sp.get("strategy_type", "single_leg")),
+        "spread_long_delta": float(sp.get("spread", {}).get("long_delta_target", 0.50)),
+        "spread_short_delta": float(sp.get("spread", {}).get("short_delta_target", 0.20)),
+        "spread_max_width_pct": float(sp.get("spread", {}).get("max_width_pct", 5.0)),
+        "spread_stop_loss_pct": float(sp.get("spread", {}).get("stop_loss_pct", 30.0)),
+        "spread_profit_target_pct": float(sp.get("spread", {}).get("profit_target_pct", 45.0)),
+        "spread_time_exit_pct": float(sp.get("spread", {}).get("time_exit_pct", 55.0)),
     }
     dsw    = sp.get("direction_score_weights", {"tech": 0.55, "regime": 0.30, "momentum": 0.15})
     rsi_oe = sp.get("rsi_overextension",       {"severe_threshold": 72, "moderate_threshold": 68,
@@ -6499,29 +6744,57 @@ def run_historical_backtest(
                     execution_realism=_execution_realism_label(normalized_truth_lane),
                 )
             else:
-                outcome = _simulate_trade_outcome_hist(
-                    prices         = t_arr["prices"],
-                    i              = pick["day_idx"],
-                    trade_type     = pick["trade_type"],
-                    hv30           = pick["hv30"],
-                    delta_target   = p_config["delta_target"],
-                    dte_at_entry   = p_config["dte_at_entry"],
-                    stop_loss_pct  = p_config["stop_loss_pct"],
-                    profit_target_pct = p_config["profit_target_pct"],
-                    time_exit_pct  = p_config["time_exit_pct"],
-                    trailing_profit_pct = p_config["trailing_profit_pct"],
-                    trailing_giveback_pct = p_config["trailing_giveback_pct"],
-                    _rsi14         = t_arr["_rsi14"],
-                    _macd          = t_arr["_macd"],
-                    _sma20         = t_arr["_sma20"],
-                    _sma50         = t_arr["_sma50"],
-                    tech_at_entry  = pick["tech_score"],
-                    entry_S0       = float(t_arr["opens"][pick["day_idx"]]),
-                    iv_adj         = iv_adj,
-                    entry_slippage_pct = p_config.get("entry_slippage_pct", 0.0),
-                    exit_slippage_pct  = p_config.get("exit_slippage_pct", 0.0),
-                    pricing_lane       = pricing_lane,
-                )
+                _is_spread_sim = p_config.get("strategy_type") == "vertical_spread"
+                if _is_spread_sim:
+                    outcome = _simulate_spread_outcome_hist(
+                        prices         = t_arr["prices"],
+                        i              = pick["day_idx"],
+                        trade_type     = pick["trade_type"],
+                        hv30           = pick["hv30"],
+                        long_delta_target  = p_config.get("spread_long_delta", 0.50),
+                        short_delta_target = p_config.get("spread_short_delta", 0.20),
+                        dte_at_entry   = p_config["dte_at_entry"],
+                        stop_loss_pct  = p_config.get("spread_stop_loss_pct", p_config["stop_loss_pct"]),
+                        profit_target_pct = p_config.get("spread_profit_target_pct", p_config["profit_target_pct"]),
+                        time_exit_pct  = p_config.get("spread_time_exit_pct", p_config["time_exit_pct"]),
+                        trailing_profit_pct = p_config["trailing_profit_pct"],
+                        trailing_giveback_pct = p_config["trailing_giveback_pct"],
+                        max_width_pct  = p_config.get("spread_max_width_pct", 5.0),
+                        _rsi14         = t_arr["_rsi14"],
+                        _macd          = t_arr["_macd"],
+                        _sma20         = t_arr["_sma20"],
+                        _sma50         = t_arr["_sma50"],
+                        tech_at_entry  = pick["tech_score"],
+                        entry_S0       = float(t_arr["opens"][pick["day_idx"]]),
+                        iv_adj         = iv_adj,
+                        entry_slippage_pct = p_config.get("entry_slippage_pct", 0.0),
+                        exit_slippage_pct  = p_config.get("exit_slippage_pct", 0.0),
+                        pricing_lane       = pricing_lane,
+                    )
+                else:
+                    outcome = _simulate_trade_outcome_hist(
+                        prices         = t_arr["prices"],
+                        i              = pick["day_idx"],
+                        trade_type     = pick["trade_type"],
+                        hv30           = pick["hv30"],
+                        delta_target   = p_config["delta_target"],
+                        dte_at_entry   = p_config["dte_at_entry"],
+                        stop_loss_pct  = p_config["stop_loss_pct"],
+                        profit_target_pct = p_config["profit_target_pct"],
+                        time_exit_pct  = p_config["time_exit_pct"],
+                        trailing_profit_pct = p_config["trailing_profit_pct"],
+                        trailing_giveback_pct = p_config["trailing_giveback_pct"],
+                        _rsi14         = t_arr["_rsi14"],
+                        _macd          = t_arr["_macd"],
+                        _sma20         = t_arr["_sma20"],
+                        _sma50         = t_arr["_sma50"],
+                        tech_at_entry  = pick["tech_score"],
+                        entry_S0       = float(t_arr["opens"][pick["day_idx"]]),
+                        iv_adj         = iv_adj,
+                        entry_slippage_pct = p_config.get("entry_slippage_pct", 0.0),
+                        exit_slippage_pct  = p_config.get("exit_slippage_pct", 0.0),
+                        pricing_lane       = pricing_lane,
+                    )
 
             if outcome is None:
                 continue

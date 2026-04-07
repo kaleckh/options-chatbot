@@ -65,8 +65,8 @@
     "max_width_pct": 5.0,
     "min_net_debit": 0.30,
     "max_debit_pct_of_width": 65.0,
-    "stop_loss_pct": 30.0,
-    "profit_target_pct": 45.0,
+    "stop_loss_pct": 55.0,
+    "profit_target_pct": 80.0,
     "time_exit_pct": 55.0,
     "close_as_single_order": true
   },
