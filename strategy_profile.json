@@ -3,7 +3,7 @@
   "targets": {
     "delta_optimal": 0.3,
     "delta_falloff": 0.2,
-    "dte_optimal": 25,
+    "dte_optimal": 35,
     "dte_falloff": 15,
     "iv_percentile_max": 50
   },
@@ -59,6 +59,9 @@
     "moderate_penalty": 5.0,
     "graduated": true,
     "penalty_per_point": 0.8
+  },
+  "early_exit": {
+    "trailing_profit_pct": 999.0
   },
   "spread": {
     "long_delta_target": 0.50,

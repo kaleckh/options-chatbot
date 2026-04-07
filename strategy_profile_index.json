@@ -1,11 +1,18 @@
 {
   "targets": {
-    "dte_optimal": 25
+    "dte_optimal": 35
+  },
+  "early_exit": {
+    "trailing_profit_pct": 999.0
   },
   "spread": {
     "max_width_pct": 10.0,
     "stop_loss_pct": 90.0,
     "profit_target_pct": 150.0,
     "time_exit_pct": 55.0
+  },
+  "entry_filters": {
+    "qqq_require_bullish_regime": true,
+    "qqq_max_hv30": 0.15
   }
 }

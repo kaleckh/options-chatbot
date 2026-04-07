@@ -3986,6 +3986,18 @@ def scan_daily_top_trades(
             if _allowed_dirs and trade_type not in _allowed_dirs:
                 _bump_scan_drop(scan_drop_counts, "direction_filter")
                 continue
+
+            # Per-ticker entry filters (e.g. QQQ requires bullish regime + low vol)
+            _entry_filters = base_sp.get("entry_filters", {})
+            if ticker == "QQQ":
+                if _entry_filters.get("qqq_require_bullish_regime") and market_regime_bucket != "bullish":
+                    _bump_scan_drop(scan_drop_counts, "ticker_regime_filter")
+                    continue
+                _qqq_max_hv = float(_entry_filters.get("qqq_max_hv30", 999.0))
+                if hv30 > _qqq_max_hv:
+                    _bump_scan_drop(scan_drop_counts, "ticker_vol_filter")
+                    continue
+
             sp = call_sp if trade_type == "call" else put_sp
             ticker_min_confidence = (
                 float(sp["entry"].get("min_direction_score", 35.0))
