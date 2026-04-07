@@ -5561,6 +5561,299 @@ def _select_target_contract(
     return best_strike, best_g
 
 
+def _simulate_spread_outcome_imported(
+    *,
+    store: "HistoricalOptionsStore",
+    ticker: str,
+    dates: pd.Index,
+    prices: np.ndarray,
+    i: int,
+    trade_type: str,
+    hv30: float,
+    long_delta_target: float,
+    short_delta_target: float,
+    dte_at_entry: int,
+    stop_loss_pct: float,
+    profit_target_pct: float,
+    time_exit_pct: float,
+    trailing_profit_pct: float,
+    trailing_giveback_pct: float,
+    max_width_pct: float = 5.0,
+    _rsi14: np.ndarray = None,
+    _macd: np.ndarray = None,
+    _sma20: np.ndarray = None,
+    _sma50: np.ndarray = None,
+    tech_at_entry: float = 50.0,
+    entry_S0: Optional[float] = None,
+    iv_adj: float = 1.20,
+    truth_source: str = IMPORTED_TRUTH_SOURCE,
+    snapshot_kind: str = DAILY_SNAPSHOT_KIND,
+    entry_quote_minute_et: int = ENTRY_QUOTE_MINUTE_ET,
+    entry_window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
+    entry_slippage_pct: float = 0.0,
+    exit_slippage_pct: float = 0.0,
+    commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
+    pricing_lane: str = "pessimistic",
+    entry_anchor_source: Optional[str] = None,
+    execution_realism: Optional[str] = None,
+) -> dict:
+    """
+    Simulate a vertical spread using real archived option quotes.
+    Finds long and short leg contracts from the historical store,
+    tracks both legs daily, and exits based on spread value.
+    """
+    normalized_truth_source = str(truth_source or IMPORTED_TRUTH_SOURCE).strip().lower()
+    requested_pricing_lane = _normalize_requested_pricing_lane(pricing_lane)
+    execution_realism_label = str(execution_realism or _execution_realism_label(normalized_truth_source)).strip()
+    resolved_entry_anchor_source = str(entry_anchor_source or "provided_entry_s0").strip()
+    n = len(prices)
+    S0 = float(entry_S0) if entry_S0 is not None else float(prices[i])
+    entry_date = pd.Timestamp(dates[i]).date()
+    target_expiry = entry_date + timedelta(days=max(int(dte_at_entry), 1))
+
+    _not_priced = lambda reason, **extra: {
+        "priced": False,
+        "unpriced_reason": reason,
+        "entry_day_idx": i,
+        "truth_source": normalized_truth_source,
+        "strategy_type": "vertical_spread",
+        **extra,
+    }
+
+    # Find long leg (higher delta, closer to ATM)
+    long_strike, long_greeks = _select_target_contract(S0, hv30, trade_type, long_delta_target, dte_at_entry, iv_adj)
+    if long_strike is None:
+        return _not_priced("no_long_leg_target")
+
+    long_entry_quote = store.find_entry_contract(
+        underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
+        target_expiry=target_expiry, target_strike=long_strike,
+        earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
+        snapshot_kind=snapshot_kind, allow_last_price=False,
+    )
+    if long_entry_quote is None:
+        return _not_priced("missing_long_entry_quote")
+
+    # Find short leg (lower delta, more OTM)
+    short_strike, short_greeks = _select_target_contract(S0, hv30, trade_type, short_delta_target, dte_at_entry, iv_adj)
+    if short_strike is None:
+        return _not_priced("no_short_leg_target")
+
+    # Ensure short is more OTM
+    if trade_type == "call" and short_strike <= long_strike:
+        short_strike = long_strike + (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
+    elif trade_type == "put" and short_strike >= long_strike:
+        short_strike = long_strike - (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
+
+    short_entry_quote = store.find_entry_contract(
+        underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
+        target_expiry=target_expiry, target_strike=short_strike,
+        earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
+        snapshot_kind=snapshot_kind, allow_last_price=False,
+    )
+    if short_entry_quote is None:
+        return _not_priced("missing_short_entry_quote")
+
+    # Validate spread width
+    spread_width = abs(float(long_entry_quote.strike) - float(short_entry_quote.strike))
+    if spread_width <= 0 or (spread_width / S0 * 100) > max_width_pct:
+        return _not_priced("invalid_spread_width")
+
+    # Compute entry prices
+    long_entry_exec = _resolve_imported_execution_price(
+        side="entry", requested_pricing_lane=requested_pricing_lane,
+        bid=long_entry_quote.bid, ask=long_entry_quote.ask, last=long_entry_quote.last,
+        slippage_pct=entry_slippage_pct,
+    )
+    short_entry_exec = _resolve_imported_execution_price(
+        side="exit", requested_pricing_lane=requested_pricing_lane,  # selling short leg = "exit" side pricing
+        bid=short_entry_quote.bid, ask=short_entry_quote.ask, last=short_entry_quote.last,
+        slippage_pct=entry_slippage_pct,
+    )
+    long_entry_px = float(long_entry_exec.get("execution_price") or 0.0)
+    short_entry_px = float(short_entry_exec.get("execution_price") or 0.0)
+
+    if long_entry_px <= 0:
+        return _not_priced("invalid_long_entry_price")
+
+    net_debit = long_entry_px - short_entry_px
+    if net_debit <= 0.01:
+        return _not_priced("zero_or_negative_net_debit")
+
+    # Exit thresholds
+    expiry_date = date.fromisoformat(long_entry_quote.expiry)
+    actual_dte = max((expiry_date - entry_date).days, 1)
+    time_exit_day = max(1, math.ceil(actual_dte * time_exit_pct / 100))
+    stop_value = net_debit * (1.0 - stop_loss_pct / 100.0)
+    target_value = net_debit * (1.0 + profit_target_pct / 100.0)
+    target_value = min(target_value, spread_width)  # can't exceed spread width
+
+    trail_activate_pct = max(0.0, float(trailing_profit_pct))
+    trail_giveback_pct = max(0.0, float(trailing_giveback_pct))
+    high_watermark = net_debit
+    trail_active = False
+    trail_stop_value = 0.0
+
+    exit_spread_value = net_debit
+    exit_reason = "unpriced"
+    exit_stock_px = S0
+    exit_day_idx = i
+
+    max_walk_days = min(n - i - 1, max(actual_dte, dte_at_entry, time_exit_day))
+    for d in range(1, max_walk_days + 1):
+        fi = i + d
+        quote_date = pd.Timestamp(dates[fi]).date()
+
+        if quote_date > expiry_date:
+            # Expiry: intrinsic values
+            if trade_type == "call":
+                long_intrinsic = max(0.0, float(prices[fi]) - float(long_entry_quote.strike))
+                short_intrinsic = max(0.0, float(prices[fi]) - float(short_entry_quote.strike))
+            else:
+                long_intrinsic = max(0.0, float(long_entry_quote.strike) - float(prices[fi]))
+                short_intrinsic = max(0.0, float(short_entry_quote.strike) - float(prices[fi]))
+            exit_spread_value = max(0.0, long_intrinsic - short_intrinsic)
+            exit_reason = "expired"
+            exit_stock_px = float(prices[fi])
+            exit_day_idx = fi
+            break
+
+        # Get daily quotes for both legs
+        long_quote = store.get_closing_quote(
+            contract_symbol=long_entry_quote.contract_symbol,
+            quote_date_et=quote_date, snapshot_kind=snapshot_kind, allow_last_price=False,
+        )
+        short_quote = store.get_closing_quote(
+            contract_symbol=short_entry_quote.contract_symbol,
+            quote_date_et=quote_date, snapshot_kind=snapshot_kind, allow_last_price=False,
+        )
+
+        if long_quote is None or short_quote is None:
+            if quote_date >= expiry_date:
+                if trade_type == "call":
+                    long_intrinsic = max(0.0, float(prices[fi]) - float(long_entry_quote.strike))
+                    short_intrinsic = max(0.0, float(prices[fi]) - float(short_entry_quote.strike))
+                else:
+                    long_intrinsic = max(0.0, float(long_entry_quote.strike) - float(prices[fi]))
+                    short_intrinsic = max(0.0, float(short_entry_quote.strike) - float(prices[fi]))
+                exit_spread_value = max(0.0, long_intrinsic - short_intrinsic)
+                exit_reason = "expired"
+                exit_stock_px = float(prices[fi])
+                exit_day_idx = fi
+                break
+            return _not_priced("missing_exit_quote_for_leg", missing_quote_date=quote_date.isoformat())
+
+        # Mark-to-market both legs
+        long_exit_exec = _resolve_imported_execution_price(
+            side="exit", requested_pricing_lane=requested_pricing_lane,
+            bid=long_quote.bid, ask=long_quote.ask, last=long_quote.last,
+            slippage_pct=exit_slippage_pct,
+        )
+        short_exit_exec = _resolve_imported_execution_price(
+            side="entry", requested_pricing_lane=requested_pricing_lane,  # buying back short = "entry" side pricing
+            bid=short_quote.bid, ask=short_quote.ask, last=short_quote.last,
+            slippage_pct=exit_slippage_pct,
+        )
+        long_now = float(long_exit_exec.get("execution_price") or 0.0)
+        short_now = float(short_exit_exec.get("execution_price") or 0.0)
+        spread_value = max(0.0, long_now - short_now)
+
+        if spread_value > high_watermark:
+            high_watermark = spread_value
+        current_pnl_pct = ((spread_value / net_debit) - 1.0) * 100.0 if net_debit > 0 else 0.0
+        peak_pnl_pct = ((high_watermark / net_debit) - 1.0) * 100.0 if net_debit > 0 else 0.0
+
+        if not trail_active and peak_pnl_pct >= trail_activate_pct:
+            trail_active = True
+        if trail_active and peak_pnl_pct > 0.0:
+            retained = peak_pnl_pct * max(0.0, 1.0 - trail_giveback_pct / 100.0)
+            trail_stop_value = net_debit * (1.0 + retained / 100.0)
+
+        effective_stop = max(stop_value, trail_stop_value) if trail_active else stop_value
+
+        if spread_value <= effective_stop:
+            exit_spread_value = spread_value
+            exit_reason = "trailing_stop" if trail_active else "stop"
+            exit_stock_px = float(prices[fi])
+            exit_day_idx = fi
+            break
+
+        if spread_value >= target_value:
+            exit_spread_value = min(spread_value, target_value)
+            exit_reason = "target"
+            exit_stock_px = float(prices[fi])
+            exit_day_idx = fi
+            break
+
+        if d >= time_exit_day:
+            exit_spread_value = spread_value
+            exit_reason = "time_exit"
+            exit_stock_px = float(prices[fi])
+            exit_day_idx = fi
+            break
+    else:
+        return _not_priced("insufficient_quote_history")
+
+    # P&L
+    gross_pnl_per_share = exit_spread_value - net_debit
+    gross_pnl_usd = gross_pnl_per_share * 100
+    fee_total = 4 * commission_per_contract_usd
+    net_pnl_usd = gross_pnl_usd - fee_total
+    capital_at_risk = net_debit * 100
+    gross_pnl_pct = (gross_pnl_per_share / net_debit * 100.0) if net_debit > 0 else 0.0
+    net_pnl_pct = (net_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else 0.0
+
+    stock_move_pct = (exit_stock_px / S0 - 1.0) * 100 if S0 > 0 else 0.0
+    directional_correct = (
+        (trade_type == "call" and stock_move_pct > 0)
+        or (trade_type == "put" and stock_move_pct < 0)
+    )
+    return {
+        "priced": True,
+        "entry_px": round(net_debit, 4),
+        "exit_px": round(exit_spread_value, 4),
+        "pnl_pct": round(net_pnl_pct, 2),
+        "gross_pnl_pct": round(gross_pnl_pct, 2),
+        "net_pnl_pct": round(net_pnl_pct, 2),
+        "gross_pnl_usd": round(gross_pnl_usd, 2),
+        "net_pnl_usd": round(net_pnl_usd, 2),
+        "fee_total_usd": round(fee_total, 2),
+        "entry_fee_total_usd": round(fee_total / 2, 2),
+        "exit_fee_total_usd": round(fee_total / 2, 2),
+        "exit_reason": exit_reason,
+        "exit_fill_basis": "imported_spread_mark",
+        "strike": round(float(long_entry_quote.strike), 2),
+        "short_strike": round(float(short_entry_quote.strike), 2),
+        "spread_width": round(spread_width, 2),
+        "net_debit": round(net_debit, 4),
+        "max_profit": round(spread_width - net_debit, 4),
+        "max_loss": round(net_debit, 4),
+        "delta_val": round(abs(float((long_greeks or {}).get("delta", 0.0))), 4),
+        "stock_px": round(S0, 4),
+        "exit_stock_px": round(exit_stock_px, 4),
+        "stock_move_pct": round(stock_move_pct, 2),
+        "directional_correct": directional_correct,
+        "hv30": round(hv30, 4),
+        "iv_adj": iv_adj,
+        "dte": actual_dte,
+        "entry_day_idx": i,
+        "exit_day_idx": exit_day_idx,
+        "strategy_type": "vertical_spread",
+        "truth_source": normalized_truth_source,
+        "requested_pricing_lane": requested_pricing_lane,
+        "effective_pricing_lane": requested_pricing_lane,
+        "pricing_lane": requested_pricing_lane,
+        "entry_anchor_source": resolved_entry_anchor_source,
+        "execution_realism": execution_realism_label,
+        "contract_symbol": long_entry_quote.contract_symbol,
+        "short_contract_symbol": short_entry_quote.contract_symbol,
+        "entry_contract_resolution": "model_target_spread",
+        "contract_selection_source": "model_target_contract",
+        "long_entry_quote_basis": long_entry_quote.price_basis,
+        "short_entry_quote_basis": short_entry_quote.price_basis,
+    }
+
+
 def _simulate_trade_outcome_imported(
     *,
     store: HistoricalOptionsStore,
@@ -6703,46 +6996,83 @@ def run_historical_backtest(
                         entry_anchor_source = "prior_close"
                     else:
                         entry_anchor_source = "open_fallback_no_prior_close"
-                outcome = _simulate_trade_outcome_imported(
-                    store=imported_store,
-                    ticker=t_sym,
-                    dates=all_closes["SPY"].index,
-                    prices=t_arr["prices"],
-                    i=pick["day_idx"],
-                    trade_type=pick["trade_type"],
-                    hv30=pick["hv30"],
-                    delta_target=p_config["delta_target"],
-                    dte_at_entry=p_config["dte_at_entry"],
-                    stop_loss_pct=p_config["stop_loss_pct"],
-                    profit_target_pct=p_config["profit_target_pct"],
-                    time_exit_pct=p_config["time_exit_pct"],
-                    trailing_profit_pct=p_config["trailing_profit_pct"],
-                    trailing_giveback_pct=p_config["trailing_giveback_pct"],
-                    _rsi14=t_arr["_rsi14"],
-                    _macd=t_arr["_macd"],
-                    _sma20=t_arr["_sma20"],
-                    _sma50=t_arr["_sma50"],
-                    tech_at_entry=pick["tech_score"],
-                    entry_S0=entry_anchor_price,
-                    iv_adj=iv_adj,
-                    truth_source=normalized_truth_lane,
-                    snapshot_kind=_imported_snapshot_kind(normalized_truth_lane),
-                    entry_quote_minute_et=DAILY_QUOTE_MINUTE_ET if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_MINUTE_ET,
-                    entry_window_minutes=0 if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_WINDOW_MINUTES,
-                    archived_contract_symbol=pick.get("contract_symbol"),
-                    archived_expiry=pick.get("expiry"),
-                    archived_strike=pick.get("strike"),
-                    archived_option_type=pick.get("option_type") or pick.get("trade_type") or pick.get("type"),
-                    archived_quote_time_et=pick.get("quote_time_et"),
-                    archived_quote_basis=pick.get("quote_basis"),
-                    archived_underlying_price_at_selection=pick.get("underlying_price_at_selection"),
-                    archived_selection_source=pick.get("selection_source"),
-                    entry_slippage_pct=p_config.get("entry_slippage_pct", 0.0),
-                    exit_slippage_pct=p_config.get("exit_slippage_pct", 0.0),
-                    pricing_lane=requested_pricing_lane,
-                    entry_anchor_source=entry_anchor_source,
-                    execution_realism=_execution_realism_label(normalized_truth_lane),
-                )
+                _is_spread_sim = p_config.get("strategy_type") == "vertical_spread"
+                if _is_spread_sim:
+                    outcome = _simulate_spread_outcome_imported(
+                        store=imported_store,
+                        ticker=t_sym,
+                        dates=all_closes["SPY"].index,
+                        prices=t_arr["prices"],
+                        i=pick["day_idx"],
+                        trade_type=pick["trade_type"],
+                        hv30=pick["hv30"],
+                        long_delta_target=p_config.get("spread_long_delta", 0.50),
+                        short_delta_target=p_config.get("spread_short_delta", 0.20),
+                        dte_at_entry=p_config["dte_at_entry"],
+                        stop_loss_pct=p_config.get("spread_stop_loss_pct", p_config["stop_loss_pct"]),
+                        profit_target_pct=p_config.get("spread_profit_target_pct", p_config["profit_target_pct"]),
+                        time_exit_pct=p_config.get("spread_time_exit_pct", p_config["time_exit_pct"]),
+                        trailing_profit_pct=p_config["trailing_profit_pct"],
+                        trailing_giveback_pct=p_config["trailing_giveback_pct"],
+                        max_width_pct=p_config.get("spread_max_width_pct", 5.0),
+                        _rsi14=t_arr["_rsi14"],
+                        _macd=t_arr["_macd"],
+                        _sma20=t_arr["_sma20"],
+                        _sma50=t_arr["_sma50"],
+                        tech_at_entry=pick["tech_score"],
+                        entry_S0=entry_anchor_price,
+                        iv_adj=iv_adj,
+                        truth_source=normalized_truth_lane,
+                        snapshot_kind=_imported_snapshot_kind(normalized_truth_lane),
+                        entry_quote_minute_et=DAILY_QUOTE_MINUTE_ET if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_MINUTE_ET,
+                        entry_window_minutes=0 if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_WINDOW_MINUTES,
+                        entry_slippage_pct=p_config.get("entry_slippage_pct", 0.0),
+                        exit_slippage_pct=p_config.get("exit_slippage_pct", 0.0),
+                        pricing_lane=requested_pricing_lane,
+                        entry_anchor_source=entry_anchor_source,
+                        execution_realism=_execution_realism_label(normalized_truth_lane),
+                    )
+                else:
+                    outcome = _simulate_trade_outcome_imported(
+                        store=imported_store,
+                        ticker=t_sym,
+                        dates=all_closes["SPY"].index,
+                        prices=t_arr["prices"],
+                        i=pick["day_idx"],
+                        trade_type=pick["trade_type"],
+                        hv30=pick["hv30"],
+                        delta_target=p_config["delta_target"],
+                        dte_at_entry=p_config["dte_at_entry"],
+                        stop_loss_pct=p_config["stop_loss_pct"],
+                        profit_target_pct=p_config["profit_target_pct"],
+                        time_exit_pct=p_config["time_exit_pct"],
+                        trailing_profit_pct=p_config["trailing_profit_pct"],
+                        trailing_giveback_pct=p_config["trailing_giveback_pct"],
+                        _rsi14=t_arr["_rsi14"],
+                        _macd=t_arr["_macd"],
+                        _sma20=t_arr["_sma20"],
+                        _sma50=t_arr["_sma50"],
+                        tech_at_entry=pick["tech_score"],
+                        entry_S0=entry_anchor_price,
+                        iv_adj=iv_adj,
+                        truth_source=normalized_truth_lane,
+                        snapshot_kind=_imported_snapshot_kind(normalized_truth_lane),
+                        entry_quote_minute_et=DAILY_QUOTE_MINUTE_ET if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_MINUTE_ET,
+                        entry_window_minutes=0 if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_WINDOW_MINUTES,
+                        archived_contract_symbol=pick.get("contract_symbol"),
+                        archived_expiry=pick.get("expiry"),
+                        archived_strike=pick.get("strike"),
+                        archived_option_type=pick.get("option_type") or pick.get("trade_type") or pick.get("type"),
+                        archived_quote_time_et=pick.get("quote_time_et"),
+                        archived_quote_basis=pick.get("quote_basis"),
+                        archived_underlying_price_at_selection=pick.get("underlying_price_at_selection"),
+                        archived_selection_source=pick.get("selection_source"),
+                        entry_slippage_pct=p_config.get("entry_slippage_pct", 0.0),
+                        exit_slippage_pct=p_config.get("exit_slippage_pct", 0.0),
+                        pricing_lane=requested_pricing_lane,
+                        entry_anchor_source=entry_anchor_source,
+                        execution_realism=_execution_realism_label(normalized_truth_lane),
+                    )
             else:
                 _is_spread_sim = p_config.get("strategy_type") == "vertical_spread"
                 if _is_spread_sim:
