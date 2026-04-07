@@ -227,7 +227,7 @@ def _infer_loop_execution_status(snapshot: dict[str, Any] | None) -> str:
     verdict = str((snapshot or {}).get("verdict") or "").strip().lower()
     if verdict.startswith("blocked"):
         return "blocked"
-    if verdict in {"degraded-watch", "recorded-no-candidates", "deferred"}:
+    if verdict in {"degraded-watch", "recorded-no-candidates", "recorded-empty-market", "deferred"}:
         return "degraded"
     return "healthy"
 

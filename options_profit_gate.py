@@ -53,6 +53,8 @@ DEFAULT_MIN_IMPORTED_QUOTE_COVERAGE_PCT = 70.0
 DEFAULT_MIN_ELIGIBLE_FORWARD_EVENTS = 10
 DEFAULT_MIN_ELIGIBLE_EVENTS_PER_SYMBOL = 3
 DEFAULT_MIN_CLOSED_TRACKED_POSITIONS = 1
+DEFAULT_MIN_REALIZED_PROFIT_FACTOR = 1.0
+DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT = 0.0
 DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS = 3
 DAILY_TRUTH_IMPORT_MANIFEST_ENV = "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"
 LEGACY_DAILY_TRUTH_IMPORT_MANIFEST_ENV = "HISTORICAL_OPTIONS_IMPORT_MANIFEST"
@@ -598,6 +600,8 @@ def evaluate_measurement_gate(
     min_eligible_forward_events: int = DEFAULT_MIN_ELIGIBLE_FORWARD_EVENTS,
     min_eligible_events_per_symbol: int = DEFAULT_MIN_ELIGIBLE_EVENTS_PER_SYMBOL,
     min_closed_tracked_positions: int = DEFAULT_MIN_CLOSED_TRACKED_POSITIONS,
+    min_realized_profit_factor: float = DEFAULT_MIN_REALIZED_PROFIT_FACTOR,
+    min_realized_avg_net_pnl_pct: float = DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT,
     max_trusted_truth_staleness_business_days: int = DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS,
 ) -> dict[str, Any]:
     blockers: list[dict[str, Any]] = []
@@ -733,14 +737,39 @@ def evaluate_measurement_gate(
         )
 
     realized_metrics = _realized_position_metrics(positions_snapshot["closed_positions"])
-    if int(realized_metrics["closed_position_count"] or 0) < int(min_closed_tracked_positions):
+    closed_position_count = int(realized_metrics["closed_position_count"] or 0)
+    realized_profit_factor = _safe_float(realized_metrics.get("net_profit_factor"))
+    realized_avg_net_pnl_pct = _safe_float(realized_metrics.get("avg_net_pnl_pct"))
+    tracked_positions_required = int(min_closed_tracked_positions) > 0
+    closed_positions_ready = closed_position_count >= int(min_closed_tracked_positions)
+    realized_profitability_ready = (
+        realized_profit_factor is not None
+        and realized_profit_factor >= float(min_realized_profit_factor)
+        and realized_avg_net_pnl_pct is not None
+        and realized_avg_net_pnl_pct > float(min_realized_avg_net_pnl_pct)
+    )
+    if tracked_positions_required and not closed_positions_ready:
         blockers.append(
             {
                 "code": "insufficient_closed_tracked_positions",
                 "severity": "degraded-watch",
                 "message": "Not enough closed tracked positions are available for optimizer supervision.",
-                "closed_position_count": int(realized_metrics["closed_position_count"] or 0),
+                "closed_position_count": closed_position_count,
                 "required_closed_position_count": int(min_closed_tracked_positions),
+            }
+        )
+    elif tracked_positions_required and not realized_profitability_ready:
+        blockers.append(
+            {
+                "code": "tracked_realized_underperforming",
+                "severity": "degraded-watch",
+                "message": "Closed tracked positions are available, but realized performance is not yet profitable enough to mark the loop healthy.",
+                "closed_position_count": closed_position_count,
+                "required_closed_position_count": int(min_closed_tracked_positions),
+                "net_profit_factor": realized_profit_factor,
+                "required_net_profit_factor": float(min_realized_profit_factor),
+                "avg_net_pnl_pct": realized_avg_net_pnl_pct,
+                "required_avg_net_pnl_pct_gt": float(min_realized_avg_net_pnl_pct),
             }
         )
 
@@ -793,8 +822,16 @@ def evaluate_measurement_gate(
                 "available": bool(positions_snapshot["available"]),
                 "database_url_configured": bool(positions_snapshot.get("database_url_configured")),
                 "error_message": positions_snapshot.get("error_message"),
-                "closed_position_count": int(realized_metrics["closed_position_count"] or 0),
+                "closed_position_count": closed_position_count,
                 "required_closed_position_count": int(min_closed_tracked_positions),
+                "tracking_required": tracked_positions_required,
+                "net_profit_factor": realized_profit_factor,
+                "required_net_profit_factor": float(min_realized_profit_factor),
+                "avg_net_pnl_pct": realized_avg_net_pnl_pct,
+                "required_avg_net_pnl_pct_gt": float(min_realized_avg_net_pnl_pct),
+                "realized_profitability_ready": (
+                    realized_profitability_ready if tracked_positions_required else None
+                ),
             },
         },
         "eligible_forward_evidence": forward_evidence["eligible_events"],

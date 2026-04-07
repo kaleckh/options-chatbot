@@ -89,6 +89,7 @@ class OptionsProfitGateTests(unittest.TestCase):
                         min_eligible_forward_events=0,
                         min_eligible_events_per_symbol=0,
                         min_closed_tracked_positions=0,
+                        recorded_before_utc="2026-04-01T23:00:00Z",
                     )
 
         self.assertEqual(result["state"], "blocked")
@@ -164,6 +165,7 @@ class OptionsProfitGateTests(unittest.TestCase):
                             min_eligible_forward_events=0,
                             min_eligible_events_per_symbol=0,
                             min_closed_tracked_positions=0,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
                         )
 
         blocker_codes = [item["code"] for item in result["blockers"]]
@@ -195,6 +197,7 @@ class OptionsProfitGateTests(unittest.TestCase):
                             min_eligible_forward_events=1,
                             min_eligible_events_per_symbol=0,
                             min_closed_tracked_positions=1,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
                         )
 
         blocker_codes = [item["code"] for item in result["blockers"]]
@@ -241,6 +244,7 @@ class OptionsProfitGateTests(unittest.TestCase):
                         min_eligible_forward_events=0,
                         min_eligible_events_per_symbol=0,
                         min_closed_tracked_positions=0,
+                        recorded_before_utc="2026-04-03T23:00:00Z",
                     )
 
         self.assertEqual(result["state"], "healthy")
@@ -249,7 +253,7 @@ class OptionsProfitGateTests(unittest.TestCase):
             0,
         )
         self.assertEqual(
-            result["checks"]["forward_evidence"]["archive_ledger_diagnostics"]["live_production_event_count"],
+            result["checks"]["forward_evidence"]["archive_ledger_diagnostics"]["live_production_session_count"],
             1,
         )
 
@@ -305,6 +309,86 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertIn("requested_manifest_inputs", result["checks"]["imported_daily_artifact"])
         self.assertIn("daily_truth_source_latest_mtime_utc", result["checks"]["imported_daily_artifact"])
         self.assertIn("daily_truth_source_stale", result["checks"]["imported_daily_artifact"])
+        self.assertTrue(result["checks"]["tracked_positions"]["realized_profitability_ready"])
+
+    def test_gate_returns_degraded_watch_when_realized_profit_factor_is_below_floor(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [{} for _ in range(12)],
+            "eligible_event_count": 12,
+            "pending_truth_events": [],
+            "pending_truth_event_count": 0,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {
+                "SPY": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+                "QQQ": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+            },
+        }
+        closed_positions = [
+            {"contract_symbol": "SPY240101C00500000", "net_pnl_pct": 20.0, "gross_pnl_pct": 20.0},
+            {"contract_symbol": "SPY240101C00510000", "net_pnl_pct": -25.0, "gross_pnl_pct": -25.0},
+        ]
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True, closed_positions=closed_positions)):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=10,
+                            min_eligible_events_per_symbol=3,
+                            min_closed_tracked_positions=1,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
+                        )
+
+        blocker_codes = [item["code"] for item in result["blockers"]]
+        self.assertEqual(result["state"], "degraded-watch")
+        self.assertIn("tracked_realized_underperforming", blocker_codes)
+        self.assertFalse(result["checks"]["tracked_positions"]["realized_profitability_ready"])
+        self.assertEqual(result["checks"]["tracked_positions"]["net_profit_factor"], 0.8)
+
+    def test_gate_returns_degraded_watch_when_realized_avg_net_pnl_is_not_positive(self):
+        artifact_path = self.tmpdir / "latest_daily.json"
+        self._write_valid_daily_artifact(artifact_path)
+
+        forward_evidence = {
+            "trusted_truth_horizon": "2026-04-01",
+            "all_events": [],
+            "eligible_events": [{} for _ in range(12)],
+            "eligible_event_count": 12,
+            "pending_truth_events": [],
+            "pending_truth_event_count": 0,
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+            "by_symbol": {
+                "SPY": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+                "QQQ": {"eligible": 6, "pending_truth": 0, "ineligible": 0},
+            },
+        }
+        closed_positions = [
+            {"contract_symbol": "SPY240101C00500000", "net_pnl_pct": 10.0, "gross_pnl_pct": 10.0},
+            {"contract_symbol": "SPY240101C00510000", "net_pnl_pct": -10.0, "gross_pnl_pct": -10.0},
+        ]
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
+            with patch("options_profit_gate.OPTIONS_VALIDATION_DAILY_LATEST_FILE", str(artifact_path)):
+                with patch("options_profit_gate._load_forward_evidence", return_value=forward_evidence):
+                    with patch("options_profit_gate.create_positions_repository", return_value=_StubRepo(available=True, closed_positions=closed_positions)):
+                        result = evaluate_measurement_gate(
+                            min_eligible_forward_events=10,
+                            min_eligible_events_per_symbol=3,
+                            min_closed_tracked_positions=1,
+                            recorded_before_utc="2026-04-01T23:00:00Z",
+                        )
+
+        blocker_codes = [item["code"] for item in result["blockers"]]
+        self.assertEqual(result["state"], "degraded-watch")
+        self.assertIn("tracked_realized_underperforming", blocker_codes)
+        self.assertEqual(result["checks"]["tracked_positions"]["avg_net_pnl_pct"], 0.0)
 
     def test_gate_blocks_when_tracked_positions_are_unavailable(self):
         artifact_path = self.tmpdir / "latest_daily.json"

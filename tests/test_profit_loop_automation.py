@@ -371,7 +371,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
         state = load_profit_loop_state(self.state_dir)
         self.assertEqual(result["snapshot"]["verdict"], "recorded-empty-market")
-        self.assertEqual(result["snapshot"]["loop_execution_status"], "healthy")
+        self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
         self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
         self.assertTrue(result["snapshot"]["evidence_complete"])
         self.assertEqual(result["snapshot"]["results"]["daily_truth_refresh"]["status"], "refreshed")
@@ -760,8 +760,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "is_valid": True,
                 "failure_reason": None,
                 "meaningfully_distinct": True,
-                "expected_imported_truth_normalization": True,
-                "effective_dimensions": ["lookback_years"],
+                "expected_imported_truth_normalization": False,
+                "effective_dimensions": ["lookback_years", "pricing_lane"],
             },
             "proof_plan": {"needs_replay_matrix": True, "needs_holdout": False},
             "proof_reuse": [],
@@ -821,7 +821,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             {
                 "lookback_years": 1,
                 "requested_pricing_lane": "mid",
-                "effective_pricing_lane": "historical_imported_daily",
+                "effective_pricing_lane": "mid",
                 "truth_source": "historical_imported_daily",
                 "selection_source_counts": {"bootstrap_heuristic": 70},
                 "calibration_summary": {"status": "sparse_calibrated"},
@@ -830,13 +830,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -21.27,
                 "directional_accuracy_pct": 50.0,
                 "max_drawdown_pct": 100.0,
-                "invalid_for_matrix_comparison": True,
+                "invalid_for_matrix_comparison": False,
                 "error": None,
             },
             {
                 "lookback_years": 2,
                 "requested_pricing_lane": "mid",
-                "effective_pricing_lane": "historical_imported_daily",
+                "effective_pricing_lane": "mid",
                 "truth_source": "historical_imported_daily",
                 "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
                 "calibration_summary": {"status": "sparse_calibrated"},
@@ -845,13 +845,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -20.03,
                 "directional_accuracy_pct": 41.5,
                 "max_drawdown_pct": 100.0,
-                "invalid_for_matrix_comparison": True,
+                "invalid_for_matrix_comparison": False,
                 "error": None,
             },
             {
                 "lookback_years": 1,
                 "requested_pricing_lane": "pessimistic",
-                "effective_pricing_lane": "historical_imported_daily",
+                "effective_pricing_lane": "pessimistic",
                 "truth_source": "historical_imported_daily",
                 "selection_source_counts": {"bootstrap_heuristic": 70},
                 "calibration_summary": {"status": "sparse_calibrated"},
@@ -860,13 +860,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -21.27,
                 "directional_accuracy_pct": 50.0,
                 "max_drawdown_pct": 100.0,
-                "invalid_for_matrix_comparison": True,
+                "invalid_for_matrix_comparison": False,
                 "error": None,
             },
             {
                 "lookback_years": 2,
                 "requested_pricing_lane": "pessimistic",
-                "effective_pricing_lane": "historical_imported_daily",
+                "effective_pricing_lane": "pessimistic",
                 "truth_source": "historical_imported_daily",
                 "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
                 "calibration_summary": {"status": "sparse_calibrated"},
@@ -875,7 +875,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "avg_pnl_pct": -20.03,
                 "directional_accuracy_pct": 41.5,
                 "max_drawdown_pct": 100.0,
-                "invalid_for_matrix_comparison": True,
+                "invalid_for_matrix_comparison": False,
                 "error": None,
             },
         ]
@@ -918,15 +918,15 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertIn("shared_state.replay_matrix", baseline["proof_reuse"])
         self.assertTrue(proof_replay_path.exists())
         self.assertTrue(baseline["replay_matrix_assessment"]["is_valid"])
-        self.assertTrue(baseline["replay_matrix_assessment"]["expected_imported_truth_normalization"])
+        self.assertFalse(baseline["replay_matrix_assessment"]["expected_imported_truth_normalization"])
 
-    def test_replay_matrix_assessment_accepts_imported_truth_execution_normalization(self):
+    def test_replay_matrix_assessment_accepts_distinct_pricing_lanes(self):
         assessment = _replay_matrix_assessment(
             [
                 {
                     "lookback_years": 1,
                     "requested_pricing_lane": "mid",
-                    "effective_pricing_lane": "historical_imported_daily",
+                    "effective_pricing_lane": "mid",
                     "truth_source": "historical_imported_daily",
                     "selection_source_counts": {"bootstrap_heuristic": 70},
                     "calibration_summary": {"status": "sparse_calibrated"},
@@ -935,13 +935,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "avg_pnl_pct": -21.27,
                     "directional_accuracy_pct": 50.0,
                     "max_drawdown_pct": 100.0,
-                    "invalid_for_matrix_comparison": True,
+                    "invalid_for_matrix_comparison": False,
                     "error": None,
                 },
                 {
                     "lookback_years": 1,
                     "requested_pricing_lane": "pessimistic",
-                    "effective_pricing_lane": "historical_imported_daily",
+                    "effective_pricing_lane": "pessimistic",
                     "truth_source": "historical_imported_daily",
                     "selection_source_counts": {"bootstrap_heuristic": 70},
                     "calibration_summary": {"status": "sparse_calibrated"},
@@ -950,13 +950,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "avg_pnl_pct": -21.27,
                     "directional_accuracy_pct": 50.0,
                     "max_drawdown_pct": 100.0,
-                    "invalid_for_matrix_comparison": True,
+                    "invalid_for_matrix_comparison": False,
                     "error": None,
                 },
                 {
                     "lookback_years": 2,
                     "requested_pricing_lane": "mid",
-                    "effective_pricing_lane": "historical_imported_daily",
+                    "effective_pricing_lane": "mid",
                     "truth_source": "historical_imported_daily",
                     "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
                     "calibration_summary": {"status": "sparse_calibrated"},
@@ -965,13 +965,13 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "avg_pnl_pct": -20.03,
                     "directional_accuracy_pct": 41.5,
                     "max_drawdown_pct": 100.0,
-                    "invalid_for_matrix_comparison": True,
+                    "invalid_for_matrix_comparison": False,
                     "error": None,
                 },
                 {
                     "lookback_years": 2,
                     "requested_pricing_lane": "pessimistic",
-                    "effective_pricing_lane": "historical_imported_daily",
+                    "effective_pricing_lane": "pessimistic",
                     "truth_source": "historical_imported_daily",
                     "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
                     "calibration_summary": {"status": "sparse_calibrated"},
@@ -980,7 +980,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "avg_pnl_pct": -20.03,
                     "directional_accuracy_pct": 41.5,
                     "max_drawdown_pct": 100.0,
-                    "invalid_for_matrix_comparison": True,
+                    "invalid_for_matrix_comparison": False,
                     "error": None,
                 },
             ]
@@ -988,8 +988,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
         self.assertTrue(assessment["is_valid"])
         self.assertIsNone(assessment["failure_reason"])
-        self.assertTrue(assessment["expected_imported_truth_normalization"])
-        self.assertEqual(assessment["effective_dimensions"], ["lookback_years"])
+        self.assertFalse(assessment["expected_imported_truth_normalization"])
+        self.assertEqual(assessment["effective_dimensions"], ["lookback_years", "pricing_lane"])
 
     def test_profit_validation_resolve_records_branch_commit_and_proof(self):
         state = load_profit_loop_state(self.state_dir)

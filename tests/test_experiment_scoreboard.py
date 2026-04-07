@@ -131,6 +131,30 @@ class ExperimentScoreboardTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertTrue(entries[0]["path"].endswith("variant.json"))
 
+    def test_discover_cached_result_paths_skips_tmp_directories_by_default(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            tracked_path = root / "variant.json"
+            tmp_variant_path = root / "tmp" / "smoke" / "variant.json"
+            tracked_path.write_text(json.dumps(_fake_result(playbook="broad", pricing_lane="mid")), encoding="utf8")
+            tmp_variant_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_variant_path.write_text(json.dumps(_fake_result(playbook="broad", pricing_lane="pessimistic")), encoding="utf8")
+
+            discovered = scoreboard.discover_cached_result_paths([root])
+
+        self.assertEqual(discovered, [tracked_path.resolve()])
+
+    def test_discover_cached_result_paths_allows_explicit_tmp_file(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            tmp_variant_path = root / "tmp" / "smoke" / "variant.json"
+            tmp_variant_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_variant_path.write_text(json.dumps(_fake_result(playbook="broad", pricing_lane="mid")), encoding="utf8")
+
+            discovered = scoreboard.discover_cached_result_paths([tmp_variant_path])
+
+        self.assertEqual(discovered, [tmp_variant_path.resolve()])
+
 
 if __name__ == "__main__":
     unittest.main()

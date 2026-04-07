@@ -81,7 +81,13 @@ from historical_options_store import (
     INTRADAY_SNAPSHOT_KIND,
     TRUSTED_DATA_TRUST,
 )
-from options_execution import DEFAULT_COMMISSION_PER_CONTRACT_USD, executable_option_price, long_option_pnl
+from options_execution import (
+    DEFAULT_COMMISSION_PER_CONTRACT_USD,
+    executable_option_price,
+    has_two_sided_quote,
+    long_option_pnl,
+    quote_midpoint,
+)
 
 try:
     import optuna
@@ -160,6 +166,72 @@ def _imported_exit_quote_label(truth_source: str) -> str:
     if normalized == IMPORTED_DAILY_TRUTH_SOURCE:
         return "End-of-day snapshot each trading day ET"
     return "Latest available snapshot each trading day ET"
+
+
+def _normalize_requested_pricing_lane(value: Any) -> str:
+    normalized = str(value or "pessimistic").strip().lower()
+    return "mid" if normalized == "mid" else "pessimistic"
+
+
+def _execution_realism_label(truth_source: str) -> str:
+    normalized = str(truth_source or "").strip().lower()
+    if normalized == IMPORTED_DAILY_TRUTH_SOURCE:
+        return "coarse_eod_validation"
+    if normalized == IMPORTED_TRUTH_SOURCE:
+        return "quote_backed_intraday_replay"
+    return "synthetic_model_replay"
+
+
+def _entry_anchor_policy_label(truth_source: str) -> str:
+    normalized = str(truth_source or "").strip().lower()
+    if normalized == IMPORTED_DAILY_TRUTH_SOURCE:
+        return "archived_selection_price_else_prior_close"
+    if normalized == IMPORTED_TRUTH_SOURCE:
+        return "selection_open"
+    return "market_open"
+
+
+def _resolve_imported_execution_price(
+    *,
+    side: str,
+    requested_pricing_lane: str,
+    bid: Any = None,
+    ask: Any = None,
+    last: Any = None,
+    slippage_pct: float = 0.0,
+) -> dict[str, Any]:
+    normalized_lane = _normalize_requested_pricing_lane(requested_pricing_lane)
+    fallback_reason: Optional[str] = None
+    if normalized_lane == "mid" and has_two_sided_quote(bid=bid, ask=ask):
+        midpoint = quote_midpoint(bid=bid, ask=ask)
+        if midpoint is not None and midpoint > 0:
+            return {
+                "execution_price": round(float(midpoint), 4),
+                "execution_basis": "mid",
+                "effective_pricing_lane": "mid",
+                "pricing_lane_fallback_reason": None,
+            }
+    if normalized_lane == "mid":
+        fallback_reason = "mid_requires_two_sided_quote"
+    execution = executable_option_price(
+        side=side,
+        bid=bid,
+        ask=ask,
+        last=last,
+        slippage_pct=slippage_pct,
+        quote_freshness_status="fresh",
+        allow_research_fallback=False,
+    )
+    return {
+        "execution_price": execution.get("execution_price"),
+        "execution_basis": execution.get("execution_basis"),
+        "effective_pricing_lane": (
+            "pessimistic"
+            if execution.get("execution_price") is not None and fallback_reason
+            else normalized_lane
+        ),
+        "pricing_lane_fallback_reason": fallback_reason,
+    }
 
 
 def _normalize_replay_history_index(index) -> pd.DatetimeIndex:
@@ -4889,8 +4961,14 @@ def _simulate_trade_outcome_imported(
     entry_slippage_pct: float = 0.0,
     exit_slippage_pct: float = 0.0,
     commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
+    pricing_lane: str = "pessimistic",
+    entry_anchor_source: Optional[str] = None,
+    execution_realism: Optional[str] = None,
 ) -> dict:
     normalized_truth_source = str(truth_source or IMPORTED_TRUTH_SOURCE).strip().lower() or IMPORTED_TRUTH_SOURCE
+    requested_pricing_lane = _normalize_requested_pricing_lane(pricing_lane)
+    execution_realism_label = str(execution_realism or _execution_realism_label(normalized_truth_source)).strip()
+    resolved_entry_anchor_source = str(entry_anchor_source or "provided_entry_s0").strip() or "provided_entry_s0"
     n = len(prices)
     S0 = float(entry_S0) if entry_S0 is not None else float(prices[i])
     entry_date = pd.Timestamp(dates[i]).date()
@@ -4928,7 +5006,12 @@ def _simulate_trade_outcome_imported(
                 "unpriced_reason": "no_model_contract_target",
                 "entry_day_idx": i,
                 "truth_source": normalized_truth_source,
-                "pricing_lane": normalized_truth_source,
+                "requested_pricing_lane": requested_pricing_lane,
+                "effective_pricing_lane": requested_pricing_lane,
+                "pricing_lane": requested_pricing_lane,
+                "pricing_lane_fallback_reason": None,
+                "entry_anchor_source": resolved_entry_anchor_source,
+                "execution_realism": execution_realism_label,
                 "requested_contract_symbol": normalized_archived_contract,
             }
 
@@ -4958,20 +5041,24 @@ def _simulate_trade_outcome_imported(
             "unpriced_reason": "missing_entry_quote",
             "entry_day_idx": i,
             "truth_source": normalized_truth_source,
-            "pricing_lane": normalized_truth_source,
+            "requested_pricing_lane": requested_pricing_lane,
+            "effective_pricing_lane": requested_pricing_lane,
+            "pricing_lane": requested_pricing_lane,
+            "pricing_lane_fallback_reason": None,
+            "entry_anchor_source": resolved_entry_anchor_source,
+            "execution_realism": execution_realism_label,
             "target_strike": round(float(target_strike), 2) if target_strike is not None else None,
             "target_expiry": target_expiry.isoformat(),
             "requested_contract_symbol": normalized_archived_contract,
         }
 
-    entry_execution = executable_option_price(
+    entry_execution = _resolve_imported_execution_price(
         side="entry",
+        requested_pricing_lane=requested_pricing_lane,
         bid=entry_quote.bid,
         ask=entry_quote.ask,
         last=entry_quote.last,
         slippage_pct=entry_slippage_pct,
-        quote_freshness_status="fresh",
-        allow_research_fallback=False,
     )
     entry_px = float(entry_execution.get("execution_price") or 0.0)
     if entry_px <= 0:
@@ -4980,7 +5067,12 @@ def _simulate_trade_outcome_imported(
             "unpriced_reason": "invalid_entry_quote",
             "entry_day_idx": i,
             "truth_source": normalized_truth_source,
-            "pricing_lane": normalized_truth_source,
+            "requested_pricing_lane": requested_pricing_lane,
+            "effective_pricing_lane": requested_pricing_lane,
+            "pricing_lane": requested_pricing_lane,
+            "pricing_lane_fallback_reason": entry_execution.get("pricing_lane_fallback_reason"),
+            "entry_anchor_source": resolved_entry_anchor_source,
+            "execution_realism": execution_realism_label,
             "contract_symbol": entry_quote.contract_symbol,
             "contract_selection_source": contract_selection_source,
         }
@@ -5050,7 +5142,12 @@ def _simulate_trade_outcome_imported(
                 "unpriced_reason": "missing_exit_quote",
                 "entry_day_idx": i,
                 "truth_source": normalized_truth_source,
-                "pricing_lane": normalized_truth_source,
+                "requested_pricing_lane": requested_pricing_lane,
+                "effective_pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+                "pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+                "pricing_lane_fallback_reason": entry_execution.get("pricing_lane_fallback_reason"),
+                "entry_anchor_source": resolved_entry_anchor_source,
+                "execution_realism": execution_realism_label,
                 "contract_symbol": entry_quote.contract_symbol,
                 "missing_quote_date": quote_date.isoformat(),
                 "entry_quote_at_utc": entry_quote.as_of_utc,
@@ -5066,14 +5163,13 @@ def _simulate_trade_outcome_imported(
                 "contract_selection_source": contract_selection_source,
             }
 
-        exit_execution = executable_option_price(
+        exit_execution = _resolve_imported_execution_price(
             side="exit",
+            requested_pricing_lane=requested_pricing_lane,
             bid=quote.bid,
             ask=quote.ask,
             last=quote.last,
             slippage_pct=exit_slippage_pct,
-            quote_freshness_status="fresh",
-            allow_research_fallback=False,
         )
         opt_now = float(exit_execution.get("execution_price") or 0.0)
         exit_fill_basis = f"historical_{exit_execution.get('execution_basis') or quote.price_basis}"
@@ -5085,7 +5181,15 @@ def _simulate_trade_outcome_imported(
                 "unpriced_reason": "invalid_exit_quote",
                 "entry_day_idx": i,
                 "truth_source": normalized_truth_source,
-                "pricing_lane": normalized_truth_source,
+                "requested_pricing_lane": requested_pricing_lane,
+                "effective_pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+                "pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+                "pricing_lane_fallback_reason": (
+                    exit_execution.get("pricing_lane_fallback_reason")
+                    or entry_execution.get("pricing_lane_fallback_reason")
+                ),
+                "entry_anchor_source": resolved_entry_anchor_source,
+                "execution_realism": execution_realism_label,
                 "contract_symbol": entry_quote.contract_symbol,
                 "entry_quote_at_utc": entry_quote.as_of_utc,
                 "entry_quote_basis": entry_quote.price_basis,
@@ -5157,7 +5261,12 @@ def _simulate_trade_outcome_imported(
             "unpriced_reason": "insufficient_quote_history",
             "entry_day_idx": i,
             "truth_source": normalized_truth_source,
-            "pricing_lane": normalized_truth_source,
+            "requested_pricing_lane": requested_pricing_lane,
+            "effective_pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+            "pricing_lane": entry_execution.get("effective_pricing_lane") or requested_pricing_lane,
+            "pricing_lane_fallback_reason": entry_execution.get("pricing_lane_fallback_reason"),
+            "entry_anchor_source": resolved_entry_anchor_source,
+            "execution_realism": execution_realism_label,
             "contract_symbol": entry_quote.contract_symbol,
             "last_quote_date": last_quote_date,
             "entry_quote_at_utc": entry_quote.as_of_utc,
@@ -5221,7 +5330,23 @@ def _simulate_trade_outcome_imported(
         "dte": actual_dte,
         "entry_day_idx": i,
         "exit_day_idx": exit_day_idx,
-        "pricing_lane": normalized_truth_source,
+        "requested_pricing_lane": requested_pricing_lane,
+        "effective_pricing_lane": (
+            exit_execution.get("effective_pricing_lane")
+            or entry_execution.get("effective_pricing_lane")
+            or requested_pricing_lane
+        ),
+        "pricing_lane": (
+            exit_execution.get("effective_pricing_lane")
+            or entry_execution.get("effective_pricing_lane")
+            or requested_pricing_lane
+        ),
+        "pricing_lane_fallback_reason": (
+            exit_execution.get("pricing_lane_fallback_reason")
+            or entry_execution.get("pricing_lane_fallback_reason")
+        ),
+        "entry_anchor_source": resolved_entry_anchor_source,
+        "execution_realism": execution_realism_label,
         "truth_source": normalized_truth_source,
         "contract_symbol": entry_quote.contract_symbol,
         "entry_quote_at_utc": entry_quote.as_of_utc,
@@ -5426,6 +5551,7 @@ def run_historical_backtest(
     idx_config, idx_evaluator = _build_profile_config(_idx_sp)
     replay_playbook = _get_replay_playbook(playbook)
     normalized_truth_lane = str(truth_lane or SYNTHETIC_TRUTH_SOURCE).strip().lower()
+    requested_pricing_lane = _normalize_requested_pricing_lane(pricing_lane)
     if normalized_truth_lane == "synthetic":
         normalized_truth_lane = SYNTHETIC_TRUTH_SOURCE
     if normalized_truth_lane not in {SYNTHETIC_TRUTH_SOURCE, IMPORTED_TRUTH_SOURCE, IMPORTED_DAILY_TRUTH_SOURCE}:
@@ -5910,6 +6036,18 @@ def run_historical_backtest(
             p_config, _ = _ticker_cfg(t_sym)
 
             if _is_imported_truth_source(normalized_truth_lane) and imported_store is not None:
+                entry_anchor_price = float(t_arr["opens"][pick["day_idx"]])
+                entry_anchor_source = "open"
+                if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE:
+                    archived_selection_price = pick.get("underlying_price_at_selection")
+                    if archived_selection_price is not None:
+                        entry_anchor_price = float(archived_selection_price)
+                        entry_anchor_source = "archived_underlying_price_at_selection"
+                    elif int(pick["day_idx"]) > 0:
+                        entry_anchor_price = float(t_arr["prices"][pick["day_idx"] - 1])
+                        entry_anchor_source = "prior_close"
+                    else:
+                        entry_anchor_source = "open_fallback_no_prior_close"
                 outcome = _simulate_trade_outcome_imported(
                     store=imported_store,
                     ticker=t_sym,
@@ -5930,11 +6068,7 @@ def run_historical_backtest(
                     _sma20=t_arr["_sma20"],
                     _sma50=t_arr["_sma50"],
                     tech_at_entry=pick["tech_score"],
-                    entry_S0=float(
-                        t_arr["prices"][pick["day_idx"]]
-                        if normalized_truth_lane == IMPORTED_DAILY_TRUTH_SOURCE
-                        else t_arr["opens"][pick["day_idx"]]
-                    ),
+                    entry_S0=entry_anchor_price,
                     iv_adj=iv_adj,
                     truth_source=normalized_truth_lane,
                     snapshot_kind=_imported_snapshot_kind(normalized_truth_lane),
@@ -5950,6 +6084,9 @@ def run_historical_backtest(
                     archived_selection_source=pick.get("selection_source"),
                     entry_slippage_pct=p_config.get("entry_slippage_pct", 0.0),
                     exit_slippage_pct=p_config.get("exit_slippage_pct", 0.0),
+                    pricing_lane=requested_pricing_lane,
+                    entry_anchor_source=entry_anchor_source,
+                    execution_realism=_execution_realism_label(normalized_truth_lane),
                 )
             else:
                 outcome = _simulate_trade_outcome_hist(
@@ -5991,7 +6128,7 @@ def run_historical_backtest(
                     "calibration_density": pick.get("calibration_density"),
                     "target_move_pct": None,
                     "truth_source": normalized_truth_lane,
-                    "pricing_lane": normalized_truth_lane,
+                    "requested_pricing_lane": requested_pricing_lane,
                     **{key: value for key, value in outcome.items() if key != "priced"},
                 }
                 unpriced_trade["promotion_class"] = _trade_promotion_class(unpriced_trade)
@@ -6115,9 +6252,13 @@ def run_historical_backtest(
             "mode": "backtest", "profile": "mixed",
             "lookback_years": lookback_years,
             "iv_adj": iv_adj,
-            "pricing_lane": normalized_truth_lane if _is_imported_truth_source(normalized_truth_lane) else pricing_lane,
+            "requested_pricing_lane": requested_pricing_lane,
+            "effective_pricing_lane": requested_pricing_lane,
+            "pricing_lane": requested_pricing_lane,
             "playbook": replay_playbook["id"],
             "truth_source": normalized_truth_lane,
+            "entry_anchor_policy": _entry_anchor_policy_label(normalized_truth_lane),
+            "execution_realism": _execution_realism_label(normalized_truth_lane),
             "n_picks": n_picks,
             "total_days": days_simulated, "total_trades": 0,
             "priced_trade_count": priced_trade_count,
@@ -6269,7 +6410,7 @@ def run_historical_backtest(
         by_symbol=by_symbol,
         playbook_id=replay_playbook["id"],
     )
-    effective_pricing_lane = normalized_truth_lane if _is_imported_truth_source(normalized_truth_lane) else pricing_lane
+    effective_pricing_lane = requested_pricing_lane
     output = {
         "run_at":            datetime.now().isoformat(timespec="seconds"),
         "mode":              "backtest",
@@ -6277,9 +6418,11 @@ def run_historical_backtest(
         "truth_source":      normalized_truth_lane,
         "lookback_years":    lookback_years,
         "iv_adj":            iv_adj,
-        "requested_pricing_lane": pricing_lane,
+        "requested_pricing_lane": requested_pricing_lane,
         "effective_pricing_lane": effective_pricing_lane,
         "pricing_lane":      effective_pricing_lane,
+        "entry_anchor_policy": _entry_anchor_policy_label(normalized_truth_lane),
+        "execution_realism": _execution_realism_label(normalized_truth_lane),
         "playbook":          replay_playbook["id"],
         "n_picks":           n_picks,
         "total_days":        days_simulated,

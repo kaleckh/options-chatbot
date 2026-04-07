@@ -1474,21 +1474,14 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
         for case in cases
         if bool(case.get("invalid_for_matrix_comparison"))
     ]
-    expected_imported_truth_normalization = bool(invalid_cases) and all(
-        str(case.get("truth_source") or "").strip().lower() in {IMPORTED_TRUTH_SOURCE, IMPORTED_DAILY_TRUTH_SOURCE}
-        and str(case.get("effective_pricing_lane") or "").strip().lower()
-        == str(case.get("truth_source") or "").strip().lower()
-        for case in cases
-    )
     if invalid_cases:
-        if not expected_imported_truth_normalization:
-            return {
-                "is_valid": False,
-                "failure_reason": "pricing_lane_flattened",
-                "meaningfully_distinct": False,
-                "invalid_cases": invalid_cases,
-                "expected_imported_truth_normalization": False,
-            }
+        return {
+            "is_valid": False,
+            "failure_reason": "pricing_lane_flattened",
+            "meaningfully_distinct": False,
+            "invalid_cases": invalid_cases,
+            "expected_imported_truth_normalization": False,
+        }
     fingerprints = set()
     for case in cases:
         fingerprint = {
@@ -1502,19 +1495,16 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
             "directional_accuracy_pct": case.get("directional_accuracy_pct"),
             "max_drawdown_pct": case.get("max_drawdown_pct"),
         }
-        if expected_imported_truth_normalization:
-            fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
-        else:
-            fingerprint["requested_pricing_lane"] = case.get("requested_pricing_lane")
-            fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
+        fingerprint["requested_pricing_lane"] = case.get("requested_pricing_lane")
+        fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
         fingerprints.add(json.dumps(fingerprint, sort_keys=True))
     meaningfully_distinct = len(fingerprints) > 1
     return {
         "is_valid": meaningfully_distinct,
         "failure_reason": None if meaningfully_distinct else "collapsed_identical_cells",
         "meaningfully_distinct": meaningfully_distinct,
-        "expected_imported_truth_normalization": expected_imported_truth_normalization,
-        "effective_dimensions": ["lookback_years"] if expected_imported_truth_normalization else ["lookback_years", "pricing_lane"],
+        "expected_imported_truth_normalization": False,
+        "effective_dimensions": ["lookback_years", "pricing_lane"],
     }
 
 
@@ -1713,7 +1703,7 @@ def _replay_matrix_seed_issue_cleared(
     if str((issue or {}).get("issue_id") or "").strip() != "replay-matrix-collapsed-results":
         return False
     assessment = dict((baseline or {}).get("replay_matrix_assessment") or {})
-    return bool(assessment.get("is_valid")) and bool(assessment.get("expected_imported_truth_normalization"))
+    return bool(assessment.get("is_valid"))
 
 
 def run_operational_health(
@@ -2193,7 +2183,7 @@ def run_truth_holdout(
     elif raw_candidates_zero:
         verdict = "recorded-empty-market"
 
-    loop_execution_status = "degraded" if verdict == "recorded-no-candidates" else "healthy"
+    loop_execution_status = "degraded" if verdict in {"recorded-no-candidates", "recorded-empty-market"} else "healthy"
     evidence_status = "inconclusive" if verdict == "recorded-no-candidates" else "trusted"
     snapshot = {
         "run_id": run["run_id"],

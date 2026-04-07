@@ -20,7 +20,7 @@ def _is_imported_truth_source(value: Any) -> bool:
 
 
 DEFAULT_RESULT_PATH = Path(__file__).resolve().parent / "wfo_results.json"
-SKIP_DIR_NAMES = {".git", ".next", "__pycache__", "node_modules"}
+SKIP_DIR_NAMES = {".git", ".next", ".pytest_cache", "__pycache__", "node_modules", "tmp"}
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -78,10 +78,16 @@ def _is_backtest_result(payload: Any) -> bool:
 
 
 def _should_skip_path(path: Path) -> bool:
-    parts = {part.lower() for part in path.parts}
-    if SKIP_DIR_NAMES.intersection(parts):
+    normalized_parts = [part.lower() for part in path.parts]
+    if SKIP_DIR_NAMES.intersection(normalized_parts):
         return True
-    return "day-trading" in parts
+    if any(
+        part.startswith(".tmp")
+        or part.startswith("pytest-of-")
+        for part in normalized_parts
+    ):
+        return True
+    return "day-trading" in normalized_parts
 
 
 def discover_cached_result_paths(inputs: Sequence[str | Path] | None = None) -> list[Path]:
@@ -91,11 +97,11 @@ def discover_cached_result_paths(inputs: Sequence[str | Path] | None = None) -> 
     discovered: list[Path] = []
     seen: set[Path] = set()
 
-    def _add_path(path: Path) -> None:
+    def _add_path(path: Path, *, skip_ephemeral: bool = True) -> None:
         if not path.exists() or not path.is_file() or path.suffix.lower() != ".json":
             return
         resolved = path.resolve()
-        if resolved in seen or _should_skip_path(resolved):
+        if resolved in seen or (skip_ephemeral and _should_skip_path(resolved)):
             return
         seen.add(resolved)
         discovered.append(resolved)
@@ -114,7 +120,7 @@ def discover_cached_result_paths(inputs: Sequence[str | Path] | None = None) -> 
                     continue
                 _add_path(child)
             return
-        _add_path(path)
+        _add_path(path, skip_ephemeral=False)
 
     for item in inputs:
         _walk(item)

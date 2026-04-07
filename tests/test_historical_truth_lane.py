@@ -122,7 +122,11 @@ class HistoricalTruthLaneTests(unittest.TestCase):
 
         self.assertEqual(synthetic["truth_source"], wfo.SYNTHETIC_TRUTH_SOURCE)
         self.assertEqual(imported["truth_source"], wfo.IMPORTED_TRUTH_SOURCE)
-        self.assertEqual(imported["pricing_lane"], wfo.IMPORTED_TRUTH_SOURCE)
+        self.assertEqual(imported["requested_pricing_lane"], "pessimistic")
+        self.assertEqual(imported["effective_pricing_lane"], "pessimistic")
+        self.assertEqual(imported["pricing_lane"], "pessimistic")
+        self.assertEqual(imported["entry_anchor_policy"], "selection_open")
+        self.assertEqual(imported["execution_realism"], "quote_backed_intraday_replay")
         self.assertIn("priced_trade_count", imported)
         self.assertIn("unpriced_trade_count", imported)
         self.assertIn("quote_coverage_pct", imported)
@@ -221,7 +225,11 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                 truth_lane="historical_imported_daily",
             )
         self.assertEqual(imported["truth_source"], "historical_imported_daily")
-        self.assertEqual(imported["pricing_lane"], "historical_imported_daily")
+        self.assertEqual(imported["requested_pricing_lane"], "pessimistic")
+        self.assertEqual(imported["effective_pricing_lane"], "pessimistic")
+        self.assertEqual(imported["pricing_lane"], "pessimistic")
+        self.assertEqual(imported["entry_anchor_policy"], "archived_selection_price_else_prior_close")
+        self.assertEqual(imported["execution_realism"], "coarse_eod_validation")
         self.assertEqual(imported["entry_quote_time_et"], "End-of-day snapshot ET")
         self.assertGreater(imported["quote_coverage_pct"], 0.0)
         self.assertIn("contract_resolution_counts", imported)
@@ -490,7 +498,9 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                     "unpriced_reason": "missing_entry_quote",
                     "entry_day_idx": kwargs["i"],
                     "truth_source": "historical_imported_daily",
-                    "pricing_lane": "historical_imported_daily",
+                    "requested_pricing_lane": "pessimistic",
+                    "effective_pricing_lane": "pessimistic",
+                    "pricing_lane": "pessimistic",
                     "target_strike": 530.0,
                     "target_expiry": "2024-07-10",
                 }
@@ -500,7 +510,9 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                     "unpriced_reason": "missing_exit_quote",
                     "entry_day_idx": kwargs["i"],
                     "truth_source": "historical_imported_daily",
-                    "pricing_lane": "historical_imported_daily",
+                    "requested_pricing_lane": "pessimistic",
+                    "effective_pricing_lane": "pessimistic",
+                    "pricing_lane": "pessimistic",
                     "contract_symbol": "SPY240712C00550000",
                     "missing_quote_date": "2024-07-04",
                     "entry_quote_at_utc": "2024-06-24T19:55:00Z",
@@ -528,7 +540,9 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                 "dte": kwargs["dte_at_entry"],
                 "entry_day_idx": kwargs["i"],
                 "exit_day_idx": kwargs["i"] + 1,
-                "pricing_lane": "historical_imported_daily",
+                "requested_pricing_lane": "pessimistic",
+                "effective_pricing_lane": "pessimistic",
+                "pricing_lane": "pessimistic",
                 "contract_symbol": "SPY240712C00550000",
                 "entry_contract_resolution": "exact_target_contract",
                 "entry_quote_at_utc": "2024-06-24T19:55:00Z",
@@ -767,7 +781,9 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                 "dte": kwargs["dte_at_entry"],
                 "entry_day_idx": kwargs["i"],
                 "exit_day_idx": kwargs["i"] + 1,
-                "pricing_lane": "historical_imported_daily",
+                "requested_pricing_lane": "pessimistic",
+                "effective_pricing_lane": "pessimistic",
+                "pricing_lane": "pessimistic",
                 "contract_symbol": target_quote.contract_symbol,
                 "entry_contract_resolution": resolution,
                 "contract_selection_source": (
