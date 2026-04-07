@@ -576,6 +576,11 @@ def annotate_pick_with_guardrails(
                 f"Suggested size reduced by 50%."
             )
     annotated["correlation_size_mult"] = correlation_size_mult
+    # Apply correlation adjustment to position size recommendation
+    if correlation_size_mult < 1.0 and "position_size_mult" in annotated:
+        annotated["position_size_mult"] = round(
+            float(annotated.get("position_size_mult", 1.0)) * correlation_size_mult, 3
+        )
 
     guardrail_decision = "blocked" if blocked else ("caution" if cautions else "clear")
     policy_decision = str(annotated.get("trade_policy_decision") or "watch")

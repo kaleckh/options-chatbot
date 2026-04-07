@@ -4206,6 +4206,20 @@ def scan_daily_top_trades(
                 _bump_scan_drop(scan_drop_counts, "ev_floor")
                 continue
 
+            # Kelly-informed position sizing recommendation
+            _kelly_win_prob = max(0.0, min(float(direction_score) / 100.0 * 0.70, 0.99))
+            _kelly_fraction = float(sp.get("risk", {}).get("kelly_fraction", 0.25))
+            _kelly_risk_pct = _kelly_adjusted_risk_pct(
+                base_risk_pct=float(sp["risk"].get("max_position_pct", 3.0)),
+                win_probability=_kelly_win_prob,
+                profit_target_pct=_profit_target_pct,
+                stop_loss_pct=_adj_stop_pct,
+                kelly_fraction=_kelly_fraction,
+                min_risk_pct=float(sp["risk"].get("min_position_pct", 0.5)),
+                max_risk_pct=float(sp["risk"].get("max_position_pct", 3.0)),
+            )
+            _adj_size_mult *= (_kelly_risk_pct / float(sp["risk"].get("max_position_pct", 3.0)))
+
             # Build human-readable signal reasons
             reasons: list[str] = []
             if bullish:
@@ -4374,6 +4388,8 @@ def scan_daily_top_trades(
                 "contract_volume":    _opt.get("volume"),
                 "contract_open_interest": _opt.get("open_interest"),
                 "quote_age_hours":    _opt.get("quote_age_hours"),
+                "kelly_risk_pct":     _kelly_risk_pct,
+                "position_size_mult": round(_adj_size_mult, 3),
             }
 
             # ── Spread-specific fields ───────────────────────────────────────

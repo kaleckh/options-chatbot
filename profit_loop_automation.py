@@ -1781,6 +1781,15 @@ def _replay_matrix_seed_issue_cleared(
     return bool(assessment.get("is_valid"))
 
 
+def _count_forward_events(state_dir: str | Path | None = None) -> int:
+    """Count eligible+pending forward events for auto-resolve checks."""
+    try:
+        summary = summarize_forward_holdout(cohort_id=None)
+        return int(summary.get("scan_pick_count", 0) or 0)
+    except Exception:
+        return 0
+
+
 def run_operational_health(
     *,
     state_dir: str | Path | None = None,
@@ -1789,6 +1798,17 @@ def run_operational_health(
 ) -> dict[str, Any]:
     ensure_profit_loop_state(state_dir)
     state = load_profit_loop_state(state_dir)
+
+    # Attempt to auto-resolve seeded blockers before health assessment
+    _auto_resolved = auto_resolve_seeded_issues(
+        state,
+        forward_events_count=_count_forward_events(state_dir),
+        live_truth_lane=IMPORTED_DAILY_TRUTH_SOURCE,
+        policy_truth_source=IMPORTED_DAILY_TRUTH_SOURCE,
+    )
+    if _auto_resolved:
+        save_profit_loop_state(state, state_dir=state_dir)
+
     context = _proof_context(repo_root=repo_root)
     now_iso = utc_now_iso()
     run_id = f"hourly-operational-health-{_utc_now().strftime('%Y%m%dT%H%M%SZ')}"
@@ -2644,6 +2664,29 @@ def prepare_profit_validation(
         evidence_complete = evidence_complete and bool(replay_assessment.get("is_valid"))
     if baseline.get("proof_plan", {}).get("needs_holdout"):
         evidence_complete = evidence_complete and bool(baseline.get("holdout_evidence"))
+
+    # Check if bootstrap recovery is needed
+    _bootstrap_check = check_bootstrap_recovery_needed(baseline)
+    if _bootstrap_check.get("recovery_needed"):
+        _bootstrap_issue = _issue_payload(
+            issue_id="bootstrap-dominance-recovery-needed",
+            source_automation="profit-validation",
+            severity="high",
+            blocker_class="calibration",
+            summary=(
+                f"Bootstrap heuristic dominates at {_bootstrap_check['bootstrap_pct']:.0f}% "
+                f"({_bootstrap_check['bootstrap_count']}/{_bootstrap_check['total_trades']} trades). "
+                f"Suggested: extend lookback to {_bootstrap_check['suggested_lookback_years']}y and re-import daily truth."
+            ),
+            evidence=[
+                f"bootstrap_pct={_bootstrap_check['bootstrap_pct']:.1f}",
+                f"current_lookback={_bootstrap_check.get('current_lookback_years')}",
+                f"suggested_lookback={_bootstrap_check.get('suggested_lookback_years')}",
+            ],
+            suggested_fix_targets=["profit_loop_automation.py", "wfo_optimizer.py"],
+        )
+        upsert_open_issue(state, _bootstrap_issue, now_iso=now_iso)
+
     snapshot = {
         "run_id": run["run_id"],
         "ran_at": now_iso,
