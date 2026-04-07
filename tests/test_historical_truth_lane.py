@@ -458,6 +458,8 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         import_daily_option_parquet(qqq_path, "qqq-daily-calendar", underlying="QQQ", db_path=daily_db_path)
 
         with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False), \
+             patch.dict(wfo.STRATEGY_PROFILES["equity"], {"strategy_type": "single_leg"}), \
+             patch.dict(wfo.STRATEGY_PROFILES["index"], {"strategy_type": "single_leg"}), \
              patch.object(wfo, "_tech_score", return_value=80.0), \
              patch.object(
                  wfo,
@@ -579,6 +581,8 @@ class HistoricalTruthLaneTests(unittest.TestCase):
             }
 
         with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False), \
+             patch.dict(wfo.STRATEGY_PROFILES["equity"], {"strategy_type": "single_leg"}), \
+             patch.dict(wfo.STRATEGY_PROFILES["index"], {"strategy_type": "single_leg"}), \
              patch.object(wfo, "_tech_score", return_value=80.0), \
              patch.object(wfo, "_simulate_trade_outcome_imported", side_effect=fake_imported_outcome):
             imported = wfo.run_historical_backtest(

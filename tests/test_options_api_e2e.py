@@ -484,6 +484,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             self.assertEqual(cleared_response.json()["stats"], {})
 
     def test_backtest_endpoint_persists_result_and_report_contract(self):
+        self.stack.enter_context(patch.dict(wfo.STRATEGY_PROFILES["equity"], {"strategy_type": "single_leg"}))
+        self.stack.enter_context(patch.dict(wfo.STRATEGY_PROFILES["index"], {"strategy_type": "single_leg"}))
         response = self.client.post("/api/backtest", json={"lookback_years": 1, "iv_adj": 1.0})
         self.assertEqual(response.status_code, 200)
         result = response.json()
@@ -1256,6 +1258,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn(payload["truth_window_status"], {"synthetic_only", "unknown"})
 
     def test_fixture_replay_golden_snapshot_stays_stable(self):
+        self.stack.enter_context(patch.dict(wfo.STRATEGY_PROFILES["equity"], {"strategy_type": "single_leg"}))
+        self.stack.enter_context(patch.dict(wfo.STRATEGY_PROFILES["index"], {"strategy_type": "single_leg"}))
         backtest_response = self.client.post(
             "/api/backtest",
             json={"lookback_years": 1, "iv_adj": 1.2, "truth_lane": "synthetic"},
@@ -1277,9 +1281,9 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(scan_response.status_code, 200)
         scan = scan_response.json()
 
-        self.assertEqual(backtest["total_trades"], 141)
-        self.assertEqual(backtest["selection_source_counts"], {"bootstrap_heuristic": 141})
-        self.assertEqual(round(backtest["profit_factor"], 2), 0.64)
+        self.assertEqual(backtest["total_trades"], 137)
+        self.assertEqual(backtest["selection_source_counts"], {"bootstrap_heuristic": 137})
+        self.assertEqual(round(backtest["profit_factor"], 2), 0.70)
         self.assertEqual(policy["scan_policy"]["promotion_status"], "block")
         self.assertEqual(len(scan["picks"]), 1)
 
@@ -1287,10 +1291,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(top_pick["ticker"], "SPY")
         self.assertEqual(top_pick["type"], "call")
         self.assertEqual(top_pick["direction_score"], 56.5)
-        self.assertEqual(top_pick["quality_score"], 79.3)
+        self.assertEqual(top_pick["quality_score"], 86.0)
         self.assertIsNone(top_pick["calibrated_expectancy_pct"])
-        self.assertEqual(top_pick["promotion_class"], "research_non_executable_quote")
-        self.assertEqual(top_pick["selection_source"], "model_contract_fallback")
+        self.assertEqual(top_pick["promotion_class"], "research_bootstrap")
+        self.assertEqual(top_pick["selection_source"], "live_chain_exact_contract")
 
 
 if __name__ == "__main__":

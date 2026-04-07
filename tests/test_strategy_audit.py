@@ -1159,7 +1159,8 @@ class StrategyAuditTests(unittest.TestCase):
                  patch.object(wfo, "_compute_direction_score", return_value=80.0), \
                  patch.object(wfo, "_compute_quality_score", return_value=70.0), \
                  patch.object(wfo, "_pick_top_n_daily", side_effect=lambda candidates, n: candidates[:n]), \
-                 patch.object(wfo, "_simulate_trade_outcome_hist", side_effect=fake_simulate_trade_outcome_hist):
+                 patch.object(wfo, "_simulate_trade_outcome_hist", side_effect=fake_simulate_trade_outcome_hist), \
+                 patch.object(wfo, "_simulate_spread_outcome_hist", side_effect=fake_simulate_trade_outcome_hist):
                 wfo.run_historical_backtest(lookback_years=1, n_picks=1, iv_adj=1.0)
 
         self.assertTrue(captured_entry_opens)

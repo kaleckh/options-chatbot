@@ -91,29 +91,23 @@ UNDERLYING_FILTERS = {
 }
 
 DEFAULT_WATCHLIST = [
-    # ── Index ETFs (bypass sector rule, use index strategy profile) ───────────
-    "SPY", "QQQ", "IWM", "DIA", "XLK",
-    # ── Technology ────────────────────────────────────────────────────────────
+    # ── Validated with imported daily historical data ─────────────────────────
+    "SPY", "QQQ",
+]
+
+# Full universe — re-enable as each ticker is validated with real option data
+_EXPANSION_WATCHLIST = [
+    "IWM", "DIA", "XLK",
     "AAPL", "NVDA", "MSFT", "META", "AMD",
-    # ── Communication Services ────────────────────────────────────────────────
     "GOOGL", "NFLX", "DIS", "T", "CMCSA",
-    # ── Financials ────────────────────────────────────────────────────────────
     "JPM", "GS", "BAC", "V", "C",
-    # ── Healthcare ────────────────────────────────────────────────────────────
     "UNH", "LLY", "JNJ", "ABBV", "PFE",
-    # ── Energy ────────────────────────────────────────────────────────────────
     "XOM", "CVX", "OXY", "COP", "SLB",
-    # ── Consumer Discretionary ────────────────────────────────────────────────
     "TSLA", "AMZN", "MCD", "NKE", "SBUX",
-    # ── Consumer Staples ──────────────────────────────────────────────────────
     "WMT", "KO", "COST", "PG", "PM",
-    # ── Industrials ───────────────────────────────────────────────────────────
     "CAT", "BA", "DE", "LMT", "RTX",
-    # ── Materials ─────────────────────────────────────────────────────────────
     "FCX", "NEM", "CLF", "AA", "LIN",
-    # ── Real Estate ───────────────────────────────────────────────────────────
     "AMT", "PLD", "SPG", "WELL", "EQR",
-    # ── Speculative / High-Beta ───────────────────────────────────────────────
     "COIN", "MSTR", "PLTR", "ARM", "SMCI",
 ]
 
@@ -3987,6 +3981,11 @@ def scan_daily_top_trades(
                 _bump_scan_drop(scan_drop_counts, "momentum")
                 continue
             trade_type = "call" if bullish else "put"
+            # Direction filter — skip if this direction isn't allowed by profile
+            _allowed_dirs = base_sp.get("entry", {}).get("allowed_directions")
+            if _allowed_dirs and trade_type not in _allowed_dirs:
+                _bump_scan_drop(scan_drop_counts, "direction_filter")
+                continue
             sp = call_sp if trade_type == "call" else put_sp
             ticker_min_confidence = (
                 float(sp["entry"].get("min_direction_score", 35.0))
