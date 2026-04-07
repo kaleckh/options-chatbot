@@ -58,6 +58,7 @@ from profit_loop_shared_state import (
     upsert_open_issue,
     utc_now_iso,
     validation_prerequisite_blockers,
+    auto_resolve_seeded_issues,
 )
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
@@ -80,6 +81,8 @@ DEFAULT_DAILY_TRUTH_REFRESH_PLAYBOOK = "broad"
 DEFAULT_DAILY_TRUTH_IMPORT_TIMEOUT_SECONDS = 600
 DEFAULT_DAILY_TRUTH_ARTIFACT_TIMEOUT_SECONDS = 1800
 DEFAULT_SUBPROCESS_HEARTBEAT_SECONDS = 60
+BOOTSTRAP_DOMINANCE_THRESHOLD_PCT = 80.0
+BOOTSTRAP_RECOVERY_EXTENDED_LOOKBACK_YEARS = 3
 
 HEALTH_TEST_MODULES = [
     "tests.test_market_data_service",
@@ -222,6 +225,40 @@ def _run_command(
                     }
                 )
             continue
+
+
+def _run_command_with_retry(
+    command: list[str],
+    *,
+    cwd: Path = ROOT_DIR,
+    timeout_seconds: int | None = None,
+    heartbeat_every_seconds: int | None = None,
+    heartbeat: Any = None,
+    max_retries: int = 1,
+    timeout_escalation: float = 1.5,
+) -> dict[str, Any]:
+    """Run a command with retry on timeout. Escalates timeout by multiplier on retry."""
+    current_timeout = timeout_seconds
+    last_error: Exception | None = None
+    for attempt in range(1 + max_retries):
+        try:
+            result = _run_command(
+                command,
+                cwd=cwd,
+                timeout_seconds=int(current_timeout) if current_timeout is not None else None,
+                heartbeat_every_seconds=heartbeat_every_seconds,
+                heartbeat=heartbeat,
+            )
+            if attempt > 0:
+                result["retried"] = True
+                result["retry_attempt"] = attempt
+            return result
+        except CommandTimeoutError as exc:
+            last_error = exc
+            if current_timeout is not None:
+                current_timeout = int(current_timeout * timeout_escalation)
+    # All retries exhausted
+    raise last_error  # type: ignore[misc]
 
 
 def _run_json_command(
@@ -1843,7 +1880,7 @@ def run_operational_health(
             )
 
     loop_execution_status = "blocked" if verdict == "blocked" else ("degraded" if verdict == "degraded-watch" else "healthy")
-    evidence_status = "untrusted" if verdict == "blocked" else "trusted"
+    evidence_status = "untrusted" if verdict == "blocked" else "operational_only"
     measurement_gate = _safe_measurement_gate()
     claim_readiness = _safe_claim_readiness()
     loop_health_state = str(measurement_gate.get("state") or "blocked").strip()
@@ -2228,8 +2265,9 @@ def run_truth_holdout(
     elif raw_candidates_zero:
         verdict = "recorded-empty-market"
 
-    loop_execution_status = "degraded" if verdict in {"recorded-no-candidates", "recorded-empty-market"} else "healthy"
-    evidence_status = "inconclusive" if verdict in {"recorded-no-candidates", "recorded-empty-market"} else "trusted"
+    _holdout_low_evidence = verdict in {"recorded-no-candidates", "recorded-empty-market"}
+    loop_execution_status = "degraded" if _holdout_low_evidence else "healthy"
+    evidence_status = "inconclusive" if _holdout_low_evidence else "recorded_pending_validation"
     snapshot = {
         "run_id": run["run_id"],
         "ran_at": now_iso,
@@ -2416,7 +2454,7 @@ def prepare_profit_validation(
             "ran_at": now_iso,
             "verdict": "queue-empty",
             "run_status": "completed",
-            "loop_execution_status": "healthy",
+            "loop_execution_status": "idle",
             "evidence_status": "inconclusive",
             "profitability_verdict": "unproven",
             "evidence_complete": False,
@@ -2651,9 +2689,9 @@ def prepare_profit_validation(
         )
         result_action = "resolved_no_longer_observed"
         snapshot["verdict"] = "resolved-no-longer-observed"
-        snapshot["loop_execution_status"] = "healthy"
-        snapshot["evidence_status"] = "trusted"
-        snapshot["evidence_complete"] = True
+        snapshot["loop_execution_status"] = "degraded"
+        snapshot["evidence_status"] = "auto_cleared"
+        snapshot["evidence_complete"] = False
         snapshot["resolved_issue"] = targeted_issue["issue_id"]
         snapshot["resolution_note"] = (
             "Replay-matrix pricing-lane collapse is expected under imported executable truth and no longer blocks validation."
@@ -2781,11 +2819,9 @@ def resolve_profit_validation_issue(
         or not comparison_spec_exact_match
     ):
         profitability_verdict = "inconclusive"
-    evidence_status = "trusted"
-    if profitability_verdict == "inconclusive" and baseline_profitability_verdict == "improved":
-        evidence_status = "inconclusive"
+    evidence_status = "trusted" if profitability_verdict == "improved" else "inconclusive"
     evidence_complete = evidence_status == "trusted"
-    loop_execution_status = "healthy" if profitability_verdict == "improved" and evidence_status == "trusted" else "degraded"
+    loop_execution_status = "healthy" if profitability_verdict == "improved" and evidence_complete else "degraded"
     profitability_prerequisites = {
         "operational_health_verdict": health_snapshot.get("verdict"),
         "operational_health_status": health_status or None,
@@ -3027,6 +3063,113 @@ def run_profit_loop_canary(
         "daily_truth_refresh": daily_truth_refresh,
         "consistency": consistency,
         "steps": [health, holdout, validation],
+    }
+
+
+def check_bootstrap_recovery_needed(result: dict[str, Any] | None) -> dict[str, Any]:
+    """
+    Check if a backtest result is dominated by bootstrap heuristic trades
+    and suggest recovery actions.
+    """
+    if not result:
+        return {"recovery_needed": False, "reason": "no_result"}
+
+    trades = list(result.get("trades") or [])
+    if not trades:
+        return {"recovery_needed": False, "reason": "no_trades"}
+
+    bootstrap_count = sum(
+        1 for t in trades
+        if str(t.get("expectancy_selection_source") or "").strip().lower() == "bootstrap_heuristic"
+    )
+    total = len(trades)
+    bootstrap_pct = (bootstrap_count / total * 100.0) if total > 0 else 0.0
+
+    if bootstrap_pct < BOOTSTRAP_DOMINANCE_THRESHOLD_PCT:
+        return {
+            "recovery_needed": False,
+            "bootstrap_pct": round(bootstrap_pct, 1),
+            "total_trades": total,
+        }
+
+    current_lookback = int(result.get("lookback_years", 1) or 1)
+    suggested_lookback = min(
+        BOOTSTRAP_RECOVERY_EXTENDED_LOOKBACK_YEARS,
+        current_lookback + 1,
+    )
+
+    return {
+        "recovery_needed": True,
+        "bootstrap_pct": round(bootstrap_pct, 1),
+        "total_trades": total,
+        "bootstrap_count": bootstrap_count,
+        "current_lookback_years": current_lookback,
+        "suggested_lookback_years": suggested_lookback,
+        "actions": [
+            "trigger_historical_data_import",
+            f"rerun_backtest_with_lookback_{suggested_lookback}y",
+            "switch_to_imported_daily_truth_source",
+        ],
+    }
+
+
+RESEARCH_RUNS_DIR = ROOT_DIR / "research_runs"
+MAX_RETAINED_RESEARCH_RUNS = 30
+
+
+def cleanup_research_runs(
+    *,
+    max_retain: int = MAX_RETAINED_RESEARCH_RUNS,
+    protected_run_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Remove old research runs, keeping the most recent max_retain runs
+    plus any runs referenced by current incumbents.
+    """
+    runs_dir = RESEARCH_RUNS_DIR
+    if not runs_dir.exists():
+        return {"cleaned": 0, "retained": 0, "errors": []}
+
+    protected = set(protected_run_ids or set())
+    all_runs: list[tuple[float, Path]] = []
+    errors: list[str] = []
+
+    for entry in runs_dir.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            mtime = entry.stat().st_mtime
+            all_runs.append((mtime, entry))
+        except OSError as exc:
+            errors.append(f"Cannot stat {entry.name}: {exc}")
+
+    # Sort newest first
+    all_runs.sort(key=lambda x: x[0], reverse=True)
+
+    retained: list[str] = []
+    to_remove: list[Path] = []
+
+    for idx, (mtime, run_path) in enumerate(all_runs):
+        run_name = run_path.name
+        if idx < max_retain or run_name in protected:
+            retained.append(run_name)
+        else:
+            to_remove.append(run_path)
+
+    cleaned = 0
+    for run_path in to_remove:
+        try:
+            import shutil
+            shutil.rmtree(run_path)
+            cleaned += 1
+        except OSError as exc:
+            errors.append(f"Cannot remove {run_path.name}: {exc}")
+
+    return {
+        "cleaned": cleaned,
+        "retained": len(retained),
+        "total_found": len(all_runs),
+        "errors": errors,
     }
 
 

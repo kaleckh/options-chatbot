@@ -24,8 +24,8 @@ DEFAULT_RUN_LEASE_MINUTES = 90
 DEFAULT_CLAIM_LEASE_MINUTES = 180
 
 RUN_STATUSES = {"running", "completed", "failed", "expired"}
-LOOP_EXECUTION_STATUSES = {"healthy", "degraded", "blocked"}
-EVIDENCE_STATUSES = {"trusted", "inconclusive", "untrusted"}
+LOOP_EXECUTION_STATUSES = {"healthy", "degraded", "blocked", "idle"}
+EVIDENCE_STATUSES = {"trusted", "inconclusive", "untrusted", "operational_only", "recorded_pending_validation", "auto_cleared"}
 PROFITABILITY_VERDICTS = {"unproven", "inconclusive", "improved", "regressed"}
 OPEN_STATUSES = {"open", "claimed", "deferred"}
 
@@ -119,6 +119,69 @@ SEEDED_ISSUES = [
         "status": "open",
     },
 ]
+
+
+def auto_resolve_seeded_issues(
+    state: dict[str, Any],
+    *,
+    forward_events_count: int = 0,
+    live_truth_lane: str = "",
+    policy_truth_source: str = "",
+    now_iso: str | None = None,
+) -> list[str]:
+    """
+    Attempt to auto-resolve seeded blockers when conditions are met.
+    Returns list of issue_ids that were auto-resolved.
+    """
+    current_time = str(now_iso or utc_now_iso())
+    resolved_ids: list[str] = []
+    open_issues = list(state.get("open_issues") or [])
+
+    for issue in open_issues:
+        issue_id = str(issue.get("issue_id") or "").strip()
+        if str(issue.get("source_automation") or "").strip() != "seed":
+            continue
+        if str(issue.get("status") or "").strip() not in OPEN_STATUSES:
+            continue
+
+        # Auto-resolve truth lane mismatch when lanes align
+        if issue_id == "truth-lane-live-policy-mismatch":
+            live_lane = str(live_truth_lane).strip().lower()
+            policy_src = str(policy_truth_source).strip().lower()
+            if live_lane and policy_src and live_lane == policy_src:
+                issue["status"] = "resolved"
+                issue["resolved_at"] = current_time
+                issue["resolution_kind"] = "auto_resolved"
+                issue["resolution_branch"] = "auto"
+                issue["resolution_commit"] = "auto"
+                issue["proof_bundle_dir"] = "auto"
+                resolved_ids.append(issue_id)
+
+        # Auto-resolve scan starvation when forward events exist
+        elif issue_id == "forward-holdout-no-raw-candidates":
+            if int(forward_events_count) > 0:
+                issue["status"] = "resolved"
+                issue["resolved_at"] = current_time
+                issue["resolution_kind"] = "auto_resolved"
+                issue["resolution_branch"] = "auto"
+                issue["resolution_commit"] = "auto"
+                issue["proof_bundle_dir"] = "auto"
+                resolved_ids.append(issue_id)
+
+    if resolved_ids:
+        state["updated_at"] = current_time
+        # Move resolved issues from open to resolved list
+        remaining_open = []
+        resolved_list = list(state.get("resolved_issues") or [])
+        for issue in state.get("open_issues", []):
+            if str(issue.get("issue_id") or "").strip() in resolved_ids:
+                resolved_list.append(issue)
+            else:
+                remaining_open.append(issue)
+        state["open_issues"] = remaining_open
+        state["resolved_issues"] = resolved_list
+
+    return resolved_ids
 
 
 def _utc_now() -> datetime:
@@ -227,8 +290,10 @@ def _infer_loop_execution_status(snapshot: dict[str, Any] | None) -> str:
     verdict = str((snapshot or {}).get("verdict") or "").strip().lower()
     if verdict.startswith("blocked"):
         return "blocked"
-    if verdict in {"degraded-watch", "recorded-no-candidates", "recorded-empty-market", "deferred"}:
+    if verdict in {"degraded-watch", "recorded-no-candidates", "recorded-empty-market", "deferred", "resolved-no-longer-observed"}:
         return "degraded"
+    if verdict == "queue-empty":
+        return "idle"
     return "healthy"
 
 

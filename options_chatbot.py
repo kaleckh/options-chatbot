@@ -46,7 +46,10 @@ from expectancy_calibration import (
     DEFAULT_SPARSE_WARNING_TRADES,
     DEFAULT_SURFACE_MIN_TRADES,
     build_expectancy_surface,
+    load_persisted_expectancy_surface,
     lookup_calibrated_expectancy,
+    save_expectancy_surface,
+    composite_market_regime_score,
     normalized_market_regime,
 )
 from market_data_service import (
@@ -362,7 +365,9 @@ def _select_live_expectancy(
             return None, dense_calibration, "replay_calibrated"
         return ev_pct, dense_calibration, "replay_calibrated"
 
-    p_win = max(0.0, min(float(direction_score) / 100.0, 1.0))
+    raw_p_win = max(0.0, min(float(direction_score) / 100.0, 1.0))
+    # Apply 30% haircut to account for theta decay, spread slippage, and real-world friction
+    p_win = raw_p_win * 0.70
     ev_pct = p_win * float(profit_target_pct) - (1.0 - p_win) * float(stop_loss_pct)
     if ev_pct < float(min_ev_return_pct):
         return None, None, "bootstrap_heuristic"
@@ -396,29 +401,34 @@ def _load_expectancy_surface_for_live(
             load_last_imported_daily_results,
         )
     except Exception:
-        return None
+        return load_persisted_expectancy_surface()
 
     normalized_truth_lane = str(truth_lane or IMPORTED_DAILY_TRUTH_SOURCE).strip().lower() or IMPORTED_DAILY_TRUTH_SOURCE
     if normalized_truth_lane != IMPORTED_DAILY_TRUTH_SOURCE:
-        return None
+        return load_persisted_expectancy_surface()
 
     result = load_last_imported_daily_results()
     if not result:
-        return None
+        return load_persisted_expectancy_surface()
     if str(result.get("truth_source") or "").strip().lower() != IMPORTED_DAILY_TRUTH_SOURCE:
-        return None
+        return load_persisted_expectancy_surface()
     if str(result.get("playbook") or "").strip().lower() != str(playbook or "broad").strip().lower():
-        return None
+        return load_persisted_expectancy_surface()
     if float(result.get("quote_coverage_pct", 0.0) or 0.0) < float(MIN_IMPORTED_QUOTE_COVERAGE_PCT):
-        return None
+        return load_persisted_expectancy_surface()
 
-    return build_expectancy_surface(
+    surface = build_expectancy_surface(
         result=result,
         min_trades=min_trades,
         bucket_size=bucket_size,
         shrinkage_trades=DEFAULT_SHRINKAGE_TRADES,
         sparse_warning_trades=DEFAULT_SPARSE_WARNING_TRADES,
     )
+    if surface is not None:
+        save_expectancy_surface(surface)
+        return surface
+    # Fall back to previously persisted surface
+    return load_persisted_expectancy_surface()
 
 
 def _compute_tech_score_from_close_series(
@@ -510,12 +520,14 @@ PREDICTIONS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "
 # index:  broad-market ETFs — longer DTE, tighter delta, lower VIX threshold.
 STRATEGY_PROFILES: dict[str, dict] = {
     "equity": {
-        "name": "OTM Short-Duration Momentum Strategy (Equity)",
+        "name": "Vertical Spread Momentum Strategy (Equity)",
         "philosophy": (
-            "Buy OTM calls or puts on high-conviction momentum signals with strict entry filters. "
+            "Trade bull call spreads or bear put spreads on high-conviction momentum signals. "
+            "Spreads reduce theta drag and cap max loss vs single-leg OTM. "
             "Entry is gated by signal quality, volatility regime, and liquidity. "
             "Position size scales with conviction. Exit rules are fixed and non-negotiable."
         ),
+        "strategy_type": "vertical_spread",
         "confidence_weights": {
             "iv_percentile": 0.40,
             "delta":         0.30,
@@ -590,14 +602,25 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "trailing_giveback_pct":  50.0,
             "min_profit_to_exit_pct": 5.0,
         },
+        "spread": {
+            "long_delta_target":      0.50,   # ATM-ish: higher probability, less theta drag
+            "short_delta_target":     0.20,   # OTM wing: collects premium to offset cost
+            "max_width_pct":          5.0,    # max spread width as % of stock price
+            "min_net_debit":          0.30,   # min premium to pay (avoid penny spreads)
+            "max_debit_pct_of_width": 65.0,   # max net debit as % of width (cost efficiency)
+            "stop_loss_pct":          40.0,   # tighter stop: lose 40% of debit, not 50%
+            "profit_target_pct":      80.0,   # realistic: 80% return on debit paid
+            "time_exit_pct":          55.0,   # slightly longer hold for spread to develop
+        },
     },
     "index": {
-        "name": "OTM Index Momentum Strategy",
+        "name": "Vertical Spread Index Momentum Strategy",
         "philosophy": (
-            "Trade broad-market ETFs with longer duration, tighter delta targeting, "
-            "and a lower VIX defense threshold — indexes have lower realized vol and "
-            "are more directly correlated with the VIX regime."
+            "Trade broad-market ETF vertical spreads with longer duration, tighter "
+            "delta targeting, and a lower VIX defense threshold — indexes have lower "
+            "realized vol and are more directly correlated with the VIX regime."
         ),
+        "strategy_type": "vertical_spread",
         "confidence_weights": {
             "iv_percentile": 0.40,
             "delta":         0.30,
@@ -672,6 +695,16 @@ STRATEGY_PROFILES: dict[str, dict] = {
             "trailing_giveback_pct":  50.0,
             "min_profit_to_exit_pct": 5.0,
         },
+        "spread": {
+            "long_delta_target":      0.50,
+            "short_delta_target":     0.20,
+            "max_width_pct":          4.0,    # tighter for indexes (lower vol)
+            "min_net_debit":          0.30,
+            "max_debit_pct_of_width": 60.0,   # indexes: demand better cost efficiency
+            "stop_loss_pct":          35.0,   # tighter stop on indexes
+            "profit_target_pct":      75.0,
+            "time_exit_pct":          55.0,
+        },
     },
 }
 
@@ -737,7 +770,7 @@ def _load_profile() -> None:
             sp = STRATEGY_PROFILES[profile]
             for section in ("confidence_weights", "targets", "filters", "risk", "entry",
                             "direction_score_weights", "rsi_overextension", "quality_score_weights",
-                            "early_exit"):
+                            "early_exit", "spread"):
                 if section in saved and isinstance(saved[section], dict):
                     sp[section].update(saved[section])
         except Exception:
@@ -1491,6 +1524,33 @@ def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
         }, indent=2)
     except Exception as e:
         return json.dumps({"error": type(e).__name__, "message": str(e)})
+
+
+# ─── Kelly-informed position sizing (internal) ───────────────────────────────
+
+def _kelly_adjusted_risk_pct(
+    *,
+    base_risk_pct: float,
+    win_probability: float,
+    profit_target_pct: float,
+    stop_loss_pct: float,
+    kelly_fraction: float = 0.25,
+    min_risk_pct: float = 0.5,
+    max_risk_pct: float = 3.0,
+) -> float:
+    """
+    Compute position size as a fraction of Kelly criterion.
+    Returns risk_pct clamped to [min_risk_pct, max_risk_pct].
+    """
+    if win_probability <= 0 or profit_target_pct <= 0 or stop_loss_pct <= 0:
+        return min_risk_pct
+    b = profit_target_pct / stop_loss_pct  # win/loss ratio
+    q = 1.0 - win_probability
+    kelly_pct = (win_probability * b - q) / b  # Kelly fraction of bankroll
+    if kelly_pct <= 0:
+        return min_risk_pct  # negative edge — use minimum size
+    adjusted_pct = kelly_pct * kelly_fraction * 100.0  # scale to percentage
+    return round(max(min_risk_pct, min(adjusted_pct, max_risk_pct)), 2)
 
 
 # ─── Tool 9: Position sizing & risk check ────────────────────────────────────
@@ -3252,7 +3312,11 @@ def _fetch_best_option(
                 _iv  = float(_row.get("impliedVolatility") or 0)
                 _vol = _iv if _iv > 0.01 else hv30_fallback
 
-                _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, _vol, trade_type)
+                # Apply volatility smile: OTM options have higher IV
+                _moneyness = _K / _S if _S > 0 else 1.0
+                _smile_adj = 1.0 + 0.15 * abs(1.0 - _moneyness)  # 15% skew per unit OTM
+                _vol_adjusted = _vol * _smile_adj
+                _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, _vol_adjusted, trade_type)
                 if not _g:
                     continue
 
@@ -3321,6 +3385,134 @@ def _fetch_best_option(
         best["chain_context"] = chain_context
 
     return best
+
+
+def _fetch_best_spread(
+    ticker: str,
+    trade_type: str,          # "call" or "put"
+    long_delta_target: float,
+    short_delta_target: float,
+    target_dte: int,
+    stock_price: float = 0.0,
+    hv30_fallback: float = 0.30,
+    max_width_pct: float = 5.0,
+    min_net_debit: float = 0.30,
+    max_debit_pct_of_width: float = 65.0,
+    *,
+    return_context: bool = False,
+) -> dict | None:
+    """
+    Fetch two legs from the real options chain for a vertical debit spread.
+
+    Bull call spread: buy lower-strike call (higher delta), sell higher-strike call (lower delta)
+    Bear put spread:  buy higher-strike put (higher delta), sell lower-strike put (lower delta)
+
+    Returns dict with long_leg, short_leg, spread metrics, or None if no valid spread found.
+    """
+    long_opt = _fetch_best_option(
+        ticker, trade_type, long_delta_target, target_dte,
+        stock_price=stock_price, hv30_fallback=hv30_fallback,
+        return_context=return_context,
+    )
+    if long_opt is None:
+        return None
+
+    short_opt = _fetch_best_option(
+        ticker, trade_type, short_delta_target, target_dte,
+        stock_price=stock_price, hv30_fallback=hv30_fallback,
+        return_context=return_context,
+    )
+    if short_opt is None:
+        return None
+
+    long_strike = long_opt["strike"]
+    short_strike = short_opt["strike"]
+    long_premium = long_opt["premium"]
+    short_premium = short_opt["premium"]
+
+    # Validate spread structure
+    if trade_type == "call":
+        # Bull call spread: long strike < short strike
+        if long_strike >= short_strike:
+            return None
+        spread_width = short_strike - long_strike
+    else:
+        # Bear put spread: long strike > short strike
+        if long_strike <= short_strike:
+            return None
+        spread_width = long_strike - short_strike
+
+    if spread_width <= 0:
+        return None
+
+    # Width constraint
+    _S = stock_price or long_opt.get("stock_price", 0)
+    if _S > 0 and (spread_width / _S * 100) > max_width_pct:
+        return None
+
+    # Net debit = what we pay (long premium - short premium credit)
+    net_debit = long_premium - short_premium
+    if net_debit < min_net_debit:
+        return None
+    if net_debit <= 0:
+        return None
+
+    # Cost efficiency: don't pay too much of the width
+    debit_pct_of_width = (net_debit / spread_width) * 100
+    if debit_pct_of_width > max_debit_pct_of_width:
+        return None
+
+    max_profit = spread_width - net_debit
+    max_loss = net_debit
+    net_delta = abs(long_opt.get("delta", long_delta_target)) - abs(short_opt.get("delta", short_delta_target))
+
+    result = {
+        "long_leg": {
+            "strike":          long_strike,
+            "premium":         round(long_premium, 4),
+            "delta":           round(abs(long_opt.get("delta", 0)), 3),
+            "iv":              long_opt.get("iv"),
+            "bid":             long_opt.get("bid"),
+            "ask":             long_opt.get("ask"),
+            "last":            long_opt.get("last"),
+            "contract_symbol": long_opt.get("contract_symbol"),
+            "volume":          long_opt.get("volume"),
+            "open_interest":   long_opt.get("open_interest"),
+            "quote_age_hours": long_opt.get("quote_age_hours"),
+            "quote_basis":     long_opt.get("quote_basis"),
+        },
+        "short_leg": {
+            "strike":          short_strike,
+            "premium":         round(short_premium, 4),
+            "delta":           round(abs(short_opt.get("delta", 0)), 3),
+            "iv":              short_opt.get("iv"),
+            "bid":             short_opt.get("bid"),
+            "ask":             short_opt.get("ask"),
+            "last":            short_opt.get("last"),
+            "contract_symbol": short_opt.get("contract_symbol"),
+            "volume":          short_opt.get("volume"),
+            "open_interest":   short_opt.get("open_interest"),
+            "quote_age_hours": short_opt.get("quote_age_hours"),
+            "quote_basis":     short_opt.get("quote_basis"),
+        },
+        "spread_width":       round(spread_width, 4),
+        "net_debit":           round(net_debit, 4),
+        "max_profit":          round(max_profit, 4),
+        "max_loss":            round(max_loss, 4),
+        "net_delta":           round(net_delta, 3),
+        "debit_pct_of_width":  round(debit_pct_of_width, 1),
+        "risk_reward_ratio":   round(max_profit / max_loss, 2) if max_loss > 0 else None,
+        "expiry":              long_opt.get("expiry"),
+        "dte":                 long_opt.get("dte"),
+        "live_chain":          long_opt.get("live_chain", False) and short_opt.get("live_chain", False),
+        "options_snapshot_status": long_opt.get("options_snapshot_status"),
+        "option_chain_status":    long_opt.get("option_chain_status"),
+    }
+
+    if return_context:
+        result["chain_context"] = long_opt.get("chain_context")
+
+    return result
 
 
 def _compute_quality_score(iv_pct: float, delta_val: float, dte: int, sp=None) -> float:
@@ -3405,13 +3597,22 @@ def _compute_direction_score(
     _w_total = _w_tech + _w_reg + _w_mom or 1.0
     raw = (tech_score * _w_tech + regime_score * _w_reg + mom_score * _w_mom) / _w_total
 
-    # ── RSI overextension penalty ─────────────────────────────────────────────
-    if is_bullish:
-        penalty = _sev_p if rsi14 > _sev_t else (_mod_p if rsi14 > _mod_t else 0.0)
+    # ── RSI overextension penalty (graduated) ─────────────────────────────────
+    _graduated = bool(_rsi_oe.get("graduated", False))
+    _per_pt = float(_rsi_oe.get("penalty_per_point", 0.8))
+    if _graduated:
+        if is_bullish:
+            penalty = max(0.0, min(float(_sev_p), (rsi14 - _mod_t) * _per_pt)) if rsi14 > _mod_t else 0.0
+        else:
+            _bear_mod_t = 100.0 - _mod_t
+            penalty = max(0.0, min(float(_sev_p), (_bear_mod_t - rsi14) * _per_pt)) if rsi14 < _bear_mod_t else 0.0
     else:
-        _bear_sev_t = 100.0 - _sev_t   # mirror: 72 → 28
-        _bear_mod_t = 100.0 - _mod_t   # mirror: 68 → 32
-        penalty = _sev_p if rsi14 < _bear_sev_t else (_mod_p if rsi14 < _bear_mod_t else 0.0)
+        if is_bullish:
+            penalty = _sev_p if rsi14 > _sev_t else (_mod_p if rsi14 > _mod_t else 0.0)
+        else:
+            _bear_sev_t = 100.0 - _sev_t
+            _bear_mod_t = 100.0 - _mod_t
+            penalty = _sev_p if rsi14 < _bear_sev_t else (_mod_p if rsi14 < _bear_mod_t else 0.0)
 
     return round(max(0.0, min(100.0, raw - penalty)), 1)
 
@@ -3464,7 +3665,11 @@ def _check_early_exit(
             history_frame=history_frame,
         )
     except Exception:
-        return False, ""  # can't compute indicators — skip
+        # Can't compute live indicators — protective exit if near expiry
+        dte_remaining = int(pick.get("dte", 99) or 99)
+        if dte_remaining <= 2:
+            return True, "data_unavailable_protective_exit: cannot fetch live indicators within 2 DTE"
+        return False, ""  # farther from expiry — hold but log warning
 
     dir_score_live = _compute_direction_score(
         tech_live, trade_type, rsi_live, ret5_live, spy_ret5, sp=sp,
@@ -3570,8 +3775,9 @@ def _generate_trade_strategy(
     elif iv_rank >= 65:
         label   = "Exit early"
         comment = (
-            f"IV at {iv_rank:.0f}th percentile — options are expensive and IV crush can erode gains "
-            "even on a winning move. Target 50–60% of full profit and exit before last 2 days."
+            f"IV at {iv_rank:.0f}th percentile — options are expensive. "
+            "Spreads reduce IV crush exposure but still target 60–70% of full profit "
+            "and exit before last 2 days."
         )
     elif direction_score >= 78 and quality_score >= 65 and spy_aligned:
         label   = "Hold to target"
@@ -3662,6 +3868,8 @@ def scan_daily_top_trades(
 
     # Fetch SPY regime data once for all tickers
     _spy_ret5 = 0.0
+    _spy_ret20 = 0.0
+    _spy_above_sma50 = False
     try:
         _spy_hist = _cached_history("SPY", period="10d")["Close"].dropna()
         if len(_spy_hist) >= 6:
@@ -3669,11 +3877,26 @@ def scan_daily_top_trades(
     except Exception:
         pass
     try:
+        _spy_hist_ext = _cached_history("SPY", period="70d")["Close"].dropna()
+        if len(_spy_hist_ext) >= 21:
+            _spy_ret20 = float((_spy_hist_ext.iloc[-1] / _spy_hist_ext.iloc[-21] - 1) * 100)
+        if len(_spy_hist_ext) >= 50:
+            _spy_sma50 = float(_spy_hist_ext.iloc[-50:].mean())
+            _spy_above_sma50 = float(_spy_hist_ext.iloc[-1]) > _spy_sma50
+    except Exception:
+        pass
+    try:
         _vix_close = float(_cached_history("^VIX", period="5d")["Close"].dropna().iloc[-1])
     except Exception:
         _vix_close = 20.0
     expectancy_surface = _load_expectancy_surface_for_live(playbook=calibration_playbook)
-    market_regime_bucket = normalized_market_regime(spy_ret5=_spy_ret5)
+    _composite_regime = composite_market_regime_score(
+        spy_ret5=_spy_ret5,
+        spy_ret20=_spy_ret20,
+        spy_above_sma50=_spy_above_sma50,
+        vix_level=_vix_close,
+    )
+    market_regime_bucket = _composite_regime["regime"]
     market_open = _market_is_open()
 
     for ticker in DEFAULT_WATCHLIST:
@@ -3774,9 +3997,11 @@ def scan_daily_top_trades(
                 if scan_target_dte is None else scan_target_dte
             )
 
-            # ── Earnings gate: skip if earnings fall within the DTE window ──────
+            # ── Earnings gate: skip if too close, half-size if in window ──────
+            _earnings_size_mult = 1.0
             if _ac == "equity":
                 _earnings_skip = False
+                _earnings_size_mult = 1.0
                 try:
                     _today_dt = datetime.now().replace(tzinfo=None)
                     _ticker_info = _cached_ticker_info(ticker) or {}
@@ -3790,45 +4015,79 @@ def scan_daily_top_trades(
                                 _next_earn = _future_ed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
                     if _next_earn is not None:
                         _days_to_earn = (_next_earn - _today_dt).days
-                        if 0 <= _days_to_earn <= ticker_target_dte:
-                            _earnings_skip = True  # earnings inside our hold window → skip
+                        if 0 <= _days_to_earn <= 2:
+                            _earnings_skip = True  # too close to earnings — skip entirely
+                        elif 0 <= _days_to_earn <= ticker_target_dte:
+                            _earnings_size_mult = 0.5  # earnings in window — half size
                 except Exception:
                     _earnings_skip = True
                 if _earnings_skip:
                     _bump_scan_drop(scan_drop_counts, "earnings")
                     continue
 
-            # ── Fetch real options chain: actual strike + bid/ask (or lastPrice) ─
-            try:
-                _opt = _fetch_best_option(
-                    ticker,
-                    trade_type,
-                    float(sp["targets"]["delta_optimal"]),
-                    ticker_target_dte,
-                    stock_price=_live_underlying_price,
-                    hv30_fallback=hv30,
-                    return_context=True,
-                )
-            except TypeError as exc:
-                if "return_context" not in str(exc):
-                    raise
-                _opt = _fetch_best_option(
-                    ticker,
-                    trade_type,
-                    float(sp["targets"]["delta_optimal"]),
-                    ticker_target_dte,
-                    stock_price=_live_underlying_price,
-                    hv30_fallback=hv30,
-                )
-            if _opt is None:
-                _bump_scan_drop(scan_drop_counts, "option_liquidity")
-                continue
+            # ── Fetch options: spread (default) or single-leg ─────────────────
+            _strategy_type = sp.get("strategy_type", "single_leg")
+            _is_spread = _strategy_type == "vertical_spread"
+            _spread_cfg = sp.get("spread", {})
+            _spread_result = None
 
-            best_strike = _opt["strike"]
-            est_premium = _opt["premium"]
-            delta_val   = _opt["delta"]
-            actual_exp  = _opt["expiry"]
-            actual_dte  = _opt["dte"]
+            if _is_spread:
+                try:
+                    _spread_result = _fetch_best_spread(
+                        ticker,
+                        trade_type,
+                        long_delta_target=float(_spread_cfg.get("long_delta_target", 0.50)),
+                        short_delta_target=float(_spread_cfg.get("short_delta_target", 0.20)),
+                        target_dte=ticker_target_dte,
+                        stock_price=_live_underlying_price,
+                        hv30_fallback=hv30,
+                        max_width_pct=float(_spread_cfg.get("max_width_pct", 5.0)),
+                        min_net_debit=float(_spread_cfg.get("min_net_debit", 0.30)),
+                        max_debit_pct_of_width=float(_spread_cfg.get("max_debit_pct_of_width", 65.0)),
+                        return_context=True,
+                    )
+                except Exception:
+                    _spread_result = None
+                if _spread_result is None:
+                    _bump_scan_drop(scan_drop_counts, "option_liquidity")
+                    continue
+                # Map spread fields to single-leg variable names for downstream compat
+                _opt = _spread_result["long_leg"]  # primary leg for liquidity checks
+                best_strike = _spread_result["long_leg"]["strike"]
+                est_premium = _spread_result["net_debit"]  # cost basis = net debit
+                delta_val   = _spread_result["net_delta"]
+                actual_exp  = _spread_result["expiry"]
+                actual_dte  = _spread_result["dte"]
+            else:
+                try:
+                    _opt = _fetch_best_option(
+                        ticker,
+                        trade_type,
+                        float(sp["targets"]["delta_optimal"]),
+                        ticker_target_dte,
+                        stock_price=_live_underlying_price,
+                        hv30_fallback=hv30,
+                        return_context=True,
+                    )
+                except TypeError as exc:
+                    if "return_context" not in str(exc):
+                        raise
+                    _opt = _fetch_best_option(
+                        ticker,
+                        trade_type,
+                        float(sp["targets"]["delta_optimal"]),
+                        ticker_target_dte,
+                        stock_price=_live_underlying_price,
+                        hv30_fallback=hv30,
+                    )
+                if _opt is None:
+                    _bump_scan_drop(scan_drop_counts, "option_liquidity")
+                    continue
+                best_strike = _opt["strike"]
+                est_premium = _opt["premium"]
+                delta_val   = _opt["delta"]
+                actual_exp  = _opt["expiry"]
+                actual_dte  = _opt["dte"]
 
             # Liquidity gate — same as brain (skip if bid/ask spread too wide)
             _liq = _check_trade_liquidity(
@@ -3869,9 +4128,13 @@ def scan_daily_top_trades(
                 )
                 continue
 
-            # Per-ticker profile values
-            _stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
-            _profit_target_pct = float(sp["risk"]["profit_target_pct"])
+            # Per-ticker profile values — use spread overrides when applicable
+            if _is_spread and _spread_cfg:
+                _stop_loss_pct     = float(_spread_cfg.get("stop_loss_pct", sp["risk"]["stop_loss_pct"]))
+                _profit_target_pct = float(_spread_cfg.get("profit_target_pct", sp["risk"]["profit_target_pct"]))
+            else:
+                _stop_loss_pct     = float(sp["risk"]["stop_loss_pct"])
+                _profit_target_pct = float(sp["risk"]["profit_target_pct"])
             _min_empirical_ev  = float(sp["filters"].get("min_calibrated_expectancy_pct", 0.0))
 
             # Market regime — ATR stop widening + defense mode (same as brain)
@@ -3884,9 +4147,17 @@ def scan_daily_top_trades(
                 )
                 _adj_stop_pct  = round(_stop_loss_pct * _regime["stop_loss_mult"], 1)
                 _adj_size_mult = _regime["position_size_mult"]
+                _adj_size_mult *= _earnings_size_mult
+                # Dynamic ATR-based stop adjustment
+                if _regime.get("atr_14d", 0) > 0 and _live_underlying_price > 0:
+                    _adj_stop_pct = _dynamic_stop_loss_pct(
+                        base_stop_pct=_adj_stop_pct,
+                        atr_14=_regime["atr_14d"],
+                        close_price=_live_underlying_price,
+                    )
             except Exception:
                 _adj_stop_pct  = _stop_loss_pct
-                _adj_size_mult = 1.0
+                _adj_size_mult = 1.0 * _earnings_size_mult
 
             # Quality Score: rates the option to buy if direction is right
             quality_score = _compute_quality_score(iv_pct, delta_val, actual_dte, sp=sp)
@@ -3992,10 +4263,16 @@ def scan_daily_top_trades(
             if _should_mark_non_executable_quote(profitability.get("profitability_blockers")):
                 promotion_class = "research_non_executable_quote"
 
-            candidates.append({
+            _time_exit_pct = float(
+                _spread_cfg.get("time_exit_pct", sp["risk"].get("time_exit_pct", 50.0))
+                if _is_spread else sp["risk"].get("time_exit_pct", 50.0)
+            )
+
+            _candidate = {
                 "ticker":             ticker,
                 "direction":          trade_type,
                 "option_type":        trade_type,
+                "strategy_type":      _strategy_type,
                 "direction_score":    round(direction_score, 1),
                 "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
@@ -4007,11 +4284,11 @@ def scan_daily_top_trades(
                 "stock_price":        round(_live_underlying_price, 2),
                 "current_spot":       round(_live_underlying_price, 2),
                 "underlying_price_at_selection": round(_live_underlying_price, 2),
-                "strike_est":         best_strike,   # real market strike — no rounding
+                "strike_est":         best_strike,
                 "strike":             best_strike,
                 "expiry":             actual_exp or target_str,
                 "contract_symbol":    _opt.get("contract_symbol"),
-                "live_chain":         actual_exp is not None,  # True = real bid/ask, False = BS estimate
+                "live_chain":         actual_exp is not None,
                 "dte":                actual_dte,
                 "bid":                _opt.get("bid"),
                 "ask":                _opt.get("ask"),
@@ -4023,7 +4300,7 @@ def scan_daily_top_trades(
                 "entry_fee_total_usd": commission_total_usd(contracts=1) if entry_execution.get("execution_price") is not None else 0.0,
                 "profitability_eligibility": profitability["profitability_eligibility"],
                 "profitability_blockers": profitability["profitability_blockers"],
-                "stop_loss_pct":      _adj_stop_pct,    # ATR-adjusted (may be wider than base)
+                "stop_loss_pct":      _adj_stop_pct,
                 "profit_target_pct":  _profit_target_pct,
                 "atr_stop_widened":   _adj_stop_pct != _stop_loss_pct,
                 "ev_pct":             round(ev_pct, 1) if ev_pct is not None else None,
@@ -4052,9 +4329,9 @@ def scan_daily_top_trades(
                 "promotion_class":    promotion_class,
                 "promotable":         promotion_class == "promotable_exact_contract" and entry_execution.get("execution_price") is not None,
                 "target_date":        target_str,
-                "entry_price":        round(_entry_stock_price, 2),   # prev day's close (last complete candle)
-                "entry_at_open":      _at_open,          # True = market was closed, use next-open price
-                "entry_open_price":   None,               # filled on first grade after market opens
+                "entry_price":        round(_entry_stock_price, 2),
+                "entry_at_open":      _at_open,
+                "entry_open_price":   None,
                 "target_move_pct":    target_move_pct,
                 "signal_reasons":     reasons,
                 "strategy_label":     strategy["label"],
@@ -4063,8 +4340,8 @@ def scan_daily_top_trades(
                 "tp_option_px":       strategy["tp_option_px"],
                 "stock_sl":           strategy["stock_sl"],
                 "stock_tp":           strategy["stock_tp"],
-                "time_exit_pct":      float(sp["risk"].get("time_exit_pct", 50.0)),
-                "time_exit_day":      max(1, math.ceil(actual_dte * float(sp["risk"].get("time_exit_pct", 50.0)) / 100)),
+                "time_exit_pct":      _time_exit_pct,
+                "time_exit_day":      max(1, math.ceil(actual_dte * _time_exit_pct / 100)),
                 "type":               "daily_scan",
                 "outcome":            None,
                 "asset_class":        _ac,
@@ -4076,7 +4353,36 @@ def scan_daily_top_trades(
                 "contract_volume":    _opt.get("volume"),
                 "contract_open_interest": _opt.get("open_interest"),
                 "quote_age_hours":    _opt.get("quote_age_hours"),
-            })
+            }
+
+            # ── Spread-specific fields ───────────────────────────────────────
+            if _is_spread and _spread_result is not None:
+                _candidate["legs"] = [
+                    {"role": "long",  **_spread_result["long_leg"]},
+                    {"role": "short", **_spread_result["short_leg"]},
+                ]
+                _candidate["spread_width"]        = _spread_result["spread_width"]
+                _candidate["net_debit"]            = _spread_result["net_debit"]
+                _candidate["max_profit"]           = _spread_result["max_profit"]
+                _candidate["max_loss"]             = _spread_result["max_loss"]
+                _candidate["net_delta"]            = _spread_result["net_delta"]
+                _candidate["debit_pct_of_width"]   = _spread_result["debit_pct_of_width"]
+                _candidate["risk_reward_ratio"]    = _spread_result["risk_reward_ratio"]
+                _candidate["short_strike"]         = _spread_result["short_leg"]["strike"]
+                _candidate["short_contract_symbol"] = _spread_result["short_leg"].get("contract_symbol")
+                # Override fee for spreads: 4 legs total (2 on entry, 2 on exit)
+                if entry_execution.get("execution_price") is not None:
+                    _candidate["entry_fee_total_usd"] = commission_total_usd(contracts=1, sides=2)
+                # Spread-specific signal reasons
+                _candidate["signal_reasons"] = reasons + [
+                    f"Vertical {'call' if trade_type == 'call' else 'put'} spread: "
+                    f"${_spread_result['long_leg']['strike']}/{_spread_result['short_leg']['strike']} "
+                    f"(width ${_spread_result['spread_width']:.2f}, "
+                    f"debit ${_spread_result['net_debit']:.2f}, "
+                    f"max profit ${_spread_result['max_profit']:.2f})",
+                ]
+
+            candidates.append(_candidate)
         except Exception:
             _bump_scan_drop(scan_drop_counts, "exceptions")
             continue
@@ -4469,6 +4775,28 @@ def _get_market_regime(
         "stop_loss_mult":         round(stop_mult, 1),
         "regime_notes":           notes if notes else ["Normal market conditions"],
     }
+
+
+def _dynamic_stop_loss_pct(
+    *,
+    base_stop_pct: float,
+    atr_14: float,
+    close_price: float,
+    median_atr_ratio: float = 0.015,
+    min_mult: float = 0.8,
+    max_mult: float = 1.5,
+) -> float:
+    """
+    Scale stop loss by ATR ratio relative to median.
+    High-vol stocks get wider stops; low-vol stocks get tighter stops.
+    """
+    if close_price <= 0 or atr_14 <= 0:
+        return base_stop_pct
+    atr_ratio = atr_14 / close_price
+    if median_atr_ratio <= 0:
+        return base_stop_pct
+    mult = max(min_mult, min(max_mult, atr_ratio / median_atr_ratio))
+    return round(base_stop_pct * mult, 1)
 
 
 def _calculate_iv_skew(

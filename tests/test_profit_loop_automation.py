@@ -319,6 +319,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertTrue(any("smoke_live_policy_error=" in item for item in state["open_issues"][0]["evidence"]))
 
     def test_truth_holdout_records_empty_market_without_opening_issue(self):
+        _empty_market_drop_counts = {"momentum": 2, "direction_score": 1}
         policy_payload = {
             "session_id": 101,
             "scan_picks_count": 0,
@@ -338,6 +339,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "policy_fail_closed": False,
                 "include_blocked_policy_picks": False,
                 "include_blocked_guardrail_picks": False,
+                "drop_counts": _empty_market_drop_counts,
             },
         }
         raw_payload = {
@@ -359,6 +361,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "policy_fail_closed": False,
                 "include_blocked_policy_picks": True,
                 "include_blocked_guardrail_picks": True,
+                "drop_counts": _empty_market_drop_counts,
             },
         }
         policy_record = {"command": "policy", "passed": True}
@@ -923,7 +926,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["action"], "resolved_no_longer_observed")
         self.assertEqual(result["snapshot"]["verdict"], "resolved-no-longer-observed")
-        self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
+        self.assertEqual(result["snapshot"]["evidence_status"], "auto_cleared")
         state = load_profit_loop_state(self.state_dir)
         self.assertFalse(any(item["issue_id"] == "replay-matrix-collapsed-results" for item in state["open_issues"]))
         resolved = next(item for item in state["resolved_issues"] if item["issue_id"] == "replay-matrix-collapsed-results")
@@ -1515,7 +1518,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["snapshot"]["profitability_verdict"], "inconclusive")
         self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
-        self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
+        self.assertEqual(result["snapshot"]["evidence_status"], "inconclusive")
 
     def test_canary_runner_reuses_external_shared_state_across_repeated_runs(self):
         refresh_result = {"status": "dry_run", "commands": []}

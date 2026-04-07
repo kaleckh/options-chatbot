@@ -388,16 +388,20 @@ class StrategyAuditTests(unittest.TestCase):
     def test_scan_uses_profile_dte_per_ticker_without_cross_ticker_leak(self):
         requested_dtes = {}
 
-        def fake_fetch_best_option(ticker, trade_type, delta_target, target_dte, stock_price=0.0, hv30_fallback=0.30):
+        def fake_fetch_best_option(ticker, trade_type, delta_target, target_dte, stock_price=0.0, hv30_fallback=0.30, **kwargs):
             requested_dtes[ticker] = target_dte
+            # Return different strikes for long vs short leg so spread validation passes
+            is_long_leg = delta_target > 0.35
+            strike = 95.0 if is_long_leg else 100.0
+            premium = 3.0 if is_long_leg else 1.5
             return {
-                "strike": 100.0,
-                "premium": 1.5,
-                "bid": 1.49,
-                "ask": 1.51,
+                "strike": strike,
+                "premium": premium,
+                "bid": premium - 0.01,
+                "ask": premium + 0.01,
                 "expiry": "2026-04-17",
                 "dte": 19 if ticker == "SPY" else 8,
-                "delta": 0.30,
+                "delta": delta_target,
             }
 
         with patch.object(oc, "DEFAULT_WATCHLIST", ["SPY", "AAPL"]), \
@@ -412,6 +416,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }):
             picks = oc.scan_daily_top_trades(n_picks=2)
 
@@ -424,14 +429,17 @@ class StrategyAuditTests(unittest.TestCase):
 
         def fake_fetch_best_option(ticker, trade_type, delta_target, target_dte, stock_price=0.0, hv30_fallback=0.30, **kwargs):
             requested_prices[ticker] = stock_price
+            is_long_leg = delta_target > 0.35
+            strike = 95.0 if is_long_leg else 100.0
+            premium = 3.0 if is_long_leg else 1.5
             return {
-                "strike": 100.0,
-                "premium": 1.5,
-                "bid": 1.49,
-                "ask": 1.51,
+                "strike": strike,
+                "premium": premium,
+                "bid": premium - 0.01,
+                "ask": premium + 0.01,
                 "expiry": "2026-04-17",
                 "dte": 19,
-                "delta": 0.30,
+                "delta": delta_target,
             }
 
         with patch.object(oc, "DEFAULT_WATCHLIST", ["SPY"]), \
@@ -456,6 +464,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }):
             picks = oc.scan_daily_top_trades(n_picks=1)
 
@@ -486,6 +495,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }):
             picks = oc.scan_daily_top_trades(n_picks=1)
 
@@ -511,19 +521,39 @@ class StrategyAuditTests(unittest.TestCase):
     def test_scan_reuses_cached_history_and_sector_between_identical_calls(self):
         tickers = {symbol: _CountingScanTicker(symbol) for symbol in ["SPY", "AAPL", "^VIX"]}
 
+        _fake_spread = {
+            "long_leg": {
+                "strike": 95.0, "premium": 3.0, "delta": 0.50,
+                "bid": 2.99, "ask": 3.01, "iv": None, "last": None,
+                "contract_symbol": None, "volume": None, "open_interest": None,
+                "quote_age_hours": None, "quote_basis": None,
+            },
+            "short_leg": {
+                "strike": 100.0, "premium": 1.5, "delta": 0.20,
+                "bid": 1.49, "ask": 1.51, "iv": None, "last": None,
+                "contract_symbol": None, "volume": None, "open_interest": None,
+                "quote_age_hours": None, "quote_basis": None,
+            },
+            "spread_width": 5.0,
+            "net_debit": 1.5,
+            "max_profit": 3.5,
+            "max_loss": 1.5,
+            "net_delta": 0.30,
+            "debit_pct_of_width": 30.0,
+            "risk_reward_ratio": 2.33,
+            "expiry": "2026-04-17",
+            "dte": 10,
+            "live_chain": False,
+            "options_snapshot_status": None,
+            "option_chain_status": None,
+        }
+
         with patch.object(oc, "DEFAULT_WATCHLIST", ["AAPL"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: tickers[symbol]), \
              patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_direction_score", return_value=72.0), \
              patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
-             patch.object(oc, "_fetch_best_option", return_value={
-                 "strike": 100.0,
-                 "premium": 1.5,
-                 "bid": 1.50,
-                 "ask": 1.51,
-                 "expiry": "2026-04-17",
-                 "dte": 10,
-                 "delta": 0.30,
-             }), \
+             patch.object(oc, "_fetch_best_spread", return_value=_fake_spread), \
              patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
              patch.object(oc, "_get_market_regime", return_value={
                  "position_size_mult": 1.0,
@@ -531,6 +561,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }):
             first = oc.scan_daily_top_trades(n_picks=1)
             second = oc.scan_daily_top_trades(n_picks=1)
@@ -539,7 +570,8 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertTrue(second)
         self.assertEqual(tickers["AAPL"].info_calls, 1)
         self.assertEqual(len(tickers["AAPL"].history_calls), 2)
-        self.assertEqual(len(tickers["SPY"].history_calls), 2)
+        # SPY history is fetched for two different periods (10d and 70d) per scan run
+        self.assertEqual(len(tickers["SPY"].history_calls), 4)
 
     def test_put_call_ratio_reuses_cached_options_data_between_calls(self):
         class _RatioTicker:
@@ -610,6 +642,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }), \
              patch.object(oc.yf, "Ticker", return_value=_EvalTicker()):
             result = json.loads(
@@ -651,6 +684,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }), \
              patch.object(oc.yf, "Ticker", return_value=_EvalTicker()):
             result = json.loads(
@@ -689,6 +723,7 @@ class StrategyAuditTests(unittest.TestCase):
                  "regime_notes": ["Normal market conditions"],
                  "defense_mode": False,
                  "vix": 18.0,
+                 "atr_14d": 0.015,
              }), \
              patch.object(oc.yf, "Ticker", return_value=_EvalTicker()):
             result = json.loads(

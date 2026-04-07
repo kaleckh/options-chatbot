@@ -4,7 +4,7 @@ import json
 import math
 from pathlib import Path
 from statistics import median
-from typing import Iterable
+from typing import Any, Iterable
 
 
 DEFAULT_RESULT_PATH = Path(__file__).resolve().parent / "wfo_results.json"
@@ -304,3 +304,111 @@ def build_metric_truth_report(
         "risk_flags": risk_flags,
         "recommendations": recommendations,
     }
+
+
+def suggest_parameter_adjustments(
+    report: dict[str, Any],
+    *,
+    auto_tune_config: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """
+    Given a metric truth report, suggest parameter adjustments based on
+    detected calibration gaps and performance issues.
+
+    Returns a list of suggested adjustments, each with:
+      - parameter: the strategy_profile key to adjust
+      - current_value: inferred current value
+      - suggested_value: recommended new value
+      - reason: why the change is suggested
+      - confidence: low/medium/high
+    """
+    config = dict(auto_tune_config or {})
+    if not config.get("enabled", False):
+        return []
+
+    step = int(config.get("direction_score_step", 5))
+    gap_threshold = float(config.get("calibration_gap_threshold_pct", 10.0))
+    suggestions: list[dict[str, Any]] = []
+
+    risk_flags = list(report.get("risk_flags") or [])
+    metric_floors = report.get("metric_floors") or {}
+
+    # Check for calibration gap in direction_score
+    for flag in risk_flags:
+        flag_text = str(flag).lower()
+        if "calibration" in flag_text and "direction" in flag_text:
+            # Direction score calibration gap detected — tighten floor
+            current_floor = None
+            direction_floors = metric_floors.get("direction_score") or {}
+            if isinstance(direction_floors, dict):
+                best_floor = direction_floors.get("best_floor")
+                if best_floor is not None:
+                    current_floor = int(best_floor)
+            suggestions.append({
+                "parameter": "entry.min_direction_score",
+                "current_value": current_floor,
+                "suggested_value": (current_floor or 55) + step,
+                "reason": f"Direction score calibration gap exceeds {gap_threshold}%",
+                "confidence": "medium",
+            })
+
+    # Check for poor profit factor
+    for flag in risk_flags:
+        flag_text = str(flag).lower()
+        if "profit_factor" in flag_text or "profit factor" in flag_text:
+            suggestions.append({
+                "parameter": "risk.stop_loss_pct",
+                "current_value": None,
+                "suggested_value": 30,
+                "reason": "Profit factor below 1.0 — tighten stop loss to cut losers faster",
+                "confidence": "low",
+            })
+
+    # Check for poor directional accuracy
+    for flag in risk_flags:
+        flag_text = str(flag).lower()
+        if "directional_accuracy" in flag_text or "directional accuracy" in flag_text:
+            suggestions.append({
+                "parameter": "entry.min_tech_score",
+                "current_value": None,
+                "suggested_value": 70,
+                "reason": "Directional accuracy below 50% — raise tech score floor",
+                "confidence": "medium",
+            })
+
+    return suggestions
+
+
+def record_auto_tune_suggestion(
+    suggestion: dict[str, Any],
+    *,
+    changelog_path: str | None = None,
+) -> bool:
+    """Append an auto-tune suggestion to brain_changelog.json."""
+    import os
+    from datetime import datetime
+
+    path = changelog_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "brain_changelog.json")
+    try:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                entries = json.load(f)
+        else:
+            entries = []
+
+        entries.append({
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "source": "auto_tune",
+            "parameter": suggestion.get("parameter"),
+            "old_value": suggestion.get("current_value"),
+            "new_value": suggestion.get("suggested_value"),
+            "reason": suggestion.get("reason"),
+            "confidence": suggestion.get("confidence"),
+            "applied": False,
+        })
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(entries, f, indent=2)
+        return True
+    except (OSError, json.JSONDecodeError):
+        return False

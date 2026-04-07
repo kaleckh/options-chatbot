@@ -382,7 +382,7 @@ def build_replay_scoreboard(
     entries: Sequence[dict[str, Any]] | None = None,
     *,
     result_paths: Sequence[str | Path] | None = None,
-    min_trades: int = 20,
+    min_trades: int = 30,
     min_profit_factor: float = 1.05,
     catastrophic_pf_floor: float = 0.85,
     bootstrap_watch_share_pct: float = 40.0,

@@ -92,6 +92,40 @@ def normalized_market_regime(value: Any = None, spy_ret5: Any = None) -> str:
     return "neutral"
 
 
+def composite_market_regime_score(
+    *,
+    spy_ret5: float = 0.0,
+    spy_ret20: float = 0.0,
+    spy_above_sma50: bool = False,
+    vix_level: float = 20.0,
+) -> dict[str, Any]:
+    """
+    Composite regime score (0-100) using multiple timeframe signals.
+    <30 bearish, 30-70 neutral, >70 bullish.
+    """
+    score = 0.0
+    score += 25.0 if spy_ret5 > 0 else 0.0       # short-term momentum
+    score += 25.0 if spy_ret20 > 0 else 0.0       # medium-term trend
+    score += 30.0 if spy_above_sma50 else 0.0      # structural trend
+    score += 20.0 if vix_level < 20 else (10.0 if vix_level < 25 else 0.0)  # vol environment
+    if score < 30:
+        regime = "bearish"
+    elif score > 70:
+        regime = "bullish"
+    else:
+        regime = "neutral"
+    return {
+        "regime": regime,
+        "score": round(score, 1),
+        "components": {
+            "spy_ret5_bullish": spy_ret5 > 0,
+            "spy_ret20_bullish": spy_ret20 > 0,
+            "spy_above_sma50": spy_above_sma50,
+            "vix_level": round(vix_level, 2),
+        },
+    }
+
+
 def normalized_trade_direction(value: Any = None) -> str:
     text = str(value or "").strip().lower()
     if text in {"call", "calls", "c"}:
@@ -238,6 +272,9 @@ def _summarize_group(
         "avg_quality_score": round(sum(quality_values) / max(len(quality_values), 1), 1),
         "avg_direction_score": round(sum(direction_values) / max(len(direction_values), 1), 1),
         "avg_tech_score": round(sum(tech_values) / max(len(tech_values), 1), 1),
+        "pnl_std": round((sum((v - raw_avg) ** 2 for v in pnl_values) / max(len(pnl_values) - 1, 1)) ** 0.5, 2) if len(pnl_values) > 1 else 0.0,
+        "ci_lower_95": round(raw_avg - 1.96 * ((sum((v - raw_avg) ** 2 for v in pnl_values) / max(len(pnl_values) - 1, 1)) ** 0.5) / max(len(pnl_values), 1) ** 0.5, 2) if len(pnl_values) > 1 else round(raw_avg, 2),
+        "ci_upper_95": round(raw_avg + 1.96 * ((sum((v - raw_avg) ** 2 for v in pnl_values) / max(len(pnl_values) - 1, 1)) ** 0.5) / max(len(pnl_values), 1) ** 0.5, 2) if len(pnl_values) > 1 else round(raw_avg, 2),
     }
     return out
 
@@ -383,6 +420,9 @@ def _summarize_group_from_stats(
         "avg_quality_score": round(quality_sum / max(trades, 1), 1),
         "avg_direction_score": round(direction_sum / max(trades, 1), 1),
         "avg_tech_score": round(tech_sum / max(trades, 1), 1),
+        "pnl_std": round(max(0.0, (float(stats.get("pnl_sq_sum", 0.0) or 0.0) / max(trades, 1) - raw_avg ** 2)) ** 0.5, 2) if trades > 1 else None,
+        "ci_lower_95": round(raw_avg - 1.96 * max(0.0, (float(stats.get("pnl_sq_sum", 0.0) or 0.0) / max(trades, 1) - raw_avg ** 2)) ** 0.5 / max(trades, 1) ** 0.5, 2) if trades > 1 else None,
+        "ci_upper_95": round(raw_avg + 1.96 * max(0.0, (float(stats.get("pnl_sq_sum", 0.0) or 0.0) / max(trades, 1) - raw_avg ** 2)) ** 0.5 / max(trades, 1) ** 0.5, 2) if trades > 1 else None,
     }
 
 
@@ -397,6 +437,7 @@ def _empty_group_stats(field_values: dict[str, Any]) -> dict[str, Any]:
         "quality_sum": 0.0,
         "direction_sum": 0.0,
         "tech_sum": 0.0,
+        "pnl_sq_sum": 0.0,
         "field_values": dict(field_values),
     }
 
@@ -460,6 +501,7 @@ class CalibrationAccumulator:
             stats["trades"] += 1
             pnl = float(normalized.get("pnl_pct", 0.0) or 0.0)
             stats["pnl_sum"] += pnl
+            stats["pnl_sq_sum"] = stats.get("pnl_sq_sum", 0.0) + pnl * pnl
             if pnl > 0:
                 stats["gross_win"] += pnl
                 stats["win_count"] += 1
@@ -676,6 +718,48 @@ def build_expectancy_surface(
         shrinkage_trades=shrinkage_trades,
         sparse_warning_trades=sparse_warning_trades,
     )
+
+
+EXPECTANCY_SURFACE_DIR_ENV = "OPTIONS_PROFIT_STATE_DIR"
+EXPECTANCY_SURFACE_FILE_NAME = "expectancy_surface.json"
+
+
+def _expectancy_surface_path() -> str | None:
+    state_dir = os.getenv(EXPECTANCY_SURFACE_DIR_ENV, "").strip()
+    if not state_dir:
+        return None
+    return os.path.join(state_dir, EXPECTANCY_SURFACE_FILE_NAME)
+
+
+def save_expectancy_surface(surface: dict[str, Any]) -> str | None:
+    """Persist an expectancy surface to disk for cross-session reuse."""
+    path = _expectancy_surface_path()
+    if not path or not surface:
+        return None
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp_path = path + ".tmp"
+        with open(tmp_path, "w", encoding="utf-8") as handle:
+            json.dump(surface, handle, indent=2)
+        os.replace(tmp_path, path)
+        return path
+    except OSError:
+        return None
+
+
+def load_persisted_expectancy_surface() -> dict[str, Any] | None:
+    """Load a previously persisted expectancy surface from disk."""
+    path = _expectancy_surface_path()
+    if not path or not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            surface = json.load(handle)
+        if not isinstance(surface, dict) or "levels" not in surface:
+            return None
+        return surface
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def lookup_calibrated_expectancy(

@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 CONTRACT_MULTIPLIER = 100
 DEFAULT_COMMISSION_PER_CONTRACT_USD = 0.65
+DEFAULT_SLIPPAGE_PCT = 1.0
 ELIGIBLE_STATUS = "eligible"
 INELIGIBLE_STATUS = "ineligible"
 PENDING_TRUTH_STATUS = "pending_truth"
@@ -268,6 +269,41 @@ def scan_profitability_assessment(
     return (ELIGIBLE_STATUS if not blockers else INELIGIBLE_STATUS, blockers)
 
 
+def scan_profitability_assessment_lenient(
+    *,
+    contract_symbol: Any,
+    promotion_class: Any,
+    selection_source: Any,
+    entry_execution_price: Any,
+    quote_freshness_status: Any,
+) -> tuple[str, list[str], float]:
+    """
+    Like scan_profitability_assessment but returns a weight (0.0-1.0) for
+    best-effort evidence. Events missing only non-critical metadata count
+    at reduced weight rather than being fully ineligible.
+    """
+    status, blockers = scan_profitability_assessment(
+        contract_symbol=contract_symbol,
+        promotion_class=promotion_class,
+        selection_source=selection_source,
+        entry_execution_price=entry_execution_price,
+        quote_freshness_status=quote_freshness_status,
+    )
+    if not blockers:
+        return ELIGIBLE_STATUS, blockers, 1.0
+
+    # Non-critical blockers that allow partial evidence credit
+    non_critical = {
+        "stale_quote_freshness",
+        "unknown_quote_freshness",
+    }
+    critical_blockers = [b for b in blockers if b not in non_critical and not b.startswith("research_only_quote_basis:")]
+    if not critical_blockers:
+        # Only non-critical issues — count at 50% weight
+        return "best_effort_eligible", blockers, 0.5
+    return INELIGIBLE_STATUS, blockers, 0.0
+
+
 def executable_option_price(
     *,
     side: str,
@@ -408,3 +444,102 @@ def option_pnl_snapshot(
         exit_fee_total_usd=exit_fee_total_usd,
         contract_multiplier=contract_multiplier,
     )
+
+
+def vertical_spread_pnl(
+    *,
+    long_entry_price: Any,
+    long_exit_price: Any,
+    short_entry_price: Any,
+    short_exit_price: Any,
+    contracts: Any = 1,
+    commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
+    include_entry_fee: bool = True,
+    include_exit_fee: bool = True,
+    spread_width: Any = None,
+    close_as_single_order: bool = False,
+) -> dict[str, Optional[float]]:
+    """
+    P&L for a vertical spread (bull call spread or bear put spread).
+
+    A debit spread has two legs:
+      - Long leg: buy to open, sell to close
+      - Short leg: sell to open, buy to close
+
+    Net debit (entry cost) = long_entry - short_entry
+    Net exit value         = long_exit  - short_exit
+    Gross P&L              = (net_exit - net_debit) * multiplier * contracts
+
+    Fees: 4 transactions (open long, open short, close long, close short)
+          = contracts * 4 * commission_per_contract_usd
+    """
+    l_entry = safe_float(long_entry_price)
+    l_exit = safe_float(long_exit_price)
+    s_entry = safe_float(short_entry_price)
+    s_exit = safe_float(short_exit_price)
+    contract_count = max(int(safe_int(contracts) or 0), 0)
+
+    if (
+        l_entry is None or l_entry <= 0
+        or s_entry is None or s_entry < 0
+        or l_exit is None
+        or s_exit is None
+        or contract_count <= 0
+    ):
+        return {
+            "gross_pnl_usd": None,
+            "net_pnl_usd": None,
+            "gross_pnl_pct": None,
+            "net_pnl_pct": None,
+            "fee_total_usd": 0.0,
+            "entry_fee_total_usd": 0.0,
+            "exit_fee_total_usd": 0.0,
+            "net_debit": None,
+            "net_exit_value": None,
+            "spread_width": safe_float(spread_width),
+            "max_profit": None,
+            "max_loss": None,
+        }
+
+    net_debit = float(l_entry) - float(s_entry)
+    net_exit_value = float(l_exit) - float(s_exit)
+
+    gross_pnl_usd = (net_exit_value - net_debit) * CONTRACT_MULTIPLIER * contract_count
+
+    # Fees: 2 legs on entry, 2 legs on exit = 4 sides total
+    entry_sides = 2 if include_entry_fee else 0
+    exit_sides = (1 if close_as_single_order else 2) if include_exit_fee else 0
+    entry_fee = commission_total_usd(
+        contracts=contracts, sides=entry_sides,
+        commission_per_contract_usd=commission_per_contract_usd,
+    )
+    exit_fee = commission_total_usd(
+        contracts=contracts, sides=exit_sides,
+        commission_per_contract_usd=commission_per_contract_usd,
+    )
+    fee_total = entry_fee + exit_fee
+    net_pnl_usd = gross_pnl_usd - fee_total
+
+    # Capital at risk = net debit paid
+    capital_at_risk = abs(net_debit) * CONTRACT_MULTIPLIER * contract_count
+    gross_pnl_pct = (gross_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else None
+    net_pnl_pct = (net_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else None
+
+    width = safe_float(spread_width)
+    max_profit = (float(width) - net_debit) if width is not None and width > 0 else None
+    max_loss = net_debit if net_debit > 0 else None
+
+    return {
+        "gross_pnl_usd": round(gross_pnl_usd, 4),
+        "net_pnl_usd": round(net_pnl_usd, 4),
+        "gross_pnl_pct": round(gross_pnl_pct, 4) if gross_pnl_pct is not None else None,
+        "net_pnl_pct": round(net_pnl_pct, 4) if net_pnl_pct is not None else None,
+        "fee_total_usd": round(fee_total, 4),
+        "entry_fee_total_usd": round(entry_fee, 4),
+        "exit_fee_total_usd": round(exit_fee, 4),
+        "net_debit": round(net_debit, 4),
+        "net_exit_value": round(net_exit_value, 4),
+        "spread_width": round(float(width), 4) if width is not None else None,
+        "max_profit": round(max_profit, 4) if max_profit is not None else None,
+        "max_loss": round(max_loss, 4) if max_loss is not None else None,
+    }

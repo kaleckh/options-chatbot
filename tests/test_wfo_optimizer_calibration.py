@@ -54,11 +54,13 @@ class WFOOptimizerCalibrationTests(unittest.TestCase):
                     "selection_source": "replay_calibrated",
                     "calibration_density": "sparse",
                     "calibration_sparse_warning": "direction cohort is sparse with only 2 trades.",
+                    "entry_contract_resolution": "exact_target_contract",
                 },
                 {
                     "date": _trade_date(1),
                     "pnl_pct": 2.0,
                     "selection_source": "bootstrap_heuristic",
+                    "entry_contract_resolution": "exact_target_contract",
                 },
             ],
         }

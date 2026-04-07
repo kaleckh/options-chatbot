@@ -42,6 +42,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "max_regime_open_positions": 2,
         "block_same_ticker": True,
         "calibration_playbook": "broad",
+        "max_concurrent_positions": 3,
+        "max_correlated_index_positions": 1,
+        "daily_loss_limit_pct": 2.0,
+        "weekly_loss_limit_pct": 5.0,
     },
     "swing": {
         "id": "swing",
@@ -53,6 +57,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "max_regime_open_positions": 2,
         "block_same_ticker": True,
         "calibration_playbook": "broad",
+        "max_concurrent_positions": 3,
+        "max_correlated_index_positions": 1,
+        "daily_loss_limit_pct": 2.0,
+        "weekly_loss_limit_pct": 5.0,
     },
     "bullish_momentum": {
         "id": "bullish_momentum",
@@ -68,6 +76,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "allowed_directions": ["call"],
         "min_quality_score": 70.0,
         "calibration_playbook": "bullish_momentum",
+        "max_concurrent_positions": 3,
+        "max_correlated_index_positions": 1,
+        "daily_loss_limit_pct": 2.0,
+        "weekly_loss_limit_pct": 5.0,
     },
     "bearish_defensive": {
         "id": "bearish_defensive",
@@ -84,6 +96,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "allowed_directions": ["put"],
         "min_quality_score": 70.0,
         "calibration_playbook": "bearish_defensive",
+        "max_concurrent_positions": 3,
+        "max_correlated_index_positions": 1,
+        "daily_loss_limit_pct": 2.0,
+        "weekly_loss_limit_pct": 5.0,
     },
 }
 
@@ -259,8 +275,11 @@ def _annotate_managed_pick(pick: dict[str, Any], policy: Optional[dict[str, Any]
     return annotated
 
 
+CORRELATED_INDEXES = {"SPY", "QQQ", "IWM", "DIA"}
+
+
 def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
-    context = {
+    context: dict[str, Any] = {
         "available": True,
         "open_positions": 0,
         "opened_today": 0,
@@ -268,6 +287,9 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         "sector_counts": {},
         "regime_counts": {},
         "warnings": [],
+        "daily_realized_pnl_usd": 0.0,
+        "weekly_realized_pnl_usd": 0.0,
+        "correlated_index_count": 0,
     }
     if not getattr(positions_repository, "is_available", False):
         context["available"] = False
@@ -284,7 +306,9 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
     ticker_counts: dict[str, int] = {}
     sector_counts: dict[str, int] = {}
     regime_counts: dict[str, int] = {}
+    sector_direction_counts: dict[str, int] = {}
     opened_today = 0
+    correlated_index_count = 0
     today_et = datetime.now(_ET).date()
 
     for position in open_positions:
@@ -292,16 +316,36 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         ticker = str(position.get("ticker") or source_pick.get("ticker") or "").upper()
         sector = str(source_pick.get("sector") or "").strip()
         market_regime = str(source_pick.get("market_regime") or scan_pick_market_regime(source_pick)).strip().lower()
+        pos_direction = str(source_pick.get("direction") or source_pick.get("type") or "").strip().lower()
         filled_at = _et_date(_parse_iso_datetime(position.get("filled_at")))
 
         if ticker:
             ticker_counts[ticker] = ticker_counts.get(ticker, 0) + 1
+            if ticker in CORRELATED_INDEXES:
+                correlated_index_count += 1
         if sector:
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
         if market_regime and market_regime != "unknown":
             regime_counts[market_regime] = regime_counts.get(market_regime, 0) + 1
+        if sector and pos_direction in {"call", "put"}:
+            sd_key = f"{sector}|{pos_direction}"
+            sector_direction_counts[sd_key] = sector_direction_counts.get(sd_key, 0) + 1
         if filled_at and filled_at.date() == today_et:
             opened_today += 1
+
+    # Query realized P&L for daily/weekly loss limits
+    daily_realized_pnl_usd = 0.0
+    weekly_realized_pnl_usd = 0.0
+    try:
+        now_et = datetime.now(_ET)
+        today_open = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+        weekday = today_open.weekday()
+        monday_open = today_open if weekday == 0 else today_open.replace(day=today_open.day - weekday)
+        if hasattr(positions_repository, "get_realized_pnl_since"):
+            daily_realized_pnl_usd = positions_repository.get_realized_pnl_since(today_open)
+            weekly_realized_pnl_usd = positions_repository.get_realized_pnl_since(monday_open)
+    except Exception:
+        pass
 
     context.update(
         {
@@ -310,6 +354,10 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
             "ticker_counts": ticker_counts,
             "sector_counts": sector_counts,
             "regime_counts": regime_counts,
+            "sector_direction_counts": sector_direction_counts,
+            "daily_realized_pnl_usd": daily_realized_pnl_usd,
+            "weekly_realized_pnl_usd": weekly_realized_pnl_usd,
+            "correlated_index_count": correlated_index_count,
         }
     )
     return context
@@ -490,6 +538,45 @@ def annotate_pick_with_guardrails(
     ):
         cautions.append(f"{market_regime.title()} regime exposure is near the current cap.")
 
+    # --- Daily / weekly loss limits ---
+    account_size = float(playbook.get("account_size") or 10_000)
+    daily_loss_limit_pct = float(playbook.get("daily_loss_limit_pct", 2.0) or 2.0)
+    weekly_loss_limit_pct = float(playbook.get("weekly_loss_limit_pct", 5.0) or 5.0)
+    daily_realized_pnl = float(exposure.get("daily_realized_pnl_usd", 0.0) or 0.0)
+    weekly_realized_pnl = float(exposure.get("weekly_realized_pnl_usd", 0.0) or 0.0)
+    daily_limit_usd = account_size * daily_loss_limit_pct / 100.0
+    weekly_limit_usd = account_size * weekly_loss_limit_pct / 100.0
+    if daily_realized_pnl < 0 and abs(daily_realized_pnl) >= daily_limit_usd:
+        blocked.append(f"Daily loss limit reached: ${abs(daily_realized_pnl):.2f} lost today against ${daily_limit_usd:.2f} cap ({daily_loss_limit_pct}%).")
+    if weekly_realized_pnl < 0 and abs(weekly_realized_pnl) >= weekly_limit_usd:
+        blocked.append(f"Weekly loss limit reached: ${abs(weekly_realized_pnl):.2f} lost this week against ${weekly_limit_usd:.2f} cap ({weekly_loss_limit_pct}%).")
+
+    # --- Max concurrent positions ---
+    max_concurrent = int(playbook.get("max_concurrent_positions", 3) or 3)
+    total_open = int(exposure.get("open_positions", 0) or 0)
+    if total_open >= max_concurrent:
+        blocked.append(f"Max concurrent positions ({max_concurrent}) reached: {total_open} position(s) currently open.")
+
+    # --- Correlated index positions ---
+    max_correlated = int(playbook.get("max_correlated_index_positions", 1) or 1)
+    correlated_count = int(exposure.get("correlated_index_count", 0) or 0)
+    if ticker in CORRELATED_INDEXES and correlated_count >= max_correlated:
+        blocked.append(f"Correlated index limit ({max_correlated}) reached: {correlated_count} index position(s) already open across {', '.join(sorted(CORRELATED_INDEXES))}.")
+
+    # Correlation guard: reduce size when same sector + same direction is already concentrated
+    correlation_size_mult = 1.0
+    sector_direction_counts = dict(exposure.get("sector_direction_counts") or {})
+    if sector and direction in {"call", "put"}:
+        sd_key = f"{sector}|{direction}"
+        same_sector_direction_count = int(sector_direction_counts.get(sd_key, 0) or 0)
+        if same_sector_direction_count >= 2:
+            correlation_size_mult = 0.5
+            cautions.append(
+                f"Correlated exposure: {same_sector_direction_count} open {direction}(s) already in {sector}. "
+                f"Suggested size reduced by 50%."
+            )
+    annotated["correlation_size_mult"] = correlation_size_mult
+
     guardrail_decision = "blocked" if blocked else ("caution" if cautions else "clear")
     policy_decision = str(annotated.get("trade_policy_decision") or "watch")
     if guardrail_decision == "blocked":
@@ -552,6 +639,7 @@ def apply_playbook_guardrails(
         "ticker_counts": exposure["ticker_counts"],
         "sector_counts": exposure["sector_counts"],
         "regime_counts": exposure["regime_counts"],
+        "sector_direction_counts": exposure.get("sector_direction_counts", {}),
         "warnings": exposure["warnings"],
     }
 
