@@ -102,6 +102,12 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
         "gross_pnl_usd": gross_pnl_usd,
         "net_pnl_usd": net_pnl_usd,
         "fee_total_usd": fee_total_usd,
+        "source_scan_session_id": row.get("source_scan_session_id"),
+        "source_scan_event_key": row.get("source_scan_event_key"),
+        "source_scan_run_id": row.get("source_scan_run_id"),
+        "source_scan_recorded_at_utc": _to_iso(row.get("source_scan_recorded_at_utc")),
+        "proof_eligible": bool(row.get("proof_eligible", False)),
+        "proof_ineligibility_reason": row.get("proof_ineligibility_reason"),
         "created_at": _to_iso(row.get("created_at")),
         "updated_at": _to_iso(row.get("updated_at")),
         "latest_review": latest_review,
@@ -232,6 +238,19 @@ class PostgresTrackedPositionsRepository:
         ADD COLUMN IF NOT EXISTS net_pnl_usd DOUBLE PRECISION;
         ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;
+
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS source_scan_session_id BIGINT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS source_scan_event_key TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS source_scan_run_id TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS source_scan_recorded_at_utc TIMESTAMPTZ;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS proof_eligible BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS proof_ineligibility_reason TEXT;
 
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_status ON tracked_positions (status);
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_filled_at ON tracked_positions (filled_at DESC);
@@ -440,7 +459,13 @@ class PostgresTrackedPositionsRepository:
                         exit_execution_price,
                         exit_execution_basis,
                         exit_reason,
-                        fee_total_usd
+                        fee_total_usd,
+                        source_scan_session_id,
+                        source_scan_event_key,
+                        source_scan_run_id,
+                        source_scan_recorded_at_utc,
+                        proof_eligible,
+                        proof_ineligibility_reason
                     ) VALUES (
                         %s,
                         %s,
@@ -466,6 +491,12 @@ class PostgresTrackedPositionsRepository:
                         %s,
                         %s,
                         %s::jsonb,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
                         %s,
                         %s,
                         %s,
@@ -508,6 +539,12 @@ class PostgresTrackedPositionsRepository:
                         payload.get("exit_execution_basis"),
                         payload.get("exit_reason"),
                         payload.get("fee_total_usd"),
+                        payload.get("source_scan_session_id"),
+                        payload.get("source_scan_event_key"),
+                        payload.get("source_scan_run_id"),
+                        payload.get("source_scan_recorded_at_utc"),
+                        bool(payload.get("proof_eligible", False)),
+                        payload.get("proof_ineligibility_reason"),
                     ),
                 )
                 row = cur.fetchone()

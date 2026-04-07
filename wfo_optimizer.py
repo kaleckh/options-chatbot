@@ -143,6 +143,7 @@ MODEL_DAILY_FALLBACK_ONLY_STATUS = "model_daily_fallback_only"
 SYNTHETIC_ONLY_STATUS = "synthetic_only"
 MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES = 25
 MIN_IMPORTED_QUOTE_COVERAGE_PCT = 70.0
+MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT = 50.0
 
 
 def _is_imported_truth_source(value: Optional[str]) -> bool:
@@ -2237,6 +2238,13 @@ def _insufficient_archived_forward_result(
         "unresolved_candidates": max(len(picks) - len(pending), 0),
         "pending_truth_horizon": len(pending),
     }
+    authoritative_metrics = _trade_subset_metrics([], include_exit_reasons=True)
+    authoritative_gate = _authoritative_profitability_gate(
+        authoritative_metrics,
+        min_trade_count=MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES,
+        min_profit_factor=1.05,
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
+    )
     return {
         "available": False,
         "status": "insufficient_archived_evidence",
@@ -2271,6 +2279,9 @@ def _insufficient_archived_forward_result(
             ],
         },
         "by_symbol": {},
+        "authoritative_profitability_basis": "archived_exact_contract_only",
+        "authoritative_profitability_metrics": authoritative_metrics,
+        "authoritative_profitability_gate": authoritative_gate,
         "archived_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
         "model_exact_contract_metrics": _trade_subset_metrics([], include_exit_reasons=True),
         "nearest_listed_metrics": _trade_subset_metrics([], include_exit_reasons=True),
@@ -2743,11 +2754,33 @@ def run_archived_forward_daily_backtest(
     by_symbol = _by_symbol_trade_metrics(
         priced_trades,
         playbook_id=playbook_id,
+        truth_source=IMPORTED_DAILY_TRUTH_SOURCE,
+        candidate_source=FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+        authoritative_evidence_source="archived_forward_daily",
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
     )
     promotion_metrics = _overall_promotion_metrics(
         trades=priced_trades,
         by_symbol=by_symbol,
         playbook_id=playbook_id,
+        truth_source=IMPORTED_DAILY_TRUTH_SOURCE,
+        candidate_source=FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+        authoritative_evidence_source="archived_forward_daily",
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
+    )
+    exact_contract_metrics = _trade_subset_metrics(
+        archived_exact_trades + model_exact_trades,
+        include_exit_reasons=True,
+    )
+    authoritative_metrics = _trade_subset_metrics(
+        archived_exact_trades,
+        include_exit_reasons=True,
+    )
+    authoritative_profitability_gate = _authoritative_profitability_gate(
+        authoritative_metrics,
+        min_trade_count=MIN_ARCHIVED_PRIMARY_SYMBOL_TRADES,
+        min_profit_factor=1.05,
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
     )
     unique_entry_dates = sorted({str(item.get("entry_date") or "") for item in filtered_picks if str(item.get("entry_date") or "").strip()})
     output = {
@@ -2789,10 +2822,10 @@ def run_archived_forward_daily_backtest(
         "calibration_summary": _selection_calibration_summary(priced_trades),
         "calibration_density_metrics": _calibration_density_metrics(priced_trades),
         "contract_selection_basis": "archived_exact_contract_with_model_fallback",
-        "exact_contract_metrics": _trade_subset_metrics(
-            archived_exact_trades + model_exact_trades,
-            include_exit_reasons=True,
-        ),
+        "exact_contract_metrics": exact_contract_metrics,
+        "authoritative_profitability_basis": "archived_exact_contract_only",
+        "authoritative_profitability_metrics": authoritative_metrics,
+        "authoritative_profitability_gate": authoritative_profitability_gate,
         "archived_exact_contract_metrics": _trade_subset_metrics(
             archived_exact_trades,
             include_exit_reasons=True,
@@ -2991,6 +3024,7 @@ def _summarize_unpriced_trades(unpriced_trades: list[dict[str, Any]]) -> dict[st
 
 def _result_source_metadata(result: dict, total_trades: int | None = None) -> dict[str, Any]:
     truth_store = result.get("truth_store") or {}
+    profitability_view = _authoritative_profitability_view(result)
     return {
         "run_at": result.get("run_at"),
         "mode": result.get("mode"),
@@ -3022,6 +3056,11 @@ def _result_source_metadata(result: dict, total_trades: int | None = None) -> di
         "earliest_quote_at_utc": truth_store.get("earliest_quote_at_utc"),
         "latest_quote_at_utc": truth_store.get("latest_quote_at_utc"),
         "validation_universe": list(result.get("validation_universe") or []),
+        "authoritative_profitability_lens": profitability_view["lens"],
+        "authoritative_profitability_label": profitability_view["label"],
+        "authoritative_trade_count": profitability_view["authoritative_trade_count"],
+        "research_only_trade_count": profitability_view["research_only_trade_count"],
+        "aggregate_trade_count": profitability_view["aggregate_trade_count"],
         **_contract_resolution_summary(result),
     }
 
@@ -3385,12 +3424,15 @@ def build_options_experiment_matrix(
     if mode and mode != "backtest":
         return {"error": f"Last results are not a historical options backtest (mode={result.get('mode')})"}
 
-    trades = result.get("trades") or []
+    aggregate_trades = list(result.get("trades") or [])
+    profitability_view = _authoritative_profitability_view(result, aggregate_trades)
+    trades = list(profitability_view["trades"])
+    research_only_trades = list(profitability_view["research_only_trades"])
     score_bucket_order = ("00-39", "40-49", "50-59", "60-69", "70-79", "80-100")
     score_floors = score_floors or [40, 50, 60, 70, 80]
     normalized_score_floors = sorted({max(0, min(100, int(floor))) for floor in score_floors})
 
-    source = _result_source_metadata(result, len(trades))
+    source = _result_source_metadata(result, len(aggregate_trades))
     source.update(
         {
             "strategy_domain": "options",
@@ -3401,9 +3443,29 @@ def build_options_experiment_matrix(
     if not trades:
         overall = _summarize_experiment_slice(
             "overall",
-            "All Options Trades",
+            profitability_view["label"],
             [],
             0,
+            {"domain": "options"},
+            min_trades,
+            min_profit_factor,
+            min_directional_accuracy_pct,
+        )
+        aggregate_overall = _summarize_experiment_slice(
+            "aggregate_overall",
+            "All Options Trades",
+            aggregate_trades,
+            len(aggregate_trades),
+            {"domain": "options"},
+            min_trades,
+            min_profit_factor,
+            min_directional_accuracy_pct,
+        )
+        research_only_overall = _summarize_experiment_slice(
+            "research_only_overall",
+            "Research-only replay trades",
+            research_only_trades,
+            len(research_only_trades),
             {"domain": "options"},
             min_trades,
             min_profit_factor,
@@ -3425,6 +3487,18 @@ def build_options_experiment_matrix(
                 "min_avg_pnl_pct": 0.01,
             },
             "overall": overall,
+            "aggregate_overall": aggregate_overall,
+            "research_only_overall": research_only_overall,
+            "authoritative_profitability_lens": profitability_view["lens"],
+            "authoritative_profitability_label": profitability_view["label"],
+            "authoritative_profitability_description": profitability_view["description"],
+            "authoritative_profitability_metrics": profitability_view["metrics"],
+            "authoritative_profitability_gate": _authoritative_profitability_gate(
+                profitability_view["metrics"],
+                min_trade_count=min_trades,
+                min_profit_factor=min_profit_factor,
+                min_directional_accuracy_pct=min_directional_accuracy_pct,
+            ),
             "category_order": [
                 "score_floors",
                 "score_bands",
@@ -3446,15 +3520,40 @@ def build_options_experiment_matrix(
             "experiments": [],
             "passing_experiments": [],
             "near_miss_experiments": [],
-            "recommendations": [],
+            "recommendations": [
+                (
+                    f"No trades are available under the authoritative profitability lens "
+                    f"({profitability_view['label']})."
+                )
+            ],
         }
 
     total_trades = len(trades)
     overall = _summarize_experiment_slice(
         "overall",
-        "All Options Trades",
+        profitability_view["label"],
         trades,
         total_trades,
+        {"domain": "options"},
+        min_trades,
+        min_profit_factor,
+        min_directional_accuracy_pct,
+    )
+    aggregate_overall = _summarize_experiment_slice(
+        "aggregate_overall",
+        "All Options Trades",
+        aggregate_trades,
+        len(aggregate_trades),
+        {"domain": "options"},
+        min_trades,
+        min_profit_factor,
+        min_directional_accuracy_pct,
+    )
+    research_only_overall = _summarize_experiment_slice(
+        "research_only_overall",
+        "Research-only replay trades",
+        research_only_trades,
+        len(research_only_trades),
         {"domain": "options"},
         min_trades,
         min_profit_factor,
@@ -3622,7 +3721,10 @@ def build_options_experiment_matrix(
         recommendations.append(f"Focus the next options replay pass on: {top_labels}.")
     else:
         recommendations.append(
-            "No options slice cleared the current quality bar yet, so keep optimizing filters before adding new signal complexity."
+            (
+                f"No {profitability_view['label'].lower()} slice cleared the current quality bar yet, "
+                "so keep optimizing filters before adding new signal complexity."
+            )
         )
 
     improving_score_floors = [
@@ -3659,6 +3761,18 @@ def build_options_experiment_matrix(
             "min_avg_pnl_pct": 0.01,
         },
         "overall": _annotate([overall])[0],
+        "aggregate_overall": aggregate_overall,
+        "research_only_overall": research_only_overall,
+        "authoritative_profitability_lens": profitability_view["lens"],
+        "authoritative_profitability_label": profitability_view["label"],
+        "authoritative_profitability_description": profitability_view["description"],
+        "authoritative_profitability_metrics": profitability_view["metrics"],
+        "authoritative_profitability_gate": _authoritative_profitability_gate(
+            profitability_view["metrics"],
+            min_trade_count=min_trades,
+            min_profit_factor=min_profit_factor,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
+        ),
         "category_order": list(by_category.keys()),
         "by_category": by_category,
         "experiments": ranked_experiments,
@@ -3859,7 +3973,7 @@ def build_live_options_trade_policy(
 
     if preferred_score_band:
         rationale.append(
-            f"{preferred_score_band['label']} was the strongest broad score cohort in the latest options replay "
+            f"{preferred_score_band['label']} was the strongest score cohort under the current authoritative replay lens "
             f"(PF {preferred_score_band['profit_factor']:.2f}, avg P&L {preferred_score_band['avg_pnl_pct']:+.2f}%)."
         )
     else:
@@ -3883,20 +3997,36 @@ def build_live_options_trade_policy(
         )
 
     truth_source = _result_truth_source(result or {})
-    trades = list((result or {}).get("trades") or [])
+    aggregate_trades = list((result or {}).get("trades") or [])
+    profitability_view = _authoritative_profitability_view(result, aggregate_trades)
+    authoritative_trades = list(profitability_view["trades"])
+    research_only_trades = list(profitability_view["research_only_trades"])
     playbook_id = str((result or {}).get("playbook") or (matrix.get("source") or {}).get("playbook") or "broad").strip().lower()
     exact_contract_trades = [
-        trade for trade in trades
+        trade for trade in aggregate_trades
         if _is_exact_contract_resolution(trade.get("entry_contract_resolution"))
     ]
     nearest_listed_trades = [
-        trade for trade in trades
+        trade for trade in aggregate_trades
         if not _is_exact_contract_resolution(trade.get("entry_contract_resolution"))
     ]
-    by_symbol = _by_symbol_trade_metrics(
-        trades,
+    aggregate_by_symbol = _by_symbol_trade_metrics(
+        aggregate_trades,
         playbook_id=playbook_id,
+        truth_source=truth_source,
+        candidate_source=result.get("candidate_source") if result else None,
+        authoritative_evidence_source=result.get("authoritative_evidence_source") if result else None,
         min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
+    )
+    by_symbol = _by_symbol_trade_metrics(
+        authoritative_trades,
+        playbook_id=playbook_id,
+        truth_source=truth_source,
+        candidate_source=result.get("candidate_source") if result else None,
+        authoritative_evidence_source=result.get("authoritative_evidence_source") if result else None,
+        min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
     )
     watch_priority_symbols, watch_deprioritized_symbols = _watch_symbol_preferences(by_symbol)
     if (
@@ -3910,19 +4040,46 @@ def build_live_options_trade_policy(
         if fallback_by_symbol:
             watch_priority_symbols, watch_deprioritized_symbols = _watch_symbol_preferences(fallback_by_symbol)
     promotion_metrics = _overall_promotion_metrics(
-        trades=trades,
+        trades=authoritative_trades,
         by_symbol=by_symbol,
         playbook_id=playbook_id,
+        truth_source=truth_source,
+        candidate_source=result.get("candidate_source") if result else None,
+        authoritative_evidence_source=result.get("authoritative_evidence_source") if result else None,
         min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
     )
+    aggregate_metrics = _trade_subset_metrics(aggregate_trades, include_exit_reasons=True)
     exact_contract_metrics = _trade_subset_metrics(exact_contract_trades, include_exit_reasons=True)
+    authoritative_exact_contract_metrics = _trade_subset_metrics(authoritative_trades, include_exit_reasons=True)
     nearest_listed_metrics = _trade_subset_metrics(nearest_listed_trades)
-    calibration_density_metrics = _calibration_density_metrics(trades)
+    authoritative_profitability_basis = str(
+        (result or {}).get("authoritative_profitability_basis")
+        or (promotion_metrics.get("authoritative_profitability_basis"))
+        or profitability_view.get("lens")
+    )
+    authoritative_profitability_metrics = dict(
+        (result or {}).get("authoritative_profitability_metrics")
+        or (promotion_metrics.get("authoritative_profitability_metrics"))
+        or authoritative_exact_contract_metrics
+    )
+    authoritative_profitability_gate = dict(
+        (result or {}).get("authoritative_profitability_gate")
+        or (promotion_metrics.get("authoritative_profitability_gate"))
+        or _authoritative_profitability_gate(
+            authoritative_profitability_metrics,
+            min_trade_count=25,
+            min_profit_factor=min_profit_factor,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
+        )
+    )
+    research_only_metrics = _trade_subset_metrics(research_only_trades, include_exit_reasons=True)
+    calibration_density_metrics = _calibration_density_metrics(aggregate_trades)
     promoted_symbols = list(promotion_metrics.get("promoted_symbols") or [])
-    non_promotable_trade_count = len([trade for trade in trades if not _is_trade_promotable(trade)])
-    if float(overall.get("profit_factor", 0.0) or 0.0) < 1.0:
+    non_promotable_trade_count = len([trade for trade in aggregate_trades if not _is_trade_promotable(trade)])
+    if float(aggregate_metrics.get("profit_factor", 0.0) or 0.0) < 1.0:
         warnings.append(
-            "The full options universe is still negative overall, so this policy is meant to increase selectivity rather than declare the strategy solved."
+            "The aggregate replay universe is still negative overall; treat that as research context rather than the profitability judge."
         )
     if stability.get("overall_status") != "promote":
         warnings.append(
@@ -3966,15 +4123,31 @@ def build_live_options_trade_policy(
         warnings.append(
             "Broad pooled profitability is exploratory only. Promotion must come from symbol-specific exact-contract results."
         )
+    if profitability_view["research_only_trade_count"] > 0:
+        warnings.append(
+            (
+                f"{profitability_view['research_only_trade_count']} replay trade(s) sit outside the authoritative "
+                f"{profitability_view['label'].lower()} and stay research-only."
+            )
+        )
     nearest_contract_match_count = int((matrix.get("source") or {}).get("nearest_contract_match_count", 0) or 0)
     if _is_imported_truth_source(truth_source) and nearest_contract_match_count > 0:
         warnings.append(
-            f"{nearest_contract_match_count} replay trade(s) used the nearest listed historical contract rather than an exact target-contract match."
+            (
+                f"{nearest_contract_match_count} replay trade(s) used the nearest listed historical contract "
+                "rather than an exact target-contract match; they cannot promote the policy."
+            )
+        )
+    if not bool(authoritative_profitability_gate.get("passed")):
+        warnings.append(
+            "Exact-contract profitability does not currently clear the policy bar, so no symbol can be treated as profitable or promotable."
         )
     synthetic_only = truth_source == SYNTHETIC_TRUTH_SOURCE
     readiness_blockers: list[str] = []
     if synthetic_only:
         readiness_blockers.append("synthetic_only")
+    if not bool(authoritative_profitability_gate.get("passed")):
+        readiness_blockers.append("authoritative_exact_profitability_not_clear")
     if str(stability.get("overall_status") or "block").strip().lower() != "promote":
         readiness_blockers.append("stability_not_promote")
     if truth_window_status == "stale":
@@ -4026,16 +4199,26 @@ def build_live_options_trade_policy(
         "exit_quote_time_et": (matrix.get("source") or {}).get("exit_quote_time_et"),
         "strategy_domain": matrix.get("strategy_domain"),
         "trade_types": matrix.get("trade_types"),
+        "authoritative_profitability_lens": profitability_view["lens"],
+        "authoritative_profitability_label": profitability_view["label"],
+        "authoritative_profitability_description": profitability_view["description"],
         "promotion_status": promotion_status,
         "managed_lane_status": managed_lane_status,
         "readiness_blockers": readiness_blockers,
         "synthetic_only": synthetic_only,
         "overall": overall,
         "stability": stability,
+        "authoritative_profitability_basis": authoritative_profitability_basis,
+        "authoritative_profitability_metrics": authoritative_profitability_metrics,
+        "authoritative_profitability_gate": authoritative_profitability_gate,
+        "aggregate_metrics": aggregate_metrics,
         "exact_contract_metrics": exact_contract_metrics,
+        "authoritative_exact_contract_metrics": authoritative_exact_contract_metrics,
         "nearest_listed_metrics": nearest_listed_metrics,
+        "research_only_metrics": research_only_metrics,
         "promotion_metrics": promotion_metrics,
         "by_symbol": by_symbol,
+        "aggregate_by_symbol": aggregate_by_symbol,
         "promotion_trade_count": int(promotion_metrics.get("trade_count") or 0),
         "non_promotable_trade_count": non_promotable_trade_count,
         "calibration_density_metrics": calibration_density_metrics,
@@ -4406,23 +4589,187 @@ def _trade_subset_metrics(
     return metrics
 
 
+def _authoritative_profitability_basis(truth_source: Any) -> str:
+    return "exact_contract_only" if _is_imported_truth_source(truth_source) else "all_trades"
+
+
+def _authoritative_profitability_lens_for_context(
+    *,
+    truth_source: Any = None,
+    candidate_source: Any = None,
+    authoritative_evidence_source: Any = None,
+) -> str:
+    normalized_candidate_source = str(candidate_source or "").strip().lower()
+    normalized_evidence_source = str(authoritative_evidence_source or "").strip().lower()
+    if (
+        normalized_candidate_source == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE
+        or normalized_evidence_source == "archived_forward_daily"
+    ):
+        return "archived_exact_contract_only"
+    return _authoritative_profitability_basis(truth_source)
+
+
+def _authoritative_profitability_trades(
+    result: Optional[dict[str, Any]] = None,
+    *,
+    trades: Optional[list[dict[str, Any]]] = None,
+    truth_source: Any = None,
+) -> list[dict[str, Any]]:
+    source_truth = truth_source if truth_source is not None else _result_truth_source(result or {})
+    all_trades = list(trades if trades is not None else ((result or {}).get("trades") or []))
+    candidate_source = str((result or {}).get("candidate_source") or "").strip().lower()
+    authoritative_evidence_source = str((result or {}).get("authoritative_evidence_source") or "").strip().lower()
+    lens = _authoritative_profitability_lens_for_context(
+        truth_source=source_truth,
+        candidate_source=candidate_source,
+        authoritative_evidence_source=authoritative_evidence_source,
+    )
+    if lens == "archived_exact_contract_only":
+        return [
+            trade
+            for trade in all_trades
+            if str(trade.get("entry_contract_resolution") or "").strip().lower() == PRIMARY_JUDGE_TRADE_CLASS
+        ]
+    if lens != "exact_contract_only":
+        return all_trades
+    return [
+        trade for trade in all_trades
+        if _is_exact_contract_resolution(trade.get("entry_contract_resolution"))
+    ]
+
+
+def _authoritative_profitability_gate(
+    metrics: dict[str, Any],
+    *,
+    min_trade_count: int,
+    min_profit_factor: float,
+    min_avg_pnl_pct: float = 0.0,
+    min_directional_accuracy_pct: Optional[float] = None,
+) -> dict[str, Any]:
+    trade_count = int(metrics.get("trade_count") or 0)
+    profit_factor = float(metrics.get("profit_factor") or 0.0)
+    avg_pnl_pct = float(metrics.get("avg_pnl_pct") or 0.0)
+    directional_accuracy_pct = float(metrics.get("directional_accuracy_pct") or 0.0)
+    blockers: list[str] = []
+    if trade_count < int(min_trade_count):
+        blockers.append(
+            f"Exact-contract trade count is {trade_count}, below the {int(min_trade_count)}-trade bar."
+        )
+    if profit_factor < float(min_profit_factor):
+        blockers.append(
+            f"Exact-contract PF is {profit_factor:.2f}, below {float(min_profit_factor):.2f}."
+        )
+    if avg_pnl_pct <= float(min_avg_pnl_pct):
+        blockers.append(
+            f"Exact-contract avg P&L is {avg_pnl_pct:+.2f}%, not above {float(min_avg_pnl_pct):+.2f}%."
+        )
+    if (
+        min_directional_accuracy_pct is not None
+        and directional_accuracy_pct < float(min_directional_accuracy_pct)
+    ):
+        blockers.append(
+            f"Exact-contract directional accuracy is {directional_accuracy_pct:.1f}%, below {float(min_directional_accuracy_pct):.1f}%."
+        )
+    return {
+        "passed": not blockers,
+        "trade_count": trade_count,
+        "profit_factor": round(profit_factor, 2),
+        "avg_pnl_pct": round(avg_pnl_pct, 2),
+        "directional_accuracy_pct": round(directional_accuracy_pct, 1),
+        "thresholds": {
+            "min_trade_count": int(min_trade_count),
+            "min_profit_factor": float(min_profit_factor),
+            "min_avg_pnl_pct": float(min_avg_pnl_pct),
+            "min_directional_accuracy_pct": (
+                float(min_directional_accuracy_pct)
+                if min_directional_accuracy_pct is not None
+                else None
+            ),
+        },
+        "blockers": blockers,
+    }
+
+
+def _authoritative_profitability_view(
+    result: Optional[dict[str, Any]],
+    aggregate_trades: Optional[list[dict[str, Any]]] = None,
+) -> dict[str, Any]:
+    all_trades = list(aggregate_trades if aggregate_trades is not None else ((result or {}).get("trades") or []))
+    truth_source = _result_truth_source(result or {})
+    lens = _authoritative_profitability_basis(truth_source)
+    authoritative_trades = _authoritative_profitability_trades(
+        result,
+        trades=all_trades,
+        truth_source=truth_source,
+    )
+    authoritative_ids = {id(trade) for trade in authoritative_trades}
+    research_only_trades = [
+        trade for trade in all_trades
+        if id(trade) not in authoritative_ids
+    ]
+    if lens == "exact_contract_only":
+        label = "Exact-contract replay trades"
+        description = (
+            "Imported replay profitability and promotion claims are judged from exact-contract matches only. "
+            "Nearest-listed substitutions remain research-only."
+        )
+    else:
+        label = "All replay trades"
+        description = "No exact-contract historical subset is available for this truth lane, so all replay trades are used."
+    return {
+        "lens": lens,
+        "label": label,
+        "description": description,
+        "truth_source": truth_source,
+        "trades": authoritative_trades,
+        "research_only_trades": research_only_trades,
+        "metrics": _trade_subset_metrics(authoritative_trades, include_exit_reasons=True),
+        "aggregate_trade_count": len(all_trades),
+        "authoritative_trade_count": len(authoritative_trades),
+        "research_only_trade_count": len(research_only_trades),
+    }
+
+
 def _symbol_promotion_summary(
     *,
     symbol: str,
     trades: list[dict[str, Any]],
     playbook_id: str,
+    truth_source: Any = None,
+    candidate_source: Any = None,
+    authoritative_evidence_source: Any = None,
     min_profit_factor: float = 1.05,
     min_promotable_trades: int = 25,
+    min_directional_accuracy_pct: float = MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
 ) -> dict[str, Any]:
     exact_trades = [trade for trade in trades if _is_exact_contract_resolution(trade.get("entry_contract_resolution"))]
     nearest_trades = [trade for trade in trades if not _is_exact_contract_resolution(trade.get("entry_contract_resolution"))]
-    promotable_trades = [trade for trade in trades if _is_trade_promotable(trade)]
+    profitability_view = _authoritative_profitability_view(
+        {
+            "truth_source": truth_source,
+            "candidate_source": candidate_source,
+            "authoritative_evidence_source": authoritative_evidence_source,
+            "trades": trades,
+        }
+    )
+    authoritative_trades = list(profitability_view["trades"])
+    research_only_trades = list(profitability_view["research_only_trades"])
+    promotable_trades = [trade for trade in authoritative_trades if _is_trade_promotable(trade)]
     non_promotable_trades = [trade for trade in trades if not _is_trade_promotable(trade)]
 
     blockers: list[str] = []
+    exact_metrics = _trade_subset_metrics(exact_trades, include_exit_reasons=True)
+    authoritative_metrics = _trade_subset_metrics(authoritative_trades, include_exit_reasons=True)
+    authoritative_gate = _authoritative_profitability_gate(
+        authoritative_metrics,
+        min_trade_count=min_promotable_trades,
+        min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
+    )
     promotable_metrics = _trade_subset_metrics(promotable_trades, include_exit_reasons=True)
     if playbook_id == "broad":
         blockers.append("Broad playbook is exploratory-only and cannot be promoted.")
+    blockers.extend(list(authoritative_gate.get("blockers") or []))
     if promotable_metrics["trade_count"] < int(min_promotable_trades):
         blockers.append(
             f"{symbol} only has {promotable_metrics['trade_count']} promotable exact-contract trade(s) against the {int(min_promotable_trades)}-trade bar."
@@ -4435,12 +4782,22 @@ def _symbol_promotion_summary(
         blockers.append(
             f"{symbol} promotable exact-contract avg P&L is {float(promotable_metrics.get('avg_pnl_pct', 0.0) or 0.0):+.2f}%."
         )
+    if float(promotable_metrics.get("directional_accuracy_pct", 0.0) or 0.0) < float(min_directional_accuracy_pct):
+        blockers.append(
+            f"{symbol} promotable exact-contract directional accuracy is "
+            f"{float(promotable_metrics.get('directional_accuracy_pct', 0.0) or 0.0):.1f}%, "
+            f"below {float(min_directional_accuracy_pct):.1f}%."
+        )
 
     promotion_status = "promote" if not blockers else "block"
     return {
         "symbol": symbol,
         "overall_metrics": _trade_subset_metrics(trades),
-        "exact_contract_metrics": _trade_subset_metrics(exact_trades, include_exit_reasons=True),
+        "exact_contract_metrics": exact_metrics,
+        "authoritative_profitability_basis": profitability_view["lens"],
+        "authoritative_profitability_metrics": authoritative_metrics,
+        "authoritative_profitability_gate": authoritative_gate,
+        "research_only_metrics": _trade_subset_metrics(research_only_trades, include_exit_reasons=True),
         "nearest_listed_metrics": _trade_subset_metrics(nearest_trades),
         "promotion_metrics": {
             **promotable_metrics,
@@ -4471,8 +4828,12 @@ def _by_symbol_trade_metrics(
     trades: list[dict[str, Any]],
     *,
     playbook_id: str,
+    truth_source: Any = None,
+    candidate_source: Any = None,
+    authoritative_evidence_source: Any = None,
     min_profit_factor: float = 1.05,
     min_promotable_trades: int = 25,
+    min_directional_accuracy_pct: float = MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
 ) -> dict[str, Any]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for trade in trades:
@@ -4482,8 +4843,12 @@ def _by_symbol_trade_metrics(
             symbol=symbol,
             trades=symbol_trades,
             playbook_id=playbook_id,
+            truth_source=truth_source,
+            candidate_source=candidate_source,
+            authoritative_evidence_source=authoritative_evidence_source,
             min_profit_factor=min_profit_factor,
             min_promotable_trades=min_promotable_trades,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
         )
         for symbol, symbol_trades in sorted(grouped.items())
     }
@@ -4494,19 +4859,43 @@ def _overall_promotion_metrics(
     trades: list[dict[str, Any]],
     by_symbol: dict[str, Any],
     playbook_id: str,
+    truth_source: Any = None,
+    candidate_source: Any = None,
+    authoritative_evidence_source: Any = None,
     min_profit_factor: float = 1.05,
     min_promotable_trades: int = 25,
+    min_directional_accuracy_pct: float = MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
 ) -> dict[str, Any]:
-    promotable_trades = [trade for trade in trades if _is_trade_promotable(trade)]
+    exact_trades = [trade for trade in trades if _is_exact_contract_resolution(trade.get("entry_contract_resolution"))]
+    profitability_view = _authoritative_profitability_view(
+        {
+            "truth_source": truth_source,
+            "candidate_source": candidate_source,
+            "authoritative_evidence_source": authoritative_evidence_source,
+            "trades": trades,
+        }
+    )
+    authoritative_trades = list(profitability_view["trades"])
+    research_only_trades = list(profitability_view["research_only_trades"])
+    promotable_trades = [trade for trade in authoritative_trades if _is_trade_promotable(trade)]
     promoted_symbols = [
         symbol
         for symbol, summary in sorted(by_symbol.items())
         if str((summary.get("promotion_metrics") or {}).get("promotion_status") or "block") == "promote"
     ]
     blockers: list[str] = []
+    exact_metrics = _trade_subset_metrics(exact_trades, include_exit_reasons=True)
+    authoritative_metrics = _trade_subset_metrics(authoritative_trades, include_exit_reasons=True)
+    authoritative_gate = _authoritative_profitability_gate(
+        authoritative_metrics,
+        min_trade_count=min_promotable_trades,
+        min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
+    )
     promotable_metrics = _trade_subset_metrics(promotable_trades, include_exit_reasons=True)
     if playbook_id == "broad":
         blockers.append("Broad playbook is exploratory-only and cannot be promoted.")
+    blockers.extend(list(authoritative_gate.get("blockers") or []))
     if not promoted_symbols:
         blockers.append("No symbol exact-contract subset cleared the promotion bar.")
     if promotable_metrics["trade_count"] < int(min_promotable_trades):
@@ -4521,8 +4910,19 @@ def _overall_promotion_metrics(
         blockers.append(
             f"Promotable exact-contract avg P&L is {float(promotable_metrics.get('avg_pnl_pct', 0.0) or 0.0):+.2f}%."
         )
+    if float(promotable_metrics.get("directional_accuracy_pct", 0.0) or 0.0) < float(min_directional_accuracy_pct):
+        blockers.append(
+            f"Promotable exact-contract directional accuracy is "
+            f"{float(promotable_metrics.get('directional_accuracy_pct', 0.0) or 0.0):.1f}%, "
+            f"below {float(min_directional_accuracy_pct):.1f}%."
+        )
     return {
         **promotable_metrics,
+        "authoritative_profitability_basis": profitability_view["lens"],
+        "authoritative_profitability_metrics": authoritative_metrics,
+        "authoritative_profitability_gate": authoritative_gate,
+        "research_only_metrics": _trade_subset_metrics(research_only_trades, include_exit_reasons=True),
+        "exact_contract_metrics": exact_metrics,
         "promotion_status": "promote" if playbook_id != "broad" and promoted_symbols else "block",
         "promoted_symbols": promoted_symbols,
         "blockers": blockers,
@@ -5531,6 +5931,7 @@ def run_historical_backtest(
     pricing_lane: str = "pessimistic",
     truth_lane: str = SYNTHETIC_TRUTH_SOURCE,
     playbook: Optional[str] = None,
+    allowed_directions: Optional[Sequence[str]] = None,
     progress_callback: Optional[Callable[[str, float], None]] = None,
 ) -> dict:
     """
@@ -5550,6 +5951,15 @@ def run_historical_backtest(
     eq_config,  eq_evaluator  = _build_profile_config(_eq_sp)
     idx_config, idx_evaluator = _build_profile_config(_idx_sp)
     replay_playbook = _get_replay_playbook(playbook)
+    normalized_allowed_directions = sorted(
+        {
+            str(item).strip().lower()
+            for item in list(allowed_directions or [])
+            if str(item).strip().lower() in {"call", "put"}
+        }
+    )
+    if normalized_allowed_directions:
+        replay_playbook["allowed_directions"] = normalized_allowed_directions
     normalized_truth_lane = str(truth_lane or SYNTHETIC_TRUTH_SOURCE).strip().lower()
     requested_pricing_lane = _normalize_requested_pricing_lane(pricing_lane)
     if normalized_truth_lane == "synthetic":
@@ -6241,8 +6651,16 @@ def run_historical_backtest(
         )
         exact_contract_metrics = _trade_subset_metrics([], include_exit_reasons=True)
         nearest_listed_metrics = _trade_subset_metrics([])
+        authoritative_profitability_gate = _authoritative_profitability_gate(
+            exact_contract_metrics,
+            min_trade_count=25,
+            min_profit_factor=1.05,
+        )
         promotion_metrics = {
             **_trade_subset_metrics([], include_exit_reasons=True),
+            "authoritative_profitability_basis": _authoritative_profitability_basis(normalized_truth_lane),
+            "authoritative_profitability_metrics": exact_contract_metrics,
+            "authoritative_profitability_gate": authoritative_profitability_gate,
             "promotion_status": "block",
             "promoted_symbols": [],
             "blockers": ["No promotable exact-contract trades were recorded."],
@@ -6256,6 +6674,7 @@ def run_historical_backtest(
             "effective_pricing_lane": requested_pricing_lane,
             "pricing_lane": requested_pricing_lane,
             "playbook": replay_playbook["id"],
+            "requested_directions": normalized_allowed_directions,
             "truth_source": normalized_truth_lane,
             "entry_anchor_policy": _entry_anchor_policy_label(normalized_truth_lane),
             "execution_realism": _execution_realism_label(normalized_truth_lane),
@@ -6282,6 +6701,9 @@ def run_historical_backtest(
                 else "synthetic_model"
             ),
             "exact_contract_metrics": exact_contract_metrics,
+            "authoritative_profitability_basis": _authoritative_profitability_basis(normalized_truth_lane),
+            "authoritative_profitability_metrics": exact_contract_metrics,
+            "authoritative_profitability_gate": authoritative_profitability_gate,
             "nearest_listed_metrics": nearest_listed_metrics,
             "promotion_metrics": promotion_metrics,
             "by_symbol": {},
@@ -6404,11 +6826,22 @@ def run_historical_backtest(
     by_symbol = _by_symbol_trade_metrics(
         all_trades,
         playbook_id=replay_playbook["id"],
+        truth_source=normalized_truth_lane,
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
     )
     promotion_metrics = _overall_promotion_metrics(
         trades=all_trades,
         by_symbol=by_symbol,
         playbook_id=replay_playbook["id"],
+        truth_source=normalized_truth_lane,
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
+    )
+    exact_contract_metrics = _trade_subset_metrics(exact_contract_trades, include_exit_reasons=True)
+    authoritative_profitability_gate = _authoritative_profitability_gate(
+        exact_contract_metrics,
+        min_trade_count=25,
+        min_profit_factor=1.05,
+        min_directional_accuracy_pct=MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
     )
     effective_pricing_lane = requested_pricing_lane
     output = {
@@ -6424,6 +6857,7 @@ def run_historical_backtest(
         "entry_anchor_policy": _entry_anchor_policy_label(normalized_truth_lane),
         "execution_realism": _execution_realism_label(normalized_truth_lane),
         "playbook":          replay_playbook["id"],
+        "requested_directions": normalized_allowed_directions,
         "n_picks":           n_picks,
         "total_days":        days_simulated,
         "total_trades":      len(all_trades),
@@ -6452,7 +6886,10 @@ def run_historical_backtest(
             if _is_imported_truth_source(normalized_truth_lane)
             else "synthetic_model"
         ),
-        "exact_contract_metrics": _trade_subset_metrics(exact_contract_trades, include_exit_reasons=True),
+        "exact_contract_metrics": exact_contract_metrics,
+        "authoritative_profitability_basis": _authoritative_profitability_basis(normalized_truth_lane),
+        "authoritative_profitability_metrics": exact_contract_metrics,
+        "authoritative_profitability_gate": authoritative_profitability_gate,
         "nearest_listed_metrics": _trade_subset_metrics(nearest_listed_trades),
         "promotion_metrics": promotion_metrics,
         "by_symbol": by_symbol,
@@ -6684,11 +7121,16 @@ def build_options_stability_report(
     if not result:
         return {"error": "No backtest results found"}
 
-    trades = sorted(
+    aggregate_trades = sorted(
         [trade for trade in (result.get("trades") or []) if _trade_date(trade) is not None],
         key=lambda trade: _trade_date(trade),
     )
-    source = _result_source_metadata(result, len(trades))
+    profitability_view = _authoritative_profitability_view(result, aggregate_trades)
+    trades = sorted(
+        [trade for trade in profitability_view["trades"] if _trade_date(trade) is not None],
+        key=lambda trade: _trade_date(trade),
+    )
+    source = _result_source_metadata(result, len(aggregate_trades))
     if not trades:
         return {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -6714,7 +7156,26 @@ def build_options_stability_report(
                 "watch_filters": {},
                 "blocked_filters": {},
             },
-            "recommendations": ["No replay trades are available, so promotion is blocked."],
+            "authoritative_profitability_lens": profitability_view["lens"],
+            "authoritative_profitability_label": profitability_view["label"],
+            "authoritative_profitability_description": profitability_view["description"],
+            "authoritative_profitability_metrics": profitability_view["metrics"],
+            "authoritative_profitability_gate": _authoritative_profitability_gate(
+                profitability_view["metrics"],
+                min_trade_count=min_trades,
+                min_profit_factor=min_profit_factor,
+            ),
+            "aggregate_overall": _trade_subset_metrics(aggregate_trades, include_exit_reasons=True),
+            "research_only_metrics": _trade_subset_metrics(
+                profitability_view["research_only_trades"],
+                include_exit_reasons=True,
+            ),
+            "recommendations": [
+                (
+                    f"No trades are available under the authoritative profitability lens "
+                    f"({profitability_view['label']}), so promotion is blocked."
+                )
+            ],
         }
 
     max_date = _trade_date(trades[-1])
@@ -6925,7 +7386,10 @@ def build_options_stability_report(
     nearest_contract_match_count = int(source.get("nearest_contract_match_count", 0) or 0)
     if _is_imported_truth_source(_result_truth_source(result)) and nearest_contract_match_count > 0:
         recommendations.append(
-            f"{nearest_contract_match_count} imported trade(s) still resolved to the nearest listed contract rather than an exact target contract, so treat the validation as conservative but not exact-contract complete."
+            (
+                f"{nearest_contract_match_count} imported trade(s) still resolved to the nearest listed contract "
+                "rather than an exact target contract; they remain research-only and do not count toward promotion."
+            )
         )
 
     return {
@@ -6934,7 +7398,22 @@ def build_options_stability_report(
         "truth_source": source["truth_source"],
         "quote_coverage_pct": source["quote_coverage_pct"],
         "overall_status": overall_status,
+        "authoritative_profitability_lens": profitability_view["lens"],
+        "authoritative_profitability_label": profitability_view["label"],
+        "authoritative_profitability_description": profitability_view["description"],
+        "authoritative_profitability_metrics": profitability_view["metrics"],
+        "authoritative_profitability_gate": _authoritative_profitability_gate(
+            profitability_view["metrics"],
+            min_trade_count=min_trades,
+            min_profit_factor=min_profit_factor,
+        ),
         "calibration_summary": calibration_summary,
+        "aggregate_overall": _trade_subset_metrics(aggregate_trades, include_exit_reasons=True),
+        "authoritative_overall": _trade_subset_metrics(trades, include_exit_reasons=True),
+        "research_only_metrics": _trade_subset_metrics(
+            profitability_view["research_only_trades"],
+            include_exit_reasons=True,
+        ),
         "quality_bar": {
             "min_trades": int(min_trades),
             "min_profit_factor": float(min_profit_factor),
@@ -7128,7 +7607,9 @@ def _normalize_playbook_discovery_sources(
 
     sources: list[dict] = []
     for index, item in enumerate(raw_results, start=1):
-        trades = list(item.get("trades") or [])
+        aggregate_trades = list(item.get("trades") or [])
+        profitability_view = _authoritative_profitability_view(item, aggregate_trades)
+        trades = list(profitability_view["trades"])
         dated_trades = sorted(
             [trade for trade in trades if _trade_date(trade) is not None],
             key=lambda trade: _trade_date(trade),
@@ -7141,7 +7622,12 @@ def _normalize_playbook_discovery_sources(
                 "pricing_lane": str(item.get("pricing_lane") or "").strip().lower() or None,
                 "playbook": str(item.get("playbook") or "").strip().lower() or None,
                 "total_days": item.get("total_days"),
-                "total_trades": item.get("total_trades", len(trades)),
+                "total_trades": item.get("total_trades", len(aggregate_trades)),
+                "aggregate_trade_count": len(aggregate_trades),
+                "authoritative_trade_count": profitability_view["authoritative_trade_count"],
+                "research_only_trade_count": profitability_view["research_only_trade_count"],
+                "authoritative_profitability_lens": profitability_view["lens"],
+                "authoritative_profitability_label": profitability_view["label"],
                 "trades": trades,
                 "dated_trades": dated_trades,
                 "result": item,
@@ -7446,6 +7932,10 @@ def build_playbook_discovery_report(
                     "pricing_lane": source["pricing_lane"],
                     "playbook": source["playbook"],
                     "total_trades": source["total_trades"],
+                    "aggregate_trade_count": source["aggregate_trade_count"],
+                    "authoritative_trade_count": source["authoritative_trade_count"],
+                    "research_only_trade_count": source["research_only_trade_count"],
+                    "authoritative_profitability_lens": source["authoritative_profitability_lens"],
                 }
                 for source in sources
             ],
@@ -7506,18 +7996,18 @@ def build_playbook_discovery_report(
 
         reasons: list[str] = [
             (
-                f"Aggregate evidence: {overall['trades']} trades, PF {overall['profit_factor']:.2f}, "
+                f"Authoritative evidence: {overall['trades']} trades, PF {overall['profit_factor']:.2f}, "
                 f"avg P&L {overall['avg_pnl_pct']:+.2f}%, directional accuracy {overall['directional_accuracy_pct']:.1f}%."
             )
         ]
         blockers: list[str] = []
 
         if overall["passes_quality_bar"]:
-            reasons.append("Aggregate slice cleared the quality bar.")
+            reasons.append("Authoritative exact-contract slice cleared the quality bar.")
         elif overall["sparse"]:
             blockers.append(f"Only {overall['trades']} trades matched; need at least {int(min_trades)}.")
         else:
-            blockers.append("Aggregate slice missed the profitability and/or directional-accuracy bar.")
+            blockers.append("Authoritative exact-contract slice missed the profitability and/or directional-accuracy bar.")
 
         playbook_shape_ok = "direction" in filters and (
             "market_regime" in filters or "sector" in filters
@@ -7675,6 +8165,10 @@ def build_playbook_discovery_report(
                 "playbook": source["playbook"],
                 "total_days": source["total_days"],
                 "total_trades": source["total_trades"],
+                "aggregate_trade_count": source["aggregate_trade_count"],
+                "authoritative_trade_count": source["authoritative_trade_count"],
+                "research_only_trade_count": source["research_only_trade_count"],
+                "authoritative_profitability_lens": source["authoritative_profitability_lens"],
             }
             for source in sources
         ],

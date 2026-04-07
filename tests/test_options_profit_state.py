@@ -187,6 +187,32 @@ class OptionsProfitStateMigrationTests(unittest.TestCase):
         self.assertIn("QQQ__call__broad_ev7", candidate_ids)
         self.assertIn("QQQ__put__broad_ev7", candidate_ids)
 
+    def test_manifest_directions_seed_only_requested_sides_for_challengers(self):
+        self._write_json(
+            self.manifest_path,
+            {
+                "manifest_version": 1,
+                "symbols": ["SPY", "QQQ"],
+                "cohorts": [
+                    {"id": "baseline_broad_control", "role": "control", "overrides": {}},
+                    {
+                        "id": "broad_tech72",
+                        "role": "candidate",
+                        "overrides": {"entry": {"min_tech_score": 72.0}},
+                        "directions": ["call"],
+                    },
+                ],
+            },
+        )
+
+        ensure_options_profit_state()
+        candidate_ids = {str(item.get("candidate_id") or "") for item in list_candidate_manifests()}
+
+        self.assertIn("SPY__call__broad_tech72", candidate_ids)
+        self.assertIn("QQQ__call__broad_tech72", candidate_ids)
+        self.assertNotIn("SPY__put__broad_tech72", candidate_ids)
+        self.assertNotIn("QQQ__put__broad_tech72", candidate_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

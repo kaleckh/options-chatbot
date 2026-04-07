@@ -372,8 +372,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         state = load_profit_loop_state(self.state_dir)
         self.assertEqual(result["snapshot"]["verdict"], "recorded-empty-market")
         self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
-        self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
-        self.assertTrue(result["snapshot"]["evidence_complete"])
+        self.assertEqual(result["snapshot"]["evidence_status"], "inconclusive")
+        self.assertFalse(result["snapshot"]["evidence_complete"])
         self.assertEqual(result["snapshot"]["results"]["daily_truth_refresh"]["status"], "refreshed")
         self.assertIsNone(result["snapshot"]["results"]["evidence_blocker"])
         self.assertTrue(result["snapshot"]["results"]["empty_market"])
@@ -551,6 +551,21 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(result["status"], "artifact_refreshed")
 
     def test_refresh_daily_truth_accepts_stale_source_when_truth_is_capped(self):
+        manifest_path = self.state_dir / "daily_truth_import_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "imports": [
+                        {
+                            "input": "C:/tmp/qqq_options.parquet",
+                            "source": "qqq_options",
+                        }
+                    ]
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
         artifact_result = {
             "result_path": "C:/artifact.json",
             "truth_source": "historical_imported_daily",
@@ -571,7 +586,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             "allowed_truth_staleness_business_days": 3,
         }
         with patch("profit_loop_automation._env_flag", return_value=True), \
-             patch("profit_loop_automation._resolve_daily_truth_import_manifest", return_value=("C:/tmp/manifest.json", "env")), \
+             patch("profit_loop_automation._resolve_daily_truth_import_manifest", return_value=(str(manifest_path), "env")), \
              patch("profit_loop_automation._load_manifest_entries", return_value=[{"source": "qqq_options", "input": "C:/tmp/qqq_options.parquet"}]), \
              patch("profit_loop_automation._daily_truth_entries_needing_import", return_value=([], {"latest_quote_at_utc": "2025-12-15T00:00:00Z"})), \
              patch("profit_loop_automation._run_daily_truth_artifact_refresh", return_value=(artifact_result, artifact_record)) as artifact_refresh_mock, \
@@ -583,6 +598,80 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(result["artifact_refresh"]["reason"], "source_truth_stale_preflight")
         self.assertTrue(result["artifact_refresh"]["skipped"])
         artifact_refresh_mock.assert_not_called()
+
+    def test_refresh_daily_truth_fails_when_configured_manifest_is_missing(self):
+        missing_manifest = self.state_dir / "missing-manifest.json"
+
+        with patch("profit_loop_automation._env_flag", return_value=True), \
+             patch(
+                 "profit_loop_automation._resolve_daily_truth_import_manifest",
+                 return_value=(str(missing_manifest), "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"),
+             ):
+            result = _refresh_daily_truth(repo_root=self.state_dir)
+
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["stage"], "preflight")
+        self.assertIn("does not exist", result["error"])
+        self.assertEqual(result["commands"], [])
+
+    def test_refresh_daily_truth_uses_explicit_historical_db_path(self):
+        manifest_path = self.state_dir / "daily_truth_import_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "imports": [
+                        {
+                            "input": "tmp_public/qqq_options.parquet",
+                            "source": "philippdubach_qqq_2024_2025_fresh",
+                            "format": "philippdubach_daily",
+                            "underlying": "QQQ",
+                            "date_from": "2024-01-01",
+                            "date_to": "2025-12-31",
+                        }
+                    ]
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+        external_db_path = self.state_dir / "external-options-history.db"
+        freshness_summary = {
+            "requested_manifest_inputs": ["C:/tmp/qqq_options.parquet"],
+            "daily_truth_source_latest_mtime_utc": "2026-04-03T12:00:00Z",
+            "daily_truth_source_horizon": "2025-12-15",
+            "daily_truth_source_stale": True,
+            "source_horizon_staleness_business_days": 79,
+            "trusted_truth_horizon": "2025-12-15",
+            "truth_staleness_business_days": 79,
+            "allowed_truth_staleness_business_days": 3,
+        }
+
+        with patch.dict(
+            os.environ,
+            {
+                "HISTORICAL_OPTIONS_DB_PATH": str(external_db_path),
+            },
+            clear=False,
+        ), \
+             patch("profit_loop_automation._env_flag", return_value=True), \
+             patch(
+                 "profit_loop_automation._resolve_daily_truth_import_manifest",
+                 return_value=(str(manifest_path), "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"),
+             ), \
+             patch(
+                 "profit_loop_automation._daily_truth_entries_needing_import",
+                 return_value=([], {"latest_quote_at_utc": "2025-12-15T00:00:00Z"}),
+             ) as entries_mock, \
+             patch(
+                 "profit_loop_automation._daily_truth_source_freshness",
+                 return_value=freshness_summary,
+             ) as freshness_mock:
+            result = _refresh_daily_truth(repo_root=self.state_dir)
+
+        self.assertEqual(result["status"], "artifact_refreshed")
+        self.assertEqual(entries_mock.call_args.kwargs["db_path"], str(external_db_path))
+        self.assertEqual(freshness_mock.call_args.kwargs["db_path"], str(external_db_path))
+        self.assertEqual(result["import_summary"]["db_path"], str(external_db_path))
 
     def test_truth_holdout_accepts_artifact_refresh_without_blocking(self):
         policy_payload = {
@@ -650,6 +739,65 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(result["targeted_issue"]["issue_id"], "truth-lane-live-policy-mismatch")
         self.assertIsNone(state["active_run"])
         self.assertEqual(state["latest_profit_validation"]["targeted_issue_id"], "truth-lane-live-policy-mismatch")
+        self.assertEqual(state["latest_profit_validation"]["loop_execution_status"], "degraded")
+
+    def test_profit_validation_queue_empty_is_not_treated_as_trusted_proof(self):
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"ran_at": "2026-04-02T11:30:00Z", "verdict": "healthy"}
+        state["latest_truth_holdout"] = {"ran_at": "2026-04-02T11:45:00Z", "verdict": "recorded"}
+        save_profit_loop_state(state, state_dir=self.state_dir)
+
+        refresh_result = {"status": "refreshed", "commands": []}
+        with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]):
+            result = prepare_profit_validation(state_dir=self.state_dir, auto_defer=False, daily_truth_refresh=refresh_result)
+
+        self.assertEqual(result["action"], "queue_empty")
+        self.assertEqual(result["snapshot"]["evidence_status"], "inconclusive")
+        self.assertFalse(result["snapshot"]["evidence_complete"])
+        state = load_profit_loop_state(self.state_dir)
+        self.assertEqual(state["latest_profit_validation"]["evidence_status"], "inconclusive")
+        self.assertFalse(state["latest_profit_validation"]["evidence_complete"])
+
+    def test_profit_validation_preserves_baseline_fields_in_written_artifact(self):
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"ran_at": "2026-04-02T11:30:00Z", "verdict": "healthy"}
+        state["latest_truth_holdout"] = {"ran_at": "2026-04-02T11:45:00Z", "verdict": "recorded"}
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "truth-lane-live-policy-mismatch",
+                "source_automation": "hourly-operational-health",
+                "severity": "high",
+                "blocker_class": "truth_lane_mismatch",
+                "summary": "Mismatch",
+                "evidence": ["one"],
+                "suggested_fix_targets": ["options_chatbot.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+
+        baseline = {
+            "validation_tests_passed": True,
+            "validation_test_count": 57,
+            "smoke_summary": {"scan_truth_lane": "historical_imported_daily"},
+            "replay_cases": [],
+            "proof_plan": {"needs_replay_matrix": False, "needs_holdout": False},
+            "proof_reuse": ["latest_operational_health.smoke"],
+            "proof_context": {"base_fingerprint": "match"},
+        }
+        refresh_result = {"status": "refreshed", "commands": []}
+        with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]), \
+             patch("profit_loop_automation._capture_validation_baseline", return_value=baseline):
+            result = prepare_profit_validation(state_dir=self.state_dir, auto_defer=False, daily_truth_refresh=refresh_result)
+
+        artifact = json.loads(
+            (Path(result["snapshot"]["proof_bundle_dir"]) / "validation_baseline.json").read_text(encoding="utf8")
+        )
+        self.assertTrue(artifact["validation_tests_passed"])
+        self.assertEqual(artifact["proof_reuse"], ["latest_operational_health.smoke"])
+        self.assertEqual(artifact["snapshot"]["targeted_issue_id"], "truth-lane-live-policy-mismatch")
 
     def test_profit_validation_reuses_smoke_from_recent_operational_health(self):
         state = load_profit_loop_state(self.state_dir)
@@ -726,6 +874,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         state = load_profit_loop_state(self.state_dir)
         deferred = next(item for item in state["open_issues"] if item["issue_id"] == "replay-matrix-collapsed-results")
         self.assertEqual(result["action"], "deferred")
+        self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
         self.assertEqual(deferred["status"], "deferred")
         self.assertEqual(deferred["deferred_reason"], "no_safe_fix_plan")
         self.assertTrue(str(deferred["next_action"]).strip())
@@ -1035,7 +1184,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                         "iv_adj": 1.2,
                     },
                     "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
-                    "after": {"profit_factor": 0.9, "avg_pnl_pct": -0.5},
+                    "after": {"profit_factor": 1.2, "avg_pnl_pct": 0.5},
                     "forward_evidence_status": "non_worse",
                     "truth_quality_regressed": False,
                     "safety_regressed": False,
@@ -1049,6 +1198,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(state["resolved_issues"][0]["resolution_branch"], "codex/automation/20260402-1200-truth-lane-live-policy-mismatch")
         self.assertEqual(state["latest_profit_validation"]["resolution_commit"], "abc1234")
         self.assertEqual(state["latest_profit_validation"]["profitability_verdict"], "improved")
+        self.assertEqual(state["latest_profit_validation"]["loop_execution_status"], "healthy")
         self.assertEqual(state["latest_profit_validation"]["measurement_gate"]["state"], "healthy")
         self.assertTrue((proof_dir / "validation_baseline.json").exists())
 
@@ -1245,7 +1395,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                         "iv_adj": 1.2,
                     },
                     "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
-                    "after": {"profit_factor": 0.9, "avg_pnl_pct": -0.5},
+                    "after": {"profit_factor": 1.2, "avg_pnl_pct": 0.5},
                     "forward_evidence_status": "sparse",
                     "truth_quality_regressed": False,
                     "safety_regressed": False,
@@ -1255,6 +1405,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             )
 
         self.assertEqual(result["snapshot"]["profitability_verdict"], "inconclusive")
+        self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
         state = load_profit_loop_state(self.state_dir)
         self.assertEqual(state["latest_profit_validation"]["profitability_verdict"], "inconclusive")
 
@@ -1298,7 +1449,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                         "iv_adj": 1.2,
                     },
                     "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
-                    "after": {"profit_factor": 0.9, "avg_pnl_pct": -0.5},
+                    "after": {"profit_factor": 1.2, "avg_pnl_pct": 0.5},
                     "forward_evidence_status": "non_worse",
                     "truth_quality_regressed": False,
                     "safety_regressed": False,
@@ -1309,7 +1460,62 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
         self.assertEqual(result["snapshot"]["profitability_verdict"], "inconclusive")
         self.assertEqual(result["snapshot"]["evidence_status"], "inconclusive")
+        self.assertFalse(result["snapshot"]["evidence_complete"])
+        self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
         self.assertEqual(result["snapshot"]["measurement_gate"]["state"], "blocked")
+
+    def test_profit_validation_resolve_does_not_claim_improved_for_less_bad_but_still_losing_results(self):
+        state = load_profit_loop_state(self.state_dir)
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "truth-lane-live-policy-mismatch",
+                "source_automation": "hourly-operational-health",
+                "severity": "high",
+                "blocker_class": "truth_lane_mismatch",
+                "summary": "Mismatch",
+                "evidence": ["one"],
+                "suggested_fix_targets": ["options_chatbot.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+        self._seed_healthy_validation_artifacts(
+            issue_id="truth-lane-live-policy-mismatch",
+            blocker_class="truth_lane_mismatch",
+            proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+        )
+
+        with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]), \
+             patch("profit_loop_automation.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}):
+            result = resolve_profit_validation_issue(
+                issue_id="truth-lane-live-policy-mismatch",
+                resolution_branch="codex/automation/20260402-1200-truth-lane-live-policy-mismatch",
+                resolution_commit="abc1234",
+                proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+                before_after_comparison={
+                    "comparison_spec": {
+                        "playbook": "broad",
+                        "truth_lane": "historical_imported_daily",
+                        "pricing_lane": "mid",
+                        "lookback_years": 1,
+                        "n_picks": 1,
+                        "iv_adj": 1.2,
+                    },
+                    "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
+                    "after": {"profit_factor": 0.9, "avg_pnl_pct": -0.5},
+                    "forward_evidence_status": "non_worse",
+                    "truth_quality_regressed": False,
+                    "safety_regressed": False,
+                    "material_drawdown_worsened": False,
+                },
+                state_dir=self.state_dir,
+            )
+
+        self.assertEqual(result["snapshot"]["profitability_verdict"], "inconclusive")
+        self.assertEqual(result["snapshot"]["loop_execution_status"], "degraded")
+        self.assertEqual(result["snapshot"]["evidence_status"], "trusted")
 
     def test_canary_runner_reuses_external_shared_state_across_repeated_runs(self):
         refresh_result = {"status": "dry_run", "commands": []}
@@ -1391,6 +1597,59 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             result["consistency"]["ledger_run_ids"],
             ["health-1", "holdout-1", "validation-1"],
         )
+
+
+class CandidateFlowBreakdownTests(unittest.TestCase):
+    def test_zero_candidates_with_drop_counts_classifies_correctly(self):
+        from profit_loop_automation import _candidate_flow_breakdown
+        funnel = {
+            "raw_candidates": 0,
+            "post_policy_visible": 0,
+            "post_guardrails_visible": 0,
+            "returned_picks": 0,
+            "drop_counts": {"tech_score": 5, "option_liquidity": 3},
+        }
+        result = _candidate_flow_breakdown(funnel)
+        self.assertEqual(result["classification"], "filtered_by_history_or_liquidity")
+        self.assertIsNotNone(result["primary_starving_gate"])
+
+    def test_zero_candidates_without_diagnostics_classifies_starvation_unresolved(self):
+        from profit_loop_automation import _candidate_flow_breakdown
+        funnel = {
+            "raw_candidates": 0,
+            "post_policy_visible": 0,
+            "post_guardrails_visible": 0,
+            "returned_picks": 0,
+        }
+        result = _candidate_flow_breakdown(funnel)
+        self.assertEqual(result["classification"], "scanner_starvation_unresolved")
+
+    def test_zero_candidates_with_symbol_diagnostics_classifies_no_candidates(self):
+        from profit_loop_automation import _candidate_flow_breakdown
+        funnel = {
+            "raw_candidates": 0,
+            "post_policy_visible": 0,
+            "post_guardrails_visible": 0,
+            "returned_picks": 0,
+            "symbol_diagnostics": {
+                "SPY": {"history_eligible": True, "final_candidate": False},
+            },
+        }
+        result = _candidate_flow_breakdown(funnel)
+        self.assertEqual(result["classification"], "no_candidates_from_scan")
+
+    def test_zero_candidates_with_tech_score_starvation(self):
+        from profit_loop_automation import _candidate_flow_breakdown
+        funnel = {
+            "raw_candidates": 0,
+            "post_policy_visible": 0,
+            "post_guardrails_visible": 0,
+            "returned_picks": 0,
+            "drop_counts": {"tech_score": 10},
+        }
+        result = _candidate_flow_breakdown(funnel)
+        # tech_score alone is not in the history/liquidity group
+        self.assertEqual(result["classification"], "no_candidates_from_scan")
 
 
 if __name__ == "__main__":

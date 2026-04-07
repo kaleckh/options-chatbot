@@ -13,6 +13,7 @@ from forward_options_ledger import (
     list_forward_sessions,
     migrate_live_production_evidence,
     record_forward_snapshot,
+    record_position_opened,
     summarize_forward_holdout,
 )
 
@@ -792,6 +793,204 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(authoritative_sessions[0]["evidence_class"], "live_production")
         self.assertEqual(len(authoritative_events), 1)
         self.assertEqual(authoritative_events[0]["ticker"], "SPY")
+
+
+    def test_record_position_opened_writes_ledger_event(self):
+        position = {
+            "id": 42,
+            "ticker": "SPY",
+            "direction": "call",
+            "contract_symbol": "SPY260417C00560000",
+            "strike": 560.0,
+            "expiry": "2026-04-17",
+            "contracts": 2,
+            "entry_execution_price": 5.10,
+            "entry_execution_basis": "ask",
+            "entry_fee_total_usd": 1.30,
+            "source_scan_session_id": 99,
+            "source_scan_event_key": "baseline_broad_control:rank_1",
+            "source_scan_run_id": "test_run_001",
+            "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+            "proof_eligible": True,
+            "proof_ineligibility_reason": None,
+            "source_pick_snapshot": {
+                "ticker": "SPY",
+                "direction": "call",
+                "contract_symbol": "SPY260417C00560000",
+                "expiry": "2026-04-17",
+                "strike": 560.0,
+                "quote_time_et": "2026-04-06T10:00:00",
+                "quote_basis": "mid",
+                "underlying_price_at_selection": 552.25,
+                "selection_source": "live_chain_exact_contract",
+                "promotion_class": "promotable_exact_contract",
+                "cohort_id": "baseline_broad_control",
+                "cohort_role": "control",
+            },
+        }
+
+        result = record_position_opened(
+            position=position,
+            source_label="position_opened",
+            db_path=self.db_path,
+            evidence_class="unit_test",
+            run_id="test_run_sprint1",
+            run_mode="test_harness",
+            is_fixture=True,
+        )
+
+        self.assertEqual(result["event_type"], "position_opened")
+        self.assertEqual(result["position_id"], 42)
+        self.assertEqual(result["ticker"], "SPY")
+        self.assertEqual(result["contract_symbol"], "SPY260417C00560000")
+        self.assertIsNotNone(result["session_id"])
+
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            row = conn.execute(
+                "SELECT event_type, ticker, contract_symbol, position_id, contracts, "
+                "source_scan_session_id, source_scan_event_key, source_scan_run_id, "
+                "outcome_state, entry_execution_price, entry_execution_basis "
+                "FROM forward_events WHERE event_type = 'position_opened'"
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], "position_opened")
+        self.assertEqual(row[1], "SPY")
+        self.assertEqual(row[2], "SPY260417C00560000")
+        self.assertEqual(row[3], 42)
+        self.assertEqual(row[4], 2)
+        self.assertEqual(row[5], 99)
+        self.assertEqual(row[6], "baseline_broad_control:rank_1")
+        self.assertEqual(row[7], "test_run_001")
+        self.assertEqual(row[8], "taken")
+        self.assertEqual(row[9], 5.10)
+        self.assertEqual(row[10], "ask")
+
+    def test_matching_prefers_explicit_scan_provenance_ids(self):
+        from forward_options_ledger import _tracked_position_matches_pick
+
+        pick_with_provenance = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-04-17",
+            "strike": 560.0,
+            "contract_symbol": "SPY260417C00560000",
+            "source_scan_session_id": 100,
+            "source_scan_event_key": "baseline_broad_control:rank_1",
+        }
+
+        position_matching = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-04-17",
+            "strike": 560.0,
+            "contract_symbol": "SPY260417C00560000",
+            "source_scan_session_id": 100,
+            "source_scan_event_key": "baseline_broad_control:rank_1",
+            "source_pick_snapshot": {},
+        }
+
+        position_different_provenance = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-04-17",
+            "strike": 560.0,
+            "contract_symbol": "SPY260417C00560000",
+            "source_scan_session_id": 200,
+            "source_scan_event_key": "baseline_broad_control:rank_2",
+            "source_pick_snapshot": {},
+        }
+
+        self.assertTrue(_tracked_position_matches_pick(pick_with_provenance, [position_matching]))
+        # Falls through to contract symbol match even if provenance differs
+        self.assertTrue(_tracked_position_matches_pick(pick_with_provenance, [position_different_provenance]))
+
+    def test_drop_counts_preserved_in_scan_funnel(self):
+        result = record_forward_snapshot(
+            scan_snapshot={
+                "picks": [],
+                "policy_applied": True,
+                "policy": {"truth_source": "historical_imported_daily", "promotion_status": "watch"},
+                "playbook": {"id": "short_term"},
+                "scan_funnel": {
+                    "raw_candidates": 0,
+                    "post_policy_visible": 0,
+                    "post_guardrails_visible": 0,
+                    "returned_picks": 0,
+                    "policy_filtered_out": 0,
+                    "guardrail_filtered_out": 0,
+                    "final_trimmed": 0,
+                    "drop_counts": {
+                        "tech_score": 5,
+                        "option_liquidity": 3,
+                        "min_history": 0,
+                    },
+                    "symbol_diagnostics": {
+                        "SPY": {"history_eligible": True, "signal_candidate": False, "final_candidate": False},
+                        "QQQ": {"history_eligible": True, "signal_candidate": True, "final_candidate": False},
+                    },
+                },
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="unit_test",
+            db_path=self.db_path,
+        )
+
+        sessions = list_forward_sessions(db_path=self.db_path)
+        self.assertEqual(len(sessions), 1)
+        funnel = sessions[0]["notes"]["scan_funnel"]
+        self.assertEqual(funnel["drop_counts"]["tech_score"], 5)
+        self.assertEqual(funnel["drop_counts"]["option_liquidity"], 3)
+        self.assertEqual(funnel["symbol_diagnostics"]["SPY"]["signal_candidate"], False)
+        self.assertEqual(funnel["symbol_diagnostics"]["QQQ"]["signal_candidate"], True)
+
+    def test_claim_readiness_not_ready_with_no_evidence(self):
+        from options_profit_gate import evaluate_claim_readiness
+        with patch("options_profit_gate._load_forward_evidence", return_value={
+            "eligible_event_count": 5,
+            "pending_truth_event_count": 0,
+            "by_symbol": {"SPY": {"eligible": 3, "pending_truth": 0, "ineligible": 0}, "QQQ": {"eligible": 2, "pending_truth": 0, "ineligible": 0}},
+            "contamination_findings": [],
+            "stale_metadata_events": [],
+        }), patch("options_profit_gate._load_positions_snapshot", return_value={
+            "available": True,
+            "error_message": None,
+            "closed_positions": [],
+            "database_url_configured": True,
+        }):
+            result = evaluate_claim_readiness()
+        self.assertFalse(result["claim_ready"])
+        self.assertEqual(result["state"], "not_claim_ready")
+        self.assertGreater(result["blocker_count"], 0)
+        blocker_codes = [b["code"] for b in result["blockers"]]
+        self.assertIn("insufficient_eligible_forward_events", blocker_codes)
+        self.assertIn("insufficient_exact_contract_positions", blocker_codes)
+
+    def test_loop_healthy_but_not_claim_ready(self):
+        """Verify the two-tier gate: loop can be healthy while claim is not ready."""
+        from options_profit_gate import LOOP_HEALTH_MIN_ELIGIBLE_FORWARD_EVENTS, CLAIM_MIN_ELIGIBLE_FORWARD_EVENTS
+        # Loop health needs 10, claim needs 40
+        self.assertLess(LOOP_HEALTH_MIN_ELIGIBLE_FORWARD_EVENTS, CLAIM_MIN_ELIGIBLE_FORWARD_EVENTS)
+
+    def test_matching_falls_back_to_heuristic_for_legacy_positions(self):
+        from forward_options_ledger import _tracked_position_matches_pick
+
+        pick_no_provenance = {
+            "ticker": "QQQ",
+            "direction": "put",
+            "expiry": "2026-04-17",
+            "strike": 480.0,
+        }
+
+        position_legacy = {
+            "ticker": "QQQ",
+            "direction": "put",
+            "expiry": "2026-04-17",
+            "strike": 480.0,
+            "source_pick_snapshot": {},
+        }
+
+        self.assertTrue(_tracked_position_matches_pick(pick_no_provenance, [position_legacy]))
 
 
 if __name__ == "__main__":

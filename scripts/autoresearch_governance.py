@@ -123,6 +123,30 @@ def _normalize_symbols(values: Sequence[Any] | None) -> list[str]:
     return normalized
 
 
+def _normalize_profile_targets(values: Sequence[Any] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        target = str(raw or "").strip().lower()
+        if target not in {"equity", "index"} or target in seen:
+            continue
+        seen.add(target)
+        normalized.append(target)
+    return normalized
+
+
+def _normalize_directions(values: Sequence[Any] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        direction = str(raw or "").strip().lower()
+        if direction not in {"call", "put"} or direction in seen:
+            continue
+        seen.add(direction)
+        normalized.append(direction)
+    return normalized
+
+
 def _normalized_cohort(raw: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": str(raw.get("id") or "").strip(),
@@ -130,6 +154,8 @@ def _normalized_cohort(raw: dict[str, Any]) -> dict[str, Any]:
         "label": str(raw.get("label") or raw.get("id") or "").strip(),
         "playbooks": [str(item).strip() for item in (raw.get("playbooks") or []) if str(item).strip()],
         "overrides": dict(raw.get("overrides") or {}),
+        "profile_targets": _normalize_profile_targets(raw.get("profile_targets")) or ["equity"],
+        "directions": _normalize_directions(raw.get("directions")),
         "allowed_proposal_families": [
             str(item).strip()
             for item in (raw.get("allowed_proposal_families") or [])

@@ -234,5 +234,62 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(len(tickers["SPY"].history_calls), 1)
 
 
+    def test_review_includes_pricing_state_priced_exact(self):
+        position = self._build_position(fill_price=2.0)
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_fetch_option_quote", return_value={
+                 "expired": False,
+                 "current_option_price": 2.2,
+                 "pricing_source": "mid",
+                 "pricing_state": "priced_exact",
+                 "current_execution_price": 2.2,
+                 "current_execution_basis": "mid",
+                 "price_trigger_ok": True,
+                 "warnings": [],
+                 "underlying_price": 125.0,
+             }), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0), \
+             patch.object(svc, "_check_early_exit", return_value=(False, "")):
+            review = svc.review_position(position)
+
+        self.assertEqual(review["pricing_state"], "priced_exact")
+        self.assertEqual(review["metrics_snapshot"]["pricing_state"], "priced_exact")
+
+    def test_review_includes_pricing_state_unpriced(self):
+        position = self._build_position(fill_price=3.2)
+        position["contract_symbol"] = "AAA260407C99999999"
+        position["source_pick_snapshot"]["contract_symbol"] = position["contract_symbol"]
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc.yf, "Ticker", side_effect=self.bundle.make_ticker), \
+             patch.object(svc, "_check_indicator_exit_without_price", return_value=(False, "")):
+            review = svc.review_position(position)
+
+        self.assertEqual(review["pricing_state"], "unpriced_exact_contract_not_in_chain")
+        self.assertEqual(review["metrics_snapshot"]["pricing_state"], "unpriced_exact_contract_not_in_chain")
+
+    def test_review_includes_pricing_state_display_only_last(self):
+        position = self._build_position(fill_price=2.0)
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_fetch_option_quote", return_value={
+                 "expired": False,
+                 "current_option_price": 2.1,
+                 "pricing_source": "last",
+                 "pricing_state": "priced_display_only_last",
+                 "current_execution_price": None,
+                 "current_execution_basis": None,
+                 "price_trigger_ok": False,
+                 "warnings": ["Using last trade only for display"],
+                 "underlying_price": 125.0,
+             }), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0), \
+             patch.object(svc, "_check_indicator_exit_without_price", return_value=(False, "")):
+            review = svc.review_position(position)
+
+        self.assertEqual(review["pricing_state"], "priced_display_only_last")
+
+
 if __name__ == "__main__":
     unittest.main()

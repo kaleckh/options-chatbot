@@ -94,6 +94,47 @@ def _is_exact_contract_resolution(value: Any) -> bool:
     return normalized in {"exact_target_contract", "exact_archived_contract"}
 
 
+def _truth_source(result: dict[str, Any]) -> str:
+    return str(result.get("truth_source") or "synthetic_research").strip().lower() or "synthetic_research"
+
+
+def _authoritative_profitability_view(
+    result: dict[str, Any],
+    aggregate_trades: list[dict[str, Any]],
+) -> dict[str, Any]:
+    candidate_source = str(result.get("candidate_source") or "").strip().lower()
+    authoritative_evidence_source = str(result.get("authoritative_evidence_source") or "").strip().lower()
+    truth_source = _truth_source(result)
+
+    if candidate_source == "forward_ledger_scan" or authoritative_evidence_source == "archived_forward_daily":
+        authoritative_trades = [
+            trade
+            for trade in aggregate_trades
+            if _contract_resolution(trade) == "exact_archived_contract"
+        ]
+        label = "Archived exact-contract subset"
+        description = "Forward profitability claims use only archived exact contracts; model fallback remains research-only."
+    elif truth_source in {"historical_imported", "historical_imported_daily"}:
+        authoritative_trades = [
+            trade for trade in aggregate_trades if _is_exact_contract_resolution(_contract_resolution(trade))
+        ]
+        label = "Exact-contract subset"
+        description = "Imported replay profitability claims use exact-contract matches only; nearest-listed substitutions remain research-only."
+    else:
+        authoritative_trades = list(aggregate_trades)
+        label = "Aggregate replay"
+        description = "No exact-contract split is available for this truth lane, so profitability falls back to all replay trades."
+
+    authoritative_ids = {id(trade) for trade in authoritative_trades}
+    research_only_trades = [trade for trade in aggregate_trades if id(trade) not in authoritative_ids]
+    return {
+        "label": label,
+        "description": description,
+        "trades": authoritative_trades,
+        "research_only_trades": research_only_trades,
+    }
+
+
 def _summarize_trade_subset(
     category: str,
     value: str,
@@ -210,17 +251,38 @@ def build_options_profitability_forensics(
     if not result:
         return {"error": "No backtest results found"}
 
-    trades = list(result.get("trades") or [])
+    aggregate_trades = list(result.get("trades") or [])
+    profitability_view = _authoritative_profitability_view(result, aggregate_trades)
+    trades = list(profitability_view["trades"])
+    research_only_trades = list(profitability_view["research_only_trades"])
     total_trades = len(trades)
-    source = _result_source(result, total_trades)
+    source = _result_source(result, len(aggregate_trades))
     overall = _summarize_trade_subset("overall", "overall", trades, total_trades, min_trades=min_trades)
+    aggregate_overall = _summarize_trade_subset(
+        "aggregate_overall",
+        "aggregate_overall",
+        aggregate_trades,
+        len(aggregate_trades),
+        min_trades=min_trades,
+    )
+    research_only_overall = _summarize_trade_subset(
+        "research_only_overall",
+        "research_only_overall",
+        research_only_trades,
+        len(research_only_trades),
+        min_trades=min_trades,
+    )
 
-    if not trades:
+    if not aggregate_trades:
         return {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
             "source": source,
             "quality_bar": {"min_trades": int(min_trades)},
             "overall": overall,
+            "aggregate_overall": aggregate_overall,
+            "research_only_overall": research_only_overall,
+            "authoritative_profitability_label": profitability_view["label"],
+            "authoritative_profitability_description": profitability_view["description"],
             "exactness_view": {
                 "exact_only": _summarize_trade_subset("exactness", "exact_only", [], 0, min_trades=min_trades),
                 "nearest_allowed": _summarize_trade_subset("exactness", "nearest_allowed", [], 0, min_trades=min_trades),
@@ -289,15 +351,29 @@ def build_options_profitability_forensics(
             pretrade_slices.extend(summaries)
 
     exact_only = [
-        trade for trade in trades if _is_exact_contract_resolution(_contract_resolution(trade))
+        trade for trade in aggregate_trades if _is_exact_contract_resolution(_contract_resolution(trade))
     ]
     nearest_only = [
-        trade for trade in trades if _contract_resolution(trade) == "nearest_listed_contract"
+        trade for trade in aggregate_trades if _contract_resolution(trade) == "nearest_listed_contract"
     ]
     exactness_view = {
-        "exact_only": _summarize_trade_subset("exactness", "exact_only", exact_only, total_trades, min_trades=min_trades),
-        "nearest_allowed": _summarize_trade_subset("exactness", "nearest_allowed", trades, total_trades, min_trades=min_trades),
-        "nearest_only": _summarize_trade_subset("exactness", "nearest_only", nearest_only, total_trades, min_trades=min_trades),
+        "exact_only": _summarize_trade_subset("exactness", "exact_only", exact_only, len(aggregate_trades), min_trades=min_trades),
+        "authoritative_only": _summarize_trade_subset(
+            "exactness",
+            "authoritative_only",
+            trades,
+            len(aggregate_trades),
+            min_trades=min_trades,
+        ),
+        "nearest_allowed": _summarize_trade_subset("exactness", "nearest_allowed", aggregate_trades, len(aggregate_trades), min_trades=min_trades),
+        "nearest_only": _summarize_trade_subset("exactness", "nearest_only", nearest_only, len(aggregate_trades), min_trades=min_trades),
+        "research_only": _summarize_trade_subset(
+            "exactness",
+            "research_only",
+            research_only_trades,
+            len(aggregate_trades),
+            min_trades=min_trades,
+        ),
     }
 
     dense_slices = [item for item in pretrade_slices if not item.get("sparse")]
@@ -307,9 +383,9 @@ def build_options_profitability_forensics(
     blockers: list[str] = []
     recommendations: list[str] = []
     if float(overall.get("profit_factor", 0.0) or 0.0) < 1.0:
-        blockers.append("Overall profit factor is below 1.0.")
+        blockers.append(f"{profitability_view['label']} profit factor is below 1.0.")
     if float(overall.get("avg_pnl_pct", 0.0) or 0.0) <= 0.0:
-        blockers.append("Overall average trade P&L is not positive.")
+        blockers.append(f"{profitability_view['label']} average trade P&L is not positive.")
     if float(exactness_view["exact_only"].get("profit_factor", 0.0) or 0.0) < 1.0:
         blockers.append("Exact-contract-only subset is not profitable.")
     if float(exactness_view["exact_only"].get("avg_pnl_pct", 0.0) or 0.0) <= 0.0:
@@ -327,6 +403,10 @@ def build_options_profitability_forensics(
     if bootstrap_share_pct >= 80.0:
         blockers.append(
             f"Bootstrap-heuristic trades still dominate the sample ({bootstrap_share_pct:.1f}%)."
+        )
+    if research_only_trades:
+        recommendations.append(
+            f"{len(research_only_trades)} replay trade(s) remain outside the authoritative profitability lens and should stay research-only."
         )
 
     if best_dense_slices and float(best_dense_slices[0].get("avg_pnl_pct", 0.0) or 0.0) > 0.0:
@@ -346,6 +426,10 @@ def build_options_profitability_forensics(
         "source": source,
         "quality_bar": {"min_trades": int(min_trades)},
         "overall": overall,
+        "aggregate_overall": aggregate_overall,
+        "research_only_overall": research_only_overall,
+        "authoritative_profitability_label": profitability_view["label"],
+        "authoritative_profitability_description": profitability_view["description"],
         "exactness_view": exactness_view,
         "category_order": category_order,
         "by_category": by_category,

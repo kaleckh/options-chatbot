@@ -1005,6 +1005,78 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(report["exactness_view"]["nearest_only"]["trades"], 3)
         self.assertTrue(any(item["value"] == "SPY:call" for item in report["by_category"]["symbol_side"]))
 
+    def test_profitability_forensics_uses_exact_contract_authoritative_lens(self):
+        result = {
+            "run_at": "2026-04-03T14:18:04",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "truth_source": "historical_imported_daily",
+            "trades": [
+                {
+                    "ticker": "SPY",
+                    "type": "call",
+                    "selection_source": "replay_calibrated",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 80.0,
+                    "quality_score": 72.0,
+                    "tech_score": 71.0,
+                    "dte": 7,
+                    "exit_reason": "stop",
+                    "pnl_pct": -12.0,
+                    "directional_correct": False,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "call",
+                    "selection_source": "replay_calibrated",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 78.0,
+                    "quality_score": 70.0,
+                    "tech_score": 69.0,
+                    "dte": 9,
+                    "exit_reason": "stop",
+                    "pnl_pct": -8.0,
+                    "directional_correct": False,
+                },
+                {
+                    "ticker": "SPY",
+                    "type": "call",
+                    "selection_source": "replay_calibrated",
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 82.0,
+                    "quality_score": 74.0,
+                    "tech_score": 73.0,
+                    "dte": 8,
+                    "exit_reason": "target",
+                    "pnl_pct": 15.0,
+                    "directional_correct": True,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "call",
+                    "selection_source": "replay_calibrated",
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 84.0,
+                    "quality_score": 76.0,
+                    "tech_score": 75.0,
+                    "dte": 10,
+                    "exit_reason": "target",
+                    "pnl_pct": 14.0,
+                    "directional_correct": True,
+                },
+            ],
+        }
+
+        report = opf.build_options_profitability_forensics(result, min_trades=1)
+
+        self.assertEqual(report["authoritative_profitability_label"], "Exact-contract subset")
+        self.assertEqual(report["overall"]["trades"], 2)
+        self.assertEqual(report["aggregate_overall"]["trades"], 4)
+        self.assertEqual(report["research_only_overall"]["trades"], 2)
+        self.assertEqual(report["exactness_view"]["authoritative_only"]["trades"], 2)
+        self.assertIn("Exact-contract subset profit factor is below 1.0.", report["blockers"])
+
     def test_historical_backtest_uses_spy_aligned_open_series(self):
         spy_dates = pd.date_range("2024-01-01", periods=100, freq="B")
         aaa_dates = pd.date_range("2024-01-01", periods=105, freq="B")
@@ -1601,6 +1673,74 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertIn("stability_not_promote", policy["readiness_blockers"])
         self.assertEqual(policy["scan_policy"]["hard_filters"]["approved_tickers"], ["SPY"])
 
+    def test_live_policy_blocks_when_exact_contract_subset_is_not_profitable(self):
+        def _trade(*, pnl_pct: float, dense: bool) -> dict:
+            return {
+                "ticker": "SPY",
+                "type": "call",
+                "direction_score": 72.0,
+                "quality_score": 78.0,
+                "tech_score": 80.0,
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "selection_source": "replay_calibrated",
+                "calibration_density": "dense" if dense else "sparse",
+                "entry_contract_resolution": "exact_target_contract",
+                "exit_reason": "target" if pnl_pct > 0 else "stop",
+                "directional_correct": pnl_pct > 0,
+                "pnl_pct": pnl_pct,
+            }
+
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "priced_trade_count": 50,
+            "unpriced_trade_count": 0,
+            "trades": [*[_trade(pnl_pct=12.0, dense=True) for _ in range(25)], *[_trade(pnl_pct=-20.0, dense=False) for _ in range(25)]],
+        }
+        matrix = {
+            "source": {
+                "pricing_lane": "historical_imported_daily",
+                "playbook": "short_term",
+                "quote_coverage_pct": 100.0,
+                "priced_trade_count": 50,
+                "unpriced_trade_count": 0,
+                "nearest_contract_match_count": 0,
+            },
+            "source_run_at": "2026-04-01T12:00:00",
+            "source_mode": "backtest",
+            "lookback_years": 1,
+            "strategy_domain": "options",
+            "trade_types": ["call"],
+            "overall": {"profit_factor": 1.2},
+            "by_category": {
+                "score_bands": [],
+                "asset_class_by_regime": [],
+                "sector": [],
+                "ticker": [],
+            },
+        }
+        stability = {
+            "overall_status": "promote",
+            "promotion_recommendations": {"approved_filters": {}},
+            "recommendations": [],
+        }
+
+        with patch.object(wfo, "build_options_experiment_matrix", return_value=matrix), \
+             patch.object(wfo, "build_options_stability_report", return_value=stability):
+            policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["promotion_status"], "block")
+        self.assertFalse(policy["authoritative_profitability_gate"]["passed"])
+        self.assertIn("authoritative_exact_profitability_not_clear", policy["readiness_blockers"])
+        self.assertEqual(policy["scan_policy"]["hard_filters"]["approved_tickers"], [])
+        self.assertEqual(policy["by_symbol"]["SPY"]["promotion_metrics"]["promotion_status"], "block")
+
     def test_live_policy_stays_watch_when_archived_evidence_is_insufficient(self):
         trade = {
             "ticker": "SPY",
@@ -1666,6 +1806,118 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(policy["promotion_status"], "watch")
         self.assertEqual(policy["managed_lane_status"], "watch_only")
         self.assertIn(f"evidence_status:{wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS}", policy["readiness_blockers"])
+
+    def test_live_policy_promotes_from_exact_subset_even_when_nearest_listed_replay_is_negative(self):
+        trade_dates = pd.date_range("2025-01-02", periods=50, freq="B")
+
+        def _trade(date_value: pd.Timestamp, ticker: str, pnl_pct: float, resolution: str) -> dict:
+            return {
+                "ticker": ticker,
+                "date": str(date_value.date()),
+                "type": "call",
+                "direction_score": 72.0,
+                "quality_score": 78.0,
+                "tech_score": 80.0,
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "selection_source": "replay_calibrated",
+                "calibration_density": "dense",
+                "entry_contract_resolution": resolution,
+                "exit_reason": "target" if pnl_pct > 0 else "stop",
+                "directional_correct": pnl_pct > 0,
+                "pnl_pct": pnl_pct,
+            }
+
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "priced_trade_count": 50,
+            "unpriced_trade_count": 0,
+            "exact_contract_match_count": 25,
+            "nearest_contract_match_count": 25,
+            "trades": [
+                *[
+                    _trade(trade_dates[idx], "SPY", 12.0, "exact_target_contract")
+                    for idx in range(25)
+                ],
+                *[
+                    _trade(trade_dates[idx + 25], "QQQ", -20.0, "nearest_listed_contract")
+                    for idx in range(25)
+                ],
+            ],
+        }
+
+        policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["promotion_status"], "promote")
+        self.assertEqual(policy["managed_lane_status"], "open")
+        self.assertEqual(policy["authoritative_profitability_lens"], "exact_contract_only")
+        self.assertEqual(policy["authoritative_profitability_metrics"]["trade_count"], 25)
+        self.assertEqual(policy["authoritative_exact_contract_metrics"]["trade_count"], 25)
+        self.assertEqual(policy["nearest_listed_metrics"]["trade_count"], 25)
+        self.assertEqual(policy["scan_policy"]["hard_filters"]["approved_tickers"], ["SPY"])
+        self.assertNotIn("authoritative_exact_profitability_not_clear", policy["readiness_blockers"])
+
+    def test_live_policy_blocks_when_only_nearest_listed_subset_is_profitable(self):
+        trade_dates = pd.date_range("2025-01-02", periods=50, freq="B")
+
+        def _trade(date_value: pd.Timestamp, ticker: str, pnl_pct: float, resolution: str) -> dict:
+            return {
+                "ticker": ticker,
+                "date": str(date_value.date()),
+                "type": "call",
+                "direction_score": 72.0,
+                "quality_score": 78.0,
+                "tech_score": 80.0,
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "selection_source": "replay_calibrated",
+                "calibration_density": "dense",
+                "entry_contract_resolution": resolution,
+                "exit_reason": "target" if pnl_pct > 0 else "stop",
+                "directional_correct": pnl_pct > 0,
+                "pnl_pct": pnl_pct,
+            }
+
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "priced_trade_count": 50,
+            "unpriced_trade_count": 0,
+            "exact_contract_match_count": 25,
+            "nearest_contract_match_count": 25,
+            "trades": [
+                *[
+                    _trade(trade_dates[idx], "SPY", -8.0, "exact_target_contract")
+                    for idx in range(25)
+                ],
+                *[
+                    _trade(trade_dates[idx + 25], "QQQ", 20.0, "nearest_listed_contract")
+                    for idx in range(25)
+                ],
+            ],
+        }
+
+        policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["promotion_status"], "block")
+        self.assertEqual(policy["managed_lane_status"], "blocked_no_approved_symbols")
+        self.assertEqual(policy["authoritative_profitability_lens"], "exact_contract_only")
+        self.assertEqual(policy["authoritative_profitability_metrics"]["trade_count"], 25)
+        self.assertEqual(policy["authoritative_exact_contract_metrics"]["profit_factor"], 0.0)
+        self.assertGreater(policy["nearest_listed_metrics"]["profit_factor"], 1.0)
+        self.assertIn("authoritative_exact_profitability_not_clear", policy["readiness_blockers"])
+        self.assertEqual(policy["scan_policy"]["hard_filters"]["approved_tickers"], [])
 
     def test_live_policy_marks_truth_window_stale_and_blocks_managed_lane(self):
         result = {
@@ -1743,6 +1995,134 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(policy["watch_priority_symbols"], ["SPY"])
         self.assertEqual(policy["watch_deprioritized_symbols"], ["QQQ"])
         self.assertIn("truth_window_stale", policy["readiness_blockers"])
+
+    def test_live_policy_requires_exact_directional_accuracy_for_promotion(self):
+        def _trade(directionally_correct: bool, pnl_pct: float) -> dict:
+            return {
+                "ticker": "SPY",
+                "type": "call",
+                "direction_score": 72.0,
+                "quality_score": 78.0,
+                "tech_score": 80.0,
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "selection_source": "replay_calibrated",
+                "calibration_density": "dense",
+                "entry_contract_resolution": "exact_target_contract",
+                "exit_reason": "target" if pnl_pct > 0 else "stop",
+                "directional_correct": directionally_correct,
+                "pnl_pct": pnl_pct,
+            }
+
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "playbook": "short_term",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "priced_trade_count": 25,
+            "unpriced_trade_count": 0,
+            "trades": [
+                *[_trade(True, 12.0) for _ in range(10)],
+                *[_trade(False, -1.0) for _ in range(15)],
+            ],
+        }
+        matrix = {
+            "source": {
+                "pricing_lane": "historical_imported_daily",
+                "playbook": "short_term",
+                "quote_coverage_pct": 100.0,
+                "priced_trade_count": 25,
+                "unpriced_trade_count": 0,
+                "nearest_contract_match_count": 0,
+            },
+            "source_run_at": "2026-04-01T12:00:00",
+            "source_mode": "backtest",
+            "lookback_years": 1,
+            "strategy_domain": "options",
+            "trade_types": ["call"],
+            "overall": {"profit_factor": 8.0, "avg_pnl_pct": 4.2},
+            "aggregate_overall": {"profit_factor": 8.0, "avg_pnl_pct": 4.2},
+            "by_category": {
+                "score_bands": [],
+                "asset_class_by_regime": [],
+                "sector": [],
+                "ticker": [],
+            },
+        }
+        stability = {
+            "overall_status": "promote",
+            "promotion_recommendations": {"approved_filters": {}},
+            "recommendations": [],
+        }
+
+        with patch.object(wfo, "build_options_experiment_matrix", return_value=matrix), \
+             patch.object(wfo, "build_options_stability_report", return_value=stability):
+            policy = wfo.build_live_options_trade_policy(result=result, min_trades=1)
+
+        self.assertEqual(policy["promotion_status"], "block")
+        self.assertIn("authoritative_exact_profitability_not_clear", policy["readiness_blockers"])
+        self.assertEqual(
+            policy["authoritative_profitability_gate"]["thresholds"]["min_directional_accuracy_pct"],
+            50.0,
+        )
+        self.assertFalse(policy["authoritative_profitability_gate"]["passed"])
+
+    def test_experiment_matrix_uses_exact_contract_authoritative_lens(self):
+        result = {
+            "run_at": "2026-04-01T12:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "historical_imported_daily",
+            "truth_source": "historical_imported_daily",
+            "quote_coverage_pct": 100.0,
+            "trades": [
+                {
+                    "ticker": "SPY",
+                    "type": "call",
+                    "direction_score": 80.0,
+                    "sector": "Index ETF",
+                    "market_regime": "bullish",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "directional_correct": False,
+                    "pnl_pct": -10.0,
+                },
+                {
+                    "ticker": "QQQ",
+                    "type": "call",
+                    "direction_score": 78.0,
+                    "sector": "Index ETF",
+                    "market_regime": "bullish",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "directional_correct": False,
+                    "pnl_pct": -10.0,
+                },
+                *[
+                    {
+                        "ticker": "SPY",
+                        "type": "call",
+                        "direction_score": 82.0,
+                        "sector": "Index ETF",
+                        "market_regime": "bullish",
+                        "entry_contract_resolution": "nearest_listed_contract",
+                        "directional_correct": True,
+                        "pnl_pct": 12.0,
+                    }
+                    for _ in range(8)
+                ],
+            ],
+        }
+
+        matrix = wfo.build_options_experiment_matrix(result=result, min_trades=1)
+
+        self.assertEqual(matrix["authoritative_profitability_lens"], "exact_contract_only")
+        self.assertEqual(matrix["overall"]["trades"], 2)
+        self.assertLess(matrix["overall"]["avg_pnl_pct"], 0.0)
+        self.assertEqual(matrix["aggregate_overall"]["trades"], 10)
+        self.assertGreater(matrix["aggregate_overall"]["avg_pnl_pct"], 0.0)
+        self.assertFalse(matrix["authoritative_profitability_gate"]["passed"])
 
     def test_supervised_policy_ranking_prefers_dense_expectancy_after_decision(self):
         policy = {

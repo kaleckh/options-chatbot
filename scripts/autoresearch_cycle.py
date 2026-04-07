@@ -253,17 +253,47 @@ def _temporary_replay_universe(symbols: Optional[Sequence[str]]):
         wfo.IMPORTED_VALIDATION_UNIVERSE = previous_imported_universe
 
 
+def _normalize_profile_targets(values: Optional[Sequence[Any]]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        target = str(raw or "").strip().lower()
+        if target not in {"equity", "index"} or target in seen:
+            continue
+        seen.add(target)
+        normalized.append(target)
+    return normalized
+
+
+def _normalize_directions(values: Optional[Sequence[Any]]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        direction = str(raw or "").strip().lower()
+        if direction not in {"call", "put"} or direction in seen:
+            continue
+        seen.add(direction)
+        normalized.append(direction)
+    return normalized
+
+
 def _merge_profile_overrides(
     base_profiles: dict[str, dict[str, Any]],
     overrides: dict[str, Any],
+    *,
+    profile_targets: Optional[Sequence[str]] = None,
 ) -> dict[str, dict[str, Any]]:
     merged = copy.deepcopy(base_profiles)
-    equity_overrides = dict(overrides or {})
-    for section_name, section_value in equity_overrides.items():
-        if isinstance(section_value, dict) and isinstance(merged["equity"].get(section_name), dict):
-            merged["equity"][section_name].update(copy.deepcopy(section_value))
-        else:
-            merged["equity"][section_name] = copy.deepcopy(section_value)
+    normalized_targets = _normalize_profile_targets(profile_targets) or ["equity"]
+    applied_overrides = dict(overrides or {})
+    for target in normalized_targets:
+        if target not in merged:
+            continue
+        for section_name, section_value in applied_overrides.items():
+            if isinstance(section_value, dict) and isinstance(merged[target].get(section_name), dict):
+                merged[target][section_name].update(copy.deepcopy(section_value))
+            else:
+                merged[target][section_name] = copy.deepcopy(section_value)
     return merged
 
 
@@ -274,14 +304,22 @@ def _replace_profiles(target: Any, profiles: dict[str, dict[str, Any]]) -> None:
 
 
 @contextmanager
-def _temporary_profile_overrides(overrides: Optional[dict[str, Any]]):
+def _temporary_profile_overrides(
+    overrides: Optional[dict[str, Any]],
+    *,
+    profile_targets: Optional[Sequence[str]] = None,
+):
     if not overrides:
         yield
         return
     previous_oc_profiles = copy.deepcopy(oc.STRATEGY_PROFILES)
     previous_wfo_profiles = copy.deepcopy(wfo.STRATEGY_PROFILES)
     try:
-        merged_profiles = _merge_profile_overrides(previous_oc_profiles, dict(overrides or {}))
+        merged_profiles = _merge_profile_overrides(
+            previous_oc_profiles,
+            dict(overrides or {}),
+            profile_targets=profile_targets,
+        )
         _replace_profiles(oc, merged_profiles)
         _replace_profiles(wfo, merged_profiles)
         yield
@@ -472,8 +510,10 @@ def build_matrix(
     iv_adj: float = DEFAULT_IV_ADJ,
     truth_lane: str = SYNTHETIC_TRUTH_SOURCE,
     watchlist_symbols: Optional[Sequence[str]] = None,
+    allowed_directions: Optional[Sequence[str]] = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     normalized_truth_lane = _normalize_truth_lane(truth_lane)
+    normalized_directions = _normalize_directions(allowed_directions)
     requested_playbooks = list(playbooks) if playbooks else [DEFAULT_PLAYBOOK]
     effective_pricing_lanes = _effective_pricing_lanes(
         truth_lane=normalized_truth_lane,
@@ -514,6 +554,7 @@ def build_matrix(
                                 pricing_lane=str(pricing_lane),
                                 playbook=str(playbook),
                                 truth_lane=normalized_truth_lane,
+                                allowed_directions=normalized_directions,
                             )
 
                         cell = dict(scenario)
@@ -540,6 +581,7 @@ def build_matrix(
             "playbooks": requested_playbooks,
             "truth_lane": normalized_truth_lane,
             "watchlist_symbols": [str(item) for item in watchlist_symbols or []],
+            **({"directions": normalized_directions} if normalized_directions else {}),
         },
         "primary_scenario": primary_scenario,
         "cells": cells,
@@ -804,15 +846,18 @@ def _run_primary_scenario(
     iv_adj: float,
     watchlist_symbols: Optional[Sequence[str]],
     profile_overrides: Optional[dict[str, Any]] = None,
+    profile_targets: Optional[Sequence[str]] = None,
+    allowed_directions: Optional[Sequence[str]] = None,
 ) -> dict[str, Any]:
     normalized_truth_lane = _normalize_truth_lane(truth_lane)
+    normalized_directions = _normalize_directions(allowed_directions)
     with tempfile.TemporaryDirectory() as tmp_dir:
         scratch_root = Path(tmp_dir)
         validation_root = scratch_root / "options_validation_runs"
         with (
             _temporary_validation_results_dir(validation_root),
             _temporary_replay_universe(watchlist_symbols),
-            _temporary_profile_overrides(profile_overrides),
+            _temporary_profile_overrides(profile_overrides, profile_targets=profile_targets),
         ):
             with _temporary_results_file(scratch_root / "primary.json"):
                 return run_historical_backtest(
@@ -822,6 +867,7 @@ def _run_primary_scenario(
                     pricing_lane=_primary_pricing_lane(normalized_truth_lane),
                     playbook=str(playbook),
                     truth_lane=normalized_truth_lane,
+                    allowed_directions=normalized_directions,
                 )
 
 
@@ -1138,10 +1184,14 @@ def _build_manifest(
     batch_id: Optional[str],
     baseline_compatibility: Optional[dict[str, Any]],
     effective_override_diff: Optional[dict[str, Any]],
+    profile_targets: Optional[Sequence[str]] = None,
+    directions: Optional[Sequence[str]] = None,
 ) -> dict[str, Any]:
     requested_playbooks = list(playbooks) if playbooks else [DEFAULT_PLAYBOOK]
     normalized_truth_lane = _normalize_truth_lane(truth_lane)
-    return {
+    normalized_profile_targets = _normalize_profile_targets(profile_targets)
+    normalized_directions = _normalize_directions(directions)
+    manifest = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "status": "running",
         "slug": slug,
@@ -1187,6 +1237,12 @@ def _build_manifest(
         "git_sha": None,
         "errors": [],
     }
+    if normalized_profile_targets:
+        manifest["profile_targets"] = normalized_profile_targets
+    if normalized_directions:
+        manifest["directions"] = normalized_directions
+        manifest["defaults"]["primary_scenario"]["directions"] = normalized_directions
+    return manifest
 
 
 def _finalize_manifest(
@@ -1327,6 +1383,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
     effective_override_diff = dict((cohort or {}).get("overrides") or {})
     required_baseline_id = phase_resolution.get("required_baseline_id")
     phase_watchlist_manifest = phase_resolution.get("watchlist_manifest")
+    effective_profile_targets = list((cohort or {}).get("profile_targets") or [])
+    effective_directions = list((cohort or {}).get("directions") or [])
 
     if watchlist_manifest_path is None and phase_watchlist_manifest is not None:
         watchlist_manifest = phase_watchlist_manifest
@@ -1354,6 +1412,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
         batch_id=batch_manifest.get("batch_id") if batch_manifest else None,
         baseline_compatibility=baseline_compatibility,
         effective_override_diff=effective_override_diff,
+        profile_targets=effective_profile_targets,
+        directions=effective_directions,
     )
     _write_json(run_dir / "manifest.json", manifest)
     _write_text(run_dir / "decision.md", _decision_stub(slug))
@@ -1462,11 +1522,15 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
         return 1
 
     try:
-        with _temporary_profile_overrides(effective_override_diff):
+        with _temporary_profile_overrides(
+            effective_override_diff,
+            profile_targets=effective_profile_targets,
+        ):
             matrix, primary_result = build_matrix(
                 playbooks=playbooks,
                 truth_lane=truth_lane,
                 watchlist_symbols=(watchlist_manifest or {}).get("symbols"),
+                allowed_directions=effective_directions,
             )
             _require_quote_coverage(primary_result, args.require_quote_coverage)
         _write_json(run_dir / "matrix.json", matrix)
@@ -1544,6 +1608,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
                 iv_adj=DEFAULT_IV_ADJ,
                 watchlist_symbols=(watchlist_manifest or {}).get("symbols"),
                 profile_overrides=effective_override_diff,
+                profile_targets=effective_profile_targets,
+                allowed_directions=effective_directions,
             )
             _write_json(
                 run_dir / "paired_synthetic_primary_report.json",
@@ -1622,6 +1688,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
                     iv_adj=DEFAULT_IV_ADJ,
                     watchlist_symbols=(watchlist_manifest or {}).get("symbols"),
                     profile_overrides=effective_override_diff,
+                    profile_targets=effective_profile_targets,
+                    allowed_directions=effective_directions,
                 )
             if imported_daily_primary is None:
                 imported_daily_primary = _run_primary_scenario(
@@ -1631,6 +1699,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
                     iv_adj=DEFAULT_IV_ADJ,
                     watchlist_symbols=(watchlist_manifest or {}).get("symbols"),
                     profile_overrides=effective_override_diff,
+                    profile_targets=effective_profile_targets,
+                    allowed_directions=effective_directions,
                 )
             if imported_intraday_primary is None:
                 imported_intraday_primary = _run_primary_scenario(
@@ -1640,6 +1710,8 @@ def main(argv: Optional[Sequence[str]] = None, *, root_dir: Optional[Path] = Non
                     iv_adj=DEFAULT_IV_ADJ,
                     watchlist_symbols=(watchlist_manifest or {}).get("symbols"),
                     profile_overrides=effective_override_diff,
+                    profile_targets=effective_profile_targets,
+                    allowed_directions=effective_directions,
                 )
             if synthetic_primary_for_bundle is not None and imported_daily_primary is not None:
                 imported_daily_comparison = build_truth_lane_comparison(

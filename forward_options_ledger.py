@@ -91,6 +91,11 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "quote_freshness_status": "TEXT",
     "eligibility_status": "TEXT",
     "eligibility_blockers": "TEXT NOT NULL DEFAULT '[]'",
+    "position_id": "INTEGER",
+    "contracts": "INTEGER",
+    "source_scan_session_id": "INTEGER",
+    "source_scan_event_key": "TEXT",
+    "source_scan_run_id": "TEXT",
 }
 
 
@@ -800,6 +805,11 @@ def _normalized_scan_funnel(value: Any) -> dict[str, Any]:
         "policy_fail_closed": bool(payload.get("policy_fail_closed")),
         "include_blocked_policy_picks": bool(payload.get("include_blocked_policy_picks")),
         "include_blocked_guardrail_picks": bool(payload.get("include_blocked_guardrail_picks")),
+        "drop_counts": {
+            str(key): int(count or 0)
+            for key, count in dict(payload.get("drop_counts") or {}).items()
+        },
+        "symbol_diagnostics": dict(payload.get("symbol_diagnostics") or {}),
     }
 
 
@@ -827,6 +837,16 @@ def _accumulate_scan_funnel(target: dict[str, Any], value: Any) -> dict[str, Any
     target["policy_fail_closed"] = bool(target.get("policy_fail_closed")) or bool(current.get("policy_fail_closed"))
     target["include_blocked_policy_picks"] = bool(target.get("include_blocked_policy_picks")) or bool(current.get("include_blocked_policy_picks"))
     target["include_blocked_guardrail_picks"] = bool(target.get("include_blocked_guardrail_picks")) or bool(current.get("include_blocked_guardrail_picks"))
+    drop_counts = dict(target.get("drop_counts") or {})
+    for key, count in dict(current.get("drop_counts") or {}).items():
+        drop_counts[str(key)] = drop_counts.get(str(key), 0) + int(count or 0)
+    target["drop_counts"] = drop_counts
+    existing_diag = dict(target.get("symbol_diagnostics") or {})
+    current_diag = dict(current.get("symbol_diagnostics") or {})
+    for symbol, diag in current_diag.items():
+        if symbol not in existing_diag:
+            existing_diag[symbol] = diag
+    target["symbol_diagnostics"] = existing_diag
     return target
 
 
@@ -908,6 +928,7 @@ def build_forward_scan_snapshot(
     is_fixture: Optional[bool] = None,
     policy_artifact_id: Optional[str] = None,
     quote_freshness_status: Optional[str] = None,
+    symbol_diagnostics: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     snapshot = {
         "picks": list(picks or []),
@@ -939,6 +960,7 @@ def build_forward_scan_snapshot(
         "is_fixture": is_fixture if is_fixture is not None else None,
         "policy_artifact_id": _safe_text(policy_artifact_id),
         "quote_freshness_status": _normalize_quote_freshness_status(quote_freshness_status),
+        "symbol_diagnostics": dict(symbol_diagnostics or {}),
     }
     if positions_error:
         snapshot["positions_error"] = str(positions_error)
@@ -949,6 +971,18 @@ def _tracked_position_matches_pick(
     pick: dict[str, Any],
     tracked_positions: list[dict[str, Any]],
 ) -> bool:
+    # 1. Prefer explicit scan provenance ids when both pick and position have them
+    pick_session_id = pick.get("source_scan_session_id")
+    pick_event_key = pick.get("source_scan_event_key")
+    if pick_session_id is not None and pick_event_key is not None:
+        for position in tracked_positions:
+            pos_session_id = position.get("source_scan_session_id")
+            pos_event_key = position.get("source_scan_event_key")
+            if pos_session_id is not None and pos_event_key is not None:
+                if int(pos_session_id) == int(pick_session_id) and str(pos_event_key) == str(pick_event_key):
+                    return True
+
+    # 2. Exact contract symbol match
     ticker = str(pick.get("ticker") or "").strip().upper()
     contract_symbol = str(_pick_contract_symbol(pick) or "").strip().upper()
     expiry = str(pick.get("expiry") or "").strip()[:10]
@@ -970,6 +1004,14 @@ def _tracked_position_matches_pick(
         ).strip().upper()
         if contract_symbol and position_contract and contract_symbol == position_contract:
             return True
+
+    # 3. Fallback heuristic matching
+    for position in tracked_positions:
+        source = dict(position.get("source_pick_snapshot") or {})
+        if cohort_id:
+            position_cohort = str(source.get("cohort_id") or position.get("cohort_id") or "").strip()
+            if position_cohort != cohort_id:
+                continue
         if ticker and str(position.get("ticker") or source.get("ticker") or "").strip().upper() != ticker:
             continue
         position_expiry = str(position.get("expiry") or source.get("expiry") or "").strip()[:10]
@@ -1185,108 +1227,124 @@ def _insert_forward_event(
     quote_freshness_status: Optional[str] = None,
     eligibility_status: Optional[str] = None,
     eligibility_blockers: Optional[str] = None,
+    position_id: Optional[int] = None,
+    contracts: Optional[int] = None,
+    source_scan_session_id: Optional[int] = None,
+    source_scan_event_key: Optional[str] = None,
+    source_scan_run_id: Optional[str] = None,
 ) -> None:
+    columns = [
+        "session_id",
+        "event_type",
+        "event_key",
+        "ticker",
+        "contract_symbol",
+        "recommendation",
+        "pricing_source",
+        "cohort_id",
+        "cohort_role",
+        "policy_state",
+        "guardrail_state",
+        "expiry",
+        "strike",
+        "option_type",
+        "quote_time_et",
+        "quote_basis",
+        "underlying_price_at_selection",
+        "selection_source",
+        "promotion_class",
+        "candidate_rank",
+        "option_bid",
+        "option_ask",
+        "option_mid",
+        "option_spread_pct",
+        "option_iv",
+        "option_delta",
+        "option_dte",
+        "entry_execution_price",
+        "entry_execution_basis",
+        "entry_fee_total_usd",
+        "exit_execution_price",
+        "exit_execution_basis",
+        "gross_pnl_pct",
+        "net_pnl_pct",
+        "gross_pnl_usd",
+        "net_pnl_usd",
+        "fee_total_usd",
+        "outcome_state",
+        "run_id",
+        "run_mode",
+        "evidence_class",
+        "is_fixture",
+        "policy_artifact_id",
+        "quote_freshness_status",
+        "eligibility_status",
+        "eligibility_blockers",
+        "position_id",
+        "contracts",
+        "source_scan_session_id",
+        "source_scan_event_key",
+        "source_scan_run_id",
+        "payload_json",
+    ]
+    values = (
+        int(session_id),
+        str(event_type),
+        event_key,
+        ticker,
+        contract_symbol,
+        recommendation,
+        pricing_source,
+        cohort_id,
+        cohort_role,
+        policy_state,
+        guardrail_state,
+        expiry,
+        strike,
+        option_type,
+        quote_time_et,
+        quote_basis,
+        underlying_price_at_selection,
+        selection_source,
+        promotion_class,
+        candidate_rank,
+        option_bid,
+        option_ask,
+        option_mid,
+        option_spread_pct,
+        option_iv,
+        option_delta,
+        option_dte,
+        entry_execution_price,
+        entry_execution_basis,
+        entry_fee_total_usd,
+        exit_execution_price,
+        exit_execution_basis,
+        gross_pnl_pct,
+        net_pnl_pct,
+        gross_pnl_usd,
+        net_pnl_usd,
+        fee_total_usd,
+        outcome_state,
+        run_id,
+        run_mode,
+        evidence_class,
+        int(bool(is_fixture)),
+        policy_artifact_id,
+        quote_freshness_status,
+        eligibility_status,
+        eligibility_blockers or "[]",
+        position_id,
+        contracts,
+        source_scan_session_id,
+        source_scan_event_key,
+        source_scan_run_id,
+        payload_json,
+    )
+    placeholders = ", ".join("?" for _ in columns)
     cursor.execute(
-        """
-        INSERT INTO forward_events (
-            session_id,
-            event_type,
-            event_key,
-            ticker,
-            contract_symbol,
-            recommendation,
-            pricing_source,
-            cohort_id,
-            cohort_role,
-            policy_state,
-            guardrail_state,
-            expiry,
-            strike,
-            option_type,
-            quote_time_et,
-            quote_basis,
-            underlying_price_at_selection,
-            selection_source,
-            promotion_class,
-            candidate_rank,
-            option_bid,
-            option_ask,
-            option_mid,
-            option_spread_pct,
-            option_iv,
-            option_delta,
-            option_dte,
-            entry_execution_price,
-            entry_execution_basis,
-            entry_fee_total_usd,
-            exit_execution_price,
-            exit_execution_basis,
-            gross_pnl_pct,
-            net_pnl_pct,
-            gross_pnl_usd,
-            net_pnl_usd,
-            fee_total_usd,
-            outcome_state,
-            run_id,
-            run_mode,
-            evidence_class,
-            is_fixture,
-            policy_artifact_id,
-            quote_freshness_status,
-            eligibility_status,
-            eligibility_blockers,
-            payload_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            int(session_id),
-            str(event_type),
-            event_key,
-            ticker,
-            contract_symbol,
-            recommendation,
-            pricing_source,
-            cohort_id,
-            cohort_role,
-            policy_state,
-            guardrail_state,
-            expiry,
-            strike,
-            option_type,
-            quote_time_et,
-            quote_basis,
-            underlying_price_at_selection,
-            selection_source,
-            promotion_class,
-            candidate_rank,
-            option_bid,
-            option_ask,
-            option_mid,
-            option_spread_pct,
-            option_iv,
-            option_delta,
-            option_dte,
-            entry_execution_price,
-            entry_execution_basis,
-            entry_fee_total_usd,
-            exit_execution_price,
-            exit_execution_basis,
-            gross_pnl_pct,
-            net_pnl_pct,
-            gross_pnl_usd,
-            net_pnl_usd,
-            fee_total_usd,
-            outcome_state,
-            run_id,
-            run_mode,
-            evidence_class,
-            int(bool(is_fixture)),
-            policy_artifact_id,
-            quote_freshness_status,
-            eligibility_status,
-            eligibility_blockers or "[]",
-            payload_json,
-        ),
+        f"INSERT INTO forward_events ({', '.join(columns)}) VALUES ({placeholders})",
+        values,
     )
 
 
@@ -1465,6 +1523,7 @@ def record_forward_snapshot(
             if str(key).strip()
         },
         "positions_error": scan_snapshot.get("positions_error"),
+        "symbol_diagnostics": dict(scan_snapshot.get("symbol_diagnostics") or {}),
         "run_id": provenance["run_id"],
         "run_mode": provenance["run_mode"],
         "evidence_class": provenance["evidence_class"],
@@ -1623,6 +1682,153 @@ def record_forward_snapshot(
         "quote_freshness_status": provenance["quote_freshness_status"],
         "eligibility_status": provenance["eligibility_status"],
         "eligibility_blockers": list(provenance["eligibility_blockers"]),
+    }
+
+
+def record_position_opened(
+    *,
+    position: dict[str, Any],
+    source_label: str = "position_opened",
+    db_path: str | Path | None = None,
+    evidence_class: str | None = None,
+    run_id: str | None = None,
+    run_mode: str | None = None,
+    is_fixture: bool | None = None,
+) -> dict[str, Any]:
+    """Record a position_opened forward event when the user takes a scan pick."""
+    recorded_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    source = dict(position.get("source_pick_snapshot") or {})
+
+    resolved_evidence_class = _normalize_evidence_class(
+        evidence_class,
+        source_label=source_label,
+    )
+    resolved_run_mode = _safe_text(run_mode) or _default_run_mode(resolved_evidence_class)
+    resolved_run_id = _safe_text(run_id) or f"{source_label}:{recorded_at_utc}"
+    resolved_is_fixture = is_fixture if is_fixture is not None else resolved_evidence_class in {
+        FIXTURE_SMOKE_EVIDENCE_CLASS, UNIT_TEST_EVIDENCE_CLASS, E2E_TEST_EVIDENCE_CLASS,
+    }
+
+    provenance = {
+        "recorded_at_utc": recorded_at_utc,
+        "run_id": resolved_run_id,
+        "run_mode": resolved_run_mode,
+        "evidence_class": resolved_evidence_class,
+        "is_fixture": resolved_is_fixture,
+        "policy_artifact_id": None,
+        "quote_freshness_status": _quote_freshness_status_from_pick(source),
+        "eligibility_status": ELIGIBLE_STATUS if resolved_evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS and not resolved_is_fixture else INELIGIBLE_STATUS,
+        "eligibility_blockers": [] if resolved_evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS and not resolved_is_fixture else ["non_live_evidence_class"],
+    }
+
+    path = init_forward_ledger(db_path or _db_path_for_provenance(provenance))
+
+    ticker = str(position.get("ticker") or "").strip().upper()
+    contract_symbol = str(position.get("contract_symbol") or "").strip().upper() or None
+    direction = str(position.get("direction") or "").strip().lower()
+    expiry = str(position.get("expiry") or "").strip()[:10]
+    strike = _safe_float(position.get("strike"))
+    position_id = position.get("id")
+    contracts = _safe_int(position.get("contracts"))
+    cohort_id = _safe_text(source.get("cohort_id"))
+    cohort_role = _safe_text(source.get("cohort_role"))
+    selection_source = _safe_text(source.get("selection_source") or source.get("contract_selection_source"))
+    promotion_class = _safe_text(source.get("promotion_class"))
+
+    notes = {
+        "event_type": "position_opened",
+        "position_id": position_id,
+        "ticker": ticker,
+        "contract_symbol": contract_symbol,
+        "direction": direction,
+        "run_id": provenance["run_id"],
+        "run_mode": provenance["run_mode"],
+        "evidence_class": provenance["evidence_class"],
+        "is_fixture": provenance["is_fixture"],
+    }
+
+    with closing(sqlite3.connect(path)) as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO forward_sessions (
+                recorded_at_utc, source_label, playbook, truth_source, promotion_status,
+                scan_picks_count, reviewed_positions_count, notes_json,
+                run_id, run_mode, evidence_class, is_fixture,
+                policy_artifact_id, quote_freshness_status,
+                eligibility_status, eligibility_blockers
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                recorded_at_utc,
+                source_label,
+                "position_opened",
+                None,
+                None,
+                0,
+                0,
+                json.dumps(notes),
+                provenance["run_id"],
+                provenance["run_mode"],
+                provenance["evidence_class"],
+                int(bool(provenance["is_fixture"])),
+                provenance["policy_artifact_id"],
+                provenance["quote_freshness_status"],
+                provenance["eligibility_status"],
+                json.dumps(provenance["eligibility_blockers"]),
+            ),
+        )
+        session_id = int(cursor.lastrowid)
+
+        _insert_forward_event(
+            cursor,
+            session_id=session_id,
+            event_type="position_opened",
+            event_key=str(position_id or ""),
+            ticker=ticker or None,
+            contract_symbol=contract_symbol,
+            cohort_id=cohort_id,
+            cohort_role=cohort_role,
+            expiry=expiry or None,
+            strike=strike,
+            option_type=direction or None,
+            quote_time_et=_safe_text(source.get("quote_time_et")),
+            quote_basis=_safe_text(source.get("quote_basis")),
+            underlying_price_at_selection=_safe_float(
+                source.get("underlying_price_at_selection") or source.get("stock_price")
+            ),
+            selection_source=selection_source,
+            promotion_class=promotion_class,
+            entry_execution_price=_safe_float(position.get("entry_execution_price")),
+            entry_execution_basis=_safe_text(position.get("entry_execution_basis")),
+            entry_fee_total_usd=_safe_float(position.get("entry_fee_total_usd")),
+            outcome_state="taken",
+            position_id=_safe_int(position_id),
+            contracts=contracts,
+            source_scan_session_id=_safe_int(position.get("source_scan_session_id")),
+            source_scan_event_key=_safe_text(position.get("source_scan_event_key")),
+            source_scan_run_id=_safe_text(position.get("source_scan_run_id")),
+            run_id=provenance["run_id"],
+            run_mode=provenance["run_mode"],
+            evidence_class=provenance["evidence_class"],
+            is_fixture=provenance["is_fixture"],
+            policy_artifact_id=provenance["policy_artifact_id"],
+            quote_freshness_status=provenance["quote_freshness_status"],
+            eligibility_status=provenance["eligibility_status"],
+            eligibility_blockers=json.dumps(provenance["eligibility_blockers"]),
+            payload_json=json.dumps(position, default=str),
+        )
+        conn.commit()
+
+    return {
+        "db_path": str(path),
+        "session_id": session_id,
+        "recorded_at_utc": recorded_at_utc,
+        "event_type": "position_opened",
+        "position_id": position_id,
+        "ticker": ticker,
+        "contract_symbol": contract_symbol,
+        "evidence_class": provenance["evidence_class"],
     }
 
 

@@ -80,6 +80,7 @@ from forward_options_ledger import (
     list_forward_scan_pick_events,
     list_forward_sessions,
     record_forward_snapshot,
+    record_position_opened,
     summarize_forward_holdout,
 )
 from positions_repository import create_positions_repository
@@ -90,6 +91,7 @@ from supervised_scan import (
     run_supervised_scan,
     scan_pick_market_regime,
 )
+from options_profit_gate import evaluate_claim_readiness, evaluate_measurement_gate
 from options_profit_state import build_read_only_profit_status_view, live_profile_entry_for_symbol
 
 app = FastAPI(title="Options Chatbot Backend")
@@ -1214,6 +1216,18 @@ async def create_position_endpoint(body: dict[str, Any]):
             notes=body.get("notes"),
         )
         position = POSITIONS_REPOSITORY.create_position(payload)
+        try:
+            await _run_in_worker(
+                record_position_opened,
+                position=position,
+                source_label="position_opened",
+                evidence_class=_scan_evidence_class(),
+                run_id=_scan_run_id(),
+                run_mode="position_opened",
+                is_fixture=_scan_is_fixture(),
+            )
+        except Exception:
+            pass
         return {"position": position}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
@@ -1261,6 +1275,50 @@ async def review_positions_endpoint(body: dict[str, Any] = {}):
         return {"positions": reviewed}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@app.get("/api/positions/{position_id}/close-prefill")
+async def close_prefill_endpoint(position_id: int):
+    """Return prefilled exit data from the latest review for a tracked position."""
+    if not getattr(POSITIONS_REPOSITORY, "is_available", False):
+        return _positions_unavailable_response()
+
+    try:
+        position = POSITIONS_REPOSITORY.get_position(position_id)
+        if position is None:
+            raise HTTPException(404, f"Tracked position {position_id} was not found")
+        if str(position.get("status") or "").strip().lower() != "open":
+            raise HTTPException(409, f"Tracked position {position_id} is already closed")
+
+        latest_review = position.get("latest_review") or {}
+        metrics = latest_review.get("metrics_snapshot") or {}
+        exit_execution_price = (
+            latest_review.get("exit_execution_price")
+            or position.get("exit_execution_price")
+        )
+        exit_execution_basis = (
+            latest_review.get("exit_execution_basis")
+            or position.get("exit_execution_basis")
+        )
+        pricing_state = metrics.get("pricing_state")
+
+        return {
+            "position_id": position_id,
+            "ticker": position.get("ticker"),
+            "contract_symbol": position.get("contract_symbol"),
+            "prefill_available": exit_execution_price is not None,
+            "exit_execution_price": exit_execution_price,
+            "exit_execution_basis": exit_execution_basis,
+            "pricing_state": pricing_state,
+            "current_option_price": latest_review.get("current_option_price"),
+            "recommendation": latest_review.get("recommendation"),
+            "reason": latest_review.get("reason"),
+            "reviewed_at": latest_review.get("reviewed_at"),
+        }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -1781,5 +1839,75 @@ async def get_options_profit_status():
     """Return the read-only bounded options profit-cycle status artifact."""
     try:
         return await _run_in_worker(_read_only_options_profit_status)
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+@app.get("/api/proof-summary")
+async def get_proof_summary():
+    """Return the canonical proof-lane summary: loop-health and claim-readiness verdicts."""
+    try:
+        def _build_proof_summary() -> dict[str, Any]:
+            loop_health = evaluate_measurement_gate()
+            claim_readiness = evaluate_claim_readiness()
+
+            # Count positions
+            positions_available = False
+            open_count = 0
+            closed_count = 0
+            exact_contract_closed = 0
+            if getattr(POSITIONS_REPOSITORY, "is_available", False):
+                positions_available = True
+                try:
+                    open_positions = POSITIONS_REPOSITORY.list_positions("open")
+                    closed_positions = POSITIONS_REPOSITORY.list_positions("closed")
+                    open_count = len(open_positions)
+                    closed_count = len(closed_positions)
+                    exact_contract_closed = sum(
+                        1 for p in closed_positions
+                        if str(p.get("contract_symbol") or "").strip()
+                    )
+                except Exception:
+                    pass
+
+            # Forward evidence counts
+            forward_evidence = _cached_forward_evidence_report()
+            forward_events = list(forward_evidence.get("authoritative_events") or [])
+            scan_pick_events = [e for e in forward_events if str(e.get("event_type") or "") == "scan_pick"]
+            position_opened_events = [e for e in forward_events if str(e.get("event_type") or "") == "position_opened"]
+            review_events = [e for e in forward_events if str(e.get("event_type") or "") == "position_review"]
+
+            return {
+                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+                "loop_health": {
+                    "state": loop_health["state"],
+                    "blocker_count": len(loop_health["blockers"]),
+                    "blockers": loop_health["blockers"],
+                },
+                "claim_readiness": {
+                    "state": claim_readiness["state"],
+                    "claim_ready": claim_readiness["claim_ready"],
+                    "blocker_count": claim_readiness["blocker_count"],
+                    "blockers": claim_readiness["blockers"],
+                },
+                "evidence_counts": {
+                    "forward_event_count": len(forward_events),
+                    "scan_pick_event_count": len(scan_pick_events),
+                    "position_opened_event_count": len(position_opened_events),
+                    "review_event_count": len(review_events),
+                    "eligible_event_count": claim_readiness.get("eligible_event_count", 0),
+                    "pending_truth_event_count": claim_readiness.get("pending_truth_event_count", 0),
+                    "by_symbol": claim_readiness.get("by_symbol", {}),
+                },
+                "tracked_positions": {
+                    "available": positions_available,
+                    "open_count": open_count,
+                    "closed_count": closed_count,
+                    "exact_contract_closed_count": exact_contract_closed,
+                },
+                "realized_metrics": claim_readiness.get("tracked_realized_metrics", {}),
+            }
+
+        return await _run_in_worker(_build_proof_summary)
     except Exception as exc:
         raise HTTPException(500, str(exc))

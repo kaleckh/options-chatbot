@@ -48,6 +48,36 @@ def _load_champion_manifest(path: Path) -> dict:
     }
 
 
+def _normalize_profile_targets(values) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        target = str(raw or "").strip().lower()
+        if target not in {"equity", "index"} or target in seen:
+            continue
+        seen.add(target)
+        normalized.append(target)
+    return normalized
+
+
+def _normalize_directions(values) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values or []:
+        direction = str(raw or "").strip().lower()
+        if direction not in {"call", "put"} or direction in seen:
+            continue
+        seen.add(direction)
+        normalized.append(direction)
+    return normalized
+
+
+def _pick_direction(pick: dict) -> str | None:
+    raw = pick.get("option_type") or pick.get("direction") or pick.get("type")
+    normalized = str(raw or "").strip().lower()
+    return normalized if normalized in {"call", "put"} else None
+
+
 @contextmanager
 def _temporary_cohort_context(
     *,
@@ -55,18 +85,21 @@ def _temporary_cohort_context(
     watchlist_symbols: list[str],
     playbook_id: str | None = None,
     dte_override: int | None = None,
+    profile_targets: list[str] | None = None,
 ):
     previous_profiles = copy.deepcopy(oc.STRATEGY_PROFILES)
     previous_watchlist = list(oc.DEFAULT_WATCHLIST)
     previous_playbooks = copy.deepcopy(SCAN_PLAYBOOKS)
     try:
         oc.DEFAULT_WATCHLIST = list(watchlist_symbols)
+        targets = _normalize_profile_targets(profile_targets) or ["equity"]
         for section_key, section_values in dict(overrides or {}).items():
-            if section_key not in oc.STRATEGY_PROFILES["equity"]:
-                continue
             if not isinstance(section_values, dict):
                 continue
-            oc.STRATEGY_PROFILES["equity"][section_key].update(section_values)
+            for target in targets:
+                if section_key not in oc.STRATEGY_PROFILES.get(target, {}):
+                    continue
+                oc.STRATEGY_PROFILES[target][section_key].update(section_values)
         if playbook_id and dte_override is not None and playbook_id in SCAN_PLAYBOOKS:
             SCAN_PLAYBOOKS[playbook_id]["target_dte"] = int(dte_override)
         yield
@@ -159,6 +192,7 @@ def _run_scan_for_cohort(
         watchlist_symbols=watchlist_symbols,
         playbook_id=str(playbook.get("id") or ""),
         dte_override=args.dte,
+        profile_targets=list(cohort.get("profile_targets") or []),
     ):
         guardrail_result = run_supervised_scan(
             scan_func=oc.scan_daily_top_trades,
@@ -176,9 +210,14 @@ def _run_scan_for_cohort(
             min_profit_factor=1.05,
             min_directional_accuracy_pct=50.0,
         )
+        requested_directions = _normalize_directions(cohort.get("directions"))
+        filtered_picks = [
+            pick for pick in list(guardrail_result.get("picks") or [])
+            if not requested_directions or _pick_direction(pick) in requested_directions
+        ]
         picks = _normalized_picks_with_cohort(
             backend_main=backend_main,
-            picks=guardrail_result["picks"][: int(args.n_picks)],
+            picks=filtered_picks[: int(args.n_picks)],
             cohort=cohort,
         )
         return {
@@ -186,9 +225,11 @@ def _run_scan_for_cohort(
             "cohort_role": cohort.get("role"),
             "cohort_label": cohort.get("label"),
             "overrides": cohort.get("overrides") or {},
+            "profile_targets": list(cohort.get("profile_targets") or []),
+            "requested_directions": requested_directions,
             "picks": picks,
             "candidate_count": int(guardrail_result.get("candidate_count") or 0),
-            "returned_count": int(guardrail_result.get("returned_count") or len(picks)),
+            "returned_count": len(picks),
             "policy_decision_counts": dict(guardrail_result.get("policy_decision_counts") or {}),
             "guardrail_decision_counts": dict(guardrail_result.get("guardrail_decision_counts") or {}),
             "scan_funnel": _normalized_scan_funnel(guardrail_result.get("scan_funnel")),

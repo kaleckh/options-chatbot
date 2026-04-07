@@ -104,6 +104,18 @@ def _normalize_direction(direction: Any) -> str | None:
     return value if value in ALLOWED_OPTIONS_PROFIT_DIRECTIONS else None
 
 
+def _manifest_seed_directions(cohort: dict[str, Any]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in list((cohort or {}).get("directions") or []):
+        direction = _normalize_direction(raw)
+        if not direction or direction in seen:
+            continue
+        seen.add(direction)
+        normalized.append(direction)
+    return normalized or list(ALLOWED_OPTIONS_PROFIT_DIRECTIONS)
+
+
 def _side_candidate_id(symbol: str, direction: str, cohort_id: str) -> str:
     return f"{str(symbol).strip().upper()}__{str(direction).strip().lower()}__{str(cohort_id).strip()}"
 
@@ -217,8 +229,9 @@ def _seed_candidates_from_manifest() -> None:
         return
     for symbol in symbols:
         normalized_symbol = str(symbol).strip().upper()
-        for direction in ALLOWED_OPTIONS_PROFIT_DIRECTIONS:
-            for cohort in cohorts:
+        for cohort in cohorts:
+            seed_directions = _manifest_seed_directions(cohort)
+            for direction in seed_directions:
                 cohort_id = str(cohort.get("id") or "").strip()
                 if not cohort_id:
                     continue

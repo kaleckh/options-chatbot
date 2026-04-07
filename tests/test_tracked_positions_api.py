@@ -190,6 +190,105 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(second_close.status_code, 409)
         self.assertIn("already closed", second_close.text)
 
+    def test_create_position_stores_scan_provenance(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "baseline_broad_control:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position = create_response.json()["position"]
+        self.assertEqual(position["source_scan_session_id"], 55)
+        self.assertEqual(position["source_scan_event_key"], "baseline_broad_control:rank_1")
+        self.assertEqual(position["source_scan_run_id"], "api_scan_20260406T100000Z")
+        self.assertTrue(position["proof_eligible"])
+        self.assertIsNone(position["proof_ineligibility_reason"])
+
+    def test_create_position_without_provenance_marks_not_proof_eligible(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        # No provenance, no exact contract metadata
+        scan_pick.pop("contract_symbol", None)
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position = create_response.json()["position"]
+        self.assertFalse(position["proof_eligible"])
+        self.assertIsNotNone(position["proof_ineligibility_reason"])
+        self.assertIn("contract_symbol", position["proof_ineligibility_reason"])
+
+    def test_proof_lane_validation_blocks_missing_contract_symbol(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.pop("contract_symbol", None)
+        with self.assertRaises(ValueError) as ctx:
+            psvc.build_position_payload(
+                scan_pick=scan_pick,
+                fill_price=4.50,
+                contracts=1,
+                require_proof_eligible=True,
+            )
+        self.assertIn("contract_symbol", str(ctx.exception))
+
+    def test_proof_lane_validation_blocks_non_exact_selection_source(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["selection_source"] = "nearest_strike"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        with self.assertRaises(ValueError) as ctx:
+            psvc.build_position_payload(
+                scan_pick=scan_pick,
+                fill_price=4.50,
+                contracts=1,
+                require_proof_eligible=True,
+            )
+        self.assertIn("selection_source", str(ctx.exception))
+
+    def test_close_prefill_returns_review_exit_data(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        position_id = create_response.json()["position"]["id"]
+
+        self.client.post("/api/positions/review", json={})
+
+        prefill_response = self.client.get(f"/api/positions/{position_id}/close-prefill")
+        self.assertEqual(prefill_response.status_code, 200)
+        prefill = prefill_response.json()
+        self.assertEqual(prefill["position_id"], position_id)
+        self.assertIn("exit_execution_price", prefill)
+        self.assertIn("pricing_state", prefill)
+
     def test_positions_endpoints_return_clear_error_when_storage_missing(self):
         unavailable = UnavailableTrackedPositionsRepository("DATABASE_URL is not configured for tracked positions.")
         with patch.object(self.backend, "POSITIONS_REPOSITORY", unavailable):

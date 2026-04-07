@@ -35,7 +35,7 @@ _ENV_FILES_LOADED = _load_local_env(ROOT_DIR)
 
 from forward_options_ledger import summarize_forward_holdout
 from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
-from options_profit_gate import DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS, evaluate_measurement_gate
+from options_profit_gate import DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS, evaluate_claim_readiness, evaluate_measurement_gate
 from profit_loop_shared_state import (
     _infer_loop_execution_status,
     append_run_ledger,
@@ -746,7 +746,25 @@ def _refresh_daily_truth(
         }
 
     historical_db_path = str(os.getenv("HISTORICAL_OPTIONS_DB_PATH") or "").strip() or None
-    manifest_entries = _load_manifest_entries(manifest_path)
+    if not str(manifest_path).startswith(("http://", "https://")) and not Path(manifest_path).exists():
+        return {
+            **base_result,
+            "status": "failed",
+            "stage": "preflight",
+            "error": f"Configured imported-daily truth manifest does not exist: {manifest_path}",
+            "commands": [],
+        }
+
+    try:
+        manifest_entries = _load_manifest_entries(manifest_path)
+    except Exception as exc:
+        return {
+            **base_result,
+            "status": "failed",
+            "stage": "preflight",
+            "error": f"Unable to load imported-daily truth manifest: {exc}",
+            "commands": [],
+        }
     import_entries, pre_import_summary = _daily_truth_entries_needing_import(
         manifest_entries,
         repo_root=repo_root,
@@ -1132,6 +1150,7 @@ def _normalized_scan_funnel(value: dict[str, Any] | None) -> dict[str, Any]:
         "include_blocked_policy_picks": bool(payload.get("include_blocked_policy_picks")),
         "include_blocked_guardrail_picks": bool(payload.get("include_blocked_guardrail_picks")),
         "drop_counts": normalized_drop_counts,
+        "symbol_diagnostics": dict(payload.get("symbol_diagnostics") or {}),
     }
 
 
@@ -1162,6 +1181,8 @@ def _candidate_flow_breakdown(
         primary_starving_gate = max(drop_counts.items(), key=lambda item: int(item[1] or 0))[0]
         if int(drop_counts.get(primary_starving_gate) or 0) <= 0:
             primary_starving_gate = None
+    symbol_diagnostics = dict(normalized.get("symbol_diagnostics") or {})
+    has_symbol_diagnostics = bool(symbol_diagnostics)
     if environment_or_data_failure:
         classification = "environment_or_data_failure"
         primary_starving_gate = primary_starving_gate or "environment_or_data_failure"
@@ -1173,6 +1194,8 @@ def _candidate_flow_breakdown(
             for key in ("min_history", "history_or_liquidity", "signal_index", "earnings", "option_liquidity")
         ):
             classification = "filtered_by_history_or_liquidity"
+        elif not any(int(v or 0) > 0 for v in drop_counts.values()) and not has_symbol_diagnostics:
+            classification = "scanner_starvation_unresolved"
         else:
             classification = "no_candidates_from_scan"
     elif int(normalized.get("post_policy_visible") or 0) <= 0:
@@ -1199,6 +1222,7 @@ def _candidate_flow_breakdown(
         "final_trimmed": int(normalized.get("final_trimmed") or 0),
         "drop_counts": drop_counts,
         "primary_starving_gate": primary_starving_gate,
+        "symbol_diagnostics": symbol_diagnostics,
     }
 
 
@@ -1249,6 +1273,19 @@ def _safe_measurement_gate() -> dict[str, Any]:
                     "message": str(exc),
                 }
             ],
+            "error": str(exc),
+        }
+
+
+def _safe_claim_readiness() -> dict[str, Any]:
+    try:
+        return dict(evaluate_claim_readiness() or {})
+    except Exception as exc:
+        return {
+            "state": "not_claim_ready",
+            "claim_ready": False,
+            "blockers": [{"code": "claim_readiness_evaluation_failed", "message": str(exc)}],
+            "blocker_count": 1,
             "error": str(exc),
         }
 
@@ -1439,12 +1476,13 @@ def _evaluate_profitability_verdict(before_after_comparison: dict[str, Any]) -> 
     after_pf = float(after.get("profit_factor") or 0.0)
     baseline_avg = float(baseline.get("avg_pnl_pct") or 0.0)
     after_avg = float(after.get("avg_pnl_pct") or 0.0)
+    after_is_profitable = after_pf > 1.0 and after_avg > 0.0
 
     if truth_quality_regressed or safety_regressed or drawdown_regressed:
         return "regressed"
     if after_pf < baseline_pf or after_avg < baseline_avg:
         return "regressed"
-    if after_pf > baseline_pf and after_avg > baseline_avg:
+    if after_pf > baseline_pf and after_avg > baseline_avg and after_is_profitable:
         if forward_status in {"non_worse", "improved"}:
             return "improved"
         return "inconclusive"
@@ -1806,6 +1844,11 @@ def run_operational_health(
 
     loop_execution_status = "blocked" if verdict == "blocked" else ("degraded" if verdict == "degraded-watch" else "healthy")
     evidence_status = "untrusted" if verdict == "blocked" else "trusted"
+    measurement_gate = _safe_measurement_gate()
+    claim_readiness = _safe_claim_readiness()
+    loop_health_state = str(measurement_gate.get("state") or "blocked").strip()
+    claim_ready = bool(claim_readiness.get("claim_ready", False))
+    profitability_verdict = "claim_ready" if claim_ready else ("loop_healthy" if loop_health_state == "healthy" else "unproven")
     snapshot = {
         "run_id": run["run_id"],
         "ran_at": now_iso,
@@ -1813,7 +1856,9 @@ def run_operational_health(
         "run_status": "completed",
         "loop_execution_status": loop_execution_status,
         "evidence_status": evidence_status,
-        "profitability_verdict": "unproven",
+        "profitability_verdict": profitability_verdict,
+        "loop_health_state": loop_health_state,
+        "claim_ready": claim_ready,
         "evidence_complete": True,
         "proof_reuse": [],
         "proof_bundle_dir": str(proof_dir),
@@ -2184,7 +2229,7 @@ def run_truth_holdout(
         verdict = "recorded-empty-market"
 
     loop_execution_status = "degraded" if verdict in {"recorded-no-candidates", "recorded-empty-market"} else "healthy"
-    evidence_status = "inconclusive" if verdict == "recorded-no-candidates" else "trusted"
+    evidence_status = "inconclusive" if verdict in {"recorded-no-candidates", "recorded-empty-market"} else "trusted"
     snapshot = {
         "run_id": run["run_id"],
         "ran_at": now_iso,
@@ -2193,7 +2238,7 @@ def run_truth_holdout(
         "loop_execution_status": loop_execution_status,
         "evidence_status": evidence_status,
         "profitability_verdict": "unproven",
-        "evidence_complete": verdict != "recorded-no-candidates",
+        "evidence_complete": verdict not in {"recorded-no-candidates", "recorded-empty-market"},
         "proof_reuse": [],
         "proof_bundle_dir": str(proof_dir),
         "proof_context": context,
@@ -2372,9 +2417,9 @@ def prepare_profit_validation(
             "verdict": "queue-empty",
             "run_status": "completed",
             "loop_execution_status": "healthy",
-            "evidence_status": "trusted",
+            "evidence_status": "inconclusive",
             "profitability_verdict": "unproven",
-            "evidence_complete": True,
+            "evidence_complete": False,
             "proof_reuse": [],
             "proof_context": context,
             "targeted_issue_id": None,
@@ -2399,7 +2444,7 @@ def prepare_profit_validation(
                 "ran_at": now_iso,
                 "verdict": "queue-empty",
                 "loop_execution_status": "healthy",
-                "evidence_status": "trusted",
+                "evidence_status": "inconclusive",
                 "profitability_verdict": "unproven",
                 "issue_ids": [],
             },
@@ -2566,7 +2611,7 @@ def prepare_profit_validation(
         "ran_at": now_iso,
         "verdict": "claimed-issue" if not auto_defer else "deferred",
         "run_status": "completed",
-        "loop_execution_status": "healthy",
+        "loop_execution_status": "degraded",
         "evidence_status": "trusted" if evidence_complete else "inconclusive",
         "profitability_verdict": "unproven",
         "evidence_complete": evidence_complete,
@@ -2606,6 +2651,7 @@ def prepare_profit_validation(
         )
         result_action = "resolved_no_longer_observed"
         snapshot["verdict"] = "resolved-no-longer-observed"
+        snapshot["loop_execution_status"] = "healthy"
         snapshot["evidence_status"] = "trusted"
         snapshot["evidence_complete"] = True
         snapshot["resolved_issue"] = targeted_issue["issue_id"]
@@ -2633,7 +2679,7 @@ def prepare_profit_validation(
         status="completed",
         phase="completed",
         result_verdict=snapshot["verdict"],
-        loop_execution_status="healthy",
+        loop_execution_status=snapshot["loop_execution_status"],
         evidence_status=snapshot["evidence_status"],
         profitability_verdict="unproven",
         now_iso=now_iso,
@@ -2643,6 +2689,7 @@ def prepare_profit_validation(
         {
             "run_id": run["run_id"],
             "targeted_issue_id": targeted_issue["issue_id"],
+            **baseline,
             "snapshot": snapshot,
             "resolved_issue": auto_cleared_seed_issue,
         },
@@ -2654,7 +2701,7 @@ def prepare_profit_validation(
             "automation_id": "daily-profit-validation",
             "ran_at": now_iso,
             "verdict": snapshot["verdict"],
-            "loop_execution_status": "healthy",
+            "loop_execution_status": snapshot["loop_execution_status"],
             "evidence_status": snapshot["evidence_status"],
             "profitability_verdict": "unproven",
             "state_hash": ((state.get("active_run") or {}).get("state_hash")),
@@ -2737,6 +2784,8 @@ def resolve_profit_validation_issue(
     evidence_status = "trusted"
     if profitability_verdict == "inconclusive" and baseline_profitability_verdict == "improved":
         evidence_status = "inconclusive"
+    evidence_complete = evidence_status == "trusted"
+    loop_execution_status = "healthy" if profitability_verdict == "improved" and evidence_status == "trusted" else "degraded"
     profitability_prerequisites = {
         "operational_health_verdict": health_snapshot.get("verdict"),
         "operational_health_status": health_status or None,
@@ -2764,10 +2813,10 @@ def resolve_profit_validation_issue(
         "ran_at": now_iso,
         "verdict": "resolved",
         "run_status": "completed",
-        "loop_execution_status": "healthy",
+        "loop_execution_status": loop_execution_status,
         "evidence_status": evidence_status,
         "profitability_verdict": profitability_verdict,
-        "evidence_complete": True,
+        "evidence_complete": evidence_complete,
         "proof_reuse": [],
         "proof_bundle_dir": str(proof_dir),
         "proof_context": context,
@@ -2802,7 +2851,7 @@ def resolve_profit_validation_issue(
             "automation_id": "daily-profit-validation",
             "ran_at": now_iso,
             "verdict": "resolved",
-            "loop_execution_status": "healthy",
+            "loop_execution_status": loop_execution_status,
             "evidence_status": evidence_status,
             "profitability_verdict": profitability_verdict,
             "issue_ids": [issue_id],

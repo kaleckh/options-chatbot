@@ -132,6 +132,8 @@ def build_position_payload(
     contracts: int,
     filled_at: Optional[str] = None,
     notes: Optional[str] = None,
+    *,
+    require_proof_eligible: bool = False,
 ) -> dict[str, Any]:
     ticker = str(scan_pick.get("ticker") or "").upper()
     direction = str(scan_pick.get("direction") or scan_pick.get("type") or "").lower()
@@ -150,6 +152,11 @@ def build_position_payload(
     if contracts <= 0:
         raise ValueError("contracts must be at least 1.")
 
+    source_scan_session_id = scan_pick.get("source_scan_session_id")
+    source_scan_event_key = scan_pick.get("source_scan_event_key")
+    source_scan_run_id = scan_pick.get("source_scan_run_id")
+    source_scan_recorded_at_utc = scan_pick.get("source_scan_recorded_at_utc")
+
     source_pick_snapshot = copy.deepcopy(scan_pick)
     if contract_symbol:
         source_pick_snapshot["contract_symbol"] = contract_symbol
@@ -165,6 +172,41 @@ def build_position_payload(
     else:
         normalized_entry_execution_basis = "manual_fill"
     entry_fee_total_usd = commission_total_usd(contracts=contracts)
+
+    # Determine proof eligibility
+    proof_eligible = True
+    proof_ineligibility_reason = None
+    selection_source = str(scan_pick.get("selection_source") or scan_pick.get("contract_selection_source") or "").strip()
+    promotion_class = str(scan_pick.get("promotion_class") or "").strip()
+    quote_time_et = scan_pick.get("quote_time_et")
+    bid = _safe_float(scan_pick.get("bid"))
+    ask = _safe_float(scan_pick.get("ask"))
+
+    proof_missing: list[str] = []
+    if not contract_symbol:
+        proof_missing.append("contract_symbol")
+    if not quote_time_et:
+        proof_missing.append("quote_time_et")
+    if bid is None:
+        proof_missing.append("bid")
+    if ask is None:
+        proof_missing.append("ask")
+    if estimated_execution_price is None and not scan_pick.get("entry_execution_price"):
+        proof_missing.append("entry_execution_price")
+    if selection_source != "live_chain_exact_contract":
+        proof_missing.append("selection_source_not_exact")
+    if promotion_class != "promotable_exact_contract":
+        proof_missing.append("promotion_class_not_exact")
+    if proof_missing:
+        proof_eligible = False
+        proof_ineligibility_reason = ", ".join(proof_missing)
+
+    if require_proof_eligible and not proof_eligible:
+        raise ValueError(
+            f"Proof-lane position creation blocked: {proof_ineligibility_reason}. "
+            "All proof-lane positions require exact-contract identity, executable entry quote, "
+            "and live_chain_exact_contract selection source."
+        )
 
     payload = {
         "status": "open",
@@ -202,6 +244,12 @@ def build_position_payload(
         "gross_pnl_usd": None,
         "net_pnl_usd": None,
         "fee_total_usd": entry_fee_total_usd,
+        "source_scan_session_id": source_scan_session_id,
+        "source_scan_event_key": source_scan_event_key,
+        "source_scan_run_id": source_scan_run_id,
+        "source_scan_recorded_at_utc": source_scan_recorded_at_utc,
+        "proof_eligible": proof_eligible,
+        "proof_ineligibility_reason": proof_ineligibility_reason,
     }
     return payload
 
@@ -249,6 +297,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
             "expired": True,
             "current_option_price": None,
             "pricing_source": "expired",
+            "pricing_state": "unpriced_expiry_not_available",
             "price_trigger_ok": False,
             "warnings": warnings,
             "underlying_price": underlying_price,
@@ -263,6 +312,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
             "expired": False,
             "current_option_price": None,
             "pricing_source": "unavailable",
+            "pricing_state": "unpriced_chain_fetch_failed",
             "price_trigger_ok": False,
             "warnings": warnings,
             "underlying_price": underlying_price,
@@ -274,6 +324,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
             "expired": False,
             "current_option_price": None,
             "pricing_source": "unavailable",
+            "pricing_state": "unpriced_expiry_not_available",
             "price_trigger_ok": False,
             "warnings": warnings,
             "underlying_price": underlying_price,
@@ -288,6 +339,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
                 "expired": False,
                 "current_option_price": None,
                 "pricing_source": "unavailable",
+                "pricing_state": "unpriced_exact_contract_not_in_chain",
                 "price_trigger_ok": False,
                 "warnings": warnings,
                 "underlying_price": underlying_price,
@@ -308,6 +360,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
                     "expired": False,
                     "current_option_price": None,
                     "pricing_source": "unavailable",
+                    "pricing_state": "unpriced_exact_contract_missing",
                     "price_trigger_ok": False,
                     "warnings": warnings,
                     "underlying_price": underlying_price,
@@ -323,6 +376,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
                     "expired": False,
                     "current_option_price": None,
                     "pricing_source": "unavailable",
+                    "pricing_state": "unpriced_exact_contract_not_in_chain",
                     "price_trigger_ok": False,
                     "warnings": warnings,
                     "underlying_price": underlying_price,
@@ -338,6 +392,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
                     "expired": False,
                     "current_option_price": None,
                     "pricing_source": "unavailable",
+                    "pricing_state": "unpriced_exact_contract_not_in_chain",
                     "price_trigger_ok": False,
                     "warnings": warnings,
                     "underlying_price": underlying_price,
@@ -361,10 +416,16 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
                 warnings.append(
                     "Using last trade only for display; stop/target checks are suppressed until a live executable bid/ask quote returns."
                 )
+                pricing_state = "priced_display_only_last"
+            elif execution.get("execution_price") is not None:
+                pricing_state = "priced_exact"
+            else:
+                pricing_state = "priced_display_only_last"
             return {
                 "expired": False,
                 "current_option_price": execution.get("display_price"),
                 "pricing_source": "mid" if execution.get("display_basis") == "mid" else execution.get("display_basis"),
+                "pricing_state": pricing_state,
                 "current_execution_price": execution.get("execution_price"),
                 "current_execution_basis": execution.get("execution_basis"),
                 "price_trigger_ok": execution.get("execution_price") is not None,
@@ -378,6 +439,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
         "expired": False,
         "current_option_price": None,
         "pricing_source": "unavailable",
+        "pricing_state": "unpriced_chain_fetch_failed",
         "price_trigger_ok": False,
         "warnings": warnings,
         "underlying_price": underlying_price,
@@ -528,6 +590,10 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
                 recommendation = "SELL"
                 reason = f"Indicator exit triggered: {indicator_detail}"
 
+    pricing_state = pricing.get("pricing_state") or (
+        "priced_exact" if pricing.get("price_trigger_ok") else "unpriced_chain_fetch_failed"
+    )
+
     metrics_snapshot = {
         "days_held": days_held,
         "contract_symbol": _normalize_contract_symbol(
@@ -544,6 +610,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "current_underlying_price": current_stock_price,
         "current_stock_pct": current_stock_pct,
         "price_trigger_ok": bool(pricing.get("price_trigger_ok")),
+        "pricing_state": pricing_state,
         "exit_execution_price": exit_execution_price,
         "exit_execution_basis": pricing.get("current_execution_basis"),
         "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
@@ -558,6 +625,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "position_id": position["id"],
         "reviewed_at": datetime.now().isoformat(),
         "pricing_source": pricing.get("pricing_source"),
+        "pricing_state": pricing_state,
         "current_option_price": current_option_price,
         "current_pnl_pct": current_pnl_pct,
         "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),

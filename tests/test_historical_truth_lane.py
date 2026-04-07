@@ -133,6 +133,9 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertIn("contract_resolution_counts", imported)
         self.assertIn("exact_contract_match_count", imported)
         self.assertIn("nearest_contract_match_count", imported)
+        self.assertIn("authoritative_profitability_basis", imported)
+        self.assertIn("authoritative_profitability_metrics", imported)
+        self.assertIn("authoritative_profitability_gate", imported)
         self.assertIn("truth_store", imported)
         self.assertGreater(imported["truth_store"]["quote_count"], 0)
         self.assertGreater(imported["priced_trade_count"], 0)
@@ -170,6 +173,24 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         )
         self.assertTrue(synthetic_policy["synthetic_only"])
         self.assertEqual(synthetic_policy["truth_source"], wfo.SYNTHETIC_TRUTH_SOURCE)
+
+    def test_backtest_can_restrict_replay_to_call_direction_only(self):
+        with patch.object(
+            wfo,
+            "_resolve_replay_entry_signal",
+            return_value={"trade_type": "put", "signal_family": "momentum"},
+        ):
+            filtered = wfo.run_historical_backtest(
+                lookback_years=1,
+                n_picks=1,
+                iv_adj=1.0,
+                pricing_lane="pessimistic",
+                truth_lane="synthetic",
+                allowed_directions=["call"],
+            )
+
+        self.assertEqual(filtered["requested_directions"], ["call"])
+        self.assertEqual(filtered["total_trades"], 0)
 
     def test_fixture_imports_do_not_count_as_trusted_validation(self):
         fixture_db_path = os.path.join(self._tmp.name, "options_history_fixture.db")
@@ -236,6 +257,8 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertIn("exact_contract_metrics", imported)
         self.assertIn("nearest_listed_metrics", imported)
         self.assertIn("promotion_metrics", imported)
+        self.assertEqual(imported["authoritative_profitability_basis"], "exact_contract_only")
+        self.assertIn("authoritative_profitability_gate", imported)
         self.assertIn("by_symbol", imported)
         self.assertTrue(os.path.exists(self.imported_daily_latest_path))
 
@@ -246,6 +269,8 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertEqual(policy["truth_source"], "historical_imported_daily")
         self.assertIn(policy["promotion_status"], {"watch", "block"})
         self.assertNotEqual(policy["promotion_status"], "promote")
+        self.assertEqual(policy["authoritative_profitability_basis"], "exact_contract_only")
+        self.assertIn("authoritative_profitability_gate", policy)
         self.assertIn("by_symbol", policy)
         self.assertIn("promotion_metrics", policy)
 
@@ -809,8 +834,13 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertEqual(result["candidate_source"], wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE)
         self.assertEqual(result["primary_judge_trade_class"], "exact_archived_contract")
         self.assertEqual(result["evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
+        self.assertEqual(result["authoritative_profitability_basis"], "archived_exact_contract_only")
+        self.assertEqual(result["authoritative_profitability_metrics"]["trade_count"], 1)
+        self.assertEqual(result["authoritative_profitability_gate"]["trade_count"], 1)
         self.assertEqual(result["archived_exact_contract_metrics"]["trade_count"], 1)
         self.assertEqual(result["model_exact_contract_metrics"]["trade_count"], 1)
+        self.assertEqual(result["exact_contract_metrics"]["trade_count"], 2)
+        self.assertEqual(result["promotion_metrics"]["authoritative_profitability_metrics"]["trade_count"], 1)
         self.assertTrue(result["primary_judge_fallback_used"])
         self.assertEqual(result["primary_judge_fallback_reason"], "missing_archived_contract_quote")
         self.assertEqual(result["archived_sample_date_coverage"]["entry_date_count"], 1)

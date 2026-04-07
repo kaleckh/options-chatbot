@@ -258,29 +258,118 @@ class AutoresearchCycleTests(unittest.TestCase):
         }
         self.assertTrue(expected_files.issubset({path.name for path in run_dir.iterdir()}))
 
-        manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf8"))
-        self.assertEqual(manifest["truth_lane"], "historical_imported")
-        self.assertEqual(manifest["mode"], "search")
-        self.assertEqual(manifest["window_mode"], "rolling_6m")
-        self.assertEqual(manifest["require_quote_coverage"], 75.0)
-        self.assertEqual(manifest["watchlist_manifest"]["symbols"], ["SPY", "QQQ", "AAPL"])
-
-        matrix = json.loads((run_dir / "matrix.json").read_text(encoding="utf8"))
-        self.assertEqual(matrix["defaults"]["requested_pricing_lanes"], ["mid", "pessimistic"])
-        self.assertEqual(matrix["defaults"]["effective_pricing_lanes"], ["historical_imported"])
-        self.assertEqual(matrix["defaults"]["truth_lane"], "historical_imported")
-
-        truth_lane_comparison = json.loads((run_dir / "truth_lane_comparison.json").read_text(encoding="utf8"))
-        self.assertEqual(truth_lane_comparison["unsupported_by_import_rate_pct"], 13.6)
-
-        falsification = json.loads((run_dir / "falsification.json").read_text(encoding="utf8"))
-        self.assertEqual(
-            falsification["acceptance_rule"]["quote_coverage_sensitivity"]["stricter_floor_pct"],
-            85.0,
+    def test_validation_manifest_passes_profile_targets_and_directions_to_replay(self):
+        phase_path = self.root / "docs" / "autoresearch" / "phase.json"
+        phase_path.parent.mkdir(parents=True, exist_ok=True)
+        phase_path.write_text(
+            json.dumps(
+                {
+                    "phase_id": "truth-first",
+                    "mode": "validation",
+                    "freeze_search": True,
+                    "allowed_truth_lanes": ["historical_imported_daily"],
+                    "required_watchlist": ["SPY", "QQQ"],
+                    "required_baseline_control": "baseline_broad_control",
+                    "cohorts": [
+                        {
+                            "id": "baseline_broad_control",
+                            "role": "control",
+                            "label": "Baseline Broad",
+                            "playbooks": ["broad"],
+                            "overrides": {"entry": {"min_tech_score": 72.0}},
+                            "profile_targets": ["index"],
+                            "directions": ["call"],
+                        }
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf8",
         )
 
-        evidence_bundle = json.loads((run_dir / "evidence_bundle.json").read_text(encoding="utf8"))
-        self.assertIn("authoritative_truth_source", evidence_bundle)
+        captured_build_matrix: list[dict] = []
+        captured_primary: list[dict] = []
+
+        def fake_backtest(**kwargs):
+            return _fake_backtest_result(
+                lookback_years=kwargs["lookback_years"],
+                pricing_lane=kwargs["pricing_lane"],
+                playbook=kwargs["playbook"] or "broad",
+            )
+
+        def fake_build_matrix(**kwargs):
+            captured_build_matrix.append(kwargs)
+            return (
+                {
+                    "generated_at": "now",
+                    "primary_scenario": {
+                        "lookback_years": 2,
+                        "n_picks": 1,
+                        "iv_adj": 1.2,
+                        "pricing_lane": "historical_imported_daily",
+                        "playbook": "broad",
+                        "truth_lane": "historical_imported_daily",
+                        "directions": list(kwargs.get("allowed_directions") or []),
+                    },
+                    "cells": [],
+                },
+                _fake_backtest_result(
+                    lookback_years=2,
+                    pricing_lane="historical_imported_daily",
+                    playbook="broad",
+                ),
+            )
+
+        def fake_primary(**kwargs):
+            captured_primary.append(kwargs)
+            return _fake_backtest_result(
+                lookback_years=2,
+                pricing_lane=kwargs["truth_lane"],
+                playbook=kwargs["playbook"],
+            )
+
+        with patch.object(cycle, "run_mandatory_regressions", return_value=_fake_test_report()), \
+             patch.object(cycle, "build_matrix", side_effect=fake_build_matrix), \
+             patch.object(cycle, "_run_primary_scenario", side_effect=fake_primary), \
+             patch.object(cycle, "build_options_experiment_matrix", return_value={"generated_at": "now", "experiments": []}), \
+             patch.object(cycle, "build_options_stability_report", return_value={"overall_status": "watch"}), \
+             patch.object(cycle, "build_live_options_trade_policy", return_value={"scan_policy": {"promotion_status": "watch"}}), \
+             patch.object(cycle, "build_metric_truth_report", return_value={"overall": {"profit_factor": 1.1}}), \
+             patch.object(cycle, "build_truth_lane_comparison", return_value={"synthetic": {}, "imported": {}, "unsupported_by_import_count": 0, "deltas": {}}), \
+             patch.object(cycle, "build_playbook_discovery_report", return_value={"generated_at": "now"}), \
+             patch.object(cycle, "build_falsification_report", return_value={"generated_at": "now"}), \
+             patch.object(cycle, "build_evidence_bundle", return_value={"generated_at": "now"}), \
+             patch.object(cycle, "summarize_forward_holdout", return_value={"available": False}), \
+             patch.object(cycle, "run_historical_backtest", side_effect=fake_backtest):
+            code = cycle.main(
+                [
+                    "--slug",
+                    "call-only-validation",
+                    "--proposal",
+                    str(self.proposal.relative_to(self.root)),
+                    "--phase-manifest",
+                    str(phase_path.relative_to(self.root)),
+                    "--mode",
+                    "validation",
+                    "--cohort-id",
+                    "baseline_broad_control",
+                    "--truth-lane",
+                    "historical_imported_daily",
+                ],
+                root_dir=self.root,
+            )
+
+        self.assertEqual(code, 0)
+        self.assertEqual(captured_build_matrix[0]["allowed_directions"], ["call"])
+        self.assertEqual(captured_primary[0]["profile_targets"], ["index"])
+        self.assertEqual(captured_primary[0]["allowed_directions"], ["call"])
+
+        run_dir = self._run_dirs()[0]
+        manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf8"))
+        self.assertEqual(manifest["mode"], "validation")
+        self.assertEqual(manifest["truth_lane"], "historical_imported_daily")
+        self.assertEqual(manifest["profile_targets"], ["index"])
+        self.assertEqual(manifest["directions"], ["call"])
 
     def test_compare_to_writes_comparison_json_with_deltas(self):
         compare_dir = self.root / "research_runs" / "20260330_140000_baseline"

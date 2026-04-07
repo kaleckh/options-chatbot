@@ -125,6 +125,36 @@ class AutoresearchGovernanceTests(unittest.TestCase):
         self.assertEqual(current_state["validation_scope_symbols"], ["SPY", "QQQ"])
         self.assertIn("## Active", queue_md)
 
+    def test_load_phase_manifest_normalizes_profile_targets_and_directions(self):
+        (self.docs / "phase.json").write_text(
+            json.dumps(
+                {
+                    "phase_id": "truth-first",
+                    "mode": "validation",
+                    "freeze_search": True,
+                    "required_watchlist": ["SPY", "QQQ"],
+                    "cohorts": [
+                        {
+                            "id": "call-baseline",
+                            "role": "control",
+                            "label": "Call Baseline",
+                            "playbooks": ["broad"],
+                            "overrides": {},
+                            "profile_targets": ["index"],
+                            "directions": ["call"],
+                        }
+                    ],
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+
+        phase_manifest = load_phase_manifest(self.docs / "phase.json")
+
+        self.assertEqual(phase_manifest["cohorts"][0]["profile_targets"], ["index"])
+        self.assertEqual(phase_manifest["cohorts"][0]["directions"], ["call"])
+
 
 if __name__ == "__main__":
     unittest.main()

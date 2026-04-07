@@ -56,6 +56,20 @@ DEFAULT_MIN_CLOSED_TRACKED_POSITIONS = 1
 DEFAULT_MIN_REALIZED_PROFIT_FACTOR = 1.0
 DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT = 0.0
 DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS = 3
+
+# Loop-health thresholds (existing defaults above)
+LOOP_HEALTH_MIN_ELIGIBLE_FORWARD_EVENTS = 10
+LOOP_HEALTH_MIN_ELIGIBLE_EVENTS_PER_SYMBOL = 3
+LOOP_HEALTH_MIN_CLOSED_TRACKED_POSITIONS = 3
+
+# Claim-readiness thresholds
+CLAIM_MIN_ELIGIBLE_FORWARD_EVENTS = 40
+CLAIM_MIN_ELIGIBLE_EVENTS_PER_SYMBOL = 15
+CLAIM_MIN_CLOSED_EXACT_CONTRACT_POSITIONS = 20
+CLAIM_MIN_CLOSED_EXACT_CONTRACT_PER_SYMBOL = 8
+CLAIM_MIN_NET_PROFIT_FACTOR = 1.20
+CLAIM_MIN_AVG_NET_PNL_PCT = 0.0
+CLAIM_MIN_EXACT_CONTRACT_CAPTURE_PCT = 95.0
 DAILY_TRUTH_IMPORT_MANIFEST_ENV = "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"
 LEGACY_DAILY_TRUTH_IMPORT_MANIFEST_ENV = "HISTORICAL_OPTIONS_IMPORT_MANIFEST"
 DEFAULT_DAILY_TRUTH_IMPORT_MANIFEST = ROOT_DIR / "data" / "options-validation" / "daily_truth_import_manifest.json"
@@ -840,5 +854,134 @@ def evaluate_measurement_gate(
             for key, value in forward_evidence.items()
             if key != "all_events"
         },
+        "tracked_realized_metrics": realized_metrics,
+    }
+
+
+def evaluate_claim_readiness(
+    *,
+    forward_db_path: str | Path | None = None,
+    recorded_before_utc: str | None = None,
+    min_eligible_forward_events: int = CLAIM_MIN_ELIGIBLE_FORWARD_EVENTS,
+    min_eligible_events_per_symbol: int = CLAIM_MIN_ELIGIBLE_EVENTS_PER_SYMBOL,
+    min_closed_exact_contract_positions: int = CLAIM_MIN_CLOSED_EXACT_CONTRACT_POSITIONS,
+    min_closed_exact_contract_per_symbol: int = CLAIM_MIN_CLOSED_EXACT_CONTRACT_PER_SYMBOL,
+    min_net_profit_factor: float = CLAIM_MIN_NET_PROFIT_FACTOR,
+    min_avg_net_pnl_pct: float = CLAIM_MIN_AVG_NET_PNL_PCT,
+    min_exact_contract_capture_pct: float = CLAIM_MIN_EXACT_CONTRACT_CAPTURE_PCT,
+) -> dict[str, Any]:
+    """Evaluate whether the system meets claim-readiness thresholds for profitability claims."""
+    blockers: list[dict[str, Any]] = []
+
+    forward_evidence = _load_forward_evidence(
+        forward_db_path=forward_db_path,
+        recorded_before_utc=recorded_before_utc,
+    )
+
+    eligible_event_count = int(forward_evidence["eligible_event_count"])
+    if eligible_event_count < int(min_eligible_forward_events):
+        blockers.append({
+            "code": "insufficient_eligible_forward_events",
+            "message": f"Need {min_eligible_forward_events} matured eligible forward events, have {eligible_event_count}.",
+            "eligible_event_count": eligible_event_count,
+            "required": int(min_eligible_forward_events),
+        })
+
+    for symbol, counts in sorted(forward_evidence["by_symbol"].items()):
+        symbol_eligible = int(counts.get("eligible") or 0)
+        if symbol_eligible < int(min_eligible_events_per_symbol):
+            blockers.append({
+                "code": f"insufficient_symbol_events_{symbol.lower()}",
+                "message": f"{symbol} has {symbol_eligible} eligible events, need {min_eligible_events_per_symbol}.",
+                "symbol": symbol,
+                "eligible_event_count": symbol_eligible,
+                "required": int(min_eligible_events_per_symbol),
+            })
+
+    positions_snapshot = _load_positions_snapshot()
+    if not positions_snapshot["available"]:
+        blockers.append({
+            "code": "tracked_positions_unavailable",
+            "message": positions_snapshot.get("error_message") or "Tracked positions storage is unavailable.",
+        })
+        return _claim_result(blockers, {}, forward_evidence)
+
+    closed_positions = positions_snapshot["closed_positions"]
+    realized_metrics = _realized_position_metrics(closed_positions)
+
+    exact_contract_count = int(realized_metrics.get("exact_contract_closed_count") or 0)
+    total_closed = int(realized_metrics.get("closed_position_count") or 0)
+    exact_capture_pct = round((exact_contract_count / total_closed) * 100.0, 1) if total_closed > 0 else 0.0
+
+    if exact_contract_count < int(min_closed_exact_contract_positions):
+        blockers.append({
+            "code": "insufficient_exact_contract_positions",
+            "message": f"Need {min_closed_exact_contract_positions} closed exact-contract positions, have {exact_contract_count}.",
+            "exact_contract_closed_count": exact_contract_count,
+            "required": int(min_closed_exact_contract_positions),
+        })
+
+    # Per-symbol closed exact-contract positions
+    per_symbol_closed: dict[str, int] = {}
+    for position in closed_positions:
+        symbol = str(position.get("ticker") or "").strip().upper()
+        if symbol and str(position.get("contract_symbol") or "").strip():
+            per_symbol_closed[symbol] = per_symbol_closed.get(symbol, 0) + 1
+    for symbol in TARGET_SYMBOLS:
+        symbol_count = per_symbol_closed.get(symbol, 0)
+        if symbol_count < int(min_closed_exact_contract_per_symbol):
+            blockers.append({
+                "code": f"insufficient_exact_positions_{symbol.lower()}",
+                "message": f"{symbol} has {symbol_count} closed exact-contract positions, need {min_closed_exact_contract_per_symbol}.",
+                "symbol": symbol,
+                "count": symbol_count,
+                "required": int(min_closed_exact_contract_per_symbol),
+            })
+
+    profit_factor = _safe_float(realized_metrics.get("net_profit_factor"))
+    avg_net_pnl = _safe_float(realized_metrics.get("avg_net_pnl_pct"))
+
+    if profit_factor is None or profit_factor < float(min_net_profit_factor):
+        blockers.append({
+            "code": "net_profit_factor_below_claim_threshold",
+            "message": f"Net profit factor is {profit_factor}, need >= {min_net_profit_factor}.",
+            "net_profit_factor": profit_factor,
+            "required": float(min_net_profit_factor),
+        })
+
+    if avg_net_pnl is None or avg_net_pnl <= float(min_avg_net_pnl_pct):
+        blockers.append({
+            "code": "avg_net_pnl_below_claim_threshold",
+            "message": f"Average net PnL is {avg_net_pnl}%, need > {min_avg_net_pnl_pct}%.",
+            "avg_net_pnl_pct": avg_net_pnl,
+            "required_gt": float(min_avg_net_pnl_pct),
+        })
+
+    if exact_capture_pct < float(min_exact_contract_capture_pct):
+        blockers.append({
+            "code": "exact_contract_capture_below_claim_threshold",
+            "message": f"Exact-contract capture is {exact_capture_pct}%, need >= {min_exact_contract_capture_pct}%.",
+            "exact_contract_capture_pct": exact_capture_pct,
+            "required": float(min_exact_contract_capture_pct),
+        })
+
+    return _claim_result(blockers, realized_metrics, forward_evidence)
+
+
+def _claim_result(
+    blockers: list[dict[str, Any]],
+    realized_metrics: dict[str, Any],
+    forward_evidence: dict[str, Any],
+) -> dict[str, Any]:
+    claim_ready = len(blockers) == 0
+    return {
+        "generated_at": utc_now_iso(),
+        "claim_ready": claim_ready,
+        "state": "claim_ready" if claim_ready else "not_claim_ready",
+        "blockers": blockers,
+        "blocker_count": len(blockers),
+        "eligible_event_count": int(forward_evidence.get("eligible_event_count") or 0),
+        "pending_truth_event_count": int(forward_evidence.get("pending_truth_event_count") or 0),
+        "by_symbol": forward_evidence.get("by_symbol", {}),
         "tracked_realized_metrics": realized_metrics,
     }
