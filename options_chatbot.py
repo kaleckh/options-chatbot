@@ -93,6 +93,11 @@ UNDERLYING_FILTERS = {
 DEFAULT_WATCHLIST = [
     # ── Validated with imported daily historical data ─────────────────────────
     "SPY", "QQQ",
+    # ── Index ETFs (same index profile as SPY/QQQ) ───────────────────────────
+    "IWM", "DIA", "XLK",
+    # ── Mega-cap equities (equity profile, paper-trade validation) ────────────
+    "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META",
+    "AMD", "NFLX", "JPM", "TSLA",
 ]
 
 # Full universe — re-enable as each ticker is validated with real option data
