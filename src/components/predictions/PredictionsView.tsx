@@ -295,10 +295,10 @@ export default function PredictionsView() {
       const forwardData = await forwardRes.json();
       const statusData = await statusRes.json();
       if (!forwardRes.ok || forwardData.error) {
-        throw new Error(forwardData.error || "Failed to load forward evidence report");
+        console.warn("Forward evidence not available:", forwardData.error || forwardRes.status);
       }
       if (!statusRes.ok || statusData.error) {
-        throw new Error(statusData.error || "Failed to load options profit status");
+        console.warn("Options profit status not available:", statusData.error || statusRes.status);
       }
       setForwardEvidence((forwardData || null) as ForwardEvidenceReport | null);
       setOptionsProfitStatus((statusData || null) as OptionsProfitStatus | null);
