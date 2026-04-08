@@ -1085,6 +1085,7 @@ function resolveDynamicTakeProfitPrice(position, bar) {
 }
 
 function calculateTradeOutcome(position, bars, feesFraction) {
+  const isShort = position.direction === "short";
   let exitBar = bars[bars.length - 1];
   let exitReason = "end_of_series";
   let exitPrice = exitBar.close;
@@ -1094,20 +1095,40 @@ function calculateTradeOutcome(position, bars, feesFraction) {
     const bar = bars[i];
     holdBars = i + 1;
 
-    const stopPrice = position.entryPrice * (1 - position.stopLossFraction);
-    const takePrice = resolveDynamicTakeProfitPrice(position, bar)
-      || (position.entryPrice * (1 + position.takeProfitFraction));
-    if (bar.low <= stopPrice) {
-      exitBar = bar;
-      exitReason = "stop_loss";
-      exitPrice = stopPrice;
-      break;
-    }
-    if (bar.high >= takePrice) {
-      exitBar = bar;
-      exitReason = position.exitTargetMode ? "dynamic_take_profit" : "take_profit";
-      exitPrice = takePrice;
-      break;
+    if (isShort) {
+      // Short: stop above entry, take profit below entry
+      const stopPrice = position.entryPrice * (1 + position.stopLossFraction);
+      const takePrice = resolveDynamicTakeProfitPrice(position, bar)
+        || (position.entryPrice * (1 - position.takeProfitFraction));
+      if (bar.high >= stopPrice) {
+        exitBar = bar;
+        exitReason = "stop_loss";
+        exitPrice = stopPrice;
+        break;
+      }
+      if (bar.low <= takePrice) {
+        exitBar = bar;
+        exitReason = position.exitTargetMode ? "dynamic_take_profit" : "take_profit";
+        exitPrice = takePrice;
+        break;
+      }
+    } else {
+      // Long: stop below entry, take profit above entry
+      const stopPrice = position.entryPrice * (1 - position.stopLossFraction);
+      const takePrice = resolveDynamicTakeProfitPrice(position, bar)
+        || (position.entryPrice * (1 + position.takeProfitFraction));
+      if (bar.low <= stopPrice) {
+        exitBar = bar;
+        exitReason = "stop_loss";
+        exitPrice = stopPrice;
+        break;
+      }
+      if (bar.high >= takePrice) {
+        exitBar = bar;
+        exitReason = position.exitTargetMode ? "dynamic_take_profit" : "take_profit";
+        exitPrice = takePrice;
+        break;
+      }
     }
 
     if (holdBars >= position.maxHoldBars) {
@@ -1119,7 +1140,7 @@ function calculateTradeOutcome(position, bars, feesFraction) {
   }
 
   const exitExecution = simulateExecution({
-    side: "sell",
+    side: isShort ? "buy" : "sell",
     quantity: 1,
     referencePrice: exitPrice,
     snapshot: {
@@ -1130,7 +1151,9 @@ function calculateTradeOutcome(position, bars, feesFraction) {
   });
 
   const realizedExitPrice = exitExecution.fillPrice;
-  const grossReturnFraction = (realizedExitPrice - position.entryPrice) / position.entryPrice;
+  const grossReturnFraction = isShort
+    ? (position.entryPrice - realizedExitPrice) / position.entryPrice
+    : (realizedExitPrice - position.entryPrice) / position.entryPrice;
   const netReturnFraction = grossReturnFraction - exitExecution.feeFraction;
 
   return {
@@ -1142,6 +1165,7 @@ function calculateTradeOutcome(position, bars, feesFraction) {
     netReturnFraction,
     exitFeesFraction: exitExecution.feeFraction,
     exitSlippageFraction: exitExecution.slippageFraction,
+    direction: isShort ? "short" : "long",
   };
 }
 
@@ -1206,10 +1230,16 @@ function runBacktest(options = {}) {
   for (let i = strategy.evaluationWindow.warmupBars; i < bars.length - 1; i += 1) {
     const bar = bars[i];
     const signalValue = getSignalValue(bar, strategy.simulation.entrySignal);
-    if (signalValue <= 0) continue;
+    const strategyDirection = String(strategy.simulation.direction || "long");
+    const absSignal = Math.abs(signalValue);
+    const signalDirection = signalValue > 0 ? "long" : signalValue < 0 ? "short" : null;
+    if (absSignal === 0) continue;
+    // For long-only strategies, skip short signals; for short-only, skip long; for both, take either
+    if (strategyDirection === "long" && signalDirection !== "long") continue;
+    if (strategyDirection === "short" && signalDirection !== "short") continue;
     if (
       strategy.simulation.useSignalStrengthThreshold != null &&
-      signalValue < strategy.simulation.useSignalStrengthThreshold
+      absSignal < strategy.simulation.useSignalStrengthThreshold
     ) {
       continue;
     }
@@ -1219,7 +1249,7 @@ function runBacktest(options = {}) {
     if (!Number.isFinite(rawEntryPrice) || rawEntryPrice <= 0) continue;
 
     const entryExecution = simulateExecution({
-      side: "buy",
+      side: signalDirection === "short" ? "sell" : "buy",
       quantity: 1,
       referencePrice: rawEntryPrice,
       snapshot: {
@@ -1230,12 +1260,27 @@ function runBacktest(options = {}) {
     });
     if (entryExecution.status === "rejected") continue;
 
+    // Dynamic ATR-based stop/target: when atrStopMultiplier and atrTargetMultiplier
+    // are set, compute per-trade exit levels from the signal bar's ATR14 instead of
+    // using fixed fractions. This adapts to current volatility — wider stops in
+    // volatile markets, tighter in quiet markets — keeping risk/reward consistent.
+    let effectiveStopFraction = strategy.simulation.stopLossFraction;
+    let effectiveTargetFraction = strategy.simulation.takeProfitFraction;
+    const atrStopMult = Number(strategy.simulation.atrStopMultiplier);
+    const atrTargetMult = Number(strategy.simulation.atrTargetMultiplier);
+    const entryAtr = bar.indicators?.atr14;
+    if (atrStopMult > 0 && atrTargetMult > 0 && Number.isFinite(entryAtr) && entryAtr > 0 && rawEntryPrice > 0) {
+      effectiveStopFraction = Math.min((entryAtr * atrStopMult) / rawEntryPrice, strategy.simulation.stopLossFraction * 3);
+      effectiveTargetFraction = Math.min((entryAtr * atrTargetMult) / rawEntryPrice, strategy.simulation.takeProfitFraction * 3);
+    }
+
     const outcome = calculateTradeOutcome({
       entryPrice: entryExecution.fillPrice,
-      takeProfitFraction: strategy.simulation.takeProfitFraction,
-      stopLossFraction: strategy.simulation.stopLossFraction,
+      takeProfitFraction: effectiveTargetFraction,
+      stopLossFraction: effectiveStopFraction,
       maxHoldBars: strategy.simulation.maxHoldBars,
       exitTargetMode: strategy.simulation.exitTargetMode,
+      direction: signalDirection,
     }, bars.slice(i + 1), feesFraction);
     outcome.netReturnFraction -= entryExecution.feeFraction;
 
@@ -1258,7 +1303,7 @@ function runBacktest(options = {}) {
       symbol: bar.symbol,
       entryTimestamp: bars[i + 1] ? bars[i + 1].timestamp : bar.timestamp,
       exitTimestamp: outcome.exitBar.timestamp,
-      direction: strategy.simulation.direction,
+      direction: signalDirection || strategy.simulation.direction,
       entryPrice: round(entryExecution.fillPrice),
       exitPrice: round(outcome.exitPrice),
       holdBars: outcome.holdBars,
@@ -1272,6 +1317,14 @@ function runBacktest(options = {}) {
       exitSlippageFraction: round(outcome.exitSlippageFraction),
       positionFraction: round(positionFraction),
       pnlFractionOfEquity: round(pnlFractionOfEquity),
+      // Context for trade-level forensics
+      effectiveStopFraction: round(effectiveStopFraction),
+      effectiveTargetFraction: round(effectiveTargetFraction),
+      entryAtr14: round(entryAtr),
+      entryRegime: bar.indicators?.marketRegime || null,
+      entryHtfTrend: bar.indicators?.htfTrend || null,
+      entrySessionPhase: bar.indicators?.sessionPhase || null,
+      entryRegimeStrength: round(bar.indicators?.marketRegimeStrength),
     });
 
     equityCurve.push({

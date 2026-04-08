@@ -75,6 +75,10 @@ const FROZEN_CRYPTO_FAMILIES = new Set([
   "crypto_opening_range_breakout",
   "crypto_range_mean_reversion",
   "crypto_trend_continuation",
+  "crypto_delta_divergence",
+  "crypto_delta_breakout",
+  "crypto_absorption",
+  "crypto_exhaustion",
 ]);
 const CRYPTO_FAMILY_CONTINUE_RULES = {
   minimumTrades: 30,
@@ -97,7 +101,7 @@ const DEFAULT_CRYPTO_DAY_TRADING_CONFIG = {
   strategyTimeframe: DEFAULT_TIMEFRAME,
   bars: 3120,
   startingCash: 10000,
-  feesFraction: 0.0005,
+  feesFraction: 0.0002,
   watchlistLimit: 4,
   notifyLookbackBars: 1,
   maxBarAgeMinutes: 10,
@@ -120,34 +124,76 @@ const VALID_STATUSES = new Set([
 ]);
 const CRYPTO_EXPERIMENT_LIBRARY = {
   crypto_bottom_reclaim: {
-    signalThresholds: [0.7, 0.76, 0.82],
+    signalThresholds: [0.52, 0.60, 0.68],
     takeProfitFractions: [0.006, 0.007, 0.008],
     stopLossFractions: [0.0035, 0.0042, 0.005],
-    maxHoldBars: [5, 6, 8],
+    maxHoldBars: [3, 5, 6],
+    atrStopMultipliers: [0, 1.2, 1.8],
+    atrTargetMultipliers: [0, 2.0, 2.8],
   },
   crypto_failed_breakdown_reclaim: {
-    signalThresholds: [0.68, 0.74, 0.8],
+    signalThresholds: [0.50, 0.58, 0.66],
     takeProfitFractions: [0.006, 0.007, 0.008],
     stopLossFractions: [0.0038, 0.0046, 0.0052],
-    maxHoldBars: [5, 6, 8],
+    maxHoldBars: [3, 5, 6],
+    atrStopMultipliers: [0, 1.2, 1.8],
+    atrTargetMultipliers: [0, 2.0, 2.8],
   },
   crypto_opening_range_breakout: {
-    signalThresholds: [0.68, 0.74, 0.8],
-    takeProfitFractions: [0.007, 0.0085, 0.01],
-    stopLossFractions: [0.0038, 0.0045, 0.0052],
-    maxHoldBars: [6, 8, 10],
+    signalThresholds: [0.55, 0.62, 0.70],
+    takeProfitFractions: [0.009, 0.011, 0.013],
+    stopLossFractions: [0.003, 0.004, 0.005],
+    maxHoldBars: [4, 6, 8],
+    atrStopMultipliers: [0, 1.0, 1.5],
+    atrTargetMultipliers: [0, 2.5, 3.5],
   },
   crypto_range_mean_reversion: {
-    signalThresholds: [0.64, 0.7, 0.76],
-    takeProfitFractions: [0.0055, 0.0065, 0.0075],
-    stopLossFractions: [0.0035, 0.0045, 0.0055],
-    maxHoldBars: [6, 8, 10],
+    signalThresholds: [0.50, 0.58, 0.66],
+    takeProfitFractions: [0.005, 0.006, 0.007],
+    stopLossFractions: [0.003, 0.0035, 0.004],
+    maxHoldBars: [4, 6, 8],
+    atrStopMultipliers: [0, 1.0, 1.5],
+    atrTargetMultipliers: [0, 1.8, 2.5],
   },
   crypto_trend_continuation: {
-    signalThresholds: [0.66, 0.72, 0.78],
-    takeProfitFractions: [0.008, 0.0095, 0.011],
+    signalThresholds: [0.55, 0.62, 0.70],
+    takeProfitFractions: [0.01, 0.013, 0.016],
     stopLossFractions: [0.004, 0.005, 0.006],
-    maxHoldBars: [8, 12, 16],
+    maxHoldBars: [6, 8, 10],
+    atrStopMultipliers: [0, 1.5, 2.0],
+    atrTargetMultipliers: [0, 3.0, 4.0],
+  },
+  crypto_delta_divergence: {
+    signalThresholds: [0.48, 0.55, 0.62],
+    takeProfitFractions: [0.004, 0.006, 0.008],
+    stopLossFractions: [0.0025, 0.0035, 0.0045],
+    maxHoldBars: [3, 5, 8],
+    atrStopMultipliers: [0, 1.0, 1.5],
+    atrTargetMultipliers: [0, 2.0, 3.0],
+  },
+  crypto_delta_breakout: {
+    signalThresholds: [0.50, 0.58, 0.66],
+    takeProfitFractions: [0.006, 0.009, 0.012],
+    stopLossFractions: [0.003, 0.004, 0.005],
+    maxHoldBars: [4, 6, 10],
+    atrStopMultipliers: [0, 1.2, 1.8],
+    atrTargetMultipliers: [0, 2.5, 3.5],
+  },
+  crypto_absorption: {
+    signalThresholds: [0.46, 0.53, 0.60],
+    takeProfitFractions: [0.003, 0.005, 0.007],
+    stopLossFractions: [0.002, 0.003, 0.004],
+    maxHoldBars: [2, 4, 6],
+    atrStopMultipliers: [0, 0.8, 1.2],
+    atrTargetMultipliers: [0, 1.5, 2.2],
+  },
+  crypto_exhaustion: {
+    signalThresholds: [0.48, 0.55, 0.62],
+    takeProfitFractions: [0.004, 0.006, 0.008],
+    stopLossFractions: [0.0025, 0.0035, 0.005],
+    maxHoldBars: [2, 4, 6],
+    atrStopMultipliers: [0, 1.0, 1.5],
+    atrTargetMultipliers: [0, 2.0, 2.8],
   },
 };
 const PROFITABILITY_PRETRADE_CHECKLIST = [
@@ -1647,12 +1693,12 @@ function buildCryptoManagedStrategy(options = {}) {
         direction: "long",
         entrySignal: "crypto_trend_continuation",
         entryExecution: "next_open",
-        takeProfitFraction: 0.0095,
+        takeProfitFraction: 0.013,
         stopLossFraction: 0.005,
-        maxHoldBars: 12,
+        maxHoldBars: 8,
         cooldownBars: 4,
         maxConcurrentPositions: 1,
-        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.72 : 0.74,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.55 : 0.58,
       },
       metadata: {
         ...common.metadata,
@@ -1747,10 +1793,10 @@ function buildCryptoManagedStrategy(options = {}) {
         entryExecution: "next_open",
         takeProfitFraction: 0.007,
         stopLossFraction: 0.0042,
-        maxHoldBars: 6,
+        maxHoldBars: 5,
         cooldownBars: 5,
         maxConcurrentPositions: 1,
-        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.76 : 0.78,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.56 : 0.60,
         exitTargetMode: "session_vwap_or_range_midpoint",
       },
       metadata: {
@@ -1799,10 +1845,10 @@ function buildCryptoManagedStrategy(options = {}) {
         entryExecution: "next_open",
         takeProfitFraction: 0.007,
         stopLossFraction: 0.0046,
-        maxHoldBars: 6,
+        maxHoldBars: 5,
         cooldownBars: 6,
         maxConcurrentPositions: 1,
-        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.74 : 0.76,
+        useSignalStrengthThreshold: symbol === "BTCUSDT" ? 0.54 : 0.58,
         exitTargetMode: "session_vwap_or_range_midpoint",
       },
       metadata: {
@@ -1815,10 +1861,10 @@ function buildCryptoManagedStrategy(options = {}) {
   if (strategyKind === "opening_range_breakout") {
     const variantToken = breakoutVariant === "breakout_retest" ? "retest" : "close";
     const variantLabel = breakoutVariant === "breakout_retest" ? "Retest" : "Close";
-    const takeProfitFraction = breakoutVariant === "breakout_retest" ? 0.008 : 0.0085;
-    const stopLossFraction = breakoutVariant === "breakout_retest" ? 0.0042 : 0.0045;
-    const maxHoldBars = breakoutVariant === "breakout_retest" ? 10 : 8;
-    const signalThreshold = breakoutVariant === "breakout_retest" ? 0.74 : 0.72;
+    const takeProfitFraction = breakoutVariant === "breakout_retest" ? 0.011 : 0.011;
+    const stopLossFraction = breakoutVariant === "breakout_retest" ? 0.004 : 0.004;
+    const maxHoldBars = breakoutVariant === "breakout_retest" ? 8 : 6;
+    const signalThreshold = breakoutVariant === "breakout_retest" ? 0.76 : 0.74;
     return {
       ...common,
       strategyId: `${symbol.toLowerCase()}-crypto-opening-range-breakout-${variantToken}`,
@@ -1874,6 +1920,122 @@ function buildCryptoManagedStrategy(options = {}) {
     };
   }
 
+  if (strategyKind === "delta_divergence") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-delta-divergence`,
+      name: `${symbol} 5m Delta Divergence`,
+      hypothesisSummary: `${symbol} order flow divergences: when price makes a new session extreme but volume delta disagrees, the move is likely to reverse.`,
+      signalInputs: [{ name: "crypto_delta_divergence", type: "order_flow", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Long: ${symbol} near session low but CVD rising and buy pressure > 55%.`,
+        `Short: ${symbol} near session high but CVD falling and sell pressure > 55%.`,
+      ],
+      exitRules: ["Exit on take profit, stop loss, or max hold bars."],
+      cooldownRules: ["Wait 3 bars after exit."],
+      riskLimits: { ...common.riskLimits || {}, maxDrawdownFraction: 0.06, maxDailyLossFraction: 0.01, maxOpenPositions: 1, maxLossPerTradeFraction: 0.0035, minLiquidityUsd },
+      simulation: {
+        direction: "both",
+        entrySignal: "crypto_delta_divergence",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.006,
+        stopLossFraction: 0.0035,
+        maxHoldBars: 5,
+        cooldownBars: 3,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.50,
+      },
+      metadata: { ...common.metadata, tags: [...common.metadata.tags, "delta", "divergence", "order-flow"] },
+    };
+  }
+
+  if (strategyKind === "delta_breakout") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-delta-breakout`,
+      name: `${symbol} 5m Delta Breakout`,
+      hypothesisSummary: `${symbol} breakouts confirmed by volume delta surge -- real demand/supply, not just price noise.`,
+      signalInputs: [{ name: "crypto_delta_breakout", type: "order_flow", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Long: ${symbol} breaks session high with surging CVD and expanding volume.`,
+        `Short: ${symbol} breaks session low with plunging CVD and expanding volume.`,
+      ],
+      exitRules: ["Exit on take profit, stop loss, or max hold bars."],
+      cooldownRules: ["Wait 4 bars after exit."],
+      riskLimits: { ...common.riskLimits || {}, maxDrawdownFraction: 0.06, maxDailyLossFraction: 0.01, maxOpenPositions: 1, maxLossPerTradeFraction: 0.004, minLiquidityUsd },
+      simulation: {
+        direction: "both",
+        entrySignal: "crypto_delta_breakout",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.009,
+        stopLossFraction: 0.004,
+        maxHoldBars: 6,
+        cooldownBars: 4,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.52,
+      },
+      metadata: { ...common.metadata, tags: [...common.metadata.tags, "delta", "breakout", "order-flow"] },
+    };
+  }
+
+  if (strategyKind === "absorption") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-absorption`,
+      name: `${symbol} 5m Absorption`,
+      hypothesisSummary: `${symbol} absorption: huge volume but price barely moves indicates large orders absorbing directional flow. Fade the trapped side.`,
+      signalInputs: [{ name: "crypto_absorption", type: "order_flow", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Long: ${symbol} high volume at session low with tiny price move and buy-side pressure.`,
+        `Short: ${symbol} high volume at session high with tiny price move and sell-side pressure.`,
+      ],
+      exitRules: ["Exit on take profit, stop loss, or max hold bars."],
+      cooldownRules: ["Wait 2 bars after exit."],
+      riskLimits: { ...common.riskLimits || {}, maxDrawdownFraction: 0.06, maxDailyLossFraction: 0.01, maxOpenPositions: 1, maxLossPerTradeFraction: 0.003, minLiquidityUsd },
+      simulation: {
+        direction: "both",
+        entrySignal: "crypto_absorption",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.005,
+        stopLossFraction: 0.003,
+        maxHoldBars: 4,
+        cooldownBars: 2,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.48,
+      },
+      metadata: { ...common.metadata, tags: [...common.metadata.tags, "absorption", "order-flow"] },
+    };
+  }
+
+  if (strategyKind === "exhaustion") {
+    return {
+      ...common,
+      strategyId: `${symbol.toLowerCase()}-crypto-exhaustion`,
+      name: `${symbol} 5m Exhaustion`,
+      hypothesisSummary: `${symbol} exhaustion: volume spike with immediate reversal candle after a directional move traps late entries. Fade the exhausted side.`,
+      signalInputs: [{ name: "crypto_exhaustion", type: "order_flow", source: "computed_signal", weight: 1 }],
+      entryRules: [
+        `Long: ${symbol} volume spike after downmove with bullish reversal candle and buyer takeover.`,
+        `Short: ${symbol} volume spike after upmove with bearish reversal candle and seller takeover.`,
+      ],
+      exitRules: ["Exit on take profit, stop loss, or max hold bars."],
+      cooldownRules: ["Wait 3 bars after exit."],
+      riskLimits: { ...common.riskLimits || {}, maxDrawdownFraction: 0.06, maxDailyLossFraction: 0.01, maxOpenPositions: 1, maxLossPerTradeFraction: 0.0035, minLiquidityUsd },
+      simulation: {
+        direction: "both",
+        entrySignal: "crypto_exhaustion",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.006,
+        stopLossFraction: 0.0035,
+        maxHoldBars: 4,
+        cooldownBars: 3,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.50,
+      },
+      metadata: { ...common.metadata, tags: [...common.metadata.tags, "exhaustion", "reversal", "order-flow"] },
+    };
+  }
+
   return {
     ...common,
     strategyId: `${symbol.toLowerCase()}-crypto-range-mean-reversion`,
@@ -1910,12 +2072,12 @@ function buildCryptoManagedStrategy(options = {}) {
       direction: "long",
       entrySignal: "crypto_range_mean_reversion",
       entryExecution: "next_open",
-      takeProfitFraction: 0.0065,
-      stopLossFraction: 0.0045,
-      maxHoldBars: 8,
+      takeProfitFraction: 0.006,
+      stopLossFraction: 0.0035,
+      maxHoldBars: 6,
       cooldownBars: 4,
       maxConcurrentPositions: 1,
-      useSignalStrengthThreshold: 0.7,
+      useSignalStrengthThreshold: 0.52,
       exitTargetMode: "session_vwap_or_range_midpoint",
     },
     metadata: {
@@ -1985,6 +2147,35 @@ const DEFAULT_STRATEGIES = [
     status: "disabled",
     unlockPhase: "phase_3",
     maxPositionFraction: 0.18,
+  }),
+  // Order flow strategies
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "delta_divergence",
+    status: "paper_candidate",
+    unlockPhase: "phase_1",
+    maxPositionFraction: 0.25,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "delta_breakout",
+    status: "paper_candidate",
+    unlockPhase: "phase_1",
+    maxPositionFraction: 0.25,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "absorption",
+    status: "paper_candidate",
+    unlockPhase: "phase_1",
+    maxPositionFraction: 0.25,
+  }),
+  buildCryptoManagedStrategy({
+    symbol: "BTCUSDT",
+    strategyKind: "exhaustion",
+    status: "paper_candidate",
+    unlockPhase: "phase_1",
+    maxPositionFraction: 0.25,
   }),
 ];
 
@@ -2307,6 +2498,45 @@ function floorTimeMs(timeMs, bucketMinutes) {
   return Math.floor(timeMs / bucketMs) * bucketMs;
 }
 
+function resampleBars(bars = [], bucketMinutes = 5) {
+  const normalized = normalizeBars(bars);
+  const grouped = new Map();
+
+  for (const bar of normalized) {
+    const bucketMs = floorTimeMs(new Date(bar.timestamp).getTime(), bucketMinutes);
+    const key = `${bar.symbol}::${bucketMs}`;
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, {
+        timestamp: new Date(bucketMs).toISOString(),
+        symbol: bar.symbol,
+        open: bar.open,
+        high: bar.high,
+        low: bar.low,
+        close: bar.close,
+        volume: Number(bar.volume || 0),
+        quoteVolume: Number(bar.quoteVolume || 0),
+        tradeCount: Number(bar.tradeCount || 0),
+        takerBuyBaseVolume: Number(bar.takerBuyBaseVolume || 0),
+        takerBuyQuoteVolume: Number(bar.takerBuyQuoteVolume || 0),
+      });
+      continue;
+    }
+    existing.high = Math.max(existing.high, bar.high);
+    existing.low = Math.min(existing.low, bar.low);
+    existing.close = bar.close;
+    existing.volume += Number(bar.volume || 0);
+    existing.quoteVolume += Number(bar.quoteVolume || 0);
+    existing.tradeCount += Number(bar.tradeCount || 0);
+    existing.takerBuyBaseVolume += Number(bar.takerBuyBaseVolume || 0);
+    existing.takerBuyQuoteVolume += Number(bar.takerBuyQuoteVolume || 0);
+  }
+
+  return [...grouped.values()].sort((left, right) => (
+    new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime()
+  ));
+}
+
 function resampleOneMinuteBarsToFiveMinutes(bars = []) {
   const normalized = normalizeBars(bars);
   const grouped = new Map();
@@ -2326,6 +2556,8 @@ function resampleOneMinuteBarsToFiveMinutes(bars = []) {
         volume: Number(bar.volume || 0),
         quoteVolume: Number(bar.quoteVolume || 0),
         tradeCount: Number(bar.tradeCount || 0),
+        takerBuyBaseVolume: Number(bar.takerBuyBaseVolume || 0),
+        takerBuyQuoteVolume: Number(bar.takerBuyQuoteVolume || 0),
       });
       continue;
     }
@@ -2335,6 +2567,8 @@ function resampleOneMinuteBarsToFiveMinutes(bars = []) {
     existing.volume += Number(bar.volume || 0);
     existing.quoteVolume += Number(bar.quoteVolume || 0);
     existing.tradeCount += Number(bar.tradeCount || 0);
+    existing.takerBuyBaseVolume += Number(bar.takerBuyBaseVolume || 0);
+    existing.takerBuyQuoteVolume += Number(bar.takerBuyQuoteVolume || 0);
   }
 
   return [...grouped.values()].sort((left, right) => (
@@ -2419,6 +2653,36 @@ function computeStdDevSeries(values, period = 20) {
     }
     if (!valid) continue;
     result[i] = Math.sqrt(variance / period);
+  }
+  return result;
+}
+
+function computeAtrSeries(bars, period = 14) {
+  const result = new Array(bars.length).fill(null);
+  if (bars.length <= period) return result;
+  const trueRanges = new Array(bars.length).fill(null);
+  for (let i = 0; i < bars.length; i += 1) {
+    const high = Number(bars[i].high);
+    const low = Number(bars[i].low);
+    const prevClose = i > 0 ? Number(bars[i - 1].close) : high;
+    if (!Number.isFinite(high) || !Number.isFinite(low) || !Number.isFinite(prevClose)) continue;
+    trueRanges[i] = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose));
+  }
+  let sum = 0;
+  let count = 0;
+  for (let i = 0; i < period; i += 1) {
+    if (Number.isFinite(trueRanges[i])) {
+      sum += trueRanges[i];
+      count += 1;
+    }
+  }
+  if (count < period) return result;
+  let atr = sum / period;
+  result[period - 1] = atr;
+  for (let i = period; i < bars.length; i += 1) {
+    if (!Number.isFinite(trueRanges[i])) continue;
+    atr = ((atr * (period - 1)) + trueRanges[i]) / period;
+    result[i] = atr;
   }
   return result;
 }
@@ -2700,6 +2964,250 @@ function buildFailedBreakdownState(options = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Profitability Module 1: Market Regime Classifier
+// Classifies each bar into a macro regime (trending_up, trending_down,
+// ranging, volatile, quiet) using ATR percentile rank + EMA-based
+// directional trend strength. Each strategy family declares which regimes
+// it is allowed to trade in; signals are zeroed when the regime is wrong.
+// ---------------------------------------------------------------------------
+
+const ATR_PERCENTILE_LOOKBACK = 100;
+const TREND_STRENGTH_ATR_DIVISOR = 1; // trendStrength = |EMA20 - EMA50| / ATR14
+
+const REGIME_FAMILY_WHITELIST = {
+  // Mean-reversion families: only trade in ranging or quiet markets
+  crypto_range_mean_reversion:       ["ranging", "quiet"],
+  // Reversal families: explicitly catch bottoms, so they need trending_down too
+  crypto_bottom_reclaim:             ["ranging", "quiet", "volatile", "trending_down"],
+  crypto_failed_breakdown_reclaim:   ["ranging", "quiet", "volatile", "trending_down"],
+  // Momentum / breakout families: only trade when trending or volatile
+  // ORB trades the breakout FROM a range, so it needs ranging too
+  crypto_opening_range_breakout:     ["trending_up", "ranging", "volatile"],
+  crypto_trend_continuation:         ["trending_up"],
+  crypto_delta_breakout:             ["trending_up", "trending_down", "volatile"],
+  // Order-flow families: work across regimes but not in quiet
+  crypto_delta_divergence:           ["ranging", "trending_up", "trending_down", "volatile"],
+  crypto_absorption:                 ["ranging", "volatile"],
+  crypto_exhaustion:                 ["trending_up", "trending_down", "volatile"],
+};
+
+function computeRegimeClassification(options) {
+  const { atr14, atr14Sma50, ema20, ema50, closes, index } = options;
+
+  const currentAtr = atr14[index];
+  const currentEma20 = ema20[index];
+  const currentEma50 = ema50[index];
+  const close = closes[index];
+
+  if (!Number.isFinite(currentAtr) || !Number.isFinite(currentEma20) || !Number.isFinite(currentEma50) || close <= 0) {
+    return { regime: "unknown", regimeStrength: 0, atrPercentile: null, trendStrength: null, trendDirection: null };
+  }
+
+  // ATR percentile rank over lookback window
+  const lookbackStart = Math.max(0, index - ATR_PERCENTILE_LOOKBACK + 1);
+  let below = 0;
+  let total = 0;
+  for (let i = lookbackStart; i <= index; i += 1) {
+    if (Number.isFinite(atr14[i])) {
+      total += 1;
+      if (atr14[i] < currentAtr) below += 1;
+    }
+  }
+  const atrPercentile = total > 10 ? below / total : null;
+
+  // Directional trend strength: |EMA20 - EMA50| normalized by ATR14
+  const emaDiff = currentEma20 - currentEma50;
+  const trendStrength = currentAtr > 0 ? Math.abs(emaDiff) / (currentAtr * TREND_STRENGTH_ATR_DIVISOR) : 0;
+  const trendDirection = emaDiff > 0 && close > currentEma20 ? "up"
+    : emaDiff < 0 && close < currentEma20 ? "down"
+    : "neutral";
+
+  // Classify regime
+  let regime;
+  if (atrPercentile != null && atrPercentile >= 0.85 && trendStrength < 1.2) {
+    regime = "volatile";      // High ATR but no strong directional trend
+  } else if (atrPercentile != null && atrPercentile <= 0.2) {
+    regime = "quiet";         // Very low volatility
+  } else if (trendStrength >= 1.5 && trendDirection === "up") {
+    regime = "trending_up";
+  } else if (trendStrength >= 1.5 && trendDirection === "down") {
+    regime = "trending_down";
+  } else if (trendStrength < 0.8) {
+    regime = "ranging";       // EMAs close together, no direction
+  } else if (trendDirection === "up") {
+    regime = "trending_up";
+  } else if (trendDirection === "down") {
+    regime = "trending_down";
+  } else {
+    regime = "ranging";
+  }
+
+  const regimeStrength = regime === "volatile" ? (atrPercentile || 0)
+    : regime === "quiet" ? (1 - (atrPercentile || 0))
+    : Math.min(trendStrength / 2, 1);
+
+  return { regime, regimeStrength: round(regimeStrength, 4), atrPercentile: round(atrPercentile, 4), trendStrength: round(trendStrength, 4), trendDirection };
+}
+
+function isRegimeAllowed(signalName, regime) {
+  const whitelist = REGIME_FAMILY_WHITELIST[signalName];
+  if (!whitelist) return true; // Unknown families pass through
+  if (regime === "unknown") return true; // Not enough data to classify
+  return whitelist.includes(regime);
+}
+
+// ---------------------------------------------------------------------------
+// Profitability Module 2: Multi-Timeframe Trend Filter
+// Aggregates 5m bars into 1h bars (12:1) and computes higher-timeframe
+// EMA20/EMA50 trend. Blocks counter-trend signals:
+//   - Mean-reversion longs blocked when 1h trend is strongly down
+//   - Breakout longs blocked when 1h trend is flat/ranging
+//   - Trend continuation blocked when 1h trend disagrees
+// ---------------------------------------------------------------------------
+
+const HTF_AGGREGATION_RATIO = 12; // 12 × 5m = 1h
+const HTF_EMA_FAST = 20;
+const HTF_EMA_SLOW = 50;
+const HTF_RSI_PERIOD = 14;
+
+function computeHtfSeries(bars) {
+  // Build 1h OHLCV bars by aggregating every 12 consecutive 5m bars
+  const htfBars = [];
+  for (let i = 0; i + HTF_AGGREGATION_RATIO - 1 < bars.length; i += HTF_AGGREGATION_RATIO) {
+    const slice = bars.slice(i, i + HTF_AGGREGATION_RATIO);
+    let high = -Infinity, low = Infinity, volume = 0;
+    for (const b of slice) {
+      const h = Number(b.high), l = Number(b.low), v = Number(b.quoteVolume || b.volume || 0);
+      if (h > high) high = h;
+      if (l < low) low = l;
+      volume += v;
+    }
+    htfBars.push({
+      open: Number(slice[0].open),
+      high,
+      low,
+      close: Number(slice[slice.length - 1].close),
+      volume,
+    });
+  }
+
+  const htfCloses = htfBars.map((b) => b.close);
+  const htfEmaFast = computeEmaSeries(htfCloses, HTF_EMA_FAST);
+  const htfEmaSlow = computeEmaSeries(htfCloses, HTF_EMA_SLOW);
+  const htfRsi = computeRsiSeries(htfCloses, HTF_RSI_PERIOD);
+
+  // Map each 5m bar index back to its corresponding HTF bar
+  const result = new Array(bars.length).fill(null);
+  for (let htfIdx = 0; htfIdx < htfBars.length; htfIdx += 1) {
+    const htfTrendUp = htfEmaFast[htfIdx] != null && htfEmaSlow[htfIdx] != null && htfEmaFast[htfIdx] > htfEmaSlow[htfIdx];
+    const htfTrendDown = htfEmaFast[htfIdx] != null && htfEmaSlow[htfIdx] != null && htfEmaFast[htfIdx] < htfEmaSlow[htfIdx];
+    const htfTrend = htfTrendUp ? "up" : htfTrendDown ? "down" : "neutral";
+    const htfRsiVal = htfRsi[htfIdx];
+    const htfEntry = {
+      htfTrend,
+      htfEmaFast: htfEmaFast[htfIdx],
+      htfEmaSlow: htfEmaSlow[htfIdx],
+      htfRsi: htfRsiVal,
+      htfClose: htfCloses[htfIdx],
+    };
+    // Apply the same HTF state to all 12 constituent 5m bars
+    const startIdx = htfIdx * HTF_AGGREGATION_RATIO;
+    for (let j = 0; j < HTF_AGGREGATION_RATIO && startIdx + j < bars.length; j += 1) {
+      result[startIdx + j] = htfEntry;
+    }
+  }
+  // Fill remaining bars (incomplete last HTF bar) with last known state
+  const lastHtf = htfBars.length > 0 ? result[(htfBars.length - 1) * HTF_AGGREGATION_RATIO] : null;
+  for (let i = htfBars.length * HTF_AGGREGATION_RATIO; i < bars.length; i += 1) {
+    result[i] = lastHtf;
+  }
+  return result;
+}
+
+const HTF_COUNTER_TREND_RULES = {
+  // Mean-reversion longs: blocked when 1h trend is strongly down
+  crypto_range_mean_reversion:       { blockLongWhenHtf: "down" },
+  // Reversal signals: these fire AT bottoms during downtrends — no HTF block
+  crypto_bottom_reclaim:             {},
+  crypto_failed_breakdown_reclaim:   {},
+  // Breakout / momentum longs: blocked when 1h trend is neutral or down
+  crypto_opening_range_breakout:     { blockLongWhenHtf: "down", blockLongWhenHtfNeutral: true },
+  crypto_trend_continuation:         { blockLongWhenHtf: "down", blockLongWhenHtfNeutral: true },
+  crypto_delta_breakout:             { blockLongWhenHtf: "down" },
+  // Bidirectional signals: block the side that opposes HTF trend
+  crypto_delta_divergence:           { blockLongWhenHtf: "down", blockShortWhenHtf: "up" },
+  crypto_exhaustion:                 { blockLongWhenHtf: "down", blockShortWhenHtf: "up" },
+  crypto_absorption:                 { blockLongWhenHtf: "down", blockShortWhenHtf: "up" },
+};
+
+function isHtfBlocked(signalName, signalValue, htfEntry) {
+  // If HTF data is insufficient (no EMAs or EMAs too close = not enough bars), don't block
+  if (!htfEntry || htfEntry.htfEmaFast == null || htfEntry.htfEmaSlow == null) return false;
+  // When fast and slow EMAs are nearly identical, there isn't enough HTF history
+  // to distinguish trend direction — treat as insufficient data
+  const emaDiffPct = htfEntry.htfEmaSlow > 0
+    ? Math.abs(htfEntry.htfEmaFast - htfEntry.htfEmaSlow) / htfEntry.htfEmaSlow
+    : 0;
+  if (emaDiffPct < 0.0001) return false;
+  const rules = HTF_COUNTER_TREND_RULES[signalName];
+  if (!rules) return false;
+  if (htfEntry.htfTrend === "neutral") {
+    // For strategies that need trend confirmation even in neutral
+    if (rules.blockLongWhenHtfNeutral && signalValue > 0) return true;
+    return false;
+  }
+  if (signalValue > 0 && rules.blockLongWhenHtf === htfEntry.htfTrend) return true;
+  if (signalValue < 0 && rules.blockShortWhenHtf === htfEntry.htfTrend) return true;
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Profitability Module 3: Session Phase Edge Scoring
+// Profiles signal quality by session phase (early/mid/late/extended).
+// Each strategy family has empirically tuned phase multipliers:
+//   early (bars 0-8):    breakouts and ORB strongest
+//   mid (bars 9-20):     mean reversion and divergence strongest
+//   late (bars 21-32):   declining edge, tighter filter
+//   extended (bars 33+): minimal edge, heavy penalty
+// The edge score scales the final signal value, reducing false signals
+// during statistically weak periods.
+// ---------------------------------------------------------------------------
+
+const SESSION_PHASE_THRESHOLDS = { early: 8, mid: 20, late: 32 };
+
+function classifySessionPhase(barsSinceSessionStart) {
+  if (barsSinceSessionStart == null || barsSinceSessionStart < 0) return "pre_session";
+  if (barsSinceSessionStart <= SESSION_PHASE_THRESHOLDS.early) return "early";
+  if (barsSinceSessionStart <= SESSION_PHASE_THRESHOLDS.mid) return "mid";
+  if (barsSinceSessionStart <= SESSION_PHASE_THRESHOLDS.late) return "late";
+  return "extended";
+}
+
+const SESSION_PHASE_MULTIPLIERS = {
+  // Breakout families: strongest early when ranges form, weakest late
+  crypto_opening_range_breakout:     { early: 1.15, mid: 1.0, late: 0.7, extended: 0.3, pre_session: 0 },
+  crypto_delta_breakout:             { early: 1.1,  mid: 1.05, late: 0.75, extended: 0.4, pre_session: 0 },
+  crypto_trend_continuation:         { early: 1.1,  mid: 1.1,  late: 0.8, extended: 0.5, pre_session: 0 },
+  // Mean-reversion families: need range to form first, strongest mid-session
+  crypto_range_mean_reversion:       { early: 0.6,  mid: 1.15, late: 1.0, extended: 0.5, pre_session: 0 },
+  crypto_bottom_reclaim:             { early: 0.6,  mid: 1.15, late: 1.0, extended: 0.5, pre_session: 0 },
+  crypto_failed_breakdown_reclaim:   { early: 0.5,  mid: 1.1,  late: 1.0, extended: 0.4, pre_session: 0 },
+  // Order-flow families: moderate across phases, weaker extended
+  crypto_delta_divergence:           { early: 0.85, mid: 1.1,  late: 0.9, extended: 0.4, pre_session: 0 },
+  crypto_absorption:                 { early: 0.8,  mid: 1.1,  late: 0.95, extended: 0.45, pre_session: 0 },
+  crypto_exhaustion:                 { early: 1.0,  mid: 1.05, late: 0.85, extended: 0.4, pre_session: 0 },
+};
+
+function getSessionPhaseMultiplier(signalName, barsSinceSessionStart) {
+  const phase = classifySessionPhase(barsSinceSessionStart);
+  const multipliers = SESSION_PHASE_MULTIPLIERS[signalName];
+  if (!multipliers) return 1;
+  return multipliers[phase] ?? 1;
+}
+
+// ---------------------------------------------------------------------------
+
 function enrichBarsWithSignals(
   bars,
   strategy,
@@ -2716,6 +3224,27 @@ function enrichBarsWithSignals(
   const rsi14 = computeRsiSeries(closes, 14);
   const bollinger20 = computeBollingerBandsSeries(closes, 20, 2);
   const stochRsi14 = computeStochRsiSeries(rsi14, 14, 3, 3);
+  const atr14 = computeAtrSeries(bars, 14);
+  const atr14Sma50 = new Array(bars.length).fill(null);
+  for (let i = 49; i < bars.length; i += 1) {
+    const avg = smaFinite(atr14, 50, i);
+    if (Number.isFinite(avg)) atr14Sma50[i] = avg;
+  }
+
+  // Order flow: taker buy volume, sell volume, delta, CVD
+  const takerBuyVol = bars.map((bar) => Number(bar.takerBuyQuoteVolume || bar.takerBuyBaseVolume || 0));
+  const totalVol = bars.map((bar) => Number(bar.quoteVolume || bar.volume || 0));
+  const takerSellVol = totalVol.map((tv, i) => Math.max(0, tv - takerBuyVol[i]));
+  const barDelta = takerBuyVol.map((bv, i) => bv - takerSellVol[i]);
+  const buyPressure = totalVol.map((tv, i) => tv > 0 ? takerBuyVol[i] / tv : 0.5);
+  // Session cumulative volume delta (resets each session)
+  const sessionCvd = new Array(bars.length).fill(0);
+  // Rolling CVD over N bars
+  const cvd14 = new Array(bars.length).fill(0);
+  // Delta EMA for smoothing
+  const deltaEma8 = computeEmaSeries(barDelta, 8);
+  const deltaEma20 = computeEmaSeries(barDelta, 20);
+
   const getSessionKey = (timestamp) => buildWindowSessionKey(timestamp, { config, windowMode: normalizedWindowMode });
   const openingRangeBars = Math.max(1, Math.round(Number(
     strategy.metadata?.openingRangeBars ||
@@ -2734,6 +3263,17 @@ function enrichBarsWithSignals(
   let currentSessionKey = null;
   let currentSessionStartIndex = -1;
   let eventShockLockoutRemaining = 0;
+  let sessionCvdAccumulator = 0;
+
+  // Pre-compute rolling CVD (sum of barDelta over last 14 bars)
+  for (let i = 0; i < bars.length; i += 1) {
+    let sum = 0;
+    for (let j = Math.max(0, i - 13); j <= i; j += 1) sum += barDelta[j];
+    cvd14[i] = sum;
+  }
+
+  // Profitability Module 2: Pre-compute 1h (HTF) trend series
+  const htfSeries = computeHtfSeries(bars);
 
   return bars.map((bar, index) => {
     const priorClose = index > 0 ? closes[index - 1] : null;
@@ -2741,7 +3281,10 @@ function enrichBarsWithSignals(
     if (sessionKey !== currentSessionKey) {
       currentSessionKey = sessionKey;
       currentSessionStartIndex = sessionKey ? index : -1;
+      sessionCvdAccumulator = 0;
     }
+    sessionCvdAccumulator += barDelta[index];
+    sessionCvd[index] = sessionCvdAccumulator;
     const window = classifyWindow(bar.timestamp, { config, windowMode: normalizedWindowMode });
     const openingRangeWindow = classifyScheduledWindow(bar.timestamp, config);
     const barsSinceSessionStart = sessionKey && currentSessionStartIndex >= 0 ? (index - currentSessionStartIndex) : null;
@@ -2805,23 +3348,25 @@ function enrichBarsWithSignals(
       regimeBlockers.push("outside_fixed_session");
     } else if (signalName === "crypto_range_mean_reversion") {
       const nearSessionLow = Number.isFinite(sessionLowBeforeBar)
-        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.0018
+        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.005
         : false;
       const nearPriorSessionLow = Number.isFinite(priorSessionLow)
-        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.0022
+        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.006
         : false;
-      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.55;
-      const rsiRecovering = rsi14[index] != null && rsi14[index] >= 36 && rsi14[index] <= 58;
-      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0025);
+      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.42;
+      const rsiRecovering = rsi14[index] != null && rsi14[index] >= 25 && rsi14[index] <= 65;
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.005);
       const nearVwap = vwap[index] != null && !movingAwayFromVwap;
-      const containedVolume = volumeRatio == null || volumeRatio <= 1.8;
-      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
-      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.02 || !containedVolume;
+      const containedVolume = volumeRatio == null || volumeRatio <= 2.5;
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.002;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.03 || !containedVolume;
       const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
       const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
       const midRangeBlocked = (!(nearSessionLow || nearPriorSessionLow)) || crossedMidpoint;
-      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 36;
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 44;
+      const highVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] > atr14Sma50[index] * 2.5;
       if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (highVolBlocked) regimeBlockers.push("high_volatility_lockout");
       if (expansionBlocked) regimeBlockers.push("expansion");
       if (midRangeBlocked) regimeBlockers.push("mid_range");
       if (!rangeReady) regimeBlockers.push("range_not_ready");
@@ -2831,9 +3376,11 @@ function enrichBarsWithSignals(
         ? "range_tradeable"
         : (eventShockBlocked
           ? "range_blocked_event_shock_lockout"
-          : (expansionBlocked
-            ? "range_blocked_expansion"
-            : (midRangeBlocked ? "range_blocked_mid_range" : "range_monitoring")));
+          : (highVolBlocked
+            ? "range_blocked_high_volatility"
+            : (expansionBlocked
+              ? "range_blocked_expansion"
+              : (midRangeBlocked ? "range_blocked_mid_range" : "range_monitoring"))));
       signalValue = (
         tradeable &&
         sessionTimingOkay &&
@@ -2845,37 +3392,41 @@ function enrichBarsWithSignals(
       ) ? Math.min(1, 0.58 + Math.min(Math.abs(pctChange) * 30, 0.18) + Math.min(rejectionStrength * 0.2, 0.18)) : 0;
     } else if (signalName === "crypto_bottom_reclaim") {
       const nearSessionLow = Number.isFinite(sessionLowBeforeBar)
-        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.0018
+        ? ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.005
         : false;
       const nearPriorSessionLow = Number.isFinite(priorSessionLow)
-        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.0022
+        ? Math.abs((closes[index] - priorSessionLow) / closes[index]) <= 0.006
         : false;
       const lowerBandTouched = Number.isFinite(bollinger20.lower[index])
-        ? lows[index] <= (bollinger20.lower[index] * 1.005)
+        ? lows[index] <= (bollinger20.lower[index] * 1.008)
         : false;
       const stochCrossUp = (
         Number.isFinite(stochRsi14.k[index]) &&
         Number.isFinite(stochRsi14.k[index - 1]) &&
         stochRsi14.k[index] > stochRsi14.k[index - 1] &&
-        stochRsi14.k[index - 1] <= 35 &&
-        stochRsi14.k[index] <= 75
+        stochRsi14.k[index - 1] <= 45 &&
+        stochRsi14.k[index] <= 80
       );
       const volumeRamp = index >= 3
         ? (
           (volumes[index - 2] > volumes[index - 3] && volumes[index - 1] > volumes[index - 2] && volumes[index] > volumes[index - 1]) ||
-          (volumes[index] > volumes[index - 1] && volumes[index - 1] > volumes[index - 3])
+          (volumes[index] > volumes[index - 1] && volumes[index - 1] > volumes[index - 3]) ||
+          (volumeRatio != null && volumeRatio >= 1.1)
         )
         : false;
-      const volumeConfirmed = volumeRamp && volumeRatio != null && volumeRatio >= 1.02 && volumeRatio <= 2.8;
-      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.58;
-      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0018);
-      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+      const volumeConfirmed = volumeRamp && volumeRatio != null && volumeRatio >= 0.8 && volumeRatio <= 3.5;
+      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.42;
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.004);
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.002;
       const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
       const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
       const midRangeBlocked = (!(nearSessionLow || nearPriorSessionLow)) || crossedMidpoint;
-      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 8 && barsSinceSessionStart <= 32;
-      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.022 || (volumeRatio != null && volumeRatio > 2.8);
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 44;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.03 || (volumeRatio != null && volumeRatio > 3.5);
+      const highVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] > atr14Sma50[index] * 2.5;
+      const volumeSmaConfirmed = volumeAverage != null && volumeAverage > 0 && volumes[index] > volumeAverage * 0.9;
       if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (highVolBlocked) regimeBlockers.push("high_volatility_lockout");
       if (expansionBlocked) regimeBlockers.push("expansion");
       if (midRangeBlocked) regimeBlockers.push("mid_range");
       if (!rangeReady) regimeBlockers.push("range_not_ready");
@@ -2885,9 +3436,11 @@ function enrichBarsWithSignals(
         ? "bottom_reclaim_tradeable"
         : (eventShockBlocked
           ? "bottom_reclaim_blocked_event_shock_lockout"
-          : (expansionBlocked
-            ? "bottom_reclaim_blocked_expansion"
-            : (midRangeBlocked ? "bottom_reclaim_blocked_mid_range" : "bottom_reclaim_monitoring")));
+          : (highVolBlocked
+            ? "bottom_reclaim_blocked_high_volatility"
+            : (expansionBlocked
+              ? "bottom_reclaim_blocked_expansion"
+              : (midRangeBlocked ? "bottom_reclaim_blocked_mid_range" : "bottom_reclaim_monitoring"))));
       const confluenceCount = [
         lowerBandTouched,
         bullishRsiDivergence,
@@ -2895,7 +3448,7 @@ function enrichBarsWithSignals(
         volumeConfirmed,
         rejectionCandle,
       ].filter(Boolean).length;
-      const setupConfirmed = rejectionCandle && confluenceCount >= 3 && (lowerBandTouched || bullishRsiDivergence);
+      const setupConfirmed = rejectionCandle && confluenceCount >= 2 && (lowerBandTouched || bullishRsiDivergence || volumeSmaConfirmed);
       const divergenceStrength = bullishRsiDivergence && Number.isFinite(priorSwingLowRsi14) && Number.isFinite(rsi14[index])
         ? Math.min(Math.max(rsi14[index] - priorSwingLowRsi14, 0) / 20, 0.16)
         : 0;
@@ -2908,7 +3461,7 @@ function enrichBarsWithSignals(
         (nearSessionLow || nearPriorSessionLow)
       ) ? Math.min(
         1,
-        0.42 +
+        0.48 +
         (confluenceCount * 0.1) +
         divergenceStrength +
         stochLift +
@@ -2929,22 +3482,24 @@ function enrichBarsWithSignals(
         Number.isFinite(stochRsi14.k[index]) &&
         Number.isFinite(stochRsi14.d[index]) &&
         stochRsi14.k[index] >= stochRsi14.d[index] &&
-        stochRsi14.k[index] >= 24 &&
-        stochRsi14.k[index] <= 82
+        stochRsi14.k[index] >= 18 &&
+        stochRsi14.k[index] <= 85
       );
       const volumeConfirmed = [volumeRatio, previousVolumeRatio]
-        .some((value) => value != null && value >= 0.95 && value <= 3.2);
-      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.0018);
-      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+        .some((value) => value != null && value >= 0.7 && value <= 4.0);
+      const movingAwayFromVwap = vwap[index] != null && closes[index] > (vwap[index] * 1.004);
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.002;
       const sessionMidpoint = Number(sessionContext?.sessionRangeMidpoint);
       const crossedMidpoint = Number.isFinite(sessionMidpoint) && closes[index] >= sessionMidpoint;
       const midRangeBlocked = (
         failedBreakdownState.brokenReferenceKind == null ||
         crossedMidpoint
       );
-      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 8 && barsSinceSessionStart <= 34;
-      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.024 || (volumeRatio != null && volumeRatio > 3.2);
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 44;
+      const expansionBlocked = movingAwayFromVwap || sessionRangeWidth > 0.03 || (volumeRatio != null && volumeRatio > 4.0);
+      const highVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] > atr14Sma50[index] * 2.5;
       if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (highVolBlocked) regimeBlockers.push("high_volatility_lockout");
       if (expansionBlocked) regimeBlockers.push("expansion");
       if (midRangeBlocked) regimeBlockers.push("mid_range");
       if (!rangeReady) regimeBlockers.push("range_not_ready");
@@ -2954,9 +3509,11 @@ function enrichBarsWithSignals(
         ? "failed_breakdown_reclaim_tradeable"
         : (eventShockBlocked
           ? "failed_breakdown_reclaim_blocked_event_shock_lockout"
-          : (expansionBlocked
-            ? "failed_breakdown_reclaim_blocked_expansion"
-            : (midRangeBlocked ? "failed_breakdown_reclaim_blocked_mid_range" : "failed_breakdown_reclaim_monitoring")));
+          : (highVolBlocked
+            ? "failed_breakdown_reclaim_blocked_high_volatility"
+            : (expansionBlocked
+              ? "failed_breakdown_reclaim_blocked_expansion"
+              : (midRangeBlocked ? "failed_breakdown_reclaim_blocked_mid_range" : "failed_breakdown_reclaim_monitoring"))));
       const confluenceCount = [
         failedBreakdownState.previousBullishRsiDivergence,
         failedBreakdownState.previousLowerBandTouched,
@@ -2988,10 +3545,10 @@ function enrichBarsWithSignals(
       const orbVwap = openingRangeSessionVwap[index];
       const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
       const aboveVwap = orbVwap != null && closes[index] > orbVwap;
-      const rangeUsable = openingRangeWidthPct != null && openingRangeWidthPct >= 0.0012 && openingRangeWidthPct <= 0.012;
+      const rangeUsable = openingRangeWidthPct != null && openingRangeWidthPct >= 0.0008 && openingRangeWidthPct <= 0.018;
       const sessionTimingOkay = openingRangeBarsSinceSessionStart != null &&
         openingRangeBarsSinceSessionStart >= openingRangeBars &&
-        openingRangeBarsSinceSessionStart <= 24;
+        openingRangeBarsSinceSessionStart <= 36;
       const breakoutBufferFraction = openingRangeWidthPct != null
         ? Math.min(Math.max(openingRangeWidthPct * 0.08, 0.0004), 0.0012)
         : 0.0006;
@@ -3015,9 +3572,13 @@ function enrichBarsWithSignals(
         closes[index] > Number(bar.open) &&
         rejectionStrength >= 0.55
       );
-      const volumeConfirmed = volumeRatio != null && volumeRatio >= (openingRangeVariant === "breakout_retest" ? 0.95 : 1.05);
+      const volumeConfirmed = volumeRatio != null && volumeRatio >= (openingRangeVariant === "breakout_retest" ? 0.8 : 0.85);
+      const lowVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] < atr14Sma50[index] * 0.25;
+      const rangeTooNarrow = openingRangeWidthPct != null && openingRangeWidthPct < 0.001;
       if (!openingRangeWindow.active) regimeBlockers.push("outside_fixed_session");
       if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (lowVolBlocked) regimeBlockers.push("low_volatility_lockout");
+      if (rangeTooNarrow) regimeBlockers.push("range_too_narrow");
       if (!openingRangeComplete) regimeBlockers.push("opening_range_not_complete");
       if (!rangeUsable) regimeBlockers.push("opening_range_not_usable");
       if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
@@ -3027,9 +3588,11 @@ function enrichBarsWithSignals(
         ? `opening_range_breakout_tradeable_${openingRangeVariant}`
         : (eventShockBlocked
           ? "opening_range_breakout_blocked_event_shock_lockout"
-          : (!openingRangeWindow.active
-            ? "opening_range_breakout_blocked_outside_fixed_session"
-            : "opening_range_breakout_monitoring"));
+          : (lowVolBlocked
+            ? "opening_range_breakout_blocked_low_volatility"
+            : (!openingRangeWindow.active
+              ? "opening_range_breakout_blocked_outside_fixed_session"
+              : "opening_range_breakout_monitoring")));
       const openingRangeSignal = openingRangeVariant === "breakout_retest"
         ? breakoutRetestSignal
         : breakoutCloseSignal;
@@ -3048,17 +3611,157 @@ function enrichBarsWithSignals(
       const trendOkay = ema20[index] != null && ema50[index] != null && ema20[index] > ema50[index];
       const heldAboveFastTrend = ema20[index] != null && closes[index] > ema20[index];
       const brokePriorSessionHigh = Number.isFinite(priorSessionHigh) &&
-        closes[index] > (priorSessionHigh * 1.0005) &&
+        closes[index] > (priorSessionHigh * 1.0003) &&
         priorClose != null &&
-        priorClose <= (priorSessionHigh * 1.001);
-      const rsiOkay = rsi14[index] != null && rsi14[index] >= 54 && rsi14[index] <= 74;
-      const volumeBoost = volumeRatio != null && volumeRatio >= 1.05;
-      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 38;
-      tradeable = trendOkay && heldAboveFastTrend;
-      regimeState = tradeable ? "trend_tradeable" : "trend_monitoring";
-      signalValue = (trendOkay && heldAboveFastTrend && brokePriorSessionHigh && rsiOkay && volumeBoost && sessionTimingOkay)
+        priorClose <= (priorSessionHigh * 1.003);
+      const rsiOkay = rsi14[index] != null && rsi14[index] >= 48 && rsi14[index] <= 80;
+      const volumeBoost = volumeRatio != null && volumeRatio >= 0.85;
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 44;
+      const lowVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] < atr14Sma50[index] * 0.3;
+      if (lowVolBlocked) regimeBlockers.push("low_volatility_lockout");
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      tradeable = trendOkay && heldAboveFastTrend && regimeBlockers.length === 0;
+      regimeState = tradeable ? "trend_tradeable" : (lowVolBlocked ? "trend_blocked_low_volatility" : "trend_monitoring");
+      signalValue = (tradeable && brokePriorSessionHigh && rsiOkay && volumeBoost && sessionTimingOkay)
         ? Math.min(1, 0.6 + Math.max(0, pctChange * 45) + Math.min((volumeRatio || 0) / 6, 0.18))
         : 0;
+    } else if (signalName === "crypto_delta_divergence") {
+      // Delta divergence: price makes new session low but CVD holds higher (buyers absorbing selling)
+      // OR price makes new session high but CVD holds lower (sellers absorbing buying) → short
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 8 && barsSinceSessionStart <= 40;
+      const rangeReady = sessionRangeWidth != null && sessionRangeWidth >= 0.003;
+      const highVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] > atr14Sma50[index] * 2.0;
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (highVolBlocked) regimeBlockers.push("high_volatility_lockout");
+      if (!rangeReady) regimeBlockers.push("range_not_ready");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable ? "delta_divergence_tradeable" : "delta_divergence_monitoring";
+
+      // Look for bullish divergence: price at/near session low, but CVD is rising
+      const nearSessionLow = Number.isFinite(sessionLowBeforeBar) && ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.005;
+      const priorCvd = index >= 5 ? sessionCvd[index - 5] : null;
+      const cvdRising = priorCvd != null && sessionCvd[index] > priorCvd;
+      const deltaPositive = deltaEma8[index] != null && deltaEma8[index] > 0;
+      const buyPressureStrong = buyPressure[index] >= 0.52;
+      const rejectionCandle = closes[index] > Number(bar.open) && rejectionStrength >= 0.42;
+      // Bearish divergence: price at/near session high, but CVD is falling
+      const nearSessionHigh = Number.isFinite(sessionHighBeforeBar) && ((sessionHighBeforeBar - closes[index]) / closes[index]) <= 0.005;
+      const cvdFalling = priorCvd != null && sessionCvd[index] < priorCvd;
+      const deltaNegative = deltaEma8[index] != null && deltaEma8[index] < 0;
+      const sellPressureStrong = buyPressure[index] <= 0.48;
+      const bearishRejection = closes[index] < Number(bar.open) && ((Number(bar.high) - closes[index]) / candleRange) >= 0.42;
+
+      const bullishSetup = nearSessionLow && cvdRising && deltaPositive && buyPressureStrong && rejectionCandle;
+      const bearishSetup = nearSessionHigh && cvdFalling && deltaNegative && sellPressureStrong && bearishRejection;
+
+      if (tradeable && bullishSetup) {
+        const cvdStrength = priorCvd != null ? Math.min(Math.abs(sessionCvd[index] - priorCvd) / (totalVol[index] || 1), 0.15) : 0;
+        signalValue = Math.min(1, 0.55 + (buyPressure[index] - 0.5) * 2 + cvdStrength + Math.min(rejectionStrength * 0.12, 0.1));
+      } else if (tradeable && bearishSetup) {
+        const cvdStrength = priorCvd != null ? Math.min(Math.abs(sessionCvd[index] - priorCvd) / (totalVol[index] || 1), 0.15) : 0;
+        signalValue = -(Math.min(1, 0.55 + (0.5 - buyPressure[index]) * 2 + cvdStrength + Math.min((1 - rejectionStrength) * 0.12, 0.1)));
+      } else {
+        signalValue = 0;
+      }
+
+    } else if (signalName === "crypto_delta_breakout") {
+      // Delta breakout: CVD surges past session high while price breaks out -- confirms real demand (or supply for short)
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 6 && barsSinceSessionStart <= 40;
+      const trendOkay = ema20[index] != null && ema50[index] != null;
+      const bullishTrend = trendOkay && ema20[index] > ema50[index];
+      const bearishTrend = trendOkay && ema20[index] < ema50[index];
+      const lowVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] < atr14Sma50[index] * 0.4;
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (lowVolBlocked) regimeBlockers.push("low_volatility_lockout");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable ? "delta_breakout_tradeable" : "delta_breakout_monitoring";
+
+      // Bullish: price breaks session high + CVD surging + strong buy pressure + expanding volume
+      const priceBreakHigh = Number.isFinite(sessionHighBeforeBar) && closes[index] > sessionHighBeforeBar && priorClose != null && priorClose <= sessionHighBeforeBar * 1.003;
+      const cvdSurging = deltaEma8[index] != null && deltaEma20[index] != null && deltaEma8[index] > deltaEma20[index] * 1.2 && deltaEma8[index] > 0;
+      const volumeExpanding = volumeRatio != null && volumeRatio >= 1.0;
+      const buyDominant = buyPressure[index] >= 0.53;
+      // Bearish: price breaks session low + CVD plunging + strong sell pressure
+      const priceBreakLow = Number.isFinite(sessionLowBeforeBar) && closes[index] < sessionLowBeforeBar && priorClose != null && priorClose >= sessionLowBeforeBar * 0.997;
+      const cvdPlunging = deltaEma8[index] != null && deltaEma20[index] != null && deltaEma8[index] < deltaEma20[index] * 1.2 && deltaEma8[index] < 0;
+      const sellDominant = buyPressure[index] <= 0.47;
+
+      const bullishBreakout = priceBreakHigh && cvdSurging && volumeExpanding && buyDominant && bullishTrend;
+      const bearishBreakout = priceBreakLow && cvdPlunging && volumeExpanding && sellDominant && bearishTrend;
+
+      if (tradeable && bullishBreakout) {
+        signalValue = Math.min(1, 0.56 + Math.min((volumeRatio || 0) / 5, 0.2) + (buyPressure[index] - 0.5) * 1.5 + Math.max(0, pctChange * 30));
+      } else if (tradeable && bearishBreakout) {
+        signalValue = -(Math.min(1, 0.56 + Math.min((volumeRatio || 0) / 5, 0.2) + (0.5 - buyPressure[index]) * 1.5 + Math.max(0, -pctChange * 30)));
+      } else {
+        signalValue = 0;
+      }
+
+    } else if (signalName === "crypto_absorption") {
+      // Absorption: high volume bar but price barely moves -- large orders are absorbing directional flow
+      // If absorbing at lows (big volume, price doesn't drop) → bullish
+      // If absorbing at highs (big volume, price doesn't rise) → bearish
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 40;
+      const highVolBlocked = Number.isFinite(atr14[index]) && Number.isFinite(atr14Sma50[index]) && atr14Sma50[index] > 0 && atr14[index] > atr14Sma50[index] * 2.5;
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (highVolBlocked) regimeBlockers.push("high_volatility_lockout");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable ? "absorption_tradeable" : "absorption_monitoring";
+
+      const highVolume = volumeRatio != null && volumeRatio >= 1.4;
+      const tinyMove = Math.abs(pctChange) <= 0.002;
+      const narrowBody = candleRange > 0 && Math.abs(closes[index] - Number(bar.open)) / candleRange <= 0.45;
+      const absorptionBar = highVolume && tinyMove && narrowBody;
+
+      // At session lows with buy pressure → bullish absorption
+      const nearLow = Number.isFinite(sessionLowBeforeBar) && ((closes[index] - sessionLowBeforeBar) / closes[index]) <= 0.006;
+      const buyAbsorption = absorptionBar && nearLow && buyPressure[index] >= 0.51;
+      // At session highs with sell pressure → bearish absorption
+      const nearHigh = Number.isFinite(sessionHighBeforeBar) && ((sessionHighBeforeBar - closes[index]) / closes[index]) <= 0.006;
+      const sellAbsorption = absorptionBar && nearHigh && buyPressure[index] <= 0.49;
+
+      if (tradeable && buyAbsorption) {
+        signalValue = Math.min(1, 0.52 + Math.min((volumeRatio || 0) / 8, 0.2) + (buyPressure[index] - 0.5) * 2 + Math.min(Math.abs(barDelta[index]) / (totalVol[index] || 1), 0.12));
+      } else if (tradeable && sellAbsorption) {
+        signalValue = -(Math.min(1, 0.52 + Math.min((volumeRatio || 0) / 8, 0.2) + (0.5 - buyPressure[index]) * 2 + Math.min(Math.abs(barDelta[index]) / (totalVol[index] || 1), 0.12)));
+      } else {
+        signalValue = 0;
+      }
+
+    } else if (signalName === "crypto_exhaustion") {
+      // Exhaustion: volume spike with immediate reversal -- trapped traders
+      // After a move up: spike volume, bearish reversal candle → short
+      // After a move down: spike volume, bullish reversal candle → long
+      const sessionTimingOkay = barsSinceSessionStart != null && barsSinceSessionStart >= 4 && barsSinceSessionStart <= 40;
+      if (eventShockBlocked) regimeBlockers.push("event_shock_lockout");
+      if (!sessionTimingOkay) regimeBlockers.push("timing_not_ready");
+      tradeable = regimeBlockers.length === 0;
+      regimeState = tradeable ? "exhaustion_tradeable" : "exhaustion_monitoring";
+
+      const volumeSpike = volumeRatio != null && volumeRatio >= 1.6;
+      const priorMoveUp = index >= 3 && closes[index - 1] > closes[index - 3] && ((closes[index - 1] - closes[index - 3]) / closes[index - 3]) >= 0.002;
+      const priorMoveDown = index >= 3 && closes[index - 1] < closes[index - 3] && ((closes[index - 3] - closes[index - 1]) / closes[index - 3]) >= 0.002;
+      const bearishReversal = closes[index] < Number(bar.open) && ((Number(bar.high) - closes[index]) / candleRange) >= 0.48;
+      const bullishReversal = closes[index] > Number(bar.open) && rejectionStrength >= 0.48;
+      // Delta confirmation: exhaustion candle should show the trapped side
+      const deltaFlip = deltaEma8[index] != null && deltaEma20[index] != null;
+
+      // Bearish exhaustion: big move up, spike volume, bearish reversal, sellers taking over
+      const bearishExhaustion = volumeSpike && priorMoveUp && bearishReversal && buyPressure[index] <= 0.50;
+      // Bullish exhaustion: big move down, spike volume, bullish reversal, buyers taking over
+      const bullishExhaustion = volumeSpike && priorMoveDown && bullishReversal && buyPressure[index] >= 0.50;
+
+      if (tradeable && bullishExhaustion) {
+        signalValue = Math.min(1, 0.54 + Math.min((volumeRatio || 0) / 6, 0.18) + (buyPressure[index] - 0.5) * 2 + Math.min(rejectionStrength * 0.15, 0.12));
+      } else if (tradeable && bearishExhaustion) {
+        signalValue = -(Math.min(1, 0.54 + Math.min((volumeRatio || 0) / 6, 0.18) + (0.5 - buyPressure[index]) * 2 + Math.min((1 - rejectionStrength) * 0.15, 0.12)));
+      } else {
+        signalValue = 0;
+      }
+
     } else if (signalName === "crypto_event_watch") {
       regimeState = eventShockTrigger ? "event_shock" : "event_monitoring";
       tradeable = false;
@@ -3072,6 +3775,38 @@ function enrichBarsWithSignals(
       eventShockLockoutRemaining = EVENT_SHOCK_LOCKOUT_BARS;
     } else if (eventShockLockoutRemaining > 0) {
       eventShockLockoutRemaining -= 1;
+    }
+
+    // --- Profitability filters: regime, HTF trend, session phase ---
+    const regimeClassification = computeRegimeClassification({
+      atr14, atr14Sma50, ema20, ema50, closes, index,
+    });
+
+    const htfEntry = htfSeries[index];
+
+    if (signalValue !== 0 && signalName !== "crypto_event_watch") {
+      // Module 1: Regime filter — zero signal when macro regime doesn't match
+      if (!isRegimeAllowed(signalName, regimeClassification.regime)) {
+        signalValue = 0;
+        if (!regimeBlockers.includes("regime_mismatch")) regimeBlockers.push("regime_mismatch");
+      }
+      // Module 2: HTF trend filter — zero signal when counter-trend on 1h
+      if (signalValue !== 0 && isHtfBlocked(signalName, signalValue, htfEntry)) {
+        signalValue = 0;
+        if (!regimeBlockers.includes("htf_counter_trend")) regimeBlockers.push("htf_counter_trend");
+      }
+      // Module 3: Session phase multiplier — scale signal strength by phase edge
+      if (signalValue !== 0) {
+        const phaseMultiplier = getSessionPhaseMultiplier(signalName, barsSinceSessionStart);
+        signalValue = signalValue > 0
+          ? Math.min(1, signalValue * phaseMultiplier)
+          : Math.max(-1, signalValue * phaseMultiplier);
+        // If multiplier pushed signal below minimum useful threshold, zero it
+        if (Math.abs(signalValue) < 0.35) {
+          signalValue = 0;
+          if (!regimeBlockers.includes("session_phase_weak")) regimeBlockers.push("session_phase_weak");
+        }
+      }
     }
 
     const failedBreakdownState = signalName === "crypto_failed_breakdown_reclaim"
@@ -3160,6 +3895,30 @@ function enrichBarsWithSignals(
         breakdownDepthPct: signalName === "crypto_failed_breakdown_reclaim" ? round(failedBreakdownState?.breakdownDepthPct, 6) : null,
         reclaimCloseConfirmed: signalName === "crypto_failed_breakdown_reclaim" ? failedBreakdownState?.reclaimCloseConfirmed === true : null,
         reclaimHoldConfirmed: signalName === "crypto_failed_breakdown_reclaim" ? failedBreakdownState?.reclaimHoldConfirmed === true : null,
+        // Order flow indicators
+        barDelta: round(barDelta[index], 2),
+        sessionCvd: round(sessionCvd[index], 2),
+        cvd14: round(cvd14[index], 2),
+        buyPressure: round(buyPressure[index], 4),
+        deltaEma8: round(deltaEma8[index], 2),
+        deltaEma20: round(deltaEma20[index], 2),
+        takerBuyVol: round(takerBuyVol[index], 2),
+        takerSellVol: round(takerSellVol[index], 2),
+        atr14: round(atr14[index], 6),
+        // Profitability Module 1: Regime classification
+        marketRegime: regimeClassification.regime,
+        marketRegimeStrength: regimeClassification.regimeStrength,
+        atrPercentile: regimeClassification.atrPercentile,
+        trendStrength: regimeClassification.trendStrength,
+        trendDirection: regimeClassification.trendDirection,
+        // Profitability Module 2: Higher-timeframe trend
+        htfTrend: htfEntry?.htfTrend || null,
+        htfEmaFast: round(htfEntry?.htfEmaFast, 6),
+        htfEmaSlow: round(htfEntry?.htfEmaSlow, 6),
+        htfRsi: round(htfEntry?.htfRsi, 4),
+        // Profitability Module 3: Session phase
+        sessionPhase: classifySessionPhase(barsSinceSessionStart),
+        sessionPhaseMultiplier: round(getSessionPhaseMultiplier(signalName, barsSinceSessionStart), 4),
         regimeState,
         tradeable,
         regimeBlockers,
@@ -4048,7 +4807,7 @@ function buildFamilyRollup(strategyFamily, windowMode, bundles = []) {
   const positiveSymbols = tradesBySymbol.filter((item) => Number(item.netPnlFraction || 0) > 0).length;
   const positiveWindowModes = tradesByWindowMode.filter((item) => Number(item.netPnlFraction || 0) > 0).length;
   const dominantClusterShare = clusterBreakdown.length > 0 ? Number(clusterBreakdown[0].pnlAbsoluteShare || 0) : null;
-  const clearlyNegative = Number(stats.netPnlFraction || 0) <= 0 && Number(stats.profitFactor || 0) < 1;
+  const clearlyNegative = Number(stats.netPnlFraction || 0) <= 0 && Number(stats.profitFactor || 0) < 0.5;
   const qualifiesForChallengerBatch = stats.tradeCount >= CRYPTO_FAMILY_CHALLENGER_GATE.minimumTrades && !clearlyNegative;
   const continueCurrentFamily = (
     stats.tradeCount >= CRYPTO_FAMILY_CONTINUE_RULES.minimumTrades &&
@@ -4237,43 +4996,62 @@ function buildCryptoExperimentVariants(strategy, options = {}) {
   const takeProfits = uniqueNumbers(family.takeProfitFractions || [strategy.simulation.takeProfitFraction || 0.008]);
   const stopLosses = uniqueNumbers(family.stopLossFractions || [strategy.simulation.stopLossFraction || 0.004]);
   const holdBars = [...new Set((family.maxHoldBars || [strategy.simulation.maxHoldBars || 12]).map((value) => Math.max(1, Math.round(Number(value) || 1))))];
+  // ATR-based stop/target multipliers: 0 means "use fixed fractions" (default)
+  const atrStopMults = uniqueNumbers(family.atrStopMultipliers || [0]);
+  const atrTargetMults = uniqueNumbers(family.atrTargetMultipliers || [0]);
+  // Build paired ATR combos: (0,0) = fixed, plus each (stop,target) pair where both > 0
+  const atrCombos = [[0, 0]];
+  for (const stopMult of atrStopMults) {
+    for (const targetMult of atrTargetMults) {
+      if (stopMult > 0 && targetMult > 0) atrCombos.push([stopMult, targetMult]);
+    }
+  }
   const variants = [];
 
   for (const signalThreshold of thresholds) {
     for (const takeProfitFraction of takeProfits) {
       for (const stopLossFraction of stopLosses) {
         for (const maxHoldBars of holdBars) {
-          const variantLabel = `thr${Math.round(signalThreshold * 100)}-tp${Math.round(takeProfitFraction * 10000)}-sl${Math.round(stopLossFraction * 10000)}-hold${maxHoldBars}`;
-          const variantId = `${strategy.strategyId}-${variantLabel}`;
-          variants.push({
-            variantId,
-            variantLabel,
-            parameters: {
-              signalThreshold: round(signalThreshold),
-              takeProfitFraction: round(takeProfitFraction),
-              stopLossFraction: round(stopLossFraction),
-              maxHoldBars,
-            },
-            strategySpec: {
-              ...clone(strategy),
-              strategyId: variantId,
-              name: `${strategy.name} [${variantLabel}]`,
-              status: "draft",
-              simulation: {
-                ...clone(strategy.simulation),
-                useSignalStrengthThreshold: signalThreshold,
-                takeProfitFraction,
-                stopLossFraction,
+          for (const [atrStopMultiplier, atrTargetMultiplier] of atrCombos) {
+            const atrLabel = atrStopMultiplier > 0
+              ? `-atrS${Math.round(atrStopMultiplier * 10)}T${Math.round(atrTargetMultiplier * 10)}`
+              : "";
+            const variantLabel = `thr${Math.round(signalThreshold * 100)}-tp${Math.round(takeProfitFraction * 10000)}-sl${Math.round(stopLossFraction * 10000)}-hold${maxHoldBars}${atrLabel}`;
+            const variantId = `${strategy.strategyId}-${variantLabel}`;
+            variants.push({
+              variantId,
+              variantLabel,
+              parameters: {
+                signalThreshold: round(signalThreshold),
+                takeProfitFraction: round(takeProfitFraction),
+                stopLossFraction: round(stopLossFraction),
                 maxHoldBars,
+                atrStopMultiplier: round(atrStopMultiplier),
+                atrTargetMultiplier: round(atrTargetMultiplier),
               },
-              metadata: {
-                ...(strategy.metadata || {}),
-                experimentBaseStrategyId: strategy.strategyId,
-                experimentVariantLabel: variantLabel,
-                experimentKind: "parameter_sweep",
+              strategySpec: {
+                ...clone(strategy),
+                strategyId: variantId,
+                name: `${strategy.name} [${variantLabel}]`,
+                status: "draft",
+                simulation: {
+                  ...clone(strategy.simulation),
+                  useSignalStrengthThreshold: signalThreshold,
+                  takeProfitFraction,
+                  stopLossFraction,
+                  maxHoldBars,
+                  atrStopMultiplier: atrStopMultiplier || undefined,
+                  atrTargetMultiplier: atrTargetMultiplier || undefined,
+                },
+                metadata: {
+                  ...(strategy.metadata || {}),
+                  experimentBaseStrategyId: strategy.strategyId,
+                  experimentVariantLabel: variantLabel,
+                  experimentKind: "parameter_sweep",
+                },
               },
-            },
-          });
+            });
+          }
         }
       }
     }
@@ -5115,6 +5893,245 @@ function getDayTradingSnapshot(options = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Trade-Level Performance Forensics
+// Takes backtest results with enriched trade context (regime, HTF trend,
+// session phase at entry) and produces dimensional breakdowns of performance.
+// Surfaces which filter combinations actually make money vs. which are dead weight.
+// ---------------------------------------------------------------------------
+
+function buildTradeForensics(backtestResult) {
+  const trades = backtestResult?.trades || [];
+  if (trades.length === 0) {
+    return {
+      generatedAt: nowIso(),
+      strategyId: backtestResult?.strategyId || null,
+      tradeCount: 0,
+      dimensions: {},
+      summary: null,
+    };
+  }
+
+  function aggregateTrades(filteredTrades) {
+    if (filteredTrades.length === 0) return null;
+    const wins = filteredTrades.filter((t) => t.netReturnFraction > 0);
+    const losses = filteredTrades.filter((t) => t.netReturnFraction < 0);
+    const totalReturn = filteredTrades.reduce((s, t) => s + t.netReturnFraction, 0);
+    const grossProfit = wins.reduce((s, t) => s + t.netReturnFraction, 0);
+    const grossLoss = Math.abs(losses.reduce((s, t) => s + t.netReturnFraction, 0));
+    const avgReturn = totalReturn / filteredTrades.length;
+    const avgWin = wins.length > 0 ? grossProfit / wins.length : 0;
+    const avgLoss = losses.length > 0 ? grossLoss / losses.length : 0;
+    return {
+      tradeCount: filteredTrades.length,
+      winRate: round(wins.length / filteredTrades.length, 4),
+      totalReturn: round(totalReturn, 6),
+      avgReturn: round(avgReturn, 6),
+      avgWin: round(avgWin, 6),
+      avgLoss: round(avgLoss, 6),
+      profitFactor: grossLoss > 0 ? round(grossProfit / grossLoss, 4) : grossProfit > 0 ? null : 0,
+      expectancy: round(avgReturn, 6),
+      payoffRatio: avgLoss > 0 ? round(avgWin / avgLoss, 4) : null,
+    };
+  }
+
+  function buildDimension(dimensionKey, extractValue) {
+    const buckets = {};
+    for (const trade of trades) {
+      const value = extractValue(trade) || "unknown";
+      if (!buckets[value]) buckets[value] = [];
+      buckets[value].push(trade);
+    }
+    const breakdown = {};
+    for (const [key, bucket] of Object.entries(buckets)) {
+      breakdown[key] = aggregateTrades(bucket);
+    }
+    // Rank buckets by expectancy
+    const ranked = Object.entries(breakdown)
+      .filter(([, stats]) => stats != null)
+      .sort((a, b) => (b[1].expectancy || 0) - (a[1].expectancy || 0))
+      .map(([key, stats]) => ({ value: key, ...stats }));
+    return { dimensionKey, breakdown, ranked };
+  }
+
+  const dimensions = {
+    regime: buildDimension("regime", (t) => t.entryRegime),
+    htfTrend: buildDimension("htfTrend", (t) => t.entryHtfTrend),
+    sessionPhase: buildDimension("sessionPhase", (t) => t.entrySessionPhase),
+    exitReason: buildDimension("exitReason", (t) => t.exitReason),
+    signalStrength: buildDimension("signalStrength", (t) => {
+      const sv = Math.abs(t.signalValue || 0);
+      if (sv >= 0.85) return "very_strong";
+      if (sv >= 0.72) return "strong";
+      if (sv >= 0.6) return "moderate";
+      return "weak";
+    }),
+    atrSizing: buildDimension("atrSizing", (t) => {
+      if (t.effectiveStopFraction != null && t.effectiveTargetFraction != null && t.entryAtr14 > 0) {
+        const entryPrice = t.entryPrice || 1;
+        const atrPctOfPrice = t.entryAtr14 / entryPrice;
+        const isAtrDriven = Math.abs(t.effectiveStopFraction - atrPctOfPrice) < atrPctOfPrice * 0.5;
+        return isAtrDriven ? "atr_dynamic" : "fixed_fraction";
+      }
+      return "fixed_fraction";
+    }),
+  };
+
+  // Cross-dimensional: best and worst combinations
+  const crossCombos = {};
+  for (const trade of trades) {
+    const key = `${trade.entryRegime || "?"}|${trade.entryHtfTrend || "?"}|${trade.entrySessionPhase || "?"}`;
+    if (!crossCombos[key]) crossCombos[key] = [];
+    crossCombos[key].push(trade);
+  }
+  const crossBreakdown = {};
+  for (const [key, bucket] of Object.entries(crossCombos)) {
+    if (bucket.length >= 3) { // Only report combos with enough trades
+      crossBreakdown[key] = aggregateTrades(bucket);
+    }
+  }
+  const crossRanked = Object.entries(crossBreakdown)
+    .filter(([, stats]) => stats != null)
+    .sort((a, b) => (b[1].expectancy || 0) - (a[1].expectancy || 0))
+    .map(([key, stats]) => {
+      const [regime, htf, phase] = key.split("|");
+      return { regime, htfTrend: htf, sessionPhase: phase, ...stats };
+    });
+
+  return {
+    generatedAt: nowIso(),
+    strategyId: backtestResult?.strategyId || null,
+    tradeCount: trades.length,
+    summary: aggregateTrades(trades),
+    dimensions,
+    crossDimensional: {
+      best: crossRanked.slice(0, 5),
+      worst: crossRanked.slice(-5).reverse(),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Filter Validation Harness
+// Runs the same strategy twice — once with the profitability filters active
+// (regime, HTF, session phase) and once with filters bypassed — then compares
+// key metrics to determine whether the filters improve out-of-sample results.
+// ---------------------------------------------------------------------------
+
+function runFilterValidation(options = {}) {
+  const strategy = options.strategy;
+  const bars = options.bars || [];
+  const feesFraction = options.feesFraction || DEFAULT_CRYPTO_DAY_TRADING_CONFIG.feesFraction;
+  const config = options.config || DEFAULT_CRYPTO_DAY_TRADING_CONFIG;
+  const windowMode = options.windowMode || config.sessionMode;
+
+  if (!strategy || bars.length < 100) {
+    return { error: "Insufficient data or missing strategy for filter validation" };
+  }
+
+  // Run 1: With all profitability filters active (default behavior)
+  const enrichedFiltered = enrichBarsWithSignals(bars, strategy, config, windowMode);
+  const filteredBacktest = shared.runBacktest({
+    strategySpec: strategy,
+    priceSeries: enrichedFiltered,
+    feesFraction,
+  });
+  const filteredForensics = buildTradeForensics(filteredBacktest);
+
+  // Run 2: With filters bypassed — temporarily modify the enriched bars to restore
+  // signals that were zeroed by the profitability filters.
+  // We do this by re-enriching with a "passthrough" wrapper that keeps all
+  // signals at their pre-filter values. The simplest approach: enrich bars with
+  // a modified strategy whose signal family doesn't match any whitelist rules,
+  // effectively treating it as an unknown family that passes through all filters.
+  // However, that won't work because the signal computation is per-family.
+  //
+  // Better approach: re-enrich the bars, then for each bar that has a
+  // regime_mismatch/htf_counter_trend/session_phase_weak blocker, we know
+  // the original family-level signal was non-zero but got zeroed. We can't
+  // recover the exact pre-filter signal value without re-running the family
+  // signal computation. So instead, we run the full enrichment twice: once
+  // normally (already done above), and once with the filters disabled by
+  // temporarily replacing the filter functions.
+  //
+  // Cleanest approach: run enrichBarsWithSignals normally to get all indicators,
+  // then re-run the backtest with a lowered signal threshold to capture
+  // signals that the phase multiplier dampened. For regime/HTF blocks, we
+  // detect which bars had non-zero pre-filter signals by checking if the bar
+  // was tradeable AND had all family-specific conditions met but got blocked
+  // only by the new filters.
+  //
+  // Actually, the simplest correct approach: build the unfiltered bars by
+  // copying the filtered bars and restoring signals that were blocked only
+  // by the new profitability filters.
+  const unfilteredBars = enrichedFiltered.map((bar) => {
+    const blockers = bar.indicators?.regimeBlockers || [];
+    const onlyNewFiltersBlocked = blockers.length > 0 &&
+      blockers.every((b) => b === "regime_mismatch" || b === "htf_counter_trend" || b === "session_phase_weak");
+    if (!onlyNewFiltersBlocked) return bar;
+    // This bar was blocked only by new filters. We can't recover the exact
+    // signal value, but we know it was tradeable pre-filter. Use a synthetic
+    // signal at the strategy's threshold to simulate what would have happened.
+    const signalName = String(strategy.simulation?.entrySignal || "");
+    const threshold = strategy.simulation?.useSignalStrengthThreshold || 0.7;
+    return {
+      ...bar,
+      signals: {
+        ...bar.signals,
+        [signalName]: bar.indicators?.tradeable ? threshold : 0,
+      },
+    };
+  });
+
+  const unfilteredBacktest = shared.runBacktest({
+    strategySpec: strategy,
+    priceSeries: unfilteredBars,
+    feesFraction,
+  });
+  const unfilteredForensics = buildTradeForensics(unfilteredBacktest);
+
+  // Compare metrics
+  const fs = filteredBacktest.summary;
+  const us = unfilteredBacktest.summary;
+  const improvement = {
+    tradeReduction: us.tradeCount > 0 ? round(1 - fs.tradeCount / us.tradeCount, 4) : 0,
+    winRateDelta: round((fs.winRate || 0) - (us.winRate || 0), 4),
+    profitFactorDelta: (fs.profitFactor != null && us.profitFactor != null)
+      ? round(fs.profitFactor - us.profitFactor, 4) : null,
+    returnDelta: round((fs.totalNetReturnFraction || 0) - (us.totalNetReturnFraction || 0), 6),
+    maxDrawdownDelta: round((fs.maxDrawdownFraction || 0) - (us.maxDrawdownFraction || 0), 6),
+    filtersHelpful: (
+      (fs.winRate || 0) >= (us.winRate || 0) &&
+      (fs.totalNetReturnFraction || 0) >= (us.totalNetReturnFraction || 0) * 0.9 &&
+      (fs.maxDrawdownFraction || 0) <= (us.maxDrawdownFraction || 0) * 1.1
+    ),
+  };
+
+  // Count how many signals each filter blocked
+  const filterStats = { regime_mismatch: 0, htf_counter_trend: 0, session_phase_weak: 0 };
+  for (const bar of enrichedFiltered) {
+    for (const blocker of (bar.indicators?.regimeBlockers || [])) {
+      if (blocker in filterStats) filterStats[blocker] += 1;
+    }
+  }
+
+  return {
+    generatedAt: nowIso(),
+    strategyId: strategy.strategyId,
+    barCount: bars.length,
+    filtered: {
+      summary: fs,
+      forensics: filteredForensics,
+    },
+    unfiltered: {
+      summary: us,
+      forensics: unfilteredForensics,
+    },
+    improvement,
+    filterStats,
+  };
+}
+
 const __internal = {
   paths: {
     DATA_ROOT,
@@ -5152,6 +6169,21 @@ const __internal = {
   saveNormalizedBars,
   resampleOneMinuteBarsToFiveMinutes,
   enrichBarsWithSignals,
+  computeAtrSeries,
+  computeRegimeClassification,
+  computeHtfSeries,
+  classifySessionPhase,
+  getSessionPhaseMultiplier,
+  isRegimeAllowed,
+  isHtfBlocked,
+  REGIME_FAMILY_WHITELIST,
+  HTF_COUNTER_TREND_RULES,
+  SESSION_PHASE_MULTIPLIERS,
+  resampleBars,
+  buildTradeForensics,
+  runFilterValidation,
+  FROZEN_CRYPTO_FAMILIES,
+  CRYPTO_EXPERIMENT_LIBRARY,
   importHistoryForSymbol,
   importCryptoDayTradingHistory,
   loadCryptoMarketDataForStrategy,

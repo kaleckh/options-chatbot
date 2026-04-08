@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const {
   getDayTradingSnapshot,
-  normalizeDayTradingMarket,
   requestCryptoProfitabilityPreflightTicket,
 } = require("@/lib/day-trading");
 
@@ -27,14 +26,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const market = normalizeDayTradingMarket(body.market);
-    if (market !== "crypto") {
-      return NextResponse.json(
-        { error: "Preflight tickets are only available for the crypto pilot." },
-        { status: 400 },
-      );
-    }
-
     const result = await requestCryptoProfitabilityPreflightTicket({
       strategyId: body.strategyId,
       bars: body.bars,
@@ -43,7 +34,7 @@ export async function POST(req: NextRequest) {
       headline_lockout_checked: body.headline_lockout_checked,
       maker_limit_plan_confirmed: body.maker_limit_plan_confirmed,
     });
-    const snapshot = getDayTradingSnapshot({ market: "crypto" });
+    const snapshot = getDayTradingSnapshot();
 
     return NextResponse.json({ result, snapshot });
   } catch (err) {

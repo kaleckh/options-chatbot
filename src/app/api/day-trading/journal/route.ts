@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 const {
   appendCryptoProfitabilityJournalEntry,
   getDayTradingSnapshot,
-  normalizeDayTradingMarket,
 } = require("@/lib/day-trading");
 
 export const runtime = "nodejs";
@@ -25,14 +24,6 @@ export async function POST(req: NextRequest) {
     const body = await readJsonBody(req);
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-    }
-
-    const market = normalizeDayTradingMarket(body.market);
-    if (market !== "crypto") {
-      return NextResponse.json(
-        { error: "Journal logging is only available for the crypto pilot." },
-        { status: 400 },
-      );
     }
 
     const result = await appendCryptoProfitabilityJournalEntry({
@@ -68,7 +59,7 @@ export async function POST(req: NextRequest) {
       mistakeTag: body.mistakeTag,
       note: body.note,
     });
-    const snapshot = getDayTradingSnapshot({ market: "crypto" });
+    const snapshot = getDayTradingSnapshot();
 
     return NextResponse.json({
       entry: result.entry,

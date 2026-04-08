@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const { getDayTradingSnapshot, runDayTradingValidation, normalizeDayTradingMarket } = require("@/lib/day-trading");
+const { getDayTradingSnapshot, runDayTradingValidation } = require("@/lib/day-trading");
 
 export const runtime = "nodejs";
 
@@ -18,9 +18,7 @@ async function readJsonBody(req: NextRequest): Promise<Record<string, unknown> |
 
 export async function GET(req: NextRequest) {
   try {
-    const { searchParams } = new URL(req.url);
-    const market = normalizeDayTradingMarket(searchParams.get("market"));
-    const snapshot = getDayTradingSnapshot({ market });
+    const snapshot = getDayTradingSnapshot();
     return NextResponse.json(snapshot);
   } catch (err) {
     return NextResponse.json(
@@ -38,13 +36,11 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
-    const market = normalizeDayTradingMarket(body.market);
     const report = await runDayTradingValidation({
-      market,
       bars: body.bars,
       startingCash: body.startingCash,
     });
-    const snapshot = getDayTradingSnapshot({ market });
+    const snapshot = getDayTradingSnapshot();
     return NextResponse.json({ report, snapshot });
   } catch (err) {
     return NextResponse.json(

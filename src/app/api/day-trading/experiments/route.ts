@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 const {
   getDayTradingSnapshot,
-  normalizeDayTradingMarket,
   runDayTradingExperiments,
 } = require("@/lib/day-trading");
 
@@ -26,14 +25,6 @@ async function readJsonBody(req: NextRequest): Promise<Record<string, unknown> |
   }
 }
 
-function resolveCryptoMarket(input: unknown) {
-  const market = normalizeDayTradingMarket(input);
-  if (market !== "crypto") {
-    throw new Error("Day-trading experiments are only available for the crypto lane");
-  }
-  return market;
-}
-
 function buildExperimentOptions(source: Record<string, unknown> | URLSearchParams) {
   const getValue = (key: string) => {
     if (source instanceof URLSearchParams) {
@@ -44,7 +35,6 @@ function buildExperimentOptions(source: Record<string, unknown> | URLSearchParam
   };
 
   return {
-    market: resolveCryptoMarket(getValue("market")),
     bars: parseNumber(getValue("bars")) ?? parseNumber(getValue("barsRequested")),
     top: parseNumber(getValue("top")),
     feesFraction: parseNumber(getValue("feesFraction")),
@@ -55,13 +45,6 @@ function buildExperimentOptions(source: Record<string, unknown> | URLSearchParam
       ? undefined
       : getValue("strictMarketData") !== "false",
   };
-}
-
-function resolveErrorStatus(err: unknown) {
-  if (err instanceof Error && err.message.includes("only available for the crypto lane")) {
-    return 400;
-  }
-  return 500;
 }
 
 export async function GET(req: NextRequest) {
@@ -78,7 +61,7 @@ export async function GET(req: NextRequest) {
       {
         error: err instanceof Error ? err.message : "Failed to load day-trading experiments",
       },
-      { status: resolveErrorStatus(err) },
+      { status: 500 },
     );
   }
 }
@@ -101,7 +84,7 @@ export async function POST(req: NextRequest) {
       {
         error: err instanceof Error ? err.message : "Failed to run day-trading experiments",
       },
-      { status: resolveErrorStatus(err) },
+      { status: 500 },
     );
   }
 }

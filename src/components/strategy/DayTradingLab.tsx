@@ -15,7 +15,7 @@ import type {
   DayTradingWatchlist,
 } from "@/lib/types";
 
-type DayTradingMarket = "crypto" | "equities_legacy";
+type DayTradingMarket = "crypto";
 type MarketInputState = { bars: number; startingCash: number };
 type PreflightChecklistState = {
   setup_match_confirmed: boolean;
@@ -175,24 +175,8 @@ function buildJournalDraft(ticket?: DayTradingProfitabilityTicket | null): Journ
   };
 }
 
-const MARKET_OPTIONS: { value: DayTradingMarket; label: string; description: string }[] = [
-  {
-    value: "crypto",
-    label: "Crypto",
-    description: "Default research lane using free Binance-style spot data.",
-  },
-  {
-    value: "equities_legacy",
-    label: "Equities Legacy",
-    description: "Previous Yahoo-based ETF morning lab kept for comparison.",
-  },
-];
 const MARKET_INPUT_DEFAULTS: Record<DayTradingMarket, MarketInputState> = {
   crypto: {
-    bars: 3120,
-    startingCash: 10000,
-  },
-  equities_legacy: {
     bars: 3120,
     startingCash: 10000,
   },
@@ -480,17 +464,7 @@ function experimentReportFromPayload(payload: unknown): DayTradingExperimentRepo
   return null;
 }
 
-function marketCopy(market: DayTradingMarket) {
-  if (market === "equities_legacy") {
-    return {
-      title: "Day Trading Lab",
-      description:
-        "Legacy ETF morning lab that tracks SPY/QQQ replay evidence and paper activity. This lane is still available for comparison, but crypto is now the default active research track.",
-      watchlistTitle: "Morning Watchlist",
-      windowActive: "Morning window live",
-      windowInactive: "Outside morning window",
-    };
-  }
+function marketCopy() {
   return {
     title: "Crypto Day Trading Lab",
     description:
@@ -581,11 +555,9 @@ export default function DayTradingLab() {
   const watchlistRequestRef = useRef(0);
   const marketInputsRef = useRef<Record<DayTradingMarket, MarketInputState>>({
     crypto: { ...MARKET_INPUT_DEFAULTS.crypto },
-    equities_legacy: { ...MARKET_INPUT_DEFAULTS.equities_legacy },
   });
   const hydratedMarketsRef = useRef<Record<DayTradingMarket, boolean>>({
     crypto: false,
-    equities_legacy: false,
   });
 
   const syncJournalTicketState = useCallback((nextSnapshot: DayTradingSnapshot | null, preferredTicketId?: string) => {
@@ -921,7 +893,7 @@ export default function DayTradingLab() {
 
   const report: DayTradingReport | null = snapshot.lastReport;
   const selectedMarket = (snapshot.market || market) as DayTradingMarket;
-  const copy = marketCopy(selectedMarket);
+  const copy = marketCopy();
   const operatingPlan: DayTradingOperatingPlan | null = snapshot.operatingPlan || null;
   const pilotSummary: DayTradingPilotSummary | null = snapshot.pilotSummary || null;
   const artifactHealth = snapshot.artifactHealth || null;
@@ -1221,19 +1193,11 @@ export default function DayTradingLab() {
         <div className="grid grid-cols-3 gap-4">
           <div>
             <label className="text-xs text-text-2 block mb-1">Active market</label>
-            <select
-              value={market}
-              onChange={(e) => setMarket(e.target.value as DayTradingMarket)}
-              className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
-            >
-              {MARKET_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0">
+              Crypto
+            </div>
             <div className="mt-1 text-xs text-text-3">
-              {MARKET_OPTIONS.find((option) => option.value === market)?.description}
+              Research lane using free Binance-style spot data.
             </div>
           </div>
           <div>
