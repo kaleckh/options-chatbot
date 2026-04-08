@@ -34,9 +34,18 @@
     "profit-loop:health": "python scripts/automation_operational_health.py --json",
     "profit-loop:holdout": "python scripts/automation_truth_holdout.py --json",
     "profit-loop:validate": "python scripts/automation_profit_validation.py --json",
-    "profit-loop:canary": "python scripts/run_profit_loop_canary.py"
+    "profit-loop:canary": "python scripts/run_profit_loop_canary.py",
+    "crypto:signals": "python -W ignore -m crypto_options.signals",
+    "crypto:backtest": "python -W ignore -m crypto_options.signals --backtest",
+    "crypto:chain": "python -W ignore -m crypto_options.deribit",
+    "crypto:spread": "python -W ignore -m crypto_options.deribit --spread",
+    "crypto:scan": "python -W ignore -m crypto_options.execution",
+    "crypto:monitor": "python -W ignore -m crypto_options.execution --loop",
+    "options:log": "python scripts/log_scan_picks.py"
   },
   "dependencies": {
+    "@polymarket/clob-client": "^5.8.1",
+    "ethers": "^5.8.0",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
