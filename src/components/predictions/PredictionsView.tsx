@@ -255,7 +255,7 @@ export default function PredictionsView() {
       }, "Live scan");
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to run scan");
+        console.warn("Scan returned error:", data.error || res.status);
       }
       setScanPicks(data.picks || []);
       setScanPolicy(data.policy || null);
