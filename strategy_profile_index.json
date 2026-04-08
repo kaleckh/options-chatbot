@@ -16,6 +16,7 @@
   },
   "entry_filters": {
     "qqq_require_bullish_regime": true,
-    "qqq_max_hv30": 0.15
+    "qqq_max_hv30": 0.15,
+    "stop_cooldown_days": 5
   }
 }

@@ -6774,6 +6774,9 @@ def run_historical_backtest(
     unpriced_candidates: list[dict] = []
     days_simulated: int = 0
 
+    # Stop cooldown: after a stop-out, skip that ticker for N calendar days
+    _stop_cooldown_until: dict[str, str] = {}  # ticker -> "YYYY-MM-DD" cooldown expiry
+
     max_dte   = max(eq_config["dte_at_entry"], idx_config["dte_at_entry"])
     start_idx = 57                         # day_idx-1 needs SMA50 warmup (50+) plus buffer
     end_idx   = series_len - max_dte - 5     # leave room for trade exit data
@@ -6850,6 +6853,12 @@ def run_historical_backtest(
             # Per-ticker entry filters (same as live scan in options_chatbot.py)
             _entry_filters = t_sp.get("entry_filters", {})
             if _entry_filters:
+                # Stop cooldown: skip ticker if recently stopped out
+                _cooldown_days = int(_entry_filters.get("stop_cooldown_days", 0) or 0)
+                if _cooldown_days > 0:
+                    _today_str = str(all_closes["SPY"].index[day_idx].date())
+                    if _today_str <= _stop_cooldown_until.get(ticker, ""):
+                        continue
                 market_regime_bucket = _market_regime_bucket(spy_ret5_today)
                 # Universal bullish regime gate (applies to all tickers if set)
                 if _entry_filters.get("require_bullish_regime") and market_regime_bucket != "bullish":
@@ -7233,6 +7242,16 @@ def run_historical_backtest(
                 )
                 calibration_queue_seq += 1
             all_trades.append(trade_record)
+
+            # Trigger stop cooldown if this trade stopped out
+            if outcome.get("exit_reason") in ("stop", "trailing_stop"):
+                _t_sp_for_cooldown = _idx_sp if t_sym.upper() in INDEX_TICKERS else _eq_sp
+                _cd = int(_t_sp_for_cooldown.get("entry_filters", {}).get("stop_cooldown_days", 0) or 0)
+                if _cd > 0:
+                    from datetime import timedelta
+                    _entry_dt = all_closes["SPY"].index[day_idx]
+                    _cooldown_expiry = (_entry_dt + timedelta(days=_cd)).strftime("%Y-%m-%d")
+                    _stop_cooldown_until[t_sym] = max(_stop_cooldown_until.get(t_sym, ""), _cooldown_expiry)
 
     # ── Aggregate metrics ─────────────────────────────────────────────────────
     if not all_trades:
