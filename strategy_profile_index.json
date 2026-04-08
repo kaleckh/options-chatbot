@@ -7,9 +7,12 @@
   },
   "spread": {
     "max_width_pct": 10.0,
-    "stop_loss_pct": 90.0,
+    "stop_loss_pct": 80.0,
     "profit_target_pct": 150.0,
     "time_exit_pct": 55.0
+  },
+  "entry": {
+    "min_direction_score": 60
   },
   "entry_filters": {
     "qqq_require_bullish_regime": true,

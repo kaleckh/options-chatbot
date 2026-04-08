@@ -774,8 +774,10 @@ def _load_profile() -> None:
             sp = STRATEGY_PROFILES[profile]
             for section in ("confidence_weights", "targets", "filters", "risk", "entry",
                             "direction_score_weights", "rsi_overextension", "quality_score_weights",
-                            "early_exit", "spread"):
+                            "early_exit", "spread", "entry_filters"):
                 if section in saved and isinstance(saved[section], dict):
+                    if section not in sp:
+                        sp[section] = {}
                     sp[section].update(saved[section])
         except Exception:
             pass  # corrupt file — fall back to defaults silently

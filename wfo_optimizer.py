@@ -6847,6 +6847,21 @@ def run_historical_backtest(
                 continue
             trade_type = signal["trade_type"]
 
+            # Per-ticker entry filters (same as live scan in options_chatbot.py)
+            _entry_filters = t_sp.get("entry_filters", {})
+            if _entry_filters:
+                market_regime_bucket = _market_regime_bucket(spy_ret5_today)
+                # Universal bullish regime gate (applies to all tickers if set)
+                if _entry_filters.get("require_bullish_regime") and market_regime_bucket != "bullish":
+                    continue
+                # Per-ticker: QQQ-specific gates
+                if ticker.upper() == "QQQ":
+                    if _entry_filters.get("qqq_require_bullish_regime") and market_regime_bucket != "bullish":
+                        continue
+                    _qqq_max_hv = float(_entry_filters.get("qqq_max_hv30", 999.0))
+                    if day_data["hv30"] > _qqq_max_hv:
+                        continue
+
             # Tech score gate (same _tech_score formula as live scan)
             tech = _tech_score(
                 rsi14=day_data["rsi14"],
