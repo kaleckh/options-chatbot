@@ -3334,10 +3334,15 @@ def _fetch_best_option(
                 _iv  = float(_row.get("impliedVolatility") or 0)
                 _vol = _iv if _iv > 0.01 else hv30_fallback
 
-                # Apply volatility smile: OTM options have higher IV
-                _moneyness = _K / _S if _S > 0 else 1.0
-                _smile_adj = 1.0 + 0.15 * abs(1.0 - _moneyness)  # 15% skew per unit OTM
-                _vol_adjusted = _vol * _smile_adj
+                # When we have per-strike IV from the chain, use it directly
+                # (smile is already embedded). Only apply synthetic smile when
+                # falling back to HV30 as a flat vol estimate.
+                if _iv > 0.01:
+                    _vol_adjusted = _iv
+                else:
+                    _moneyness = _K / _S if _S > 0 else 1.0
+                    _smile_adj = 1.0 + 0.15 * abs(1.0 - _moneyness)
+                    _vol_adjusted = _vol * _smile_adj
                 _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, _vol_adjusted, trade_type)
                 if not _g:
                     continue

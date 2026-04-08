@@ -12,7 +12,8 @@
     "time_exit_pct": 55.0
   },
   "entry": {
-    "min_direction_score": 60
+    "min_direction_score": 60,
+    "min_tech_score": 55
   },
   "entry_filters": {
     "qqq_require_bullish_regime": true,
