@@ -3,7 +3,10 @@ from __future__ import annotations
 import copy
 import json
 import math
+import os
+import sqlite3
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Optional
 
 from options_execution import commission_total_usd, option_pnl_snapshot
@@ -831,6 +834,463 @@ class PostgresTrackedPositionsRepository:
                 return float(row["total_pnl_usd"]) if row else 0.0
 
 
+class SqliteTrackedPositionsRepository:
+    """SQLite-backed tracked positions repository (fallback when Postgres is unavailable)."""
+
+    def __init__(self, db_path: Optional[str] = None):
+        if db_path is None:
+            project_root = Path(__file__).resolve().parent.parent
+            db_dir = project_root / "data"
+            db_dir.mkdir(parents=True, exist_ok=True)
+            db_path = str(db_dir / "tracked_positions.db")
+        self.db_path = db_path
+        self.is_available = True
+        self.error_message: Optional[str] = None
+
+    def _connect(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        return conn
+
+    def init_schema(self) -> bool:
+        schema_sql = """
+        CREATE TABLE IF NOT EXISTS tracked_positions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            status TEXT NOT NULL DEFAULT 'open',
+            ticker TEXT NOT NULL,
+            direction TEXT NOT NULL,
+            contract_symbol TEXT,
+            strike REAL NOT NULL,
+            expiry TEXT NOT NULL,
+            asset_class TEXT,
+            contracts INTEGER NOT NULL,
+            entry_option_price REAL NOT NULL,
+            entry_execution_price REAL,
+            entry_execution_basis TEXT,
+            entry_fee_total_usd REAL,
+            entry_underlying_price REAL,
+            filled_at TEXT NOT NULL,
+            stop_loss_pct REAL NOT NULL,
+            profit_target_pct REAL NOT NULL,
+            time_exit_day INTEGER NOT NULL,
+            peak_pnl_pct REAL,
+            last_option_price REAL,
+            last_pnl_pct REAL,
+            last_recommendation TEXT,
+            last_recommendation_reason TEXT,
+            last_reviewed_at TEXT,
+            source_pick_snapshot TEXT NOT NULL DEFAULT '{}',
+            notes TEXT,
+            closed_at TEXT,
+            exit_option_price REAL,
+            exit_execution_price REAL,
+            exit_execution_basis TEXT,
+            exit_reason TEXT,
+            gross_pnl_pct REAL,
+            net_pnl_pct REAL,
+            gross_pnl_usd REAL,
+            net_pnl_usd REAL,
+            fee_total_usd REAL,
+            source_scan_session_id INTEGER,
+            source_scan_event_key TEXT,
+            source_scan_run_id TEXT,
+            source_scan_recorded_at_utc TEXT,
+            proof_eligible INTEGER NOT NULL DEFAULT 0,
+            proof_ineligibility_reason TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tracked_positions_status ON tracked_positions (status);
+        CREATE INDEX IF NOT EXISTS idx_tracked_positions_filled_at ON tracked_positions (filled_at DESC);
+
+        CREATE TABLE IF NOT EXISTS position_reviews (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            position_id INTEGER NOT NULL REFERENCES tracked_positions(id) ON DELETE CASCADE,
+            reviewed_at TEXT NOT NULL,
+            pricing_source TEXT,
+            current_option_price REAL,
+            current_pnl_pct REAL,
+            gross_pnl_pct REAL,
+            net_pnl_pct REAL,
+            gross_pnl_usd REAL,
+            net_pnl_usd REAL,
+            entry_execution_price REAL,
+            exit_execution_price REAL,
+            entry_execution_basis TEXT,
+            exit_execution_basis TEXT,
+            fee_total_usd REAL,
+            recommendation TEXT NOT NULL,
+            reason TEXT NOT NULL,
+            warnings TEXT NOT NULL DEFAULT '[]',
+            metrics_snapshot TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_position_reviews_position_id ON position_reviews (position_id, reviewed_at DESC);
+        """
+        try:
+            with self._connect() as conn:
+                conn.executescript(schema_sql)
+            return True
+        except Exception as exc:
+            self.is_available = False
+            self.error_message = (
+                "SQLite tracked positions database is unavailable. "
+                f"Details: {exc}"
+            )
+            return False
+
+    def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
+        """Convert a sqlite3.Row to a dict, parsing JSON text columns."""
+        d = dict(row)
+        for key in ("source_pick_snapshot", "warnings", "metrics_snapshot"):
+            if key in d and isinstance(d[key], str):
+                try:
+                    d[key] = json.loads(d[key])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        if "proof_eligible" in d:
+            d["proof_eligible"] = bool(d["proof_eligible"])
+        return d
+
+    _POSITION_WITH_LATEST_REVIEW_SQL = """
+        SELECT
+            p.*,
+            r.id AS review_id,
+            r.reviewed_at,
+            r.pricing_source,
+            r.current_option_price,
+            r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
+            r.recommendation,
+            r.reason,
+            r.warnings,
+            r.metrics_snapshot
+        FROM tracked_positions p
+        LEFT JOIN position_reviews r ON r.id = (
+            SELECT pr.id
+            FROM position_reviews pr
+            WHERE pr.position_id = p.id
+            ORDER BY pr.reviewed_at DESC, pr.id DESC
+            LIMIT 1
+        )
+    """
+
+    def _fetch_one_position(self, where_sql: str, params: tuple[Any, ...]) -> Optional[dict[str, Any]]:
+        query = f"{self._POSITION_WITH_LATEST_REVIEW_SQL} {where_sql}"
+        with self._connect() as conn:
+            cur = conn.execute(query, params)
+            row = cur.fetchone()
+        if not row:
+            return None
+        return _normalize_position_row(self._row_to_dict(row))
+
+    def _fetch_position_by_id_in_conn(self, conn: sqlite3.Connection, position_id: int) -> Optional[dict[str, Any]]:
+        query = f"{self._POSITION_WITH_LATEST_REVIEW_SQL} WHERE p.id = ?"
+        cur = conn.execute(query, (position_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return _normalize_position_row(self._row_to_dict(row))
+
+    def create_position(self, payload: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO tracked_positions (
+                    status, ticker, direction, contract_symbol, strike, expiry,
+                    asset_class, contracts, entry_option_price, entry_execution_price,
+                    entry_execution_basis, entry_fee_total_usd, entry_underlying_price,
+                    filled_at, stop_loss_pct, profit_target_pct, time_exit_day,
+                    peak_pnl_pct, last_option_price, last_pnl_pct,
+                    last_recommendation, last_recommendation_reason, last_reviewed_at,
+                    source_pick_snapshot, notes, closed_at, exit_option_price,
+                    exit_execution_price, exit_execution_basis, exit_reason,
+                    fee_total_usd, source_scan_session_id, source_scan_event_key,
+                    source_scan_run_id, source_scan_recorded_at_utc,
+                    proof_eligible, proof_ineligibility_reason
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?,
+                    ?, ?
+                )
+                """,
+                (
+                    payload["status"],
+                    payload["ticker"],
+                    payload["direction"],
+                    payload.get("contract_symbol"),
+                    payload["strike"],
+                    _to_iso(payload["expiry"]),
+                    payload.get("asset_class"),
+                    payload["contracts"],
+                    payload["entry_option_price"],
+                    payload.get("entry_execution_price"),
+                    payload.get("entry_execution_basis"),
+                    payload.get("entry_fee_total_usd"),
+                    payload.get("entry_underlying_price"),
+                    _to_iso(payload["filled_at"]),
+                    payload["stop_loss_pct"],
+                    payload["profit_target_pct"],
+                    payload["time_exit_day"],
+                    payload.get("peak_pnl_pct"),
+                    payload.get("last_option_price"),
+                    payload.get("last_pnl_pct"),
+                    payload.get("last_recommendation"),
+                    payload.get("last_recommendation_reason"),
+                    _to_iso(payload.get("last_reviewed_at")),
+                    json.dumps(payload.get("source_pick_snapshot") or {}),
+                    payload.get("notes"),
+                    _to_iso(payload.get("closed_at")),
+                    payload.get("exit_option_price"),
+                    payload.get("exit_execution_price"),
+                    payload.get("exit_execution_basis"),
+                    payload.get("exit_reason"),
+                    payload.get("fee_total_usd"),
+                    payload.get("source_scan_session_id"),
+                    payload.get("source_scan_event_key"),
+                    payload.get("source_scan_run_id"),
+                    _to_iso(payload.get("source_scan_recorded_at_utc")),
+                    1 if payload.get("proof_eligible") else 0,
+                    payload.get("proof_ineligibility_reason"),
+                ),
+            )
+            position_id = cur.lastrowid
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+        if position is None:
+            raise RuntimeError(f"Tracked position {position_id} was not found after creation.")
+        return position
+
+    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+        where_sql = ""
+        params: tuple[Any, ...] = ()
+        if status in {"open", "closed"}:
+            where_sql = "WHERE p.status = ?"
+            params = (status,)
+        query = f"""
+        {self._POSITION_WITH_LATEST_REVIEW_SQL}
+        {where_sql}
+        ORDER BY p.filled_at DESC, p.id DESC
+        """
+        with self._connect() as conn:
+            cur = conn.execute(query, params)
+            rows = cur.fetchall()
+        return [_normalize_position_row(self._row_to_dict(row)) for row in rows]
+
+    def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
+        return self._fetch_one_position("WHERE p.id = ?", (position_id,))
+
+    def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
+        with self._connect() as conn:
+            cur = conn.execute("SELECT status FROM tracked_positions WHERE id = ?", (position_id,))
+            status_row = cur.fetchone()
+            if not status_row:
+                raise RuntimeError(f"Tracked position {position_id} not found.")
+            if str(status_row["status"]) != "open":
+                raise ValueError(f"Tracked position {position_id} is not open for review.")
+
+            conn.execute(
+                """
+                INSERT INTO position_reviews (
+                    position_id, reviewed_at, pricing_source,
+                    current_option_price, current_pnl_pct,
+                    gross_pnl_pct, net_pnl_pct, gross_pnl_usd, net_pnl_usd,
+                    entry_execution_price, exit_execution_price,
+                    entry_execution_basis, exit_execution_basis,
+                    fee_total_usd,
+                    recommendation, reason, warnings, metrics_snapshot
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    position_id,
+                    _to_iso(review["reviewed_at"]),
+                    review.get("pricing_source"),
+                    review.get("current_option_price"),
+                    review.get("current_pnl_pct"),
+                    review.get("gross_pnl_pct"),
+                    review.get("net_pnl_pct"),
+                    review.get("gross_pnl_usd"),
+                    review.get("net_pnl_usd"),
+                    review.get("entry_execution_price"),
+                    review.get("exit_execution_price"),
+                    review.get("entry_execution_basis"),
+                    review.get("exit_execution_basis"),
+                    review.get("fee_total_usd"),
+                    review["recommendation"],
+                    review["reason"],
+                    json.dumps(review.get("warnings") or []),
+                    json.dumps(review.get("metrics_snapshot") or {}),
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE tracked_positions
+                SET
+                    peak_pnl_pct = ?,
+                    last_option_price = ?,
+                    last_pnl_pct = ?,
+                    last_recommendation = ?,
+                    last_recommendation_reason = ?,
+                    exit_execution_price = ?,
+                    exit_execution_basis = ?,
+                    gross_pnl_pct = ?,
+                    net_pnl_pct = ?,
+                    gross_pnl_usd = ?,
+                    net_pnl_usd = ?,
+                    fee_total_usd = ?,
+                    last_reviewed_at = ?,
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (
+                    review.get("peak_pnl_pct"),
+                    review.get("current_option_price"),
+                    review.get("current_pnl_pct"),
+                    review["recommendation"],
+                    review["reason"],
+                    review.get("exit_execution_price"),
+                    review.get("exit_execution_basis"),
+                    review.get("gross_pnl_pct"),
+                    review.get("net_pnl_pct"),
+                    review.get("gross_pnl_usd"),
+                    review.get("net_pnl_usd"),
+                    review.get("fee_total_usd"),
+                    _to_iso(review["reviewed_at"]),
+                    position_id,
+                ),
+            )
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+            if position is None:
+                raise RuntimeError(f"Tracked position {position_id} was not found after review save.")
+            return position
+
+    def close_position(
+        self,
+        position_id: int,
+        exit_price: float,
+        closed_at: datetime,
+        exit_reason: str,
+        notes: Optional[str] = None,
+    ) -> Optional[dict[str, Any]]:
+        with self._connect() as conn:
+            if not math.isfinite(float(exit_price)) or float(exit_price) <= 0:
+                raise ValueError("exit_price must be a finite number greater than 0.")
+
+            cur = conn.execute(
+                """
+                SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd
+                FROM tracked_positions
+                WHERE id = ?
+                """,
+                (position_id,),
+            )
+            status_row = cur.fetchone()
+            if not status_row:
+                return None
+            if str(status_row["status"]) != "open":
+                raise ValueError(f"Tracked position {position_id} is already closed.")
+            contracts = int(status_row["contracts"] or 1)
+            entry_execution_price = status_row["entry_execution_price"] or status_row["entry_option_price"]
+            entry_fee_total_usd = status_row["entry_fee_total_usd"]
+            if entry_fee_total_usd is None:
+                entry_fee_total_usd = commission_total_usd(contracts=contracts)
+            exit_fee_total_usd = commission_total_usd(contracts=contracts)
+            pnl_snapshot = option_pnl_snapshot(
+                entry_execution_price=entry_execution_price,
+                exit_execution_price=exit_price,
+                contracts=contracts,
+                entry_fee_total_usd=entry_fee_total_usd,
+                exit_fee_total_usd=exit_fee_total_usd,
+            )
+
+            # Build notes update
+            if notes:
+                cur2 = conn.execute("SELECT notes FROM tracked_positions WHERE id = ?", (position_id,))
+                existing_row = cur2.fetchone()
+                existing_notes = existing_row["notes"] if existing_row and existing_row["notes"] else ""
+                new_notes = f"{existing_notes}\n{notes}".strip() if existing_notes else notes
+            else:
+                new_notes = None
+
+            closed_at_iso = _to_iso(closed_at)
+            conn.execute(
+                """
+                UPDATE tracked_positions
+                SET
+                    status = 'closed',
+                    closed_at = ?,
+                    exit_option_price = ?,
+                    exit_execution_price = ?,
+                    exit_execution_basis = 'manual_close',
+                    exit_reason = ?,
+                    last_option_price = ?,
+                    last_pnl_pct = ?,
+                    gross_pnl_pct = ?,
+                    net_pnl_pct = ?,
+                    gross_pnl_usd = ?,
+                    net_pnl_usd = ?,
+                    fee_total_usd = ?,
+                    last_reviewed_at = ?,
+                    notes = COALESCE(?, notes),
+                    updated_at = datetime('now')
+                WHERE id = ? AND status = 'open'
+                """,
+                (
+                    closed_at_iso,
+                    exit_price,
+                    exit_price,
+                    exit_reason,
+                    exit_price,
+                    pnl_snapshot.get("gross_pnl_pct"),
+                    pnl_snapshot.get("gross_pnl_pct"),
+                    pnl_snapshot.get("net_pnl_pct"),
+                    pnl_snapshot.get("gross_pnl_usd"),
+                    pnl_snapshot.get("net_pnl_usd"),
+                    pnl_snapshot.get("fee_total_usd"),
+                    closed_at_iso,
+                    new_notes,
+                    position_id,
+                ),
+            )
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+            if position is None:
+                raise RuntimeError(f"Tracked position {position_id} was not found after close.")
+            return position
+
+    def get_realized_pnl_since(self, since: datetime) -> float:
+        since_iso = _to_iso(since)
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                SELECT COALESCE(SUM(net_pnl_usd), 0) AS total_pnl_usd
+                FROM tracked_positions
+                WHERE status = 'closed' AND closed_at >= ?
+                """,
+                (since_iso,),
+            )
+            row = cur.fetchone()
+            return float(row["total_pnl_usd"]) if row else 0.0
+
+
 class MemoryTrackedPositionsRepository:
     def __init__(self):
         self.is_available = True
@@ -994,11 +1454,12 @@ class MemoryTrackedPositionsRepository:
 
 
 def create_positions_repository(database_url: Optional[str]):
-    if not database_url:
-        return UnavailableTrackedPositionsRepository(
-            "Tracked positions are unavailable because DATABASE_URL is not configured. "
-            "Start local Postgres and set DATABASE_URL to enable the supervised options tracker."
-        )
-    repo = PostgresTrackedPositionsRepository(database_url)
+    if database_url:
+        repo = PostgresTrackedPositionsRepository(database_url)
+        repo.init_schema()
+        if repo.is_available:
+            return repo
+    # Fall back to SQLite
+    repo = SqliteTrackedPositionsRepository()
     repo.init_schema()
     return repo
