@@ -39,7 +39,7 @@
   "entry": {
     "entry_momentum_pct": 0.5,
     "min_direction_score": 60,
-    "min_tech_score": 65,
+    "min_tech_score": 50,
     "allowed_directions": ["call"]
   },
   "direction_score_weights": {
