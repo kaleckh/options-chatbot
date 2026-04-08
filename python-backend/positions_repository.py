@@ -1458,7 +1458,12 @@ def create_positions_repository(database_url: Optional[str]):
         repo = PostgresTrackedPositionsRepository(database_url)
         repo.init_schema()
         if repo.is_available:
-            return repo
+            # Verify we can actually connect (init_schema tests the connection)
+            try:
+                repo.list_positions("open")
+                return repo
+            except Exception:
+                pass  # Connection failed — fall through to SQLite
     # Fall back to SQLite
     repo = SqliteTrackedPositionsRepository()
     repo.init_schema()
