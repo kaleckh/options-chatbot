@@ -3834,6 +3834,10 @@ SCAN_FUNNEL_DROP_KEYS = (
     "momentum",
     "tech_score",
     "direction_score",
+    "direction_filter",
+    "stop_cooldown",
+    "ticker_regime_filter",
+    "ticker_vol_filter",
     "earnings",
     "option_liquidity",
     "iv_crush_penalty",
@@ -3861,6 +3865,7 @@ def scan_daily_top_trades(
     min_confidence: float = None,
     min_tech_score: float = None,
     calibration_playbook: str = "broad",
+    positions_repository: object = None,
 ) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
@@ -3915,6 +3920,39 @@ def scan_daily_top_trades(
     )
     market_regime_bucket = _composite_regime["regime"]
     market_open = _market_is_open()
+
+    # ── Stop cooldown: build per-ticker cooldown set from recent closed positions ──
+    _stop_cooldown_tickers: set[str] = set()
+    if positions_repository is not None:
+        try:
+            from datetime import timedelta
+            closed = positions_repository.list_positions(status="closed")
+            _now = datetime.now()
+            for _pos in closed:
+                _exit_reason = str(_pos.get("exit_reason") or "").strip().lower()
+                if _exit_reason not in ("sl_hit", "stop", "trailing_stop"):
+                    continue
+                _pos_ticker = str(_pos.get("ticker") or "").strip().upper()
+                if not _pos_ticker:
+                    continue
+                _pos_sp = _get_profile(_pos_ticker)
+                _cd_days = int(_pos_sp.get("entry_filters", {}).get("stop_cooldown_days", 0) or 0)
+                if _cd_days <= 0:
+                    continue
+                _closed_at = _pos.get("closed_at")
+                if _closed_at is None:
+                    continue
+                if isinstance(_closed_at, str):
+                    try:
+                        _closed_at = datetime.fromisoformat(_closed_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                    except (ValueError, TypeError):
+                        continue
+                if hasattr(_closed_at, "replace"):
+                    _closed_at = _closed_at.replace(tzinfo=None)
+                if (_now - _closed_at).days < _cd_days:
+                    _stop_cooldown_tickers.add(_pos_ticker)
+        except Exception:
+            pass  # If repo unavailable, allow all trades
 
     for ticker in DEFAULT_WATCHLIST:
         _ac = _asset_class(ticker)
@@ -3991,6 +4029,10 @@ def scan_daily_top_trades(
 
             # Per-ticker entry filters (e.g. QQQ requires bullish regime + low vol)
             _entry_filters = base_sp.get("entry_filters", {})
+            # Stop cooldown — skip ticker if recently stopped out
+            if ticker in _stop_cooldown_tickers:
+                _bump_scan_drop(scan_drop_counts, "stop_cooldown")
+                continue
             if ticker == "QQQ":
                 if _entry_filters.get("qqq_require_bullish_regime") and market_regime_bucket != "bullish":
                     _bump_scan_drop(scan_drop_counts, "ticker_regime_filter")

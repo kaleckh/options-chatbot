@@ -728,6 +728,7 @@ def run_supervised_scan(
             n_picks=scan_pool_size,
             dte=scan_dte,
             calibration_playbook=str(playbook.get("calibration_playbook") or "broad"),
+            positions_repository=positions_repository,
         )
     )
     scan_drop_counts = _normalized_scan_drop_counts(getattr(scan_func, "_last_scan_drop_counts", None))
