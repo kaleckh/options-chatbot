@@ -28,6 +28,10 @@ tsconfig.tsbuildinfo
 data/day-trading/
 data/options-validation/
 
+# Polymarket runtime state and credentials (NEVER commit private keys)
+data/polymarket/credentials.json
+data/polymarket/state.json
+
 # Local autoresearch artifacts
 research_runs/
 
