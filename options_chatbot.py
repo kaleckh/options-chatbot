@@ -3372,6 +3372,13 @@ def _fetch_best_option(
     except Exception:
         pass
 
+    # Reject live chain result if the delta is wildly off target (e.g. deep ITM
+    # strike when targeting ATM). This happens when per-strike IV distorts the
+    # BS delta calc. Fall through to the BS fallback instead.
+    if best is not None and best_diff > 0.20:
+        best = None
+        best_diff = 999.0
+
     if best is not None:
         if return_context and chain_context is not None:
             best["chain_context"] = chain_context
@@ -3935,7 +3942,6 @@ def scan_daily_top_trades(
     _stop_cooldown_tickers: set[str] = set()
     if positions_repository is not None:
         try:
-            from datetime import timedelta
             closed = positions_repository.list_positions(status="closed")
             _now = datetime.now()
             for _pos in closed:
@@ -4184,7 +4190,10 @@ def scan_daily_top_trades(
                 quote_age_hours=_opt.get("quote_age_hours"),
                 sp=sp,
             )
-            if _liq["is_illiquid"]:
+            _is_live_chain = (
+                _spread_result.get("live_chain", True) if (_is_spread and _spread_result) else _opt.get("live_chain", True)
+            )
+            if _liq["is_illiquid"] and _is_live_chain:
                 _bump_scan_drop(scan_drop_counts, "option_liquidity")
                 continue
 
