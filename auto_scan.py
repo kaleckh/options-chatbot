@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _DIR)
+sys.path.insert(0, os.path.join(_DIR, "python-backend"))
 
 logging.basicConfig(
     filename=os.path.join(_DIR, "auto_scan.log"),
