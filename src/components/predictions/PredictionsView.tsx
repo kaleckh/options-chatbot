@@ -1878,21 +1878,25 @@ function TrackedPositionsTab({
     return source === "unavailable" || source === "expired" || source == null;
   }).length;
 
-  const rows = positions.map((position) => ({
+  const rows = positions.map((position) => {
+    const targetPct = position.profit_target_pct;
+    const stopPct = position.stop_loss_pct;
+    const entryPrice = position.entry_option_price || 0;
+    const targetPrice = targetPct ? entryPrice * (1 + targetPct / 100) : null;
+    const stopPrice = stopPct ? entryPrice * (1 - stopPct / 100) : null;
+    return {
     Ticker: position.ticker,
     Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
     Contract: fmtContractLabel(position),
-    "Contract Q": contractQualityLabel(position.source_pick_snapshot),
-    Source: fmtCompactLabel(position.source_pick_snapshot?.selection_source || position.source_pick_snapshot?.promotion_class),
-    "Entry Basis": fmtCompactLabel(position.entry_execution_basis || position.source_pick_snapshot?.entry_execution_basis),
     Contracts: String(position.contracts),
     Entry: fmtMoney(position.entry_option_price),
     "Last Px": fmtMoney(position.last_option_price),
     "P&L %": fmtPct(position.last_pnl_pct),
+    Target: targetPct ? `+${targetPct}% ($${targetPrice?.toFixed(2)})` : "\u2014",
+    Stop: stopPct ? `-${stopPct}% ($${stopPrice?.toFixed(2)})` : "\u2014",
     Pricing: fmtPricingSource(position.latest_review?.pricing_source),
     Warnings: position.latest_review?.warnings?.[0] || "\u2014",
     Recommendation: position.last_recommendation || "\u2014",
-    Reason: position.last_recommendation_reason || position.latest_review?.reason || "\u2014",
     Filled: fmtDate(position.filled_at),
     Action: view === "open" ? (
       <div className="flex items-center gap-2">
@@ -1915,7 +1919,7 @@ function TrackedPositionsTab({
     ) : (
       <span className="text-xs text-text-3">{position.exit_reason || "manual_close"}</span>
     ),
-  }));
+  };});
 
   return (
     <div className="space-y-4">
@@ -2050,7 +2054,7 @@ function TrackedPositionsTab({
           data={rows}
           badgeCol="Trade"
           pnlCols={["P&L %"]}
-          monoCols={["Contract", "Contract Q", "Entry Basis", "Contracts", "Entry", "Last Px"]}
+          monoCols={["Contract", "Contracts", "Entry", "Last Px", "Target", "Stop"]}
           label="Tracked options positions"
           maxHeight="620px"
         />
