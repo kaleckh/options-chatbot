@@ -251,6 +251,17 @@ def _managed_pick_block_reason(pick: dict[str, Any], policy: Optional[dict[str, 
     if approved_tickers and ticker not in approved_tickers:
         return "approved_symbol_scope"
     trade_policy_decision = str(pick.get("trade_policy_decision") or "watch").strip().lower()
+    # During evidence-building (no approved symbols yet), candidates that
+    # pass all quality checks above are surfaced for supervised use.
+    # Hard-filter failures (decision="blocked") are still rejected.
+    managed_lane_status = str(
+        policy.get("managed_lane_status") or ""
+    ).strip().lower()
+    if (
+        managed_lane_status == "blocked_no_approved_symbols"
+        and trade_policy_decision == "watch"
+    ):
+        return None
     if trade_policy_decision != "approved":
         return f"trade_policy_decision:{trade_policy_decision or 'unknown'}"
     return None
