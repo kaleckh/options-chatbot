@@ -42,6 +42,11 @@ tmp_public/
 .tmp/
 .tmp-test/
 .tmp-test-workspaces/
+.tmp-test-dead/
+.tmp-dead-root/
+.tmp-dead-*/
+.tmp-venv-repro*/
+tmp8zf11ul3/
 .codex_tmp/
 .codex_tmp_test/
 .codex-logs/
@@ -49,3 +54,10 @@ chat_history.db
 market_data.db
 *.db-shm
 *.db-wal
+auto_scan.log
+daily_performance.json
+data/tracked_positions.db
+data/forward-tracking/crypto_options_positions.json
+data/forward-tracking/crypto_scan_log.txt
+data/forward-tracking/position_review_log.txt
+data/forward-tracking/scan_log.txt

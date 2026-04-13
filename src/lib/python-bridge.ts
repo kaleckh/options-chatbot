@@ -12,6 +12,7 @@ import type {
 const PYTHON_BACKEND_URL =
   process.env.PYTHON_BACKEND_URL || "http://localhost:8100";
 const PYTHON_BACKEND_TIMEOUT_MS = Number(process.env.PYTHON_BACKEND_TIMEOUT_MS || 30000);
+const JSON_REQUEST_HEADERS = { "Content-Type": "application/json" };
 
 function buildBackendTimeoutError(path: string): Error {
   return new Error(`Python backend request timed out for ${path} after ${Math.round(PYTHON_BACKEND_TIMEOUT_MS / 1000)}s`);
@@ -40,12 +41,13 @@ async function fetchBackendResponse(
 
 async function fetchBackendJson<T = Record<string, unknown>>(
   path: string,
-  init?: RequestInit
+  init?: RequestInit,
+  errorPrefix: string = "Python backend error"
 ): Promise<T> {
   const res = await fetchBackendResponse(path, init);
   const data = await res.json().catch(() => ({}));
   if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Python backend error: ${res.status}`));
+    throw new Error(String((data as Record<string, unknown>).error || `${errorPrefix}: ${res.status}`));
   }
   return data as T;
 }
@@ -70,13 +72,45 @@ function normalizeToolResult(result: unknown): string {
   return JSON.stringify(result) ?? "";
 }
 
+async function postBackendJson<T = Record<string, unknown>>(
+  path: string,
+  payload: Record<string, unknown>,
+  errorPrefix: string
+): Promise<T> {
+  return fetchBackendJson<T>(
+    path,
+    {
+      method: "POST",
+      headers: JSON_REQUEST_HEADERS,
+      body: toJsonBody(payload),
+    },
+    errorPrefix
+  );
+}
+
+async function putBackendJson(
+  path: string,
+  payload: Record<string, unknown>,
+  errorPrefix: string
+): Promise<void> {
+  await fetchBackendJson<Record<string, unknown>>(
+    path,
+    {
+      method: "PUT",
+      headers: JSON_REQUEST_HEADERS,
+      body: toJsonBody(payload),
+    },
+    errorPrefix
+  );
+}
+
 export async function callTool(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<string> {
   const res = await fetchBackendResponse(`/api/tools/${toolName}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: JSON_REQUEST_HEADERS,
     body: toJsonBody(args),
   });
   if (!res.ok) {
@@ -99,18 +133,17 @@ export async function getProfiles(): Promise<Record<string, unknown>> {
 }
 
 export async function getPredictionHistory(): Promise<unknown[]> {
-  const data = await fetchBackendJson<unknown[]>("/api/predictions");
-  return data;
+  return fetchBackendJson<unknown[]>("/api/predictions");
 }
 
 export async function gradePredictions(
   payload: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>("/api/predictions/grade", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: toJsonBody(payload),
-  });
+  return postBackendJson<Record<string, unknown>>(
+    "/api/predictions/grade",
+    payload,
+    "Failed to grade predictions"
+  );
 }
 
 export async function getChangelog(profile: string = "equity"): Promise<unknown[]> {
@@ -120,9 +153,11 @@ export async function getChangelog(profile: string = "equity"): Promise<unknown[
 export async function getProfile(
   profileType: "equity" | "index" = "equity"
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/profile?type=${profileType}`);
-  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`);
-  return res.json();
+  return fetchBackendJson<Record<string, unknown>>(
+    `/api/profile?type=${profileType}`,
+    undefined,
+    "Failed to fetch profile"
+  );
 }
 
 export async function saveProfile(
@@ -130,29 +165,29 @@ export async function saveProfile(
   updates: Record<string, unknown>,
   note?: string
 ): Promise<void> {
-  const res = await fetchBackendResponse(`/api/profile`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type: profileType, updates, note }),
-  });
-  if (!res.ok) throw new Error(`Failed to save profile: ${res.status}`);
+  await putBackendJson(
+    "/api/profile",
+    { type: profileType, updates, note },
+    "Failed to save profile"
+  );
 }
 
 export async function getPredictions(): Promise<unknown[]> {
-  const res = await fetchBackendResponse(`/api/predictions`);
-  if (!res.ok) throw new Error(`Failed to fetch predictions: ${res.status}`);
-  return res.json();
+  return fetchBackendJson<unknown[]>(
+    "/api/predictions",
+    undefined,
+    "Failed to fetch predictions"
+  );
 }
 
 export async function getTrackedPositions(
   status: "open" | "closed" | "all" = "open"
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/positions?status=${status}`);
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to fetch positions: ${res.status}`));
-  }
-  return data;
+  return fetchBackendJson<Record<string, unknown>>(
+    `/api/positions?status=${status}`,
+    undefined,
+    "Failed to fetch positions"
+  );
 }
 
 export async function getGroupedTrackedPositions(): Promise<Record<string, unknown>> {
@@ -162,58 +197,42 @@ export async function getGroupedTrackedPositions(): Promise<Record<string, unkno
 export async function createTrackedPosition(
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/positions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to create tracked position: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    "/api/positions",
+    payload,
+    "Failed to create tracked position"
+  );
 }
 
 export async function reviewTrackedPositions(
   payload: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/positions/review`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to review tracked positions: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    "/api/positions/review",
+    payload,
+    "Failed to review tracked positions"
+  );
 }
 
 export async function closeTrackedPosition(
   positionId: number,
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/positions/${positionId}/close`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to close tracked position: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    `/api/positions/${positionId}/close`,
+    payload,
+    "Failed to close tracked position"
+  );
 }
 
 export async function getSuggestedTrades(
   status: "open" | "closed" | "all" = "open"
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/suggested-trades?status=${status}`);
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to fetch suggested trades: ${res.status}`));
-  }
-  return data;
+  return fetchBackendJson<Record<string, unknown>>(
+    `/api/suggested-trades?status=${status}`,
+    undefined,
+    "Failed to fetch suggested trades"
+  );
 }
 
 export async function getGroupedSuggestedTrades(): Promise<Record<string, unknown>> {
@@ -223,60 +242,43 @@ export async function getGroupedSuggestedTrades(): Promise<Record<string, unknow
 export async function createSuggestedTrade(
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/suggested-trades`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to create suggested trade: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    "/api/suggested-trades",
+    payload,
+    "Failed to create suggested trade"
+  );
 }
 
 export async function reviewSuggestedTrades(
   payload: Record<string, unknown> = {}
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/suggested-trades/review`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to review suggested trades: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    "/api/suggested-trades/review",
+    payload,
+    "Failed to review suggested trades"
+  );
 }
 
 export async function closeSuggestedTrade(
   positionId: number,
   payload: Record<string, unknown>
 ): Promise<Record<string, unknown>> {
-  const res = await fetchBackendResponse(`/api/suggested-trades/${positionId}/close`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok || (data as Record<string, unknown>).error) {
-    throw new Error(String((data as Record<string, unknown>).error || `Failed to close suggested trade: ${res.status}`));
-  }
-  return data;
+  return postBackendJson<Record<string, unknown>>(
+    `/api/suggested-trades/${positionId}/close`,
+    payload,
+    "Failed to close suggested trade"
+  );
 }
 
 export async function runScan(
   payload: number | Record<string, unknown> = 5
 ): Promise<Record<string, unknown>> {
   const body = typeof payload === "number" ? { n_picks: payload } : payload;
-  const res = await fetchBackendResponse(`/api/scan`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Failed to run scan: ${res.status}`);
-  return res.json();
+  return postBackendJson<Record<string, unknown>>(
+    "/api/scan",
+    body,
+    "Failed to run scan"
+  );
 }
 
 export async function getLiveTradePolicy(
@@ -334,18 +336,17 @@ export async function getOptionsProfitStatus(): Promise<OptionsProfitStatus> {
 export async function runBacktest(
   params: Record<string, unknown>
 ): Promise<BacktestResult> {
-  const res = await fetchBackendResponse(`/api/backtest`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) throw new Error(`Failed to run backtest: ${res.status}`);
-  return res.json() as Promise<BacktestResult>;
+  return postBackendJson<BacktestResult>(
+    "/api/backtest",
+    params,
+    "Failed to run backtest"
+  );
 }
 
 export async function getSectorSentiments(): Promise<unknown[]> {
-  const res = await fetch(`${PYTHON_BACKEND_URL}/api/sectors`);
-  if (!res.ok)
-    throw new Error(`Failed to fetch sector data: ${res.status}`);
-  return res.json();
+  return fetchBackendJson<unknown[]>(
+    "/api/sectors",
+    undefined,
+    "Failed to fetch sector data"
+  );
 }

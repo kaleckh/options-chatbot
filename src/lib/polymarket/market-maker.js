@@ -17,7 +17,7 @@ const DEFAULT_MM_CONFIG = {
   orderSizeUsd: 25,              // $ size per side per market
   halfSpreadOverride: null,      // Override spread (null = use market spread / 2)
   minHalfSpread: 0.005,          // Minimum 0.5 cent each side
-  maxHalfSpread: 0.05,           // Maximum 5 cent each side
+  maxHalfSpread: 0.03,           // Maximum 3 cent each side (tighter = fills faster)
   inventorySkewFactor: 0.3,      // How much to skew price based on inventory
   maxInventoryUsd: 100,          // Max inventory per side before stopping that side
   refreshIntervalMs: 30000,      // Quote refresh interval
@@ -56,6 +56,15 @@ class MarketMaker {
     }
 
     this.cycleCount++;
+
+    // Cancel stale orders before posting fresh quotes
+    try {
+      await client.cancelAll();
+      this.risk.openOrderCount = 0;
+    } catch (err) {
+      console.log("[MM] Cancel all failed: " + err.message.slice(0, 80));
+    }
+
     const results = [];
 
     for (const [tokenId, market] of this.activeMarkets) {
@@ -77,32 +86,24 @@ class MarketMaker {
   }
 
   async _quoteMarket(client, tokenId, market) {
-    // Get current orderbook for fresh mid price
     let midPrice = market.midPrice;
-    try {
-      const book = await fetchMarketOrderBook(tokenId);
-      if (book.bids?.length > 0 && book.asks?.length > 0) {
-        const bestBid = Number(book.bids[0].price);
-        const bestAsk = Number(book.asks[0].price);
-        if (bestBid > 0 && bestAsk > 0) {
-          midPrice = (bestBid + bestAsk) / 2;
-        }
-      }
-    } catch {
-      // Fall back to stored midPrice
-    }
 
-    // Calculate spread
-    let halfSpread = this.config.halfSpreadOverride || (market.spread / 2);
-    halfSpread = Math.max(this.config.minHalfSpread, Math.min(this.config.maxHalfSpread, halfSpread));
+    // Use the scanner's midPrice (from outcomePrices) as the reference.
+    // The raw CLOB orderbook for YES tokens can be misleading on extreme-priced
+    // markets. The scanner midPrice is more reliable.
+    const tick = 0.01;
+    const halfSpread = Math.max(this.config.minHalfSpread, Math.min(this.config.maxHalfSpread, market.spread / 2));
 
-    // Inventory skew: if we're long, move bid down (less eager to buy more)
+    // Inventory skew
     const inv = this.inventory.get(tokenId) || { yesShares: 0, noShares: 0 };
     const netInventoryUsd = (inv.yesShares - inv.noShares) * midPrice;
-    const skew = (netInventoryUsd / this.config.maxInventoryUsd) * this.config.inventorySkewFactor * halfSpread;
+    const skew = (netInventoryUsd / this.config.maxInventoryUsd) * this.config.inventorySkewFactor;
 
-    const bidPrice = Math.max(0.01, Math.round((midPrice - halfSpread - skew) * 100) / 100);
-    const askPrice = Math.min(0.99, Math.round((midPrice + halfSpread - skew) * 100) / 100);
+    let bidPrice = midPrice - halfSpread - skew;
+    let askPrice = midPrice + halfSpread - skew;
+
+    bidPrice = Math.max(0.01, Math.round(bidPrice * 100) / 100);
+    askPrice = Math.min(0.99, Math.round(askPrice * 100) / 100);
     const orderSize = Math.round(this.config.orderSizeUsd / midPrice);
 
     if (orderSize < 1) return { tokenId, status: "skip", reason: "order_size_too_small" };
@@ -155,7 +156,7 @@ class MarketMaker {
       midPrice,
       bidPrice,
       askPrice,
-      halfSpread,
+      spread: askPrice - bidPrice,
       skew,
       netInventoryUsd,
       actions,

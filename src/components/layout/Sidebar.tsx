@@ -87,7 +87,7 @@ export default function Sidebar({
           <div className="flex items-center gap-1.5 mt-1.5">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-green shadow-[0_0_6px_var(--green)]" />
             <span className="text-2xs text-text-2 tracking-wide uppercase font-medium">
-              Options picks plus BTC-guardrailed crypto research
+              Options picks and replay-backed research
             </span>
           </div>
         </div>
@@ -135,7 +135,7 @@ export default function Sidebar({
                 Refresh the scanner, review the playbook, and only act when the risk settings and gate checks line up.
               </div>
               <div className="text-xs text-text-3 mt-2 leading-relaxed">
-                Keep the options scanner lane separate from the BTC profitability pilot so the guardrails stay easy to audit.
+                Keep the options scanner lane separate from exploratory tooling so the guardrails stay easy to audit.
               </div>
             </div>
 
@@ -183,7 +183,7 @@ export default function Sidebar({
                 Current Product Scope
               </div>
               <div className="text-xs text-text-2 leading-relaxed">
-                Options picks stay in the scanner workflow. Crypto day trading stays BTC-first, with ETH phase-gated and SOL paper-only until explicitly unlocked.
+                Options picks stay in the scanner workflow. Research tooling supports validation, replay, and policy review around the options product.
               </div>
             </div>
           </div>
@@ -196,7 +196,7 @@ export default function Sidebar({
                 Research Lab
               </div>
               <div className="text-sm text-text-1 leading-relaxed">
-                Use this area for replay work, validation, and the BTC profitability pilot.
+                Use this area for replay work, validation, and policy review around the options system.
               </div>
               <div className="text-xs text-text-3 mt-2 leading-relaxed">
                 If we prototype anything new, keep it behind the existing guardrails instead of stretching the current scanner beyond its tested lane.
@@ -208,7 +208,7 @@ export default function Sidebar({
                 Current Scope
               </div>
               <div className="text-xs text-text-2 leading-relaxed">
-                Optimizer, day-trading lab, and replay diagnostics stay here as supporting tools behind the picks workflow.
+                Optimizer and replay diagnostics stay here as supporting tools behind the picks workflow.
               </div>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function Sidebar({
 
       <div className="px-4 py-3 border-t border-border">
         <p className="text-2xs text-text-3 leading-relaxed">
-          Not financial advice. Options and crypto trading involve substantial risk of loss. Market data may be delayed by source.
+          Not financial advice. Options trading involves substantial risk of loss. Market data may be delayed by source.
         </p>
       </div>
     </aside>

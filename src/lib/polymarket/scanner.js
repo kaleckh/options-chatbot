@@ -12,9 +12,9 @@ const DEFAULT_CONFIG = {
   minEventLiquidity: 20000,
   maxTradeableSpread: 0.10,
   minDeviationPct: 0.03,
-  mmMinSpread: 0.02,
-  mmMinLiquidity: 10000,
-  mmMinVolume24h: 5000,
+  mmMinSpread: 0.01,
+  mmMinLiquidity: 20000,
+  mmMinVolume24h: 50000,
 };
 
 function parseOutcomePrices(market) {
@@ -155,7 +155,9 @@ async function scan(options = {}) {
   const mmOpps = allMarkets
     .map((m) => analyzeMarketMaking(m, config))
     .filter(Boolean)
-    .sort((a, b) => b.estDailyProfit - a.estDailyProfit);
+    // Prefer markets near 50/50 (more two-sided flow) with high volume
+    .filter((m) => m.midPrice >= 0.15 && m.midPrice <= 0.85)
+    .sort((a, b) => b.volume24h - a.volume24h);
 
   return {
     scannedAt: new Date().toISOString(),

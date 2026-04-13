@@ -25,9 +25,13 @@
     "target_date": "2026-03-25",
     "confidence": 6,
     "reasoning": "HV rank at historic low (0.3%) \u2014 coiled spring. Broader market in downtrend argues for downside resolution. TSLA rejected $400 today, closed -1.61% near session lows. High-beta name gets hit hardest in risk-off moves.",
-    "outcome": null,
+    "outcome": "directional",
     "current_stock_px": 380.85,
-    "current_stock_pct": -3.05
+    "current_stock_pct": -3.05,
+    "exit_price": 385.95,
+    "actual_move_pct": -1.76,
+    "graded_date": "2026-04-09",
+    "exit_reason": "expired"
   },
   {
     "id": 3,
@@ -39,9 +43,13 @@
     "target_date": "2026-03-25",
     "confidence": 5,
     "reasoning": "Tech sector under sustained pressure. NVDA consolidating below recent highs, down -0.87% today. IV fairly priced (IV \u2248 HV30) \u2014 no bullish repricing expected. Semis tend to lag in broader market downturns.",
-    "outcome": null,
+    "outcome": "directional",
     "current_stock_px": 175.64,
-    "current_stock_pct": -2.61
+    "current_stock_pct": -2.61,
+    "exit_price": 178.68,
+    "actual_move_pct": -0.93,
+    "graded_date": "2026-04-09",
+    "exit_reason": "expired"
   },
   {
     "id": 4,
@@ -725,7 +733,7 @@
     "time_exit_pct": 50.0,
     "time_exit_day": 5,
     "type": "daily_scan",
-    "outcome": null,
+    "outcome": "miss",
     "asset_class": "equity",
     "sector": "Consumer Cyclical",
     "pick_status": "new",
@@ -735,7 +743,30 @@
     "current_stock_px": 380.85,
     "current_stock_pct": 0.14,
     "current_option_px": 5.62,
-    "current_pnl_pct": -5.1
+    "current_pnl_pct": -5.1,
+    "exit_price": 385.95,
+    "actual_move_pct": 1.49,
+    "graded_date": "2026-04-09",
+    "exit_reason": "sl_hit",
+    "option_gain_pct": -55.0,
+    "daily_option_pnl": [
+      {
+        "date": "2026-03-24",
+        "stock_px": 383.03,
+        "stock_chg": 0.72,
+        "opt_px": 4.54,
+        "day_pct": -23.4,
+        "cum_pct": -23.4
+      },
+      {
+        "date": "2026-03-25",
+        "stock_px": 385.95,
+        "stock_chg": 1.49,
+        "opt_px": 3.1,
+        "day_pct": -31.7,
+        "cum_pct": -47.7
+      }
+    ]
   },
   {
     "ticker": "QQQ",
@@ -778,7 +809,7 @@
     "time_exit_pct": 50.0,
     "time_exit_day": 5,
     "type": "daily_scan",
-    "outcome": null,
+    "outcome": "miss",
     "asset_class": "index",
     "sector": null,
     "pick_status": "new",
@@ -788,7 +819,30 @@
     "current_stock_px": 588.0,
     "current_stock_pct": 1.02,
     "current_option_px": 5.77,
-    "current_pnl_pct": 1.0
+    "current_pnl_pct": 1.0,
+    "exit_price": 587.82,
+    "actual_move_pct": 0.99,
+    "graded_date": "2026-04-09",
+    "exit_reason": "sl_hit",
+    "option_gain_pct": -45.0,
+    "daily_option_pnl": [
+      {
+        "date": "2026-03-24",
+        "stock_px": 583.98,
+        "stock_chg": 0.33,
+        "opt_px": 4.59,
+        "day_pct": -19.7,
+        "cum_pct": -19.7
+      },
+      {
+        "date": "2026-03-25",
+        "stock_px": 587.82,
+        "stock_chg": 0.99,
+        "opt_px": 3.14,
+        "day_pct": -31.5,
+        "cum_pct": -45.0
+      }
+    ]
   },
   {
     "ticker": "SPY",
@@ -832,7 +886,7 @@
     "time_exit_pct": 50.0,
     "time_exit_day": 5,
     "type": "daily_scan",
-    "outcome": null,
+    "outcome": "miss",
     "asset_class": "index",
     "sector": null,
     "pick_status": "new",
@@ -842,6 +896,109 @@
     "current_stock_px": 655.38,
     "current_stock_pct": 1.05,
     "current_option_px": 6.32,
-    "current_pnl_pct": 6.8
+    "current_pnl_pct": 6.8,
+    "exit_price": 653.18,
+    "actual_move_pct": 0.71,
+    "graded_date": "2026-04-09",
+    "exit_reason": "sl_hit",
+    "option_gain_pct": -45.0,
+    "daily_option_pnl": [
+      {
+        "date": "2026-03-24",
+        "stock_px": 653.18,
+        "stock_chg": 0.71,
+        "opt_px": 3.94,
+        "day_pct": -33.4,
+        "cum_pct": -33.4
+      },
+      {
+        "date": "2026-03-25",
+        "stock_px": 656.82,
+        "stock_chg": 1.27,
+        "opt_px": 3.25,
+        "day_pct": -17.4,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-03-26",
+        "stock_px": 645.09,
+        "stock_chg": -0.54,
+        "opt_px": 5.18,
+        "day_pct": 59.4,
+        "cum_pct": -12.4
+      },
+      {
+        "date": "2026-03-27",
+        "stock_px": 634.09,
+        "stock_chg": -2.23,
+        "opt_px": 7.89,
+        "day_pct": 52.2,
+        "cum_pct": 33.4
+      },
+      {
+        "date": "2026-03-30",
+        "stock_px": 631.97,
+        "stock_chg": -2.56,
+        "opt_px": 7.94,
+        "day_pct": 0.6,
+        "cum_pct": 34.2
+      },
+      {
+        "date": "2026-03-31",
+        "stock_px": 650.34,
+        "stock_chg": 0.27,
+        "opt_px": 3.25,
+        "day_pct": -59.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-01",
+        "stock_px": 655.24,
+        "stock_chg": 1.03,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-02",
+        "stock_px": 655.83,
+        "stock_chg": 1.12,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-06",
+        "stock_px": 658.93,
+        "stock_chg": 1.6,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-07",
+        "stock_px": 659.22,
+        "stock_chg": 1.64,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-08",
+        "stock_px": 676.01,
+        "stock_chg": 4.23,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      },
+      {
+        "date": "2026-04-09",
+        "stock_px": 680.61,
+        "stock_chg": 4.94,
+        "opt_px": 3.25,
+        "day_pct": 0.0,
+        "cum_pct": -45.0
+      }
+    ]
   }
 ]

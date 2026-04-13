@@ -30,6 +30,7 @@ import type {
 const INDEX_TICKERS = new Set(["QQQ", "SPY", "IWM", "DIA", "XLK"]);
 const LEGACY_PREDICTION_TABS = new Set(["pending", "graded", "breakdown", "sim", "sectors"]);
 const REQUEST_TIMEOUT_MS = 30000;
+const POSITION_SYNC_INTERVAL_MS = 60000;
 
 function buildTimeoutError(label: string, timeoutMs: number): Error {
   return new Error(`${label} timed out after ${Math.round(timeoutMs / 1000)}s.`);
@@ -185,15 +186,14 @@ export default function PredictionsView() {
   const [takeNotes, setTakeNotes] = useState("");
   const [takingTrade, setTakingTrade] = useState(false);
   const [savingSuggestedTrade, setSavingSuggestedTrade] = useState(false);
+  const [showLegacyTabs, setShowLegacyTabs] = useState(false);
   const [positionsView, setPositionsView] = useState<"open" | "closed">("open");
-  const [reviewingAll, setReviewingAll] = useState(false);
   const [reviewingIds, setReviewingIds] = useState<number[]>([]);
   const [closingPosition, setClosingPosition] = useState<TrackedPosition | null>(null);
   const [exitPrice, setExitPrice] = useState("");
   const [closeNotes, setCloseNotes] = useState("");
   const [closingId, setClosingId] = useState<number | null>(null);
   const [suggestedTradesView, setSuggestedTradesView] = useState<"open" | "closed">("open");
-  const [reviewingAllSuggestedTrades, setReviewingAllSuggestedTrades] = useState(false);
   const [reviewingSuggestedTradeIds, setReviewingSuggestedTradeIds] = useState<number[]>([]);
   const [closingSuggestedTrade, setClosingSuggestedTrade] = useState<SuggestedTrade | null>(null);
   const [suggestedExitPrice, setSuggestedExitPrice] = useState("");
@@ -201,6 +201,46 @@ export default function PredictionsView() {
   const [closingSuggestedTradeId, setClosingSuggestedTradeId] = useState<number | null>(null);
   const toast = useToast();
   const { guard } = useSubmitGuard();
+
+  const mergeTrackedPosition = useCallback((position: TrackedPosition) => {
+    setOpenPositions((prev) =>
+      position.status === "open"
+        ? [position, ...prev.filter((item) => item.id !== position.id)]
+        : prev.filter((item) => item.id !== position.id)
+    );
+    setClosedPositions((prev) =>
+      position.status === "closed"
+        ? [position, ...prev.filter((item) => item.id !== position.id)]
+        : prev.filter((item) => item.id !== position.id)
+    );
+  }, []);
+
+  const mergeSuggestedTrade = useCallback((trade: SuggestedTrade) => {
+    setOpenSuggestedTrades((prev) =>
+      trade.status === "open"
+        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
+        : prev.filter((item) => item.id !== trade.id)
+    );
+    setClosedSuggestedTrades((prev) =>
+      trade.status === "closed"
+        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
+        : prev.filter((item) => item.id !== trade.id)
+    );
+  }, []);
+
+  const applyReviewedPositions = useCallback((reviewed: TrackedPosition[]) => {
+    const reviewedById = new globalThis.Map<number, TrackedPosition>(
+      reviewed.map((position) => [position.id, position])
+    );
+    setOpenPositions((prev) => prev.map((position) => reviewedById.get(position.id) ?? position));
+  }, []);
+
+  const applyReviewedSuggestedTrades = useCallback((reviewed: SuggestedTrade[]) => {
+    const reviewedById = new globalThis.Map<number, SuggestedTrade>(
+      reviewed.map((trade) => [trade.id, trade])
+    );
+    setOpenSuggestedTrades((prev) => prev.map((trade) => reviewedById.get(trade.id) ?? trade));
+  }, []);
 
   const fetchPredictionsData = useCallback(async ({
     includePredictions = true,
@@ -328,10 +368,26 @@ export default function PredictionsView() {
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to load tracked positions");
       }
-      setOpenPositions((data.open || []) as TrackedPosition[]);
+      const nextOpenPositions = (data.open || []) as TrackedPosition[];
+      setOpenPositions(nextOpenPositions);
       setClosedPositions((data.closed || []) as TrackedPosition[]);
       setPositionsLoaded(true);
       setPositionsError(null);
+      if (nextOpenPositions.length > 0) {
+        const reviewRes = await fetchWithTimeout("/api/positions/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position_ids: nextOpenPositions.map((position) => position.id) }),
+        }, "Tracked position review");
+        const reviewData = await reviewRes.json();
+        if (!reviewRes.ok || reviewData.error) {
+          throw new Error(reviewData.error || "Failed to review tracked positions");
+        }
+        applyReviewedPositions((reviewData.positions || []) as TrackedPosition[]);
+      }
+      if (showToast) {
+        toast.success(nextOpenPositions.length > 0 ? "Tracked positions refreshed and repriced." : "Tracked positions refreshed.");
+      }
     } catch (err) {
       console.error("Failed to load tracked positions:", err);
       const message = err instanceof Error ? err.message : "Failed to load tracked positions.";
@@ -344,7 +400,7 @@ export default function PredictionsView() {
     } finally {
       setPositionsLoading(false);
     }
-  }, [toast]);
+  }, [applyReviewedPositions, toast]);
 
   const fetchSuggestedTrades = useCallback(async (showToast = false) => {
     setSuggestedTradesLoading(true);
@@ -354,10 +410,26 @@ export default function PredictionsView() {
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to load suggested trades");
       }
-      setOpenSuggestedTrades((data.open || []) as SuggestedTrade[]);
+      const nextOpenTrades = (data.open || []) as SuggestedTrade[];
+      setOpenSuggestedTrades(nextOpenTrades);
       setClosedSuggestedTrades((data.closed || []) as SuggestedTrade[]);
       setSuggestedTradesLoaded(true);
       setSuggestedTradesError(null);
+      if (nextOpenTrades.length > 0) {
+        const reviewRes = await fetchWithTimeout("/api/suggested-trades/review", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ position_ids: nextOpenTrades.map((trade) => trade.id) }),
+        }, "Suggested trade review");
+        const reviewData = await reviewRes.json();
+        if (!reviewRes.ok || reviewData.error) {
+          throw new Error(reviewData.error || "Failed to review suggested trades");
+        }
+        applyReviewedSuggestedTrades((reviewData.trades || []) as SuggestedTrade[]);
+      }
+      if (showToast) {
+        toast.success(nextOpenTrades.length > 0 ? "Suggested trades refreshed and repriced." : "Suggested trades refreshed.");
+      }
     } catch (err) {
       console.error("Failed to load suggested trades:", err);
       const message = err instanceof Error ? err.message : "Failed to load suggested trades.";
@@ -370,7 +442,7 @@ export default function PredictionsView() {
     } finally {
       setSuggestedTradesLoading(false);
     }
-  }, [toast]);
+  }, [applyReviewedSuggestedTrades, toast]);
 
   useEffect(() => {
     let mounted = true;
@@ -408,45 +480,31 @@ export default function PredictionsView() {
     void fetchSuggestedTrades(false);
   }, [activeSubTab, fetchSuggestedTrades, suggestedTradesLoaded]);
 
-  const mergeTrackedPosition = useCallback((position: TrackedPosition) => {
-    setOpenPositions((prev) =>
-      position.status === "open"
-        ? [position, ...prev.filter((item) => item.id !== position.id)]
-        : prev.filter((item) => item.id !== position.id)
-    );
-    setClosedPositions((prev) =>
-      position.status === "closed"
-        ? [position, ...prev.filter((item) => item.id !== position.id)]
-        : prev.filter((item) => item.id !== position.id)
-    );
-  }, []);
+  useEffect(() => {
+    if (!showLegacyTabs && LEGACY_PREDICTION_TABS.has(activeSubTab)) {
+      setActiveSubTab("scanner");
+    }
+  }, [activeSubTab, showLegacyTabs]);
 
-  const mergeSuggestedTrade = useCallback((trade: SuggestedTrade) => {
-    setOpenSuggestedTrades((prev) =>
-      trade.status === "open"
-        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
-        : prev.filter((item) => item.id !== trade.id)
-    );
-    setClosedSuggestedTrades((prev) =>
-      trade.status === "closed"
-        ? [trade, ...prev.filter((item) => item.id !== trade.id)]
-        : prev.filter((item) => item.id !== trade.id)
-    );
-  }, []);
+  useEffect(() => {
+    if (activeSubTab !== "positions") return;
+    const intervalId = window.setInterval(() => {
+      void fetchPositions(false);
+    }, POSITION_SYNC_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeSubTab, fetchPositions]);
 
-  const applyReviewedPositions = useCallback((reviewed: TrackedPosition[]) => {
-    const reviewedById = new globalThis.Map<number, TrackedPosition>(
-      reviewed.map((position) => [position.id, position])
-    );
-    setOpenPositions((prev) => prev.map((position) => reviewedById.get(position.id) ?? position));
-  }, []);
-
-  const applyReviewedSuggestedTrades = useCallback((reviewed: SuggestedTrade[]) => {
-    const reviewedById = new globalThis.Map<number, SuggestedTrade>(
-      reviewed.map((trade) => [trade.id, trade])
-    );
-    setOpenSuggestedTrades((prev) => prev.map((trade) => reviewedById.get(trade.id) ?? trade));
-  }, []);
+  useEffect(() => {
+    if (activeSubTab !== "suggestions") return;
+    const intervalId = window.setInterval(() => {
+      void fetchSuggestedTrades(false);
+    }, POSITION_SYNC_INTERVAL_MS);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [activeSubTab, fetchSuggestedTrades]);
 
   const openTakeTrade = useCallback((pick: ScanPick) => {
     setSelectedPick(pick);
@@ -540,37 +598,14 @@ export default function PredictionsView() {
     });
   };
 
-  const reviewAllPositions = async () => {
-    await guard(async () => {
-      setReviewingAll(true);
-      try {
-        const res = await fetch("/api/positions/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          throw new Error(data.error || "Failed to review tracked positions");
-        }
-        applyReviewedPositions((data.positions || []) as TrackedPosition[]);
-        toast.success("Open positions reviewed.");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to review tracked positions.");
-      } finally {
-        setReviewingAll(false);
-      }
-    });
-  };
-
   const reviewSinglePosition = async (positionId: number) => {
     setReviewingIds((prev) => [...prev, positionId]);
     try {
-      const res = await fetch("/api/positions/review", {
+      const res = await fetchWithTimeout("/api/positions/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ position_ids: [positionId] }),
-      });
+      }, "Tracked position review");
       const data = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to review position");
@@ -584,37 +619,14 @@ export default function PredictionsView() {
     }
   };
 
-  const reviewAllSuggestedTrades = async () => {
-    await guard(async () => {
-      setReviewingAllSuggestedTrades(true);
-      try {
-        const res = await fetch("/api/suggested-trades/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-        const data = await res.json();
-        if (!res.ok || data.error) {
-          throw new Error(data.error || "Failed to review suggested trades");
-        }
-        applyReviewedSuggestedTrades((data.trades || []) as SuggestedTrade[]);
-        toast.success("Suggested trades reviewed.");
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to review suggested trades.");
-      } finally {
-        setReviewingAllSuggestedTrades(false);
-      }
-    });
-  };
-
   const reviewSingleSuggestedTrade = async (positionId: number) => {
     setReviewingSuggestedTradeIds((prev) => [...prev, positionId]);
     try {
-      const res = await fetch("/api/suggested-trades/review", {
+      const res = await fetchWithTimeout("/api/suggested-trades/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ position_ids: [positionId] }),
-      });
+      }, "Suggested trade review");
       const data = await res.json();
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to review suggested trade");
@@ -749,16 +761,19 @@ export default function PredictionsView() {
       : "\u2014";
   }, [graded]);
 
-  const SUB_TABS = [
+  const PRIMARY_SUB_TABS = [
     { id: "scanner", label: `Scanner (${scanPicks.length})`, icon: Search },
     { id: "positions", label: `Tracked Positions (${openPositions.length})`, icon: BriefcaseBusiness },
     { id: "suggestions", label: `Suggested Trades (${openSuggestedTrades.length})`, icon: Clipboard },
+  ] as const;
+  const LEGACY_SUB_TABS = [
     { id: "pending", label: `Legacy Active (${pending.length})`, icon: Timer },
     { id: "graded", label: `Legacy Graded (${graded.length})`, icon: CheckCircle },
     { id: "breakdown", label: "Legacy Breakdown", icon: BarChart3 },
     { id: "sim", label: "Legacy Portfolio Sim", icon: DollarSign },
     { id: "sectors", label: "Legacy Sectors", icon: Map },
   ] as const;
+  const SUB_TABS = showLegacyTabs ? [...PRIMARY_SUB_TABS, ...LEGACY_SUB_TABS] : PRIMARY_SUB_TABS;
 
   if (loading) {
     return (
@@ -771,7 +786,7 @@ export default function PredictionsView() {
 
   return (
     <div className="px-4 md:px-8 py-6 max-w-7xl mx-auto">
-      {["pending", "graded", "breakdown", "sim", "sectors"].includes(activeSubTab) && (
+      {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
         <div className="space-y-6 mb-6">
           <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
             These legacy prediction analytics are archival scanner research, not the current supervised tracked-position workflow.
@@ -798,7 +813,7 @@ export default function PredictionsView() {
         </div>
       )}
 
-      {graded.length > 0 && ["pending", "graded", "breakdown", "sim", "sectors"].includes(activeSubTab) && (
+      {graded.length > 0 && LEGACY_PREDICTION_TABS.has(activeSubTab) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {["index", "equity"].map((assetClass) => {
             const subset = graded.filter((p) =>
@@ -860,7 +875,14 @@ export default function PredictionsView() {
           );
         })}
         <div className="flex-1" />
-        {["pending", "graded", "breakdown", "sim", "sectors"].includes(activeSubTab) && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowLegacyTabs((prev) => !prev)}
+        >
+          {showLegacyTabs ? "Hide Legacy" : "Show Legacy Research"}
+        </Button>
+        {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
           <Button
             variant="secondary"
             size="sm"
@@ -944,7 +966,6 @@ export default function PredictionsView() {
             loading={suggestedTradesLoading}
             error={suggestedTradesError}
             view={suggestedTradesView}
-            reviewingAll={reviewingAllSuggestedTrades}
             reviewingIds={reviewingSuggestedTradeIds}
             closingTrade={closingSuggestedTrade}
             exitPrice={suggestedExitPrice}
@@ -952,7 +973,6 @@ export default function PredictionsView() {
             closingId={closingSuggestedTradeId}
             onViewChange={setSuggestedTradesView}
             onRefresh={() => void fetchSuggestedTrades(true)}
-            onReviewAll={() => void reviewAllSuggestedTrades()}
             onReviewTrade={(positionId) => void reviewSingleSuggestedTrade(positionId)}
             onOpenClose={openCloseSuggestedTradeForm}
             onCancelClose={cancelCloseSuggestedTradeForm}
@@ -968,7 +988,6 @@ export default function PredictionsView() {
             loading={positionsLoading}
             error={positionsError}
             view={positionsView}
-            reviewingAll={reviewingAll}
             reviewingIds={reviewingIds}
             closingPosition={closingPosition}
             exitPrice={exitPrice}
@@ -976,7 +995,6 @@ export default function PredictionsView() {
             closingId={closingId}
             onViewChange={setPositionsView}
             onRefresh={() => void fetchPositions(true)}
-            onReviewAll={() => void reviewAllPositions()}
             onReviewPosition={(positionId) => void reviewSinglePosition(positionId)}
             onOpenClose={openCloseForm}
             onCancelClose={cancelCloseForm}
@@ -1608,7 +1626,6 @@ function SuggestedTradesTab({
   loading,
   error,
   view,
-  reviewingAll,
   reviewingIds,
   closingTrade,
   exitPrice,
@@ -1616,7 +1633,6 @@ function SuggestedTradesTab({
   closingId,
   onViewChange,
   onRefresh,
-  onReviewAll,
   onReviewTrade,
   onOpenClose,
   onCancelClose,
@@ -1629,7 +1645,6 @@ function SuggestedTradesTab({
   loading: boolean;
   error: string | null;
   view: "open" | "closed";
-  reviewingAll: boolean;
   reviewingIds: number[];
   closingTrade: SuggestedTrade | null;
   exitPrice: string;
@@ -1637,7 +1652,6 @@ function SuggestedTradesTab({
   closingId: number | null;
   onViewChange: (value: "open" | "closed") => void;
   onRefresh: () => void;
-  onReviewAll: () => void;
   onReviewTrade: (positionId: number) => void;
   onOpenClose: (trade: SuggestedTrade) => void;
   onCancelClose: () => void;
@@ -1710,7 +1724,7 @@ function SuggestedTradesTab({
         <div>
           <div className="section-header mt-0">Suggested Trades (Hypothetical)</div>
           <p className="text-xs text-text-3">
-            Manual paper-tracked ideas from the scanner. These are hypothetical trades and stay separate from positions you actually took.
+            Manual paper-tracked ideas from the scanner. Open trades reprice automatically here, and stay separate from positions you actually took.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1737,16 +1751,6 @@ function SuggestedTradesTab({
           >
             Refresh
           </Button>
-          {view === "open" && (
-            <Button
-              size="sm"
-              variant="primary"
-              loading={reviewingAll}
-              onClick={onReviewAll}
-            >
-              Review All
-            </Button>
-          )}
         </div>
       </div>
 
@@ -1833,7 +1837,6 @@ function TrackedPositionsTab({
   loading,
   error,
   view,
-  reviewingAll,
   reviewingIds,
   closingPosition,
   exitPrice,
@@ -1841,7 +1844,6 @@ function TrackedPositionsTab({
   closingId,
   onViewChange,
   onRefresh,
-  onReviewAll,
   onReviewPosition,
   onOpenClose,
   onCancelClose,
@@ -1854,7 +1856,6 @@ function TrackedPositionsTab({
   loading: boolean;
   error: string | null;
   view: "open" | "closed";
-  reviewingAll: boolean;
   reviewingIds: number[];
   closingPosition: TrackedPosition | null;
   exitPrice: string;
@@ -1862,7 +1863,6 @@ function TrackedPositionsTab({
   closingId: number | null;
   onViewChange: (value: "open" | "closed") => void;
   onRefresh: () => void;
-  onReviewAll: () => void;
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
   onCancelClose: () => void;
@@ -1927,7 +1927,7 @@ function TrackedPositionsTab({
         <div>
           <div className="section-header mt-0">Tracked Options Positions</div>
           <p className="text-xs text-text-3">
-            These are the positions you actually took. Reviews are on-demand, keep exact contract identity when available, and return only HOLD or SELL.
+            These are the positions you actually took. Open positions refresh profit and HOLD/SELL guidance automatically while keeping exact contract identity when available.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1954,16 +1954,6 @@ function TrackedPositionsTab({
           >
             Refresh
           </Button>
-          {view === "open" && (
-            <Button
-              size="sm"
-              variant="primary"
-              loading={reviewingAll}
-              onClick={onReviewAll}
-            >
-              Review All
-            </Button>
-          )}
         </div>
       </div>
 

@@ -94,15 +94,15 @@ class Orchestrator {
 
     // Step 3: Update market-maker targets (if enabled)
     if (this.config.mmEnabled && this.config.mode !== "scan") {
+      // Refresh market selection each cycle — pick top markets by volume
       const topMM = scanResult.marketMaking.items
         .filter((m) => m.volume24h >= this.config.mmMinVolume24h)
         .slice(0, this.config.mmMaxMarkets);
 
-      // Add new markets
+      // Clear old markets and add fresh ones
+      this.mm.activeMarkets.clear();
       for (const opp of topMM) {
-        if (!this.mm.activeMarkets.has(opp.yesTokenId)) {
-          this.mm.addMarket(opp);
-        }
+        this.mm.addMarket(opp);
       }
 
       // Run MM cycle

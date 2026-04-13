@@ -9,131 +9,86 @@
 - If asked about a design decision, read the implementation before claiming what it does.
 - Getting it wrong confidently is worse than saying "let me check."
 
-## Options Endpoints That Matter Most
+## Runtime Layers
 
-### Scanner and replay truth
+There are three runtime layers in the active browser app:
+
+1. client components under `src/components/*`
+2. same-origin Next route handlers under `src/app/api/*`
+3. FastAPI handlers in `python-backend/main.py`
+
+`src/lib/python-bridge.ts` is the contract layer between the Next route handlers and FastAPI.
+
+## Active Browser-Facing Route Groups
+
+### Scan And Replay
 
 - `POST /api/scan`
-  - runs the live options scan
-  - can apply replay-backed focus or broader all-qualifying mode
-  - can apply playbook guardrails
-  - returns policy decisions, guardrail decisions, and size guidance
+  - live options scan
+- `POST /api/backtest`
+  - run replay
+- `GET /api/backtest/summary`
+  - combined replay artifact bundle
 - `GET /api/backtest/live-policy`
-  - returns the current replay-backed policy bundle
-  - carries source metadata including replay run time, lookback, pricing lane, playbook, and promotion status
-- `GET /api/backtest/exit-audit`
-  - returns the playbook cohort audit
-  - carries source metadata and current promotion status
+  - replay-backed policy
+- `GET /api/backtest/report`
+  - grouped replay report
 - `GET /api/backtest/metric-truth`
-  - returns score calibration and metric-health diagnostics
-- `POST /api/backtest/experiments`
-  - returns the ranked experiment matrix
+  - truth or calibration report
+- `GET /api/backtest/comparison`
+  - synthetic vs imported comparison
+- `GET /api/backtest/forward-evidence`
+  - forward evidence health
+- `GET /api/backtest/exit-audit`
+  - playbook exit audit
 
-### Tracked positions
+### Profile And Status
 
-- `POST /api/positions`
-  - creates a tracked position from a scan pick and real fill data
-  - persists exact contract identity when the scan pick includes it
+- `GET /api/profile`
+- `PUT /api/profile`
+- `GET /api/changelog`
+- `GET /api/risk-settings`
+- `GET /api/options-profit/status`
+
+### Predictions
+
+- `GET /api/predictions`
+- `GET /api/predictions/history`
+- `POST /api/predictions/grade`
+
+### Tracked Positions
+
 - `GET /api/positions`
-  - lists tracked positions
+- `POST /api/positions`
 - `POST /api/positions/review`
-  - reviews open tracked positions and returns `HOLD` or `SELL`
-  - exact contract matching comes first
-  - nearest-strike substitution is disabled for tracked positions
-  - unpriceable contracts return warnings instead of synthetic substitutes
 - `POST /api/positions/{id}/close`
-  - closes a tracked position
-  - rejects invalid exit prices
-  - rejects already-closed positions clearly
 
-### Suggested trades
+### Suggested Trades
 
-- `POST /api/suggested-trades`
-  - saves a hypothetical scanner idea
 - `GET /api/suggested-trades`
-  - lists hypothetical trades
+- `POST /api/suggested-trades`
 - `POST /api/suggested-trades/review`
-  - reviews hypothetical trades
 - `POST /api/suggested-trades/{id}/close`
-  - closes a hypothetical trade
 
-Suggested trades stay separate from tracked positions by design.
+### Support
 
-## Day-Trading Endpoints
+- `POST /api/tools/{name}`
+- `GET /api/sectors`
 
-The day-trading lab is read-heavy with a single validation write surface.
+## Snapshot Warning
 
-- `GET /api/day-trading?market=crypto|equities_legacy`
-  - returns the current snapshot for the selected market
-  - crypto snapshots now include the operating plan, milestone state, today-gate state, journal schema, and execution summary
-- `POST /api/day-trading?market=crypto|equities_legacy`
-  - runs a validation cycle and refreshes the snapshot artifacts
-- `GET /api/day-trading/watchlist?market=crypto|equities_legacy`
-  - returns the current watchlist
-  - crypto watchlist items now expose regime state, tradeability, blocker reasons, and approval-slot visibility
-
-The BTC pilot approval and journal flows remain CLI-first in v1:
-- `npm run daytrading:preflight`
-- `npm run daytrading:journal:add`
-
-There is intentionally no browser write route for preflight tickets or pilot journal entries yet.
-
-## Frontend Surfaces
-
-The main supervised options workflow lives in:
-- `src/components/predictions/PredictionsView.tsx`
-
-The day-trading surface lives in:
-- `src/components/strategy/DayTradingLab.tsx`
-
-The main application shell lives in:
-- `src/components/layout/AppShell.tsx`
-
-The intended top-level product split is:
-1. options scanner and supervised position review
-2. research lab surfaces, including crypto day trading
-3. legacy analytics after the core supervised workflow
-
-Bridge helpers and shared frontend types live in:
-- `src/lib/python-bridge.ts`
-- `src/lib/types.ts`
+The current worktree does not include active Next route handlers for `src/app/api/day-trading/*`. Any older docs that describe those as current browser endpoints are stale for this snapshot.
 
 ## Storage Layers
 
 ### SQLite
 
-File:
+Primary file:
 - `chat_history.db`
 
-Purpose:
-- suggested trades and suggested-trade reviews
-- local workflow state used by the scanner and research surfaces
-
-### JSON
-
-Important options artifacts:
-- `wfo_results.json`
-- `predictions.json`
-- `strategy_profile.json`
-- `sim_settings.json`
-
-Important crypto day-trading artifacts:
-- `data/day-trading/crypto/strategies.json`
-- `data/day-trading/crypto/backtests/`
-- `data/day-trading/crypto/trading_validation_report.json`
-- `data/day-trading/crypto/watchlist_latest.json`
-- `data/day-trading/crypto/profitability_journal.json`
-- `data/day-trading/crypto/profitability_preflight_tickets.json`
-
-Important legacy day-trading artifacts:
-- `data/day-trading/strategies.json`
-- `data/day-trading/backtests/`
-- `data/day-trading/trading_validation_report.json`
-
-Purpose:
-- replay and prediction-era artifacts
-- configuration and profile state
-- day-trading validation, watchlist, and pilot state
+Used for:
+- suggested trades
+- local workflow state
 
 ### Postgres
 
@@ -141,58 +96,59 @@ Configured by:
 - `DATABASE_URL`
 - `compose.yaml`
 
-Purpose:
+Used for:
 - tracked positions
 - tracked-position reviews
 
-The tracked-position schema stores exact contract identity when available, alongside the original scanner snapshot.
+### JSON And Artifact Files
 
-## Important Commands
+Common files:
+- `predictions.json`
+- `wfo_results.json`
+- `strategy_profile.json`
+- `brain_changelog.json`
 
-Core app:
-- `npm run dev`
-- `npm run dev:next`
-- `npm run dev:python`
-- `npm run build`
-- `npm run build:clean`
+Artifact directories:
+- `data/options-profit/*`
+- `data/forward-tracking/*`
+- `docs/autoresearch/*`
 
-Verification:
-- `npm run verify`
-- `npm run verify:fast`
-- `npm run verify:full`
-- `python -m unittest discover -s tests -p "test_*.py" -v`
+Used for:
+- replay outputs
+- policy artifacts
+- truth-gate state
+- forward evidence
+- research proposals and snapshots
 
-Options research:
-- `python scripts/options_algorithm_smoke.py`
-- `python scripts/options_experiment_matrix.py`
-- `python scripts/options_metric_truth_report.py`
-- `python scripts/options_experiment_scoreboard.py`
+### Market Data Cache
 
-Crypto day trading:
-- `npm run daytrading:test`
-- `npm run daytrading:import:crypto -- --days=90`
-- `npm run daytrading:validate -- --bars=all --window-mode=scheduled_windows`
-- `npm run daytrading:watch`
-- `npm run daytrading:preflight -- --setup-match-confirmed=true --headline-lockout-checked=true --maker-limit-plan-confirmed=true`
-- `npm run daytrading:pilot`
+Primary file:
+- `market_data.db`
 
-Profit loop:
-- `npm run profit-loop:health`
-- `npm run profit-loop:holdout`
-- `npm run profit-loop:validate`
-- `npm run profit-loop:canary`
+Used for:
+- market data caching and historical support workflows
 
-## Most Important Files For Future Context
+## Ownership Map
 
-- `options_chatbot.py`
-- `wfo_optimizer.py`
+- Next route handlers
+  - request validation and same-origin proxying only
+- `src/lib/python-bridge.ts`
+  - backend HTTP transport, timeout, and JSON error normalization
 - `python-backend/main.py`
-- `python-backend/positions_service.py`
-- `python-backend/positions_repository.py`
-- `src/components/predictions/PredictionsView.tsx`
-- `src/components/strategy/DayTradingLab.tsx`
-- `src/lib/day-trading/crypto-engine.js`
-- `docs/current-state.md`
-- `docs/day-trading-current-state.md`
+  - endpoint composition and cache orchestration
+- `options_chatbot.py`
+  - options scan and profile-era domain logic
+- `wfo_optimizer.py`
+  - replay and policy generation
+- repository modules
+  - tracked positions and suggested-trade persistence
 
-Start there before reading older prediction-era or experiment-only surfaces.
+## Fast Reading Order
+
+1. `src/lib/python-bridge.ts`
+2. `src/app/api/scan/route.ts`
+3. `python-backend/main.py`
+4. `python-backend/positions_service.py`
+5. `python-backend/positions_repository.py`
+6. `options_chatbot.py`
+7. `wfo_optimizer.py`

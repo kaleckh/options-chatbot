@@ -81,7 +81,6 @@ from forward_options_ledger import (
     list_forward_sessions,
     record_forward_snapshot,
     record_position_opened,
-    summarize_forward_holdout,
 )
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions

@@ -4,7 +4,7 @@ import glob
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any, Callable, Sequence
 
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,

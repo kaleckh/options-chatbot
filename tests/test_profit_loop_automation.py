@@ -16,7 +16,6 @@ from profit_loop_automation import (
     _shared_replay_matrix_artifact_path,
     _require_daily_truth_refresh,
     _validation_fingerprint,
-    defer_profit_validation_issue,
     prepare_profit_validation,
     resolve_profit_validation_issue,
     run_operational_health,

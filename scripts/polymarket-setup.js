@@ -11,7 +11,7 @@ const fs = require("fs");
 const path = require("path");
 
 const CREDENTIALS_PATH = path.resolve("data/polymarket/credentials.json");
-const POLYGON_RPC = "https://polygon-rpc.com";
+const POLYGON_RPC = "https://polygon-bor-rpc.publicnode.com";
 
 // Polymarket exchange contracts that need USDC approval
 const CONTRACTS_TO_APPROVE = [
@@ -20,8 +20,11 @@ const CONTRACTS_TO_APPROVE = [
   { name: "NegRisk Adapter", address: "0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296" },
 ];
 
-// USDC.e on Polygon (what Polymarket uses)
-const USDC_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+// USDC on Polygon — check both native and bridged
+const USDC_NATIVE_ADDRESS = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
+const USDC_BRIDGED_ADDRESS = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174";
+// Polymarket uses USDC.e (bridged) — but let's detect which has balance
+let USDC_ADDRESS = USDC_BRIDGED_ADDRESS;
 const USDC_ABI = [
   "function balanceOf(address) view returns (uint256)",
   "function allowance(address owner, address spender) view returns (uint256)",

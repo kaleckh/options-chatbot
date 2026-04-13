@@ -11,6 +11,12 @@ Last updated: 2026-04-03
 - If asked about a design decision, read the implementation before claiming what it does.
 - Getting it wrong confidently is worse than saying "let me check."
 
+## Snapshot Warning
+
+In this worktree, the old app-facing Next day-trading routes and the `DayTradingLab` component are not present.
+
+Use this document as background on the legacy or CLI-oriented day-trading lane, not as a description of the current browser surface.
+
 ## Goal
 
 The active day-trading goal is now:

@@ -5,7 +5,6 @@ import { Brain, Target, Save, History, Play } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import FinTable from "@/components/ui/FinTable";
 import Button from "@/components/ui/Button";
-import DayTradingLab from "@/components/strategy/DayTradingLab";
 import { useToast } from "@/components/ui/Toast";
 import { useSubmitGuard } from "@/lib/hooks";
 import type {
@@ -24,7 +23,6 @@ import type {
 const SUB_TABS = [
   { id: "brain", label: "Strategy Brain", icon: Brain },
   { id: "optimizer", label: "Optimizer", icon: Target },
-  { id: "daytrading", label: "Day Trading", icon: Play },
 ] as const;
 
 function fmtTruthSource(value?: string | null): string {
@@ -52,7 +50,7 @@ export default function StrategyView() {
   const saveGuard = useSubmitGuard();
   const backtestGuard = useSubmitGuard();
 
-  const [activeSubTab, setActiveSubTab] = useState("daytrading");
+  const [activeSubTab, setActiveSubTab] = useState("brain");
   const [profileType, setProfileType] = useState<"equity" | "index">("equity");
   const [profiles, setProfiles] = useState<Record<string, StrategyProfile> | null>(null);
   const [changelog, setChangelog] = useState<Record<string, unknown>[]>([]);
@@ -324,12 +322,6 @@ export default function StrategyView() {
             comparisonReport={comparisonReport}
             artifactNotice={artifactNotice}
           />
-        </div>
-      )}
-
-      {activeSubTab === "daytrading" && (
-        <div role="tabpanel" id="tabpanel-daytrading" aria-labelledby="tab-daytrading">
-          <DayTradingLab />
         </div>
       )}
     </div>

@@ -62,9 +62,6 @@ from profit_loop_shared_state import (
 )
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
-    IMPORTED_TRUTH_SOURCE,
-    OPTIONS_VALIDATION_DAILY_LATEST_FILE,
-    _is_imported_truth_source,
     run_historical_backtest,
 )
 
