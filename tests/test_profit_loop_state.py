@@ -382,6 +382,90 @@ class ProfitLoopStateTests(unittest.TestCase):
                 now_iso="2026-04-02T12:06:00Z",
             )
 
+    def test_resolve_requires_matching_claim_run_id_when_provided(self):
+        state = empty_profit_loop_state()
+        issue = {
+            "issue_id": "forward-holdout-no-raw-candidates",
+            "source_automation": "daily-truth-holdout",
+            "severity": "high",
+            "blocker_class": "scan_starvation",
+            "summary": "Zero picks",
+            "evidence": ["raw_scan_picks=0"],
+            "suggested_fix_targets": ["supervised_scan.py"],
+            "status": "open",
+        }
+        upsert_open_issue(state, issue, now_iso="2026-04-02T12:00:00Z")
+        claim_issue(
+            state,
+            "forward-holdout-no-raw-candidates",
+            now_iso="2026-04-02T12:05:00Z",
+            claim_run_id="run-1",
+        )
+        proof_dir = self.state_dir / "runs" / "resolve-proof"
+        proof_dir.mkdir(parents=True, exist_ok=True)
+
+        with self.assertRaises(ValueError) as exc:
+            resolve_issue(
+                state,
+                "forward-holdout-no-raw-candidates",
+                resolution_branch="codex/automation/20260402-1200-forward-holdout-no-raw-candidates",
+                resolution_commit="abc1234",
+                proof_bundle_dir=str(proof_dir),
+                proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+                before_after_comparison={
+                    "comparison_spec": {
+                        "playbook": "broad",
+                        "truth_lane": "historical_imported_daily",
+                        "pricing_lane": "mid",
+                        "lookback_years": 1,
+                        "n_picks": 1,
+                        "iv_adj": 1.2,
+                    },
+                    "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
+                    "after": {"profit_factor": 0.9, "avg_pnl_pct": -0.5},
+                    "forward_evidence_status": "non_worse",
+                    "truth_quality_regressed": False,
+                    "safety_regressed": False,
+                    "material_drawdown_worsened": False,
+                },
+                expected_claim_run_id="run-2",
+                now_iso="2026-04-02T12:30:00Z",
+            )
+
+        self.assertIn("active claim for run run-2", str(exc.exception))
+
+    def test_defer_requires_matching_claim_run_id_when_provided(self):
+        state = empty_profit_loop_state()
+        issue = {
+            "issue_id": "replay-matrix-collapsed-results",
+            "source_automation": "daily-profit-validation",
+            "severity": "medium",
+            "blocker_class": "replay_matrix_suspicious",
+            "summary": "Collapsed matrix",
+            "evidence": ["all four cells match"],
+            "suggested_fix_targets": ["wfo_optimizer.py"],
+            "status": "open",
+        }
+        upsert_open_issue(state, issue, now_iso="2026-04-02T12:00:00Z")
+        claim_issue(
+            state,
+            "replay-matrix-collapsed-results",
+            now_iso="2026-04-02T12:05:00Z",
+            claim_run_id="run-1",
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            defer_issue(
+                state,
+                "replay-matrix-collapsed-results",
+                deferred_reason="needs work",
+                next_action="retry later",
+                expected_claim_run_id="run-2",
+                now_iso="2026-04-02T12:06:00Z",
+            )
+
+        self.assertIn("active claim for run run-2", str(exc.exception))
+
     def test_validation_prerequisites_block_when_health_or_holdout_are_stale(self):
         state = empty_profit_loop_state()
         state["latest_operational_health"] = {

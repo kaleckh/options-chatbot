@@ -1342,16 +1342,42 @@ def _validation_proof_plan(issue: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _proof_command_texts(commands: list[Any]) -> set[str]:
-    texts: set[str] = set()
+def _normalized_command_list(commands: list[Any]) -> list[str]:
+    texts: list[str] = []
     for item in list(commands or []):
         if isinstance(item, dict):
             candidate = str(item.get("command") or "").strip()
         else:
             candidate = str(item or "").strip()
         if candidate:
-            texts.add(candidate)
+            texts.append(candidate)
     return texts
+
+
+def _proof_command_texts(commands: list[Any]) -> set[str]:
+    return set(_normalized_command_list(commands))
+
+
+def _build_validation_comparison_spec(
+    *,
+    proof_plan: dict[str, Any] | None,
+    refresh_config: dict[str, Any] | None,
+) -> dict[str, Any]:
+    resolved_plan = dict(proof_plan or {})
+    resolved_refresh = dict(refresh_config or {})
+    if not resolved_plan and not resolved_refresh:
+        return {}
+
+    return {
+        "playbook": str(resolved_plan.get("playbook") or resolved_refresh.get("playbook") or "broad"),
+        "truth_lane": str(
+            resolved_plan.get("truth_lane") or resolved_refresh.get("truth_lane") or IMPORTED_DAILY_TRUTH_SOURCE
+        ),
+        "pricing_lane": str(resolved_refresh.get("pricing_lane") or DEFAULT_DAILY_TRUTH_REFRESH_PRICING_LANE),
+        "lookback_years": int(resolved_refresh.get("lookback_years") or DEFAULT_DAILY_TRUTH_REFRESH_LOOKBACK_YEARS),
+        "n_picks": int(resolved_refresh.get("n_picks") or DEFAULT_DAILY_TRUTH_REFRESH_N_PICKS),
+        "iv_adj": float(resolved_refresh.get("iv_adj") or DEFAULT_DAILY_TRUTH_REFRESH_IV_ADJ),
+    }
 
 
 def _validation_baseline_artifact_path(proof_dir: Path) -> Path:
@@ -1450,10 +1476,10 @@ def _resolution_prerequisite_blockers(
     if str(baseline_context.get("validation_fingerprint") or "").strip() != expected_fingerprint:
         blockers.append("validation_baseline_fingerprint_mismatch")
 
-    baseline_commands = _proof_command_texts(list(baseline.get("commands") or []))
-    missing_commands = [command for command in proof_commands if command not in baseline_commands]
-    if missing_commands:
-        blockers.append(f"proof_commands_not_in_baseline: {missing_commands}")
+    baseline_commands = list(baseline.get("expected_proof_commands") or _normalized_command_list(list(baseline.get("commands") or [])))
+    actual_commands = _normalized_command_list(proof_commands)
+    if actual_commands != baseline_commands:
+        blockers.append(f"proof_commands_mismatch: expected={baseline_commands!r} actual={actual_commands!r}")
 
     comparison = dict(before_after_comparison or {})
     expected_comparison_spec = _expected_validation_comparison_spec(
@@ -1500,19 +1526,15 @@ def _expected_validation_comparison_spec(
     latest_snapshot: dict[str, Any] | None,
     baseline: dict[str, Any] | None,
 ) -> dict[str, Any]:
+    stored = dict((baseline or {}).get("expected_comparison_spec") or {})
+    if stored:
+        return copy.deepcopy(stored)
     proof_plan = dict((baseline or {}).get("proof_plan") or {})
     refresh_config = dict((((latest_snapshot or {}).get("daily_truth_refresh") or {}).get("refresh_config") or {}))
-    if not proof_plan and not refresh_config:
-        return {}
-
-    return {
-        "playbook": str(proof_plan.get("playbook") or refresh_config.get("playbook") or "broad"),
-        "truth_lane": str(proof_plan.get("truth_lane") or refresh_config.get("truth_lane") or IMPORTED_DAILY_TRUTH_SOURCE),
-        "pricing_lane": str(refresh_config.get("pricing_lane") or DEFAULT_DAILY_TRUTH_REFRESH_PRICING_LANE),
-        "lookback_years": int(refresh_config.get("lookback_years") or DEFAULT_DAILY_TRUTH_REFRESH_LOOKBACK_YEARS),
-        "n_picks": int(refresh_config.get("n_picks") or DEFAULT_DAILY_TRUTH_REFRESH_N_PICKS),
-        "iv_adj": float(refresh_config.get("iv_adj") or DEFAULT_DAILY_TRUTH_REFRESH_IV_ADJ),
-    }
+    return _build_validation_comparison_spec(
+        proof_plan=proof_plan,
+        refresh_config=refresh_config,
+    )
 
 
 def _run_proof_modules(modules: list[str], *, repo_root: Path = ROOT_DIR, dry_run: bool = False) -> dict[str, Any]:
@@ -1664,6 +1686,7 @@ def _capture_validation_baseline(
     state_dir: str | Path | None = None,
     repo_root: Path = ROOT_DIR,
     dry_run: bool = False,
+    daily_truth_refresh: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     proof_plan = _validation_proof_plan(issue)
     context = _proof_context(repo_root=repo_root)
@@ -1775,6 +1798,7 @@ def _capture_validation_baseline(
 
     baseline = {
         "commands": commands,
+        "expected_proof_commands": _normalized_command_list(commands),
         "validation_tests_passed": bool(module_result["passed"]),
         "validation_test_count": module_result["count"],
         "smoke_summary": smoke_summary,
@@ -1782,6 +1806,10 @@ def _capture_validation_baseline(
         "replay_matrix_assessment": replay_matrix_assessment,
         "holdout_evidence": holdout_evidence,
         "proof_plan": proof_plan,
+        "expected_comparison_spec": _build_validation_comparison_spec(
+            proof_plan=proof_plan,
+            refresh_config=dict((daily_truth_refresh or {}).get("refresh_config") or {}),
+        ),
         "proof_context": {
             **context,
             "validation_fingerprint": _validation_fingerprint(
@@ -2695,6 +2723,7 @@ def prepare_profit_validation(
         state_dir=state_dir,
         repo_root=repo_root,
         dry_run=dry_run,
+        daily_truth_refresh=refresh_result,
     )
     evidence_complete = bool(baseline.get("smoke_summary")) and bool(baseline.get("validation_tests_passed"))
     if baseline.get("proof_plan", {}).get("needs_replay_matrix"):
@@ -2787,6 +2816,7 @@ def prepare_profit_validation(
                 "Investigate the claimed blocker and either land a verified deterministic fix or defer it with exact next steps.",
             ),
             now_iso=now_iso,
+            expected_claim_run_id=run["run_id"],
         )
         result_action = "deferred"
         snapshot["deferred_issue"] = deferred["issue_id"]
@@ -2870,10 +2900,16 @@ def resolve_profit_validation_issue(
     if proof_blockers:
         raise ValueError(f"Cannot resolve validation issue without healthy prerequisites and proof artifacts: {proof_blockers}")
     baseline_artifact = dict(baseline_artifact or {})
-    baseline_commands = _proof_command_texts(list(baseline_artifact.get("commands") or []))
-    missing_commands = [str(item).strip() for item in list(proof_commands or []) if str(item).strip() not in baseline_commands]
-    if missing_commands:
-        raise ValueError(f"proof_commands do not match the executed commands in the validation baseline: {missing_commands}")
+    baseline_commands = list(
+        baseline_artifact.get("expected_proof_commands")
+        or _normalized_command_list(list(baseline_artifact.get("commands") or []))
+    )
+    actual_commands = _normalized_command_list(list(proof_commands or []))
+    if actual_commands != baseline_commands:
+        raise ValueError(
+            "proof_commands do not exactly match the executed commands in the validation baseline: "
+            f"expected={baseline_commands!r} actual={actual_commands!r}"
+        )
     baseline_profitability_verdict = _evaluate_profitability_verdict(before_after_comparison)
     health_snapshot = dict(state.get("latest_operational_health") or {})
     health_status = str(health_snapshot.get("loop_execution_status") or _infer_loop_execution_status(health_snapshot)).strip().lower()
@@ -2883,10 +2919,11 @@ def resolve_profit_validation_issue(
     measurement_gate = _safe_measurement_gate()
     measurement_gate_state = str(measurement_gate.get("state") or "blocked").strip().lower()
     comparison_spec = dict(before_after_comparison.get("comparison_spec") or {})
-    comparison_spec_exact_match = all(
-        key in comparison_spec
-        for key in ("playbook", "truth_lane", "pricing_lane", "lookback_years", "n_picks", "iv_adj")
+    expected_comparison_spec = _expected_validation_comparison_spec(
+        latest_snapshot=latest_snapshot,
+        baseline=baseline_artifact,
     )
+    comparison_spec_exact_match = bool(expected_comparison_spec) and comparison_spec == expected_comparison_spec
     forward_evidence_status = str(before_after_comparison.get("forward_evidence_status") or "sparse").strip().lower()
     truth_quality_regressed = bool(before_after_comparison.get("truth_quality_regressed"))
     safety_regressed = bool(before_after_comparison.get("safety_regressed"))
@@ -2924,6 +2961,7 @@ def resolve_profit_validation_issue(
         proof_commands=list(proof_commands or []),
         before_after_comparison=before_after_comparison,
         now_iso=now_iso,
+        expected_claim_run_id=run_id,
     )
     snapshot = {
         "run_id": run_id,
@@ -3003,6 +3041,7 @@ def defer_profit_validation_issue(
         deferred_reason=deferred_reason,
         next_action=next_action,
         now_iso=now_iso,
+        expected_claim_run_id=run_id,
     )
     snapshot = {
         "run_id": run_id,

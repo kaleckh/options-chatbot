@@ -890,16 +890,31 @@ def defer_issue(
     deferred_reason: str,
     next_action: str,
     now_iso: str | None = None,
+    expected_claim_run_id: str | None = None,
 ) -> dict[str, Any]:
     if not str(next_action or "").strip():
         raise ValueError("next_action is required when deferring an issue")
     current_time = str(now_iso or utc_now_iso())
+    current_dt = _parse_iso_datetime(current_time) or _utc_now()
     open_issues = list(state.get("open_issues") or [])
     index = _find_issue_index(open_issues, issue_id)
     if index is None:
         raise ValueError(f"Cannot defer unknown issue: {issue_id}")
+    existing_issue = dict(open_issues[index])
+    normalized_claim_run_id = str(expected_claim_run_id or "").strip() or None
+    if normalized_claim_run_id:
+        existing_status = str(existing_issue.get("status") or "").strip().lower()
+        existing_claim_run_id = str(existing_issue.get("claim_run_id") or "").strip() or None
+        if existing_status != "claimed" or existing_claim_run_id != normalized_claim_run_id:
+            raise ValueError(
+                f"Cannot defer issue {issue_id} without the active claim for run {normalized_claim_run_id}"
+            )
+        if _is_expired(existing_issue.get("claim_expires_at"), now=current_dt):
+            raise ValueError(
+                f"Cannot defer issue {issue_id}; the claim for run {normalized_claim_run_id} has expired"
+            )
     issue = _normalize_issue(
-        dict(open_issues[index])
+        existing_issue
         | {
             "status": "deferred",
             "last_seen_at": current_time,
@@ -929,8 +944,10 @@ def resolve_issue(
     proof_commands: list[str] | None = None,
     before_after_comparison: dict[str, Any] | None = None,
     now_iso: str | None = None,
+    expected_claim_run_id: str | None = None,
 ) -> dict[str, Any]:
     current_time = str(now_iso or utc_now_iso())
+    current_dt = _parse_iso_datetime(current_time) or _utc_now()
     normalized_branch = str(resolution_branch or "").strip()
     normalized_commit = str(resolution_commit or "").strip()
     if not normalized_branch:
@@ -953,6 +970,19 @@ def resolve_issue(
     index = _find_issue_index(open_issues, issue_id)
     if index is None:
         raise ValueError(f"Cannot resolve unknown issue: {issue_id}")
+    existing_issue = dict(open_issues[index])
+    normalized_claim_run_id = str(expected_claim_run_id or "").strip() or None
+    if normalized_claim_run_id:
+        existing_status = str(existing_issue.get("status") or "").strip().lower()
+        existing_issue_claim_run_id = str(existing_issue.get("claim_run_id") or "").strip() or None
+        if existing_status != "claimed" or existing_issue_claim_run_id != normalized_claim_run_id:
+            raise ValueError(
+                f"Cannot resolve issue {issue_id} without the active claim for run {normalized_claim_run_id}"
+            )
+        if _is_expired(existing_issue.get("claim_expires_at"), now=current_dt):
+            raise ValueError(
+                f"Cannot resolve issue {issue_id}; the claim for run {normalized_claim_run_id} has expired"
+            )
     issue = _normalize_issue(
         dict(open_issues.pop(index))
         | {

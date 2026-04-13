@@ -23,6 +23,7 @@ from profit_loop_automation import (
     run_truth_holdout,
 )
 from profit_loop_shared_state import (
+    claim_issue,
     empty_profit_loop_state,
     list_run_ledger_events,
     load_profit_loop_state,
@@ -60,6 +61,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         now = datetime.now(UTC).replace(microsecond=0)
         health_ran_at = now - timedelta(minutes=30)
         holdout_ran_at = now - timedelta(minutes=15)
+        validation_iso = now.isoformat().replace("+00:00", "Z")
         health_iso = health_ran_at.isoformat().replace("+00:00", "Z")
         holdout_iso = holdout_ran_at.isoformat().replace("+00:00", "Z")
         proof_dir = self.state_dir / "runs" / proof_dir_name
@@ -77,16 +79,26 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         }
         if proof_plan_overrides:
             proof_plan.update(proof_plan_overrides)
+        expected_comparison_spec = {
+            "playbook": "broad",
+            "truth_lane": "historical_imported_daily",
+            "pricing_lane": "pessimistic",
+            "lookback_years": 2,
+            "n_picks": 1,
+            "iv_adj": 1.2,
+        }
         baseline = {
             "run_id": "daily-profit-validation-seed",
             "targeted_issue_id": issue_id,
             "commands": [{"command": command, "passed": True, "stdout": "", "stderr": ""} for command in proof_commands],
+            "expected_proof_commands": list(proof_commands),
             "validation_tests_passed": True,
             "validation_test_count": len(proof_commands),
             "smoke_summary": {"scan_truth_lane": "historical_imported_daily"},
             "replay_cases": [],
             "holdout_evidence": {"raw_scan_picks": 1} if proof_plan["needs_holdout"] else None,
             "proof_plan": proof_plan,
+            "expected_comparison_spec": expected_comparison_spec,
             "proof_context": {
                 **context,
                 "validation_fingerprint": _validation_fingerprint(
@@ -181,7 +193,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             key="latest_profit_validation",
             payload={
                 "run_id": "daily-profit-validation-seed",
-                "ran_at": "2026-04-02T11:50:00Z",
+                "ran_at": validation_iso,
                 "verdict": "deferred",
                 "run_status": "completed",
                 "loop_execution_status": "healthy",
@@ -193,10 +205,16 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 "proof_context": context,
                 "targeted_issue_id": issue_id,
                 "prerequisite_blockers": [],
-                "daily_truth_refresh": {"status": "refreshed"},
+                "daily_truth_refresh": {"status": "refreshed", "refresh_config": expected_comparison_spec},
                 "baseline": baseline,
             },
-            now_iso="2026-04-02T11:50:00Z",
+            now_iso=validation_iso,
+        )
+        claim_issue(
+            state,
+            issue_id,
+            now_iso=validation_iso,
+            claim_run_id="daily-profit-validation-seed",
         )
         save_profit_loop_state(state, state_dir=self.state_dir)
         return proof_dir
@@ -783,6 +801,15 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         save_profit_loop_state(state, state_dir=self.state_dir)
 
         baseline = {
+            "expected_comparison_spec": {
+                "playbook": "broad",
+                "truth_lane": "historical_imported_daily",
+                "pricing_lane": "pessimistic",
+                "lookback_years": 2,
+                "n_picks": 1,
+                "iv_adj": 1.2,
+            },
+            "expected_proof_commands": ["python -m unittest tests.test_options_api_e2e -v"],
             "validation_tests_passed": True,
             "validation_test_count": 57,
             "smoke_summary": {"scan_truth_lane": "historical_imported_daily"},
@@ -801,6 +828,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         )
         self.assertTrue(artifact["validation_tests_passed"])
         self.assertEqual(artifact["proof_reuse"], ["latest_operational_health.smoke"])
+        self.assertEqual(artifact["expected_comparison_spec"]["pricing_lane"], "pessimistic")
+        self.assertEqual(artifact["expected_proof_commands"], ["python -m unittest tests.test_options_api_e2e -v"])
         self.assertEqual(artifact["snapshot"]["targeted_issue_id"], "truth-lane-live-policy-mismatch")
 
     def test_profit_validation_reuses_smoke_from_recent_operational_health(self):
@@ -1409,6 +1438,60 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                 )
 
         self.assertIn("comparison_spec_mismatch", str(exc.exception))
+
+    def test_profit_validation_resolve_rejects_proof_command_subset(self):
+        state = load_profit_loop_state(self.state_dir)
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "truth-lane-live-policy-mismatch",
+                "source_automation": "hourly-operational-health",
+                "severity": "high",
+                "blocker_class": "truth_lane_mismatch",
+                "summary": "Mismatch",
+                "evidence": ["one"],
+                "suggested_fix_targets": ["options_chatbot.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+        self._seed_healthy_validation_artifacts(
+            issue_id="truth-lane-live-policy-mismatch",
+            blocker_class="truth_lane_mismatch",
+            proof_commands=[
+                "python scripts/options_algorithm_smoke.py --fixture",
+                "python -m unittest tests.test_options_api_e2e -v",
+            ],
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]):
+                resolve_profit_validation_issue(
+                    issue_id="truth-lane-live-policy-mismatch",
+                    resolution_branch="codex/automation/20260402-1200-truth-lane-live-policy-mismatch",
+                    resolution_commit="abc1234",
+                    proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+                    before_after_comparison={
+                        "comparison_spec": {
+                            "playbook": "broad",
+                            "truth_lane": "historical_imported_daily",
+                            "pricing_lane": "pessimistic",
+                            "lookback_years": 2,
+                            "n_picks": 1,
+                            "iv_adj": 1.2,
+                        },
+                        "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
+                        "after": {"profit_factor": 1.2, "avg_pnl_pct": 0.5},
+                        "forward_evidence_status": "non_worse",
+                        "truth_quality_regressed": False,
+                        "safety_regressed": False,
+                        "material_drawdown_worsened": False,
+                    },
+                    state_dir=self.state_dir,
+                )
+
+        self.assertIn("proof_commands_mismatch", str(exc.exception))
 
     def test_profit_validation_resolve_does_not_claim_improved_for_sparse_forward_evidence(self):
         state = load_profit_loop_state(self.state_dir)
