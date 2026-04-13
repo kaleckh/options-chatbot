@@ -44,8 +44,28 @@ function Test-VenvHasPip([string]$PythonPath) {
         return $false
     }
 
-    & $PythonPath -m pip --version *> $null
+    & $PythonPath -c "import importlib.util, sys; sys.exit(0 if importlib.util.find_spec('pip') else 1)" 1>$null 2>$null
     return ($LASTEXITCODE -eq 0)
+}
+
+function Repair-VenvPip([string]$PythonPath, [string]$VenvRoot) {
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        return $false
+    }
+
+    Write-Warning "Attempting to repair pip in repo-local virtualenv at $VenvRoot"
+    try {
+        & $PythonPath -m ensurepip --upgrade --default-pip
+    }
+    catch {
+        return $false
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return (Test-VenvHasPip -PythonPath $PythonPath)
 }
 
 function Set-RepoTempEnvironment([string]$RepoRoot) {
@@ -237,8 +257,10 @@ try {
     $currentStamp = Get-StableFileStamp -Paths $requirements
 
     if ((Test-Path -LiteralPath $venvPython) -and -not (Test-VenvHasPip -PythonPath $venvPython)) {
-        Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
-        Remove-Item -LiteralPath $venvRoot -Recurse -Force -ErrorAction SilentlyContinue
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $venvRoot)) {
+            Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
+            Remove-Item -LiteralPath $venvRoot -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     if (-not (Test-Path -LiteralPath $venvPython)) {
@@ -251,7 +273,15 @@ try {
             & $bootstrap[0] -m venv $venvRoot
         }
         if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create repo-local virtualenv."
+            if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $venvRoot)) {
+                throw "Failed to create repo-local virtualenv."
+            }
+        }
+    }
+
+    if (-not (Test-VenvHasPip -PythonPath $venvPython)) {
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $venvRoot)) {
+            throw "Repo-local virtualenv is missing pip after bootstrap repair attempts."
         }
     }
 
