@@ -760,6 +760,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         state = load_profit_loop_state(self.state_dir)
         self.assertEqual(state["latest_profit_validation"]["evidence_status"], "inconclusive")
         self.assertFalse(state["latest_profit_validation"]["evidence_complete"])
+        ledger = list_run_ledger_events(self.state_dir)
+        self.assertEqual(ledger[-1]["loop_execution_status"], "idle")
 
     def test_profit_validation_preserves_baseline_fields_in_written_artifact(self):
         state = load_profit_loop_state(self.state_dir)

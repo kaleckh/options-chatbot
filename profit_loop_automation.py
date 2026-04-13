@@ -2542,7 +2542,7 @@ def prepare_profit_validation(
                 "automation_id": "daily-profit-validation",
                 "ran_at": now_iso,
                 "verdict": "queue-empty",
-                "loop_execution_status": "healthy",
+                "loop_execution_status": "idle",
                 "evidence_status": "inconclusive",
                 "profitability_verdict": "unproven",
                 "issue_ids": [],
