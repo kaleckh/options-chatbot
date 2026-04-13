@@ -1458,6 +1458,27 @@ def _resolution_prerequisite_blockers(
     if missing_commands:
         blockers.append(f"proof_commands_not_in_baseline: {missing_commands}")
 
+    comparison = dict(before_after_comparison or {})
+    expected_comparison_spec = _expected_validation_comparison_spec(
+        latest_snapshot=latest_snapshot,
+        baseline=baseline,
+    )
+    if expected_comparison_spec:
+        comparison_spec = dict(comparison.get("comparison_spec") or {})
+        mismatched_fields = [
+            key
+            for key, expected_value in expected_comparison_spec.items()
+            if comparison_spec.get(key) != expected_value
+        ]
+        if mismatched_fields:
+            blockers.append(
+                "comparison_spec_mismatch: "
+                + ", ".join(
+                    f"{key}=expected:{expected_comparison_spec.get(key)!r} actual:{comparison_spec.get(key)!r}"
+                    for key in mismatched_fields
+                )
+            )
+
     if not bool(baseline.get("validation_tests_passed")):
         blockers.append("validation_tests_failed")
     if proof_plan.get("needs_smoke") and not dict(baseline.get("smoke_summary") or {}):
@@ -1475,6 +1496,26 @@ def _resolution_prerequisite_blockers(
         blockers.append("missing_holdout_evidence")
 
     return blockers, baseline
+
+
+def _expected_validation_comparison_spec(
+    *,
+    latest_snapshot: dict[str, Any] | None,
+    baseline: dict[str, Any] | None,
+) -> dict[str, Any]:
+    proof_plan = dict((baseline or {}).get("proof_plan") or {})
+    refresh_config = dict((((latest_snapshot or {}).get("daily_truth_refresh") or {}).get("refresh_config") or {}))
+    if not proof_plan and not refresh_config:
+        return {}
+
+    return {
+        "playbook": str(proof_plan.get("playbook") or refresh_config.get("playbook") or "broad"),
+        "truth_lane": str(proof_plan.get("truth_lane") or refresh_config.get("truth_lane") or IMPORTED_DAILY_TRUTH_SOURCE),
+        "pricing_lane": str(refresh_config.get("pricing_lane") or DEFAULT_DAILY_TRUTH_REFRESH_PRICING_LANE),
+        "lookback_years": int(refresh_config.get("lookback_years") or DEFAULT_DAILY_TRUTH_REFRESH_LOOKBACK_YEARS),
+        "n_picks": int(refresh_config.get("n_picks") or DEFAULT_DAILY_TRUTH_REFRESH_N_PICKS),
+        "iv_adj": float(refresh_config.get("iv_adj") or DEFAULT_DAILY_TRUTH_REFRESH_IV_ADJ),
+    }
 
 
 def _run_proof_modules(modules: list[str], *, repo_root: Path = ROOT_DIR, dry_run: bool = False) -> dict[str, Any]:

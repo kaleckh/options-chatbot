@@ -110,7 +110,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "lookback_years": 1,
                     "n_picks": 1,
                     "iv_adj": 1.2,
-                    "pricing_lane": "mid",
+                    "pricing_lane": "pessimistic",
                     "truth_source": "historical_imported_daily",
                     "total_trades": 10,
                     "profit_factor": 1.1,
@@ -1181,8 +1181,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "comparison_spec": {
                         "playbook": "broad",
                         "truth_lane": "historical_imported_daily",
-                        "pricing_lane": "mid",
-                        "lookback_years": 1,
+                        "pricing_lane": "pessimistic",
+                        "lookback_years": 2,
                         "n_picks": 1,
                         "iv_adj": 1.2,
                     },
@@ -1288,8 +1288,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                         "comparison_spec": {
                             "playbook": "broad",
                             "truth_lane": "historical_imported_daily",
-                            "pricing_lane": "mid",
-                            "lookback_years": 1,
+                            "pricing_lane": "pessimistic",
+                            "lookback_years": 2,
                             "n_picks": 1,
                             "iv_adj": 1.2,
                         },
@@ -1343,8 +1343,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                         "comparison_spec": {
                             "playbook": "broad",
                             "truth_lane": "historical_imported_daily",
-                            "pricing_lane": "mid",
-                            "lookback_years": 1,
+                            "pricing_lane": "pessimistic",
+                            "lookback_years": 2,
                             "n_picks": 1,
                             "iv_adj": 1.2,
                         },
@@ -1357,6 +1357,57 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     },
                     state_dir=self.state_dir,
                 )
+
+    def test_profit_validation_resolve_rejects_mismatched_comparison_spec(self):
+        state = load_profit_loop_state(self.state_dir)
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "truth-lane-live-policy-mismatch",
+                "source_automation": "hourly-operational-health",
+                "severity": "high",
+                "blocker_class": "truth_lane_mismatch",
+                "summary": "Mismatch",
+                "evidence": ["one"],
+                "suggested_fix_targets": ["options_chatbot.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+        self._seed_healthy_validation_artifacts(
+            issue_id="truth-lane-live-policy-mismatch",
+            blocker_class="truth_lane_mismatch",
+            proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+        )
+
+        with self.assertRaises(ValueError) as exc:
+            with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]):
+                resolve_profit_validation_issue(
+                    issue_id="truth-lane-live-policy-mismatch",
+                    resolution_branch="codex/automation/20260402-1200-truth-lane-live-policy-mismatch",
+                    resolution_commit="abc1234",
+                    proof_commands=["python -m unittest tests.test_options_api_e2e -v"],
+                    before_after_comparison={
+                        "comparison_spec": {
+                            "playbook": "broad",
+                            "truth_lane": "historical_imported_daily",
+                            "pricing_lane": "mid",
+                            "lookback_years": 3,
+                            "n_picks": 1,
+                            "iv_adj": 1.2,
+                        },
+                        "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
+                        "after": {"profit_factor": 1.2, "avg_pnl_pct": 0.5},
+                        "forward_evidence_status": "non_worse",
+                        "truth_quality_regressed": False,
+                        "safety_regressed": False,
+                        "material_drawdown_worsened": False,
+                    },
+                    state_dir=self.state_dir,
+                )
+
+        self.assertIn("comparison_spec_mismatch", str(exc.exception))
 
     def test_profit_validation_resolve_does_not_claim_improved_for_sparse_forward_evidence(self):
         state = load_profit_loop_state(self.state_dir)
@@ -1392,8 +1443,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "comparison_spec": {
                         "playbook": "broad",
                         "truth_lane": "historical_imported_daily",
-                        "pricing_lane": "mid",
-                        "lookback_years": 1,
+                            "pricing_lane": "pessimistic",
+                            "lookback_years": 2,
                         "n_picks": 1,
                         "iv_adj": 1.2,
                     },
@@ -1446,8 +1497,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "comparison_spec": {
                         "playbook": "broad",
                         "truth_lane": "historical_imported_daily",
-                        "pricing_lane": "mid",
-                        "lookback_years": 1,
+                    "pricing_lane": "pessimistic",
+                    "lookback_years": 2,
                         "n_picks": 1,
                         "iv_adj": 1.2,
                     },
@@ -1501,8 +1552,8 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "comparison_spec": {
                         "playbook": "broad",
                         "truth_lane": "historical_imported_daily",
-                        "pricing_lane": "mid",
-                        "lookback_years": 1,
+                    "pricing_lane": "pessimistic",
+                    "lookback_years": 2,
                         "n_picks": 1,
                         "iv_adj": 1.2,
                     },
