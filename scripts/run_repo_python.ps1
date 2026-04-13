@@ -48,6 +48,58 @@ function Test-VenvHasPip([string]$PythonPath) {
     return ($LASTEXITCODE -eq 0)
 }
 
+function Test-VenvHealthy([string]$VenvRoot, [string]$PythonPath) {
+    if (-not (Test-Path -LiteralPath $VenvRoot)) {
+        return $false
+    }
+
+    $configPath = Join-Path $VenvRoot "pyvenv.cfg"
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        return $false
+    }
+
+    return (Test-VenvHasPip -PythonPath $PythonPath)
+}
+
+function Remove-VenvDirectory([string]$VenvRoot) {
+    if (-not (Test-Path -LiteralPath $VenvRoot)) {
+        return
+    }
+
+    Remove-Item -LiteralPath $VenvRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
+    if (Test-Path -LiteralPath $VenvRoot) {
+        Write-Warning "Detected incomplete repo-local virtualenv at $VenvRoot; recreating it."
+        Remove-VenvDirectory -VenvRoot $VenvRoot
+    }
+
+    Write-Host "Creating repo-local virtualenv at $VenvRoot"
+    if ($BootstrapCommand.Length -gt 1) {
+        & $BootstrapCommand[0] $BootstrapCommand[1..($BootstrapCommand.Length - 1)] -m venv $VenvRoot
+    }
+    else {
+        & $BootstrapCommand[0] -m venv $VenvRoot
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "Initial virtualenv creation failed; removing partial environment and retrying once."
+        Remove-VenvDirectory -VenvRoot $VenvRoot
+
+        if ($BootstrapCommand.Length -gt 1) {
+            & $BootstrapCommand[0] $BootstrapCommand[1..($BootstrapCommand.Length - 1)] -m venv $VenvRoot
+        }
+        else {
+            & $BootstrapCommand[0] -m venv $VenvRoot
+        }
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create repo-local virtualenv."
+    }
+}
+
 function Set-RepoTempEnvironment([string]$RepoRoot) {
     $tempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
     $tmpPath = Join-Path $tempRoot "tmp"
@@ -236,23 +288,9 @@ try {
     ) | Where-Object { Test-Path -LiteralPath $_ }
     $currentStamp = Get-StableFileStamp -Paths $requirements
 
-    if ((Test-Path -LiteralPath $venvPython) -and -not (Test-VenvHasPip -PythonPath $venvPython)) {
-        Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
-        Remove-Item -LiteralPath $venvRoot -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
-    if (-not (Test-Path -LiteralPath $venvPython)) {
+    if (-not (Test-VenvHealthy -VenvRoot $venvRoot -PythonPath $venvPython)) {
         $bootstrap = Get-SystemPythonCommand
-        Write-Host "Creating repo-local virtualenv at $venvRoot"
-        if ($bootstrap.Length -gt 1) {
-            & $bootstrap[0] $bootstrap[1..($bootstrap.Length - 1)] -m venv $venvRoot
-        }
-        else {
-            & $bootstrap[0] -m venv $venvRoot
-        }
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to create repo-local virtualenv."
-        }
+        New-RepoVirtualEnv -BootstrapCommand $bootstrap -VenvRoot $venvRoot
     }
 
     $previousStamp = if (Test-Path -LiteralPath $stampPath) { (Get-Content -LiteralPath $stampPath -Raw).TrimEnd("`r", "`n") } else { "" }
