@@ -53,6 +53,7 @@ from profit_loop_shared_state import (
     reconcile_source_open_issues,
     resolve_issue,
     save_profit_loop_state,
+    save_profit_loop_state_with_ledger,
     set_latest_snapshot,
     shared_state_dir,
     upsert_open_issue,
@@ -2037,9 +2038,9 @@ def run_operational_health(
             "issues": issues,
         },
     )
-    save_profit_loop_state(state, state_dir=state_dir)
-    append_run_ledger(
-        {
+    save_profit_loop_state_with_ledger(
+        state,
+        event={
             "run_id": run["run_id"],
             "automation_id": "hourly-operational-health",
             "ran_at": now_iso,
@@ -2160,8 +2161,9 @@ def run_truth_holdout(
                 },
                 state_dir=state_dir,
             )
-        append_run_ledger(
-            {
+        save_profit_loop_state_with_ledger(
+            state,
+            event={
                 "run_id": run["run_id"],
                 "automation_id": "daily-truth-holdout",
                 "ran_at": now_iso,
@@ -2426,18 +2428,18 @@ def run_truth_holdout(
             "issues": issues,
         },
     )
-    save_profit_loop_state(state, state_dir=state_dir)
-    append_run_ledger(
-        {
+    save_profit_loop_state_with_ledger(
+        state,
+        event={
             "run_id": run["run_id"],
             "automation_id": "daily-truth-holdout",
             "ran_at": now_iso,
-                "verdict": verdict,
-                "loop_execution_status": loop_execution_status,
-                "evidence_status": evidence_status,
-                "profitability_verdict": "unproven",
-                "state_hash": ((state.get("active_run") or {}).get("state_hash")),
-                "issue_ids": [issue["issue_id"] for issue in issues],
+            "verdict": verdict,
+            "loop_execution_status": loop_execution_status,
+            "evidence_status": evidence_status,
+            "profitability_verdict": "unproven",
+            "state_hash": ((state.get("active_run") or {}).get("state_hash")),
+            "issue_ids": [issue["issue_id"] for issue in issues],
         },
         state_dir=state_dir,
     )
@@ -2510,9 +2512,9 @@ def prepare_profit_validation(
             },
         }
         set_latest_snapshot(state, key="latest_profit_validation", payload=snapshot, now_iso=now_iso)
-        save_profit_loop_state(state, state_dir=state_dir)
-        append_run_ledger(
-            {
+        save_profit_loop_state_with_ledger(
+            state,
+            event={
                 "run_id": run_id,
                 "automation_id": "daily-profit-validation",
                 "ran_at": now_iso,
@@ -2560,9 +2562,9 @@ def prepare_profit_validation(
             },
         }
         set_latest_snapshot(state, key="latest_profit_validation", payload=snapshot, now_iso=now_iso)
-        save_profit_loop_state(state, state_dir=state_dir)
-        append_run_ledger(
-            {
+        save_profit_loop_state_with_ledger(
+            state,
+            event={
                 "run_id": run_id,
                 "automation_id": "daily-profit-validation",
                 "ran_at": now_iso,
@@ -2676,8 +2678,9 @@ def prepare_profit_validation(
                 },
                 state_dir=state_dir,
             )
-        append_run_ledger(
-            {
+        save_profit_loop_state_with_ledger(
+            state,
+            event={
                 "run_id": run["run_id"],
                 "automation_id": "daily-profit-validation",
                 "ran_at": now_iso,
@@ -2843,9 +2846,9 @@ def prepare_profit_validation(
             "resolved_issue": auto_cleared_seed_issue,
         },
     )
-    save_profit_loop_state(state, state_dir=state_dir)
-    append_run_ledger(
-        {
+    save_profit_loop_state_with_ledger(
+        state,
+        event={
             "run_id": run["run_id"],
             "automation_id": "daily-profit-validation",
             "ran_at": now_iso,
@@ -2999,9 +3002,9 @@ def resolve_profit_validation_issue(
             "profitability_verdict": profitability_verdict,
         },
     )
-    save_profit_loop_state(state, state_dir=state_dir)
-    append_run_ledger(
-        {
+    save_profit_loop_state_with_ledger(
+        state,
+        event={
             "run_id": run_id,
             "automation_id": "daily-profit-validation",
             "ran_at": now_iso,
@@ -3067,9 +3070,9 @@ def defer_profit_validation_issue(
         },
     }
     set_latest_snapshot(state, key="latest_profit_validation", payload=snapshot, now_iso=now_iso)
-    save_profit_loop_state(state, state_dir=state_dir)
-    append_run_ledger(
-        {
+    save_profit_loop_state_with_ledger(
+        state,
+        event={
             "run_id": run_id,
             "automation_id": "daily-profit-validation",
             "ran_at": now_iso,

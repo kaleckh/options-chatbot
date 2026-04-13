@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
@@ -15,6 +16,7 @@ DEFAULT_CODEX_HOME = Path.home() / ".codex"
 DEFAULT_SHARED_STATE_DIR = DEFAULT_CODEX_HOME / "automations" / "shared" / "options-chatbot"
 DEFAULT_STATE_FILE_NAME = "profit-loop-state.json"
 DEFAULT_RUN_LEDGER_FILE_NAME = "profit-loop-runs.jsonl"
+DEFAULT_PENDING_RUN_LEDGER_FILE_NAME = "profit-loop-run-ledger-pending.json"
 LEGACY_REPO_HANDOFF_PATH = ROOT_DIR / "docs" / "autoresearch" / "automation-handoff.json"
 
 SCHEMA_VERSION = 2
@@ -222,6 +224,10 @@ def state_path(state_dir: str | Path | None = None) -> Path:
 
 def runs_ledger_path(state_dir: str | Path | None = None) -> Path:
     return shared_state_dir(state_dir) / DEFAULT_RUN_LEDGER_FILE_NAME
+
+
+def pending_run_ledger_path(state_dir: str | Path | None = None) -> Path:
+    return shared_state_dir(state_dir) / DEFAULT_PENDING_RUN_LEDGER_FILE_NAME
 
 
 def proof_runs_dir(state_dir: str | Path | None = None) -> Path:
@@ -594,6 +600,96 @@ def _refresh_state_hash(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def _prepare_state_for_save(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = validate_profit_loop_state(payload)
+    normalized["updated_at"] = utc_now_iso()
+    _refresh_state_hash(normalized)
+    return normalized
+
+
+def _sync_saved_payload(target: dict[str, Any], normalized: dict[str, Any]) -> None:
+    if isinstance(target, dict):
+        target.clear()
+        target.update(copy.deepcopy(normalized))
+
+
+def _normalize_run_ledger_event(event: dict[str, Any]) -> dict[str, Any]:
+    payload = dict(event or {})
+    payload.setdefault("recorded_at", utc_now_iso())
+    payload.setdefault("event_id", str(uuid.uuid4()))
+    return payload
+
+
+def _run_ledger_event_matches(existing: dict[str, Any], expected: dict[str, Any]) -> bool:
+    existing_event_id = str(existing.get("event_id") or "").strip()
+    expected_event_id = str(expected.get("event_id") or "").strip()
+    if existing_event_id and expected_event_id:
+        return existing_event_id == expected_event_id
+    return json.dumps(existing, sort_keys=True) == json.dumps(expected, sort_keys=True)
+
+
+def _ledger_contains_event(path: Path, expected: dict[str, Any]) -> bool:
+    if not path.exists():
+        return False
+    for line in path.read_text(encoding="utf8").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            existing = json.loads(stripped)
+        except json.JSONDecodeError:
+            continue
+        if _run_ledger_event_matches(existing, expected):
+            return True
+    return False
+
+
+def recover_pending_run_ledger(state_dir: str | Path | None = None) -> dict[str, Any] | None:
+    pending_path = pending_run_ledger_path(state_dir)
+    pending_payload = _load_json(pending_path)
+    if pending_payload is None:
+        return None
+
+    event = dict(pending_payload.get("event") or {})
+    expected_state_hash = str(pending_payload.get("expected_state_hash") or "").strip()
+    current_state_payload = _load_json(state_path(state_dir))
+    if not event or not expected_state_hash or current_state_payload is None:
+        pending_path.unlink(missing_ok=True)
+        return {
+            "status": "discarded",
+            "reason": "missing_event_or_state",
+        }
+
+    current_state = validate_profit_loop_state(current_state_payload)
+    current_state_hash = _state_hash_payload(current_state)
+    if current_state_hash != expected_state_hash:
+        pending_path.unlink(missing_ok=True)
+        return {
+            "status": "discarded",
+            "reason": "state_hash_mismatch",
+            "expected_state_hash": expected_state_hash,
+            "current_state_hash": current_state_hash,
+        }
+
+    ledger_path = runs_ledger_path(state_dir)
+    ledger_path.parent.mkdir(parents=True, exist_ok=True)
+    if not ledger_path.exists():
+        ledger_path.touch()
+    if _ledger_contains_event(ledger_path, event):
+        pending_path.unlink(missing_ok=True)
+        return {
+            "status": "deduped",
+            "event": event,
+        }
+
+    _append_jsonl(ledger_path, event)
+    pending_path.unlink(missing_ok=True)
+    return {
+        "status": "recovered",
+        "event": event,
+    }
+
+
 def _is_expired(iso_value: str | None, *, now: datetime) -> bool:
     lease_time = _parse_iso_datetime(iso_value)
     return lease_time is not None and lease_time <= now
@@ -651,17 +747,17 @@ def expire_stale_leases(
 
 def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any]:
     ensure_profit_loop_state(state_dir)
+    recover_pending_run_ledger(state_dir)
     payload = _load_json(state_path(state_dir))
     if payload is None:
         return initialize_profit_loop_state(state_dir)
     normalized = validate_profit_loop_state(payload)
     lease_recovery = expire_stale_leases(normalized)
-    if lease_recovery["changed"] or int(payload.get("schema_version") or 1) != SCHEMA_VERSION:
-        save_profit_loop_state(normalized, state_dir=state_dir)
     expired_run = dict(lease_recovery.get("expired_run") or {})
     if expired_run:
-        append_run_ledger(
-            {
+        save_profit_loop_state_with_ledger(
+            normalized,
+            event={
                 "run_id": expired_run.get("run_id"),
                 "automation_id": expired_run.get("automation_id"),
                 "ran_at": lease_recovery.get("expired_at"),
@@ -674,28 +770,56 @@ def load_profit_loop_state(state_dir: str | Path | None = None) -> dict[str, Any
             },
             state_dir=state_dir,
         )
+    elif lease_recovery["changed"] or int(payload.get("schema_version") or 1) != SCHEMA_VERSION:
+        save_profit_loop_state(normalized, state_dir=state_dir)
     return normalized
 
 
 def save_profit_loop_state(payload: dict[str, Any], *, state_dir: str | Path | None = None) -> Path:
-    normalized = validate_profit_loop_state(payload)
-    normalized["updated_at"] = utc_now_iso()
-    _refresh_state_hash(normalized)
+    recover_pending_run_ledger(state_dir)
+    normalized = _prepare_state_for_save(payload)
     path = _atomic_write_json(state_path(state_dir), normalized)
-    if isinstance(payload, dict):
-        payload.clear()
-        payload.update(copy.deepcopy(normalized))
+    _sync_saved_payload(payload, normalized)
+    return path
+
+
+def save_profit_loop_state_with_ledger(
+    payload: dict[str, Any],
+    *,
+    event: dict[str, Any],
+    state_dir: str | Path | None = None,
+) -> Path:
+    recover_pending_run_ledger(state_dir)
+    normalized = _prepare_state_for_save(payload)
+    ledger_payload = _normalize_run_ledger_event(event)
+    active_state_hash = str(((normalized.get("active_run") or {}).get("state_hash")) or "").strip()
+    if active_state_hash and not str(ledger_payload.get("state_hash") or "").strip():
+        ledger_payload["state_hash"] = active_state_hash
+    pending_path = pending_run_ledger_path(state_dir)
+    _atomic_write_json(
+        pending_path,
+        {
+            "created_at": utc_now_iso(),
+            "expected_state_hash": _state_hash_payload(normalized),
+            "event": ledger_payload,
+        },
+    )
+    path = _atomic_write_json(state_path(state_dir), normalized)
+    _append_jsonl(runs_ledger_path(state_dir), ledger_payload)
+    pending_path.unlink(missing_ok=True)
+    _sync_saved_payload(payload, normalized)
     return path
 
 
 def append_run_ledger(event: dict[str, Any], *, state_dir: str | Path | None = None) -> Path:
-    payload = dict(event or {})
-    payload.setdefault("recorded_at", utc_now_iso())
+    recover_pending_run_ledger(state_dir)
+    payload = _normalize_run_ledger_event(event)
     return _append_jsonl(runs_ledger_path(state_dir), payload)
 
 
 def list_run_ledger_events(state_dir: str | Path | None = None) -> list[dict[str, Any]]:
     ensure_profit_loop_state(state_dir)
+    recover_pending_run_ledger(state_dir)
     path = runs_ledger_path(state_dir)
     events: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf8").splitlines():

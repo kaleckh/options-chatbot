@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +20,7 @@ from profit_loop_shared_state import (
     reconcile_source_open_issues,
     resolve_issue,
     save_profit_loop_state,
+    save_profit_loop_state_with_ledger,
     upsert_open_issue,
     validate_profit_loop_state,
     validation_prerequisite_blockers,
@@ -651,6 +653,57 @@ class ProfitLoopStateTests(unittest.TestCase):
         self.assertTrue((self.state_dir / "profit-loop-state.json").exists())
         self.assertTrue((self.state_dir / "profit-loop-runs.jsonl").exists())
         self.assertEqual(events[0]["automation_id"], "hourly-operational-health")
+
+    def test_pending_run_ledger_recovers_after_partial_commit(self):
+        state = empty_profit_loop_state()
+        with patch("profit_loop_shared_state._append_jsonl", side_effect=OSError("ledger write failed")):
+            with self.assertRaises(OSError):
+                save_profit_loop_state_with_ledger(
+                    state,
+                    event={
+                        "run_id": "run-1",
+                        "automation_id": "daily-profit-validation",
+                        "ran_at": "2026-04-02T12:00:00Z",
+                        "verdict": "queue-empty",
+                    },
+                    state_dir=self.state_dir,
+                )
+
+        pending_path = self.state_dir / "profit-loop-run-ledger-pending.json"
+        self.assertTrue(pending_path.exists())
+
+        load_profit_loop_state(self.state_dir)
+        events = list_run_ledger_events(self.state_dir)
+
+        self.assertFalse(pending_path.exists())
+        self.assertEqual(events[-1]["run_id"], "run-1")
+        self.assertEqual(events[-1]["automation_id"], "daily-profit-validation")
+
+    def test_pending_run_ledger_discards_hash_mismatch(self):
+        state = empty_profit_loop_state()
+        save_profit_loop_state(state, state_dir=self.state_dir)
+        pending_path = self.state_dir / "profit-loop-run-ledger-pending.json"
+        pending_path.write_text(
+            json.dumps(
+                {
+                    "created_at": "2026-04-02T12:00:00Z",
+                    "expected_state_hash": "not-the-current-state",
+                    "event": {
+                        "event_id": "pending-run-1",
+                        "run_id": "run-1",
+                        "automation_id": "daily-profit-validation",
+                        "ran_at": "2026-04-02T12:00:00Z",
+                        "verdict": "queue-empty",
+                    },
+                }
+            ),
+            encoding="utf8",
+        )
+
+        load_profit_loop_state(self.state_dir)
+
+        self.assertFalse(pending_path.exists())
+        self.assertEqual(list_run_ledger_events(self.state_dir), [])
 
     def test_state_initialization_does_not_seed_replay_matrix_issue(self):
         ensure_profit_loop_state(self.state_dir)
