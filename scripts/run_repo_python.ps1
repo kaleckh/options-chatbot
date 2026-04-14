@@ -62,8 +62,22 @@ function Get-RepoTempRoot([string]$RepoRoot) {
         return Join-Path $env:CODEX_HOME ".tmp\repo-python\$rootName"
     }
 
-    $systemTemp = [System.IO.Path]::GetTempPath().TrimEnd('\')
+    $systemTemp = Get-SystemTempBasePath
     return Join-Path $systemTemp "codex-repo-python\$rootName"
+}
+
+function Get-SystemTempBasePath {
+    $systemTemp = [System.IO.Path]::GetTempPath().TrimEnd('\')
+    if ([string]::IsNullOrWhiteSpace($systemTemp)) {
+        throw "A system temp path could not be determined."
+    }
+    return $systemTemp
+}
+
+function Ensure-DirectoryPath([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
 }
 
 function Test-VenvHasPip([string]$PythonPath) {
@@ -183,15 +197,33 @@ function Get-CanonicalVirtualEnvFallback(
 }
 
 function Set-RepoTempEnvironment([string]$RepoRoot) {
-    $tempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
-    $tmpPath = Join-Path $tempRoot "tmp"
-    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
+    $preferredTempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
+    $tempRoot = $preferredTempRoot
 
-    foreach ($path in @($tempRoot, $tmpPath, $pipBuildTracker)) {
-        if (-not (Test-Path -LiteralPath $path)) {
-            New-Item -ItemType Directory -Path $path -Force | Out-Null
+    try {
+        foreach ($path in @(
+            $tempRoot,
+            (Join-Path $tempRoot "tmp"),
+            (Join-Path $tempRoot "pip-build-tracker")
+        )) {
+            Ensure-DirectoryPath -Path $path
         }
     }
+    catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+        $fallbackRoot = Join-Path (Get-SystemTempBasePath) ("codex-repo-python\" + (Split-Path -Leaf $tempRoot))
+        Write-Warning "Repo temp root $preferredTempRoot is unavailable ($($_.Exception.Message)); falling back to $fallbackRoot"
+        $tempRoot = $fallbackRoot
+        foreach ($path in @(
+            $tempRoot,
+            (Join-Path $tempRoot "tmp"),
+            (Join-Path $tempRoot "pip-build-tracker")
+        )) {
+            Ensure-DirectoryPath -Path $path
+        }
+    }
+
+    $tmpPath = Join-Path $tempRoot "tmp"
+    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
 
     $names = @("TMP", "TEMP", "TMPDIR", "PIP_BUILD_TRACKER")
     $backup = @{}
