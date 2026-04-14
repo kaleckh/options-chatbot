@@ -18,12 +18,12 @@ function LoadingSkeleton() {
 
 const PredictionsView = dynamic(
   () => import("@/components/predictions/PredictionsView"),
-  { loading: () => <LoadingSkeleton /> }
+  { loading: () => <LoadingSkeleton />, ssr: false }
 );
 
 const StrategyView = dynamic(
   () => import("@/components/strategy/StrategyView"),
-  { loading: () => <LoadingSkeleton /> }
+  { loading: () => <LoadingSkeleton />, ssr: false }
 );
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
