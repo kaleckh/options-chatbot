@@ -18,12 +18,29 @@ function Get-SystemPythonCommand {
     throw "Python 3.12 bootstrap executable was not found."
 }
 
-function Get-StableFileStamp([string[]]$Paths) {
+function Get-StableFileStamp([string[]]$Paths, [string]$BaseRoot = "") {
     $parts = New-Object System.Collections.Generic.List[string]
+    $normalizedBaseRoot = ""
+    if (-not [string]::IsNullOrWhiteSpace($BaseRoot)) {
+        $normalizedBaseRoot = [System.IO.Path]::GetFullPath($BaseRoot).TrimEnd('\')
+    }
     foreach ($path in $Paths) {
         if (Test-Path -LiteralPath $path) {
             $item = Get-Item -LiteralPath $path
-            $parts.Add(("{0}|{1}|{2}" -f $item.FullName, $item.Length, $item.LastWriteTimeUtc.Ticks))
+            $relativePath = [string]$item.Name
+            $resolvedPath = [System.IO.Path]::GetFullPath($item.FullName)
+
+            if (-not [string]::IsNullOrWhiteSpace($normalizedBaseRoot)) {
+                if ($resolvedPath.StartsWith($normalizedBaseRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    $candidate = $resolvedPath.Substring($normalizedBaseRoot.Length).TrimStart('\')
+                    if (-not [string]::IsNullOrWhiteSpace($candidate)) {
+                        $relativePath = $candidate
+                    }
+                }
+            }
+
+            $fileHash = (Get-FileHash -LiteralPath $resolvedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+            $parts.Add(("{0}|{1}" -f $relativePath, $fileHash))
         }
     }
     return ($parts -join "`n")
@@ -31,12 +48,22 @@ function Get-StableFileStamp([string[]]$Paths) {
 
 function Get-RepoTempRoot([string]$RepoRoot) {
     $repoName = Split-Path -Leaf $RepoRoot
+    $normalizedRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\').ToLowerInvariant()
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $sha256.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($normalizedRoot))
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $repoHash = ([System.BitConverter]::ToString($hashBytes)).Replace("-", "").Substring(0, 12).ToLowerInvariant()
+    $rootName = "$repoName-$repoHash"
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
-        return Join-Path $env:CODEX_HOME ".tmp\repo-python\$repoName"
+        return Join-Path $env:CODEX_HOME ".tmp\repo-python\$rootName"
     }
 
     $systemTemp = [System.IO.Path]::GetTempPath().TrimEnd('\')
-    return Join-Path $systemTemp "codex-repo-python\$repoName"
+    return Join-Path $systemTemp "codex-repo-python\$rootName"
 }
 
 function Test-VenvHasPip([string]$PythonPath) {
@@ -97,6 +124,61 @@ function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
 
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to create repo-local virtualenv."
+    }
+}
+
+function Get-CanonicalRequirements([string]$CanonicalRoot, [string[]]$RepoRequirements, [string]$RepoRoot) {
+    $resolvedRepoRoot = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\')
+    $canonicalRequirements = New-Object System.Collections.Generic.List[string]
+    foreach ($path in $RepoRequirements) {
+        if (-not (Test-Path -LiteralPath $path)) {
+            continue
+        }
+
+        $resolvedPath = [System.IO.Path]::GetFullPath($path)
+        if ($resolvedPath.StartsWith($resolvedRepoRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $relativePath = $resolvedPath.Substring($resolvedRepoRoot.Length).TrimStart('\')
+            $canonicalPath = Join-Path $CanonicalRoot $relativePath
+            if (Test-Path -LiteralPath $canonicalPath) {
+                $canonicalRequirements.Add($canonicalPath)
+            }
+        }
+    }
+
+    return @($canonicalRequirements)
+}
+
+function Get-CanonicalVirtualEnvFallback(
+    [string]$RepoRoot,
+    [string]$CanonicalRoot,
+    [string[]]$Requirements,
+    [string]$CurrentStamp
+) {
+    if ($CanonicalRoot -eq $RepoRoot) {
+        return $null
+    }
+
+    $canonicalRequirements = Get-CanonicalRequirements -CanonicalRoot $CanonicalRoot -RepoRequirements $Requirements -RepoRoot $RepoRoot
+    if ($canonicalRequirements.Count -ne $Requirements.Count) {
+        return $null
+    }
+
+    $canonicalStamp = Get-StableFileStamp -Paths $canonicalRequirements -BaseRoot $CanonicalRoot
+    if ($canonicalStamp.TrimEnd("`r", "`n") -ne $CurrentStamp.TrimEnd("`r", "`n")) {
+        return $null
+    }
+
+    $canonicalVenvRoot = Join-Path $CanonicalRoot ".venv"
+    $canonicalVenvPython = Join-Path $canonicalVenvRoot "Scripts\python.exe"
+    if (-not (Test-VenvHealthy -VenvRoot $canonicalVenvRoot -PythonPath $canonicalVenvPython)) {
+        return $null
+    }
+
+    return @{
+        VenvRoot = $canonicalVenvRoot
+        PythonPath = $canonicalVenvPython
+        StampPath = Join-Path $canonicalVenvRoot ".automation-deps-stamp"
+        UsingCanonical = $true
     }
 }
 
@@ -286,14 +368,32 @@ try {
         (Join-Path $repoRoot "pyproject.toml"),
         (Join-Path $repoRoot "python-backend\requirements.txt")
     ) | Where-Object { Test-Path -LiteralPath $_ }
-    $currentStamp = Get-StableFileStamp -Paths $requirements
+    $currentStamp = Get-StableFileStamp -Paths $requirements -BaseRoot $repoRoot
+    $activeVenvRoot = $venvRoot
+    $activeVenvPython = $venvPython
+    $activeStampPath = $stampPath
+    $usingCanonicalVenv = $false
 
     if (-not (Test-VenvHealthy -VenvRoot $venvRoot -PythonPath $venvPython)) {
         $bootstrap = Get-SystemPythonCommand
-        New-RepoVirtualEnv -BootstrapCommand $bootstrap -VenvRoot $venvRoot
+        try {
+            New-RepoVirtualEnv -BootstrapCommand $bootstrap -VenvRoot $venvRoot
+        }
+        catch {
+            $canonicalFallback = Get-CanonicalVirtualEnvFallback -RepoRoot $repoRoot -CanonicalRoot $canonicalRoot -Requirements $requirements -CurrentStamp $currentStamp
+            if ($null -eq $canonicalFallback) {
+                throw
+            }
+
+            $activeVenvRoot = [string]$canonicalFallback.VenvRoot
+            $activeVenvPython = [string]$canonicalFallback.PythonPath
+            $activeStampPath = [string]$canonicalFallback.StampPath
+            $usingCanonicalVenv = $true
+            Write-Warning "Repo-local virtualenv bootstrap failed; falling back to the healthy canonical virtualenv at $activeVenvRoot"
+        }
     }
 
-    $previousStamp = if (Test-Path -LiteralPath $stampPath) { (Get-Content -LiteralPath $stampPath -Raw).TrimEnd("`r", "`n") } else { "" }
+    $previousStamp = if (Test-Path -LiteralPath $activeStampPath) { (Get-Content -LiteralPath $activeStampPath -Raw).TrimEnd("`r", "`n") } else { "" }
     $normalizedCurrentStamp = $currentStamp.TrimEnd("`r", "`n")
     if ($ForceInstall -or $previousStamp -ne $normalizedCurrentStamp) {
         $installArgs = @(
@@ -301,23 +401,28 @@ try {
             "-r", (Join-Path $repoRoot "requirements.txt"),
             "-r", (Join-Path $repoRoot "python-backend\requirements.txt")
         )
-        Write-Host "Installing repo Python dependencies into $venvRoot"
-        & $venvPython @installArgs
+        if ($usingCanonicalVenv) {
+            Write-Warning "Installing worktree dependency updates into the canonical virtualenv at $activeVenvRoot"
+        }
+        else {
+            Write-Host "Installing repo Python dependencies into $activeVenvRoot"
+        }
+        & $activeVenvPython @installArgs
         if ($LASTEXITCODE -ne 0) {
             throw "Failed to install repo Python dependencies."
         }
-        Set-Content -LiteralPath $stampPath -Value $normalizedCurrentStamp -Encoding UTF8 -NoNewline
+        Set-Content -LiteralPath $activeStampPath -Value $normalizedCurrentStamp -Encoding UTF8 -NoNewline
     }
 
     if (-not $CommandArgs -or $CommandArgs.Count -eq 0) {
-        Write-Output $venvPython
+        Write-Output $activeVenvPython
         exit 0
     }
 
     $env:PYTHONUTF8 = "1"
     Push-Location $repoRoot
     try {
-        & $venvPython @CommandArgs
+        & $activeVenvPython @CommandArgs
         exit $LASTEXITCODE
     }
     finally {
