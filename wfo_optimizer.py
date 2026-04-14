@@ -4345,6 +4345,8 @@ def _playbook_trade_window(playbook: str) -> dict[str, int]:
     playbook_id = str(playbook or "short_term").strip().lower()
     if playbook_id == "swing":
         return {"min_dte": 13, "max_dte": 35}
+    if playbook_id == "speculative":
+        return {"min_dte": 5, "max_dte": 9}
     if playbook_id == "bullish_momentum":
         return {"min_dte": 7, "max_dte": 21}
     if playbook_id == "bullish_mean_reversion":

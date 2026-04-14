@@ -34,6 +34,10 @@ SCAN_FUNNEL_DROP_KEYS = (
     "exceptions",
 )
 
+SPECULATIVE_ALLOWED_TICKERS = ("SPY", "QQQ")
+SPECULATIVE_COHORT_ID = "speculative_short_dte"
+SPECULATIVE_COHORT_ROLE = "observation"
+
 
 SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
     "short_term": {
@@ -65,6 +69,29 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "max_correlated_index_positions": 1,
         "daily_loss_limit_pct": 2.0,
         "weekly_loss_limit_pct": 5.0,
+    },
+    "speculative": {
+        "id": "speculative",
+        "label": "Speculative",
+        "description": "Observation-only 5 DTE SPY/QQQ ideas for high-convexity setups. Starter size only while the lane builds forward evidence.",
+        "target_dte": 5,
+        "max_new_positions_per_day": 1,
+        "max_sector_open_positions": 1,
+        "max_regime_open_positions": 1,
+        "block_same_ticker": True,
+        "allowed_asset_classes": ["index"],
+        "allowed_tickers": list(SPECULATIVE_ALLOWED_TICKERS),
+        "min_quality_score": 70.0,
+        "calibration_playbook": "broad",
+        "max_concurrent_positions": 1,
+        "max_correlated_index_positions": 1,
+        "daily_loss_limit_pct": 1.0,
+        "weekly_loss_limit_pct": 2.5,
+        "observation_only": True,
+        "require_speculative_flag": True,
+        "forced_size_tier": "starter",
+        "forced_cohort_id": SPECULATIVE_COHORT_ID,
+        "forced_cohort_role": SPECULATIVE_COHORT_ROLE,
     },
     "bullish_momentum": {
         "id": "bullish_momentum",
@@ -182,6 +209,127 @@ def _candidate_rank_tuple(pick: dict[str, Any]) -> tuple[float, float, float, fl
     )
 
 
+def _safe_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _safe_int(value: Any) -> int | None:
+    try:
+        if value is None:
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _clamp_tier(value: int) -> int:
+    return max(1, min(int(value), 5))
+
+
+def _candidate_profit_id(symbol: str, direction: str, cohort_id: str) -> str:
+    normalized_symbol = str(symbol or "").strip().upper()
+    normalized_direction = str(direction or "").strip().lower()
+    return f"{normalized_symbol}__{normalized_direction}__{str(cohort_id or '').strip()}"
+
+
+def _bid_ask_spread_pct(pick: dict[str, Any]) -> float | None:
+    bid = _safe_float(pick.get("bid"))
+    ask = _safe_float(pick.get("ask"))
+    mid = (
+        _safe_float(pick.get("mid"))
+        or _safe_float(pick.get("premium"))
+        or _safe_float(pick.get("est_premium"))
+    )
+    if bid is None or ask is None or mid is None or mid <= 0 or ask < bid:
+        return None
+    return ((ask - bid) / mid) * 100.0
+
+
+def _derive_convexity_profile(pick: dict[str, Any]) -> dict[str, Any]:
+    dte = _safe_int(pick.get("dte"))
+    delta_value = _safe_float(pick.get("delta"))
+    if delta_value is None:
+        delta_value = _safe_float(pick.get("delta_est"))
+    delta = abs(delta_value) if delta_value is not None else None
+    iv_pct = _safe_float(pick.get("iv_percentile"))
+    if iv_pct is None:
+        iv_pct = _safe_float(pick.get("iv_pct"))
+    premium = (
+        _safe_float(pick.get("premium"))
+        or _safe_float(pick.get("est_premium"))
+        or _safe_float(pick.get("mid"))
+    )
+    spread_pct = _bid_ask_spread_pct(pick)
+    quote_freshness = str(pick.get("quote_freshness_status") or "").strip().lower()
+
+    risk_tier = 1
+    upside_tier = 1
+    reasons: list[str] = []
+
+    if dte is not None:
+        if dte <= 5:
+            risk_tier += 2
+            upside_tier += 2
+            reasons.append("5 DTE or less sharply increases gamma and theta sensitivity.")
+        elif dte <= 7:
+            risk_tier += 1
+            upside_tier += 1
+
+    if delta is not None:
+        if delta <= 0.2:
+            risk_tier += 2
+            upside_tier += 2
+            reasons.append("Low delta makes the contract lower-probability but more convex.")
+        elif delta <= 0.35:
+            risk_tier += 1
+            upside_tier += 1
+        elif delta >= 0.55:
+            risk_tier -= 1
+
+    if premium is not None:
+        if premium <= 1.0:
+            risk_tier += 1
+            upside_tier += 1
+            reasons.append("Lower premium increases all-or-nothing risk and percentage payoff potential.")
+        elif premium >= 4.0:
+            upside_tier -= 1
+
+    if iv_pct is not None and iv_pct >= 70.0:
+        risk_tier += 1
+        reasons.append("Elevated IV raises the chance of vol-compression drag.")
+
+    if spread_pct is not None and spread_pct >= 10.0:
+        risk_tier += 1
+        reasons.append("Wide bid/ask spread adds execution risk.")
+
+    if quote_freshness and quote_freshness not in {"fresh", "live"}:
+        risk_tier += 1
+        reasons.append("Quote freshness is not marked fresh.")
+
+    risk_tier = _clamp_tier(risk_tier)
+    upside_tier = _clamp_tier(upside_tier)
+    speculative_flag = risk_tier >= 4 and upside_tier >= 4
+    if speculative_flag:
+        convexity_class = "speculative"
+    elif risk_tier >= 3 or upside_tier >= 3:
+        convexity_class = "aggressive"
+    else:
+        convexity_class = "core"
+
+    return {
+        "risk_tier": risk_tier,
+        "upside_tier": upside_tier,
+        "speculative_flag": speculative_flag,
+        "speculative_reason": reasons,
+        "convexity_class": convexity_class,
+    }
+
+
 def _watch_symbol_rank(pick: dict[str, Any], policy: Optional[dict[str, Any]]) -> int:
     if not policy:
         return 0
@@ -220,6 +368,11 @@ def _normalized_snapshot_status(value: Any) -> str:
 
 
 def _managed_pick_block_reason(pick: dict[str, Any], policy: Optional[dict[str, Any]]) -> Optional[str]:
+    if bool(pick.get("observation_only")):
+        return str(
+            pick.get("observation_reason")
+            or "observation_only_lane"
+        )
     if not policy:
         return "policy_not_applied"
     if str(policy.get("truth_window_status") or "unknown").strip().lower() == "stale":
@@ -497,6 +650,7 @@ def annotate_pick_with_guardrails(
 
     blocked: list[str] = []
     cautions: list[str] = []
+    annotated.update(_derive_convexity_profile(annotated))
 
     if not bool(exposure.get("available", True)):
         blocked.append("Portfolio guardrails failed closed because tracked-position storage is unavailable.")
@@ -504,6 +658,10 @@ def annotate_pick_with_guardrails(
     allowed_asset_classes = _normalized_label_set(playbook.get("allowed_asset_classes") or [])
     if allowed_asset_classes and asset_class not in allowed_asset_classes:
         blocked.append(f"{playbook['label']} only allows asset classes: {', '.join(sorted(allowed_asset_classes))}.")
+
+    allowed_tickers = _normalized_label_set(playbook.get("allowed_tickers") or [])
+    if allowed_tickers and ticker.lower() not in allowed_tickers:
+        blocked.append(f"{playbook['label']} only runs on tickers: {', '.join(sorted(playbook.get('allowed_tickers') or []))}.")
 
     allowed_market_regimes = _normalized_label_set(playbook.get("allowed_market_regimes") or [])
     if allowed_market_regimes and market_regime not in allowed_market_regimes:
@@ -520,6 +678,9 @@ def annotate_pick_with_guardrails(
     min_quality_score = playbook.get("min_quality_score")
     if min_quality_score is not None and quality_score < float(min_quality_score):
         blocked.append(f"Quality score {quality_score:.1f} is below the {playbook['label']} minimum of {float(min_quality_score):.1f}.")
+
+    if playbook.get("require_speculative_flag") and not bool(annotated.get("speculative_flag")):
+        blocked.append(f"{playbook['label']} only surfaces high-convexity setups rated speculative on the risk/upside scale.")
 
     if playbook.get("block_same_ticker") and ticker and int(ticker_counts.get(ticker, 0) or 0) > 0:
         blocked.append(f"An open tracked position already exists in {ticker}.")
@@ -602,6 +763,9 @@ def annotate_pick_with_guardrails(
     if guardrail_decision == "blocked":
         suggested_size_tier = "blocked"
         suggested_size_reason = "Do not add this trade while the current playbook guardrails are blocking it."
+    elif str(playbook.get("forced_size_tier") or "").strip().lower() in {"starter", "half", "full"}:
+        suggested_size_tier = str(playbook.get("forced_size_tier")).strip().lower()
+        suggested_size_reason = "This playbook is intentionally capped at starter size while it builds separate forward evidence."
     elif policy_decision == "watch":
         suggested_size_tier = "starter"
         suggested_size_reason = "Watch-tier trades default to starter size until the cohort proves itself further."
@@ -618,6 +782,18 @@ def annotate_pick_with_guardrails(
     annotated["guardrail_reasons"] = blocked if blocked else cautions
     annotated["suggested_size_tier"] = suggested_size_tier
     annotated["suggested_size_reason"] = suggested_size_reason
+    annotated["observation_only"] = bool(playbook.get("observation_only"))
+    if annotated["observation_only"]:
+        annotated["observation_reason"] = (
+            "Speculative lane stays watch-only until it earns enough exact-contract forward evidence."
+        )
+    forced_cohort_id = str(playbook.get("forced_cohort_id") or "").strip()
+    if forced_cohort_id and ticker and direction:
+        forced_profit_candidate_id = _candidate_profit_id(ticker, direction, forced_cohort_id)
+        annotated["profit_candidate_id"] = forced_profit_candidate_id
+        annotated["policy_artifact_id"] = forced_profit_candidate_id
+        annotated["cohort_id"] = forced_cohort_id
+        annotated["cohort_role"] = str(playbook.get("forced_cohort_role") or "candidate").strip()
     return annotated
 
 
@@ -736,6 +912,7 @@ def run_supervised_scan(
     min_directional_accuracy_pct: float = 50.0,
 ) -> dict[str, Any]:
     playbook = get_scan_playbook(playbook_id)
+    observation_only_playbook = bool(playbook.get("observation_only"))
     scan_dte = int(playbook["target_dte"])
     scan_pool_size = max(int(n_picks), int(watchlist_size))
     raw_picks = list(
@@ -902,7 +1079,7 @@ def run_supervised_scan(
             ),
             reverse=True,
         )
-        final_picks = approved_picks
+        final_picks = watch_picks[: max(int(n_picks), 0)] if observation_only_playbook else approved_picks
     else:
         ranked_picks = [_annotate_managed_pick(pick, None) for pick in ranked_picks]
         final_picks = ranked_picks[: max(int(n_picks), 0)]

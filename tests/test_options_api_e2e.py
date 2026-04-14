@@ -971,6 +971,89 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(pick["cohort_id"], expected_profit_context["cohort_id"])
         self.assertEqual(pick["cohort_role"], expected_profit_context["mode"])
 
+    def test_speculative_playbook_stays_observation_only_and_keeps_its_own_cohort(self):
+        speculative_pick = {
+            "ticker": "SPY",
+            "direction": "call",
+            "direction_score": 84.0,
+            "quality_score": 78.0,
+            "tech_score": 73.0,
+            "ev_pct": 13.8,
+            "stock_price": 520.0,
+            "strike_est": 528.0,
+            "est_premium": 1.15,
+            "delta": 0.28,
+            "dte": 5,
+            "iv_percentile": 42.0,
+            "expiry": "2026-04-17",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "spy_ret5": 0.8,
+            "quote_freshness_status": "fresh",
+            "target_move_pct": 2.4,
+            "type": "daily_scan",
+        }
+        off_playbook_pick = {
+            "ticker": "IWM",
+            "direction": "call",
+            "direction_score": 82.0,
+            "quality_score": 77.0,
+            "tech_score": 71.0,
+            "ev_pct": 12.9,
+            "stock_price": 216.0,
+            "strike_est": 221.0,
+            "est_premium": 1.2,
+            "delta": 0.27,
+            "dte": 5,
+            "iv_percentile": 44.0,
+            "expiry": "2026-04-17",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "spy_ret5": 0.8,
+            "quote_freshness_status": "fresh",
+            "target_move_pct": 2.6,
+            "type": "daily_scan",
+        }
+        baseline_context = {
+            "candidate_id": "SPY__call__baseline_broad_control",
+            "cohort_id": "baseline_broad_control",
+            "mode": "incumbent",
+            "status": "incumbent",
+        }
+
+        with patch.object(self.backend, "scan_daily_top_trades", return_value=[speculative_pick, off_playbook_pick]), \
+             patch.object(self.backend, "live_profile_entry_for_symbol", return_value=baseline_context):
+            response = self.client.post(
+                "/api/scan",
+                json={
+                    "playbook": "speculative",
+                    "n_picks": 5,
+                    "use_recommended_policy": False,
+                    "include_blocked_guardrail_picks": True,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["playbook"]["id"], "speculative")
+        self.assertTrue(any(item["id"] == "speculative" for item in payload["playbooks"]))
+        picks = {pick["ticker"]: pick for pick in payload["picks"]}
+        self.assertEqual(picks["SPY"]["guardrail_decision"], "clear")
+        self.assertEqual(picks["SPY"]["suggested_size_tier"], "starter")
+        self.assertTrue(picks["SPY"]["observation_only"])
+        self.assertTrue(picks["SPY"]["speculative_flag"])
+        self.assertEqual(picks["SPY"]["convexity_class"], "speculative")
+        self.assertGreaterEqual(picks["SPY"]["risk_tier"], 4)
+        self.assertGreaterEqual(picks["SPY"]["upside_tier"], 4)
+        self.assertEqual(picks["SPY"]["profit_candidate_id"], "SPY__call__speculative_short_dte")
+        self.assertEqual(picks["SPY"]["policy_artifact_id"], "SPY__call__speculative_short_dte")
+        self.assertEqual(picks["SPY"]["cohort_id"], "speculative_short_dte")
+        self.assertEqual(picks["SPY"]["cohort_role"], "observation")
+        self.assertEqual(picks["IWM"]["guardrail_decision"], "blocked")
+        self.assertTrue(picks["IWM"]["guardrail_reasons"])
+
     def test_bearish_defensive_playbook_only_clears_matching_slice(self):
         bearish_pick = {
             "ticker": "PFE",

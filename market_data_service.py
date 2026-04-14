@@ -223,6 +223,11 @@ class _SQLiteConnectionProxy:
         self.close()
 
 
+def _unwrap_sqlite_connection(conn: sqlite3.Connection) -> sqlite3.Connection:
+    raw_conn = getattr(conn, "_conn", conn)
+    return raw_conn if isinstance(raw_conn, sqlite3.Connection) else conn
+
+
 def _sqlite_connection() -> sqlite3.Connection:
     path = _db_path()
     request_active = _REQUEST_MEMO.get() is not None
@@ -470,17 +475,17 @@ def _business_dates(start_date: date, end_date: date) -> set[str]:
 
 
 def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
-    conn = _sqlite_connection()
-    rows = pd.read_sql_query(
-        """
-        SELECT bar_date, open, high, low, close, adj_close, volume
-        FROM daily_history
-        WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
-        ORDER BY bar_date
-        """,
-        conn,
-        params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
-    )
+    with _sqlite_connection() as conn:
+        rows = pd.read_sql_query(
+            """
+            SELECT bar_date, open, high, low, close, adj_close, volume
+            FROM daily_history
+            WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
+            ORDER BY bar_date
+            """,
+            _unwrap_sqlite_connection(conn),
+            params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
+        )
     if rows.empty:
         return pd.DataFrame()
     rows["bar_date"] = pd.to_datetime(rows["bar_date"])
