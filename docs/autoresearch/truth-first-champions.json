@@ -13,7 +13,8 @@
   "required_baseline_control": "baseline_broad_control",
   "allowed_proposal_families": [
     "baseline",
-    "broad"
+    "broad",
+    "speculative"
   ],
   "required_watchlist": [
     "SPY",
@@ -25,7 +26,8 @@
     "No live-default changes or promotion changes should be made from synthetic-only wins.",
     "Forward holdout recording should start on March 31, 2026 and remain append-only.",
     "The active truth-first validation scope is intentionally narrowed to SPY and QQQ until imported real-data coverage exists for the broader watchlist.",
-    "The active broad pack is now call-only, index-targeted, and limited to quality-tightening challengers."
+    "The active broad pack is now call-only, index-targeted, and limited to quality-tightening challengers.",
+    "The speculative short-DTE lane remains SPY/QQQ-only and observation-only until it earns separate exact-contract forward evidence."
   ],
   "symbols": [
     "SPY",
@@ -133,6 +135,22 @@
           "entry_momentum_pct": 0.7
         }
       }
+    },
+    {
+      "id": "speculative_short_dte",
+      "role": "speculative_candidate",
+      "label": "Speculative Short DTE",
+      "playbooks": [
+        "speculative"
+      ],
+      "profile_targets": [
+        "index"
+      ],
+      "directions": [
+        "call",
+        "put"
+      ],
+      "overrides": {}
     }
   ]
 }

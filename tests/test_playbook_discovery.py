@@ -60,6 +60,9 @@ def _find_candidate(report: dict, filters: dict) -> dict:
 
 
 class PlaybookDiscoveryTests(unittest.TestCase):
+    def test_speculative_window_targets_shortest_allowed_contracts(self):
+        self.assertEqual(wfo._playbook_trade_window("speculative"), {"min_dte": 5, "max_dte": 9})
+
     def test_stable_slice_gets_promote(self):
         start = date(2024, 1, 5)
         tickers = ["PFE", "MRK", "LLY"]

@@ -191,6 +191,48 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(history_stats["full_refresh_failures"], 1)
         self.assertEqual(history_stats["stale_cache_returns"], 1)
 
+    def test_daily_history_query_uses_native_sqlite_connection_for_pandas(self):
+        service = self._service()
+        captured: dict[str, object] = {}
+        raw_conn = sqlite3.connect(":memory:")
+        self.addCleanup(raw_conn.close)
+        raw_conn.execute(
+            """
+            CREATE TABLE daily_history (
+                symbol TEXT NOT NULL,
+                bar_date TEXT NOT NULL,
+                open REAL,
+                high REAL,
+                low REAL,
+                close REAL,
+                adj_close REAL,
+                volume REAL,
+                fetched_at TEXT NOT NULL
+            )
+            """
+        )
+        raw_conn.execute(
+            """
+            INSERT INTO daily_history(symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("AAA", "2026-04-10", 100.0, 101.0, 99.0, 100.5, 100.4, 1000.0, "2026-04-10T00:00:00"),
+        )
+        raw_conn.commit()
+        original_read_sql_query = pd.read_sql_query
+
+        def _fake_read_sql_query(query, conn, params=()):
+            captured["conn"] = conn
+            return original_read_sql_query(query, conn, params=params)
+
+        proxy = service._SQLiteConnectionProxy(raw_conn, persistent=False)
+        with patch.object(service, "_sqlite_connection", return_value=proxy), \
+             patch.object(service.pd, "read_sql_query", side_effect=_fake_read_sql_query):
+            rows = service._load_daily_history_rows("AAA", pd.Timestamp("2026-04-10").date(), pd.Timestamp("2026-04-10").date())
+
+        self.assertFalse(rows.empty)
+        self.assertIsInstance(captured["conn"], sqlite3.Connection)
+
     def test_ttl_cache_reuses_options_and_fast_info(self):
         service = self._service()
         with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \

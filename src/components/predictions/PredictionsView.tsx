@@ -70,16 +70,38 @@ function fmtDate(value?: string | null): string {
   return value ? value.slice(0, 10) : "\u2014";
 }
 
+function fmtStrike(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return "\u2014";
+  return fmtMoney(value, 0);
+}
+
+function fmtContractCoreLabel(position: {
+  ticker: string;
+  direction: "call" | "put";
+  strike?: number | null;
+  short_strike?: number | null;
+  expiry?: string | null;
+}): string {
+  const strikeLabel = fmtStrike(position.strike);
+  const shortStrikeLabel =
+    position.short_strike != null && !Number.isNaN(position.short_strike)
+      ? fmtStrike(position.short_strike)
+      : null;
+  const strikeBlock = shortStrikeLabel ? `${strikeLabel}/${shortStrikeLabel}` : strikeLabel;
+  return `${position.ticker} ${position.direction.toUpperCase()} ${strikeBlock} ${fmtDate(position.expiry)}`;
+}
+
 function fmtContractLabel(position: {
   ticker: string;
   direction: "call" | "put";
   strike?: number | null;
+  short_strike?: number | null;
   expiry?: string | null;
   contract_symbol?: string | null;
 }): string {
-  if (position.contract_symbol) return position.contract_symbol;
-  const strike = position.strike != null ? fmtMoney(position.strike, 0) : "\u2014";
-  return `${position.ticker} ${fmtDate(position.expiry)} ${strike} ${position.direction.toUpperCase()}`;
+  const coreLabel = fmtContractCoreLabel(position);
+  if (position.contract_symbol) return `${coreLabel} | ${position.contract_symbol}`;
+  return coreLabel;
 }
 
 function fmtPricingSource(value?: string | null): string {
@@ -139,6 +161,13 @@ function quoteContextLabel(pick?: Partial<ScanPick> | null): string {
   if (basis === "\u2014") return freshness;
   if (freshness === "\u2014") return basis;
   return `${basis} / ${freshness}`;
+}
+
+function fmtRiskUpsideLabel(pick?: Partial<ScanPick> | null): string {
+  const risk = pick?.risk_tier;
+  const upside = pick?.upside_tier;
+  if (risk == null && upside == null) return "\u2014";
+  return `R${risk ?? "\u2014"} / U${upside ?? "\u2014"}`;
 }
 
 function calcOptionPnlPct(entryPrice?: number | null, exitPrice?: number | null): number | null {
@@ -1131,7 +1160,14 @@ function ScannerTab({
   const rows = picks.map((pick) => ({
     Ticker: pick.ticker,
     Trade: pick.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
-    Contract: pick.contract_symbol || contractQualityLabel(pick),
+    Contract: fmtContractLabel({
+      ticker: pick.ticker,
+      direction: pick.direction,
+      strike: pick.strike ?? pick.strike_est,
+      short_strike: pick.short_strike,
+      expiry: pick.expiry,
+      contract_symbol: pick.contract_symbol,
+    }),
     Quote: quoteContextLabel(pick),
     "Dir. Score": pick.direction_score.toFixed(0),
     Quality: pick.quality_score.toFixed(0),
@@ -1150,6 +1186,7 @@ function ScannerTab({
         : "Blocked"
       : "\u2014",
     Size: pick.suggested_size_tier ? pick.suggested_size_tier.toUpperCase() : "\u2014",
+    "Risk/Upside": fmtRiskUpsideLabel(pick),
     Regime: pick.market_regime ? pick.market_regime.toUpperCase() : "\u2014",
     Sector: pick.sector || "\u2014",
     Stock: fmtMoney(pick.stock_price),
@@ -1159,7 +1196,9 @@ function ScannerTab({
     "Target Move": pick.target_move_pct != null ? `${pick.target_move_pct.toFixed(2)}%` : "\u2014",
     Action: (
       <Button size="sm" variant="secondary" onClick={() => onPick(pick)}>
-        {pick.guardrail_decision === "blocked"
+        {pick.observation_only
+          ? "Review Speculative"
+          : pick.guardrail_decision === "blocked"
           ? "Inspect"
           : pick.guardrail_decision === "caution"
           ? "Take Smaller"
@@ -1185,6 +1224,7 @@ function ScannerTab({
           {(playbooks.length ? playbooks : [
             { id: "short_term", label: "Short-Term" },
             { id: "swing", label: "Swing" },
+            { id: "speculative", label: "Speculative" },
             { id: "bearish_defensive", label: "Bearish Defensive" },
           ]).map((item) => (
             <Button
@@ -1231,10 +1271,23 @@ function ScannerTab({
 
       {activePlaybook && (
         <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
+          {activePlaybook.observation_only && (
+            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+              This lane is observation-only. It surfaces speculative SPY/QQQ ideas for paper tracking and starter-size review, not normal managed-lane approval.
+            </div>
+          )}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-text-0">{activePlaybook.label} Playbook</div>
               <p className="text-xs text-text-3 mt-1">{activePlaybook.description}</p>
+              {(activePlaybook.observation_only || activePlaybook.allowed_tickers?.length) && (
+                <div className="text-[11px] uppercase tracking-wide text-text-3 mt-2">
+                  {activePlaybook.observation_only ? "Observation only" : "Managed lane"}
+                  {activePlaybook.allowed_tickers?.length
+                    ? ` \u00b7 Universe ${activePlaybook.allowed_tickers.join(" / ")}`
+                    : ""}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <MetricCard label="Target DTE" value={String(activePlaybook.target_dte)} />
@@ -1471,13 +1524,20 @@ function ScannerTab({
         <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
           <div>
             <div className="text-sm font-semibold text-text-0">
-              Record {selectedPick.ticker} {selectedPick.direction.toUpperCase()}
+              Record {fmtContractCoreLabel({
+                ticker: selectedPick.ticker,
+                direction: selectedPick.direction,
+                strike: selectedPick.strike ?? selectedPick.strike_est,
+                short_strike: selectedPick.short_strike,
+                expiry: selectedPick.expiry,
+              })}
             </div>
             <div className="text-xs text-text-3 mt-1">
               {fmtContractLabel({
                 ticker: selectedPick.ticker,
                 direction: selectedPick.direction,
                 strike: selectedPick.strike ?? selectedPick.strike_est,
+                short_strike: selectedPick.short_strike,
                 expiry: selectedPick.expiry,
                 contract_symbol: selectedPick.contract_symbol,
               })}
@@ -1512,6 +1572,25 @@ function ScannerTab({
                   <div key={reason}>{reason}</div>
                 ))}
                 {selectedPick.suggested_size_reason && <div>{selectedPick.suggested_size_reason}</div>}
+              </div>
+            )}
+            {(selectedPick.risk_tier != null
+              || selectedPick.upside_tier != null
+              || selectedPick.convexity_class
+              || selectedPick.observation_only) && (
+              <div className="text-xs text-text-2 mt-2 space-y-1">
+                <div className="text-[11px] uppercase tracking-wide text-text-3">Risk Profile</div>
+                <div>
+                  Convexity: <strong className="text-text-0">{fmtUpperLabel(selectedPick.convexity_class)}</strong>
+                  {" "}&middot; {fmtRiskUpsideLabel(selectedPick)}
+                  {selectedPick.speculative_flag ? " \u00b7 SPECULATIVE" : ""}
+                </div>
+                {selectedPick.observation_only && (
+                  <div>{selectedPick.observation_reason || "This lane is watch-only while it builds separate forward evidence."}</div>
+                )}
+                {selectedPick.speculative_reason?.map((reason) => (
+                  <div key={reason}>{reason}</div>
+                ))}
               </div>
             )}
             <div className="text-xs text-text-2 mt-2 space-y-1">

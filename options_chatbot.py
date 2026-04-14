@@ -317,6 +317,25 @@ def _candidate_rank_tuple(candidate: dict) -> tuple:
     )
 
 
+def _scan_contract_signature(pick: dict) -> tuple:
+    def _norm_float(value: Any) -> float | None:
+        try:
+            return round(float(value), 4)
+        except (TypeError, ValueError):
+            return None
+
+    return (
+        str(pick.get("ticker") or "").strip().upper() or None,
+        str(pick.get("direction") or pick.get("type") or "").strip().lower() or None,
+        str(pick.get("expiry") or "").strip()[:10] or None,
+        str(pick.get("strategy_type") or "single_leg").strip().lower() or None,
+        _norm_float(pick.get("strike") if pick.get("strike") is not None else pick.get("strike_est")),
+        _norm_float(pick.get("short_strike")),
+        str(pick.get("contract_symbol") or "").strip().upper() or None,
+        str(pick.get("short_contract_symbol") or "").strip().upper() or None,
+    )
+
+
 def _candidate_signal_value(candidate: dict) -> float:
     return float(candidate.get("direction_score", 0.0) or 0.0)
 
@@ -4503,9 +4522,14 @@ def scan_daily_top_trades(
 
     # ── Sector concentration: equity picks — max 2 from same sector ───────────
     _sector_counts: dict[str, int] = {}
+    _seen_contracts: set[tuple] = set()
     _accepted: list[dict] = []
     _overflow: list[dict] = []
     for _c in candidates:
+        _contract_signature = _scan_contract_signature(_c)
+        if _contract_signature in _seen_contracts:
+            continue
+        _seen_contracts.add(_contract_signature)
         if len(_accepted) >= n_picks:
             _overflow.append(_c)
             continue
@@ -4594,7 +4618,7 @@ def roll_forward_daily_picks(
     # Fill empty slots with new picks
     slots_needed   = n_picks - len(rolled)
     used_keys      = {(r["ticker"], r["direction"]) for r in rolled}
-    rolled_anchors = {(r["ticker"], r.get("strike_est"), r.get("expiry")) for r in rolled}
+    rolled_anchors = {_scan_contract_signature(r) for r in rolled}
 
     new_picks: list[dict] = []
     for c in all_candidates:
@@ -4603,8 +4627,8 @@ def roll_forward_daily_picks(
         key = (c["ticker"], c["direction"])
         if key in used_keys:
             continue
-        # Suppress duplicate exposure (same ticker+strike+expiry already rolled)
-        anchor = (c["ticker"], c.get("strike_est"), c.get("expiry"))
+        # Suppress duplicate exposure when the rolled book already holds this contract.
+        anchor = _scan_contract_signature(c)
         if anchor in rolled_anchors:
             continue
         fresh_pick = dict(c)

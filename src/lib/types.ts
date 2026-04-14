@@ -54,6 +54,7 @@ export interface ScanPick {
   stock_price?: number;
   strike?: number;
   strike_est?: number;
+  short_strike?: number | null;
   premium?: number;
   est_premium?: number;
   bid?: number | null;
@@ -78,6 +79,13 @@ export interface ScanPick {
   guardrail_reasons?: string[];
   suggested_size_tier?: "starter" | "half" | "full" | "blocked" | string | null;
   suggested_size_reason?: string | null;
+  risk_tier?: 1 | 2 | 3 | 4 | 5 | number | null;
+  upside_tier?: 1 | 2 | 3 | 4 | 5 | number | null;
+  speculative_flag?: boolean;
+  speculative_reason?: string[];
+  convexity_class?: "core" | "aggressive" | "speculative" | string | null;
+  observation_only?: boolean;
+  observation_reason?: string | null;
   quote_time_et?: string | null;
   quote_basis?: string | null;
   quote_freshness_status?: string | null;
@@ -182,7 +190,7 @@ export interface LiveTradePolicy {
 }
 
 export interface ScanPlaybook {
-  id: "short_term" | "swing" | string;
+  id: "short_term" | "swing" | "speculative" | string;
   label: string;
   description: string;
   target_dte: number;
@@ -190,6 +198,12 @@ export interface ScanPlaybook {
   max_sector_open_positions: number;
   max_regime_open_positions: number;
   block_same_ticker: boolean;
+  max_concurrent_positions?: number;
+  max_correlated_index_positions?: number;
+  daily_loss_limit_pct?: number;
+  weekly_loss_limit_pct?: number;
+  observation_only?: boolean;
+  allowed_tickers?: string[];
 }
 
 export interface ExposureSnapshot {
