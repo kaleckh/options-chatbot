@@ -475,21 +475,28 @@ export default function PredictionsView() {
 
   useEffect(() => {
     let mounted = true;
+    let scanTimeoutId: number | null = null;
     const load = async () => {
       setLoading(true);
       try {
-        await refreshScannerSurface(false);
+        await fetchTruthHealth(false);
       } finally {
         if (mounted) {
           setLoading(false);
+          scanTimeoutId = window.setTimeout(() => {
+            void fetchScanner(false);
+          }, 0);
         }
       }
     };
     void load();
     return () => {
       mounted = false;
+      if (scanTimeoutId != null) {
+        window.clearTimeout(scanTimeoutId);
+      }
     };
-  }, [refreshScannerSurface]);
+  }, [fetchScanner, fetchTruthHealth]);
 
   useEffect(() => {
     if (!LEGACY_PREDICTION_TABS.has(activeSubTab)) return;
