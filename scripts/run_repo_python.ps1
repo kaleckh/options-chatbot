@@ -110,6 +110,26 @@ function Remove-VenvDirectory([string]$VenvRoot) {
     Remove-Item -LiteralPath $VenvRoot -Recurse -Force -ErrorAction SilentlyContinue
 }
 
+function Repair-VenvPip([string]$PythonPath, [string]$VenvRoot) {
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        return $false
+    }
+
+    Write-Warning "Attempting to repair pip in repo-local virtualenv at $VenvRoot"
+    try {
+        & $PythonPath -m ensurepip --upgrade --default-pip
+    }
+    catch {
+        return $false
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return (Test-VenvHasPip -PythonPath $PythonPath)
+}
+
 function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
     if (Test-Path -LiteralPath $VenvRoot) {
         Write-Warning "Detected incomplete repo-local virtualenv at $VenvRoot; recreating it."
@@ -137,7 +157,10 @@ function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create repo-local virtualenv."
+        $venvPython = Join-Path $VenvRoot "Scripts\python.exe"
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $VenvRoot)) {
+            throw "Failed to create repo-local virtualenv."
+        }
     }
 }
 
@@ -405,6 +428,13 @@ try {
     $activeVenvPython = $venvPython
     $activeStampPath = $stampPath
     $usingCanonicalVenv = $false
+
+    if ((Test-Path -LiteralPath $venvPython) -and -not (Test-VenvHasPip -PythonPath $venvPython)) {
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $venvRoot)) {
+            Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
+            Remove-VenvDirectory -VenvRoot $venvRoot
+        }
+    }
 
     if (-not (Test-VenvHealthy -VenvRoot $venvRoot -PythonPath $venvPython)) {
         $bootstrap = Get-SystemPythonCommand
