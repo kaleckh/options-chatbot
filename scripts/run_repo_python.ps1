@@ -61,9 +61,21 @@ function Get-RepoTempRoot([string]$RepoRoot) {
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
         return Join-Path $env:CODEX_HOME ".tmp\repo-python\$rootName"
     }
+    return Join-Path $RepoRoot ".tmp\repo-python\$rootName"
+}
 
+function Get-SystemTempBasePath {
     $systemTemp = [System.IO.Path]::GetTempPath().TrimEnd('\')
-    return Join-Path $systemTemp "codex-repo-python\$rootName"
+    if ([string]::IsNullOrWhiteSpace($systemTemp)) {
+        throw "A system temp path could not be determined."
+    }
+    return $systemTemp
+}
+
+function Ensure-DirectoryPath([string]$Path) {
+    if (-not (Test-Path -LiteralPath $Path)) {
+        New-Item -ItemType Directory -Path $Path -Force | Out-Null
+    }
 }
 
 function Test-VenvHasPip([string]$PythonPath) {
@@ -71,7 +83,12 @@ function Test-VenvHasPip([string]$PythonPath) {
         return $false
     }
 
-    & $PythonPath -m pip --version *> $null
+    try {
+        & $PythonPath -m pip --version 1>$null 2>$null
+    }
+    catch {
+        return $false
+    }
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -94,6 +111,26 @@ function Remove-VenvDirectory([string]$VenvRoot) {
     }
 
     Remove-Item -LiteralPath $VenvRoot -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+function Repair-VenvPip([string]$PythonPath, [string]$VenvRoot) {
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        return $false
+    }
+
+    Write-Warning "Attempting to repair pip in repo-local virtualenv at $VenvRoot"
+    try {
+        & $PythonPath -m ensurepip --upgrade --default-pip
+    }
+    catch {
+        return $false
+    }
+
+    if ($LASTEXITCODE -ne 0) {
+        return $false
+    }
+
+    return (Test-VenvHasPip -PythonPath $PythonPath)
 }
 
 function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
@@ -123,7 +160,10 @@ function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
     }
 
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to create repo-local virtualenv."
+        $venvPython = Join-Path $VenvRoot "Scripts\python.exe"
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $VenvRoot)) {
+            throw "Failed to create repo-local virtualenv."
+        }
     }
 }
 
@@ -183,15 +223,43 @@ function Get-CanonicalVirtualEnvFallback(
 }
 
 function Set-RepoTempEnvironment([string]$RepoRoot) {
-    $tempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
-    $tmpPath = Join-Path $tempRoot "tmp"
-    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
+    $preferredTempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
+    $fallbackTempRoot = Join-Path $RepoRoot (".tmp\repo-python\" + (Split-Path -Leaf $preferredTempRoot))
+    $candidateRoots = @($preferredTempRoot)
+    if ($fallbackTempRoot -ne $preferredTempRoot) {
+        $candidateRoots += $fallbackTempRoot
+    }
 
-    foreach ($path in @($tempRoot, $tmpPath, $pipBuildTracker)) {
-        if (-not (Test-Path -LiteralPath $path)) {
-            New-Item -ItemType Directory -Path $path -Force | Out-Null
+    $baseTempRoot = $null
+    $lastError = $null
+    foreach ($candidateRoot in $candidateRoots) {
+        try {
+            Ensure-DirectoryPath -Path $candidateRoot
+            $baseTempRoot = $candidateRoot
+            break
+        }
+        catch [System.UnauthorizedAccessException], [System.IO.IOException] {
+            $lastError = $_
+            Write-Warning "Repo temp root $candidateRoot is unavailable: $($_.Exception.Message)"
         }
     }
+
+    if ([string]::IsNullOrWhiteSpace($baseTempRoot)) {
+        throw "Unable to initialize a writable repo temp root. Last error: $($lastError.Exception.Message)"
+    }
+
+    # Use a fresh temp session for each bootstrap so a poisoned prior TMP tree cannot break later runs.
+    $tempRoot = Join-Path $baseTempRoot ([guid]::NewGuid().ToString("N"))
+    foreach ($path in @(
+        $tempRoot,
+        (Join-Path $tempRoot "tmp"),
+        (Join-Path $tempRoot "pip-build-tracker")
+    )) {
+        Ensure-DirectoryPath -Path $path
+    }
+
+    $tmpPath = Join-Path $tempRoot "tmp"
+    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
 
     $names = @("TMP", "TEMP", "TMPDIR", "PIP_BUILD_TRACKER")
     $backup = @{}
@@ -205,6 +273,7 @@ function Set-RepoTempEnvironment([string]$RepoRoot) {
     [Environment]::SetEnvironmentVariable("PIP_BUILD_TRACKER", $pipBuildTracker, "Process")
 
     return @{
+        TempRoot = $tempRoot
         Names = $names
         Backup = $backup
     }
@@ -221,6 +290,10 @@ function Restore-RepoTempEnvironment($Snapshot) {
             $previous = $Snapshot.Backup[$name]
         }
         [Environment]::SetEnvironmentVariable($name, $previous, "Process")
+    }
+
+    if ($Snapshot.TempRoot) {
+        Remove-Item -LiteralPath $Snapshot.TempRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
@@ -373,6 +446,13 @@ try {
     $activeVenvPython = $venvPython
     $activeStampPath = $stampPath
     $usingCanonicalVenv = $false
+
+    if ((Test-Path -LiteralPath $venvPython) -and -not (Test-VenvHasPip -PythonPath $venvPython)) {
+        if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $venvRoot)) {
+            Write-Warning "Detected incomplete repo-local virtualenv at $venvRoot; recreating it."
+            Remove-VenvDirectory -VenvRoot $venvRoot
+        }
+    }
 
     if (-not (Test-VenvHealthy -VenvRoot $venvRoot -PythonPath $venvPython)) {
         $bootstrap = Get-SystemPythonCommand
