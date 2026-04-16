@@ -86,6 +86,7 @@ def make_option_frame(symbol: str, expiry: str, option_type: str, spot: float, i
         bid = 0.0 if illiquid else round(max(0.01, premium - 0.01), 2)
         ask = 0.0 if illiquid else round(premium + 0.01, 2)
         strike_code = f"{int(round(strike * 1000)):08d}"
+        implied_vol = 0.05 + idx * 0.005
         rows.append(
             {
                 "contractSymbol": f"{symbol.upper()}{expiry_code}{option_type.upper()}{strike_code}",
@@ -93,7 +94,8 @@ def make_option_frame(symbol: str, expiry: str, option_type: str, spot: float, i
                 "bid": bid,
                 "ask": ask,
                 "lastPrice": round(premium, 2),
-                "impliedVolatility": 0.11 + idx * 0.01,
+                # Keep fixture contracts tradeable under the live IV-crush gate.
+                "impliedVolatility": implied_vol,
                 "volume": contract_volume,
                 "openInterest": open_interest,
                 "lastTradeDate": pd.Timestamp(FROZEN_NOW, tz="America/New_York"),

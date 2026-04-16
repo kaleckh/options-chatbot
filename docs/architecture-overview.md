@@ -18,7 +18,7 @@ The current user-facing browser flow is the supervised options lane:
 - review tracked positions
 - manage suggested trades
 
-The current snapshot does not include the old app-facing day-trading routes or `DayTradingLab` component. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
+The current snapshot does not include the old app-facing day-trading route files or `DayTradingLab` component. The `src/app/api/day-trading/*` directories still exist as empty scaffolding folders in this worktree, but they do not currently expose route handlers. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
 
 ## System Map
 
@@ -28,7 +28,7 @@ flowchart LR
   Layout --> Shell["src/components/layout/AppShell.tsx"]
   Shell --> Views["Client views\nPredictionsView / StrategyView"]
   Views --> NextApi["Next route handlers\nsrc/app/api/*"]
-  NextApi --> Bridge["src/lib/python-bridge.ts"]
+  NextApi --> Bridge["src/lib/backend/*\nvia src/lib/python-bridge.ts"]
   Bridge --> Backend["python-backend/main.py"]
   Backend --> Options["options_chatbot.py"]
   Backend --> Replay["wfo_optimizer.py\nmetric_truth_audit.py\nsupervised_scan.py"]
@@ -64,13 +64,15 @@ Responsibilities:
 - render scan, replay, tracked-position, and suggestion workflows
 
 Current smell:
-- both files are large, stateful client components and are the main place where frontend complexity has accumulated
+- `PredictionsView.tsx` is still the heaviest active client surface
+- `StrategyView.tsx` now acts as a coordinator, with `BrainTab.tsx` and `OptimizerTab.tsx` holding most of the rendering
 
 ### 3. Next Proxy Layer
 
 Files:
 - `src/app/api/*`
 - `src/lib/python-bridge.ts`
+- `src/lib/backend/*`
 
 Responsibilities:
 - keep browser requests same-origin
@@ -78,6 +80,14 @@ Responsibilities:
 - forward requests to the FastAPI backend
 
 This layer is intentionally thin. If behavior seems surprising, the real logic usually lives in the Python backend, not in the Next route file.
+
+The backend also exposes support endpoints that are not mirrored through `src/app/api/*` yet, including:
+- `/api/profiles`
+- `/api/proof-summary`
+- `/api/positions/{position_id}/close-prefill`
+- `/api/backtest/experiments`
+- `/api/backtest/stability`
+- `/api/market-data/cache-stats`
 
 ### 4. Python Control Plane
 
@@ -119,7 +129,9 @@ Files:
 Storage split:
 - SQLite for suggested trades and local workflow state
 - Postgres for tracked positions and reviews
-- JSON plus `data/*` artifacts for replay, truth, and research outputs
+- `data/options-validation/options_history.db` for imported options truth data
+- `data/options-validation/forward_tracking_authoritative.db` and `data/options-validation/forward_tracking.db` for canonical and archive forward evidence
+- JSON plus `data/options-profit/*`, `data/forward-tracking/*`, and other `data/*` artifacts for replay, truth, and research outputs
 
 ## Request Flow Example
 
@@ -147,8 +159,14 @@ Replay summary flow:
   - legacy prediction storage
 - `wfo_results.json`
   - replay output
+- `data/options-validation/options_history.db`
+  - imported options truth store
+- `data/options-validation/forward_tracking_authoritative.db`
+  - canonical forward-evidence ledger
+- `data/options-validation/forward_tracking.db`
+  - archive forward-evidence ledger
 - `data/options-profit/*`
-  - options profitability and truth-gate artifacts
+  - options profitability status, live profile, decisions, and candidate artifacts
 - `data/forward-tracking/*`
   - forward scan evidence
 - `market_data.db`
@@ -165,8 +183,9 @@ Replay summary flow:
 
 1. `src/components/layout/AppShell.tsx`
 2. `src/lib/python-bridge.ts`
-3. `python-backend/main.py`
-4. `src/components/predictions/PredictionsView.tsx`
-5. `src/components/strategy/StrategyView.tsx`
-6. `options_chatbot.py`
-7. `wfo_optimizer.py`
+3. `src/lib/backend/*`
+4. `python-backend/main.py`
+5. `src/components/predictions/PredictionsView.tsx`
+6. `src/components/strategy/StrategyView.tsx`
+7. `options_chatbot.py`
+8. `wfo_optimizer.py`

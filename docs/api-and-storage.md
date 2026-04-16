@@ -18,8 +18,9 @@ There are three runtime layers in the active browser app:
 3. FastAPI handlers in `python-backend/main.py`
 
 `src/lib/python-bridge.ts` is the contract layer between the Next route handlers and FastAPI.
+The actual request helpers now live under `src/lib/backend/*`, while `src/lib/python-bridge.ts` stays as a compatibility barrel.
 
-## Active Browser-Facing Route Groups
+## Active Browser-Facing Next Route Groups
 
 ### Scan And Replay
 
@@ -29,6 +30,8 @@ There are three runtime layers in the active browser app:
   - run replay
 - `GET /api/backtest/summary`
   - combined replay artifact bundle
+- `GET /api/backtest/last`
+  - most recent saved replay result
 - `GET /api/backtest/live-policy`
   - replay-backed policy
 - `GET /api/backtest/report`
@@ -53,7 +56,6 @@ There are three runtime layers in the active browser app:
 ### Predictions
 
 - `GET /api/predictions`
-- `GET /api/predictions/history`
 - `POST /api/predictions/grade`
 
 ### Tracked Positions
@@ -77,7 +79,25 @@ There are three runtime layers in the active browser app:
 
 ## Snapshot Warning
 
-The current worktree does not include active Next route handlers for `src/app/api/day-trading/*`. Any older docs that describe those as current browser endpoints are stale for this snapshot.
+The current worktree does not include active Next route handlers for `src/app/api/day-trading/*`. The directories exist only as empty scaffolding folders, so any older docs that describe those as current browser endpoints are stale for this snapshot.
+
+## Backend-Only FastAPI Endpoints
+
+These routes exist in `python-backend/main.py` but are not currently mirrored through `src/app/api/*`:
+
+- `GET /api/profiles`
+- `GET /api/positions/{position_id}/close-prefill`
+- `POST /api/scan/recommendations`
+- `POST /api/scan/roll`
+- `POST /api/backtest/archived-forward`
+- `POST /api/backtest/experiments`
+- `GET /api/backtest/profitability-forensics`
+- `GET /api/backtest/stability`
+- `GET /api/market-data/cache-stats`
+- `POST /api/market-data/cache-stats/reset`
+- `GET /api/daily-performance`
+- `GET /api/health`
+- `GET /api/proof-summary`
 
 ## Storage Layers
 
@@ -109,12 +129,15 @@ Common files:
 - `brain_changelog.json`
 
 Artifact directories:
+- `data/options-validation/*`
 - `data/options-profit/*`
 - `data/forward-tracking/*`
 - `docs/autoresearch/*`
 
 Used for:
 - replay outputs
+- imported options truth storage
+- canonical and archive forward evidence
 - policy artifacts
 - truth-gate state
 - forward evidence
@@ -133,7 +156,9 @@ Used for:
 - Next route handlers
   - request validation and same-origin proxying only
 - `src/lib/python-bridge.ts`
-  - backend HTTP transport, timeout, and JSON error normalization
+  - compatibility barrel for the backend client modules
+- `src/lib/backend/*`
+  - backend HTTP transport plus domain-specific request helpers
 - `python-backend/main.py`
   - endpoint composition and cache orchestration
 - `options_chatbot.py`
@@ -145,10 +170,12 @@ Used for:
 
 ## Fast Reading Order
 
-1. `src/lib/python-bridge.ts`
-2. `src/app/api/scan/route.ts`
-3. `python-backend/main.py`
-4. `python-backend/positions_service.py`
-5. `python-backend/positions_repository.py`
-6. `options_chatbot.py`
-7. `wfo_optimizer.py`
+1. `src/components/layout/AppShell.tsx`
+2. `src/lib/python-bridge.ts`
+3. `src/lib/backend/*`
+4. `src/app/api/scan/route.ts`
+5. `python-backend/main.py`
+6. `python-backend/positions_service.py`
+7. `python-backend/positions_repository.py`
+8. `options_chatbot.py`
+9. `wfo_optimizer.py`

@@ -16,6 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
 import market_data_service as mds
 import positions_service as svc
 from options_algorithm_fixtures import FrozenDateTime, build_options_algorithm_fixture_bundle, build_tracked_position_scan_pick
+from positions_repository import MemoryTrackedPositionsRepository
 
 
 class PositionsReviewEngineTests(unittest.TestCase):
@@ -41,6 +42,66 @@ class PositionsReviewEngineTests(unittest.TestCase):
         )
         payload["id"] = 1
         return payload
+
+    def test_build_position_payload_preserves_quote_timestamp_and_entry_snapshot(self):
+        scan_pick = dict(self.scan_pick)
+        scan_pick.update(
+            {
+                "quote_time_et": "2026-04-06T10:00:00-04:00",
+                "quote_time_utc": "2026-04-06T14:00:00Z",
+                "bid": 4.4,
+                "ask": 4.6,
+                "mid": 4.5,
+                "entry_execution_price": 4.5,
+                "entry_execution_basis": "mid",
+                "entry_underlying_price": scan_pick["stock_price"],
+                "underlying_price_at_selection": scan_pick["stock_price"],
+                "current_spot": scan_pick["stock_price"],
+                "legs": [
+                    {
+                        "role": "long",
+                        "contract_symbol": scan_pick["contract_symbol"],
+                        "strike": scan_pick["strike"],
+                        "bid": 4.4,
+                        "ask": 4.6,
+                        "mid": 4.5,
+                    }
+                ],
+            }
+        )
+
+        payload = svc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+            notes="future pick snapshot",
+        )
+
+        self.assertEqual(payload["contract_symbol"], scan_pick["contract_symbol"])
+        self.assertEqual(payload["entry_execution_price"], 4.5)
+        self.assertEqual(payload["entry_underlying_price"], scan_pick["stock_price"])
+        self.assertEqual(payload["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(payload["source_pick_snapshot"]["bid"], 4.4)
+        self.assertEqual(payload["source_pick_snapshot"]["ask"], 4.6)
+        self.assertEqual(payload["source_pick_snapshot"]["mid"], 4.5)
+        self.assertEqual(payload["source_pick_snapshot"]["entry_execution_price"], 4.5)
+        self.assertEqual(payload["source_pick_snapshot"]["entry_execution_basis"], "mid")
+        self.assertEqual(payload["source_pick_snapshot"]["entry_underlying_price"], scan_pick["stock_price"])
+        self.assertEqual(payload["source_pick_snapshot"]["underlying_price_at_selection"], scan_pick["stock_price"])
+        self.assertEqual(payload["source_pick_snapshot"]["current_spot"], scan_pick["stock_price"])
+        self.assertEqual(payload["source_pick_snapshot"]["legs"], scan_pick["legs"])
+        self.assertEqual(payload["source_pick_snapshot"]["quote_time_utc"], "2026-04-06T14:00:00Z")
+        self.assertEqual(payload["source_pick_snapshot"]["original_logged_expiry"], scan_pick["expiry"])
+        self.assertEqual(payload["source_pick_snapshot"]["resolved_listed_expiry"], scan_pick["expiry"])
+        self.assertIn("entry_quote_snapshot", payload["source_pick_snapshot"])
+        snapshot = payload["source_pick_snapshot"]["entry_quote_snapshot"]
+        self.assertEqual(snapshot["captured_at_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(snapshot["captured_at_utc"], "2026-04-06T14:00:00Z")
+        self.assertEqual(snapshot["logged_expiry"], scan_pick["expiry"])
+        self.assertEqual(snapshot["resolved_listed_expiry"], scan_pick["expiry"])
+        self.assertEqual(snapshot["entry_execution_price"], 4.5)
+        self.assertEqual(snapshot["legs"], scan_pick["legs"])
 
     def test_review_uses_actual_fill_price_for_stop_target_math(self):
         position = self._build_position(fill_price=2.0)
@@ -181,6 +242,28 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(review["recommendation"], "SELL")
         self.assertIn("expiry has passed", review["reason"].lower())
 
+    def test_review_open_positions_auto_closes_expired_contracts(self):
+        repo = MemoryTrackedPositionsRepository()
+        payload = self._build_position(fill_price=4.5, filled_at="2026-03-25T10:00:00", expiry="2026-03-30")
+        created = repo.create_position(payload)
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0), \
+             patch.object(svc, "_get_underlying_close_on_or_before", return_value=470.0):
+            reviewed = svc.review_open_positions(repo)
+
+        self.assertEqual(len(reviewed), 1)
+        closed = reviewed[0]
+        self.assertEqual(closed["id"], created["id"])
+        self.assertEqual(closed["status"], "closed")
+        self.assertEqual(closed["exit_reason"], "expired_auto_close")
+        self.assertEqual(closed["exit_execution_basis"], "expiry_intrinsic_underlying_close")
+        self.assertEqual(closed["exit_option_price"], 7.41)
+        self.assertEqual(repo.list_positions("open"), [])
+        closed_rows = repo.list_positions("closed")
+        self.assertEqual(len(closed_rows), 1)
+        self.assertEqual(closed_rows[0]["exit_option_price"], 7.41)
+
     def test_review_open_positions_reuses_market_data_reads_for_same_ticker_and_expiry(self):
         class _RecordingTicker:
             def __init__(self, inner):
@@ -232,6 +315,34 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(tickers[position_a["ticker"]].option_chain_calls.count(str(position_a["expiry"])[:10]), 1)
         self.assertEqual(len(tickers[position_a["ticker"]].history_calls), 1)
         self.assertEqual(len(tickers["SPY"].history_calls), 1)
+
+    def test_review_open_positions_preserves_existing_approximation_reviews(self):
+        position = self._build_position(fill_price=2.0)
+        position["id"] = 99
+        position["notes"] = "Paper trade - broad screenshot backfill approximation (2026-04-10)"
+        position["source_pick_snapshot"]["approximation_only"] = True
+        position["latest_review"] = {
+            "reviewed_at": "2026-04-14T11:32:07",
+            "pricing_source": "spread_mid_approx",
+            "recommendation": "HOLD",
+            "reason": "Approximate broad-lane spread mark using nearest listed expiry; comparison only.",
+            "warnings": ["Approximate P&L based on nearest listed expiry because the logged broad expiry may be synthetic."],
+            "metrics_snapshot": {"pricing_state": "priced_spread_nearest_listed_expiry"},
+        }
+
+        class _Repo:
+            def list_positions(self, status="open"):
+                return [position]
+
+            def save_review(self, position_id, review):
+                raise AssertionError("approximation_only positions with a latest review should not be re-reviewed")
+
+        with patch.object(svc, "review_position", side_effect=AssertionError("review_position should not run")):
+            reviews = svc.review_open_positions(_Repo())
+
+        self.assertEqual(len(reviews), 1)
+        self.assertEqual(reviews[0]["id"], 99)
+        self.assertEqual(reviews[0]["latest_review"]["pricing_source"], "spread_mid_approx")
 
 
     def test_review_includes_pricing_state_priced_exact(self):

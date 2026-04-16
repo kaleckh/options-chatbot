@@ -780,6 +780,58 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         ledger = list_run_ledger_events(self.state_dir)
         self.assertEqual(ledger[-1]["loop_execution_status"], "idle")
 
+    def test_profit_validation_clears_stale_prerequisite_issues_before_claiming_real_queue_work(self):
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"ran_at": "2026-04-02T11:30:00Z", "verdict": "healthy"}
+        state["latest_truth_holdout"] = {"ran_at": "2026-04-02T11:45:00Z", "verdict": "recorded"}
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "profit-validation-stale_operational_health",
+                "source_automation": "daily-profit-validation",
+                "severity": "high",
+                "blocker_class": "storage",
+                "summary": "Operational health is older than the validation freshness window.",
+                "evidence": ["code=stale_operational_health"],
+                "suggested_fix_targets": ["profit_loop_automation.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:46:00Z",
+        )
+        upsert_open_issue(
+            state,
+            {
+                "issue_id": "truth-lane-live-policy-mismatch",
+                "source_automation": "hourly-operational-health",
+                "severity": "high",
+                "blocker_class": "truth_lane_mismatch",
+                "summary": "Mismatch",
+                "evidence": ["one"],
+                "suggested_fix_targets": ["options_chatbot.py"],
+                "status": "open",
+            },
+            now_iso="2026-04-02T11:50:00Z",
+        )
+        save_profit_loop_state(state, state_dir=self.state_dir)
+
+        refresh_result = {"status": "refreshed", "commands": []}
+        with patch("profit_loop_automation.validation_prerequisite_blockers", return_value=[]), \
+             patch(
+                 "profit_loop_automation._capture_validation_baseline",
+                 return_value={"validation_tests_passed": True, "validation_test_count": 57, "smoke_summary": {}, "replay_cases": []},
+             ):
+            result = prepare_profit_validation(state_dir=self.state_dir, auto_defer=False, daily_truth_refresh=refresh_result)
+
+        self.assertEqual(result["action"], "claimed_issue")
+        self.assertEqual(result["targeted_issue"]["issue_id"], "truth-lane-live-policy-mismatch")
+        state = load_profit_loop_state(self.state_dir)
+        self.assertFalse(any(item["issue_id"] == "profit-validation-stale_operational_health" for item in state["open_issues"]))
+        resolved = next(
+            item for item in state["resolved_issues"]
+            if item["issue_id"] == "profit-validation-stale_operational_health"
+        )
+        self.assertEqual(resolved["resolution_kind"], "no_longer_observed")
+
     def test_profit_validation_preserves_baseline_fields_in_written_artifact(self):
         state = load_profit_loop_state(self.state_dir)
         state["latest_operational_health"] = {"ran_at": "2026-04-02T11:30:00Z", "verdict": "healthy"}

@@ -19,6 +19,12 @@ This audit checked whether the options product is:
 
 The focus was the supervised options workflow plus the imported historical validation lane.
 
+## Status Note
+
+This is a historical readiness audit from `2026-03-31`.
+
+Its findings are still useful context, but the current truth and profitability state has moved on. For the live snapshot in this worktree, use `docs/current-state.md`, `docs/api-and-storage.md`, and the current artifacts under `data/options-profit/*` and `wfo_results.json`.
+
 ## What Was Verified
 
 - The full regression suite passes:

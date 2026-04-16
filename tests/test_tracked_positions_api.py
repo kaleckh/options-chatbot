@@ -198,11 +198,26 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
         scan_pick["selection_source"] = "live_chain_exact_contract"
         scan_pick["promotion_class"] = "promotable_exact_contract"
-        scan_pick["quote_time_et"] = "2026-04-06T10:00:00"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
         scan_pick["bid"] = 4.4
         scan_pick["ask"] = 4.6
+        scan_pick["mid"] = 4.5
         scan_pick["entry_execution_price"] = 4.5
         scan_pick["entry_execution_basis"] = "ask"
+        scan_pick["entry_underlying_price"] = scan_pick["stock_price"]
+        scan_pick["underlying_price_at_selection"] = scan_pick["stock_price"]
+        scan_pick["current_spot"] = scan_pick["stock_price"]
+        scan_pick["legs"] = [
+            {
+                "role": "long",
+                "contract_symbol": scan_pick["contract_symbol"],
+                "strike": scan_pick["strike"],
+                "bid": 4.4,
+                "ask": 4.6,
+                "mid": 4.5,
+            }
+        ]
 
         create_response = self.client.post(
             "/api/positions",
@@ -219,6 +234,27 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(position["source_scan_run_id"], "api_scan_20260406T100000Z")
         self.assertTrue(position["proof_eligible"])
         self.assertIsNone(position["proof_ineligibility_reason"])
+        self.assertEqual(position["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(position["source_pick_snapshot"]["bid"], 4.4)
+        self.assertEqual(position["source_pick_snapshot"]["ask"], 4.6)
+        self.assertEqual(position["source_pick_snapshot"]["mid"], 4.5)
+        self.assertEqual(position["source_pick_snapshot"]["entry_execution_price"], 4.5)
+        self.assertEqual(position["source_pick_snapshot"]["entry_execution_basis"], "ask")
+        self.assertEqual(position["source_pick_snapshot"]["entry_underlying_price"], scan_pick["stock_price"])
+        self.assertEqual(position["source_pick_snapshot"]["underlying_price_at_selection"], scan_pick["stock_price"])
+        self.assertEqual(position["source_pick_snapshot"]["current_spot"], scan_pick["stock_price"])
+        self.assertEqual(position["source_pick_snapshot"]["legs"], scan_pick["legs"])
+        self.assertEqual(position["source_pick_snapshot"]["quote_time_utc"], "2026-04-06T14:00:00Z")
+        self.assertIn("entry_quote_snapshot", position["source_pick_snapshot"])
+        self.assertEqual(position["source_pick_snapshot"]["entry_quote_snapshot"]["captured_at_utc"], "2026-04-06T14:00:00Z")
+
+        list_roundtrip_response = self.client.get("/api/positions", params={"status": "open"})
+        self.assertEqual(list_roundtrip_response.status_code, 200)
+        listed_position = list_roundtrip_response.json()["positions"][0]
+        self.assertEqual(listed_position["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(listed_position["source_pick_snapshot"]["entry_execution_price"], 4.5)
+        self.assertEqual(listed_position["source_pick_snapshot"]["legs"], scan_pick["legs"])
+        self.assertEqual(listed_position["source_pick_snapshot"]["entry_quote_snapshot"]["captured_at_utc"], "2026-04-06T14:00:00Z")
 
     def test_create_position_without_provenance_marks_not_proof_eligible(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -237,7 +273,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         position = create_response.json()["position"]
         self.assertFalse(position["proof_eligible"])
         self.assertIsNotNone(position["proof_ineligibility_reason"])
-        self.assertIn("contract_symbol", position["proof_ineligibility_reason"])
+        self.assertIn("selection_source_not_exact", position["proof_ineligibility_reason"])
 
     def test_proof_lane_validation_blocks_missing_contract_symbol(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -249,7 +285,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
                 contracts=1,
                 require_proof_eligible=True,
             )
-        self.assertIn("contract_symbol", str(ctx.exception))
+        self.assertIn("selection_source_not_exact", str(ctx.exception))
 
     def test_proof_lane_validation_blocks_non_exact_selection_source(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

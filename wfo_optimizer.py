@@ -99,6 +99,7 @@ except ImportError:
 from options_chatbot import (
     STRATEGY_PROFILE,
     STRATEGY_PROFILES,
+    ensure_strategy_profiles_current,
     RISK_FREE_RATE,
     DTE_MIN,
     DTE_MAX,
@@ -6485,6 +6486,7 @@ def run_historical_backtest(
 
     No Optuna, no windows, no guardrails — a faithful historical replay of current settings.
     """
+    ensure_strategy_profiles_current()
     # Per-profile configs and evaluators — mirrors live scan's _get_profile() logic
     _eq_sp   = STRATEGY_PROFILES.get("equity", STRATEGY_PROFILE)
     _idx_sp  = STRATEGY_PROFILES.get("index",  STRATEGY_PROFILE)

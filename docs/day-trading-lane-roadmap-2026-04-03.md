@@ -2,6 +2,12 @@
 
 Last updated: 2026-04-03
 
+## Status Note
+
+This roadmap is historical planning context.
+
+It references day-trading routes and UI files that are not present in the current worktree. Use `docs/day-trading-current-state.md` for the current status of the lane, and treat the implementation references below as archived intent rather than a live route map.
+
 ## Already Shipped
 
 - In-app preflight console

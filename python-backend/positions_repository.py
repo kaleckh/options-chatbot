@@ -117,6 +117,23 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+_POSITION_UPDATE_FIELDS = (
+    "contract_symbol",
+    "strike",
+    "expiry",
+    "filled_at",
+    "entry_option_price",
+    "entry_execution_price",
+    "entry_execution_basis",
+    "entry_fee_total_usd",
+    "entry_underlying_price",
+    "source_pick_snapshot",
+    "notes",
+    "proof_eligible",
+    "proof_ineligibility_reason",
+)
+
+
 class UnavailableTrackedPositionsRepository:
     def __init__(self, error_message: str):
         self.error_message = error_message
@@ -137,6 +154,9 @@ class UnavailableTrackedPositionsRepository:
     def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(self.error_message)
 
+    def update_position(self, position_id: int, updates: dict[str, Any]) -> dict[str, Any]:
+        raise RuntimeError(self.error_message)
+
     def close_position(
         self,
         position_id: int,
@@ -144,6 +164,9 @@ class UnavailableTrackedPositionsRepository:
         closed_at: datetime,
         exit_reason: str,
         notes: Optional[str] = None,
+        *,
+        exit_execution_basis: str = "manual_close",
+        allow_zero_exit_price: bool = False,
     ) -> Optional[dict[str, Any]]:
         raise RuntimeError(self.error_message)
 
@@ -607,6 +630,54 @@ class PostgresTrackedPositionsRepository:
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
         return self._fetch_one_position("WHERE p.id = %s", (position_id,))
 
+    def update_position(self, position_id: int, updates: dict[str, Any]) -> dict[str, Any]:
+        assignments: list[str] = []
+        params: list[Any] = []
+        for field in _POSITION_UPDATE_FIELDS:
+            if field not in updates:
+                continue
+            if field == "source_pick_snapshot":
+                assignments.append("source_pick_snapshot = %s::jsonb")
+                params.append(json.dumps(updates.get(field) or {}))
+                continue
+            if field in {"expiry", "filled_at"}:
+                assignments.append("expiry = %s")
+                if field == "filled_at":
+                    assignments[-1] = "filled_at = %s"
+                params.append(_to_iso(updates.get(field)))
+                continue
+            if field == "proof_eligible":
+                assignments.append("proof_eligible = %s")
+                params.append(bool(updates.get(field)))
+                continue
+            assignments.append(f"{field} = %s")
+            params.append(updates.get(field))
+
+        if not assignments:
+            position = self.get_position(position_id)
+            if position is None:
+                raise RuntimeError(f"Tracked position {position_id} not found.")
+            return position
+
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1 FROM tracked_positions WHERE id = %s", (position_id,))
+                if not cur.fetchone():
+                    raise RuntimeError(f"Tracked position {position_id} not found.")
+                cur.execute(
+                    f"""
+                    UPDATE tracked_positions
+                    SET {", ".join(assignments)},
+                        updated_at = NOW()
+                    WHERE id = %s
+                    """,
+                    (*params, position_id),
+                )
+                position = self._fetch_position_by_id_in_conn(conn, position_id)
+        if position is None:
+            raise RuntimeError(f"Tracked position {position_id} was not found after update.")
+        return position
+
     def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as conn:
             with conn.cursor() as cur:
@@ -729,11 +800,20 @@ class PostgresTrackedPositionsRepository:
         closed_at: datetime,
         exit_reason: str,
         notes: Optional[str] = None,
+        *,
+        exit_execution_basis: str = "manual_close",
+        allow_zero_exit_price: bool = False,
     ) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
             with conn.cursor() as cur:
-                if not math.isfinite(float(exit_price)) or float(exit_price) <= 0:
-                    raise ValueError("exit_price must be a finite number greater than 0.")
+                exit_price_value = float(exit_price)
+                if (
+                    not math.isfinite(exit_price_value)
+                    or exit_price_value < 0
+                    or (not allow_zero_exit_price and exit_price_value <= 0)
+                ):
+                    comparator = "greater than or equal to 0" if allow_zero_exit_price else "greater than 0"
+                    raise ValueError(f"exit_price must be a finite number {comparator}.")
 
                 cur.execute(
                     """
@@ -761,6 +841,12 @@ class PostgresTrackedPositionsRepository:
                     entry_fee_total_usd=entry_fee_total_usd,
                     exit_fee_total_usd=exit_fee_total_usd,
                 )
+                merged_notes = None
+                if notes:
+                    cur.execute("SELECT notes FROM tracked_positions WHERE id = %s", (position_id,))
+                    existing_row = cur.fetchone()
+                    existing_notes = existing_row.get("notes") if existing_row else None
+                    merged_notes = f"{existing_notes}\n{notes}".strip() if existing_notes else notes
 
                 cur.execute(
                     """
@@ -780,22 +866,18 @@ class PostgresTrackedPositionsRepository:
                         net_pnl_usd = %s,
                         fee_total_usd = %s,
                         last_reviewed_at = %s,
-                        notes = CASE
-                            WHEN %s IS NULL OR %s = '' THEN notes
-                            WHEN notes IS NULL OR notes = '' THEN %s
-                            ELSE notes || E'\n' || %s
-                        END,
+                        notes = COALESCE(%s, notes),
                         updated_at = NOW()
                     WHERE id = %s AND status = 'open'
                     RETURNING id
                     """,
                     (
                         closed_at,
-                        exit_price,
-                        exit_price,
-                        "manual_close",
+                        exit_price_value,
+                        exit_price_value,
+                        exit_execution_basis,
                         exit_reason,
-                        exit_price,
+                        exit_price_value,
                         pnl_snapshot.get("gross_pnl_pct"),
                         pnl_snapshot.get("gross_pnl_pct"),
                         pnl_snapshot.get("net_pnl_pct"),
@@ -803,10 +885,7 @@ class PostgresTrackedPositionsRepository:
                         pnl_snapshot.get("net_pnl_usd"),
                         pnl_snapshot.get("fee_total_usd"),
                         closed_at,
-                        notes,
-                        notes,
-                        notes,
-                        notes,
+                        merged_notes,
                         position_id,
                     ),
                 )
@@ -1098,6 +1177,46 @@ class SqliteTrackedPositionsRepository:
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
         return self._fetch_one_position("WHERE p.id = ?", (position_id,))
 
+    def update_position(self, position_id: int, updates: dict[str, Any]) -> dict[str, Any]:
+        assignments: list[str] = []
+        params: list[Any] = []
+        for field in _POSITION_UPDATE_FIELDS:
+            if field not in updates:
+                continue
+            assignments.append(f"{field} = ?")
+            if field == "source_pick_snapshot":
+                params.append(json.dumps(updates.get(field) or {}))
+            elif field == "expiry":
+                params.append(_to_iso(updates.get(field)))
+            elif field == "proof_eligible":
+                params.append(1 if updates.get(field) else 0)
+            else:
+                params.append(updates.get(field))
+
+        if not assignments:
+            position = self.get_position(position_id)
+            if position is None:
+                raise RuntimeError(f"Tracked position {position_id} not found.")
+            return position
+
+        with self._connect() as conn:
+            cur = conn.execute("SELECT 1 FROM tracked_positions WHERE id = ?", (position_id,))
+            if not cur.fetchone():
+                raise RuntimeError(f"Tracked position {position_id} not found.")
+            conn.execute(
+                f"""
+                UPDATE tracked_positions
+                SET {", ".join(assignments)},
+                    updated_at = datetime('now')
+                WHERE id = ?
+                """,
+                (*params, position_id),
+            )
+            position = self._fetch_position_by_id_in_conn(conn, position_id)
+        if position is None:
+            raise RuntimeError(f"Tracked position {position_id} was not found after update.")
+        return position
+
     def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as conn:
             cur = conn.execute("SELECT status FROM tracked_positions WHERE id = ?", (position_id,))
@@ -1189,10 +1308,19 @@ class SqliteTrackedPositionsRepository:
         closed_at: datetime,
         exit_reason: str,
         notes: Optional[str] = None,
+        *,
+        exit_execution_basis: str = "manual_close",
+        allow_zero_exit_price: bool = False,
     ) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
-            if not math.isfinite(float(exit_price)) or float(exit_price) <= 0:
-                raise ValueError("exit_price must be a finite number greater than 0.")
+            exit_price_value = float(exit_price)
+            if (
+                not math.isfinite(exit_price_value)
+                or exit_price_value < 0
+                or (not allow_zero_exit_price and exit_price_value <= 0)
+            ):
+                comparator = "greater than or equal to 0" if allow_zero_exit_price else "greater than 0"
+                raise ValueError(f"exit_price must be a finite number {comparator}.")
 
             cur = conn.execute(
                 """
@@ -1215,7 +1343,7 @@ class SqliteTrackedPositionsRepository:
             exit_fee_total_usd = commission_total_usd(contracts=contracts)
             pnl_snapshot = option_pnl_snapshot(
                 entry_execution_price=entry_execution_price,
-                exit_execution_price=exit_price,
+                exit_execution_price=exit_price_value,
                 contracts=contracts,
                 entry_fee_total_usd=entry_fee_total_usd,
                 exit_fee_total_usd=exit_fee_total_usd,
@@ -1239,7 +1367,7 @@ class SqliteTrackedPositionsRepository:
                     closed_at = ?,
                     exit_option_price = ?,
                     exit_execution_price = ?,
-                    exit_execution_basis = 'manual_close',
+                    exit_execution_basis = ?,
                     exit_reason = ?,
                     last_option_price = ?,
                     last_pnl_pct = ?,
@@ -1255,10 +1383,11 @@ class SqliteTrackedPositionsRepository:
                 """,
                 (
                     closed_at_iso,
-                    exit_price,
-                    exit_price,
+                    exit_price_value,
+                    exit_price_value,
+                    exit_execution_basis,
                     exit_reason,
-                    exit_price,
+                    exit_price_value,
                     pnl_snapshot.get("gross_pnl_pct"),
                     pnl_snapshot.get("gross_pnl_pct"),
                     pnl_snapshot.get("net_pnl_pct"),
@@ -1392,6 +1521,17 @@ class MemoryTrackedPositionsRepository:
         position["updated_at"] = review.get("reviewed_at")
         return self.get_position(position_id)  # type: ignore[arg-type]
 
+    def update_position(self, position_id: int, updates: dict[str, Any]) -> dict[str, Any]:
+        position = self._find_position(position_id)
+        if position is None:
+            raise RuntimeError(f"Tracked position {position_id} not found.")
+        for field in _POSITION_UPDATE_FIELDS:
+            if field not in updates:
+                continue
+            position[field] = copy.deepcopy(updates[field])
+        position["updated_at"] = datetime.now()
+        return self.get_position(position_id)  # type: ignore[arg-type]
+
     def close_position(
         self,
         position_id: int,
@@ -1399,12 +1539,21 @@ class MemoryTrackedPositionsRepository:
         closed_at: datetime,
         exit_reason: str,
         notes: Optional[str] = None,
+        *,
+        exit_execution_basis: str = "manual_close",
+        allow_zero_exit_price: bool = False,
     ) -> Optional[dict[str, Any]]:
         position = self._find_position(position_id)
         if position is None:
             return None
-        if not math.isfinite(float(exit_price)) or float(exit_price) <= 0:
-            raise ValueError("exit_price must be a finite number greater than 0.")
+        exit_price_value = float(exit_price)
+        if (
+            not math.isfinite(exit_price_value)
+            or exit_price_value < 0
+            or (not allow_zero_exit_price and exit_price_value <= 0)
+        ):
+            comparator = "greater than or equal to 0" if allow_zero_exit_price else "greater than 0"
+            raise ValueError(f"exit_price must be a finite number {comparator}.")
         if position.get("status") != "open":
             raise ValueError(f"Tracked position {position_id} is already closed.")
         exit_fee_total_usd = commission_total_usd(contracts=position.get("contracts"))
@@ -1415,18 +1564,18 @@ class MemoryTrackedPositionsRepository:
         )
         pnl_snapshot = option_pnl_snapshot(
             entry_execution_price=position.get("entry_execution_price") or position.get("entry_option_price"),
-            exit_execution_price=exit_price,
+            exit_execution_price=exit_price_value,
             contracts=position.get("contracts"),
             entry_fee_total_usd=entry_fee_total_usd,
             exit_fee_total_usd=exit_fee_total_usd,
         )
         position["status"] = "closed"
         position["closed_at"] = closed_at
-        position["exit_option_price"] = exit_price
-        position["exit_execution_price"] = exit_price
-        position["exit_execution_basis"] = "manual_close"
+        position["exit_option_price"] = exit_price_value
+        position["exit_execution_price"] = exit_price_value
+        position["exit_execution_basis"] = exit_execution_basis
         position["exit_reason"] = exit_reason
-        position["last_option_price"] = exit_price
+        position["last_option_price"] = exit_price_value
         position["last_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
         position["gross_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
         position["net_pnl_pct"] = pnl_snapshot.get("net_pnl_pct")

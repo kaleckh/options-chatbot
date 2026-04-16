@@ -12,7 +12,7 @@ import math
 import sqlite3
 import contextlib
 import threading
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -115,6 +115,7 @@ _LAST_RESULTS_CACHE: dict[tuple[Any, ...], Any] = {}
 _FORWARD_EVIDENCE_REPORT_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 _READONLY_REPORT_OUTPUT_CACHE: dict[tuple[Any, ...], Any] = {}
 _OPTIONS_PROFIT_SYMBOLS = ("SPY", "QQQ")
+_SHARE_SAFE_REVIEW_MAX_AGE = timedelta(minutes=15)
 
 
 async def _run_in_worker(fn, /, *args, **kwargs):
@@ -368,8 +369,12 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["observation_only"] = bool(pick.get("observation_only"))
     normalized["observation_reason"] = pick.get("observation_reason")
     normalized["quote_time_et"] = pick.get("quote_time_et")
+    normalized["quote_time_utc"] = pick.get("quote_time_utc")
     normalized["quote_basis"] = pick.get("quote_basis")
     normalized["quote_freshness_status"] = pick.get("quote_freshness_status")
+    normalized["original_logged_expiry"] = pick.get("original_logged_expiry")
+    normalized["resolved_listed_expiry"] = pick.get("resolved_listed_expiry")
+    normalized["entry_quote_snapshot"] = pick.get("entry_quote_snapshot")
     normalized["expectancy_selection_source"] = pick.get("expectancy_selection_source")
     normalized["underlying_price_at_selection"] = (
         pick.get("underlying_price_at_selection")
@@ -428,6 +433,145 @@ def _normalize_scan_picks(picks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized["candidate_rank"] = int(normalized.get("candidate_rank") or idx)
         normalized_picks.append(normalized)
     return normalized_picks
+
+
+def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
+    source = _safe_dict_payload(record.get("source_pick_snapshot"))
+
+    def _norm_float(value: Any) -> float | None:
+        try:
+            return round(float(value), 4)
+        except (TypeError, ValueError):
+            return None
+
+    strike = record.get("strike")
+    if strike is None:
+        strike = source.get("strike")
+    if strike is None:
+        strike = source.get("strike_est")
+
+    expiry = record.get("expiry")
+    if expiry is None:
+        expiry = source.get("expiry")
+
+    direction = record.get("direction")
+    if direction is None:
+        direction = source.get("direction") or source.get("type")
+
+    contract_symbol = record.get("contract_symbol")
+    if contract_symbol is None:
+        contract_symbol = source.get("contract_symbol") or source.get("contractSymbol")
+
+    return (
+        str(record.get("ticker") or source.get("ticker") or "").strip().upper() or None,
+        str(direction or "").strip().lower() or None,
+        str(expiry or "").strip()[:10] or None,
+        str(source.get("strategy_type") or "single_leg").strip().lower() or None,
+        _norm_float(strike),
+        _norm_float(source.get("short_strike")),
+        str(contract_symbol or "").strip().upper() or None,
+        str(source.get("short_contract_symbol") or "").strip().upper() or None,
+    )
+
+
+def _find_existing_open_contract(repository: Any, payload: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        open_positions = list(repository.list_positions("open") or [])
+    except Exception:
+        return None
+    target_signature = _position_contract_signature(payload)
+    for position in open_positions:
+        if _position_contract_signature(dict(position)) == target_signature:
+            return dict(position)
+    return None
+
+
+def _safe_dict_payload(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return {}
+        if isinstance(parsed, str):
+            try:
+                parsed = json.loads(parsed)
+            except Exception:
+                return {}
+        return dict(parsed) if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _parse_iso_datetime(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _annotate_share_safety(row: dict[str, Any]) -> dict[str, Any]:
+    payload = copy.deepcopy(row)
+    source_pick = _safe_dict_payload(payload.get("source_pick_snapshot"))
+    latest_review = _safe_dict_payload(payload.get("latest_review"))
+    contract_symbol = (
+        payload.get("contract_symbol")
+        or source_pick.get("contract_symbol")
+        or source_pick.get("contractSymbol")
+    )
+    pricing_source = str(latest_review.get("pricing_source") or "").strip().lower() or None
+    current_option_price = latest_review.get("current_option_price")
+    reviewed_at = latest_review.get("reviewed_at") or payload.get("last_reviewed_at")
+    reviewed_dt = _parse_iso_datetime(reviewed_at)
+    review_age_minutes = None
+    if reviewed_dt is not None:
+        review_age_minutes = max(int((datetime.now(UTC) - reviewed_dt).total_seconds() // 60), 0)
+
+    share_safe = False
+    share_safe_reason = "Exact live review pending."
+    if source_pick.get("approximation_only"):
+        share_safe_reason = "Estimated from proxy contract pricing."
+    elif not str(contract_symbol or "").strip():
+        share_safe_reason = "Missing exact contract symbol."
+    elif not latest_review:
+        share_safe_reason = "Live review pending."
+    elif current_option_price is None:
+        share_safe_reason = "No live market option price is saved yet."
+    elif pricing_source not in {"mid", "last_price", "spread_mid_exact"}:
+        if pricing_source == "spread_mid_approx":
+            share_safe_reason = "Estimated from proxy contract pricing."
+        elif pricing_source == "expired":
+            share_safe_reason = "Contract is expired."
+        else:
+            share_safe_reason = "Pricing is not from an exact live option quote."
+    elif reviewed_dt is None:
+        share_safe_reason = "Missing live review timestamp."
+    elif datetime.now(UTC) - reviewed_dt > _SHARE_SAFE_REVIEW_MAX_AGE:
+        share_safe_reason = "Live review is stale for share-safe reporting."
+    else:
+        share_safe = True
+        share_safe_reason = (
+            "Comparable exact contract live-priced and freshly reviewed."
+            if source_pick.get("comparable_contract")
+            else "Exact contract live-priced and freshly reviewed."
+        )
+
+    payload["share_safe_exact_live"] = share_safe
+    payload["share_safe_reason"] = share_safe_reason
+    payload["share_review_age_minutes"] = review_age_minutes
+    payload["share_reviewed_at"] = reviewed_at
+    payload["exact_contract_symbol"] = str(contract_symbol or "").strip().upper() or None
+    return payload
+
+
+def _annotate_share_safety_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_annotate_share_safety(dict(row)) for row in list(rows or [])]
 
 
 def _scan_run_id() -> str:
@@ -1221,7 +1365,12 @@ async def create_position_endpoint(body: dict[str, Any]):
             contracts=int(body.get("contracts") or 0),
             filled_at=body.get("filled_at"),
             notes=body.get("notes"),
+            require_resolved_contract=True,
+            preserve_fill_price=True,
         )
+        existing_position = _find_existing_open_contract(POSITIONS_REPOSITORY, payload)
+        if existing_position is not None:
+            return {"position": existing_position, "duplicate": True}
         position = POSITIONS_REPOSITORY.create_position(payload)
         try:
             await _run_in_worker(
@@ -1253,7 +1402,7 @@ async def list_positions_endpoint(status: str = "open", grouped: bool = False):
 
     try:
         query_status = None if status == "all" else status
-        positions = POSITIONS_REPOSITORY.list_positions(query_status)
+        positions = _annotate_share_safety_rows(POSITIONS_REPOSITORY.list_positions(query_status))
         if grouped:
             return _group_rows_by_status(positions)
         return {"positions": positions}
@@ -1270,6 +1419,7 @@ async def review_positions_endpoint(body: dict[str, Any] = {}):
     try:
         position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, POSITIONS_REPOSITORY, position_ids=position_ids)
+        reviewed = _annotate_share_safety_rows(reviewed)
         try:
             await _run_in_worker(
                 _record_forward_truth_for_position_events,
@@ -1384,7 +1534,12 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
             contracts=int(body.get("contracts") or 1),
             filled_at=body.get("filled_at"),
             notes=body.get("notes"),
+            require_resolved_contract=True,
+            preserve_fill_price=True,
         )
+        existing_trade = _find_existing_open_contract(SUGGESTED_TRADES_REPOSITORY, payload)
+        if existing_trade is not None:
+            return {"trade": existing_trade, "duplicate": True}
         trade = SUGGESTED_TRADES_REPOSITORY.create_position(payload)
         return {"trade": trade}
     except ValueError as exc:
@@ -1404,7 +1559,7 @@ async def list_suggested_trades_endpoint(status: str = "open", grouped: bool = F
 
     try:
         query_status = None if status == "all" else status
-        trades = SUGGESTED_TRADES_REPOSITORY.list_positions(query_status)
+        trades = _annotate_share_safety_rows(SUGGESTED_TRADES_REPOSITORY.list_positions(query_status))
         if grouped:
             return _group_rows_by_status(trades)
         return {"trades": trades}
@@ -1422,6 +1577,7 @@ async def review_suggested_trades_endpoint(body: dict[str, Any] = {}):
         raw_ids = body.get("position_ids") or []
         position_ids = [int(position_id) for position_id in raw_ids] if raw_ids else None
         reviewed = await _run_in_worker(review_open_positions, SUGGESTED_TRADES_REPOSITORY, position_ids=position_ids)
+        reviewed = _annotate_share_safety_rows(reviewed)
         return {"trades": reviewed}
     except ValueError as exc:
         raise HTTPException(400, str(exc))

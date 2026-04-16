@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import math
 import sqlite3
 from datetime import date, datetime
 from typing import Any, Optional
@@ -387,8 +388,19 @@ class SQLiteSuggestedTradesRepository:
         closed_at: datetime,
         exit_reason: str,
         notes: Optional[str] = None,
+        *,
+        exit_execution_basis: str = "manual_close",
+        allow_zero_exit_price: bool = False,
     ) -> Optional[dict[str, Any]]:
         with self._connect() as conn:
+            exit_price_value = float(exit_price)
+            if (
+                not math.isfinite(exit_price_value)
+                or exit_price_value < 0
+                or (not allow_zero_exit_price and exit_price_value <= 0)
+            ):
+                comparator = "greater than or equal to 0" if allow_zero_exit_price else "greater than 0"
+                raise ValueError(f"exit_price must be a finite number {comparator}.")
             existing = self._fetch_position_by_id_in_conn(conn, position_id)
             if existing is None:
                 return None
@@ -411,7 +423,7 @@ class SQLiteSuggestedTradesRepository:
                 (
                     "closed",
                     closed_at_iso,
-                    exit_price,
+                    exit_price_value,
                     exit_reason,
                     merged_notes,
                     closed_at_iso,

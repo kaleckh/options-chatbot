@@ -966,6 +966,75 @@ def reconcile_source_open_issues(
     return cleared
 
 
+def reconcile_prefixed_open_issues(
+    state: dict[str, Any],
+    *,
+    source_automation: str,
+    issue_id_prefix: str,
+    active_issue_ids: list[str] | set[str] | tuple[str, ...],
+    now_iso: str | None = None,
+    resolution_note: str | None = None,
+) -> list[dict[str, Any]]:
+    normalized_source = str(source_automation or "").strip()
+    normalized_prefix = str(issue_id_prefix or "").strip()
+    if not normalized_source:
+        raise ValueError("source_automation is required to reconcile issues")
+    if not normalized_prefix:
+        raise ValueError("issue_id_prefix is required to reconcile issues")
+
+    current_time = str(now_iso or utc_now_iso())
+    active_ids = {str(issue_id).strip() for issue_id in list(active_issue_ids or []) if str(issue_id).strip()}
+    open_issues = list(state.get("open_issues") or [])
+    resolved_issues = list(state.get("resolved_issues") or [])
+    remaining_open: list[dict[str, Any]] = []
+    cleared: list[dict[str, Any]] = []
+
+    for item in open_issues:
+        issue = dict(item)
+        if str(issue.get("source_automation") or "").strip() != normalized_source:
+            remaining_open.append(issue)
+            continue
+        issue_id = str(issue.get("issue_id") or "").strip()
+        if not issue_id.startswith(normalized_prefix):
+            remaining_open.append(issue)
+            continue
+        if issue_id in active_ids:
+            remaining_open.append(issue)
+            continue
+        resolved_index = _find_issue_index(resolved_issues, issue_id)
+        if resolved_index is not None:
+            resolved_issues.pop(resolved_index)
+        resolution_reason = str(resolution_note or "").strip() or f"{normalized_source} no longer observes this blocker."
+        resolved = _normalize_issue(
+            issue
+            | {
+                "status": "resolved",
+                "last_seen_at": current_time,
+                "resolved_at": current_time,
+                "resolution_kind": "no_longer_observed",
+                "deferred_reason": None,
+                "claim_run_id": None,
+                "claimed_at": None,
+                "claim_expires_at": None,
+                "before_after_comparison": {
+                    "resolution_kind": "no_longer_observed",
+                    "resolved_by_source": normalized_source,
+                    "resolution_reason": resolution_reason,
+                },
+            },
+            now_iso=current_time,
+            existing=issue,
+        )
+        resolved_issues.append(resolved)
+        cleared.append(resolved)
+
+    if cleared:
+        state["open_issues"] = remaining_open
+        state["resolved_issues"] = resolved_issues
+        state["updated_at"] = current_time
+    return cleared
+
+
 def claim_issue(
     state: dict[str, Any],
     issue_id: str,

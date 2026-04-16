@@ -32,7 +32,7 @@ Browser flow:
 1. `src/app/layout.tsx` mounts `src/components/layout/AppShell.tsx`
 2. `AppShell` dynamically loads the active client surfaces
 3. client components call Next route handlers under `src/app/api/*`
-4. those routes proxy through `src/lib/python-bridge.ts`
+4. those routes proxy through the backend client modules under `src/lib/backend/*`
 5. the bridge talks to `python-backend/main.py` at `PYTHON_BACKEND_URL` (`http://localhost:8100` by default)
 6. the backend fans out into the domain modules such as `options_chatbot.py`, `wfo_optimizer.py`, `supervised_scan.py`, and the repository/service modules
 
@@ -41,6 +41,7 @@ The fastest files to read for orientation are:
 - `src/components/predictions/PredictionsView.tsx`
 - `src/components/strategy/StrategyView.tsx`
 - `src/lib/python-bridge.ts`
+- `src/lib/backend/*`
 - `python-backend/main.py`
 - `options_chatbot.py`
 - `wfo_optimizer.py`
@@ -130,9 +131,24 @@ The repo still contains legacy day-trading tests and engine code, but the corres
 
 - `docs/architecture-overview.md`
   - runtime map, request flow, subsystem ownership
+- `docs/index.md`
+  - living-doc starting point and archive map
 - `docs/api-and-storage.md`
-  - active routes, bridge layer, storage map, and artifact ownership
+  - active Next routes, backend-only support endpoints, storage map, and artifact ownership
+- `docs/route-parity.md`
+  - browser route to Next route to FastAPI parity map
+- `docs/architecture-audit.md`
+  - live audit of dead surfaces, sidecars, and remaining monoliths
 - `docs/current-state.md`
   - current options product status
 - `docs/day-trading-current-state.md`
-  - legacy or CLI-oriented day-trading context with a snapshot warning
+  - current status of the day-trading research lane with a snapshot warning
+
+Treat the files above as the living docs for this worktree.
+
+Historical planning and audit docs:
+- dated roadmap or audit files under `docs/`
+- `docs/autoresearch/*`
+- `research_runs/*`
+
+Those files are useful context, but they are records, not the source of truth for the current route map. If a dated doc disagrees with the code or the living docs above, trust the code first.

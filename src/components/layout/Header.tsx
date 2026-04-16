@@ -34,6 +34,7 @@ function Header({ onMenuClick }: HeaderProps) {
       <div className="flex items-center gap-3 md:gap-4">
         {onMenuClick && (
           <button
+            type="button"
             onClick={onMenuClick}
             className="md:hidden p-1.5 rounded-md text-text-2 hover:text-text-1 hover:bg-bg-4 transition-colors"
             aria-label="Open navigation menu"

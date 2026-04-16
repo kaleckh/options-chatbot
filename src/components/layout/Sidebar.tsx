@@ -104,6 +104,7 @@ export default function Sidebar({
             return (
               <button
                 key={tab.id}
+                type="button"
                 role="tab"
                 aria-selected={isActive}
                 aria-controls={tab.id + "-panel"}
@@ -239,6 +240,7 @@ export default function Sidebar({
             <div className="relative h-full">
               {sidebarContent}
               <button
+                type="button"
                 onClick={onClose}
                 aria-label="Close sidebar"
                 className="absolute top-3 right-3 p-1 rounded-md text-text-3 hover:text-text-1 hover:bg-bg-4 transition-all"

@@ -41,7 +41,9 @@ export interface ScanPick {
   type: "call" | "put";
   prediction_type?: string;
   direction: "call" | "put";
+  strategy_type?: string | null;
   contract_symbol?: string | null;
+  short_contract_symbol?: string | null;
   direction_score: number;
   quality_score: number;
   tech_score?: number;
@@ -87,11 +89,21 @@ export interface ScanPick {
   observation_only?: boolean;
   observation_reason?: string | null;
   quote_time_et?: string | null;
+  quote_time_utc?: string | null;
   quote_basis?: string | null;
   quote_freshness_status?: string | null;
+  original_logged_expiry?: string | null;
+  resolved_listed_expiry?: string | null;
   underlying_price_at_selection?: number | null;
   selection_source?: string | null;
   promotion_class?: string | null;
+  approximation_only?: boolean | null;
+  comparable_contract?: boolean | null;
+  comparable_contract_basis?: string | null;
+  comparable_contract_label?: string | null;
+  resolution_notes?: string | null;
+  original_logged_entry_execution_price?: number | null;
+  resolved_reference_entry_execution_price?: number | null;
   promotable?: boolean;
   options_snapshot_status?: string | null;
   option_chain_status?: string | null;
@@ -107,6 +119,51 @@ export interface ScanPick {
   policy_artifact_id?: string | null;
   cohort_id?: string | null;
   cohort_role?: string | null;
+  entry_quote_snapshot?: EntryQuoteSnapshot | null;
+}
+
+export interface EntryQuoteLeg {
+  role?: string | null;
+  contract_symbol?: string | null;
+  strike?: number | null;
+  premium?: number | null;
+  bid?: number | null;
+  ask?: number | null;
+  last?: number | null;
+  mid?: number | null;
+  delta?: number | null;
+  iv?: number | null;
+  quote_basis?: string | null;
+  quote_age_hours?: number | null;
+  volume?: number | null;
+  open_interest?: number | null;
+}
+
+export interface EntryQuoteSnapshot {
+  captured_at_et?: string | null;
+  captured_at_utc?: string | null;
+  ticker?: string | null;
+  direction?: string | null;
+  strategy_type?: string | null;
+  logged_expiry?: string | null;
+  resolved_listed_expiry?: string | null;
+  selection_source?: string | null;
+  promotion_class?: string | null;
+  underlying_price?: number | null;
+  quote_basis?: string | null;
+  quote_freshness_status?: string | null;
+  options_snapshot_status?: string | null;
+  option_chain_status?: string | null;
+  entry_execution_price?: number | null;
+  entry_execution_basis?: string | null;
+  entry_fee_total_usd?: number | null;
+  display_price?: number | null;
+  spread_width?: number | null;
+  net_debit?: number | null;
+  max_profit?: number | null;
+  max_loss?: number | null;
+  net_delta?: number | null;
+  legs?: EntryQuoteLeg[];
 }
 
 export type TruthLane = "synthetic" | "historical_imported" | "historical_imported_daily";
@@ -438,6 +495,8 @@ export interface PositionReview {
   pricing_source?: string | null;
   current_option_price?: number | null;
   current_pnl_pct?: number | null;
+  entry_execution_price?: number | null;
+  exit_execution_price?: number | null;
   entry_execution_basis?: string | null;
   exit_execution_basis?: string | null;
   gross_pnl_pct?: number | null;
@@ -488,6 +547,11 @@ export interface TrackedPosition {
   exit_execution_basis?: string | null;
   exit_reason?: string | null;
   latest_review?: PositionReview | null;
+  share_safe_exact_live?: boolean;
+  share_safe_reason?: string | null;
+  share_review_age_minutes?: number | null;
+  share_reviewed_at?: string | null;
+  exact_contract_symbol?: string | null;
 }
 
 export interface CreateTrackedPositionRequest {

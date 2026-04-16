@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { closeTrackedPosition } from "@/lib/python-bridge";
+import { BackendHttpError, closeTrackedPosition } from "@/lib/python-bridge";
 
 export async function POST(
   req: NextRequest,
@@ -11,6 +11,12 @@ export async function POST(
     const result = await closeTrackedPosition(Number(id), body);
     return NextResponse.json(result);
   } catch (err) {
+    if (err instanceof BackendHttpError) {
+      return NextResponse.json(
+        { error: err.message },
+        { status: err.status }
+      );
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Failed to close tracked position" },
       { status: 500 }

@@ -55,6 +55,7 @@ export default class ErrorBoundary extends React.Component<
             </pre>
           )}
           <button
+            type="button"
             onClick={() => this.setState({ hasError: false, error: null })}
             className="flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:bg-accent/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2 transition-colors"
           >

@@ -30,6 +30,7 @@ const sizeStyles: Record<ButtonSize, string> = {
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
     {
+      type = "button",
       variant = "secondary",
       size = "md",
       loading = false,
@@ -44,6 +45,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <button
         ref={ref}
+        type={type}
         disabled={disabled || loading}
         className={`
           inline-flex items-center justify-center font-medium rounded-md border

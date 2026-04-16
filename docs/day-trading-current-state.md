@@ -1,6 +1,6 @@
 # Day Trading Current State
 
-Last updated: 2026-04-03
+Last updated: 2026-04-15
 
 ## Critical Rule: Read Code First
 
@@ -13,7 +13,7 @@ Last updated: 2026-04-03
 
 ## Snapshot Warning
 
-In this worktree, the old app-facing Next day-trading routes and the `DayTradingLab` component are not present.
+In this worktree, the old app-facing Next day-trading route files and the `DayTradingLab` component are not present. `src/app/api/day-trading/*` still exists as empty scaffolding folders only.
 
 Use this document as background on the legacy or CLI-oriented day-trading lane, not as a description of the current browser surface.
 
@@ -46,8 +46,9 @@ This is the default active research track.
   - Monday through Friday only
 
 Main code:
-- `src/lib/day-trading/crypto-engine.js`
-- `src/lib/day-trading/index.js`
+- `crypto_options/signals.py`
+- `crypto_options/execution.py`
+- `crypto_options/deribit.py`
 
 Current managed crypto slate:
 - `BTCUSDT 5m Bottom Reclaim`
@@ -78,24 +79,22 @@ This is the older ETF morning lab kept for comparison.
 Main code:
 - `src/lib/day-trading/engine.js`
 
-## Public Surfaces
+## Current Worktree Surface
 
-Routes:
-- `GET /api/day-trading?market=crypto|equities_legacy`
-- `POST /api/day-trading?market=crypto|equities_legacy`
-- `GET /api/day-trading/watchlist?market=crypto|equities_legacy`
+There is no active day-trading Next route or mounted day-trading React surface in this checkout.
 
-Scripts:
-- `npm run daytrading:import:crypto`
-- `npm run daytrading:validate`
-- `npm run daytrading:watch`
-- `npm run daytrading:experiments`
-- `npm run daytrading:preflight`
-- `npm run daytrading:pilot`
-- `npm run daytrading:journal:add`
-- `npm run daytrading:test`
+What is actually present:
+- legacy equity research code under `src/lib/day-trading/engine.js`
+- crypto sidecar code under `crypto_options/*`
+- deterministic Node coverage under `tests/day-trading/*`
+- the package script `npm run daytrading:test`
 
-`crypto` is now the default market for the scripts and the UI.
+What is not present in this worktree:
+- `src/app/api/day-trading/*` route files
+- `src/components/strategy/DayTradingLab.tsx`
+- package scripts such as `daytrading:watch`, `daytrading:pilot`, or `daytrading:journal:add`
+
+Use the dated day-trading roadmap docs as historical planning context, not as a current route or command map.
 
 ## BTC Profitability Guardrails
 
@@ -174,24 +173,18 @@ Crypto tests cover:
 - `30`-trade review vs `50`-trade advance milestones
 - router defaulting to crypto while keeping equities legacy reachable
 
-## Current UI And API Shape
+## Current Surface Notes
 
-The day-trading UI now:
-- defaults to `crypto`
-- keeps `equities_legacy` available behind a selector
-- shows the BTC operating plan, checklist, daily cap state, and milestone progress
-- shows disqualified-vs-eligible journal counts
-- shows compact execution-quality stats from the pilot journal
-- shows watchlist blocker states such as `blocked_mid_range`, `blocked_expansion`, and `blocked_event_shock`
-- keeps live notify decisions blocked when data is stale, untrusted, or regime-blocked
+The crypto lane logic still exists in code and tests, but it is not exposed through the current Next.js app shell.
 
-The snapshot and watchlist payloads now expose:
-- operating plan metadata
-- today-gate state
-- milestone state
-- eligibility and disqualification counts
-- execution-quality summary fields
-- regime state, tradeability, and blocker lists on watchlist items
+Any older references to:
+- a default market selector
+- watchlist panels
+- journal APIs
+- ticket desk routes
+- in-app preflight consoles
+
+should be read as planned or historical rather than live browser behavior in this worktree.
 
 ## Historical Context That Led Here
 
@@ -220,4 +213,4 @@ That means:
 4. treat the `30`-trade checkpoint as review only
 5. only consider ETH after the `50`-trade gate passes cleanly
 
-The older equities lab still has value as a reference surface, but it is no longer the repository’s main day-trading research path.
+The older equities lab still has value as a reference surface, but it is no longer the repository's main day-trading research path.

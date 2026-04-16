@@ -223,6 +223,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "entry_execution_price",
             "entry_execution_basis",
             "entry_fee_total_usd",
+            "quote_time_utc",
+            "original_logged_expiry",
+            "resolved_listed_expiry",
+            "entry_quote_snapshot",
             "profitability_eligibility",
             "profitability_blockers",
         }
@@ -231,9 +235,13 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             self.assertEqual(pick["prediction_type"], "daily_scan")
             self.assertEqual(pick["type"], pick["direction"])
             self.assertIn(pick["type"], {"call", "put"})
-            self.assertEqual(pick["entry_fee_total_usd"], 0.65)
+            expected_fee = 1.3 if str(pick.get("strategy_type") or "").strip().lower() == "vertical_spread" else 0.65
+            self.assertEqual(pick["entry_fee_total_usd"], expected_fee)
             self.assertIn(pick["profitability_eligibility"], {"eligible", "ineligible"})
             self.assertIsInstance(pick["profitability_blockers"], list)
+            self.assertIsInstance(pick["entry_quote_snapshot"], dict)
+            self.assertEqual(pick["entry_quote_snapshot"].get("captured_at_et"), pick["quote_time_et"])
+            self.assertEqual(pick["entry_quote_snapshot"].get("captured_at_utc"), pick["quote_time_utc"])
 
         self.assertEqual(
             picks,
@@ -1368,13 +1376,13 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(backtest["selection_source_counts"], {"bootstrap_heuristic": 137})
         self.assertEqual(round(backtest["profit_factor"], 2), 0.70)
         self.assertEqual(policy["scan_policy"]["promotion_status"], "block")
-        self.assertEqual(len(scan["picks"]), 1)
+        self.assertEqual(len(scan["picks"]), 2)
 
         top_pick = scan["picks"][0]
         self.assertEqual(top_pick["ticker"], "SPY")
         self.assertEqual(top_pick["type"], "call")
-        self.assertEqual(top_pick["direction_score"], 56.5)
-        self.assertEqual(top_pick["quality_score"], 86.0)
+        self.assertEqual(top_pick["direction_score"], 76.5)
+        self.assertEqual(top_pick["quality_score"], 86.3)
         self.assertIsNone(top_pick["calibrated_expectancy_pct"])
         self.assertEqual(top_pick["promotion_class"], "research_bootstrap")
         self.assertEqual(top_pick["selection_source"], "live_chain_exact_contract")

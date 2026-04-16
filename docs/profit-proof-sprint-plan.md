@@ -2,6 +2,12 @@
 
 Last updated: 2026-04-06
 
+## Status Note
+
+This file is a historical implementation handoff.
+
+Several items described here have since landed in the codebase, including explicit proof-lane evaluators in `options_profit_gate.py`, support endpoints in `python-backend/main.py`, and stricter tracked-position review plumbing. Use `docs/current-state.md`, `docs/api-and-storage.md`, and the code itself for the current runtime picture; use this file for background on why those changes were introduced.
+
 ## Purpose
 
 This document is the implementation handoff for turning the options lane from:

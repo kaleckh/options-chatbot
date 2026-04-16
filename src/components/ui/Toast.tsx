@@ -121,6 +121,7 @@ function ToastItem({
       <Icon size={16} className={`${iconColor} flex-shrink-0 mt-0.5`} />
       <p className="text-sm text-text-1 flex-1">{toast.message}</p>
       <button
+        type="button"
         onClick={onDismiss}
         aria-label="Dismiss notification"
         className="text-text-3 hover:text-text-1 transition-colors flex-shrink-0"

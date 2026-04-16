@@ -2,6 +2,12 @@
 
 Last updated: 2026-04-03
 
+### Status Note
+
+This strategy roadmap is historical planning context for the day-trading lane.
+
+The strategy ideas below may still be relevant to the code under `src/lib/day-trading/*`, but any implied browser routes or mounted UI should not be assumed to exist in the current worktree.
+
 ### Decision
 
 - The crypto lane is the right place to test new intraday strategies first.

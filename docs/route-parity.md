@@ -1,0 +1,132 @@
+# Route Parity
+
+## Browser Entry Surface
+
+The mounted browser app is owned by:
+
+- `src/app/layout.tsx`
+- `src/components/layout/AppShell.tsx`
+
+`src/app/page.tsx` intentionally returns `null`.
+
+## Active Browser Routes
+
+### Scan And Truth Diagnostics
+
+- Browser: `POST /api/scan`
+  - Next: `src/app/api/scan/route.ts`
+  - FastAPI: `POST /api/scan`
+- Browser: `POST /api/backtest`
+  - Next: `src/app/api/backtest/route.ts`
+  - FastAPI: `POST /api/backtest`
+- Browser: `GET /api/backtest/summary`
+  - Next: `src/app/api/backtest/summary/route.ts`
+  - FastAPI: `GET /api/backtest/summary`
+- Browser: `GET /api/backtest/last`
+  - Next: `src/app/api/backtest/last/route.ts`
+  - FastAPI: `GET /api/backtest/last`
+- Browser: `GET /api/backtest/live-policy`
+  - Next: `src/app/api/backtest/live-policy/route.ts`
+  - FastAPI: `GET /api/backtest/live-policy`
+- Browser: `GET /api/backtest/report`
+  - Next: `src/app/api/backtest/report/route.ts`
+  - FastAPI: `GET /api/backtest/report`
+- Browser: `GET /api/backtest/metric-truth`
+  - Next: `src/app/api/backtest/metric-truth/route.ts`
+  - FastAPI: `GET /api/backtest/metric-truth`
+- Browser: `GET /api/backtest/comparison`
+  - Next: `src/app/api/backtest/comparison/route.ts`
+  - FastAPI: `GET /api/backtest/comparison`
+- Browser: `GET /api/backtest/forward-evidence`
+  - Next: `src/app/api/backtest/forward-evidence/route.ts`
+  - FastAPI: `GET /api/backtest/forward-evidence`
+- Browser: `GET /api/backtest/exit-audit`
+  - Next: `src/app/api/backtest/exit-audit/route.ts`
+  - FastAPI: `GET /api/backtest/exit-audit`
+
+### Profiles, Predictions, And Status
+
+- Browser: `GET /api/profile`
+  - Next: `src/app/api/profile/route.ts`
+  - FastAPI: `GET /api/profile`
+- Browser: `PUT /api/profile`
+  - Next: `src/app/api/profile/route.ts`
+  - FastAPI: `PUT /api/profile`
+- Browser: `GET /api/changelog`
+  - Next: `src/app/api/changelog/route.ts`
+  - FastAPI: `GET /api/changelog`
+- Browser: `GET /api/predictions`
+  - Next: `src/app/api/predictions/route.ts`
+  - FastAPI: `GET /api/predictions`
+- Browser: `POST /api/predictions/grade`
+  - Next: `src/app/api/predictions/grade/route.ts`
+  - FastAPI: `POST /api/predictions/grade`
+- Browser: `GET /api/risk-settings`
+  - Next: `src/app/api/risk-settings/route.ts`
+  - FastAPI: `GET /api/risk`
+- Browser: `GET /api/options-profit/status`
+  - Next: `src/app/api/options-profit/status/route.ts`
+  - FastAPI: `GET /api/options-profit/status`
+
+### Tracked Positions
+
+- Browser: `GET /api/positions`
+  - Next: `src/app/api/positions/route.ts`
+  - FastAPI: `GET /api/positions`
+- Browser: `POST /api/positions`
+  - Next: `src/app/api/positions/route.ts`
+  - FastAPI: `POST /api/positions`
+- Browser: `POST /api/positions/review`
+  - Next: `src/app/api/positions/review/route.ts`
+  - FastAPI: `POST /api/positions/review`
+- Browser: `POST /api/positions/[id]/close`
+  - Next: `src/app/api/positions/[id]/close/route.ts`
+  - FastAPI: `POST /api/positions/{id}/close`
+
+### Suggested Trades
+
+- Browser: `GET /api/suggested-trades`
+  - Next: `src/app/api/suggested-trades/route.ts`
+  - FastAPI: `GET /api/suggested-trades`
+- Browser: `POST /api/suggested-trades`
+  - Next: `src/app/api/suggested-trades/route.ts`
+  - FastAPI: `POST /api/suggested-trades`
+- Browser: `POST /api/suggested-trades/review`
+  - Next: `src/app/api/suggested-trades/review/route.ts`
+  - FastAPI: `POST /api/suggested-trades/review`
+- Browser: `POST /api/suggested-trades/[id]/close`
+  - Next: `src/app/api/suggested-trades/[id]/close/route.ts`
+  - FastAPI: `POST /api/suggested-trades/{id}/close`
+
+### Support
+
+- Browser: `GET /api/sectors`
+  - Next: `src/app/api/sectors/route.ts`
+  - FastAPI: `GET /api/sectors`
+- Browser: `POST /api/tools/[name]`
+  - Next: `src/app/api/tools/[name]/route.ts`
+  - FastAPI: `POST /api/tools/{tool_name}`
+
+## Backend-Only Endpoints
+
+These exist in `python-backend/main.py` but are not mirrored through active Next routes in this worktree:
+
+- `GET /api/profiles`
+- `GET /api/positions/{position_id}/close-prefill`
+- `POST /api/scan/recommendations`
+- `POST /api/scan/roll`
+- `POST /api/backtest/archived-forward`
+- `POST /api/backtest/experiments`
+- `GET /api/backtest/profitability-forensics`
+- `GET /api/backtest/stability`
+- `GET /api/market-data/cache-stats`
+- `POST /api/market-data/cache-stats/reset`
+- `GET /api/daily-performance`
+- `GET /api/health`
+- `GET /api/proof-summary`
+
+## Known Snapshot Caveats
+
+- `GET /api/predictions/history` was a duplicate Next alias and has been removed from the live route tree.
+- `src/app/api/day-trading/*` exists only as empty scaffolding folders in this worktree.
+- Any historical doc that describes mounted day-trading browser routes should be treated as archive context.

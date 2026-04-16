@@ -2,6 +2,12 @@
 
 Last updated: 2026-04-03
 
+## Status Note
+
+This is a dated roadmap, not the current browser implementation contract.
+
+Some route and UI references in this file are not present in the current worktree. Use `docs/day-trading-current-state.md` for the current lane status before treating any item below as active.
+
 ## Goal
 
 Turn the crypto day-trading lane from a read-heavy research console into a tight operator workflow:

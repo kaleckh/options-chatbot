@@ -50,6 +50,7 @@ from profit_loop_shared_state import (
     list_run_ledger_events,
     proof_bundle_dir as shared_proof_bundle_dir,
     prioritized_open_issues,
+    reconcile_prefixed_open_issues,
     reconcile_source_open_issues,
     resolve_issue,
     save_profit_loop_state,
@@ -2480,6 +2481,19 @@ def prepare_profit_validation(
     context = _proof_context(repo_root=repo_root)
 
     blockers = validation_prerequisite_blockers(state)
+    active_prerequisite_issue_ids = {
+        f"profit-validation-{str(blocker.get('code') or '').strip()}"
+        for blocker in blockers
+        if str(blocker.get("code") or "").strip()
+    }
+    reconcile_prefixed_open_issues(
+        state,
+        source_automation="daily-profit-validation",
+        issue_id_prefix="profit-validation-",
+        active_issue_ids=sorted(active_prerequisite_issue_ids),
+        now_iso=now_iso,
+        resolution_note="Profit-validation prerequisites are fresh again, so this prerequisite blocker is no longer active.",
+    )
     if blockers:
         run_id = f"daily-profit-validation-{_utc_now().strftime('%Y%m%dT%H%M%SZ')}"
         issues = []

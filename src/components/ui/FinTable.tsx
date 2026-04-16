@@ -46,6 +46,14 @@ function cellClass(
 }
 
 function rowKey(row: Record<string, unknown>, index: number): string {
+  const explicitKey = row.__rowKey;
+  if (
+    typeof explicitKey === "string" ||
+    typeof explicitKey === "number" ||
+    typeof explicitKey === "boolean"
+  ) {
+    return String(explicitKey);
+  }
   const cols = Object.keys(row);
   const parts = cols.slice(0, 3).map((c) => {
     const value = row[c];
@@ -76,7 +84,7 @@ function FinTable({
   const pnlSet = new Set(pnlCols);
   const rateSet = new Set(rateCols);
   const monoSet = new Set(monoCols);
-  const columns = Object.keys(data[0]);
+  const columns = Object.keys(data[0]).filter((col) => !col.startsWith("__"));
 
   return (
     <div

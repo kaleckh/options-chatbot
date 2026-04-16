@@ -31,7 +31,7 @@ from functools import wraps
 from typing import Any, Optional
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import yfinance as yf
 import market_data_service as _mds
@@ -64,6 +64,70 @@ from market_data_service import (
 from options_profit_state import merge_live_profile
 
 _ET = ZoneInfo("America/New_York")
+_UTC = ZoneInfo("UTC")
+
+
+def _quote_timestamp_snapshot(*, now_et: datetime | None = None) -> dict[str, str]:
+    captured_et = now_et or datetime.now(_ET)
+    if captured_et.tzinfo is None:
+        captured_et = captured_et.replace(tzinfo=_ET)
+    captured_utc = captured_et.astimezone(_UTC)
+    return {
+        "quote_time_et": captured_et.isoformat(timespec="seconds"),
+        "quote_time_utc": captured_utc.isoformat(timespec="seconds").replace("+00:00", "Z"),
+    }
+
+
+def _entry_quote_snapshot_from_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    captured_at_et = candidate.get("quote_captured_at_et") or candidate.get("quote_time_et")
+    captured_at_utc = candidate.get("quote_captured_at_utc") or candidate.get("quote_time_utc")
+    snapshot = {
+        "captured_at_et": captured_at_et,
+        "captured_at_utc": captured_at_utc,
+        "ticker": candidate.get("ticker"),
+        "direction": candidate.get("direction"),
+        "strategy_type": candidate.get("strategy_type"),
+        "logged_expiry": candidate.get("original_logged_expiry") or candidate.get("expiry"),
+        "resolved_listed_expiry": candidate.get("resolved_listed_expiry"),
+        "selection_source": candidate.get("selection_source") or candidate.get("contract_selection_source"),
+        "promotion_class": candidate.get("promotion_class"),
+        "underlying_price": candidate.get("underlying_price_at_selection"),
+        "quote_basis": candidate.get("quote_basis"),
+        "quote_freshness_status": candidate.get("quote_freshness_status"),
+        "options_snapshot_status": candidate.get("options_snapshot_status"),
+        "option_chain_status": candidate.get("option_chain_status"),
+        "entry_execution_price": candidate.get("entry_execution_price"),
+        "entry_execution_basis": candidate.get("entry_execution_basis"),
+        "entry_fee_total_usd": candidate.get("entry_fee_total_usd"),
+    }
+    legs = candidate.get("legs")
+    if isinstance(legs, list) and legs:
+        snapshot["legs"] = copy.deepcopy(legs)
+        snapshot["spread_width"] = candidate.get("spread_width")
+        snapshot["net_debit"] = candidate.get("net_debit")
+        snapshot["max_profit"] = candidate.get("max_profit")
+        snapshot["max_loss"] = candidate.get("max_loss")
+        snapshot["net_delta"] = candidate.get("net_delta")
+        snapshot["display_price"] = candidate.get("net_debit")
+    else:
+        snapshot["legs"] = [
+            {
+                "role": "long",
+                "contract_symbol": candidate.get("contract_symbol"),
+                "strike": candidate.get("strike"),
+                "premium": candidate.get("premium") if candidate.get("premium") is not None else candidate.get("est_premium"),
+                "bid": candidate.get("bid"),
+                "ask": candidate.get("ask"),
+                "last": candidate.get("last"),
+                "mid": candidate.get("mid"),
+                "quote_basis": candidate.get("quote_basis"),
+                "quote_age_hours": candidate.get("quote_age_hours"),
+                "volume": candidate.get("contract_volume"),
+                "open_interest": candidate.get("contract_open_interest"),
+            }
+        ]
+        snapshot["display_price"] = candidate.get("mid")
+    return snapshot
 
 def _market_is_open() -> bool:
     """Return True only if US equities market is currently in regular session (9:30–16:00 ET, Mon–Fri)."""
@@ -363,6 +427,49 @@ def _live_pick_promotion_class(
     return "research_bootstrap"
 
 
+def _quote_capture_timestamps() -> dict[str, str]:
+    captured_utc = datetime.now(timezone.utc)
+    captured_et = captured_utc.astimezone(_ET)
+    return {
+        "quote_captured_at_utc": captured_utc.isoformat(),
+        "quote_captured_at_et": captured_et.isoformat(),
+    }
+
+
+def _build_entry_quote_snapshot(option_snapshot: dict[str, Any], *, quote_role: str | None = None) -> dict[str, Any]:
+    snapshot = copy.deepcopy(option_snapshot or {})
+    if not snapshot:
+        return {}
+    return {
+        "quote_role": quote_role,
+        "quote_captured_at_utc": snapshot.get("quote_captured_at_utc"),
+        "quote_captured_at_et": snapshot.get("quote_captured_at_et"),
+        "ticker": snapshot.get("ticker"),
+        "direction": snapshot.get("direction"),
+        "strategy_type": snapshot.get("strategy_type"),
+        "expiry": snapshot.get("expiry"),
+        "strike": snapshot.get("strike"),
+        "short_strike": snapshot.get("short_strike"),
+        "contract_symbol": snapshot.get("contract_symbol"),
+        "short_contract_symbol": snapshot.get("short_contract_symbol"),
+        "bid": snapshot.get("bid"),
+        "ask": snapshot.get("ask"),
+        "last": snapshot.get("last"),
+        "mid": snapshot.get("premium"),
+        "quote_basis": snapshot.get("quote_basis"),
+        "quote_age_hours": snapshot.get("quote_age_hours"),
+        "live_chain": snapshot.get("live_chain"),
+        "options_snapshot_status": snapshot.get("options_snapshot_status"),
+        "option_chain_status": snapshot.get("option_chain_status"),
+        "stock_price": snapshot.get("stock_price"),
+        "entry_execution_price": snapshot.get("entry_execution_price"),
+        "entry_execution_basis": snapshot.get("entry_execution_basis"),
+        "selection_source": snapshot.get("selection_source"),
+        "promotion_class": snapshot.get("promotion_class"),
+        "entry_quote_snapshot": copy.deepcopy(snapshot.get("entry_quote_snapshot") or {}),
+    }
+
+
 def _select_live_expectancy(
     *,
     calibration_lookup: Optional[dict],
@@ -512,6 +619,7 @@ def _compute_tech_score_from_close_series(
 
 def _get_profile(ticker: str, direction: str | None = None) -> dict:
     """Return the strategy profile dict for the given ticker."""
+    ensure_strategy_profiles_current()
     base_profile = STRATEGY_PROFILES[_asset_class(ticker)]
     merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker, direction)
     return merged_profile
@@ -737,26 +845,153 @@ STRATEGY_PROFILES: dict[str, dict] = {
 }
 
 # Backwards-compat alias — all existing code referencing STRATEGY_PROFILE gets equity profile
+DEFAULT_STRATEGY_PROFILES = copy.deepcopy(STRATEGY_PROFILES)
 STRATEGY_PROFILE = STRATEGY_PROFILES["equity"]
 
 # ── Persist / restore both profiles across restarts ───────────────────────────
-_DIR_OC      = os.path.dirname(os.path.abspath(__file__))
-PROFILE_FILES = {
-    "equity": os.path.join(_DIR_OC, "strategy_profile.json"),          # keeps backwards compat
-    "index":  os.path.join(_DIR_OC, "strategy_profile_index.json"),
-}
-CHANGELOG_FILES = {
-    "equity": os.path.join(_DIR_OC, "brain_changelog.json"),
-    "index":  os.path.join(_DIR_OC, "brain_changelog_index.json"),
-}
-# Backwards-compat single-profile aliases
-PROFILE_FILE   = PROFILE_FILES["equity"]
-CHANGELOG_FILE = CHANGELOG_FILES["equity"]
+_DIR_OC = os.path.dirname(os.path.abspath(__file__))
+PROFILE_FILES: dict[str, str] = {}
+CHANGELOG_FILES: dict[str, str] = {}
+PROFILE_FILE = ""
+CHANGELOG_FILE = ""
+_PROFILE_LOAD_FINGERPRINT: tuple[tuple[str, str, int | None, int | None], ...] | None = None
+_PROFILE_LOADED_SNAPSHOT: dict[str, Any] = copy.deepcopy(STRATEGY_PROFILES)
+
+
+def _profile_storage_dir() -> str:
+    override = str(os.getenv("STRATEGY_PROFILE_DIR") or "").strip()
+    if override:
+        return os.path.abspath(override)
+    options_profit_dir = str(os.getenv("OPTIONS_PROFIT_STATE_DIR") or "").strip()
+    if options_profit_dir:
+        return os.path.abspath(options_profit_dir)
+    return _DIR_OC
+
+
+def _refresh_profile_file_aliases() -> None:
+    global PROFILE_FILES, CHANGELOG_FILES, PROFILE_FILE, CHANGELOG_FILE
+    base_dir = _profile_storage_dir()
+    PROFILE_FILES = {
+        "equity": os.path.join(base_dir, "strategy_profile.json"),
+        "index": os.path.join(base_dir, "strategy_profile_index.json"),
+    }
+    CHANGELOG_FILES = {
+        "equity": os.path.join(base_dir, "brain_changelog.json"),
+        "index": os.path.join(base_dir, "brain_changelog_index.json"),
+    }
+    PROFILE_FILE = PROFILE_FILES["equity"]
+    CHANGELOG_FILE = CHANGELOG_FILES["equity"]
+
+
+def _reset_profiles(base_profiles: dict[str, Any] | None = None) -> None:
+    source_profiles = base_profiles or DEFAULT_STRATEGY_PROFILES
+    for profile, source_profile in source_profiles.items():
+        current_profile = STRATEGY_PROFILES.setdefault(profile, {})
+        current_profile.clear()
+        current_profile.update(copy.deepcopy(source_profile))
+    for profile in list(STRATEGY_PROFILES.keys()):
+        if profile not in source_profiles:
+            del STRATEGY_PROFILES[profile]
+    if "risk_settings" in globals() and isinstance(risk_settings, dict):
+        risk_settings.clear()
+        risk_settings.update(STRATEGY_PROFILE["risk"])
+
+
+def _deep_profile_diff(current: Any, baseline: Any) -> Any:
+    if isinstance(current, dict) and isinstance(baseline, dict):
+        diff: dict[str, Any] = {}
+        for key, value in current.items():
+            if key not in baseline:
+                diff[key] = copy.deepcopy(value)
+                continue
+            nested = _deep_profile_diff(value, baseline[key])
+            if nested not in ({}, None):
+                diff[key] = nested
+        return diff
+    if current != baseline:
+        return copy.deepcopy(current)
+    return {}
+
+
+def _deep_profile_merge(target: dict[str, Any], overrides: dict[str, Any]) -> None:
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_profile_merge(target[key], value)
+        else:
+            target[key] = copy.deepcopy(value)
+
+
+def ensure_strategy_profiles_current(*, force: bool = False) -> None:
+    global _PROFILE_LOAD_FINGERPRINT, _PROFILE_LOADED_SNAPSHOT
+    _refresh_profile_file_aliases()
+    fingerprint: list[tuple[str, str, int | None, int | None]] = []
+    for profile, pfile in PROFILE_FILES.items():
+        try:
+            stat = os.stat(pfile)
+            fingerprint.append((profile, pfile, int(stat.st_mtime_ns), int(stat.st_size)))
+        except FileNotFoundError:
+            fingerprint.append((profile, pfile, None, None))
+    current_fingerprint = tuple(fingerprint)
+    if not force and current_fingerprint == _PROFILE_LOAD_FINGERPRINT:
+        return
+
+    in_memory_overrides: dict[str, Any] = {}
+    for profile, current_profile in STRATEGY_PROFILES.items():
+        baseline_profile = dict(_PROFILE_LOADED_SNAPSHOT.get(profile) or {})
+        diff = _deep_profile_diff(current_profile, baseline_profile)
+        if diff not in ({}, None):
+            in_memory_overrides[profile] = diff
+
+    has_saved_profiles = any(os.path.exists(pfile) for pfile in PROFILE_FILES.values())
+    if has_saved_profiles:
+        _reset_profiles()
+    else:
+        _reset_profiles(base_profiles=_PROFILE_LOADED_SNAPSHOT)
+    for profile, pfile in PROFILE_FILES.items():
+        if not os.path.exists(pfile):
+            continue
+        try:
+            with open(pfile) as f:
+                saved = json.load(f)
+            sp = STRATEGY_PROFILES[profile]
+            for section in (
+                "confidence_weights",
+                "targets",
+                "filters",
+                "risk",
+                "entry",
+                "direction_score_weights",
+                "rsi_overextension",
+                "quality_score_weights",
+                "early_exit",
+                "spread",
+                "entry_filters",
+            ):
+                if section in saved and isinstance(saved[section], dict):
+                    if section not in sp:
+                        sp[section] = {}
+                    sp[section].update(saved[section])
+            if "strategy_type" in saved:
+                sp["strategy_type"] = saved["strategy_type"]
+            if "auto_tune" in saved and isinstance(saved["auto_tune"], dict):
+                sp.setdefault("auto_tune", {}).update(saved["auto_tune"])
+        except Exception:
+            pass
+    for profile, overrides in in_memory_overrides.items():
+        target_profile = STRATEGY_PROFILES.get(profile)
+        if isinstance(target_profile, dict) and isinstance(overrides, dict):
+            _deep_profile_merge(target_profile, overrides)
+    if "risk_settings" in globals() and isinstance(risk_settings, dict):
+        risk_settings.clear()
+        risk_settings.update(STRATEGY_PROFILE["risk"])
+    _PROFILE_LOAD_FINGERPRINT = current_fingerprint
+    _PROFILE_LOADED_SNAPSHOT = copy.deepcopy(STRATEGY_PROFILES)
 
 
 def _log_brain_update(source: str, note: str, profile: str = "equity") -> None:
     """Append one timestamped entry to the profile's changelog file."""
     from datetime import timezone
+    _refresh_profile_file_aliases()
     entry = {
         "ts":      datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "source":  source,
@@ -778,6 +1013,7 @@ def _log_brain_update(source: str, note: str, profile: str = "equity") -> None:
 
 def _save_profile(note: str = "", profile: str = "equity") -> None:
     """Write one strategy profile to disk. Call after every Apply."""
+    ensure_strategy_profiles_current()
     sp = STRATEGY_PROFILES[profile]
     with open(PROFILE_FILES[profile], "w") as f:
         json.dump(
@@ -789,22 +1025,7 @@ def _save_profile(note: str = "", profile: str = "equity") -> None:
 
 def _load_profile() -> None:
     """Merge saved profiles into STRATEGY_PROFILES in-place (runs at import time)."""
-    for profile, pfile in PROFILE_FILES.items():
-        if not os.path.exists(pfile):
-            continue
-        try:
-            with open(pfile) as f:
-                saved = json.load(f)
-            sp = STRATEGY_PROFILES[profile]
-            for section in ("confidence_weights", "targets", "filters", "risk", "entry",
-                            "direction_score_weights", "rsi_overextension", "quality_score_weights",
-                            "early_exit", "spread", "entry_filters"):
-                if section in saved and isinstance(saved[section], dict):
-                    if section not in sp:
-                        sp[section] = {}
-                    sp[section].update(saved[section])
-        except Exception:
-            pass  # corrupt file — fall back to defaults silently
+    ensure_strategy_profiles_current(force=True)
 
 
 _load_profile()  # restore on every import / app startup
@@ -1727,6 +1948,7 @@ def manage_risk_settings(
     confidence targets). Call with NO arguments to display the full current profile.
     Call with specific arguments to update those values.
     """
+    ensure_strategy_profiles_current()
     sp  = STRATEGY_PROFILE
     rsk = sp["risk"]
     flt = sp["filters"]
@@ -3369,7 +3591,11 @@ def _fetch_best_option(
                 _diff = abs(abs(_g.get("delta", 0)) - delta_target)
                 if _diff < best_diff:
                     best_diff = _diff
+                    _capture = _quote_capture_timestamps()
                     best = {
+                        "ticker":    ticker,
+                        "direction":  trade_type,
+                        "strategy_type": "single_leg",
                         "strike":     _K,
                         "premium":    round(_mid, 4),
                         "bid":        round(_bid, 4),
@@ -3387,6 +3613,27 @@ def _fetch_best_option(
                         "live_chain": True,
                         "options_snapshot_status": getattr(_exp_snapshot, "status", None),
                         "option_chain_status": getattr(_chain_snapshot, "status", None),
+                        "quote_captured_at_utc": _capture["quote_captured_at_utc"],
+                        "quote_captured_at_et": _capture["quote_captured_at_et"],
+                        "entry_quote_snapshot": {
+                            **_capture,
+                            "ticker": ticker,
+                            "direction": trade_type,
+                            "strategy_type": "single_leg",
+                            "expiry": _best_exp,
+                            "strike": _K,
+                            "contract_symbol": str(_row.get("contractSymbol") or "").strip().upper() or None,
+                            "bid": round(_bid, 4),
+                            "ask": round(_ask, 4),
+                            "last": round(_last, 4) if _last > 0 else None,
+                            "premium": round(_mid, 4),
+                            "quote_basis": "mid" if (_bid > 0 and _ask > 0) else "last",
+                            "quote_age_hours": round(_last_trade_age_hours, 2) if _last_trade_age_hours is not None else None,
+                            "live_chain": True,
+                            "options_snapshot_status": getattr(_exp_snapshot, "status", None),
+                            "option_chain_status": getattr(_chain_snapshot, "status", None),
+                            "stock_price": _S,
+                        },
                     }
     except Exception:
         pass
@@ -3419,7 +3666,11 @@ def _fetch_best_option(
             _diff = abs(abs(_g.get("delta", 0)) - delta_target)
             if _diff < best_diff:
                 best_diff = _diff
+                _capture = _quote_capture_timestamps()
                 best = {
+                    "ticker":     ticker,
+                    "direction":  trade_type,
+                    "strategy_type": "single_leg",
                     "strike":     _K,
                     "premium":    round(float(_g.get("bs_price", 0)), 4),
                     "model_price": round(float(_g.get("bs_price", 0)), 4),
@@ -3430,6 +3681,24 @@ def _fetch_best_option(
                     "contract_symbol": None,
                     "quote_basis": "model",
                     "live_chain": False,
+                    "quote_captured_at_utc": _capture["quote_captured_at_utc"],
+                    "quote_captured_at_et": _capture["quote_captured_at_et"],
+                    "entry_quote_snapshot": {
+                        **_capture,
+                        "ticker": ticker,
+                        "direction": trade_type,
+                        "strategy_type": "single_leg",
+                        "expiry": None,
+                        "strike": _K,
+                        "contract_symbol": None,
+                        "bid": None,
+                        "ask": None,
+                        "last": None,
+                        "premium": round(float(_g.get("bs_price", 0)), 4),
+                        "quote_basis": "model",
+                        "live_chain": False,
+                        "stock_price": _S,
+                    },
                 }
     except Exception:
         pass
@@ -3518,8 +3787,14 @@ def _fetch_best_spread(
     max_profit = spread_width - net_debit
     max_loss = net_debit
     net_delta = abs(long_opt.get("delta", long_delta_target)) - abs(short_opt.get("delta", short_delta_target))
+    _spread_capture = _quote_capture_timestamps()
+    long_snapshot = _build_entry_quote_snapshot(long_opt, quote_role="long")
+    short_snapshot = _build_entry_quote_snapshot(short_opt, quote_role="short")
 
     result = {
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "vertical_spread",
         "long_leg": {
             "strike":          long_strike,
             "premium":         round(long_premium, 4),
@@ -3560,6 +3835,25 @@ def _fetch_best_spread(
         "live_chain":          long_opt.get("live_chain", False) and short_opt.get("live_chain", False),
         "options_snapshot_status": long_opt.get("options_snapshot_status"),
         "option_chain_status":    long_opt.get("option_chain_status"),
+        "quote_captured_at_utc": _spread_capture["quote_captured_at_utc"],
+        "quote_captured_at_et": _spread_capture["quote_captured_at_et"],
+        "entry_quote_snapshot": {
+            **_spread_capture,
+            "ticker": ticker,
+            "direction": trade_type,
+            "strategy_type": "vertical_spread",
+            "expiry": long_opt.get("expiry"),
+            "long_leg": copy.deepcopy(long_snapshot),
+            "short_leg": copy.deepcopy(short_snapshot),
+            "spread_width": round(spread_width, 4),
+            "net_debit": round(net_debit, 4),
+            "max_profit": round(max_profit, 4),
+            "max_loss": round(max_loss, 4),
+            "net_delta": round(net_delta, 3),
+            "debit_pct_of_width": round(debit_pct_of_width, 1),
+            "risk_reward_ratio": round(max_profit / max_loss, 2) if max_loss > 0 else None,
+            "live_chain": long_opt.get("live_chain", False) and short_opt.get("live_chain", False),
+        },
     }
 
     if return_context:
@@ -4218,6 +4512,7 @@ def scan_daily_top_trades(
 
             # IV crush check — same as brain (penalise if strike IV >> HV distribution)
             _iv_pen = 0.0
+            _direction_score_pre_iv = direction_score
             try:
                 _skew = _calculate_iv_skew(
                     ticker,
@@ -4235,12 +4530,13 @@ def scan_daily_top_trades(
             except Exception:
                 pass
 
-            if direction_score < ticker_min_confidence:
+            if not _is_spread and direction_score < ticker_min_confidence:
                 _bump_scan_drop(
                     scan_drop_counts,
-                    "iv_crush_penalty" if "_iv_pen" in locals() and float(_iv_pen or 0.0) > 0 else "direction_score",
+                    "iv_crush_penalty" if float(_iv_pen or 0.0) > 0 else "direction_score",
                 )
                 continue
+            _direction_score_for_expectancy = _direction_score_pre_iv if _is_spread else direction_score
 
             # Per-ticker profile values — use spread overrides when applicable
             if _is_spread and _spread_cfg:
@@ -4278,7 +4574,7 @@ def scan_daily_top_trades(
 
             calibration_lookup = lookup_calibrated_expectancy(
                 expectancy_surface,
-                direction_score=direction_score,
+                direction_score=_direction_score_for_expectancy,
                 quality_score=quality_score,
                 market_regime=market_regime_bucket,
                 trade_type=trade_type,
@@ -4289,7 +4585,7 @@ def scan_daily_top_trades(
             min_heuristic_ev = float(sp["filters"].get("min_ev_return_pct", _min_empirical_ev))
             ev_pct, calibration, expectancy_selection_source = _select_live_expectancy(
                 calibration_lookup=calibration_lookup,
-                direction_score=direction_score,
+                direction_score=_direction_score_for_expectancy,
                 profit_target_pct=_profit_target_pct,
                 stop_loss_pct=_adj_stop_pct,
                 min_calibrated_expectancy_pct=_min_empirical_ev,
@@ -4390,6 +4686,9 @@ def scan_daily_top_trades(
             )
             if _should_mark_non_executable_quote(profitability.get("profitability_blockers")):
                 promotion_class = "research_non_executable_quote"
+            quote_timestamps = _quote_timestamp_snapshot()
+            candidate_quote_time_et = _opt.get("quote_captured_at_et") or quote_timestamps["quote_time_et"]
+            candidate_quote_time_utc = _opt.get("quote_captured_at_utc") or quote_timestamps["quote_time_utc"]
 
             _time_exit_pct = float(
                 _spread_cfg.get("time_exit_pct", sp["risk"].get("time_exit_pct", 50.0))
@@ -4426,6 +4725,10 @@ def scan_daily_top_trades(
                 "entry_execution_price": entry_execution.get("execution_price"),
                 "entry_execution_basis": entry_execution.get("execution_basis"),
                 "entry_fee_total_usd": commission_total_usd(contracts=1) if entry_execution.get("execution_price") is not None else 0.0,
+                "quote_captured_at_utc": _opt.get("quote_captured_at_utc"),
+                "quote_captured_at_et": _opt.get("quote_captured_at_et"),
+                "entry_quote_timestamp_utc": _opt.get("quote_captured_at_utc"),
+                "entry_quote_timestamp_et": _opt.get("quote_captured_at_et"),
                 "profitability_eligibility": profitability["profitability_eligibility"],
                 "profitability_blockers": profitability["profitability_blockers"],
                 "stop_loss_pct":      _adj_stop_pct,
@@ -4447,7 +4750,8 @@ def scan_daily_top_trades(
                 "rsi14":              round(rsi14, 1),
                 "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
-                "quote_time_et":      today_str,
+                "quote_time_et":      candidate_quote_time_et,
+                "quote_time_utc":     candidate_quote_time_utc,
                 "quote_basis":        _opt.get("quote_basis"),
                 "quote_freshness_status": quote_freshness_status,
                 "options_snapshot_status": _opt.get("options_snapshot_status"),
@@ -4456,6 +4760,8 @@ def scan_daily_top_trades(
                 "contract_selection_source": contract_selection_source,
                 "promotion_class":    promotion_class,
                 "promotable":         promotion_class == "promotable_exact_contract" and entry_execution.get("execution_price") is not None,
+                "original_logged_expiry": actual_exp or target_str,
+                "resolved_listed_expiry": actual_exp,
                 "target_date":        target_str,
                 "entry_price":        round(_entry_stock_price, 2),
                 "entry_at_open":      _at_open,
@@ -4500,6 +4806,12 @@ def scan_daily_top_trades(
                 _candidate["risk_reward_ratio"]    = _spread_result["risk_reward_ratio"]
                 _candidate["short_strike"]         = _spread_result["short_leg"]["strike"]
                 _candidate["short_contract_symbol"] = _spread_result["short_leg"].get("contract_symbol")
+                _candidate["quote_captured_at_utc"] = _spread_result.get("quote_captured_at_utc")
+                _candidate["quote_captured_at_et"] = _spread_result.get("quote_captured_at_et")
+                _candidate["entry_quote_timestamp_utc"] = _spread_result.get("quote_captured_at_utc")
+                _candidate["entry_quote_timestamp_et"] = _spread_result.get("quote_captured_at_et")
+                _candidate["quote_time_et"] = _spread_result.get("quote_captured_at_et") or _candidate.get("quote_time_et")
+                _candidate["quote_time_utc"] = _spread_result.get("quote_captured_at_utc") or _candidate.get("quote_time_utc")
                 # Override fee for spreads: 4 legs total (2 on entry, 2 on exit)
                 if entry_execution.get("execution_price") is not None:
                     _candidate["entry_fee_total_usd"] = commission_total_usd(contracts=1, sides=2)
@@ -4511,6 +4823,9 @@ def scan_daily_top_trades(
                     f"debit ${_spread_result['net_debit']:.2f}, "
                     f"max profit ${_spread_result['max_profit']:.2f})",
                 ]
+                _candidate["resolved_listed_expiry"] = _spread_result.get("expiry") or _candidate.get("resolved_listed_expiry")
+
+            _candidate["entry_quote_snapshot"] = _entry_quote_snapshot_from_candidate(_candidate)
 
             candidates.append(_candidate)
         except Exception:
@@ -4603,7 +4918,11 @@ def roll_forward_daily_picks(
                        "signal_reasons", "strategy_label", "strategy_comment",
                        "selection_source", "contract_selection_source", "promotion_class",
                        "promotable", "options_snapshot_status", "option_chain_status",
-                       "quote_basis", "quote_time_et", "contract_symbol"):
+                       "quote_basis", "quote_time_et", "quote_time_utc", "contract_symbol",
+                       "original_logged_expiry", "resolved_listed_expiry",
+                       "quote_captured_at_utc", "quote_captured_at_et",
+                       "entry_quote_timestamp_utc", "entry_quote_timestamp_et",
+                       "entry_quote_snapshot"):
                 if _f in fresh:
                     updated[_f] = fresh[_f]
             updated["pick_status"]      = "rolled"
@@ -4728,7 +5047,11 @@ def generate_position_recommendations(
                            "signal_reasons", "strategy_label", "strategy_comment",
                            "selection_source", "contract_selection_source", "promotion_class",
                            "promotable", "options_snapshot_status", "option_chain_status",
-                           "quote_basis", "quote_time_et", "contract_symbol",
+                           "quote_basis", "quote_time_et", "quote_time_utc", "contract_symbol",
+                           "original_logged_expiry", "resolved_listed_expiry",
+                           "quote_captured_at_utc", "quote_captured_at_et",
+                           "entry_quote_timestamp_utc", "entry_quote_timestamp_et",
+                           "entry_quote_snapshot",
                            "calibrated_expectancy_pct", "calibration_source", "calibration_trades"):
                     if _f in fresh:
                         rec[_f] = fresh[_f]
