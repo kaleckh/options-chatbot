@@ -72,6 +72,49 @@ function Get-SystemTempBasePath {
     return $systemTemp
 }
 
+function Set-ScopedTempEnvironment([string]$BaseTempRoot) {
+    Ensure-DirectoryPath -Path $BaseTempRoot
+
+    $tempRoot = Join-Path $BaseTempRoot ([guid]::NewGuid().ToString("N"))
+    foreach ($path in @(
+        $tempRoot,
+        (Join-Path $tempRoot "tmp"),
+        (Join-Path $tempRoot "pip-build-tracker")
+    )) {
+        Ensure-DirectoryPath -Path $path
+    }
+
+    $tmpPath = Join-Path $tempRoot "tmp"
+    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
+    $names = @("TMP", "TEMP", "TMPDIR", "PIP_BUILD_TRACKER")
+    $backup = @{}
+    foreach ($name in $names) {
+        $backup[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+    }
+
+    [Environment]::SetEnvironmentVariable("TMP", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("TEMP", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("TMPDIR", $tmpPath, "Process")
+    [Environment]::SetEnvironmentVariable("PIP_BUILD_TRACKER", $pipBuildTracker, "Process")
+
+    return @{
+        TempRoot = $tempRoot
+        Names = $names
+        Backup = $backup
+    }
+}
+
+function Invoke-WithScopedTempEnvironment([string]$BaseTempRoot, [scriptblock]$ScriptBlock) {
+    $snapshot = Set-ScopedTempEnvironment -BaseTempRoot $BaseTempRoot
+    try {
+        & $ScriptBlock
+        return $LASTEXITCODE
+    }
+    finally {
+        Restore-RepoTempEnvironment -Snapshot $snapshot
+    }
+}
+
 function Ensure-DirectoryPath([string]$Path) {
     if (-not (Test-Path -LiteralPath $Path)) {
         New-Item -ItemType Directory -Path $Path -Force | Out-Null
@@ -120,13 +163,16 @@ function Repair-VenvPip([string]$PythonPath, [string]$VenvRoot) {
 
     Write-Warning "Attempting to repair pip in repo-local virtualenv at $VenvRoot"
     try {
-        & $PythonPath -m ensurepip --upgrade --default-pip
+        $systemTempRoot = Join-Path (Get-SystemTempBasePath) "codex-repo-python\ensurepip"
+        $result = Invoke-WithScopedTempEnvironment -BaseTempRoot $systemTempRoot -ScriptBlock {
+            & $PythonPath -m ensurepip --upgrade --default-pip
+        }
     }
     catch {
         return $false
     }
 
-    if ($LASTEXITCODE -ne 0) {
+    if ($result -ne 0) {
         return $false
     }
 
@@ -140,17 +186,8 @@ function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
     }
 
     Write-Host "Creating repo-local virtualenv at $VenvRoot"
-    if ($BootstrapCommand.Length -gt 1) {
-        & $BootstrapCommand[0] $BootstrapCommand[1..($BootstrapCommand.Length - 1)] -m venv $VenvRoot
-    }
-    else {
-        & $BootstrapCommand[0] -m venv $VenvRoot
-    }
-
-    if ($LASTEXITCODE -ne 0) {
-        Write-Warning "Initial virtualenv creation failed; removing partial environment and retrying once."
-        Remove-VenvDirectory -VenvRoot $VenvRoot
-
+    $systemTempRoot = Join-Path (Get-SystemTempBasePath) "codex-repo-python\venv-bootstrap"
+    $result = Invoke-WithScopedTempEnvironment -BaseTempRoot $systemTempRoot -ScriptBlock {
         if ($BootstrapCommand.Length -gt 1) {
             & $BootstrapCommand[0] $BootstrapCommand[1..($BootstrapCommand.Length - 1)] -m venv $VenvRoot
         }
@@ -159,7 +196,21 @@ function New-RepoVirtualEnv([string[]]$BootstrapCommand, [string]$VenvRoot) {
         }
     }
 
-    if ($LASTEXITCODE -ne 0) {
+    if ($result -ne 0) {
+        Write-Warning "Initial virtualenv creation failed; removing partial environment and retrying once."
+        Remove-VenvDirectory -VenvRoot $VenvRoot
+
+        $result = Invoke-WithScopedTempEnvironment -BaseTempRoot $systemTempRoot -ScriptBlock {
+            if ($BootstrapCommand.Length -gt 1) {
+                & $BootstrapCommand[0] $BootstrapCommand[1..($BootstrapCommand.Length - 1)] -m venv $VenvRoot
+            }
+            else {
+                & $BootstrapCommand[0] -m venv $VenvRoot
+            }
+        }
+    }
+
+    if ($result -ne 0) {
         $venvPython = Join-Path $VenvRoot "Scripts\python.exe"
         if (-not (Repair-VenvPip -PythonPath $venvPython -VenvRoot $VenvRoot)) {
             throw "Failed to create repo-local virtualenv."
@@ -248,35 +299,8 @@ function Set-RepoTempEnvironment([string]$RepoRoot) {
         throw "Unable to initialize a writable repo temp root. Last error: $($lastError.Exception.Message)"
     }
 
-    # Use a fresh temp session for each bootstrap so a poisoned prior TMP tree cannot break later runs.
-    $tempRoot = Join-Path $baseTempRoot ([guid]::NewGuid().ToString("N"))
-    foreach ($path in @(
-        $tempRoot,
-        (Join-Path $tempRoot "tmp"),
-        (Join-Path $tempRoot "pip-build-tracker")
-    )) {
-        Ensure-DirectoryPath -Path $path
-    }
-
-    $tmpPath = Join-Path $tempRoot "tmp"
-    $pipBuildTracker = Join-Path $tempRoot "pip-build-tracker"
-
-    $names = @("TMP", "TEMP", "TMPDIR", "PIP_BUILD_TRACKER")
-    $backup = @{}
-    foreach ($name in $names) {
-        $backup[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
-    }
-
-    [Environment]::SetEnvironmentVariable("TMP", $tmpPath, "Process")
-    [Environment]::SetEnvironmentVariable("TEMP", $tmpPath, "Process")
-    [Environment]::SetEnvironmentVariable("TMPDIR", $tmpPath, "Process")
-    [Environment]::SetEnvironmentVariable("PIP_BUILD_TRACKER", $pipBuildTracker, "Process")
-
-    return @{
-        TempRoot = $tempRoot
-        Names = $names
-        Backup = $backup
-    }
+    # Keep repo-scoped temp paths for pip/build operations, but venv/bootstrap uses a clean system temp session.
+    return Set-ScopedTempEnvironment -BaseTempRoot $baseTempRoot
 }
 
 function Restore-RepoTempEnvironment($Snapshot) {
@@ -369,7 +393,13 @@ function Restore-ProcessGitEnvironment($Snapshot) {
 }
 
 function Get-CanonicalRepoRoot([string]$RepoRoot) {
-    $worktreeOutput = & git -C $RepoRoot worktree list --porcelain 2>$null
+    try {
+        $worktreeOutput = & git -C $RepoRoot worktree list --porcelain 2>$null
+    }
+    catch {
+        return $RepoRoot
+    }
+
     if ($LASTEXITCODE -ne 0 -or -not $worktreeOutput) {
         return $RepoRoot
     }
