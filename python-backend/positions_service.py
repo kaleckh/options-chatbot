@@ -4,12 +4,12 @@ import copy
 import json
 import math
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Any, Optional
 
 import pandas as pd
 import yfinance as yf
 
+from alpaca_market_data import alpaca_provider_requested, make_alpaca_ticker_factory
 from historical_options_store import HistoricalOptionsStore
 from market_data_service import (
     get_history as _md_get_history,
@@ -31,7 +31,13 @@ from options_chatbot import (
 
 
 _HISTORICAL_OPTIONS_STORE: HistoricalOptionsStore | None = None
-_SCAN_PICK_LOG_CACHE: list[dict[str, Any]] | None = None
+ALPACA_HISTORICAL_OPTION_SOURCE_LABELS = ("alpaca_opra_daily_snapshot",)
+
+
+def _market_ticker_factory():
+    if alpaca_provider_requested():
+        return make_alpaca_ticker_factory(fallback_factory=None)
+    return yf.Ticker
 
 
 class _ReviewContext:
@@ -89,26 +95,36 @@ def _cached_history(
         start=start,
         end=end,
         interval=interval,
-        ticker_factory=yf.Ticker,
+        ticker_factory=_market_ticker_factory(),
     )
 
 
 def _cached_options(symbol: str) -> list[str]:
-    return _md_get_options(symbol, ticker_factory=yf.Ticker)
+    return _md_get_options(symbol, ticker_factory=_market_ticker_factory())
 
 
 def _cached_option_chain(symbol: str, expiry: str):
-    return _md_get_option_chain(symbol, expiry, ticker_factory=yf.Ticker)
+    return _md_get_option_chain(symbol, expiry, ticker_factory=_market_ticker_factory())
 
 
-def _parse_datetime(value: Optional[Any]) -> datetime:
-    if not value:
+def _parse_datetime(value: Optional[Any], field_name: str = "datetime") -> datetime:
+    if value in (None, ""):
         return datetime.now()
     if isinstance(value, datetime):
         return value
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be an ISO timestamp.")
     if isinstance(value, date):
         return datetime.combine(value, datetime.min.time())
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be an ISO timestamp.")
+    raw = value.strip()
+    if not raw:
+        return datetime.now()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO timestamp.") from exc
 
 
 def _parse_date(value: Any) -> date:
@@ -121,11 +137,51 @@ def _parse_date(value: Any) -> date:
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
-        if value is None or (isinstance(value, float) and math.isnan(value)):
+        if (
+            value is None
+            or isinstance(value, bool)
+            or (isinstance(value, float) and math.isnan(value))
+        ):
             return None
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _require_positive_float(value: Any, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a finite number greater than 0.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a finite number greater than 0.") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{field_name} must be a finite number greater than 0.")
+    return parsed
+
+
+def _require_positive_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive integer.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a positive integer.") from exc
+    if not math.isfinite(parsed) or parsed <= 0 or not parsed.is_integer():
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return int(parsed)
+
+
+def _positive_float_or_default(value: Any, default: float, field_name: str) -> float:
+    if value in (None, ""):
+        return default
+    return _require_positive_float(value, field_name)
+
+
+def _positive_int_or_default(value: Any, default: int, field_name: str) -> int:
+    if value in (None, ""):
+        return default
+    return _require_positive_int(value, field_name)
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -145,8 +201,17 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
-def _normalize_contract_symbol(value: Any) -> Optional[str]:
-    raw = str(value or "").strip()
+def _normalize_contract_symbol(value: Any, field_name: str = "contract_symbol") -> Optional[str]:
+    if value in (None, ""):
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string.")
+    raw = value.strip()
     return raw.upper() if raw else None
 
 
@@ -217,6 +282,95 @@ def _pick_context_fields(scan_pick: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _spread_entry_execution_basis(
+    scan_pick: dict[str, Any],
+    *,
+    snapshot: Optional[dict[str, Any]] = None,
+) -> str:
+    snapshot = snapshot or _safe_dict(scan_pick.get("entry_quote_snapshot"))
+    existing_basis = str(
+        scan_pick.get("entry_execution_basis")
+        or snapshot.get("entry_execution_basis")
+        or ""
+    ).strip().lower()
+    if existing_basis and existing_basis not in {"ask", "bid", "mid", "last", "model"}:
+        return existing_basis
+
+    legs = scan_pick.get("legs")
+    if not isinstance(legs, list) or not legs:
+        legs = snapshot.get("legs")
+    leg_bases: list[str] = []
+    if isinstance(legs, list):
+        for leg in legs:
+            if isinstance(leg, dict):
+                basis = str(leg.get("quote_basis") or "").strip().lower()
+                if basis:
+                    leg_bases.append(basis)
+    unique_bases = {basis for basis in leg_bases if basis}
+    if len(unique_bases) == 1:
+        basis = next(iter(unique_bases))
+        if basis in {"mid", "last", "model"}:
+            return f"spread_{basis}"
+
+    quote_basis = str(scan_pick.get("quote_basis") or snapshot.get("quote_basis") or "").strip().lower()
+    if quote_basis in {"mid", "last", "model"}:
+        return f"spread_{quote_basis}"
+    return "spread_net_debit"
+
+
+def _normalize_spread_entry_reference(scan_pick: dict[str, Any]) -> dict[str, Any]:
+    normalized = copy.deepcopy(scan_pick or {})
+    if _pick_strategy_type(normalized) != "vertical_spread":
+        return normalized
+
+    snapshot = _safe_dict(normalized.get("entry_quote_snapshot"))
+    spread_debit = _safe_float(normalized.get("net_debit"))
+    if spread_debit is None:
+        spread_debit = _safe_float(snapshot.get("net_debit"))
+    if spread_debit is None or spread_debit <= 0:
+        return normalized
+
+    spread_debit = round(float(spread_debit), 4)
+    existing_execution = _safe_float(normalized.get("entry_execution_price"))
+    existing_basis = str(
+        normalized.get("entry_execution_basis")
+        or snapshot.get("entry_execution_basis")
+        or ""
+    ).strip().lower()
+    has_explicit_execution_context = (
+        "entry_profitability_blockers" in normalized
+        or "entry_display_price" in normalized
+        or "entry_display_basis" in normalized
+    )
+    if (
+        (existing_execution is None and not has_explicit_execution_context)
+        or existing_basis in {"ask", "bid", "mid", "last", "model", "spread_mid", "spread_last", "spread_model", "spread_net_debit"}
+    ):
+        basis = _spread_entry_execution_basis(normalized, snapshot=snapshot)
+        normalized["entry_execution_price"] = spread_debit
+        normalized["entry_execution_basis"] = basis
+    else:
+        normalized["entry_execution_price"] = round(float(existing_execution), 4)
+        normalized["entry_execution_basis"] = existing_basis or normalized.get("entry_execution_basis")
+    if normalized.get("mid") is None:
+        normalized["mid"] = spread_debit
+    if normalized.get("est_premium") is None:
+        normalized["est_premium"] = spread_debit
+
+    if snapshot:
+        snapshot["entry_execution_price"] = normalized.get("entry_execution_price")
+        snapshot["entry_execution_basis"] = normalized.get("entry_execution_basis")
+        snapshot["net_debit"] = spread_debit
+        snapshot["display_price"] = spread_debit
+        if not isinstance(snapshot.get("legs"), list) or not snapshot.get("legs"):
+            candidate_legs = normalized.get("legs")
+            if isinstance(candidate_legs, list) and candidate_legs:
+                snapshot["legs"] = copy.deepcopy(candidate_legs)
+        normalized["entry_quote_snapshot"] = snapshot
+
+    return normalized
+
+
 def _has_resolved_contract_identity(scan_pick: dict[str, Any]) -> bool:
     fields = _pick_context_fields(scan_pick)
     if not fields["contract_symbol"]:
@@ -224,6 +378,96 @@ def _has_resolved_contract_identity(scan_pick: dict[str, Any]) -> bool:
     if fields["strategy_type"] == "vertical_spread" and fields["short_strike"] is not None:
         return bool(fields["short_contract_symbol"])
     return not bool(scan_pick.get("approximation_only"))
+
+
+def _spread_has_executable_leg_quotes(scan_pick: dict[str, Any]) -> bool:
+    legs = scan_pick.get("legs")
+    if not isinstance(legs, list) or not legs:
+        legs = _safe_dict(scan_pick.get("entry_quote_snapshot")).get("legs")
+    if not isinstance(legs, list):
+        return False
+
+    quoted_roles: set[str] = set()
+    quoted_count = 0
+    for leg in legs:
+        if not isinstance(leg, dict):
+            continue
+        bid = _safe_float(leg.get("bid"))
+        ask = _safe_float(leg.get("ask"))
+        if bid is None or ask is None:
+            continue
+        role = str(leg.get("role") or "").strip().lower()
+        if role in {"long", "short"}:
+            quoted_roles.add(role)
+        quoted_count += 1
+    return {"long", "short"}.issubset(quoted_roles) or quoted_count >= 2
+
+
+def _classify_position_proof(
+    scan_pick: dict[str, Any],
+    *,
+    contract_symbol: Optional[str],
+    entry_execution_price: float,
+    estimated_execution_price: Optional[float],
+    normalized_entry_execution_basis: Optional[str],
+) -> tuple[bool, Optional[str], str, Optional[str]]:
+    selection_source = str(scan_pick.get("selection_source") or scan_pick.get("contract_selection_source") or "").strip()
+    quote_time_et = scan_pick.get("quote_time_et")
+    bid = _safe_float(scan_pick.get("bid"))
+    ask = _safe_float(scan_pick.get("ask"))
+    strategy_type = _pick_strategy_type(scan_pick)
+
+    proof_missing: list[str] = []
+    if not contract_symbol or not _has_resolved_contract_identity(scan_pick):
+        proof_missing.append("contract_symbol")
+    if not quote_time_et:
+        proof_missing.append("quote_time_et")
+    if strategy_type == "vertical_spread":
+        if not _spread_has_executable_leg_quotes(scan_pick):
+            proof_missing.append("spread_leg_bid_ask")
+    else:
+        if bid is None:
+            proof_missing.append("bid")
+        if ask is None:
+            proof_missing.append("ask")
+    if estimated_execution_price is None:
+        proof_missing.append("entry_execution_price")
+    elif abs(float(estimated_execution_price) - float(entry_execution_price)) > 0.0001:
+        proof_missing.append("entry_execution_price_mismatch")
+    if str(normalized_entry_execution_basis or "").strip().lower() == "manual_fill":
+        proof_missing.append("manual_fill_not_scan_execution")
+    if (
+        strategy_type == "vertical_spread"
+        and str(normalized_entry_execution_basis or "").strip().lower() != "spread_ask_bid"
+    ):
+        proof_missing.append("spread_entry_not_bid_ask")
+    if selection_source != "live_chain_exact_contract":
+        proof_missing.append("selection_source_not_exact")
+    options_source = str(
+        scan_pick.get("options_data_source")
+        or scan_pick.get("market_data_source")
+        or scan_pick.get("quote_source")
+        or ""
+    ).strip().lower()
+    has_opra_source = options_source == "alpaca_opra" or ("alpaca" in options_source and "opra" in options_source)
+    if alpaca_provider_requested() and not has_opra_source:
+        proof_missing.append("options_source_not_opra")
+    elif options_source and not has_opra_source:
+        proof_missing.append("options_source_not_opra")
+
+    if not proof_missing:
+        return True, None, "live_scan_exact_contract", None
+
+    proof_ineligibility_reason = ", ".join(proof_missing)
+    normalized_basis = str(normalized_entry_execution_basis or "").strip().lower()
+    if normalized_basis in {"manual_fill", "broker_fill"} and contract_symbol and _has_resolved_contract_identity(scan_pick):
+        return (
+            False,
+            proof_ineligibility_reason,
+            "manual_broker_exact_contract",
+            "Exact contract identity with manual/broker fill; excluded from scanner proof lane.",
+        )
+    return False, proof_ineligibility_reason, "ineligible", proof_ineligibility_reason
 
 
 def _entry_quote_snapshot(scan_pick: dict[str, Any]) -> dict[str, Any]:
@@ -241,6 +485,11 @@ def _entry_quote_snapshot(scan_pick: dict[str, Any]) -> dict[str, Any]:
             "promotion_class": scan_pick.get("promotion_class"),
             "underlying_price": _safe_float(scan_pick.get("underlying_price_at_selection") or scan_pick.get("stock_price") or scan_pick.get("entry_price")),
             "quote_basis": scan_pick.get("quote_basis"),
+            "market_data_provider": scan_pick.get("market_data_provider"),
+            "market_data_source": scan_pick.get("market_data_source"),
+            "underlying_data_source": scan_pick.get("underlying_data_source"),
+            "options_data_source": scan_pick.get("options_data_source"),
+            "quote_source": scan_pick.get("quote_source"),
             "quote_freshness_status": scan_pick.get("quote_freshness_status"),
             "options_snapshot_status": scan_pick.get("options_snapshot_status"),
             "option_chain_status": scan_pick.get("option_chain_status"),
@@ -274,11 +523,44 @@ def _entry_quote_snapshot(scan_pick: dict[str, Any]) -> dict[str, Any]:
                     "last": _safe_float(scan_pick.get("last")),
                     "mid": _safe_float(scan_pick.get("mid")),
                     "quote_basis": scan_pick.get("quote_basis"),
+                    "quote_source": scan_pick.get("quote_source"),
+                    "data_source": scan_pick.get("options_data_source") or scan_pick.get("market_data_source"),
                     "quote_age_hours": _safe_float(scan_pick.get("quote_age_hours")),
                     "volume": scan_pick.get("contract_volume"),
                     "open_interest": scan_pick.get("contract_open_interest"),
                 }
             ]
+    if _pick_strategy_type(scan_pick) == "vertical_spread":
+        spread_debit = _safe_float(scan_pick.get("net_debit"))
+        if spread_debit is None:
+            spread_debit = _safe_float(snapshot.get("net_debit"))
+        if spread_debit is not None and spread_debit > 0:
+            spread_debit = round(float(spread_debit), 4)
+            existing_execution = _safe_float(scan_pick.get("entry_execution_price"))
+            existing_basis = str(
+                scan_pick.get("entry_execution_basis")
+                or snapshot.get("entry_execution_basis")
+                or ""
+            ).strip().lower()
+            has_explicit_execution_context = (
+                "entry_profitability_blockers" in scan_pick
+                or "entry_display_price" in scan_pick
+                or "entry_display_basis" in scan_pick
+            )
+            if (
+                existing_execution is not None
+                and (
+                    has_explicit_execution_context
+                    or existing_basis not in {"", "ask", "bid", "mid", "last", "model", "spread_mid", "spread_last", "spread_model", "spread_net_debit"}
+                )
+            ):
+                snapshot["entry_execution_price"] = round(float(existing_execution), 4)
+                snapshot["entry_execution_basis"] = existing_basis or scan_pick.get("entry_execution_basis")
+            else:
+                snapshot["entry_execution_price"] = spread_debit
+                snapshot["entry_execution_basis"] = _spread_entry_execution_basis(scan_pick, snapshot=snapshot)
+            snapshot["net_debit"] = spread_debit
+            snapshot["display_price"] = spread_debit
     if snapshot.get("display_price") is None:
         snapshot["display_price"] = _safe_float(
             scan_pick.get("net_debit")
@@ -329,6 +611,7 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
             target_expiry=target_expiry,
             target_strike=float(strike),
             allow_last_price=False,
+            source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
         )
         if long_quote is None:
             return None
@@ -339,6 +622,7 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
             target_expiry=long_quote.expiry,
             target_strike=float(fields["short_strike"]),
             allow_last_price=False,
+            source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
         )
         if short_quote is None or str(short_quote.expiry) != str(long_quote.expiry):
             return None
@@ -378,6 +662,7 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
         target_expiry=target_expiry,
         target_strike=float(strike),
         allow_last_price=False,
+        source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
     )
     if entry_quote is None:
         return None
@@ -479,8 +764,20 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
         short_bid = _safe_float(short_row["bid"].iloc[0])
         short_ask = _safe_float(short_row["ask"].iloc[0])
         short_last = _safe_float(short_row["lastPrice"].iloc[0])
-        long_exec = executable_option_price(side="exit", bid=long_bid, ask=long_ask, last=long_last)
-        short_exec = executable_option_price(side="entry", bid=short_bid, ask=short_ask, last=short_last)
+        long_exec = executable_option_price(
+            side="exit",
+            bid=long_bid,
+            ask=long_ask,
+            last=long_last,
+            quote_freshness_status="fresh",
+        )
+        short_exec = executable_option_price(
+            side="entry",
+            bid=short_bid,
+            ask=short_ask,
+            last=short_last,
+            quote_freshness_status="fresh",
+        )
         long_display = _safe_float(long_exec.get("display_price"))
         short_display = _safe_float(short_exec.get("display_price"))
         if long_display is None or short_display is None:
@@ -524,7 +821,7 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
     bid = _safe_float(row["bid"].iloc[0])
     ask = _safe_float(row["ask"].iloc[0])
     last_price = _safe_float(row["lastPrice"].iloc[0])
-    execution = executable_option_price(side="entry", bid=bid, ask=ask, last=last_price)
+    execution = executable_option_price(side="entry", bid=bid, ask=ask, last=last_price, quote_freshness_status="fresh")
     display_price = _safe_float(execution.get("display_price"))
     if display_price is None:
         return None
@@ -550,140 +847,6 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
     }
 
 
-def _scan_pick_log_rows() -> list[dict[str, Any]]:
-    global _SCAN_PICK_LOG_CACHE
-    if _SCAN_PICK_LOG_CACHE is not None:
-        return list(_SCAN_PICK_LOG_CACHE)
-    path = Path(__file__).resolve().parents[1] / "data" / "forward-tracking" / "scan_picks.jsonl"
-    rows: list[dict[str, Any]] = []
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                parsed = json.loads(text)
-            except Exception:
-                continue
-            if isinstance(parsed, dict):
-                rows.append(parsed)
-    except Exception:
-        rows = []
-    _SCAN_PICK_LOG_CACHE = rows
-    return list(rows)
-
-
-def _find_logged_scan_record(scan_pick: dict[str, Any], trade_date: date) -> Optional[dict[str, Any]]:
-    fields = _pick_context_fields(scan_pick)
-    for row in _scan_pick_log_rows():
-        try:
-            if str(row.get("scan_date") or "")[:10] != trade_date.isoformat():
-                continue
-            if str(row.get("ticker") or "").upper() != fields["ticker"]:
-                continue
-            if str(row.get("direction") or "").lower() != fields["direction"]:
-                continue
-            row_long = _safe_float(row.get("long_strike"))
-            row_short = _safe_float(row.get("short_strike"))
-            if fields["strike"] is None or row_long is None or abs(row_long - float(fields["strike"])) > 0.0001:
-                continue
-            if fields["short_strike"] is not None:
-                if row_short is None or abs(row_short - float(fields["short_strike"])) > 0.0001:
-                    continue
-            elif row_short is not None:
-                continue
-            if fields["expiry"] and str(row.get("expiry") or "")[:10] != str(fields["expiry"])[:10]:
-                continue
-            return row
-        except Exception:
-            continue
-    return None
-
-
-def _resolve_logged_comparable_pick(scan_pick: dict[str, Any], *, trade_date: date) -> Optional[dict[str, Any]]:
-    logged = _find_logged_scan_record(scan_pick, trade_date)
-    if not logged:
-        return None
-    comparable_expiry = str(logged.get("approx_pricing_expiry") or "").strip()
-    if not comparable_expiry:
-        return None
-    fields = _pick_context_fields(scan_pick)
-    ticker = fields["ticker"]
-    direction = fields["direction"]
-    strike = fields["strike"]
-    if not ticker or direction not in {"call", "put"} or strike is None:
-        return None
-    if fields["strategy_type"] == "vertical_spread" and fields["short_strike"] is not None:
-        long_match = _resolve_live_contract_row(
-            ticker=ticker,
-            direction=direction,
-            target_expiry=comparable_expiry,
-            target_strike=float(strike),
-            required_strikes=[float(strike), float(fields["short_strike"])],
-        )
-        if long_match is None:
-            return None
-        resolved_expiry, long_row = long_match
-        chain = _cached_option_chain(ticker, resolved_expiry)
-        option_frame = chain.calls if direction == "call" else chain.puts
-        strike_series = pd.to_numeric(option_frame["strike"], errors="coerce")
-        short_row = option_frame.loc[(strike_series - float(fields["short_strike"])).abs() <= 0.0001].head(1)
-        if short_row.empty:
-            return None
-        return {
-            "strategy_type": "vertical_spread",
-            "ticker": ticker,
-            "direction": direction,
-            "strike": round(float(strike), 4),
-            "short_strike": round(float(fields["short_strike"]), 4),
-            "expiry": str(resolved_expiry),
-            "contract_symbol": _normalize_contract_symbol(long_row.get("contractSymbol").iloc[0]),
-            "short_contract_symbol": _normalize_contract_symbol(short_row.get("contractSymbol").iloc[0]),
-            "entry_execution_price": _safe_float(scan_pick.get("entry_execution_price")) or _safe_float(logged.get("net_debit")),
-            "entry_execution_basis": "logged_comparable_spread_debit",
-            "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price") or logged.get("underlying_price")),
-            "quote_time_et": scan_pick.get("quote_time_et"),
-            "quote_basis": "mid",
-            "selection_source": "logged_comparable_exact_contract",
-            "promotion_class": "comparable_exact_contract",
-            "approximation_only": False,
-            "comparable_contract": True,
-            "comparable_contract_basis": "logged_nearest_listed_expiry_same_strikes",
-            "comparable_contract_label": "Comparable Exact Contract",
-            "resolution_notes": "Resolved from the logged nearest listed expiry with matching spread strikes.",
-        }
-    single_match = _resolve_live_contract_row(
-        ticker=ticker,
-        direction=direction,
-        target_expiry=comparable_expiry,
-        target_strike=float(strike),
-        required_strikes=[float(strike)],
-    )
-    if single_match is None:
-        return None
-    resolved_expiry, row = single_match
-    return {
-        "strategy_type": "single_leg",
-        "ticker": ticker,
-        "direction": direction,
-        "strike": round(float(strike), 4),
-        "expiry": str(resolved_expiry),
-        "contract_symbol": _normalize_contract_symbol(row.get("contractSymbol").iloc[0]),
-        "entry_execution_price": _safe_float(scan_pick.get("entry_execution_price")) or _safe_float(logged.get("net_debit")),
-        "entry_execution_basis": "logged_comparable_entry",
-        "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price") or logged.get("underlying_price")),
-        "quote_time_et": scan_pick.get("quote_time_et"),
-        "quote_basis": "mid",
-        "selection_source": "logged_comparable_exact_contract",
-        "promotion_class": "comparable_exact_contract",
-        "approximation_only": False,
-        "comparable_contract": True,
-        "comparable_contract_basis": "logged_nearest_listed_expiry_same_strikes",
-        "comparable_contract_label": "Comparable Exact Contract",
-        "resolution_notes": "Resolved from the logged nearest listed expiry with matching strike.",
-    }
-
-
 def resolve_comparable_contract_pick(
     scan_pick: dict[str, Any],
     *,
@@ -698,8 +861,6 @@ def resolve_comparable_contract_pick(
 
     trade_date = _pick_trade_date(source_pick, filled_at)
     resolution = _resolve_historical_comparable_pick(source_pick, trade_date=trade_date)
-    if resolution is None:
-        resolution = _resolve_logged_comparable_pick(source_pick, trade_date=trade_date)
     if resolution is None:
         resolution = _resolve_live_comparable_pick(source_pick)
     if resolution is None:
@@ -738,15 +899,26 @@ def build_position_payload(
     require_resolved_contract: bool = False,
     preserve_fill_price: bool = False,
 ) -> dict[str, Any]:
-    original_scan_pick = copy.deepcopy(scan_pick or {})
+    if scan_pick is None:
+        scan_pick = {}
+    elif not isinstance(scan_pick, dict):
+        raise ValueError("scan_pick must be an object.")
+    fill_price = _require_positive_float(fill_price, "fill_price")
+    contracts = _require_positive_int(contracts, "contracts")
+    parsed_filled_at = (
+        _parse_datetime(filled_at, "filled_at")
+        if filled_at not in (None, "")
+        else None
+    )
+    original_scan_pick = _normalize_spread_entry_reference(scan_pick or {})
     resolved_scan_pick, resolved_fill_price, _resolution = resolve_comparable_contract_pick(
-        scan_pick=original_scan_pick,
+        scan_pick=copy.deepcopy(original_scan_pick),
         fill_price=fill_price,
-        filled_at=filled_at,
+        filled_at=parsed_filled_at,
         preserve_fill_price=preserve_fill_price,
     )
-    scan_pick = resolved_scan_pick
-    fill_price = float(resolved_fill_price)
+    scan_pick = _normalize_spread_entry_reference(resolved_scan_pick)
+    fill_price = _require_positive_float(resolved_fill_price, "fill_price")
     ticker = str(scan_pick.get("ticker") or "").upper()
     direction = str(scan_pick.get("direction") or scan_pick.get("type") or "").lower()
     strike = scan_pick.get("strike") if scan_pick.get("strike") is not None else scan_pick.get("strike_est")
@@ -759,10 +931,10 @@ def build_position_payload(
 
     if not ticker or direction not in {"call", "put"} or strike is None or not expiry:
         raise ValueError("scan_pick is missing required option fields: ticker, direction/type, strike, or expiry.")
-    if fill_price <= 0:
-        raise ValueError("fill_price must be greater than 0.")
-    if contracts <= 0:
-        raise ValueError("contracts must be at least 1.")
+    strike_value = _require_positive_float(strike, "strike")
+    stop_loss_pct = _positive_float_or_default(scan_pick.get("stop_loss_pct"), 50.0, "stop_loss_pct")
+    profit_target_pct = _positive_float_or_default(scan_pick.get("profit_target_pct"), 100.0, "profit_target_pct")
+    time_exit_day = _positive_int_or_default(scan_pick.get("time_exit_day"), 1, "time_exit_day")
 
     source_scan_session_id = scan_pick.get("source_scan_session_id")
     source_scan_event_key = scan_pick.get("source_scan_event_key")
@@ -802,33 +974,15 @@ def build_position_payload(
     strategy_type = _pick_strategy_type(scan_pick)
     entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=2 if strategy_type == "vertical_spread" else 1)
 
-    # Determine proof eligibility
-    proof_eligible = True
-    proof_ineligibility_reason = None
-    selection_source = str(scan_pick.get("selection_source") or scan_pick.get("contract_selection_source") or "").strip()
-    promotion_class = str(scan_pick.get("promotion_class") or "").strip()
-    quote_time_et = scan_pick.get("quote_time_et")
-    bid = _safe_float(scan_pick.get("bid"))
-    ask = _safe_float(scan_pick.get("ask"))
-
-    proof_missing: list[str] = []
-    if not contract_symbol:
-        proof_missing.append("contract_symbol")
-    if not quote_time_et:
-        proof_missing.append("quote_time_et")
-    if bid is None:
-        proof_missing.append("bid")
-    if ask is None:
-        proof_missing.append("ask")
-    if estimated_execution_price is None and not scan_pick.get("entry_execution_price"):
-        proof_missing.append("entry_execution_price")
-    if selection_source != "live_chain_exact_contract":
-        proof_missing.append("selection_source_not_exact")
-    if promotion_class != "promotable_exact_contract":
-        proof_missing.append("promotion_class_not_exact")
-    if proof_missing:
-        proof_eligible = False
-        proof_ineligibility_reason = ", ".join(proof_missing)
+    proof_eligible, proof_ineligibility_reason, proof_class, proof_class_reason = _classify_position_proof(
+        scan_pick,
+        contract_symbol=contract_symbol,
+        entry_execution_price=entry_execution_price,
+        estimated_execution_price=estimated_execution_price,
+        normalized_entry_execution_basis=normalized_entry_execution_basis,
+    )
+    source_pick_snapshot["proof_class"] = proof_class
+    source_pick_snapshot["proof_class_reason"] = proof_class_reason
 
     if require_proof_eligible and not proof_eligible:
         raise ValueError(
@@ -846,20 +1000,20 @@ def build_position_payload(
         "status": "open",
         "ticker": ticker,
         "direction": direction,
-        "strike": float(strike),
+        "strike": strike_value,
         "expiry": _parse_date(str(expiry)),
         "contract_symbol": contract_symbol,
         "asset_class": scan_pick.get("asset_class"),
-        "contracts": int(contracts),
+        "contracts": contracts,
         "entry_option_price": round(float(fill_price), 4),
         "entry_execution_price": entry_execution_price,
         "entry_execution_basis": normalized_entry_execution_basis,
         "entry_fee_total_usd": entry_fee_total_usd,
         "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
-        "filled_at": _parse_datetime(filled_at),
-        "stop_loss_pct": float(scan_pick.get("stop_loss_pct") or 50.0),
-        "profit_target_pct": float(scan_pick.get("profit_target_pct") or 100.0),
-        "time_exit_day": int(scan_pick.get("time_exit_day") or 1),
+        "filled_at": parsed_filled_at or datetime.now(),
+        "stop_loss_pct": stop_loss_pct,
+        "profit_target_pct": profit_target_pct,
+        "time_exit_day": time_exit_day,
         "peak_pnl_pct": None,
         "last_option_price": None,
         "last_pnl_pct": None,
@@ -884,6 +1038,8 @@ def build_position_payload(
         "source_scan_recorded_at_utc": source_scan_recorded_at_utc,
         "proof_eligible": proof_eligible,
         "proof_ineligibility_reason": proof_ineligibility_reason,
+        "proof_class": proof_class,
+        "proof_class_reason": proof_class_reason,
     }
     return payload
 
@@ -986,6 +1142,38 @@ def _build_expired_auto_close(position: dict[str, Any], review_context: Optional
         "exit_execution_basis": close_basis,
         "exit_reason": "expired_auto_close",
         "notes": details,
+        "allow_zero_exit_price": True,
+    }
+
+
+def _build_sell_auto_close(
+    position: dict[str, Any],
+    review: dict[str, Any],
+    review_context: Optional[_ReviewContext] = None,
+) -> dict[str, Any] | None:
+    if review.get("pricing_source") == "expired":
+        return _build_expired_auto_close(position, review_context)
+
+    exit_price = _safe_float(review.get("exit_execution_price"))
+    exit_basis = str(review.get("exit_execution_basis") or "").strip()
+    price_source = "live executable exit quote"
+    if exit_price is None or exit_price <= 0:
+        return None
+
+    reviewed_at = review.get("reviewed_at")
+    try:
+        closed_at = _parse_datetime(reviewed_at)
+    except Exception:
+        closed_at = datetime.now()
+
+    reason = str(review.get("reason") or "Review recommended SELL.").strip()
+    return {
+        "closed_at": closed_at,
+        "exit_price": round(float(exit_price), 4),
+        "exit_execution_basis": exit_basis or "auto_sell_review",
+        "exit_reason": "auto_sell_recommendation",
+        "notes": f"Auto-closed because review recommended SELL: {reason} Closed using {price_source}.",
+        "allow_zero_exit_price": False,
     }
 
 
@@ -1069,7 +1257,7 @@ def _fetch_vertical_spread_quote(
             "underlying_price": underlying_price,
         }
 
-    if expiry not in available_expiries:
+    if available_expiries and expiry not in available_expiries:
         return {
             "expired": False,
             "current_option_price": None,
@@ -1118,6 +1306,7 @@ def _fetch_vertical_spread_quote(
             ask=_safe_float(long_row["ask"].iloc[0]),
             last=_safe_float(long_row["lastPrice"].iloc[0]),
             slippage_pct=exit_slippage_pct,
+            quote_freshness_status="fresh",
         )
         short_exec = executable_option_price(
             side="entry",
@@ -1125,6 +1314,7 @@ def _fetch_vertical_spread_quote(
             ask=_safe_float(short_row["ask"].iloc[0]),
             last=_safe_float(short_row["lastPrice"].iloc[0]),
             slippage_pct=exit_slippage_pct,
+            quote_freshness_status="fresh",
         )
         long_display = _safe_float(long_exec.get("display_price"))
         short_display = _safe_float(short_exec.get("display_price"))
@@ -1145,9 +1335,9 @@ def _fetch_vertical_spread_quote(
         current_execution_basis = None
         if long_execution is not None and short_execution is not None:
             current_execution_price = round(max(long_execution - short_execution, 0.0), 4)
-            current_execution_basis = "spread_bidask"
+            current_execution_basis = "spread_bid_ask"
             pricing_state = "priced_spread_exact"
-            pricing_source = "spread_mid_exact"
+            pricing_source = "spread_bid_ask_exact"
         else:
             pricing_state = "priced_display_only_last"
             pricing_source = "spread_display_only"
@@ -1224,7 +1414,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
             "underlying_price": underlying_price,
         }
 
-    if expiry not in available_expiries:
+    if available_expiries and expiry not in available_expiries:
         warnings.append("The stored expiry is not available in the live chain yet.")
         return {
             "expired": False,
@@ -1315,6 +1505,7 @@ def _fetch_option_quote(position: dict[str, Any], context: Optional[_ReviewConte
             ask=ask,
             last=last_price,
             slippage_pct=exit_slippage_pct,
+            quote_freshness_status="fresh",
         )
 
         if execution.get("display_price") is not None:
@@ -1398,6 +1589,36 @@ def _check_indicator_exit_without_price(pick: dict[str, Any], spy_ret5: float = 
     return False, ""
 
 
+def _profit_harvest_config(position: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any] | None:
+    source_pick = _safe_dict(position.get("source_pick_snapshot"))
+    profile_cfg = _safe_dict(profile.get("profit_harvest") or profile.get("mechanical_profit_harvest"))
+    lane_id = str(
+        source_pick.get("cohort_id")
+        or source_pick.get("playbook_id")
+        or position.get("cohort_id")
+        or position.get("playbook_id")
+        or ""
+    ).strip().lower()
+    explicit_enabled = profile_cfg.get("enabled")
+    if explicit_enabled is None:
+        enabled = bool(position.get("profit_harvest_enabled")) or lane_id in {
+            "bullish_pullback_observation",
+            "tracked_winner_primary",
+            "tracked_winner_observation",
+        }
+    else:
+        enabled = bool(explicit_enabled)
+    if not enabled:
+        return None
+
+    return {
+        "trigger_pct": float(profile_cfg.get("trigger_pct", profile_cfg.get("take_profit_pct", 50.0)) or 50.0),
+        "giveback_pct": float(profile_cfg.get("giveback_pct", 20.0) or 20.0),
+        "min_hold_days": int(profile_cfg.get("min_hold_days", 1) or 1),
+        "min_remaining_profit_pct": float(profile_cfg.get("min_remaining_profit_pct", 15.0) or 15.0),
+    }
+
+
 def review_position(position: dict[str, Any], context: Optional[_ReviewContext] = None) -> dict[str, Any]:
     review_context = context or _ReviewContext()
     filled_at = _parse_datetime(position["filled_at"])
@@ -1419,8 +1640,6 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     contracts = int(position.get("contracts") or 1)
     entry_execution_price = _safe_float(position.get("entry_execution_price")) or entry_option_price
     exit_execution_price = _safe_float(pricing.get("current_execution_price"))
-    if exit_execution_price is None and pricing.get("price_trigger_ok") and current_option_price is not None:
-        exit_execution_price = float(current_option_price)
     entry_fee_total_usd = _safe_float(position.get("entry_fee_total_usd"))
     if entry_fee_total_usd is None:
         entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=2 if is_vertical_spread else 1)
@@ -1460,6 +1679,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     source_pick.setdefault("ret5", source_pick.get("ret5", 0.0))
     spy_ret5 = review_context.get_spy_ret5()
     profile = review_context.get_profile(position["ticker"], position["direction"])
+    profit_harvest = _profit_harvest_config(position, profile)
 
     if pricing.get("expired"):
         recommendation = "SELL"
@@ -1470,6 +1690,32 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     elif pricing.get("price_trigger_ok") and current_pnl_pct is not None and current_pnl_pct >= profit_target_pct:
         recommendation = "SELL"
         reason = f"Live executable exit hit the profit target at {current_pnl_pct:+.1f}%."
+    elif (
+        profit_harvest
+        and pricing.get("price_trigger_ok")
+        and current_pnl_pct is not None
+        and days_held >= int(profit_harvest["min_hold_days"])
+        and current_pnl_pct >= float(profit_harvest["trigger_pct"])
+    ):
+        recommendation = "SELL"
+        reason = (
+            "Mechanical profit harvest: live executable gain "
+            f"reached {current_pnl_pct:+.1f}% versus the {float(profit_harvest['trigger_pct']):.1f}% trigger."
+        )
+    elif (
+        profit_harvest
+        and pricing.get("price_trigger_ok")
+        and current_pnl_pct is not None
+        and days_held >= int(profit_harvest["min_hold_days"])
+        and peak_pnl_pct >= float(profit_harvest["trigger_pct"])
+        and peak_pnl_pct - current_pnl_pct >= float(profit_harvest["giveback_pct"])
+        and current_pnl_pct >= float(profit_harvest["min_remaining_profit_pct"])
+    ):
+        recommendation = "SELL"
+        reason = (
+            "Mechanical profit harvest: position gave back "
+            f"{peak_pnl_pct - current_pnl_pct:.1f} points from a {peak_pnl_pct:+.1f}% peak."
+        )
     elif days_held >= time_exit_day:
         recommendation = "SELL"
         reason = f"Time exit reached after {days_held} calendar day(s), versus a {time_exit_day}-day limit."
@@ -1528,6 +1774,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
         "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
         "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
+        "profit_harvest": profit_harvest,
         "expiry": str(position["expiry"])[:10],
     }
 
@@ -1600,6 +1847,8 @@ def review_open_positions(repository, position_ids: Optional[list[int]] = None) 
                             "source_pick_snapshot": resolved_pick,
                             "proof_eligible": False,
                             "proof_ineligibility_reason": "comparable_exact_contract",
+                            "proof_class": "ineligible",
+                            "proof_class_reason": "comparable_exact_contract",
                         },
                     )
                     resolved_position = True
@@ -1608,12 +1857,15 @@ def review_open_positions(repository, position_ids: Optional[list[int]] = None) 
                 continue
             review = review_position(position, review_context)
             saved_position = repository.save_review(int(position["id"]), review)
-            if (
-                review.get("pricing_source") == "expired"
-                and review.get("recommendation") == "SELL"
-                and hasattr(repository, "close_position")
-            ):
-                auto_close = _build_expired_auto_close(position, review_context)
+            if review.get("recommendation") == "SELL" and hasattr(repository, "close_position"):
+                pricing_state = str(review.get("pricing_state") or "").strip().lower()
+                if "display_only" in pricing_state:
+                    reviewed_positions.append(saved_position)
+                    continue
+                auto_close = _build_sell_auto_close(position, review, review_context)
+                if auto_close is None:
+                    reviewed_positions.append(saved_position)
+                    continue
                 closed_position = repository.close_position(
                     int(position["id"]),
                     exit_price=float(auto_close["exit_price"]),
@@ -1621,7 +1873,7 @@ def review_open_positions(repository, position_ids: Optional[list[int]] = None) 
                     exit_reason=str(auto_close["exit_reason"]),
                     notes=str(auto_close["notes"]),
                     exit_execution_basis=str(auto_close["exit_execution_basis"]),
-                    allow_zero_exit_price=True,
+                    allow_zero_exit_price=bool(auto_close.get("allow_zero_exit_price")),
                 )
                 reviewed_positions.append(closed_position or saved_position)
                 continue

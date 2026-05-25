@@ -1,4 +1,3 @@
-import importlib.util
 import os
 import sqlite3
 import unittest
@@ -22,14 +21,7 @@ if str(TESTS_DIR) not in sys.path:
 from options_algorithm_fixtures import FrozenDateTime, make_history, make_option_frame
 from workspace_tempdir import WorkspaceTempDir
 
-
-SERVICE_SPEC = importlib.util.find_spec("market_data_service")
-MARKET_DATA_SERVICE_AVAILABLE = SERVICE_SPEC is not None
-
-if MARKET_DATA_SERVICE_AVAILABLE:
-    import market_data_service as mds
-else:  # pragma: no cover - exercised only when the service lands
-    mds = None
+import market_data_service as mds
 
 
 class _RecordingTicker:
@@ -96,6 +88,18 @@ class _RecordingTicker:
         return SimpleNamespace(calls=snap.calls.copy(), puts=snap.puts.copy())
 
 
+class _SourceRecordingTicker(_RecordingTicker):
+    def __init__(self, *args, market_data_source: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.market_data_source = market_data_source
+
+    def option_chain(self, expiry: str):
+        chain = super().option_chain(expiry)
+        chain.market_data_source = self.market_data_source
+        chain.source = self.market_data_source
+        return chain
+
+
 class _FailingOptionTicker:
     def __init__(self, symbol: str):
         self.symbol = symbol
@@ -120,19 +124,36 @@ class _ExplodingOptionTicker:
         raise RuntimeError("option chain unavailable")
 
 
-@unittest.skipUnless(MARKET_DATA_SERVICE_AVAILABLE, "market_data_service not available in this checkout")
 class MarketDataServiceTests(unittest.TestCase):
     def setUp(self):
         self._tmp = WorkspaceTempDir(prefix="market-data-service")
         self.addCleanup(self._tmp.cleanup)
+        self._env_snapshot = {
+            key: os.environ.get(key)
+            for key in (
+                "OPTIONS_MARKET_DATA_PROVIDER",
+                "ALPACA_ENABLE_DURING_TESTS",
+                "OPTIONS_RUN_MODE",
+            )
+        }
+        os.environ["OPTIONS_MARKET_DATA_PROVIDER"] = "yahoo"
+        os.environ.pop("ALPACA_ENABLE_DURING_TESTS", None)
+        os.environ["OPTIONS_RUN_MODE"] = "test"
         self.db_path = os.path.join(self._tmp.name, "market_data.db")
         self.history_df = make_history(length=320, start=100.0, step=0.7, wave=1.5, volume=8_000_000)
         self.ticker = _RecordingTicker("AAA", history_df=self.history_df, option_spot=float(self.history_df["Close"].iloc[-1]))
         self.spy_ticker = _RecordingTicker("^VIX", history_df=make_history(length=40, start=18.0, volume=0), sector=None, option_spot=18.0)
-        if mds is not None:
-            mds._MEMORY_CACHE.clear()
-            mds._SCHEMA_READY.clear()
-            mds.reset_cache_stats()
+        mds._MEMORY_CACHE.clear()
+        mds._SCHEMA_READY.clear()
+        mds.reset_cache_stats()
+        self.addCleanup(self._restore_env)
+
+    def _restore_env(self):
+        for key, value in self._env_snapshot.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
     def _service(self):
         return mds
@@ -345,6 +366,93 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(refreshed_chain.value.calls["strike"].tolist(), fresh_chain.value.calls["strike"].tolist())
         self.assertGreaterEqual(self.ticker.option_calls, 2)
         self.assertGreaterEqual(self.ticker.option_chain_calls.count(fresh_options.value[0]), 2)
+
+    def test_alpaca_opra_mode_refreshes_fresh_non_opra_option_cache(self):
+        service = self._service()
+        alpaca_ticker = _SourceRecordingTicker(
+            "AAA",
+            history_df=self.history_df,
+            option_spot=float(self.history_df["Close"].iloc[-1]),
+            market_data_source="alpaca_opra",
+        )
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", side_effect=self._make_ticker_factory()), \
+             patch.object(service, "datetime", FrozenDateTime):
+            stale_provider_options = service.get_options("AAA", include_metadata=True)
+            stale_provider_chain = service.get_option_chain("AAA", stale_provider_options.value[0], include_metadata=True)
+
+        self.assertEqual(stale_provider_options.source, "network")
+        self.assertEqual(stale_provider_chain.source, "network")
+
+        service._MEMORY_CACHE.clear()
+        service._SCHEMA_READY.clear()
+
+        alpaca_env = {
+            "MARKET_DATA_DB_PATH": self.db_path,
+            "PYTEST_CURRENT_TEST": "market-data-service-provider-cache",
+            "ALPACA_ENABLE_DURING_TESTS": "1",
+            "OPTIONS_MARKET_DATA_PROVIDER": "alpaca",
+            "OPTIONS_RUN_MODE": "live",
+            "OPTIONS_IS_FIXTURE": "0",
+            "APCA_API_KEY_ID": "test-key",
+            "APCA_API_SECRET_KEY": "test-secret",
+            "ALPACA_OPTIONS_FEED": "opra",
+        }
+        with patch.dict(os.environ, alpaca_env, clear=False), \
+             patch.object(service, "make_alpaca_ticker_factory", return_value=lambda symbol: alpaca_ticker), \
+             patch.object(service, "datetime", FrozenDateTime):
+            refreshed_options = service.get_options("AAA", include_metadata=True)
+            refreshed_chain = service.get_option_chain("AAA", refreshed_options.value[0], include_metadata=True)
+
+        self.assertEqual(refreshed_options.source, "alpaca_opra")
+        self.assertEqual(refreshed_chain.source, "alpaca_opra")
+        self.assertEqual(alpaca_ticker.option_calls, 1)
+        self.assertEqual(alpaca_ticker.option_chain_calls.count(refreshed_options.value[0]), 1)
+        self.assertEqual(service.get_cache_stats()["stats"]["options"]["persistent_provider_mismatches"], 1)
+        self.assertEqual(service.get_cache_stats()["stats"]["option_chain"]["persistent_provider_mismatches"], 1)
+
+    def test_alpaca_requested_requires_alpaca_cache_source_even_without_credentials(self):
+        service = self._service()
+        env = {
+            "PYTEST_CURRENT_TEST": "market-data-service-provider-cache",
+            "ALPACA_ENABLE_DURING_TESTS": "1",
+            "OPTIONS_MARKET_DATA_PROVIDER": "alpaca",
+            "OPTIONS_RUN_MODE": "live",
+            "OPTIONS_IS_FIXTURE": "0",
+            "ALPACA_STOCK_FEED": "sip",
+            "ALPACA_OPTIONS_FEED": "opra",
+        }
+        with patch.dict(os.environ, env, clear=False):
+            self.assertEqual(service._required_stock_cache_source(), "alpaca_sip")
+            self.assertEqual(service._required_options_cache_source(), "alpaca_opra")
+
+    def test_alpaca_mode_default_factory_does_not_call_yfinance(self):
+        service = self._service()
+        alpaca_ticker = _SourceRecordingTicker(
+            "AAA",
+            history_df=self.history_df,
+            option_spot=float(self.history_df["Close"].iloc[-1]),
+            market_data_source="alpaca_sip",
+        )
+        env = {
+            "MARKET_DATA_DB_PATH": self.db_path,
+            "PYTEST_CURRENT_TEST": "market-data-service-provider-cache",
+            "ALPACA_ENABLE_DURING_TESTS": "1",
+            "OPTIONS_MARKET_DATA_PROVIDER": "alpaca",
+            "OPTIONS_RUN_MODE": "live",
+            "OPTIONS_IS_FIXTURE": "0",
+            "APCA_API_KEY_ID": "test-key",
+            "APCA_API_SECRET_KEY": "test-secret",
+            "ALPACA_STOCK_FEED": "sip",
+        }
+        with patch.dict(os.environ, env, clear=False), \
+             patch.object(service, "make_alpaca_ticker_factory", return_value=lambda symbol: alpaca_ticker), \
+             patch.object(service.yf, "Ticker", side_effect=AssertionError("yfinance should not be called")):
+            history = service.get_history("AAA", period="5d")
+
+        self.assertFalse(history.empty)
+        self.assertEqual(history.attrs["market_data_source"], "alpaca_sip")
 
     def test_option_metadata_marks_network_failures_as_error(self):
         service = self._service()

@@ -56,6 +56,47 @@ def _merge_profile_overrides(
     return merged
 
 
+def _merge_ai_commodity_option_filter_overrides(
+    base_filters: dict[str, Any],
+    overrides: dict[str, Any],
+) -> dict[str, Any]:
+    merged = copy.deepcopy(base_filters)
+    if not overrides:
+        return merged
+    if not isinstance(overrides, dict):
+        raise VariantConfigError("ai_commodity_option_filter_overrides must be an object when provided.")
+    unknown_keys = sorted(str(key) for key in overrides if key not in merged)
+    if unknown_keys:
+        raise VariantConfigError(
+            "Unknown AI commodity option filter override(s): " + ", ".join(unknown_keys)
+        )
+    for key, value in overrides.items():
+        try:
+            merged[str(key)] = float(value)
+        except (TypeError, ValueError) as exc:
+            raise VariantConfigError(f"AI commodity option filter override for {key} must be numeric.") from exc
+    return merged
+
+
+def _merge_playbook_overrides(
+    base_playbooks: dict[str, dict[str, Any]],
+    overrides: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    merged = copy.deepcopy(base_playbooks)
+    if not overrides:
+        return merged
+    if not isinstance(overrides, dict):
+        raise VariantConfigError("playbook_overrides must be an object when provided.")
+    for playbook_name, playbook_overrides in overrides.items():
+        key = str(playbook_name or "").strip().lower()
+        if key not in merged:
+            raise VariantConfigError(f"Unknown replay playbook in variant config: {playbook_name}")
+        if not isinstance(playbook_overrides, dict):
+            raise VariantConfigError(f"Playbook override for {playbook_name} must be an object.")
+        merged[key].update(copy.deepcopy(playbook_overrides))
+    return merged
+
+
 def _replace_profiles(target: Any, profiles: dict[str, dict[str, Any]]) -> None:
     target.STRATEGY_PROFILES.clear()
     target.STRATEGY_PROFILES.update(copy.deepcopy(profiles))
@@ -67,6 +108,8 @@ def _temporary_variant_context(config: dict[str, Any]) -> Iterator[None]:
     previous_oc_profiles = copy.deepcopy(oc.STRATEGY_PROFILES)
     previous_wfo_profiles = copy.deepcopy(wfo.STRATEGY_PROFILES)
     previous_imported_universe = tuple(wfo.IMPORTED_VALIDATION_UNIVERSE)
+    previous_ai_commodity_option_filters = copy.deepcopy(oc.AI_COMMODITY_OPTION_FILTERS)
+    previous_replay_playbooks = copy.deepcopy(wfo.REPLAY_PLAYBOOKS)
 
     try:
         merged_profiles = _merge_profile_overrides(
@@ -75,6 +118,21 @@ def _temporary_variant_context(config: dict[str, Any]) -> Iterator[None]:
         )
         _replace_profiles(oc, merged_profiles)
         _replace_profiles(wfo, merged_profiles)
+
+        oc.AI_COMMODITY_OPTION_FILTERS.clear()
+        oc.AI_COMMODITY_OPTION_FILTERS.update(
+            _merge_ai_commodity_option_filter_overrides(
+                previous_ai_commodity_option_filters,
+                config.get("ai_commodity_option_filter_overrides") or {},
+            )
+        )
+        wfo.REPLAY_PLAYBOOKS.clear()
+        wfo.REPLAY_PLAYBOOKS.update(
+            _merge_playbook_overrides(
+                previous_replay_playbooks,
+                config.get("playbook_overrides") or {},
+            )
+        )
 
         imported_validation_universe = config.get("imported_validation_universe")
         if imported_validation_universe is not None:
@@ -95,6 +153,10 @@ def _temporary_variant_context(config: dict[str, Any]) -> Iterator[None]:
         wfo.STRATEGY_PROFILES.update(previous_wfo_profiles)
         wfo.STRATEGY_PROFILE = wfo.STRATEGY_PROFILES["equity"]
         wfo.IMPORTED_VALIDATION_UNIVERSE = previous_imported_universe
+        oc.AI_COMMODITY_OPTION_FILTERS.clear()
+        oc.AI_COMMODITY_OPTION_FILTERS.update(previous_ai_commodity_option_filters)
+        wfo.REPLAY_PLAYBOOKS.clear()
+        wfo.REPLAY_PLAYBOOKS.update(previous_replay_playbooks)
 
 
 def _find_new_run_dir(root_dir: Path, before: set[Path]) -> Path | None:
@@ -147,9 +209,20 @@ def main(argv: list[str] | None = None, *, root_dir: Path | None = None) -> int:
         if manifest_path.exists():
             payload = json.loads(manifest_path.read_text(encoding="utf8"))
             effective_override_diff = dict(config.get("profile_overrides") or {}).get("equity") or {}
+            ai_commodity_option_filter_overrides = dict(
+                config.get("ai_commodity_option_filter_overrides") or {}
+            )
+            playbook_overrides = dict(config.get("playbook_overrides") or {})
             payload["effective_override_diff"] = effective_override_diff
+            payload["ai_commodity_option_filter_overrides"] = ai_commodity_option_filter_overrides
+            payload["playbook_overrides"] = playbook_overrides
             fingerprint = dict(payload.get("experiment_fingerprint") or {})
             imported_store_metadata = dict((fingerprint.get("imported_store_metadata") or {}))
+            fingerprint_overrides = dict(effective_override_diff)
+            if ai_commodity_option_filter_overrides:
+                fingerprint_overrides["ai_commodity_option_filter_overrides"] = ai_commodity_option_filter_overrides
+            if playbook_overrides:
+                fingerprint_overrides["playbook_overrides"] = playbook_overrides
             payload["experiment_fingerprint"] = build_experiment_fingerprint(
                 phase_id=payload.get("phase_id"),
                 mode=payload.get("mode") or "search",
@@ -161,7 +234,7 @@ def main(argv: list[str] | None = None, *, root_dir: Path | None = None) -> int:
                 watchlist_symbols=list(((payload.get("watchlist_manifest") or {}).get("symbols") or [])),
                 baseline_id=(payload.get("baseline_compatibility") or {}).get("required_baseline_id"),
                 compare_to=payload.get("compare_to"),
-                effective_override_diff=effective_override_diff,
+                effective_override_diff=fingerprint_overrides,
                 imported_store_metadata=imported_store_metadata,
             )
             manifest_path.write_text(json.dumps(payload, indent=2), encoding="utf8")

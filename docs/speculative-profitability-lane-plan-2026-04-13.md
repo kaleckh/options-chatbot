@@ -54,6 +54,8 @@ This avoids mixing validated index behavior with unvalidated single-name or spec
 
 ### The scan universe is broader than the profit loop
 
+Update 2026-05-21: this warning no longer applies to the `ai_commodity_infra_observation` Alpaca OPRA proof loop. That lane now keeps live scan, capture, replay, and proof readiness aligned to the full scan-eligible AI commodity universe. The broader warning still applies to unrelated speculative/watchlist expansion unless those lanes first expand their exact evidence layer.
+
 The live options scan uses a larger watchlist:
 
 - [options_chatbot.py](C:\Users\kalec\options-chatbot\options_chatbot.py:93)

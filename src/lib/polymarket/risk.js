@@ -19,6 +19,7 @@ class RiskManager {
   constructor(options = {}) {
     this.config = { ...DEFAULT_RISK_CONFIG, ...options };
     this.positions = new Map();     // conditionId -> { size, avgPrice, side, exposure }
+    this.openOrders = new Map();    // orderId -> { exposure }
     this.openOrderCount = 0;
     this.dailyPnl = 0;
     this.dailyResetAt = null;
@@ -40,6 +41,9 @@ class RiskManager {
     for (const pos of this.positions.values()) {
       total += Math.abs(pos.exposure);
     }
+    for (const order of this.openOrders.values()) {
+      total += Math.abs(order.exposure);
+    }
     return total;
   }
 
@@ -56,8 +60,9 @@ class RiskManager {
 
     const orderExposure = order.size * order.price;
 
-    if (this.getTotalExposure() + orderExposure > this.config.maxTotalExposureUsd) {
-      return this._reject(order, "total_exposure_limit:" + this.getTotalExposure().toFixed(2) + "+" + orderExposure.toFixed(2) + ">" + this.config.maxTotalExposureUsd);
+    const totalExposure = this.getTotalExposure();
+    if (totalExposure + orderExposure > this.config.maxTotalExposureUsd) {
+      return this._reject(order, "total_exposure_limit:" + totalExposure.toFixed(2) + "+" + orderExposure.toFixed(2) + ">" + this.config.maxTotalExposureUsd);
     }
 
     if (orderExposure > this.config.maxSinglePositionUsd) {
@@ -79,22 +84,44 @@ class RiskManager {
       existing.avgPrice = existing.size > 0 ? totalCost / existing.size : 0;
       existing.exposure = existing.size * existing.avgPrice;
     } else {
+      const closedSize = Math.min(size, existing.size);
+      const pnl = (price - existing.avgPrice) * closedSize;
+      this.dailyPnl += pnl;
       existing.size -= size;
       if (existing.size <= 0) {
-        const pnl = (price - existing.avgPrice) * size;
-        this.dailyPnl += pnl;
         this.positions.delete(conditionId);
         return pnl;
       }
       existing.exposure = existing.size * existing.avgPrice;
+      this.positions.set(conditionId, existing);
+      return pnl;
     }
     existing.side = side;
     this.positions.set(conditionId, existing);
     return 0;
   }
 
-  recordOrderPlaced() { this.openOrderCount++; }
-  recordOrderClosed() { this.openOrderCount = Math.max(0, this.openOrderCount - 1); }
+  recordOrderPlaced(order = {}) {
+    const exposure = Number(order.size || 0) * Number(order.price || 0);
+    if (Number.isFinite(exposure) && exposure > 0) {
+      const orderId = String(order.orderId || order.id || "order-" + Date.now() + "-" + this.openOrders.size);
+      this.openOrders.set(orderId, { exposure });
+    }
+    this.openOrderCount++;
+    return { openOrderCount: this.openOrderCount, reservedExposure: exposure || 0 };
+  }
+
+  recordOrderClosed(orderId = null) {
+    if (orderId && this.openOrders.delete(String(orderId))) {
+      this.openOrderCount = Math.max(0, this.openOrderCount - 1);
+      return;
+    }
+    const firstOrderId = this.openOrders.keys().next().value;
+    if (firstOrderId) {
+      this.openOrders.delete(firstOrderId);
+    }
+    this.openOrderCount = Math.max(0, this.openOrderCount - 1);
+  }
 
   kill(reason) {
     this.killed = true;
@@ -111,6 +138,7 @@ class RiskManager {
       killed: this.killed,
       totalExposure: this.getTotalExposure(),
       openOrders: this.openOrderCount,
+      openOrderExposure: [...this.openOrders.values()].reduce((sum, order) => sum + Math.abs(order.exposure), 0),
       dailyPnl: this.dailyPnl,
       positionCount: this.positions.size,
       limits: this.config,

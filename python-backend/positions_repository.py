@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import contextlib
 import json
 import math
 import sqlite3
@@ -43,8 +44,51 @@ def _normalize_latest_review(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _closed_position_review(row: dict[str, Any], existing: Optional[dict[str, Any]]) -> dict[str, Any]:
+    existing = existing or {}
+    metrics_snapshot = copy.deepcopy(existing.get("metrics_snapshot") or {})
+    metrics_snapshot.update(
+        {
+            "pricing_state": "closed",
+            "exit_reason": row.get("exit_reason"),
+            "closed_at": _to_iso(row.get("closed_at")),
+        }
+    )
+    return {
+        "id": existing.get("id"),
+        "reviewed_at": _to_iso(
+            _first_present(row.get("closed_at"), row.get("last_reviewed_at"), existing.get("reviewed_at"))
+        ),
+        "pricing_source": _first_present(row.get("exit_execution_basis"), row.get("exit_reason"), existing.get("pricing_source")),
+        "current_option_price": _first_present(row.get("exit_option_price"), row.get("last_option_price"), existing.get("current_option_price")),
+        "current_pnl_pct": _first_present(row.get("gross_pnl_pct"), row.get("last_pnl_pct"), existing.get("current_pnl_pct")),
+        "gross_pnl_pct": _first_present(row.get("gross_pnl_pct"), existing.get("gross_pnl_pct")),
+        "net_pnl_pct": _first_present(row.get("net_pnl_pct"), existing.get("net_pnl_pct")),
+        "gross_pnl_usd": _first_present(row.get("gross_pnl_usd"), existing.get("gross_pnl_usd")),
+        "net_pnl_usd": _first_present(row.get("net_pnl_usd"), existing.get("net_pnl_usd")),
+        "entry_execution_price": _first_present(row.get("entry_execution_price"), existing.get("entry_execution_price")),
+        "exit_execution_price": _first_present(row.get("exit_execution_price"), existing.get("exit_execution_price")),
+        "entry_execution_basis": _first_present(row.get("entry_execution_basis"), existing.get("entry_execution_basis")),
+        "exit_execution_basis": _first_present(row.get("exit_execution_basis"), existing.get("exit_execution_basis")),
+        "fee_total_usd": _first_present(row.get("fee_total_usd"), existing.get("fee_total_usd")),
+        "recommendation": "SELL",
+        "reason": _first_present(row.get("exit_reason"), row.get("last_recommendation_reason"), existing.get("reason"), "Position closed."),
+        "warnings": [],
+        "metrics_snapshot": metrics_snapshot,
+    }
+
+
 def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     latest_review = _normalize_latest_review(row)
+    if str(row.get("status") or "").strip().lower() == "closed" and row.get("closed_at") is not None:
+        latest_review = _closed_position_review(row, latest_review)
     gross_pnl_pct = row.get("gross_pnl_pct")
     net_pnl_pct = row.get("net_pnl_pct")
     gross_pnl_usd = row.get("gross_pnl_usd")
@@ -110,11 +154,36 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
         "source_scan_recorded_at_utc": _to_iso(row.get("source_scan_recorded_at_utc")),
         "proof_eligible": bool(row.get("proof_eligible", False)),
         "proof_ineligibility_reason": row.get("proof_ineligibility_reason"),
+        "proof_class": row.get("proof_class"),
+        "proof_class_reason": row.get("proof_class_reason"),
         "created_at": _to_iso(row.get("created_at")),
         "updated_at": _to_iso(row.get("updated_at")),
         "latest_review": latest_review,
     }
     return normalized
+
+
+def _source_snapshot_fee_sides(source_pick_snapshot: Any) -> int:
+    snapshot = source_pick_snapshot
+    if isinstance(snapshot, str):
+        try:
+            snapshot = json.loads(snapshot)
+        except (json.JSONDecodeError, TypeError):
+            snapshot = {}
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    strategy_type = str(snapshot.get("strategy_type") or "").strip().lower()
+    if (
+        strategy_type == "vertical_spread"
+        or snapshot.get("short_strike") is not None
+        or bool(snapshot.get("short_contract_symbol"))
+    ):
+        return 2
+    return 1
+
+
+def _position_fee_sides(position: dict[str, Any]) -> int:
+    return _source_snapshot_fee_sides(position.get("source_pick_snapshot"))
 
 
 _POSITION_UPDATE_FIELDS = (
@@ -129,8 +198,14 @@ _POSITION_UPDATE_FIELDS = (
     "entry_underlying_price",
     "source_pick_snapshot",
     "notes",
+    "source_scan_session_id",
+    "source_scan_event_key",
+    "source_scan_run_id",
+    "source_scan_recorded_at_utc",
     "proof_eligible",
     "proof_ineligibility_reason",
+    "proof_class",
+    "proof_class_reason",
 )
 
 
@@ -253,6 +328,8 @@ class PostgresTrackedPositionsRepository:
         ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS entry_fee_total_usd DOUBLE PRECISION;
         ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS entry_underlying_price DOUBLE PRECISION;
+        ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS exit_execution_price DOUBLE PRECISION;
         ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;
@@ -279,6 +356,10 @@ class PostgresTrackedPositionsRepository:
         ADD COLUMN IF NOT EXISTS proof_eligible BOOLEAN NOT NULL DEFAULT FALSE;
         ALTER TABLE tracked_positions
         ADD COLUMN IF NOT EXISTS proof_ineligibility_reason TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS proof_class TEXT;
+        ALTER TABLE tracked_positions
+        ADD COLUMN IF NOT EXISTS proof_class_reason TEXT;
 
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_status ON tracked_positions (status);
         CREATE INDEX IF NOT EXISTS idx_tracked_positions_filled_at ON tracked_positions (filled_at DESC);
@@ -340,24 +421,6 @@ class PostgresTrackedPositionsRepository:
         ADD COLUMN IF NOT EXISTS metrics_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
 
         CREATE INDEX IF NOT EXISTS idx_position_reviews_position_id ON position_reviews (position_id, reviewed_at DESC);
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS gross_pnl_pct DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS net_pnl_pct DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS gross_pnl_usd DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS net_pnl_usd DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS entry_execution_price DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS exit_execution_price DOUBLE PRECISION;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS entry_execution_basis TEXT;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;
-        ALTER TABLE position_reviews
-        ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;
         """
         try:
             with self._connect() as conn:
@@ -493,7 +556,9 @@ class PostgresTrackedPositionsRepository:
                         source_scan_run_id,
                         source_scan_recorded_at_utc,
                         proof_eligible,
-                        proof_ineligibility_reason
+                        proof_ineligibility_reason,
+                        proof_class,
+                        proof_class_reason
                     ) VALUES (
                         %s,
                         %s,
@@ -519,6 +584,8 @@ class PostgresTrackedPositionsRepository:
                         %s,
                         %s,
                         %s::jsonb,
+                        %s,
+                        %s,
                         %s,
                         %s,
                         %s,
@@ -573,6 +640,8 @@ class PostgresTrackedPositionsRepository:
                         payload.get("source_scan_recorded_at_utc"),
                         bool(payload.get("proof_eligible", False)),
                         payload.get("proof_ineligibility_reason"),
+                        payload.get("proof_class"),
+                        payload.get("proof_class_reason"),
                     ),
                 )
                 row = cur.fetchone()
@@ -817,7 +886,7 @@ class PostgresTrackedPositionsRepository:
 
                 cur.execute(
                     """
-                    SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd
+                    SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd, source_pick_snapshot
                     FROM tracked_positions
                     WHERE id = %s
                     """,
@@ -831,9 +900,10 @@ class PostgresTrackedPositionsRepository:
                 contracts = int(status_row.get("contracts") or 1)
                 entry_execution_price = status_row.get("entry_execution_price") or status_row.get("entry_option_price")
                 entry_fee_total_usd = status_row.get("entry_fee_total_usd")
+                fee_sides = _source_snapshot_fee_sides(status_row.get("source_pick_snapshot"))
                 if entry_fee_total_usd is None:
-                    entry_fee_total_usd = commission_total_usd(contracts=contracts)
-                exit_fee_total_usd = commission_total_usd(contracts=contracts)
+                    entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+                exit_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
                 pnl_snapshot = option_pnl_snapshot(
                     entry_execution_price=entry_execution_price,
                     exit_execution_price=exit_price,
@@ -866,6 +936,8 @@ class PostgresTrackedPositionsRepository:
                         net_pnl_usd = %s,
                         fee_total_usd = %s,
                         last_reviewed_at = %s,
+                        last_recommendation = %s,
+                        last_recommendation_reason = %s,
                         notes = COALESCE(%s, notes),
                         updated_at = NOW()
                     WHERE id = %s AND status = 'open'
@@ -885,6 +957,8 @@ class PostgresTrackedPositionsRepository:
                         pnl_snapshot.get("net_pnl_usd"),
                         pnl_snapshot.get("fee_total_usd"),
                         closed_at,
+                        "SELL",
+                        exit_reason,
                         merged_notes,
                         position_id,
                     ),
@@ -925,12 +999,20 @@ class SqliteTrackedPositionsRepository:
         self.is_available = True
         self.error_message: Optional[str] = None
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextlib.contextmanager
+    def _connect(self):
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL")
-        conn.execute("PRAGMA foreign_keys=ON")
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def init_schema(self) -> bool:
         schema_sql = """
@@ -977,6 +1059,8 @@ class SqliteTrackedPositionsRepository:
             source_scan_recorded_at_utc TEXT,
             proof_eligible INTEGER NOT NULL DEFAULT 0,
             proof_ineligibility_reason TEXT,
+            proof_class TEXT,
+            proof_class_reason TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -1012,6 +1096,62 @@ class SqliteTrackedPositionsRepository:
         try:
             with self._connect() as conn:
                 conn.executescript(schema_sql)
+                tracked_position_columns = {
+                    "contract_symbol": "TEXT",
+                    "asset_class": "TEXT",
+                    "entry_execution_price": "REAL",
+                    "entry_execution_basis": "TEXT",
+                    "entry_fee_total_usd": "REAL",
+                    "entry_underlying_price": "REAL",
+                    "peak_pnl_pct": "REAL",
+                    "last_option_price": "REAL",
+                    "last_pnl_pct": "REAL",
+                    "last_recommendation": "TEXT",
+                    "last_recommendation_reason": "TEXT",
+                    "last_reviewed_at": "TEXT",
+                    "notes": "TEXT",
+                    "closed_at": "TEXT",
+                    "exit_option_price": "REAL",
+                    "exit_execution_price": "REAL",
+                    "exit_execution_basis": "TEXT",
+                    "exit_reason": "TEXT",
+                    "gross_pnl_pct": "REAL",
+                    "net_pnl_pct": "REAL",
+                    "gross_pnl_usd": "REAL",
+                    "net_pnl_usd": "REAL",
+                    "fee_total_usd": "REAL",
+                    "source_scan_session_id": "INTEGER",
+                    "source_scan_event_key": "TEXT",
+                    "source_scan_run_id": "TEXT",
+                    "source_scan_recorded_at_utc": "TEXT",
+                    "proof_eligible": "INTEGER NOT NULL DEFAULT 0",
+                    "proof_ineligibility_reason": "TEXT",
+                    "proof_class": "TEXT",
+                    "proof_class_reason": "TEXT",
+                }
+                position_review_columns = {
+                    "gross_pnl_pct": "REAL",
+                    "net_pnl_pct": "REAL",
+                    "gross_pnl_usd": "REAL",
+                    "net_pnl_usd": "REAL",
+                    "entry_execution_price": "REAL",
+                    "exit_execution_price": "REAL",
+                    "entry_execution_basis": "TEXT",
+                    "exit_execution_basis": "TEXT",
+                    "fee_total_usd": "REAL",
+                    "warnings": "TEXT NOT NULL DEFAULT '[]'",
+                    "metrics_snapshot": "TEXT NOT NULL DEFAULT '{}'",
+                }
+                for table_name, columns in (
+                    ("tracked_positions", tracked_position_columns),
+                    ("position_reviews", position_review_columns),
+                ):
+                    for column_name, column_type in columns.items():
+                        try:
+                            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+                        except sqlite3.OperationalError as exc:
+                            if "duplicate column name" not in str(exc).lower():
+                                raise
             return True
         except Exception as exc:
             self.is_available = False
@@ -1097,7 +1237,7 @@ class SqliteTrackedPositionsRepository:
                     exit_execution_price, exit_execution_basis, exit_reason,
                     fee_total_usd, source_scan_session_id, source_scan_event_key,
                     source_scan_run_id, source_scan_recorded_at_utc,
-                    proof_eligible, proof_ineligibility_reason
+                    proof_eligible, proof_ineligibility_reason, proof_class, proof_class_reason
                 ) VALUES (
                     ?, ?, ?, ?, ?, ?,
                     ?, ?, ?, ?,
@@ -1108,6 +1248,7 @@ class SqliteTrackedPositionsRepository:
                     ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?, ?,
+                    ?, ?,
                     ?, ?,
                     ?, ?
                 )
@@ -1150,6 +1291,8 @@ class SqliteTrackedPositionsRepository:
                     _to_iso(payload.get("source_scan_recorded_at_utc")),
                     1 if payload.get("proof_eligible") else 0,
                     payload.get("proof_ineligibility_reason"),
+                    payload.get("proof_class"),
+                    payload.get("proof_class_reason"),
                 ),
             )
             position_id = cur.lastrowid
@@ -1324,7 +1467,7 @@ class SqliteTrackedPositionsRepository:
 
             cur = conn.execute(
                 """
-                SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd
+                SELECT status, contracts, entry_execution_price, entry_option_price, entry_fee_total_usd, source_pick_snapshot
                 FROM tracked_positions
                 WHERE id = ?
                 """,
@@ -1338,9 +1481,10 @@ class SqliteTrackedPositionsRepository:
             contracts = int(status_row["contracts"] or 1)
             entry_execution_price = status_row["entry_execution_price"] or status_row["entry_option_price"]
             entry_fee_total_usd = status_row["entry_fee_total_usd"]
+            fee_sides = _source_snapshot_fee_sides(status_row["source_pick_snapshot"])
             if entry_fee_total_usd is None:
-                entry_fee_total_usd = commission_total_usd(contracts=contracts)
-            exit_fee_total_usd = commission_total_usd(contracts=contracts)
+                entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+            exit_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
             pnl_snapshot = option_pnl_snapshot(
                 entry_execution_price=entry_execution_price,
                 exit_execution_price=exit_price_value,
@@ -1377,6 +1521,8 @@ class SqliteTrackedPositionsRepository:
                     net_pnl_usd = ?,
                     fee_total_usd = ?,
                     last_reviewed_at = ?,
+                    last_recommendation = ?,
+                    last_recommendation_reason = ?,
                     notes = COALESCE(?, notes),
                     updated_at = datetime('now')
                 WHERE id = ? AND status = 'open'
@@ -1395,6 +1541,8 @@ class SqliteTrackedPositionsRepository:
                     pnl_snapshot.get("net_pnl_usd"),
                     pnl_snapshot.get("fee_total_usd"),
                     closed_at_iso,
+                    "SELL",
+                    exit_reason,
                     new_notes,
                     position_id,
                 ),
@@ -1491,7 +1639,10 @@ class MemoryTrackedPositionsRepository:
             normalized[key] = _to_iso(normalized.get(key))
         normalized["expiry"] = _to_iso(normalized.get("expiry"))
         normalized["source_pick_snapshot"] = copy.deepcopy(normalized.get("source_pick_snapshot") or {})
-        normalized["latest_review"] = self._latest_review(position_id)
+        latest_review = self._latest_review(position_id)
+        if str(normalized.get("status") or "").strip().lower() == "closed" and normalized.get("closed_at") is not None:
+            latest_review = _closed_position_review(normalized, latest_review)
+        normalized["latest_review"] = latest_review
         return normalized
 
     def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
@@ -1556,11 +1707,12 @@ class MemoryTrackedPositionsRepository:
             raise ValueError(f"exit_price must be a finite number {comparator}.")
         if position.get("status") != "open":
             raise ValueError(f"Tracked position {position_id} is already closed.")
-        exit_fee_total_usd = commission_total_usd(contracts=position.get("contracts"))
+        fee_sides = _position_fee_sides(position)
+        exit_fee_total_usd = commission_total_usd(contracts=position.get("contracts"), sides=fee_sides)
         entry_fee_total_usd = (
             position.get("entry_fee_total_usd")
             if position.get("entry_fee_total_usd") is not None
-            else commission_total_usd(contracts=position.get("contracts"))
+            else commission_total_usd(contracts=position.get("contracts"), sides=fee_sides)
         )
         pnl_snapshot = option_pnl_snapshot(
             entry_execution_price=position.get("entry_execution_price") or position.get("entry_option_price"),
@@ -1577,6 +1729,8 @@ class MemoryTrackedPositionsRepository:
         position["exit_reason"] = exit_reason
         position["last_option_price"] = exit_price_value
         position["last_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
+        position["last_recommendation"] = "SELL"
+        position["last_recommendation_reason"] = exit_reason
         position["gross_pnl_pct"] = pnl_snapshot.get("gross_pnl_pct")
         position["net_pnl_pct"] = pnl_snapshot.get("net_pnl_pct")
         position["gross_pnl_usd"] = pnl_snapshot.get("gross_pnl_usd")
@@ -1610,8 +1764,16 @@ def create_positions_repository(database_url: Optional[str]):
             try:
                 repo.list_positions("open")
                 return repo
-            except Exception:
-                pass  # Connection failed — fall through to SQLite
+            except Exception as exc:
+                repo.is_available = False
+                repo.error_message = (
+                    "Tracked positions database is unavailable. "
+                    f"Check DATABASE_URL and local Postgres. Details: {exc}"
+                )
+        return UnavailableTrackedPositionsRepository(
+            repo.error_message
+            or "Tracked positions database is unavailable. Check DATABASE_URL and local Postgres."
+        )
     # Fall back to SQLite
     repo = SqliteTrackedPositionsRepository()
     repo.init_schema()

@@ -263,4 +263,6 @@ def load_backend_main(db_path: str, database_url: str | None = ""):
     ):
         sys.modules[module_name] = module
         spec.loader.exec_module(module)
+    module.DB_PATH = db_path
+    module.SUGGESTED_TRADES_REPOSITORY = module.create_suggested_trades_repository(db_path)
     return module

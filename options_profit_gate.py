@@ -18,6 +18,7 @@ from forward_options_ledger import (
     list_forward_sessions,
 )
 from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
+from options_execution import option_pnl_snapshot
 from options_profit_state import TARGET_SYMBOLS, utc_now_iso
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
@@ -77,11 +78,47 @@ DEFAULT_DAILY_TRUTH_IMPORT_MANIFEST = ROOT_DIR / "data" / "options-validation" /
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
-        if value in (None, ""):
+        if isinstance(value, bool) or value in (None, ""):
             return None
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _position_fee_sides_from_total(position: dict[str, Any]) -> tuple[float, float]:
+    entry_fee = _safe_float(position.get("entry_fee_total_usd"))
+    exit_fee = _safe_float(position.get("exit_fee_total_usd"))
+    fee_total = _safe_float(position.get("fee_total_usd"))
+    if fee_total is not None:
+        if entry_fee is None and exit_fee is None:
+            return 0.0, fee_total
+        if entry_fee is None:
+            return max(fee_total - float(exit_fee or 0.0), 0.0), float(exit_fee or 0.0)
+        if exit_fee is None:
+            return float(entry_fee or 0.0), max(fee_total - float(entry_fee or 0.0), 0.0)
+    return float(entry_fee or 0.0), float(exit_fee or 0.0)
+
+
+def _position_pnl_snapshot(position: dict[str, Any]) -> dict[str, Any] | None:
+    entry = _safe_float(position.get("entry_execution_price"))
+    if entry is None:
+        entry = _safe_float(position.get("entry_option_price"))
+    exit_price = _safe_float(position.get("exit_execution_price"))
+    if exit_price is None:
+        exit_price = _safe_float(position.get("exit_option_price"))
+    if entry is None or entry <= 0 or exit_price is None:
+        return None
+    contracts = position.get("contracts")
+    if contracts in (None, ""):
+        contracts = 1
+    entry_fee, exit_fee = _position_fee_sides_from_total(position)
+    return option_pnl_snapshot(
+        entry_execution_price=entry,
+        exit_execution_price=exit_price,
+        contracts=contracts,
+        entry_fee_total_usd=entry_fee,
+        exit_fee_total_usd=exit_fee,
+    )
 
 
 def _parse_date(value: Any) -> Optional[date]:
@@ -203,6 +240,11 @@ def _daily_truth_source_freshness(
     latest_input_mtime_utc: datetime | None = None
     latest_source_horizon: date | None = None
     for entry in entries:
+        manifest_horizon = _normalize_source_horizon_date(entry.get("date_to"))
+        if manifest_horizon is not None and (
+            latest_source_horizon is None or manifest_horizon > latest_source_horizon
+        ):
+            latest_source_horizon = manifest_horizon
         for key in ("input", "underlying_input"):
             candidate = _resolve_manifest_entry_path(entry.get(key))
             if candidate is None:
@@ -319,23 +361,31 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
     for position in positions:
         net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
         gross_pnl_pct = _safe_float(position.get("gross_pnl_pct"))
+        snapshot = None
         if net_pnl_pct is None or gross_pnl_pct is None:
-            entry = _safe_float(position.get("entry_execution_price"))
-            if entry is None:
-                entry = _safe_float(position.get("entry_option_price"))
-            exit_price = _safe_float(position.get("exit_execution_price"))
-            if exit_price is None:
-                exit_price = _safe_float(position.get("exit_option_price"))
-            if entry is None or entry <= 0 or exit_price is None:
+            snapshot = _position_pnl_snapshot(position)
+            if snapshot is None:
                 continue
-            gross_pnl_pct = (exit_price / entry - 1.0) * 100.0
-            net_pnl_pct = gross_pnl_pct
+            if gross_pnl_pct is None:
+                gross_pnl_pct = _safe_float(snapshot.get("gross_pnl_pct"))
+            if net_pnl_pct is None:
+                net_pnl_pct = _safe_float(snapshot.get("net_pnl_pct"))
+        if net_pnl_pct is None or gross_pnl_pct is None:
+            continue
         if str(position.get("contract_symbol") or "").strip():
             exact_contract_count += 1
         net_pnls.append(net_pnl_pct)
         gross_pnls.append(gross_pnl_pct)
-        net_realized_pnl_usd += float(_safe_float(position.get("net_pnl_usd")) or 0.0)
-        gross_realized_pnl_usd += float(_safe_float(position.get("gross_pnl_usd")) or 0.0)
+        net_pnl_usd = _safe_float(position.get("net_pnl_usd"))
+        gross_pnl_usd = _safe_float(position.get("gross_pnl_usd"))
+        if (net_pnl_usd is None or gross_pnl_usd is None) and snapshot is None:
+            snapshot = _position_pnl_snapshot(position)
+        if net_pnl_usd is None and snapshot is not None:
+            net_pnl_usd = _safe_float(snapshot.get("net_pnl_usd"))
+        if gross_pnl_usd is None and snapshot is not None:
+            gross_pnl_usd = _safe_float(snapshot.get("gross_pnl_usd"))
+        net_realized_pnl_usd += float(net_pnl_usd or 0.0)
+        gross_realized_pnl_usd += float(gross_pnl_usd or 0.0)
     positive = sum(value for value in net_pnls if value > 0)
     negative = abs(sum(value for value in net_pnls if value < 0))
     profit_factor = round(positive / negative, 3) if negative > 0 else (999.0 if positive > 0 else None)

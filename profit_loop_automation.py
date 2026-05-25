@@ -226,40 +226,6 @@ def _run_command(
             continue
 
 
-def _run_command_with_retry(
-    command: list[str],
-    *,
-    cwd: Path = ROOT_DIR,
-    timeout_seconds: int | None = None,
-    heartbeat_every_seconds: int | None = None,
-    heartbeat: Any = None,
-    max_retries: int = 1,
-    timeout_escalation: float = 1.5,
-) -> dict[str, Any]:
-    """Run a command with retry on timeout. Escalates timeout by multiplier on retry."""
-    current_timeout = timeout_seconds
-    last_error: Exception | None = None
-    for attempt in range(1 + max_retries):
-        try:
-            result = _run_command(
-                command,
-                cwd=cwd,
-                timeout_seconds=int(current_timeout) if current_timeout is not None else None,
-                heartbeat_every_seconds=heartbeat_every_seconds,
-                heartbeat=heartbeat,
-            )
-            if attempt > 0:
-                result["retried"] = True
-                result["retry_attempt"] = attempt
-            return result
-        except CommandTimeoutError as exc:
-            last_error = exc
-            if current_timeout is not None:
-                current_timeout = int(current_timeout * timeout_escalation)
-    # All retries exhausted
-    raise last_error  # type: ignore[misc]
-
-
 def _run_json_command(
     command: list[str],
     *,
@@ -584,6 +550,12 @@ def _daily_truth_source_freshness(
     requested_inputs = _manifest_requested_inputs(entries, repo_root=repo_root)
     latest_input_mtime: datetime | None = None
     latest_source_horizon: date | None = None
+    for entry in entries:
+        manifest_horizon = _normalize_source_horizon_date(entry.get("date_to"))
+        if manifest_horizon is not None and (
+            latest_source_horizon is None or manifest_horizon > latest_source_horizon
+        ):
+            latest_source_horizon = manifest_horizon
     for raw_path in requested_inputs:
         candidate = Path(raw_path)
         if not candidate.exists():
@@ -3107,6 +3079,54 @@ def defer_profit_validation_issue(
     }
 
 
+def _canary_issue_is_unresolved_high(issue: dict[str, Any]) -> bool:
+    severity = str(issue.get("severity") or "").strip().lower()
+    status = str(issue.get("status") or "open").strip().lower()
+    return severity in {"high", "critical"} and status in {"", "open", "claimed", "deferred"}
+
+
+def _canary_step_issues(step: dict[str, Any], snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    for source in (step.get("issues"), snapshot.get("issues")):
+        if isinstance(source, list):
+            issues.extend(dict(item) for item in source if isinstance(item, dict))
+    targeted_issue = step.get("targeted_issue") or snapshot.get("targeted_issue")
+    if isinstance(targeted_issue, dict):
+        issues.append(dict(targeted_issue))
+    return issues
+
+
+def _canary_step_health(step: dict[str, Any]) -> dict[str, Any]:
+    automation_id = str(step.get("automation_id") or "unknown").strip() or "unknown"
+    snapshot = dict(step.get("snapshot") or {})
+    status = str(snapshot.get("loop_execution_status") or "").strip().lower()
+    verdict = str(snapshot.get("profitability_verdict") or "").strip().lower()
+    issues = _canary_step_issues(step, snapshot)
+    high_issue_ids = [
+        str(issue.get("issue_id") or issue.get("code") or "high-severity-issue").strip()
+        for issue in issues
+        if _canary_issue_is_unresolved_high(issue)
+    ]
+    reasons: list[str] = []
+    if status == "blocked":
+        reasons.append("loop_execution_status_blocked")
+    if status == "degraded" and high_issue_ids:
+        reasons.append("degraded_with_unresolved_high_severity_issue")
+    if snapshot.get("evidence_complete") is False:
+        reasons.append("evidence_incomplete")
+    if verdict in {"regressed", "inconclusive"}:
+        reasons.append(f"profitability_verdict_{verdict}")
+    return {
+        "automation_id": automation_id,
+        "loop_execution_status": status or None,
+        "profitability_verdict": verdict or None,
+        "evidence_complete": snapshot.get("evidence_complete"),
+        "unresolved_high_issue_ids": high_issue_ids,
+        "unhealthy": bool(reasons),
+        "reasons": reasons,
+    }
+
+
 def run_profit_loop_canary(
     *,
     state_dir: str | Path | None = None,
@@ -3184,13 +3204,18 @@ def run_profit_loop_canary(
         "ledger_run_ids": ledger_run_ids,
         "raw_ledger_run_ids": [str(item.get("run_id") or "") for item in new_events],
     }
+    step_health_items = [_canary_step_health(step) for step in [health, holdout, validation]]
+    step_health = {
+        "unhealthy_step_count": sum(1 for item in step_health_items if item["unhealthy"]),
+        "unhealthy_automation_ids": [
+            str(item["automation_id"]) for item in step_health_items if item["unhealthy"]
+        ],
+        "steps": step_health_items,
+    }
     exit_code = 0
     if len(matched_events) != 3 or matched_event_ids != expected_ids or latest_run_ids != expected_run_ids or ledger_run_ids != expected_run_ids:
         exit_code = 2
-    elif any(
-        str(((step.get("snapshot") or {}).get("loop_execution_status")) or "").strip().lower() == "blocked"
-        for step in [health, holdout, validation]
-    ):
+    elif step_health["unhealthy_step_count"]:
         exit_code = 2
     return {
         "ran_at": utc_now_iso(),
@@ -3199,6 +3224,7 @@ def run_profit_loop_canary(
         "exit_code": exit_code,
         "daily_truth_refresh": daily_truth_refresh,
         "consistency": consistency,
+        "step_health": step_health,
         "steps": [health, holdout, validation],
     }
 

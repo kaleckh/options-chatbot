@@ -204,7 +204,7 @@ async function placeMarketOrder(client, options) {
   const { tokenId, side, amount, negRisk, tickSize } = options;
 
   const orderOptions = {
-    token_id: tokenId,
+    tokenID: tokenId,
     amount,
     side: side === "buy" ? Side.BUY : Side.SELL,
     price: side === "buy" ? 0.99 : 0.01, // worst case price for market orders

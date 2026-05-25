@@ -20,6 +20,7 @@ The active browser product is still the supervised options lane:
 - review and close positions manually with explicit pricing context
 
 This remains supervised decision support, not autonomous trading.
+The default supervised options scanner playbook is `bullish_pullback_observation`, surfaced as Bullish Pullback Primary. That legacy `_observation` cohort ID is not watch-only; eligible scheduled picks can auto-track under the current guardrails. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
 
 ## Snapshot
 

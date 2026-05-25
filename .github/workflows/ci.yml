@@ -39,7 +39,7 @@ jobs:
           while IFS= read -r file; do
             [[ -z "${file}" ]] && continue
             case "${file}" in
-              src/*|public/*|app/*|components/*|styles/*|pages/*|*.css|*.scss|*.tsx|*.ts|*.jsx|*.js|package.json|package-lock.json|next.config.*|tailwind.config.*|postcss.config.*|tsconfig.json|next-env.d.ts)
+              src/*|public/*|app/*|components/*|styles/*|pages/*|*.css|*.scss|*.tsx|*.ts|*.jsx|*.js|*.mjs|*.cjs|package.json|package-lock.json|next.config.*|tailwind.config.*|postcss.config.*|eslint.config.*|tsconfig.json|next-env.d.ts|.github/workflows/*)
                 frontend=true
                 break
                 ;;
@@ -59,11 +59,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Install Python dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+        run: uv sync --locked
+
+      - name: Check Python dependency integrity
+        run: uv run --locked python -m pip check
 
       - name: Run backend tests
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+        run: uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
 
   daytrading-tests:
     runs-on: ubuntu-latest
@@ -76,6 +82,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -83,13 +92,22 @@ jobs:
           cache: npm
 
       - name: Install Python dependencies
-        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+        run: uv sync --locked
+
+      - name: Check Python dependency integrity
+        run: uv run --locked python -m pip check
 
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Audit production Node dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
       - name: Run day-trading tests
         run: npm run daytrading:test
+
+      - name: Run Polymarket tests
+        run: npm run polymarket:test
 
       - name: Run smoke fixture
         run: npm run verify:smoke
@@ -110,6 +128,15 @@ jobs:
 
       - name: Install Node dependencies
         run: npm ci
+
+      - name: Audit production Node dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Lint frontend
+        run: npm run lint
+
+      - name: Typecheck frontend
+        run: npm run verify:typecheck
 
       - name: Build frontend
         run: npm run build

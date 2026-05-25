@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import copy
+import contextlib
 import json
 import math
 import sqlite3
 from datetime import date, datetime
 from typing import Any, Optional
+
+from options_execution import commission_total_usd, option_pnl_snapshot
 
 
 def _to_iso(value: Any) -> Any:
@@ -35,6 +38,15 @@ def _normalize_latest_review(row: dict[str, Any]) -> Optional[dict[str, Any]]:
         "pricing_source": row.get("pricing_source"),
         "current_option_price": row.get("current_option_price"),
         "current_pnl_pct": row.get("current_pnl_pct"),
+        "gross_pnl_pct": row.get("review_gross_pnl_pct"),
+        "net_pnl_pct": row.get("review_net_pnl_pct"),
+        "gross_pnl_usd": row.get("review_gross_pnl_usd"),
+        "net_pnl_usd": row.get("review_net_pnl_usd"),
+        "entry_execution_price": row.get("review_entry_execution_price"),
+        "exit_execution_price": row.get("review_exit_execution_price"),
+        "entry_execution_basis": row.get("review_entry_execution_basis"),
+        "exit_execution_basis": row.get("review_exit_execution_basis"),
+        "fee_total_usd": row.get("review_fee_total_usd"),
         "recommendation": row.get("recommendation"),
         "reason": row.get("reason"),
         "warnings": _load_json(row.get("warnings"), []),
@@ -42,18 +54,87 @@ def _normalize_latest_review(row: dict[str, Any]) -> Optional[dict[str, Any]]:
     }
 
 
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
+def _closed_position_review(row: dict[str, Any], existing: Optional[dict[str, Any]]) -> dict[str, Any]:
+    existing = existing or {}
+    metrics_snapshot = _load_json(existing.get("metrics_snapshot"), {})
+    metrics_snapshot.update(
+        {
+            "pricing_state": "closed",
+            "exit_reason": row.get("exit_reason"),
+            "closed_at": _to_iso(row.get("closed_at")),
+        }
+    )
+    return {
+        "id": existing.get("id"),
+        "reviewed_at": _to_iso(
+            _first_present(row.get("closed_at"), row.get("last_reviewed_at"), existing.get("reviewed_at"))
+        ),
+        "pricing_source": _first_present(row.get("exit_execution_basis"), row.get("exit_reason"), existing.get("pricing_source")),
+        "current_option_price": _first_present(row.get("exit_option_price"), row.get("last_option_price"), existing.get("current_option_price")),
+        "current_pnl_pct": _first_present(row.get("gross_pnl_pct"), row.get("last_pnl_pct"), existing.get("current_pnl_pct")),
+        "gross_pnl_pct": _first_present(row.get("gross_pnl_pct"), existing.get("gross_pnl_pct")),
+        "net_pnl_pct": _first_present(row.get("net_pnl_pct"), existing.get("net_pnl_pct")),
+        "gross_pnl_usd": _first_present(row.get("gross_pnl_usd"), existing.get("gross_pnl_usd")),
+        "net_pnl_usd": _first_present(row.get("net_pnl_usd"), existing.get("net_pnl_usd")),
+        "entry_execution_price": _first_present(row.get("entry_execution_price"), existing.get("entry_execution_price")),
+        "exit_execution_price": _first_present(row.get("exit_execution_price"), existing.get("exit_execution_price")),
+        "entry_execution_basis": _first_present(row.get("entry_execution_basis"), existing.get("entry_execution_basis")),
+        "exit_execution_basis": _first_present(row.get("exit_execution_basis"), existing.get("exit_execution_basis")),
+        "fee_total_usd": _first_present(row.get("fee_total_usd"), existing.get("fee_total_usd")),
+        "recommendation": "SELL",
+        "reason": _first_present(row.get("exit_reason"), row.get("last_recommendation_reason"), existing.get("reason"), "Position closed."),
+        "warnings": [],
+        "metrics_snapshot": metrics_snapshot,
+    }
+
+
 def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     latest_review = _normalize_latest_review(row)
+    if str(row.get("status") or "").strip().lower() == "closed" and row.get("closed_at") is not None:
+        latest_review = _closed_position_review(row, latest_review)
+    gross_pnl_pct = row.get("gross_pnl_pct")
+    net_pnl_pct = row.get("net_pnl_pct")
+    gross_pnl_usd = row.get("gross_pnl_usd")
+    net_pnl_usd = row.get("net_pnl_usd")
+    fee_total_usd = row.get("fee_total_usd")
+    exit_execution_price = row.get("exit_execution_price")
+    exit_execution_basis = row.get("exit_execution_basis")
+    if latest_review is not None:
+        if gross_pnl_pct is None:
+            gross_pnl_pct = latest_review.get("gross_pnl_pct")
+        if net_pnl_pct is None:
+            net_pnl_pct = latest_review.get("net_pnl_pct")
+        if gross_pnl_usd is None:
+            gross_pnl_usd = latest_review.get("gross_pnl_usd")
+        if net_pnl_usd is None:
+            net_pnl_usd = latest_review.get("net_pnl_usd")
+        if fee_total_usd is None:
+            fee_total_usd = latest_review.get("fee_total_usd")
+        if exit_execution_price is None:
+            exit_execution_price = latest_review.get("exit_execution_price")
+        if exit_execution_basis is None:
+            exit_execution_basis = latest_review.get("exit_execution_basis")
     return {
         "id": row["id"],
         "status": row["status"],
         "ticker": row["ticker"],
         "direction": row["direction"],
+        "contract_symbol": row.get("contract_symbol"),
         "strike": row["strike"],
         "expiry": _to_iso(row["expiry"]),
         "asset_class": row.get("asset_class"),
         "contracts": row["contracts"],
         "entry_option_price": row["entry_option_price"],
+        "entry_execution_price": row.get("entry_execution_price"),
+        "entry_execution_basis": row.get("entry_execution_basis"),
+        "entry_fee_total_usd": row.get("entry_fee_total_usd"),
         "entry_underlying_price": row.get("entry_underlying_price"),
         "filled_at": _to_iso(row["filled_at"]),
         "stop_loss_pct": row["stop_loss_pct"],
@@ -69,11 +150,37 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
         "notes": row.get("notes"),
         "closed_at": _to_iso(row.get("closed_at")),
         "exit_option_price": row.get("exit_option_price"),
+        "exit_execution_price": exit_execution_price,
+        "exit_execution_basis": exit_execution_basis,
         "exit_reason": row.get("exit_reason"),
+        "gross_pnl_pct": gross_pnl_pct,
+        "net_pnl_pct": net_pnl_pct,
+        "gross_pnl_usd": gross_pnl_usd,
+        "net_pnl_usd": net_pnl_usd,
+        "fee_total_usd": fee_total_usd,
         "created_at": _to_iso(row.get("created_at")),
         "updated_at": _to_iso(row.get("updated_at")),
         "latest_review": latest_review,
     }
+
+
+def _source_snapshot_fee_sides(source_pick_snapshot: Any) -> int:
+    snapshot = source_pick_snapshot
+    if isinstance(snapshot, str):
+        try:
+            snapshot = json.loads(snapshot)
+        except (json.JSONDecodeError, TypeError):
+            snapshot = {}
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    strategy_type = str(snapshot.get("strategy_type") or "").strip().lower()
+    if (
+        strategy_type == "vertical_spread"
+        or snapshot.get("short_strike") is not None
+        or bool(snapshot.get("short_contract_symbol"))
+    ):
+        return 2
+    return 1
 
 
 class SQLiteSuggestedTradesRepository:
@@ -82,12 +189,20 @@ class SQLiteSuggestedTradesRepository:
         self.is_available = True
         self.error_message: Optional[str] = None
 
+    @contextlib.contextmanager
     def _connect(self):
         if not self.is_available:
             raise RuntimeError(self.error_message or "Suggested trades storage is unavailable.")
         conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            conn.row_factory = sqlite3.Row
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def init_schema(self) -> bool:
         schema_sql = """
@@ -96,11 +211,15 @@ class SQLiteSuggestedTradesRepository:
             status TEXT NOT NULL DEFAULT 'open',
             ticker TEXT NOT NULL,
             direction TEXT NOT NULL,
+            contract_symbol TEXT,
             strike REAL NOT NULL,
             expiry TEXT NOT NULL,
             asset_class TEXT,
             contracts INTEGER NOT NULL,
             entry_option_price REAL NOT NULL,
+            entry_execution_price REAL,
+            entry_execution_basis TEXT,
+            entry_fee_total_usd REAL,
             entry_underlying_price REAL,
             filled_at TEXT NOT NULL,
             stop_loss_pct REAL NOT NULL,
@@ -116,7 +235,14 @@ class SQLiteSuggestedTradesRepository:
             notes TEXT,
             closed_at TEXT,
             exit_option_price REAL,
+            exit_execution_price REAL,
+            exit_execution_basis TEXT,
             exit_reason TEXT,
+            gross_pnl_pct REAL,
+            net_pnl_pct REAL,
+            gross_pnl_usd REAL,
+            net_pnl_usd REAL,
+            fee_total_usd REAL,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -133,6 +259,15 @@ class SQLiteSuggestedTradesRepository:
             pricing_source TEXT,
             current_option_price REAL,
             current_pnl_pct REAL,
+            gross_pnl_pct REAL,
+            net_pnl_pct REAL,
+            gross_pnl_usd REAL,
+            net_pnl_usd REAL,
+            entry_execution_price REAL,
+            exit_execution_price REAL,
+            entry_execution_basis TEXT,
+            exit_execution_basis TEXT,
+            fee_total_usd REAL,
             recommendation TEXT NOT NULL,
             reason TEXT NOT NULL,
             warnings TEXT NOT NULL DEFAULT '[]',
@@ -147,6 +282,41 @@ class SQLiteSuggestedTradesRepository:
         try:
             with self._connect() as conn:
                 conn.executescript(schema_sql)
+                suggested_trade_columns = {
+                    "contract_symbol": "TEXT",
+                    "entry_execution_price": "REAL",
+                    "entry_execution_basis": "TEXT",
+                    "entry_fee_total_usd": "REAL",
+                    "entry_underlying_price": "REAL",
+                    "exit_execution_price": "REAL",
+                    "exit_execution_basis": "TEXT",
+                    "gross_pnl_pct": "REAL",
+                    "net_pnl_pct": "REAL",
+                    "gross_pnl_usd": "REAL",
+                    "net_pnl_usd": "REAL",
+                    "fee_total_usd": "REAL",
+                }
+                review_columns = {
+                    "gross_pnl_pct": "REAL",
+                    "net_pnl_pct": "REAL",
+                    "gross_pnl_usd": "REAL",
+                    "net_pnl_usd": "REAL",
+                    "entry_execution_price": "REAL",
+                    "exit_execution_price": "REAL",
+                    "entry_execution_basis": "TEXT",
+                    "exit_execution_basis": "TEXT",
+                    "fee_total_usd": "REAL",
+                }
+                for table_name, columns in (
+                    ("suggested_trades", suggested_trade_columns),
+                    ("suggested_trade_reviews", review_columns),
+                ):
+                    for column_name, column_type in columns.items():
+                        try:
+                            conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}")
+                        except sqlite3.OperationalError as exc:
+                            if "duplicate column name" not in str(exc).lower():
+                                raise
             return True
         except Exception as exc:
             self.is_available = False
@@ -165,6 +335,15 @@ class SQLiteSuggestedTradesRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -195,6 +374,15 @@ class SQLiteSuggestedTradesRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -231,11 +419,15 @@ class SQLiteSuggestedTradesRepository:
                     status,
                     ticker,
                     direction,
+                    contract_symbol,
                     strike,
                     expiry,
                     asset_class,
                     contracts,
                     entry_option_price,
+                    entry_execution_price,
+                    entry_execution_basis,
+                    entry_fee_total_usd,
                     entry_underlying_price,
                     filled_at,
                     stop_loss_pct,
@@ -251,18 +443,24 @@ class SQLiteSuggestedTradesRepository:
                     notes,
                     closed_at,
                     exit_option_price,
+                    exit_execution_price,
+                    exit_execution_basis,
                     exit_reason
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     serialized["status"],
                     serialized["ticker"],
                     serialized["direction"],
+                    serialized.get("contract_symbol"),
                     serialized["strike"],
                     serialized["expiry"],
                     serialized.get("asset_class"),
                     serialized["contracts"],
                     serialized["entry_option_price"],
+                    serialized.get("entry_execution_price"),
+                    serialized.get("entry_execution_basis"),
+                    serialized.get("entry_fee_total_usd"),
                     serialized.get("entry_underlying_price"),
                     serialized["filled_at"],
                     serialized["stop_loss_pct"],
@@ -278,6 +476,8 @@ class SQLiteSuggestedTradesRepository:
                     serialized.get("notes"),
                     serialized.get("closed_at"),
                     serialized.get("exit_option_price"),
+                    serialized.get("exit_execution_price"),
+                    serialized.get("exit_execution_basis"),
                     serialized.get("exit_reason"),
                 ),
             )
@@ -301,6 +501,15 @@ class SQLiteSuggestedTradesRepository:
             r.pricing_source,
             r.current_option_price,
             r.current_pnl_pct,
+            r.gross_pnl_pct AS review_gross_pnl_pct,
+            r.net_pnl_pct AS review_net_pnl_pct,
+            r.gross_pnl_usd AS review_gross_pnl_usd,
+            r.net_pnl_usd AS review_net_pnl_usd,
+            r.entry_execution_price AS review_entry_execution_price,
+            r.exit_execution_price AS review_exit_execution_price,
+            r.entry_execution_basis AS review_entry_execution_basis,
+            r.exit_execution_basis AS review_exit_execution_basis,
+            r.fee_total_usd AS review_fee_total_usd,
             r.recommendation,
             r.reason,
             r.warnings,
@@ -326,6 +535,15 @@ class SQLiteSuggestedTradesRepository:
 
     def save_review(self, position_id: int, review: dict[str, Any]) -> dict[str, Any]:
         with self._connect() as conn:
+            status_row = conn.execute(
+                "SELECT status FROM suggested_trades WHERE id = ?",
+                (position_id,),
+            ).fetchone()
+            if not status_row:
+                raise RuntimeError(f"Suggested trade {position_id} not found.")
+            if str(status_row["status"]) != "open":
+                raise ValueError(f"Suggested trade {position_id} is not open for review.")
+
             conn.execute(
                 """
                 INSERT INTO suggested_trade_reviews (
@@ -334,11 +552,20 @@ class SQLiteSuggestedTradesRepository:
                     pricing_source,
                     current_option_price,
                     current_pnl_pct,
+                    gross_pnl_pct,
+                    net_pnl_pct,
+                    gross_pnl_usd,
+                    net_pnl_usd,
+                    entry_execution_price,
+                    exit_execution_price,
+                    entry_execution_basis,
+                    exit_execution_basis,
+                    fee_total_usd,
                     recommendation,
                     reason,
                     warnings,
                     metrics_snapshot
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     position_id,
@@ -346,6 +573,15 @@ class SQLiteSuggestedTradesRepository:
                     review.get("pricing_source"),
                     review.get("current_option_price"),
                     review.get("current_pnl_pct"),
+                    review.get("gross_pnl_pct"),
+                    review.get("net_pnl_pct"),
+                    review.get("gross_pnl_usd"),
+                    review.get("net_pnl_usd"),
+                    review.get("entry_execution_price"),
+                    review.get("exit_execution_price"),
+                    review.get("entry_execution_basis"),
+                    review.get("exit_execution_basis"),
+                    review.get("fee_total_usd"),
                     review["recommendation"],
                     review["reason"],
                     json.dumps(review.get("warnings") or []),
@@ -361,6 +597,13 @@ class SQLiteSuggestedTradesRepository:
                     last_pnl_pct = ?,
                     last_recommendation = ?,
                     last_recommendation_reason = ?,
+                    exit_execution_price = ?,
+                    exit_execution_basis = ?,
+                    gross_pnl_pct = ?,
+                    net_pnl_pct = ?,
+                    gross_pnl_usd = ?,
+                    net_pnl_usd = ?,
+                    fee_total_usd = ?,
                     last_reviewed_at = ?,
                     updated_at = ?
                 WHERE id = ?
@@ -371,6 +614,13 @@ class SQLiteSuggestedTradesRepository:
                     review.get("current_pnl_pct"),
                     review["recommendation"],
                     review["reason"],
+                    review.get("exit_execution_price"),
+                    review.get("exit_execution_basis"),
+                    review.get("gross_pnl_pct"),
+                    review.get("net_pnl_pct"),
+                    review.get("gross_pnl_usd"),
+                    review.get("net_pnl_usd"),
+                    review.get("fee_total_usd"),
                     _to_iso(review["reviewed_at"]),
                     _to_iso(review["reviewed_at"]),
                     position_id,
@@ -404,32 +654,74 @@ class SQLiteSuggestedTradesRepository:
             existing = self._fetch_position_by_id_in_conn(conn, position_id)
             if existing is None:
                 return None
+            if str(existing.get("status") or "").strip().lower() != "open":
+                raise ValueError(f"Suggested trade {position_id} is already closed.")
             merged_notes = existing.get("notes")
             if notes:
                 merged_notes = f"{merged_notes}\n{notes}".strip() if merged_notes else notes
             closed_at_iso = _to_iso(closed_at)
-            conn.execute(
+            contracts = int(existing.get("contracts") or 1)
+            entry_execution_price = existing.get("entry_execution_price") or existing.get("entry_option_price")
+            fee_sides = _source_snapshot_fee_sides(existing.get("source_pick_snapshot"))
+            entry_fee_total_usd = existing.get("entry_fee_total_usd")
+            if entry_fee_total_usd is None:
+                entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+            exit_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+            pnl_snapshot = option_pnl_snapshot(
+                entry_execution_price=entry_execution_price,
+                exit_execution_price=exit_price_value,
+                contracts=contracts,
+                entry_fee_total_usd=entry_fee_total_usd,
+                exit_fee_total_usd=exit_fee_total_usd,
+            )
+            cursor = conn.execute(
                 """
                 UPDATE suggested_trades
                 SET
                     status = ?,
                     closed_at = ?,
                     exit_option_price = ?,
+                    exit_execution_price = ?,
+                    exit_execution_basis = ?,
                     exit_reason = ?,
+                    last_option_price = ?,
+                    last_pnl_pct = ?,
+                    gross_pnl_pct = ?,
+                    net_pnl_pct = ?,
+                    gross_pnl_usd = ?,
+                    net_pnl_usd = ?,
+                    fee_total_usd = ?,
+                    last_reviewed_at = ?,
+                    last_recommendation = ?,
+                    last_recommendation_reason = ?,
                     notes = ?,
                     updated_at = ?
-                WHERE id = ?
+                WHERE id = ? AND status = 'open'
                 """,
                 (
                     "closed",
                     closed_at_iso,
                     exit_price_value,
+                    exit_price_value,
+                    exit_execution_basis,
+                    exit_reason,
+                    exit_price_value,
+                    pnl_snapshot.get("gross_pnl_pct"),
+                    pnl_snapshot.get("gross_pnl_pct"),
+                    pnl_snapshot.get("net_pnl_pct"),
+                    pnl_snapshot.get("gross_pnl_usd"),
+                    pnl_snapshot.get("net_pnl_usd"),
+                    pnl_snapshot.get("fee_total_usd"),
+                    closed_at_iso,
+                    "SELL",
                     exit_reason,
                     merged_notes,
                     closed_at_iso,
                     position_id,
                 ),
             )
+            if cursor.rowcount != 1:
+                raise ValueError(f"Suggested trade {position_id} is already closed.")
             position = self._fetch_position_by_id_in_conn(conn, position_id)
             if position is None:
                 raise RuntimeError(f"Suggested trade {position_id} was not found after close.")

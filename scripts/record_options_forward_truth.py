@@ -19,7 +19,7 @@ for candidate in (ROOT, BACKEND_DIR):
 import options_chatbot as oc
 from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from positions_service import review_open_positions
-from supervised_scan import SCAN_PLAYBOOKS, get_scan_playbook, run_supervised_scan
+from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID, SCAN_PLAYBOOKS, get_scan_playbook, run_supervised_scan
 from wfo_optimizer import build_live_options_trade_policy, build_playbook_exit_audit
 
 
@@ -199,7 +199,7 @@ def _run_scan_for_cohort(
             positions_repository=backend_main.POSITIONS_REPOSITORY,
             n_picks=int(args.n_picks),
             watchlist_size=len(watchlist_symbols),
-            playbook_id=str(playbook.get("id") or "short_term"),
+            playbook_id=str(playbook.get("id") or DEFAULT_SCAN_PLAYBOOK_ID),
             use_recommended_policy=bool(args.use_recommended_policy),
             include_blocked_policy_picks=bool(args.include_blocked_policy_picks),
             include_blocked_guardrail_picks=bool(args.include_blocked_guardrail_picks),
@@ -245,7 +245,7 @@ def main() -> int:
     )
     parser.add_argument("--source", default="manual_snapshot", help="Short label for the recording session.")
     parser.add_argument("--n-picks", type=int, default=oc.DEFAULT_SCAN_PICKS, help="How many scan ideas to keep.")
-    parser.add_argument("--playbook", default="short_term", help="Scanner playbook to use.")
+    parser.add_argument("--playbook", default=DEFAULT_SCAN_PLAYBOOK_ID, help="Scanner playbook to use.")
     parser.add_argument("--dte", type=int, help="Optional DTE override for the scan.")
     parser.add_argument("--truth-lane", default=None, help="Optional truth lane override for the replay-backed policy.")
     parser.add_argument("--use-recommended-policy", action="store_true", help="Apply the replay-backed scan policy before recording.")
@@ -303,7 +303,7 @@ def main() -> int:
         )
         if args.include_exit_audit:
             exit_audit = build_playbook_exit_audit(
-                playbook=str(playbook.get("id") or "short_term"),
+                playbook=str(playbook.get("id") or DEFAULT_SCAN_PLAYBOOK_ID),
                 truth_lane=args.truth_lane,
             )
         else:

@@ -19,6 +19,8 @@ The currently active app-facing product surface is the options lane:
 - tracked positions
 - suggested trades
 
+The default supervised options scanner playbook is `bullish_pullback_observation`, shown in the UI as Bullish Pullback Primary. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior; eligible scheduled picks are allowed to auto-track. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
+
 Important snapshot caveats:
 - the App Router shell is the real browser entrypoint; `src/app/page.tsx` is intentionally a stub
 - the Next API routes are thin proxies into the Python backend
@@ -75,7 +77,7 @@ Frontend plus backend:
 
 ```bash
 npm install
-uv sync
+uv sync --locked
 npm run dev
 ```
 
@@ -110,7 +112,7 @@ Core checks:
 ```bash
 npm run build
 npm run verify
-python -m unittest discover -s tests -p "test_*.py" -v
+npm run verify:python:full
 ```
 
 Research and support scripts:

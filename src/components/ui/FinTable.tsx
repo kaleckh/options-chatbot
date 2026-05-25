@@ -8,8 +8,10 @@ interface FinTableProps {
   rateCols?: string[];
   monoCols?: string[];
   badgeCol?: string;
+  outcomeCols?: string[];
   maxHeight?: string;
   label?: string;
+  density?: "default" | "compact";
 }
 
 function cellClass(
@@ -66,14 +68,22 @@ function rowKey(row: Record<string, unknown>, index: number): string {
   return key || String(index);
 }
 
+function isOutcomeColumn(col: string, outcomeCols: Set<string>): boolean {
+  if (outcomeCols.has(col)) return true;
+  const normalized = col.trim().toLowerCase();
+  return normalized === "outcome" || normalized === "result" || normalized.endsWith(" outcome");
+}
+
 function FinTable({
   data,
   pnlCols = [],
   rateCols = [],
   monoCols = [],
   badgeCol,
+  outcomeCols = ["Outcome", "Result"],
   maxHeight = "460px",
   label = "Data table",
+  density = "default",
 }: FinTableProps) {
   if (!data || data.length === 0) {
     return (
@@ -84,6 +94,7 @@ function FinTable({
   const pnlSet = new Set(pnlCols);
   const rateSet = new Set(rateCols);
   const monoSet = new Set(monoCols);
+  const outcomeSet = new Set(outcomeCols);
   const columns = Object.keys(data[0]).filter((col) => !col.startsWith("__"));
 
   return (
@@ -94,7 +105,7 @@ function FinTable({
       aria-label={label}
       tabIndex={0}
     >
-      <table className="ft-table" aria-label={label}>
+      <table className={`ft-table ${density === "compact" ? "ft-table-compact" : ""}`.trim()} aria-label={label}>
         <thead>
           <tr>
             {columns.map((col) => (
@@ -138,21 +149,22 @@ function FinTable({
                 }
 
                 // Outcome badges
-                if (val.toLowerCase().includes("hit") && !val.toLowerCase().includes("miss")) {
+                const isOutcome = isOutcomeColumn(col, outcomeSet);
+                if (isOutcome && val.toLowerCase().includes("hit") && !val.toLowerCase().includes("miss")) {
                   return (
                     <td key={col}>
                       <span className="badge-hit" aria-label="Hit">{val}</span>
                     </td>
                   );
                 }
-                if (val.toLowerCase().includes("miss")) {
+                if (isOutcome && val.toLowerCase().includes("miss")) {
                   return (
                     <td key={col}>
                       <span className="badge-miss" aria-label="Miss">{val}</span>
                     </td>
                   );
                 }
-                if (val.toLowerCase().includes("directional") || val.toLowerCase().includes("dir")) {
+                if (isOutcome && (val.toLowerCase().includes("directional") || val.toLowerCase().includes("dir"))) {
                   if (!val.toLowerCase().includes("score")) {
                     return (
                       <td key={col}>

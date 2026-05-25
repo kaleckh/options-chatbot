@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getBacktestLast } from "@/lib/python-bridge";
+import { jsonError } from "../../_utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -7,9 +8,6 @@ export async function GET(req: NextRequest) {
     const result = await getBacktestLast(params);
     return NextResponse.json(result);
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to fetch latest backtest" },
-      { status: 500 }
-    );
+    return jsonError(err, "Failed to fetch latest backtest");
   }
 }

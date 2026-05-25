@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,7 +17,7 @@ for candidate in (ROOT, TESTS_DIR):
 from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from historical_options_fixtures import make_validation_history, write_daily_options_parquet
 from historical_options_store import HistoricalOptionsStore, import_daily_option_parquet
-from options_profit_gate import evaluate_measurement_gate
+from options_profit_gate import _daily_truth_source_freshness, _realized_position_metrics, evaluate_measurement_gate
 from workspace_tempdir import WorkspaceTempDir
 
 
@@ -60,6 +61,58 @@ class OptionsProfitGateTests(unittest.TestCase):
             ),
             encoding="utf8",
         )
+
+    def test_realized_position_metrics_fee_aware_fallback_for_missing_net_pnl(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "entry_execution_price": 1.0,
+                    "exit_execution_price": 1.01,
+                    "contracts": 1,
+                    "fee_total_usd": 2.60,
+                }
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["avg_gross_pnl_pct"], 1.0)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -1.6)
+        self.assertEqual(metrics["net_profit_factor"], 0.0)
+        self.assertAlmostEqual(metrics["gross_realized_pnl_usd"], 1.0, places=2)
+        self.assertAlmostEqual(metrics["net_realized_pnl_usd"], -1.6, places=2)
+
+    def test_source_freshness_uses_manifest_date_to_for_csv_inputs(self):
+        csv_path = self.tmpdir / "alpaca_daily.csv"
+        csv_path.write_text("as_of_utc,underlying\n2026-05-22T19:59:59Z,SPY\n", encoding="utf8")
+        manifest_path = self.tmpdir / "daily_truth_import_manifest.json"
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "imports": [
+                        {
+                            "input": str(csv_path),
+                            "source": "alpaca_opra_daily_snapshot",
+                            "format": "csv",
+                            "date_to": "2026-05-22",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf8",
+        )
+
+        with patch(
+            "options_profit_gate._resolve_daily_truth_import_manifest",
+            return_value=(str(manifest_path), "env"),
+        ):
+            freshness = _daily_truth_source_freshness(
+                current_date=date(2026, 5, 24),
+                max_trusted_truth_staleness_business_days=3,
+            )
+
+        self.assertEqual(freshness["daily_truth_source_horizon"], "2026-05-22")
+        self.assertFalse(freshness["daily_truth_source_stale"])
 
     def test_gate_blocks_when_imported_daily_artifact_mismatches_store(self):
         artifact_path = self.tmpdir / "latest_daily.json"

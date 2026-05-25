@@ -16,6 +16,8 @@ from typing import Any, Callable, Optional
 import pandas as pd
 import yfinance as yf
 
+from alpaca_market_data import alpaca_provider_requested, make_alpaca_ticker_factory
+
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_MARKET_DATA_DB_PATH = os.path.join(ROOT_DIR, "market_data.db")
@@ -228,6 +230,15 @@ def _unwrap_sqlite_connection(conn: sqlite3.Connection) -> sqlite3.Connection:
     return raw_conn if isinstance(raw_conn, sqlite3.Connection) else conn
 
 
+def _ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    existing = {
+        str(row[1])
+        for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+    }
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
 def _sqlite_connection() -> sqlite3.Connection:
     path = _db_path()
     request_active = _REQUEST_MEMO.get() is not None
@@ -276,17 +287,20 @@ def _ensure_schema() -> None:
                     adj_close REAL,
                     volume REAL,
                     fetched_at TEXT NOT NULL,
+                    source TEXT,
                     PRIMARY KEY (symbol, bar_date)
                 );
                 CREATE TABLE IF NOT EXISTS ticker_info_cache (
                     symbol TEXT PRIMARY KEY,
                     payload_json TEXT NOT NULL,
-                    fetched_at TEXT NOT NULL
+                    fetched_at TEXT NOT NULL,
+                    source TEXT
                 );
                 CREATE TABLE IF NOT EXISTS earnings_dates_cache (
                     symbol TEXT PRIMARY KEY,
                     payload_json TEXT NOT NULL,
-                    fetched_at TEXT NOT NULL
+                    fetched_at TEXT NOT NULL,
+                    source TEXT
                 );
                 CREATE TABLE IF NOT EXISTS option_expiries_cache (
                     symbol TEXT PRIMARY KEY,
@@ -306,6 +320,9 @@ def _ensure_schema() -> None:
                 );
                 """
             )
+            _ensure_sqlite_column(conn, "daily_history", "source", "TEXT")
+            _ensure_sqlite_column(conn, "ticker_info_cache", "source", "TEXT")
+            _ensure_sqlite_column(conn, "earnings_dates_cache", "source", "TEXT")
             conn.commit()
             _SCHEMA_READY.add(path)
         finally:
@@ -384,17 +401,25 @@ def _read_through_memory_cache(
 def _normalize_history_frame(frame: Optional[pd.DataFrame]) -> pd.DataFrame:
     if frame is None or frame.empty:
         return pd.DataFrame()
+    source = _market_data_source_label(frame, "")
     normalized = frame.copy()
     if not isinstance(normalized.index, pd.DatetimeIndex):
         normalized.index = pd.to_datetime(normalized.index)
     normalized = normalized.sort_index()
     normalized = normalized[~normalized.index.duplicated(keep="last")]
     keep = [col for col in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if col in normalized.columns]
-    return normalized[keep].copy() if keep else normalized.copy()
+    out = normalized[keep].copy() if keep else normalized.copy()
+    if source:
+        out.attrs["market_data_source"] = source
+    return out
 
 
 def _ticker_factory_or_default(ticker_factory: Optional[Callable[[str], Any]]) -> Callable[[str], Any]:
-    return ticker_factory or yf.Ticker
+    if ticker_factory is not None:
+        return ticker_factory
+    if alpaca_provider_requested():
+        return make_alpaca_ticker_factory(fallback_factory=None)
+    return yf.Ticker
 
 
 def _fetch_history_direct(
@@ -414,7 +439,13 @@ def _fetch_history_direct(
         kwargs["start"] = start
     if end is not None:
         kwargs["end"] = end
-    return _normalize_history_frame(ticker.history(**kwargs))
+    raw = ticker.history(**kwargs)
+    source = _market_data_source_label(raw, _market_data_source_label(ticker, "network"))
+    normalized = _normalize_history_frame(raw)
+    normalized.attrs["market_data_source"] = source
+    required_source = _required_stock_cache_source()
+    _require_data_source(source, required_source, symbol=symbol, payload="stock history")
+    return normalized
 
 
 def _parse_date(value: Any) -> date:
@@ -475,19 +506,30 @@ def _business_dates(start_date: date, end_date: date) -> set[str]:
 
 
 def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+    required_source = _required_stock_cache_source()
     with _sqlite_connection() as conn:
+        raw_conn = _unwrap_sqlite_connection(conn)
+        columns = {str(row[1]) for row in raw_conn.execute("PRAGMA table_info(daily_history)").fetchall()}
+        source_expr = "source" if "source" in columns else "NULL AS source"
         rows = pd.read_sql_query(
-            """
-            SELECT bar_date, open, high, low, close, adj_close, volume
+            f"""
+            SELECT bar_date, open, high, low, close, adj_close, volume, {source_expr}
             FROM daily_history
             WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
             ORDER BY bar_date
             """,
-            _unwrap_sqlite_connection(conn),
+            raw_conn,
             params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
         )
     if rows.empty:
         return pd.DataFrame()
+    if required_source:
+        rows = rows[
+            rows["source"].map(lambda source: _source_satisfies_requirement(source, required_source))
+        ].copy()
+        if rows.empty:
+            return pd.DataFrame()
+    source = str(rows["source"].dropna().iloc[-1]) if "source" in rows and not rows["source"].dropna().empty else ""
     rows["bar_date"] = pd.to_datetime(rows["bar_date"])
     rows = rows.set_index("bar_date")
     renamed = rows.rename(
@@ -500,13 +542,20 @@ def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> p
             "volume": "Volume",
         }
     )
-    return _normalize_history_frame(renamed)
+    renamed = renamed.drop(columns=["source"], errors="ignore")
+    frame = _normalize_history_frame(renamed)
+    if source:
+        frame.attrs["market_data_source"] = source
+    return frame
 
 
 def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
     normalized = _normalize_history_frame(frame)
     if normalized.empty:
         return
+    source = _market_data_source_label(frame, _market_data_source_label(normalized, "unknown"))
+    required_source = _required_stock_cache_source()
+    _require_data_source(source, required_source, symbol=symbol, payload="stock history cache write")
     fetched_at = _utcnow().isoformat(timespec="seconds")
     rows: list[tuple[Any, ...]] = []
     for ts, row in normalized.iterrows():
@@ -521,14 +570,15 @@ def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
                 _as_float(row.get("Adj Close")),
                 _as_float(row.get("Volume")),
                 fetched_at,
+                source,
             )
         )
     conn = _sqlite_connection()
     conn.executemany(
         """
         INSERT INTO daily_history (
-            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at, source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(symbol, bar_date) DO UPDATE SET
             open = excluded.open,
             high = excluded.high,
@@ -536,7 +586,8 @@ def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
             close = excluded.close,
             adj_close = excluded.adj_close,
             volume = excluded.volume,
-            fetched_at = excluded.fetched_at
+            fetched_at = excluded.fetched_at,
+            source = excluded.source
         """,
         rows,
     )
@@ -558,33 +609,45 @@ def _store_json_cache(
     payload: dict[str, Any],
     *,
     ttl: timedelta,
+    source: str,
 ) -> None:
+    required_source = _required_stock_cache_source()
+    _require_data_source(source, required_source, symbol=symbol, payload=f"{table} cache write")
     conn = _sqlite_connection()
     conn.execute(
         f"""
-        INSERT INTO {table} (symbol, payload_json, fetched_at)
-        VALUES (?, ?, ?)
+        INSERT INTO {table} (symbol, payload_json, fetched_at, source)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(symbol) DO UPDATE SET
             payload_json = excluded.payload_json,
-            fetched_at = excluded.fetched_at
+            fetched_at = excluded.fetched_at,
+            source = excluded.source
         """,
-        (symbol.upper(), json.dumps(payload), _utcnow().isoformat(timespec="seconds")),
+        (symbol.upper(), json.dumps(payload), _utcnow().isoformat(timespec="seconds"), str(source)),
     )
     conn.commit()
-    _memory_cache_set(("sqlite_json_cache", table, symbol.upper()), payload, ttl)
+    _memory_cache_set(("sqlite_json_cache", table, symbol.upper(), required_source or ""), payload, ttl)
 
 
-def _load_json_cache(table: str, symbol: str, ttl: timedelta) -> Optional[dict[str, Any]]:
-    cache_key = ("sqlite_json_cache", table, symbol.upper())
+def _load_json_cache(
+    table: str,
+    symbol: str,
+    ttl: timedelta,
+    *,
+    required_source: str | None = None,
+) -> Optional[dict[str, Any]]:
+    cache_key = ("sqlite_json_cache", table, symbol.upper(), required_source or "")
     memo_hit = _memory_cache_get(cache_key)
     if memo_hit is not None:
         return memo_hit
     conn = _sqlite_connection()
     row = conn.execute(
-        f"SELECT payload_json, fetched_at FROM {table} WHERE symbol = ?",
+        f"SELECT payload_json, fetched_at, source FROM {table} WHERE symbol = ?",
         (symbol.upper(),),
     ).fetchone()
     if row is None:
+        return None
+    if not _source_satisfies_requirement(row[2], required_source):
         return None
     fetched_at = datetime.fromisoformat(str(row[1]))
     if _utcnow() - fetched_at > ttl:
@@ -721,6 +784,84 @@ def _snapshot_envelope(value: Any, freshness: dict[str, Any]) -> SimpleNamespace
         freshness=SimpleNamespace(**freshness),
         stale_reason=freshness.get("stale_reason"),
         error=freshness.get("error_payload"),
+    )
+
+
+def _market_data_source_label(value: Any, default: str = "network") -> str:
+    for attr in ("market_data_source", "data_source", "source", "provider_source"):
+        try:
+            raw = getattr(value, attr)
+        except Exception:
+            raw = None
+        if raw:
+            return str(raw)
+    try:
+        attrs = getattr(value, "attrs", {}) or {}
+        raw = attrs.get("market_data_source") or attrs.get("data_source")
+        if raw:
+            return str(raw)
+    except Exception:
+        pass
+    return str(default)
+
+
+def _required_options_cache_source() -> str | None:
+    try:
+        from alpaca_market_data import ALPACA_OPTIONS_SOURCE, alpaca_provider_requested
+
+        if alpaca_provider_requested() and str(os.getenv("ALPACA_OPTIONS_FEED") or "opra").strip().lower() == "opra":
+            return ALPACA_OPTIONS_SOURCE
+    except Exception:
+        return None
+    return None
+
+
+def _required_stock_cache_source() -> str | None:
+    try:
+        from alpaca_market_data import ALPACA_STOCK_SOURCE, alpaca_provider_requested
+
+        if alpaca_provider_requested() and str(os.getenv("ALPACA_STOCK_FEED") or "sip").strip().lower() == "sip":
+            return ALPACA_STOCK_SOURCE
+    except Exception:
+        return None
+    return None
+
+
+def _source_satisfies_requirement(source: Any, required: str | None) -> bool:
+    if not required:
+        return True
+    source_text = str(source or "").strip().lower()
+    required_text = str(required or "").strip().lower()
+    if not source_text:
+        return False
+    if source_text == required_text:
+        return True
+    if required_text == "alpaca_opra":
+        return "alpaca" in source_text and "opra" in source_text
+    if required_text == "alpaca_sip":
+        return "alpaca" in source_text and "sip" in source_text
+    return required_text in source_text
+
+
+def _record_satisfies_options_requirement(record: Optional[dict[str, Any]], required: str | None) -> bool:
+    if not required or record is None:
+        return True
+    source = record.get("source")
+    freshness = record.get("freshness")
+    if not source and isinstance(freshness, dict):
+        source = freshness.get("source")
+    return _source_satisfies_requirement(source, required)
+
+
+def _require_options_source(source: Any, required: str | None, *, symbol: str, payload: str) -> None:
+    _require_data_source(source, required, symbol=symbol, payload=payload)
+
+
+def _require_data_source(source: Any, required: str | None, *, symbol: str, payload: str) -> None:
+    if _source_satisfies_requirement(source, required):
+        return
+    raise RuntimeError(
+        f"{payload} fetch for {symbol.upper()} returned {source or 'unknown'} while {required} is required"
     )
 
 
@@ -915,6 +1056,8 @@ def _load_option_chain_record(symbol: str, expiry: str) -> Optional[dict[str, An
         "value": SimpleNamespace(
             calls=_deserialize_frame((payload or {}).get("calls")),
             puts=_deserialize_frame((payload or {}).get("puts")),
+            source=str(row[2] or "sqlite"),
+            market_data_source=str(row[2] or "sqlite"),
         ),
         "freshness": freshness,
         "status": freshness["status"],
@@ -1180,7 +1323,12 @@ def get_ticker_info(
         _record_stat(namespace, "request_memo_hits")
         return memo_hit
     try:
-        cached = _load_json_cache("ticker_info_cache", symbol, _INFO_TTL)
+        cached = _load_json_cache(
+            "ticker_info_cache",
+            symbol,
+            _INFO_TTL,
+            required_source=_required_stock_cache_source(),
+        )
         if _ticker_info_payload_complete(cached):
             _record_stat(namespace, "persistent_hits")
             _request_memo_set(key, cached)
@@ -1191,11 +1339,14 @@ def get_ticker_info(
         pass
 
     try:
-        info = dict(getattr(_ticker_factory_or_default(ticker_factory)(symbol), "info", {}) or {})
+        ticker = _ticker_factory_or_default(ticker_factory)(symbol)
+        info = dict(getattr(ticker, "info", {}) or {})
+        source = _market_data_source_label(info, _market_data_source_label(ticker, "network"))
+        _require_data_source(source, _required_stock_cache_source(), symbol=symbol, payload="ticker info")
         _record_stat(namespace, "network_fetches")
         payload = _ticker_info_payload(info)
         try:
-            _store_json_cache("ticker_info_cache", symbol, payload, ttl=_INFO_TTL)
+            _store_json_cache("ticker_info_cache", symbol, payload, ttl=_INFO_TTL, source=source)
         except Exception:
             _record_stat(namespace, "cache_write_failures")
             pass
@@ -1229,7 +1380,12 @@ def get_earnings_dates(
         _record_stat(namespace, "request_memo_hits")
         return memo_hit
     try:
-        cached = _load_json_cache("earnings_dates_cache", symbol, _EARNINGS_TTL)
+        cached = _load_json_cache(
+            "earnings_dates_cache",
+            symbol,
+            _EARNINGS_TTL,
+            required_source=_required_stock_cache_source(),
+        )
         if cached is not None:
             _record_stat(namespace, "persistent_hits")
             frame = _earnings_df_from_payload(cached)
@@ -1243,13 +1399,15 @@ def get_earnings_dates(
     try:
         ticker = _ticker_factory_or_default(ticker_factory)(symbol)
         earnings = getattr(ticker, "earnings_dates", None)
+        source = _market_data_source_label(earnings, _market_data_source_label(ticker, "network"))
+        _require_data_source(source, _required_stock_cache_source(), symbol=symbol, payload="earnings dates")
         _record_stat(namespace, "network_fetches")
         frame = earnings.copy() if isinstance(earnings, pd.DataFrame) else pd.DataFrame()
         payload = {
             "index": [pd.Timestamp(ts).isoformat() for ts in frame.index]
         } if not frame.empty else {"index": []}
         try:
-            _store_json_cache("earnings_dates_cache", symbol, payload, ttl=_EARNINGS_TTL)
+            _store_json_cache("earnings_dates_cache", symbol, payload, ttl=_EARNINGS_TTL, source=source)
         except Exception:
             _record_stat(namespace, "cache_write_failures")
             pass
@@ -1270,7 +1428,8 @@ def get_options(
 ) -> list[str] | SimpleNamespace:
     namespace = "options"
     symbol_up = symbol.upper()
-    memo_key = ("options", symbol_up, bool(include_metadata))
+    required_source = _required_options_cache_source()
+    memo_key = ("options", symbol_up, bool(include_metadata), required_source or "")
     memo_hit = _request_memo_get(memo_key)
     if memo_hit is not None:
         _record_stat(namespace, "request_memo_hits")
@@ -1281,7 +1440,7 @@ def get_options(
         return list(value or [])
 
     if not include_metadata:
-        cache_key = ("options", symbol_up)
+        cache_key = ("options", symbol_up, required_source or "")
         cached = _memory_cache_get(cache_key)
         if cached is not None:
             _record_stat(namespace, "memory_hits")
@@ -1292,14 +1451,21 @@ def get_options(
         record: Optional[dict[str, Any]] = None
         try:
             record = _load_option_expiries_record(symbol_up)
-            if record is not None and record.get("status") == "fresh":
+            if (
+                record is not None
+                and record.get("status") == "fresh"
+                and _record_satisfies_options_requirement(record, required_source)
+            ):
                 _record_stat(namespace, "persistent_hits")
                 value = _fresh_record_to_value(record)
                 _memory_cache_set(cache_key, value, _OPTIONS_TTL)
                 _request_memo_set(memo_key, value)
                 return value
             if record is not None:
-                _record_stat(namespace, "persistent_stale_hits")
+                if record.get("status") == "fresh" and not _record_satisfies_options_requirement(record, required_source):
+                    _record_stat(namespace, "persistent_provider_mismatches")
+                else:
+                    _record_stat(namespace, "persistent_stale_hits")
             else:
                 _record_stat(namespace, "persistent_misses")
         except Exception:
@@ -1308,9 +1474,11 @@ def get_options(
         try:
             ticker = _ticker_factory_or_default(ticker_factory)(symbol)
             expiries = list(getattr(ticker, "options", []) or [])
+            source = _market_data_source_label(ticker, "network")
+            _require_options_source(source, required_source, symbol=symbol_up, payload="option expiries")
             _record_stat(namespace, "network_fetches")
             try:
-                _store_option_expiries(symbol_up, expiries, source="network")
+                _store_option_expiries(symbol_up, expiries, source=source)
             except Exception:
                 _record_stat(namespace, "cache_write_failures")
             _memory_cache_set(cache_key, expiries, _OPTIONS_TTL)
@@ -1320,7 +1488,7 @@ def get_options(
             _record_stat(namespace, "fallbacks")
             if record is not None:
                 fallback_value = _fresh_record_to_value(record)
-                if fallback_value:
+                if fallback_value and _record_satisfies_options_requirement(record, required_source):
                     _request_memo_set(memo_key, fallback_value)
                     return fallback_value
             raise RuntimeError(f"option expiries fetch failed for {symbol_up}: {exc}") from exc
@@ -1330,7 +1498,8 @@ def get_options(
         record = _load_option_expiries_record(symbol_up)
         if record is not None:
             status = str(record.get("status") or "error")
-            if status == "fresh":
+            source_ok = _record_satisfies_options_requirement(record, required_source)
+            if status == "fresh" and source_ok:
                 _record_stat(namespace, "persistent_hits")
                 envelope = _snapshot_envelope(
                     record.get("value") or [],
@@ -1343,6 +1512,8 @@ def get_options(
                 )
                 _request_memo_set(memo_key, envelope)
                 return envelope
+            if status == "fresh" and not source_ok:
+                _record_stat(namespace, "persistent_provider_mismatches")
             if status == "stale":
                 _record_stat(namespace, "persistent_stale_hits")
             else:
@@ -1355,9 +1526,11 @@ def get_options(
     try:
         ticker = _ticker_factory_or_default(ticker_factory)(symbol)
         expiries = list(getattr(ticker, "options", []) or [])
+        source = _market_data_source_label(ticker, "network")
+        _require_options_source(source, required_source, symbol=symbol_up, payload="option expiries")
         _record_stat(namespace, "network_fetches")
         try:
-            _store_option_expiries(symbol_up, expiries, source="network")
+            _store_option_expiries(symbol_up, expiries, source=source)
         except Exception:
             _record_stat(namespace, "cache_write_failures")
         envelope = _snapshot_envelope(
@@ -1366,14 +1539,14 @@ def get_options(
                 status="fresh",
                 fetched_at=_utcnow(),
                 ttl=_OPTIONS_TTL,
-                source="network",
+                source=source,
             ),
         )
         _request_memo_set(memo_key, envelope)
         return envelope
     except Exception as exc:
         _record_stat(namespace, "fallbacks")
-        if record is not None:
+        if record is not None and _record_satisfies_options_requirement(record, required_source):
             envelope = _snapshot_envelope(
                 record.get("value") or [],
                 record.get("freshness") or _freshness_payload(
@@ -1411,21 +1584,26 @@ def get_option_chain(
 ) -> SimpleNamespace:
     namespace = "option_chain"
     symbol_up = symbol.upper()
-    memo_key = ("option_chain", symbol_up, str(expiry), bool(include_metadata))
+    required_source = _required_options_cache_source()
+    memo_key = ("option_chain", symbol_up, str(expiry), bool(include_metadata), required_source or "")
     memo_hit = _request_memo_get(memo_key)
     if memo_hit is not None:
         _record_stat(namespace, "request_memo_hits")
         return memo_hit
 
     def _network_fetch() -> SimpleNamespace:
-        chain = _ticker_factory_or_default(ticker_factory)(symbol).option_chain(expiry)
+        ticker = _ticker_factory_or_default(ticker_factory)(symbol)
+        raw_chain = ticker.option_chain(expiry)
+        source = _market_data_source_label(raw_chain, _market_data_source_label(ticker, "network"))
         return SimpleNamespace(
-            calls=getattr(chain, "calls", pd.DataFrame()).copy(deep=True),
-            puts=getattr(chain, "puts", pd.DataFrame()).copy(deep=True),
+            calls=getattr(raw_chain, "calls", pd.DataFrame()).copy(deep=True),
+            puts=getattr(raw_chain, "puts", pd.DataFrame()).copy(deep=True),
+            source=source,
+            market_data_source=source,
         )
 
     if not include_metadata:
-        cache_key = ("option_chain", symbol_up, str(expiry))
+        cache_key = ("option_chain", symbol_up, str(expiry), required_source or "")
         cached = _memory_cache_get(cache_key)
         if cached is not None:
             _record_stat(namespace, "memory_hits")
@@ -1435,14 +1613,21 @@ def get_option_chain(
         record: Optional[dict[str, Any]] = None
         try:
             record = _load_option_chain_record(symbol_up, expiry)
-            if record is not None and record.get("status") == "fresh":
+            if (
+                record is not None
+                and record.get("status") == "fresh"
+                and _record_satisfies_options_requirement(record, required_source)
+            ):
                 _record_stat(namespace, "persistent_hits")
                 value = record["value"]
                 _memory_cache_set(cache_key, value, _OPTION_CHAIN_TTL)
                 _request_memo_set(memo_key, value)
                 return value
             if record is not None:
-                _record_stat(namespace, "persistent_stale_hits")
+                if record.get("status") == "fresh" and not _record_satisfies_options_requirement(record, required_source):
+                    _record_stat(namespace, "persistent_provider_mismatches")
+                else:
+                    _record_stat(namespace, "persistent_stale_hits")
             else:
                 _record_stat(namespace, "persistent_misses")
         except Exception:
@@ -1450,9 +1635,20 @@ def get_option_chain(
             record = None
         try:
             value = _network_fetch()
+            _require_options_source(
+                _market_data_source_label(value, "network"),
+                required_source,
+                symbol=symbol_up,
+                payload="option chain",
+            )
             _record_stat(namespace, "network_fetches")
             try:
-                _store_option_chain_snapshot(symbol_up, expiry, value, source="network")
+                _store_option_chain_snapshot(
+                    symbol_up,
+                    expiry,
+                    value,
+                    source=_market_data_source_label(value, "network"),
+                )
             except Exception:
                 _record_stat(namespace, "cache_write_failures")
             _memory_cache_set(cache_key, value, _OPTION_CHAIN_TTL)
@@ -1460,7 +1656,7 @@ def get_option_chain(
             return value
         except Exception as exc:
             _record_stat(namespace, "fallbacks")
-            if record is not None:
+            if record is not None and _record_satisfies_options_requirement(record, required_source):
                 fallback_value = record.get("value")
                 if fallback_value is not None and (
                     not getattr(fallback_value.calls, "empty", True)
@@ -1475,7 +1671,8 @@ def get_option_chain(
         record = _load_option_chain_record(symbol_up, expiry)
         if record is not None:
             status = str(record.get("status") or "error")
-            if status == "fresh":
+            source_ok = _record_satisfies_options_requirement(record, required_source)
+            if status == "fresh" and source_ok:
                 _record_stat(namespace, "persistent_hits")
                 envelope = _snapshot_envelope(
                     record["value"],
@@ -1488,6 +1685,8 @@ def get_option_chain(
                 )
                 _request_memo_set(memo_key, envelope)
                 return envelope
+            if status == "fresh" and not source_ok:
+                _record_stat(namespace, "persistent_provider_mismatches")
             elif status == "stale":
                 _record_stat(namespace, "persistent_stale_hits")
             else:
@@ -1499,9 +1698,20 @@ def get_option_chain(
 
     try:
         value = _network_fetch()
+        _require_options_source(
+            _market_data_source_label(value, "network"),
+            required_source,
+            symbol=symbol_up,
+            payload="option chain",
+        )
         _record_stat(namespace, "network_fetches")
         try:
-            _store_option_chain_snapshot(symbol_up, expiry, value, source="network")
+            _store_option_chain_snapshot(
+                symbol_up,
+                expiry,
+                value,
+                source=_market_data_source_label(value, "network"),
+            )
         except Exception:
             _record_stat(namespace, "cache_write_failures")
         envelope = _snapshot_envelope(
@@ -1510,14 +1720,14 @@ def get_option_chain(
                 status="fresh",
                 fetched_at=_utcnow(),
                 ttl=_OPTION_CHAIN_TTL,
-                source="network",
+                source=_market_data_source_label(value, "network"),
             ),
         )
         _request_memo_set(memo_key, envelope)
         return envelope
     except Exception as exc:
         _record_stat(namespace, "fallbacks")
-        if record is not None:
+        if record is not None and _record_satisfies_options_requirement(record, required_source):
             envelope = _snapshot_envelope(
                 record["value"],
                 record.get("freshness") or _freshness_payload(

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import options_chatbot as oc
-from options_profit_flywheel import run_options_profit_cycle
+from options_profit_flywheel import _candidate_position_metrics, run_options_profit_cycle
 from options_profit_state import (
     ensure_options_profit_state,
     live_profile_path,
@@ -38,6 +38,30 @@ class OptionsProfitCycleTests(unittest.TestCase):
         )
         self.env.start()
         self.addCleanup(self.env.stop)
+
+    def test_candidate_position_metrics_fee_aware_fallback_for_missing_net_pnl(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "candidate-1",
+            [
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "entry_execution_price": 1.0,
+                    "exit_execution_price": 1.01,
+                    "contracts": 1,
+                    "fee_total_usd": 2.60,
+                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                }
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_outcome_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -1.6)
+        self.assertEqual(metrics["profit_factor"], 0.0)
 
     def test_live_profile_overlay_applies_only_to_target_symbol(self):
         ensure_options_profit_state()

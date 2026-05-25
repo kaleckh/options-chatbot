@@ -36,11 +36,17 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const fetchRisk = useCallback(async () => {
     try {
       const res = await fetch("/api/risk-settings");
-      if (res.ok) {
-        const data = await res.json();
-        setRiskSettings(data);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || (data && typeof data === "object" && "error" in data)) {
+        const message =
+          data && typeof data === "object" && "error" in data
+            ? String((data as { error?: unknown }).error)
+            : `Risk settings request failed (${res.status})`;
+        throw new Error(message);
       }
-    } catch {
+      setRiskSettings(data as Record<string, unknown>);
+    } catch (error) {
+      console.error("Could not load risk settings:", error);
       toast.error("Could not load risk settings.");
     }
   }, [toast]);

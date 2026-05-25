@@ -80,6 +80,8 @@ class HistoricalOptionsImportCliTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 env={**os.environ, "PYTHONUTF8": "1"},
+                cwd=ROOT,
+                timeout=60,
             )
             payload = json.loads(completed.stdout)
 

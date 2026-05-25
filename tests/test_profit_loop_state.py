@@ -21,6 +21,7 @@ from profit_loop_shared_state import (
     resolve_issue,
     save_profit_loop_state,
     save_profit_loop_state_with_ledger,
+    _unlink_with_retries,
     upsert_open_issue,
     validate_profit_loop_state,
     validation_prerequisite_blockers,
@@ -704,6 +705,26 @@ class ProfitLoopStateTests(unittest.TestCase):
 
         self.assertFalse(pending_path.exists())
         self.assertEqual(list_run_ledger_events(self.state_dir), [])
+
+    def test_pending_run_ledger_unlink_retries_transient_permission_error(self):
+        pending_path = self.state_dir / "profit-loop-run-ledger-pending.json"
+        pending_path.parent.mkdir(parents=True, exist_ok=True)
+        pending_path.write_text("{}", encoding="utf8")
+        real_unlink = Path.unlink
+        calls = {"count": 0}
+
+        def flaky_unlink(path: Path, *args, **kwargs):
+            if path == pending_path and calls["count"] == 0:
+                calls["count"] += 1
+                raise PermissionError("simulated transient lock")
+            return real_unlink(path, *args, **kwargs)
+
+        with patch("profit_loop_shared_state.time.sleep", return_value=None), \
+             patch.object(Path, "unlink", flaky_unlink):
+            _unlink_with_retries(pending_path, missing_ok=True, attempts=2)
+
+        self.assertEqual(calls["count"], 1)
+        self.assertFalse(pending_path.exists())
 
     def test_state_initialization_does_not_seed_replay_matrix_issue(self):
         ensure_profit_loop_state(self.state_dir)

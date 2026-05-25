@@ -6,6 +6,8 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Iterable
 
+from exact_contract_accounting import contract_resolution_accounting, split_exact_and_research_trades, trade_contract_resolution
+
 
 DEFAULT_RESULT_PATH = Path(__file__).resolve().parent / "wfo_results.json"
 
@@ -38,8 +40,17 @@ def _profit_factor(pnl_values: Iterable[float]) -> float:
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
     if gross_loss <= 0:
-        return round(gross_win, 2) if gross_win > 0 else 0.0
+        return 999.0 if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
+
+
+def _is_truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "y", "hit", "correct"}
 
 
 def _metric_present(trades: list[dict], metric_key: str) -> bool:
@@ -57,7 +68,7 @@ def load_result(path: str | Path | None = None) -> dict:
 def summarize_trade_subset(label: str, trades: list[dict], total_trades: int) -> dict:
     pnl_values = [_safe_number(trade.get("pnl_pct")) for trade in trades]
     profitable = [value for value in pnl_values if value > 0]
-    directionally_correct = [trade for trade in trades if bool(trade.get("directional_correct"))]
+    directionally_correct = [trade for trade in trades if _is_truthy(trade.get("directional_correct"))]
     full_hits = [trade for trade in trades if str(trade.get("prediction_outcome") or "").lower() == "hit"]
     avg_direction_score = (
         sum(_safe_number(trade.get("direction_score")) for trade in trades) / len(trades)
@@ -183,6 +194,26 @@ def _best_floor(floors: list[dict], baseline: dict, min_trades: int) -> dict | N
     )[0]
 
 
+def _authoritative_trades_for_basis(
+    trades: list[dict],
+    exact_trades: list[dict],
+    basis: str,
+    primary_judge_trade_class: Any = None,
+) -> list[dict]:
+    normalized_basis = str(basis or "").strip().lower()
+    if normalized_basis == "exact_contract_only":
+        return list(exact_trades)
+    if normalized_basis == "archived_exact_contract_only":
+        primary_class = str(primary_judge_trade_class or "exact_archived_contract").strip().lower()
+        return [
+            trade
+            for trade in exact_trades
+            if trade_contract_resolution(trade) == primary_class
+            or str(trade.get("primary_judge_trade_class") or trade.get("trade_class") or "").strip().lower() == primary_class
+        ]
+    return list(trades)
+
+
 def build_metric_truth_report(
     result: dict,
     bucket_size: int = 10,
@@ -194,7 +225,33 @@ def build_metric_truth_report(
 ) -> dict:
     trades = list(result.get("trades") or [])
     truth_source = str(result.get("truth_source") or "synthetic_research")
+    contract_accounting = contract_resolution_accounting(
+        trades,
+        priced_trade_count=result.get("priced_trade_count"),
+        candidate_trade_count=result.get("candidate_trade_count"),
+    )
+    exact_trades, research_contract_trades = split_exact_and_research_trades(trades)
+    authoritative_basis = str(
+        result.get("authoritative_profitability_basis")
+        or ("exact_contract_only" if truth_source.startswith("historical_imported") else "all_trades")
+    )
+    authoritative_trades = _authoritative_trades_for_basis(
+        trades,
+        exact_trades,
+        authoritative_basis,
+        result.get("primary_judge_trade_class"),
+    )
     overall = summarize_trade_subset("overall", trades, len(trades))
+    authoritative_label = (
+        "authoritative_exact_contract"
+        if authoritative_basis in {"exact_contract_only", "archived_exact_contract_only"}
+        else "authoritative_all_trades"
+    )
+    authoritative_overall = summarize_trade_subset(
+        authoritative_label,
+        authoritative_trades,
+        len(trades),
+    )
 
     metric_buckets = {}
     metric_floors = {}
@@ -204,15 +261,15 @@ def build_metric_truth_report(
         ("tech_score", tech_floors),
         ("ev", ev_floors),
     ):
-        if _metric_present(trades, metric_key):
+        if _metric_present(authoritative_trades, metric_key):
             metric_buckets[metric_key] = build_metric_buckets(
-                trades=trades,
+                trades=authoritative_trades,
                 metric_key=metric_key,
                 bucket_size=bucket_size,
                 min_trades=min_trades,
             )
             metric_floors[metric_key] = build_metric_floor_analysis(
-                trades=trades,
+                trades=authoritative_trades,
                 metric_key=metric_key,
                 floors=floors,
                 min_trades=min_trades,
@@ -223,18 +280,22 @@ def build_metric_truth_report(
         metric_health[metric_key] = {
             "avg_pnl_trend": _sequence_signal(buckets, "avg_pnl_pct", min_trades),
             "win_rate_trend": _sequence_signal(buckets, "directional_accuracy_pct", min_trades),
-            "best_floor": _best_floor(metric_floors.get(metric_key, []), overall, min_trades),
+            "best_floor": _best_floor(metric_floors.get(metric_key, []), authoritative_overall, min_trades),
         }
 
     risk_flags: list[str] = []
     recommendations: list[str] = []
 
-    if overall["profit_factor"] < 1.0:
+    if authoritative_overall["profit_factor"] < 1.0:
         risk_flags.append("Overall profit factor is below 1.0, so the current replay is not profitable after losses.")
-    if overall["avg_pnl_pct"] <= 0:
+    if authoritative_overall["avg_pnl_pct"] <= 0:
         risk_flags.append("Average trade P&L is not positive, so the current metric stack is not producing positive expectancy.")
-    if overall["directional_accuracy_pct"] < 50.0:
+    if authoritative_overall["directional_accuracy_pct"] < 50.0:
         risk_flags.append("Directional accuracy is below 50%, so the signal does not beat a naive coin-flip bar yet.")
+    if authoritative_basis in {"exact_contract_only", "archived_exact_contract_only"} and research_contract_trades:
+        risk_flags.append(
+            "Nearest-listed or unresolved contracts are research-only; exact-contract rows are the authoritative metric truth subset."
+        )
 
     direction_buckets = metric_buckets.get("direction_score", [])
     dense_direction_buckets = [item for item in direction_buckets if item["trades"] >= min_trades]
@@ -288,6 +349,10 @@ def build_metric_truth_report(
             "quote_coverage_pct": result.get("quote_coverage_pct"),
             "priced_trade_count": result.get("priced_trade_count"),
             "unpriced_trade_count": result.get("unpriced_trade_count"),
+            "contract_accounting": contract_accounting,
+            "authoritative_profitability_basis": authoritative_basis,
+            "authoritative_trade_count": authoritative_overall["trades"],
+            "research_contract_trade_count": len(research_contract_trades),
             "entry_quote_time_et": result.get("entry_quote_time_et"),
             "exit_quote_time_et": result.get("exit_quote_time_et"),
             "total_days": result.get("total_days"),
@@ -298,6 +363,7 @@ def build_metric_truth_report(
             "bucket_size": int(bucket_size),
         },
         "overall": overall,
+        "authoritative_overall": authoritative_overall,
         "metric_buckets": metric_buckets,
         "metric_floors": metric_floors,
         "metric_health": metric_health,
@@ -332,18 +398,37 @@ def suggest_parameter_adjustments(
 
     risk_flags = list(report.get("risk_flags") or [])
     metric_floors = report.get("metric_floors") or {}
+    metric_health = report.get("metric_health") or {}
 
     # Check for calibration gap in direction_score
     for flag in risk_flags:
         flag_text = str(flag).lower()
-        if "calibration" in flag_text and "direction" in flag_text:
+        if (
+            ("calibration" in flag_text or "miscalibrat" in flag_text)
+            and ("direction score" in flag_text or "direction_score" in flag_text)
+        ):
             # Direction score calibration gap detected — tighten floor
             current_floor = None
-            direction_floors = metric_floors.get("direction_score") or {}
-            if isinstance(direction_floors, dict):
-                best_floor = direction_floors.get("best_floor")
-                if best_floor is not None:
-                    current_floor = int(best_floor)
+            direction_health = metric_health.get("direction_score") or {}
+            if isinstance(direction_health, dict):
+                best_floor = direction_health.get("best_floor") or {}
+                if isinstance(best_floor, dict) and best_floor.get("floor") is not None:
+                    current_floor = int(best_floor["floor"])
+            if current_floor is None:
+                direction_floors = metric_floors.get("direction_score") or []
+                if isinstance(direction_floors, dict):
+                    best_floor = direction_floors.get("best_floor")
+                    if isinstance(best_floor, dict) and best_floor.get("floor") is not None:
+                        current_floor = int(best_floor["floor"])
+                    elif best_floor is not None:
+                        current_floor = int(best_floor)
+                elif isinstance(direction_floors, list):
+                    dense_floors = [
+                        item for item in direction_floors
+                        if isinstance(item, dict) and not bool(item.get("sparse")) and item.get("floor") is not None
+                    ]
+                    if dense_floors:
+                        current_floor = int(max(item["floor"] for item in dense_floors))
             suggestions.append({
                 "parameter": "entry.min_direction_score",
                 "current_value": current_floor,
@@ -367,7 +452,7 @@ def suggest_parameter_adjustments(
     # Check for poor directional accuracy
     for flag in risk_flags:
         flag_text = str(flag).lower()
-        if "directional_accuracy" in flag_text or "directional accuracy" in flag_text:
+        if "below 50" in flag_text and ("directional_accuracy" in flag_text or "directional accuracy" in flag_text):
             suggestions.append({
                 "parameter": "entry.min_tech_score",
                 "current_value": None,

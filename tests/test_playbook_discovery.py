@@ -60,6 +60,11 @@ def _find_candidate(report: dict, filters: dict) -> dict:
 
 
 class PlaybookDiscoveryTests(unittest.TestCase):
+    def test_exit_audit_default_tracks_bullish_pullback_playbook(self):
+        self.assertEqual(wfo.DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK, "bullish_pullback_observation")
+        self.assertEqual(wfo._playbook_trade_window(""), {"min_dte": 13, "max_dte": 45})
+        self.assertEqual(wfo._playbook_trade_window("bullish_pullback_observation"), {"min_dte": 13, "max_dte": 45})
+
     def test_speculative_window_targets_shortest_allowed_contracts(self):
         self.assertEqual(wfo._playbook_trade_window("speculative"), {"min_dte": 5, "max_dte": 9})
 

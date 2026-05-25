@@ -6,6 +6,8 @@ import math
 from statistics import median
 from typing import Any, Iterable
 
+from exact_contract_accounting import is_exact_contract_resolution, trade_contract_resolution
+
 
 def _safe_number(value: Any, default: float = 0.0) -> float:
     try:
@@ -35,7 +37,7 @@ def _profit_factor(pnl_values: Iterable[float]) -> float:
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
     if gross_loss <= 0:
-        return round(gross_win, 2) if gross_win > 0 else 0.0
+        return 999.0 if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
 
 
@@ -78,11 +80,7 @@ def _dte_bucket(value: Any) -> str:
 
 
 def _contract_resolution(trade: dict[str, Any]) -> str:
-    return str(
-        trade.get("entry_contract_resolution")
-        or trade.get("contract_resolution")
-        or "unknown"
-    ).strip() or "unknown"
+    return trade_contract_resolution(trade)
 
 
 def _selection_source(trade: dict[str, Any]) -> str:
@@ -90,8 +88,7 @@ def _selection_source(trade: dict[str, Any]) -> str:
 
 
 def _is_exact_contract_resolution(value: Any) -> bool:
-    normalized = str(value or "").strip().lower()
-    return normalized in {"exact_target_contract", "exact_archived_contract"}
+    return is_exact_contract_resolution(value)
 
 
 def _truth_source(result: dict[str, Any]) -> str:

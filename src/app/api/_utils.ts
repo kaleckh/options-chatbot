@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BackendHttpError } from "@/lib/backend/transport";
 
 export async function readJsonObject(
   req: NextRequest
@@ -19,6 +20,12 @@ export function jsonError(
   fallbackMessage: string,
   status: number = 500
 ) {
+  if (error instanceof BackendHttpError) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: error.status }
+    );
+  }
   return NextResponse.json(
     { error: error instanceof Error ? error.message : fallbackMessage },
     { status }

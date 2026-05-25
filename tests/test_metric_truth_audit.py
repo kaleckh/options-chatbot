@@ -81,7 +81,7 @@ class MetricTruthAuditTests(unittest.TestCase):
         best_floor = report["metric_health"]["direction_score"]["best_floor"]
 
         self.assertIsNotNone(best_floor)
-        self.assertEqual(best_floor["floor"], 50)
+        self.assertEqual(best_floor["floor"], 70)
         self.assertGreater(best_floor["profit_factor"], report["overall"]["profit_factor"])
         self.assertGreater(best_floor["avg_pnl_pct"], report["overall"]["avg_pnl_pct"])
 
@@ -105,6 +105,46 @@ class MetricTruthAuditTests(unittest.TestCase):
         self.assertEqual(bucket["directional_accuracy_pct"], 50.0)
         self.assertEqual(bucket["calibration_gap_pct"], -22.0)
 
+    def test_string_false_directional_values_do_not_count_as_hits(self):
+        result = {
+            "run_at": "2026-03-30T10:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "total_days": 100,
+            "trades": [
+                {"direction_score": 71, "pnl_pct": 5, "directional_correct": "False"},
+                {"direction_score": 73, "pnl_pct": 4, "directional_correct": "true"},
+            ],
+        }
+
+        report = audit.build_metric_truth_report(result, min_trades=1)
+
+        self.assertEqual(report["overall"]["directional_accuracy_pct"], 50.0)
+        self.assertEqual(report["overall"]["profit_factor"], 999.0)
+
+    def test_auto_tune_uses_miscalibrated_direction_score_floor(self):
+        report = {
+            "risk_flags": [
+                "Direction score is materially miscalibrated versus realized directional accuracy, so it should not be treated as a direct probability."
+            ],
+            "metric_health": {
+                "direction_score": {
+                    "best_floor": {"floor": 80},
+                },
+            },
+            "metric_floors": {"direction_score": [{"floor": 70, "sparse": False}]},
+        }
+
+        suggestions = audit.suggest_parameter_adjustments(
+            report,
+            auto_tune_config={"enabled": True, "direction_score_step": 5},
+        )
+
+        self.assertEqual(suggestions[0]["parameter"], "entry.min_direction_score")
+        self.assertEqual(suggestions[0]["current_value"], 80)
+        self.assertEqual(suggestions[0]["suggested_value"], 85)
+        self.assertNotIn("entry.min_tech_score", {item["parameter"] for item in suggestions})
+
     def test_non_direction_metric_buckets_do_not_report_calibration_gap(self):
         result = {
             "run_at": "2026-03-30T10:00:00",
@@ -121,6 +161,86 @@ class MetricTruthAuditTests(unittest.TestCase):
         quality_bucket = next(item for item in report["metric_buckets"]["quality_score"] if item["label"] == "60-69")
 
         self.assertNotIn("calibration_gap_pct", quality_bucket)
+
+    def test_imported_report_surfaces_exact_contract_authoritative_subset(self):
+        result = {
+            "run_at": "2026-03-30T10:00:00",
+            "mode": "backtest",
+            "truth_source": "historical_imported_daily",
+            "authoritative_profitability_basis": "exact_contract_only",
+            "priced_trade_count": 3,
+            "candidate_trade_count": 4,
+            "trades": [
+                {
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 71,
+                    "pnl_pct": 12,
+                    "directional_correct": True,
+                },
+                {
+                    "entry_contract_resolution": "exact_archived_contract",
+                    "direction_score": 73,
+                    "pnl_pct": -3,
+                    "directional_correct": False,
+                },
+                {
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 76,
+                    "pnl_pct": 30,
+                    "directional_correct": True,
+                },
+            ],
+        }
+
+        report = audit.build_metric_truth_report(result, min_trades=1)
+
+        self.assertEqual(report["source"]["contract_accounting"]["exact_contract_match_count"], 2)
+        self.assertEqual(report["source"]["contract_accounting"]["nearest_contract_match_count"], 1)
+        self.assertEqual(report["source"]["contract_accounting"]["unresolved_contract_count"], 1)
+        self.assertEqual(report["source"]["authoritative_profitability_basis"], "exact_contract_only")
+        self.assertEqual(report["source"]["authoritative_trade_count"], 2)
+        self.assertEqual(report["authoritative_overall"]["trades"], 2)
+        self.assertTrue(any("research-only" in flag for flag in report["risk_flags"]))
+
+    def test_archived_exact_basis_excludes_research_rows_from_metric_recommendations(self):
+        result = {
+            "run_at": "2026-03-30T10:00:00",
+            "mode": "backtest",
+            "truth_source": "historical_imported_daily_forward",
+            "authoritative_profitability_basis": "archived_exact_contract_only",
+            "primary_judge_trade_class": "exact_archived_contract",
+            "trades": [
+                {
+                    "entry_contract_resolution": "exact_archived_contract",
+                    "direction_score": 42,
+                    "pnl_pct": -10,
+                    "directional_correct": False,
+                },
+                {
+                    "entry_contract_resolution": "exact_target_contract",
+                    "direction_score": 82,
+                    "pnl_pct": 40,
+                    "directional_correct": True,
+                },
+                {
+                    "entry_contract_resolution": "nearest_listed_contract",
+                    "direction_score": 92,
+                    "pnl_pct": 60,
+                    "directional_correct": True,
+                },
+            ],
+        }
+
+        report = audit.build_metric_truth_report(result, min_trades=1)
+
+        self.assertEqual(report["source"]["authoritative_profitability_basis"], "archived_exact_contract_only")
+        self.assertEqual(report["source"]["authoritative_trade_count"], 1)
+        self.assertEqual(report["authoritative_overall"]["trades"], 1)
+        low_bucket = next(item for item in report["metric_buckets"]["direction_score"] if item["label"] == "40-49")
+        high_bucket = next(item for item in report["metric_buckets"]["direction_score"] if item["label"] == "90-99")
+        self.assertEqual(low_bucket["trades"], 1)
+        self.assertEqual(high_bucket["trades"], 0)
+        self.assertIsNone(report["metric_health"]["direction_score"]["best_floor"])
 
 
 if __name__ == "__main__":

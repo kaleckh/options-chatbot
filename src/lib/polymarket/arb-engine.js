@@ -14,7 +14,7 @@
  *   Profit = sum of NO values - $1.00 collateral - fees.
  */
 
-const { placeLimitOrder, fetchMarketOrderBook, fetchTickSize } = require("./client");
+const { placeLimitOrder } = require("./client");
 
 const DEFAULT_ARB_CONFIG = {
   minProfitPct: 0.02,             // Minimum 2% profit after fees to execute
@@ -50,6 +50,15 @@ class ArbEngine {
     }
 
     const tradeableOutcomes = arbOpportunity.outcomes.filter((o) => o.tradeable);
+    if (tradeableOutcomes.length !== arbOpportunity.outcomeCount) {
+      return { status: "skipped", reason: "incomplete_hedge:" + tradeableOutcomes.length + "/" + arbOpportunity.outcomeCount };
+    }
+    const missingHedgeToken = tradeableOutcomes.some((outcome) => (
+      arbOpportunity.arbType === "UNDER" ? !outcome.yesTokenId : !outcome.noTokenId
+    ));
+    if (missingHedgeToken) {
+      return { status: "skipped", reason: "missing_hedge_token" };
+    }
     if (tradeableOutcomes.length > this.config.maxLegs) {
       return { status: "skipped", reason: "too_many_legs:" + tradeableOutcomes.length };
     }
@@ -101,8 +110,8 @@ class ArbEngine {
           negRisk: true,
           tickSize: leg.tickSize || "0.01",
         });
-        results.push({ ...leg, status: "placed", orderId: result.orderID || result.id });
-        this.risk.recordOrderPlaced();
+        results.push({ ...leg, status: "placed", orderId: result?.orderID || result?.id });
+        this.risk.recordOrderPlaced({ ...leg, orderId: result?.orderID || result?.id });
         successCount++;
       } catch (err) {
         results.push({ ...leg, status: "failed", error: err.message });
@@ -133,13 +142,23 @@ class ArbEngine {
   _buildPlan(arb, tradeableOutcomes) {
     const legs = [];
     let totalCost = 0;
+    const limitOffset = Number(this.config.limitOffsetFromMid || 0);
+    const prices = tradeableOutcomes.map((outcome) => {
+      if (arb.arbType === "UNDER") {
+        return Math.min(0.99, Number(outcome.bestAsk || outcome.yesPrice || 0) + limitOffset);
+      }
+      const noPrice = 1 - Number(outcome.yesPrice || 0);
+      return Math.min(0.99, Math.max(0.01, noPrice + limitOffset));
+    });
+    const maxPrice = Math.max(...prices);
+    const bundleSize = Math.max(1, Math.floor(Number(this.config.orderSizeUsd || 0) / maxPrice));
 
     if (arb.arbType === "UNDER") {
-      // Buy YES on all tradeable outcomes for less than $1 total
-      for (const outcome of tradeableOutcomes) {
+      // Buy the same number of YES shares on every outcome.
+      for (const [index, outcome] of tradeableOutcomes.entries()) {
         // Place limit order slightly above best ask for faster fill
-        const price = Math.min(0.99, outcome.bestAsk + this.config.limitOffsetFromMid);
-        const size = Math.max(1, Math.round(this.config.orderSizeUsd / price));
+        const price = Math.round(prices[index] * 100) / 100;
+        const size = bundleSize;
         const cost = price * size;
 
         legs.push({
@@ -147,7 +166,7 @@ class ArbEngine {
           title: outcome.title,
           tokenId: outcome.yesTokenId,
           side: "buy",
-          price: Math.round(price * 100) / 100,
+          price,
           size,
           cost,
           tickSize: outcome.tickSize,
@@ -155,12 +174,10 @@ class ArbEngine {
         totalCost += cost;
       }
     } else {
-      // OVER-priced: buy NO on all outcomes
-      // In negRisk, NO token price = 1 - YES price
-      for (const outcome of tradeableOutcomes) {
-        const noPrice = 1 - outcome.yesPrice;
-        const price = Math.min(0.99, Math.max(0.01, noPrice + this.config.limitOffsetFromMid));
-        const size = Math.max(1, Math.round(this.config.orderSizeUsd / price));
+      // OVER-priced: buy the same number of NO shares on every outcome.
+      for (const [index, outcome] of tradeableOutcomes.entries()) {
+        const price = Math.round(prices[index] * 100) / 100;
+        const size = bundleSize;
         const cost = price * size;
 
         legs.push({
@@ -168,7 +185,7 @@ class ArbEngine {
           title: outcome.title,
           tokenId: outcome.noTokenId,
           side: "buy",
-          price: Math.round(price * 100) / 100,
+          price,
           size,
           cost,
           tickSize: outcome.tickSize,
@@ -177,12 +194,14 @@ class ArbEngine {
       }
     }
 
-    // Estimate profit: for UNDER, profit = $1 payout per share - total cost per share set
-    // Simplified: profit fraction = 1 - sumOfYesPrices for UNDER, sumOfYesPrices - 1 for OVER
-    const estFees = legs.reduce((s, l) => s + 0.04 * l.price * (1 - l.price), 0);
-    const estimatedProfit = Math.abs(arb.deviation) - estFees;
+    const estFees = legs.reduce((s, leg) => s + (0.04 * leg.price * (1 - leg.price) * leg.size), 0);
+    const guaranteedPayout = arb.arbType === "UNDER"
+      ? bundleSize
+      : bundleSize * Math.max(arb.outcomeCount - 1, 0);
+    const estimatedProfitUsd = guaranteedPayout - totalCost - estFees;
+    const estimatedProfit = totalCost > 0 ? estimatedProfitUsd / totalCost : -Infinity;
 
-    return { legs, totalCost, estimatedProfit, estFees };
+    return { legs, totalCost, estimatedProfit, estimatedProfitUsd, estFees };
   }
 
   getStats() {

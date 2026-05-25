@@ -11,9 +11,7 @@ mirroring the equity options strategy that backtested at PF 1.76.
 import json
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Optional
 
 from .config import CRYPTO_DATA_DIR, SIGNAL_CONFIG, SYMBOLS

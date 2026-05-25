@@ -16,6 +16,24 @@ import type {
 } from "@/lib/types";
 import { fmtTruthSource } from "@/components/strategy/shared";
 
+function fmtCount(value?: number | null): string {
+  return value == null || Number.isNaN(value) ? "\u2014" : value.toLocaleString();
+}
+
+function fmtNumber(value?: number | null, digits: number = 1): string {
+  return value == null || Number.isNaN(value) ? "\u2014" : value.toFixed(digits);
+}
+
+function fmtPct(value?: number | null, digits: number = 1, signed: boolean = false): string {
+  if (value == null || Number.isNaN(value)) return "\u2014";
+  const prefix = signed && value >= 0 ? "+" : "";
+  return `${prefix}${value.toFixed(digits)}%`;
+}
+
+function fmtMoney(value?: number | null, digits: number = 2): string {
+  return value == null || Number.isNaN(value) ? "\u2014" : `$${value.toFixed(digits)}`;
+}
+
 type OptimizerTabProps = {
   backtestYears: number;
   setBacktestYears: (v: number) => void;
@@ -54,15 +72,15 @@ export function OptimizerTab({
   const summaryMetrics = useMemo(() => {
     if (!result) return null;
     return {
-      totalTrades: result.total_trades.toLocaleString(),
-      winRate: `${result.win_rate_pct?.toFixed(1)}%`,
-      fullHitRate: `${result.full_hit_rate_pct?.toFixed(1)}%`,
-      directionalAccuracy: `${result.directional_accuracy_pct?.toFixed(1)}%`,
-      profitFactor: result.profit_factor?.toFixed(2) || "\u2014",
-      avgPnl: `${result.avg_pnl_pct?.toFixed(1)}%`,
-      avgPicksPerDay: result.avg_picks_per_day?.toFixed(2) || "\u2014",
-      sharpe: result.sharpe?.toFixed(2) || "\u2014",
-      maxDrawdown: `${result.max_drawdown_pct?.toFixed(1)}%`,
+      totalTrades: fmtCount(result.total_trades),
+      winRate: fmtPct(result.win_rate_pct),
+      fullHitRate: fmtPct(result.full_hit_rate_pct),
+      directionalAccuracy: fmtPct(result.directional_accuracy_pct),
+      profitFactor: fmtNumber(result.profit_factor, 2),
+      avgPnl: fmtPct(result.avg_pnl_pct),
+      avgPicksPerDay: fmtNumber(result.avg_picks_per_day, 2),
+      sharpe: fmtNumber(result.sharpe, 2),
+      maxDrawdown: fmtPct(result.max_drawdown_pct),
       truthSource: fmtTruthSource(result.truth_source || result.source?.truth_source || report?.truth_source),
       quoteCoverage: result.quote_coverage_pct ?? report?.quote_coverage_pct ?? null,
       pricedTradeCount: result.priced_trade_count ?? report?.priced_trade_count ?? null,
@@ -98,15 +116,15 @@ export function OptimizerTab({
       Ticker: trade.ticker,
       Type: trade.type === "call" ? "\u25B2 CALL" : "\u25BC PUT",
       Sector: trade.sector || "\u2014",
-      "Dir Score": trade.direction_score?.toFixed(0) || "\u2014",
-      Quality: trade.quality_score?.toFixed(0) || "\u2014",
-      Tech: trade.tech_score?.toFixed(0) || "\u2014",
-      EV: trade.ev ? `${trade.ev.toFixed(0)}%` : "\u2014",
-      "Target Move": trade.target_move_pct !== undefined ? `${trade.target_move_pct.toFixed(1)}%` : "\u2014",
-      Strike: `$${trade.strike?.toFixed(0)}`,
-      "Entry $": `$${trade.entry_px?.toFixed(2)}`,
-      "Exit $": `$${trade.exit_px?.toFixed(2)}`,
-      "P&L %": `${trade.pnl_pct >= 0 ? "+" : ""}${trade.pnl_pct?.toFixed(1)}%`,
+      "Dir Score": fmtNumber(trade.direction_score, 0),
+      Quality: fmtNumber(trade.quality_score, 0),
+      Tech: fmtNumber(trade.tech_score, 0),
+      EV: fmtPct(trade.ev, 0),
+      "Target Move": fmtPct(trade.target_move_pct),
+      Strike: fmtMoney(trade.strike, 0),
+      "Entry $": fmtMoney(trade.entry_px),
+      "Exit $": fmtMoney(trade.exit_px),
+      "P&L %": fmtPct(trade.pnl_pct, 1, true),
       Outcome: trade.prediction_outcome || "\u2014",
       Exit: trade.exit_reason || "\u2014",
     }));
@@ -258,7 +276,7 @@ export function OptimizerTab({
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-                  <MetricCard label="Truth Trades" value={metricTruthReport.source.total_trades.toLocaleString()} />
+                  <MetricCard label="Truth Trades" value={fmtCount(metricTruthReport.source.total_trades)} />
                   <MetricCard label="Bucket Size" value={`${metricTruthReport.quality_bar.bucket_size} pts`} />
                   <MetricCard label="Min Trades" value={metricTruthReport.quality_bar.min_trades.toLocaleString()} />
                   <MetricCard
@@ -344,7 +362,7 @@ export function OptimizerTab({
               </div>
 
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <MetricCard label="Grouped Trades" value={report.source.total_trades?.toLocaleString() || "\u2014"} />
+                <MetricCard label="Grouped Trades" value={fmtCount(report.source.total_trades)} />
                 <MetricCard label="Truth Source" value={fmtTruthSource(report.truth_source || report.source?.truth_source)} />
                 <MetricCard
                   label="Priced / Unpriced"
@@ -383,10 +401,10 @@ export function OptimizerTab({
                     <div className="text-xs uppercase tracking-wide text-text-3">{label}</div>
                     <div className="text-sm text-text-1">{lane ? fmtTruthSource(lane.truth_source) : "\u2014"}</div>
                     <div className="text-xs text-text-3">
-                      Trades {lane?.total_trades != null ? lane.total_trades : "\u2014"}
-                      {lane?.profit_factor != null ? ` | PF ${lane.profit_factor.toFixed(2)}` : ""}
-                      {lane?.avg_pnl_pct != null ? ` | Avg ${lane.avg_pnl_pct.toFixed(2)}%` : ""}
-                      {lane?.directional_accuracy_pct != null ? ` | Dir ${lane.directional_accuracy_pct.toFixed(1)}%` : ""}
+                      Trades {fmtCount(lane?.total_trades)}
+                      {lane?.profit_factor != null ? ` | PF ${fmtNumber(lane.profit_factor, 2)}` : ""}
+                      {lane?.avg_pnl_pct != null ? ` | Avg ${fmtPct(lane.avg_pnl_pct, 2)}` : ""}
+                      {lane?.directional_accuracy_pct != null ? ` | Dir ${fmtPct(lane.directional_accuracy_pct)}` : ""}
                     </div>
                     <div className="text-xs text-text-3">
                       Coverage {lane?.quote_coverage_pct != null ? `${lane.quote_coverage_pct.toFixed(1)}%` : "\u2014"}
@@ -399,10 +417,10 @@ export function OptimizerTab({
               {comparisonReport.deltas ? (
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                   <MetricCard label="Trade Delta" value={String(comparisonReport.deltas.total_trades)} />
-                  <MetricCard label="PF Delta" value={comparisonReport.deltas.profit_factor.toFixed(2)} />
-                  <MetricCard label="Avg P&L Delta" value={`${comparisonReport.deltas.avg_pnl_pct.toFixed(2)}%`} />
-                  <MetricCard label="Dir Delta" value={`${comparisonReport.deltas.directional_accuracy_pct.toFixed(1)}%`} />
-                  <MetricCard label="Coverage Delta" value={`${comparisonReport.deltas.quote_coverage_pct.toFixed(1)}%`} />
+                  <MetricCard label="PF Delta" value={fmtNumber(comparisonReport.deltas.profit_factor, 2)} />
+                  <MetricCard label="Avg P&L Delta" value={fmtPct(comparisonReport.deltas.avg_pnl_pct, 2)} />
+                  <MetricCard label="Dir Delta" value={fmtPct(comparisonReport.deltas.directional_accuracy_pct)} />
+                  <MetricCard label="Coverage Delta" value={fmtPct(comparisonReport.deltas.quote_coverage_pct)} />
                 </div>
               ) : null}
 

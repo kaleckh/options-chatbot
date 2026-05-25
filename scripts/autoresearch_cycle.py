@@ -24,7 +24,6 @@ from forward_options_ledger import summarize_forward_holdout
 from metric_truth_audit import build_metric_truth_report
 from scripts.autoresearch_governance import (
     DEFAULT_PHASE_MANIFEST,
-    FORWARD_HOLDOUT_TRUTH_SOURCE,
     build_baseline_compatibility,
     build_decision_packet,
     build_evidence_bundle,

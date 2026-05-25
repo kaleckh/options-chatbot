@@ -14,7 +14,9 @@ for candidate in (ROOT, TESTS_DIR):
 
 from historical_options_store import (
     DAILY_SNAPSHOT_KIND,
+    DAILY_QUOTE_MINUTE_ET,
     HistoricalOptionsStore,
+    RESEARCH_DATA_TRUST,
     import_daily_option_parquet,
     import_historical_option_snapshots,
     load_import_batches,
@@ -55,6 +57,21 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertEqual(len(batches), 2)
         self.assertTrue(all("warnings" in batch for batch in batches))
         self.assertTrue(all(batch["data_trust"] == "trusted" for batch in batches))
+
+    def test_free_vendor_imports_are_research_not_trusted(self):
+        result = import_daily_option_parquet(
+            self.daily_parquet_path,
+            "marketdata_free_eod",
+            underlying="SPY",
+            db_path=self.db_path,
+        )
+
+        self.assertEqual(result["data_trust"], RESEARCH_DATA_TRUST)
+        store = HistoricalOptionsStore(self.db_path)
+        all_summary = store.snapshot_summary(DAILY_SNAPSHOT_KIND, trusted_only=False)
+        trusted_summary = store.snapshot_summary(DAILY_SNAPSHOT_KIND, trusted_only=True)
+        self.assertGreater(all_summary["quote_count"], 0)
+        self.assertEqual(trusted_summary["quote_count"], 0)
 
     def test_entry_window_and_exact_contract_resolution(self):
         import_historical_option_snapshots(self.csv_path, "lab_intraday", db_path=self.db_path)
@@ -209,6 +226,139 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertIn(missing_date, spy_dates)
         self.assertNotIn(missing_date, shared_dates)
         self.assertEqual(len(shared_dates), len(spy_dates) - 1)
+
+    def test_snapshot_summary_can_filter_by_source_label(self):
+        histories = {
+            "SPY": make_validation_history(length=8, start=500.0, step=0.8),
+            "QQQ": make_validation_history(length=8, start=420.0, step=0.9),
+        }
+        spy_path = Path(self._tmp.name) / "spy_summary_filter.parquet"
+        qqq_path = Path(self._tmp.name) / "qqq_summary_filter.parquet"
+        write_daily_options_parquet(spy_path, histories, symbol="SPY", strike_span=2)
+        write_daily_options_parquet(qqq_path, histories, symbol="QQQ", strike_span=2)
+
+        spy_result = import_daily_option_parquet(
+            spy_path,
+            "alpaca_opra_daily_snapshot",
+            underlying="SPY",
+            db_path=self.db_path,
+        )
+        qqq_result = import_daily_option_parquet(
+            qqq_path,
+            "other_paid_vendor",
+            underlying="QQQ",
+            db_path=self.db_path,
+        )
+
+        store = HistoricalOptionsStore(self.db_path)
+        all_summary = store.snapshot_summary(DAILY_SNAPSHOT_KIND, trusted_only=True)
+        alpaca_summary = store.snapshot_summary(
+            DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            source_labels=["alpaca_opra_daily_snapshot"],
+        )
+
+        self.assertEqual(all_summary["quote_count"], spy_result["imported_rows"] + qqq_result["imported_rows"])
+        self.assertEqual(sorted(all_summary["available_underlyings"]), ["QQQ", "SPY"])
+        self.assertEqual(alpaca_summary["quote_count"], spy_result["imported_rows"])
+        self.assertEqual(alpaca_summary["available_underlyings"], ["SPY"])
+        self.assertEqual(alpaca_summary["source_labels"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(alpaca_summary["source_labels_requested"], ["alpaca_opra_daily_snapshot"])
+
+    def test_quote_date_queries_can_filter_by_source_label(self):
+        histories = {
+            "SPY": make_validation_history(length=8, start=500.0, step=0.8),
+            "QQQ": make_validation_history(length=8, start=420.0, step=0.9),
+        }
+        spy_path = Path(self._tmp.name) / "spy_source_filter.parquet"
+        qqq_path = Path(self._tmp.name) / "qqq_source_filter.parquet"
+        write_daily_options_parquet(spy_path, histories, symbol="SPY", strike_span=2)
+        write_daily_options_parquet(qqq_path, histories, symbol="QQQ", strike_span=2)
+
+        import_daily_option_parquet(spy_path, "alpaca_opra_daily_snapshot", underlying="SPY", db_path=self.db_path)
+        import_daily_option_parquet(qqq_path, "thetadata_free_eod", underlying="QQQ", db_path=self.db_path)
+
+        store = HistoricalOptionsStore(self.db_path)
+        spy_alpaca_dates = store.available_quote_dates(
+            "SPY",
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            source_labels=["alpaca_opra_daily_snapshot"],
+        )
+        spy_theta_dates = store.available_quote_dates(
+            "SPY",
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            source_labels=["thetadata_free_eod"],
+        )
+        source_shared_dates = store.shared_quote_dates(
+            ["SPY", "QQQ"],
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            source_labels=["alpaca_opra_daily_snapshot"],
+        )
+
+        self.assertGreater(len(spy_alpaca_dates), 0)
+        self.assertEqual(spy_theta_dates, [])
+        self.assertEqual(source_shared_dates, [])
+
+        inventory = store.source_inventory(
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            underlyings=["SPY", "QQQ"],
+        )
+        inventory_by_source = {entry["source_label"]: entry for entry in inventory["sources"]}
+        self.assertEqual(inventory["status"], "summarized")
+        self.assertIn("alpaca_opra_daily_snapshot", inventory["source_labels_seen"])
+        self.assertEqual(
+            inventory["source_labels_with_quotes_in_scope"],
+            ["alpaca_opra_daily_snapshot"],
+        )
+        self.assertEqual(inventory_by_source["alpaca_opra_daily_snapshot"]["batch_count"], 1)
+        self.assertEqual(inventory_by_source["alpaca_opra_daily_snapshot"]["quote_dates"]["count"], len(spy_alpaca_dates))
+        self.assertEqual(inventory_by_source["alpaca_opra_daily_snapshot"]["underlyings_in_scope"], ["SPY"])
+        self.assertEqual(inventory_by_source["alpaca_opra_daily_snapshot"]["dataset_kinds"], ["daily_parquet"])
+        self.assertEqual(inventory_by_source["alpaca_opra_daily_snapshot"]["trust_levels"], ["trusted"])
+
+        all_inventory = store.source_inventory(
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=False,
+            underlyings=["SPY", "QQQ"],
+        )
+        all_inventory_by_source = {entry["source_label"]: entry for entry in all_inventory["sources"]}
+        self.assertIn("thetadata_free_eod", all_inventory["source_labels_seen"])
+        self.assertEqual(all_inventory_by_source["thetadata_free_eod"]["trust_levels"], ["research"])
+
+        alpaca_inventory = store.source_inventory(
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+            source_labels=["alpaca_opra_daily_snapshot"],
+            underlyings=["SPY", "QQQ"],
+        )
+        self.assertEqual(alpaca_inventory["source_labels_seen"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(alpaca_inventory["source_labels_with_quotes_in_scope"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(alpaca_inventory["sources"][0]["underlying_count_in_scope"], 1)
+
+        quote_date = spy_alpaca_dates[0]
+        alpaca_quote = store.find_entry_contract(
+            underlying="SPY",
+            trade_date_et=quote_date,
+            option_type="call",
+            target_expiry=pd.Timestamp(quote_date).date(),
+            target_strike=round(float(histories["SPY"]["Close"].iloc[0]), 0),
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            source_labels=["alpaca_opra_daily_snapshot"],
+        )
+        theta_quote = store.get_exact_quote(
+            quote_date_et=quote_date,
+            contract_symbol=alpaca_quote.contract_symbol if alpaca_quote else "SPY260101C00000000",
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            source_labels=["thetadata_free_eod"],
+        )
+        self.assertIsNotNone(alpaca_quote)
+        self.assertIsNone(theta_quote)
 
 
 if __name__ == "__main__":

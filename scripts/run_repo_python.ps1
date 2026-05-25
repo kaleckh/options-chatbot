@@ -441,7 +441,7 @@ function Sync-ValidationArtifacts([string]$CanonicalRoot, [string]$RepoRoot) {
     Write-Host "Syncing validation artifacts from $CanonicalRoot"
     try {
         if (Test-Path -LiteralPath $targetValidationRoot) {
-            Copy-Item -LiteralPath (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
+            Copy-Item -Path (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
         }
         else {
             Copy-Item -LiteralPath $sourceValidationRoot -Destination $targetValidationRoot -Recurse -Force
@@ -469,7 +469,8 @@ try {
     $requirements = @(
         (Join-Path $repoRoot "requirements.txt"),
         (Join-Path $repoRoot "pyproject.toml"),
-        (Join-Path $repoRoot "python-backend\requirements.txt")
+        (Join-Path $repoRoot "python-backend\requirements.txt"),
+        (Join-Path $repoRoot "uv.lock")
     ) | Where-Object { Test-Path -LiteralPath $_ }
     $currentStamp = Get-StableFileStamp -Paths $requirements -BaseRoot $repoRoot
     $activeVenvRoot = $venvRoot
@@ -506,20 +507,43 @@ try {
     $previousStamp = if (Test-Path -LiteralPath $activeStampPath) { (Get-Content -LiteralPath $activeStampPath -Raw).TrimEnd("`r", "`n") } else { "" }
     $normalizedCurrentStamp = $currentStamp.TrimEnd("`r", "`n")
     if ($ForceInstall -or $previousStamp -ne $normalizedCurrentStamp) {
-        $installArgs = @(
-            "-m", "pip", "--disable-pip-version-check", "install",
-            "-r", (Join-Path $repoRoot "requirements.txt"),
-            "-r", (Join-Path $repoRoot "python-backend\requirements.txt")
-        )
-        if ($usingCanonicalVenv) {
-            Write-Warning "Installing worktree dependency updates into the canonical virtualenv at $activeVenvRoot"
+        $uvCommand = Get-Command uv -ErrorAction SilentlyContinue
+        if ($uvCommand) {
+            Write-Host "Syncing repo Python dependencies from uv.lock into $venvRoot"
+            Push-Location $repoRoot
+            try {
+                & $uvCommand.Source sync --locked
+            }
+            finally {
+                Pop-Location
+            }
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to sync repo Python dependencies with uv."
+            }
+            if (-not (Test-VenvHealthy -VenvRoot $venvRoot -PythonPath $venvPython)) {
+                throw "uv sync completed but repo-local virtualenv is not healthy."
+            }
+            $activeVenvRoot = $venvRoot
+            $activeVenvPython = $venvPython
+            $activeStampPath = $stampPath
+            $usingCanonicalVenv = $false
         }
         else {
-            Write-Host "Installing repo Python dependencies into $activeVenvRoot"
-        }
-        & $activeVenvPython @installArgs
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to install repo Python dependencies."
+            $installArgs = @(
+                "-m", "pip", "--disable-pip-version-check", "install",
+                "-r", (Join-Path $repoRoot "requirements.txt"),
+                "-r", (Join-Path $repoRoot "python-backend\requirements.txt")
+            )
+            if ($usingCanonicalVenv) {
+                Write-Warning "Installing worktree dependency updates into the canonical virtualenv at $activeVenvRoot"
+            }
+            else {
+                Write-Host "Installing repo Python dependencies into $activeVenvRoot"
+            }
+            & $activeVenvPython @installArgs
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to install repo Python dependencies."
+            }
         }
         Set-Content -LiteralPath $activeStampPath -Value $normalizedCurrentStamp -Encoding UTF8 -NoNewline
     }

@@ -621,41 +621,6 @@ def _normalize_trade_for_surface(
     }
 
 
-def _should_include_tech_band(
-    trades: list[dict[str, Any]],
-    *,
-    min_trades: int,
-    direction_bucket_size: int,
-    quality_bucket_size: int,
-    tech_bucket_size: int,
-) -> bool:
-    if not trades:
-        return False
-    without_tech: dict[str, int] = defaultdict(int)
-    with_tech: dict[str, int] = defaultdict(int)
-    for trade in trades:
-        base_key = "|".join(
-            [
-                normalized_market_regime(trade.get("market_regime"), trade.get("spy_ret5")),
-                normalized_trade_direction(trade.get("type", trade.get("trade_type", trade.get("direction")))),
-                direction_score_bucket(trade.get("direction_score"), bucket_size=direction_bucket_size),
-                quality_score_bucket(trade.get("quality_score"), bucket_size=quality_bucket_size),
-            ]
-        )
-        without_tech[base_key] += 1
-        tech_key = "|".join(
-            [
-                base_key,
-                tech_score_bucket(trade.get("tech_score"), bucket_size=tech_bucket_size),
-            ]
-        )
-        with_tech[tech_key] += 1
-
-    dense_without = sum(count for count in without_tech.values() if count >= int(min_trades))
-    dense_with = sum(count for count in with_tech.values() if count >= int(min_trades))
-    return dense_with > dense_without
-
-
 def load_backtest_result(results_file: Optional[str] = None) -> Optional[dict[str, Any]]:
     path = results_file or RESULTS_FILE
     if not os.path.exists(path):

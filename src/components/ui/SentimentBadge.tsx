@@ -20,7 +20,7 @@ const ICONS: Record<string, string> = {
 
 interface SentimentBadgeProps {
   sentiment: string;
-  returnPct?: number;
+  returnPct?: number | null;
   oldSentiment?: string | null;
 }
 

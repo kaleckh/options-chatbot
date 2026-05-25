@@ -290,18 +290,36 @@ export function SimTab({ predictions }: { predictions: Prediction[] }) {
   );
 }
 
-export function SectorsTab({ sectors }: { sectors: SectorSentiment[] }) {
-  if (sectors.length === 0) {
+export function SectorsTab({
+  sectors,
+  loading = false,
+  error,
+}: {
+  sectors: SectorSentiment[];
+  loading?: boolean;
+  error?: string | null;
+}) {
+  if (error) {
     return (
-      <div className="rounded-lg border border-border bg-bg-2 p-6 text-center text-sm text-text-3">
-        Loading sector data... Make sure the Python backend is running.
+      <div className="rounded-lg border border-red/30 bg-red-dim p-6 text-center text-sm text-red">
+        {error}
       </div>
     );
   }
 
-  const bullCount = sectors.filter((sector) => sector.near_sent.includes("Bullish")).length;
-  const bearCount = sectors.filter((sector) => sector.near_sent.includes("Bearish")).length;
-  const neutralCount = sectors.length - bullCount - bearCount;
+  if (sectors.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-bg-2 p-6 text-center text-sm text-text-3">
+        {loading ? "Loading sector data..." : "No sector data returned."}
+      </div>
+    );
+  }
+
+  const availableSectors = sectors.filter((sector) => sector.data_status !== "unavailable" && sector.near_sent !== "Unavailable");
+  const unavailableCount = sectors.length - availableSectors.length;
+  const bullCount = availableSectors.filter((sector) => sector.near_sent.includes("Bullish")).length;
+  const bearCount = availableSectors.filter((sector) => sector.near_sent.includes("Bearish")).length;
+  const neutralCount = availableSectors.length - bullCount - bearCount;
 
   const biasLabel = bullCount > bearCount ? "Bullish Bias" : bearCount > bullCount ? "Bearish Bias" : "Mixed/Neutral";
   const biasColor = bullCount > bearCount ? "text-green" : bearCount > bullCount ? "text-red" : "text-text-3";
@@ -353,6 +371,14 @@ export function SectorsTab({ sectors }: { sectors: SectorSentiment[] }) {
         <span className="text-red">
           <span aria-hidden="true">{"\u25BC"}</span> {bearCount} bearish
         </span>{" "}
+        {unavailableCount > 0 ? (
+          <>
+            &middot;{" "}
+            <span className="text-amber">
+              {unavailableCount} unavailable
+            </span>{" "}
+          </>
+        ) : null}
         &mdash; <strong className={biasColor}>{biasLabel}</strong>
       </div>
     </div>

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from local_env import load_local_env
+from options_execution import option_pnl_snapshot
 from options_profit_gate import evaluate_measurement_gate
 from profit_loop_automation import _require_daily_truth_refresh
 from options_profit_state import (
@@ -21,6 +22,7 @@ from options_profit_state import (
     load_incumbents,
     load_live_profile,
     load_status,
+    status_path,
     utc_now_iso,
     write_decision,
     write_incumbents,
@@ -51,7 +53,7 @@ def _normalize_direction(direction: Any) -> Optional[str]:
 
 def _safe_float(value: Any) -> Optional[float]:
     try:
-        if value in (None, ""):
+        if isinstance(value, bool) or value in (None, ""):
             return None
         parsed = float(value)
         if not math.isfinite(parsed):
@@ -59,6 +61,46 @@ def _safe_float(value: Any) -> Optional[float]:
         return parsed
     except (TypeError, ValueError):
         return None
+
+
+def _position_fee_sides_from_total(position: dict[str, Any]) -> tuple[float, float]:
+    entry_fee = _safe_float(position.get("entry_fee_total_usd"))
+    exit_fee = _safe_float(position.get("exit_fee_total_usd"))
+    fee_total = _safe_float(position.get("fee_total_usd"))
+    if fee_total is not None:
+        if entry_fee is None and exit_fee is None:
+            return 0.0, fee_total
+        if entry_fee is None:
+            return max(fee_total - float(exit_fee or 0.0), 0.0), float(exit_fee or 0.0)
+        if exit_fee is None:
+            return float(entry_fee or 0.0), max(fee_total - float(entry_fee or 0.0), 0.0)
+    return float(entry_fee or 0.0), float(exit_fee or 0.0)
+
+
+def _position_net_pnl_pct(position: dict[str, Any]) -> float | None:
+    net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
+    if net_pnl_pct is not None:
+        return net_pnl_pct
+    entry = _safe_float(position.get("entry_execution_price"))
+    if entry is None:
+        entry = _safe_float(position.get("entry_option_price"))
+    exit_price = _safe_float(position.get("exit_execution_price"))
+    if exit_price is None:
+        exit_price = _safe_float(position.get("exit_option_price"))
+    if entry is None or entry <= 0 or exit_price is None:
+        return None
+    contracts = position.get("contracts")
+    if contracts in (None, ""):
+        contracts = 1
+    entry_fee, exit_fee = _position_fee_sides_from_total(position)
+    snapshot = option_pnl_snapshot(
+        entry_execution_price=entry,
+        exit_execution_price=exit_price,
+        contracts=contracts,
+        entry_fee_total_usd=entry_fee,
+        exit_fee_total_usd=exit_fee,
+    )
+    return _safe_float(snapshot.get("net_pnl_pct"))
 
 
 def _score_profit_factor(value: Any) -> float:
@@ -312,17 +354,9 @@ def _candidate_position_metrics(
         ).strip()
         if position_symbol != symbol or position_direction != normalized_direction or cohort_id != candidate_id:
             continue
-        net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
+        net_pnl_pct = _position_net_pnl_pct(position)
         if net_pnl_pct is None:
-            entry = _safe_float(position.get("entry_execution_price"))
-            if entry is None:
-                entry = _safe_float(position.get("entry_option_price"))
-            exit_price = _safe_float(position.get("exit_execution_price"))
-            if exit_price is None:
-                exit_price = _safe_float(position.get("exit_option_price"))
-            if entry is None or entry <= 0 or exit_price is None:
-                continue
-            net_pnl_pct = (exit_price / entry - 1.0) * 100.0
+            continue
         if str(position.get("contract_symbol") or source.get("contract_symbol") or "").strip():
             exact_outcome_count += 1
         pnls.append(net_pnl_pct)
@@ -915,7 +949,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             "measurement_gate_state": result["measurement_gate"]["state"],
             "decision": result["decision"],
             "decision_path": result["decision_path"],
-            "status_path": str((ROOT_DIR / "data" / "options-profit" / "status.json")),
+            "status_path": str(status_path()),
         }
         print(json.dumps(summary, indent=2, allow_nan=False))
     return 0

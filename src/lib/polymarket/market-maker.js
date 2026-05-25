@@ -11,7 +11,7 @@
  * - Respects risk limits from RiskManager
  */
 
-const { placeLimitOrder, cancelAllOrders, getOpenOrders, fetchMarketOrderBook } = require("./client");
+const { placeLimitOrder } = require("./client");
 
 const DEFAULT_MM_CONFIG = {
   orderSizeUsd: 25,              // $ size per side per market
@@ -91,7 +91,6 @@ class MarketMaker {
     // Use the scanner's midPrice (from outcomePrices) as the reference.
     // The raw CLOB orderbook for YES tokens can be misleading on extreme-priced
     // markets. The scanner midPrice is more reliable.
-    const tick = 0.01;
     const halfSpread = Math.max(this.config.minHalfSpread, Math.min(this.config.maxHalfSpread, market.spread / 2));
 
     // Inventory skew
@@ -116,7 +115,7 @@ class MarketMaker {
 
     if (bidCheck.allowed && Math.abs(netInventoryUsd) < this.config.maxInventoryUsd) {
       try {
-        await placeLimitOrder(client, {
+        const result = await placeLimitOrder(client, {
           tokenId,
           side: "buy",
           price: bidPrice,
@@ -124,7 +123,7 @@ class MarketMaker {
           negRisk: market.negRisk || false,
           tickSize: market.tickSize || "0.01",
         });
-        this.risk.recordOrderPlaced();
+        this.risk.recordOrderPlaced({ tokenId, side: "buy", price: bidPrice, size: orderSize, orderId: result?.orderID || result?.id });
         this.stats.ordersPlaced++;
         actions.push({ side: "bid", price: bidPrice, size: orderSize });
       } catch (err) {
@@ -134,17 +133,18 @@ class MarketMaker {
 
     if (askCheck.allowed && inv.yesShares > 0) {
       try {
-        await placeLimitOrder(client, {
+        const askSize = Math.min(orderSize, inv.yesShares);
+        const result = await placeLimitOrder(client, {
           tokenId,
           side: "sell",
           price: askPrice,
-          size: Math.min(orderSize, inv.yesShares),
+          size: askSize,
           negRisk: market.negRisk || false,
           tickSize: market.tickSize || "0.01",
         });
-        this.risk.recordOrderPlaced();
+        this.risk.recordOrderPlaced({ tokenId, side: "sell", price: askPrice, size: askSize, orderId: result?.orderID || result?.id });
         this.stats.ordersPlaced++;
-        actions.push({ side: "ask", price: askPrice, size: Math.min(orderSize, inv.yesShares) });
+        actions.push({ side: "ask", price: askPrice, size: askSize });
       } catch (err) {
         actions.push({ side: "ask", error: err.message });
       }

@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from contextlib import ExitStack
+from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -68,7 +69,17 @@ class HistoricalTruthLaneTests(unittest.TestCase):
 
         self.stack = ExitStack()
         self.addCleanup(self.stack.close)
-        self.stack.enter_context(patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.market_data_db_path}, clear=False))
+        self.stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "MARKET_DATA_DB_PATH": self.market_data_db_path,
+                    "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
+                    "OPTIONS_RUN_MODE": "test",
+                },
+                clear=False,
+            )
+        )
         self.stack.enter_context(patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": self.historical_db_path}, clear=False))
         self.stack.enter_context(
             patch.dict(
@@ -174,6 +185,50 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertTrue(synthetic_policy["synthetic_only"])
         self.assertEqual(synthetic_policy["truth_source"], wfo.SYNTHETIC_TRUTH_SOURCE)
 
+    def test_truth_lane_comparison_deltas_use_authoritative_imported_metrics(self):
+        synthetic = {
+            "truth_source": wfo.SYNTHETIC_TRUTH_SOURCE,
+            "playbook": "short_term",
+            "lookback_years": 1,
+            "total_trades": 2,
+            "priced_trade_count": 2,
+            "quote_coverage_pct": 100.0,
+            "profit_factor": 1.0,
+            "avg_pnl_pct": 2.0,
+            "directional_accuracy_pct": 50.0,
+            "trades": [],
+        }
+        imported = {
+            "truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+            "playbook": "short_term",
+            "lookback_years": 1,
+            "total_trades": 10,
+            "priced_trade_count": 10,
+            "quote_coverage_pct": 80.0,
+            "profit_factor": 5.0,
+            "avg_pnl_pct": 20.0,
+            "directional_accuracy_pct": 90.0,
+            "authoritative_profitability_basis": "archived_exact_contract_only",
+            "authoritative_profitability_metrics": {
+                "trade_count": 2,
+                "profit_factor": 0.5,
+                "avg_pnl_pct": -3.0,
+                "directional_accuracy_pct": 40.0,
+            },
+            "trades": [],
+        }
+
+        comparison = wfo.build_truth_lane_comparison(
+            synthetic_result=synthetic,
+            imported_result=imported,
+        )
+
+        self.assertEqual(comparison["imported"]["profit_factor"], 5.0)
+        self.assertEqual(comparison["imported_authoritative"]["profit_factor"], 0.5)
+        self.assertEqual(comparison["deltas"]["profit_factor"], -0.5)
+        self.assertEqual(comparison["deltas"]["avg_pnl_pct"], -5.0)
+        self.assertEqual(comparison["aggregate_deltas"]["profit_factor"], 4.0)
+
     def test_backtest_can_restrict_replay_to_call_direction_only(self):
         with patch.object(
             wfo,
@@ -191,6 +246,52 @@ class HistoricalTruthLaneTests(unittest.TestCase):
 
         self.assertEqual(filtered["requested_directions"], ["call"])
         self.assertEqual(filtered["total_trades"], 0)
+
+    def test_imported_backtest_uses_playbook_specific_historical_underlyings(self):
+        custom_playbook = {
+            "id": "custom_imported_universe",
+            "label": "Custom Imported Universe",
+            "allowed_tickers": ["SPY", "QQQ"],
+            "historical_required_underlyings": ["SPY", "QQQ"],
+            "allowed_directions": ["call"],
+            "min_quality_score": 0.0,
+        }
+
+        with patch.object(wfo, "IMPORTED_VALIDATION_UNIVERSE", ("SPY", "QQQ", "IWM")):
+            with patch.dict(wfo.REPLAY_PLAYBOOKS, {"custom_imported_universe": custom_playbook}, clear=False):
+                imported = wfo.run_historical_backtest(
+                    lookback_years=1,
+                    n_picks=1,
+                    iv_adj=1.0,
+                    truth_lane="historical_imported",
+                    playbook="custom_imported_universe",
+                )
+
+        self.assertNotIn("error", imported)
+        self.assertEqual(imported["validation_universe"], ["SPY", "QQQ"])
+
+    def test_imported_replay_underlyings_are_normalized_and_deduped(self):
+        playbook = {"historical_required_underlyings": ["fcx", " SLV ", "FCX", "", None]}
+
+        self.assertEqual(
+            wfo._imported_replay_underlyings_for_playbook(playbook),
+            ("FCX", "SLV"),
+        )
+
+    def test_ai_commodity_imported_daily_replay_requires_alpaca_opra_source(self):
+        playbook = wfo.REPLAY_PLAYBOOKS["ai_commodity_infra_observation"]
+
+        self.assertEqual(playbook["historical_source_labels"], [wfo.ALPACA_OPRA_DAILY_SOURCE_LABEL])
+
+    def test_replay_ticker_factory_prefers_alpaca_when_enabled(self):
+        sentinel_factory = object()
+
+        with patch.object(wfo, "alpaca_enabled", return_value=True):
+            with patch.object(wfo, "make_alpaca_ticker_factory", return_value=sentinel_factory) as factory:
+                resolved = wfo._replay_ticker_factory()
+
+        self.assertIs(resolved, sentinel_factory)
+        factory.assert_called_once_with(fallback_factory=wfo.yf.Ticker)
 
     def test_fixture_imports_do_not_count_as_trusted_validation(self):
         fixture_db_path = os.path.join(self._tmp.name, "options_history_fixture.db")
@@ -273,6 +374,178 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertIn("authoritative_profitability_gate", policy)
         self.assertIn("by_symbol", policy)
         self.assertIn("promotion_metrics", policy)
+
+    def test_imported_daily_playbook_source_labels_filter_required_underlyings(self):
+        daily_db_path = os.path.join(self._tmp.name, "options_history_daily_sources.db")
+        qqq_options_path = os.path.join(self._tmp.name, "qqq_source_options.parquet")
+        qqq_underlying_path = os.path.join(self._tmp.name, "qqq_source_underlying.parquet")
+        write_daily_options_parquet(self.daily_parquet_path, self.histories, symbol="SPY", strike_span=12)
+        write_daily_options_parquet(qqq_options_path, self.histories, symbol="QQQ", strike_span=12)
+        write_underlying_daily_parquet(self.daily_underlying_path, self.histories, symbol="SPY")
+        write_underlying_daily_parquet(qqq_underlying_path, self.histories, symbol="QQQ")
+        from historical_options_store import import_daily_option_parquet
+
+        import_daily_option_parquet(
+            self.daily_parquet_path,
+            "alpaca_opra_daily_snapshot",
+            underlying="SPY",
+            underlying_input=self.daily_underlying_path,
+            db_path=daily_db_path,
+        )
+        import_daily_option_parquet(
+            qqq_options_path,
+            "thetadata_free_eod",
+            underlying="QQQ",
+            underlying_input=qqq_underlying_path,
+            db_path=daily_db_path,
+        )
+        playbook = {
+            "id": "source_filtered_daily",
+            "label": "Source Filtered Daily",
+            "allowed_tickers": ["SPY", "QQQ"],
+            "historical_required_underlyings": ["SPY", "QQQ"],
+            "historical_source_labels": ["alpaca_opra_daily_snapshot"],
+            "allowed_directions": ["call"],
+            "min_quality_score": 0.0,
+        }
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False):
+            with patch.dict(wfo.REPLAY_PLAYBOOKS, {"source_filtered_daily": playbook}, clear=False):
+                imported = wfo.run_historical_backtest(
+                    lookback_years=1,
+                    n_picks=1,
+                    iv_adj=1.0,
+                    truth_lane="historical_imported_daily",
+                    playbook="source_filtered_daily",
+                )
+
+        self.assertIn("error", imported)
+        self.assertIn("missing one or more required underlyings", imported["error"])
+        self.assertEqual(imported["source_labels_required"], ["alpaca_opra_daily_snapshot"])
+        self.assertIn("SPY", imported["error"])
+        self.assertNotIn("Available underlyings: ['QQQ'", imported["error"])
+
+    def test_imported_daily_insufficient_calendar_reports_source_labels(self):
+        daily_db_path = os.path.join(self._tmp.name, "options_history_daily_short_source.db")
+        short_histories = {
+            "SPY": make_validation_history(length=14, start=500.0, step=0.7),
+            "QQQ": make_validation_history(length=14, start=420.0, step=0.8),
+        }
+        spy_options_path = os.path.join(self._tmp.name, "spy_short_source_options.parquet")
+        qqq_options_path = os.path.join(self._tmp.name, "qqq_short_source_options.parquet")
+        spy_underlying_path = os.path.join(self._tmp.name, "spy_short_source_underlying.parquet")
+        qqq_underlying_path = os.path.join(self._tmp.name, "qqq_short_source_underlying.parquet")
+        write_daily_options_parquet(spy_options_path, short_histories, symbol="SPY", strike_span=8)
+        write_daily_options_parquet(qqq_options_path, short_histories, symbol="QQQ", strike_span=8)
+        write_underlying_daily_parquet(spy_underlying_path, short_histories, symbol="SPY")
+        write_underlying_daily_parquet(qqq_underlying_path, short_histories, symbol="QQQ")
+        from historical_options_store import import_daily_option_parquet
+
+        import_daily_option_parquet(
+            spy_options_path,
+            "alpaca_opra_daily_snapshot",
+            underlying="SPY",
+            underlying_input=spy_underlying_path,
+            db_path=daily_db_path,
+        )
+        import_daily_option_parquet(
+            qqq_options_path,
+            "alpaca_opra_daily_snapshot",
+            underlying="QQQ",
+            underlying_input=qqq_underlying_path,
+            db_path=daily_db_path,
+        )
+        playbook = {
+            "id": "source_filtered_short_daily",
+            "label": "Source Filtered Short Daily",
+            "allowed_tickers": ["SPY", "QQQ"],
+            "historical_required_underlyings": ["SPY", "QQQ"],
+            "historical_source_labels": ["alpaca_opra_daily_snapshot"],
+            "allowed_directions": ["call"],
+            "min_quality_score": 0.0,
+        }
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False):
+            with patch.dict(wfo.REPLAY_PLAYBOOKS, {"source_filtered_short_daily": playbook}, clear=False):
+                imported = wfo.run_historical_backtest(
+                    lookback_years=1,
+                    n_picks=1,
+                    iv_adj=1.0,
+                    truth_lane="historical_imported_daily",
+                    playbook="source_filtered_short_daily",
+                )
+                diagnostic = wfo.run_historical_backtest(
+                    lookback_years=1,
+                    n_picks=1,
+                    iv_adj=1.0,
+                    truth_lane="historical_imported_daily",
+                    playbook="source_filtered_short_daily",
+                    min_imported_calendar_dates=1,
+                    save_result=False,
+                )
+
+        self.assertIn("insufficient trusted benchmark quote dates", imported["error"])
+        self.assertEqual(imported["source_labels_required"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(imported["replay_calendar"]["source_labels_required"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(imported["required_imported_calendar_dates"], 100)
+        self.assertEqual(imported["replay_calendar"]["required_quote_date_count"], 100)
+        self.assertLess(imported["replay_calendar"]["quote_date_count"], 100)
+        self.assertNotIn("insufficient trusted benchmark quote dates", diagnostic.get("error", ""))
+        self.assertEqual(diagnostic["required_imported_calendar_dates"], 1)
+        self.assertEqual(diagnostic["replay_calendar"]["required_quote_date_count"], 1)
+
+    def test_daily_imported_vertical_spreads_are_classified_as_listed_contracts(self):
+        daily_db_path = os.path.join(self._tmp.name, "options_history_daily_spread.db")
+        write_daily_options_parquet(self.daily_parquet_path, self.histories, symbol="SPY", strike_span=12)
+        write_daily_options_parquet(
+            os.path.join(self._tmp.name, "qqq_options.parquet"),
+            self.histories,
+            symbol="QQQ",
+            strike_span=12,
+        )
+        write_underlying_daily_parquet(self.daily_underlying_path, self.histories, symbol="SPY")
+        write_underlying_daily_parquet(
+            os.path.join(self._tmp.name, "qqq_underlying.parquet"),
+            self.histories,
+            symbol="QQQ",
+        )
+        from historical_options_store import import_daily_option_parquet
+
+        import_daily_option_parquet(
+            self.daily_parquet_path,
+            "spy-daily-spread",
+            underlying="SPY",
+            underlying_input=self.daily_underlying_path,
+            db_path=daily_db_path,
+        )
+        import_daily_option_parquet(
+            os.path.join(self._tmp.name, "qqq_options.parquet"),
+            "qqq-daily-spread",
+            underlying="QQQ",
+            underlying_input=os.path.join(self._tmp.name, "qqq_underlying.parquet"),
+            db_path=daily_db_path,
+        )
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False):
+            imported = wfo.run_historical_backtest(
+                lookback_years=1,
+                n_picks=1,
+                iv_adj=1.0,
+                truth_lane="historical_imported_daily",
+            )
+
+        self.assertGreater(imported["priced_trade_count"], 0)
+        self.assertEqual(imported["unresolved_contract_count"], 0)
+        self.assertEqual(imported["exact_contract_match_count"], 0)
+        self.assertEqual(imported["nearest_contract_match_count"], imported["priced_trade_count"])
+        self.assertEqual(imported["contract_resolution_counts"]["nearest_listed_contract"], imported["priced_trade_count"])
+        self.assertTrue(
+            all(
+                trade.get("entry_contract_resolution") == "nearest_listed_contract"
+                for trade in imported["trades"]
+                if trade.get("strategy_type") == "vertical_spread"
+            )
+        )
 
     def test_imported_outcome_prefers_archived_exact_contract_when_present(self):
         store = HistoricalOptionsStore(self.historical_db_path)
@@ -679,6 +952,67 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         )
         self.assertEqual(result["unpriced_trade_count"], 0)
         self.assertTrue(os.path.exists(self.imported_daily_forward_latest_path))
+
+    def test_archived_forward_daily_backtest_marks_uncovered_exit_horizon_pending(self):
+        daily_db_path = os.path.join(self._tmp.name, "options_history_daily_pending_exit.db")
+        spy_path = os.path.join(self._tmp.name, "spy_pending_exit.parquet")
+        write_daily_options_parquet(spy_path, self.histories, symbol="SPY", strike_span=12)
+
+        from historical_options_store import import_daily_option_parquet
+
+        import_daily_option_parquet(spy_path, "spy-daily-pending-exit", underlying="SPY", db_path=daily_db_path)
+        entry_date = pd.Timestamp(self.histories["SPY"].index[-2]).date()
+        latest_quote_date = pd.Timestamp(self.histories["SPY"].index[-1]).date()
+        expiry = latest_quote_date + timedelta(days=7)
+
+        record_forward_snapshot(
+            scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "SPY",
+                        "direction": "call",
+                        "option_type": "call",
+                        "contract_symbol": "SPY_PENDING_EXIT",
+                        "expiry": expiry.isoformat(),
+                        "strike": 560.0,
+                        "dte": (expiry - entry_date).days,
+                        "quote_time_et": entry_date.isoformat(),
+                        "quote_basis": "eod",
+                        "underlying_price_at_selection": 550.0,
+                        "selection_source": "live_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                        "candidate_rank": 1,
+                        "entry_date": entry_date.isoformat(),
+                    }
+                ],
+                "evidence_class": "live_production",
+                "is_fixture": False,
+                "run_mode": "live",
+                "policy_applied": True,
+                "policy": {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE, "promotion_status": "watch"},
+                "playbook": {"id": "short_term"},
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="api_scan_auto",
+            db_path=self.forward_ledger_db_path,
+        )
+
+        with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": daily_db_path}, clear=False), patch.object(
+            wfo,
+            "_simulate_trade_outcome_imported",
+            side_effect=AssertionError("pending horizon pick should not be replayed"),
+        ):
+            result = wfo.run_archived_forward_daily_backtest()
+
+        self.assertTrue(result["insufficient_archived_evidence"])
+        self.assertEqual(result["insufficient_reason"], "pending_truth_horizon_only")
+        self.assertEqual(result["truth_window_status"], "stale")
+        pending = result["pending_truth_horizon_trades"][0]
+        self.assertEqual(pending["pending_reason"], "exit_horizon_beyond_trusted_truth_horizon")
+        self.assertEqual(pending["latest_truth_quote_date"], latest_quote_date.isoformat())
+        self.assertEqual(pending["truth_required_date"], expiry.isoformat())
+        self.assertEqual(result["unpriced_trade_count"], 0)
 
     def test_archived_forward_daily_backtest_writes_separate_truth_artifact_with_fallback_provenance(self):
         daily_db_path = os.path.join(self._tmp.name, "options_history_daily_forward.db")

@@ -18,6 +18,8 @@ The current user-facing browser flow is the supervised options lane:
 - review tracked positions
 - manage suggested trades
 
+The main scan lane defaults to `bullish_pullback_observation` (Bullish Pullback Primary). Despite the legacy ID suffix, this lane is not observation-only; it scans the broad liquid options universe while SPY/QQQ remain the currently historical-ready subset. `quality90_debit55_canary` is the proof/control yardstick and `tracked_winner_primary` is secondary shape guidance.
+
 The current snapshot does not include the old app-facing day-trading route files or `DayTradingLab` component. The `src/app/api/day-trading/*` directories still exist as empty scaffolding folders in this worktree, but they do not currently expose route handlers. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
 
 ## System Map

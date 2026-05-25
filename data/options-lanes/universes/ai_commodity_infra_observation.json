@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "lane_id": "ai_commodity_infra_observation",
+  "lane_name": "AI Commodity / Power Infrastructure",
+  "universe_version": "2026-05-23.1",
+  "generated_at": "2026-05-23",
+  "source_label": "ai_commodity_universe_manual_review",
+  "admission_policy": {
+    "core_rule": "Core symbols are the first option-history and live-scan proof set for the commodity lane.",
+    "conditional_rule": "Conditional symbols remain scan eligible only when current contract liquidity, quote freshness, spread, volume, OI, event-risk, and concentration gates pass.",
+    "profitability_policy": "Lane B profitability must be measured only against Lane B symbols and source-labeled exact bid/ask history."
+  },
+  "tiers": [
+    {
+      "tier_id": "core_options",
+      "label": "Core Options Proxies",
+      "scan_eligible": true,
+      "admission_status": "core_liquidity_first_watchlist",
+      "admission_rule": "Primary commodity/power proxies selected for the first exact OPRA capture and replay loop.",
+      "admission_metadata": {
+        "options_bucket": "CORE_OPTIONS",
+        "required_before_promotion": ["exact_bid_ask_history", "sub_theme_attribution", "paper_fill_review"]
+      },
+      "symbols": ["FCX", "SLV", "VRT", "VST", "ETN", "GEV", "PWR", "CCJ", "CEG"]
+    },
+    {
+      "tier_id": "conditional_options",
+      "label": "Conditional Options Proxies",
+      "scan_eligible": true,
+      "admission_status": "conditional_contract_gated",
+      "admission_rule": "Secondary commodity and infrastructure proxies stay eligible only through strict per-contract liquidity gates.",
+      "admission_metadata": {
+        "options_bucket": "CONDITIONAL_OPTIONS",
+        "required_before_promotion": ["exact_bid_ask_history", "fresh_quote_pass", "spread_alternative_review"]
+      },
+      "symbols": ["SCCO", "COPX", "URA", "ALB", "SQM", "MP", "RIO", "BHP", "TECK", "AA", "XME", "NRG", "NVT", "CARR", "TT"]
+    }
+  ]
+}

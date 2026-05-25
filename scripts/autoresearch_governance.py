@@ -6,7 +6,6 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Sequence
 
-from forward_options_ledger import summarize_forward_holdout
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
     IMPORTED_TRUTH_SOURCE,

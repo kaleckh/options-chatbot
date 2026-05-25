@@ -6,7 +6,6 @@ Uses public endpoints (no auth needed for market data).
 Auth required only for order placement (Phase 3).
 """
 
-import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone

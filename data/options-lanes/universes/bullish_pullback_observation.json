@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "lane_id": "bullish_pullback_observation",
+  "lane_name": "Bullish Pullback Primary",
+  "universe_version": "2026-05-23.1",
+  "generated_at": "2026-05-23",
+  "source_label": "lane_manifest_manual_review",
+  "admission_policy": {
+    "proof_ready_rule": "Historical-ready symbols require exact imported daily bid/ask replay coverage before authoritative profitability claims.",
+    "expansion_rule": "Expansion symbols may be scanned live only when they pass current production liquidity, quote freshness, spread, and risk gates; they remain research/backfill candidates until exact history exists.",
+    "profitability_policy": "Do not mix expansion-symbol research P&L into proof-ready SPY/QQQ profitability claims."
+  },
+  "tiers": [
+    {
+      "tier_id": "historical_ready",
+      "label": "Proof-Ready Broad Index Core",
+      "scan_eligible": true,
+      "admission_status": "exact_imported_daily_ready",
+      "admission_rule": "SPY/QQQ are the current historical-ready subset for Lane A exact daily replay.",
+      "admission_metadata": {
+        "replay_basis": "historical_imported_daily",
+        "proof_role": "authoritative_when_exact_contracts_available"
+      },
+      "symbols": ["SPY", "QQQ"]
+    },
+    {
+      "tier_id": "expansion_candidates",
+      "label": "Broad Liquid Expansion Candidates",
+      "scan_eligible": true,
+      "admission_status": "scan_allowed_history_backfill_needed",
+      "admission_rule": "Broad liquid names can be scanned under production gates, but need source-labeled exact option history before profitability promotion.",
+      "admission_metadata": {
+        "replay_basis": "research_until_exact_history_imported",
+        "required_before_promotion": ["exact_contract_history", "walk_forward_oos", "paper_fill_review"]
+      },
+      "symbols": [
+        "IWM", "DIA", "XLK",
+        "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META",
+        "AMD", "NFLX", "JPM", "TSLA",
+        "DIS", "T", "CMCSA",
+        "GS", "BAC", "V", "C",
+        "UNH", "LLY", "JNJ", "ABBV", "PFE",
+        "XOM", "CVX", "OXY", "COP", "SLB",
+        "MCD", "NKE", "SBUX",
+        "WMT", "KO", "COST", "PG", "PM",
+        "CAT", "BA", "DE", "LMT", "RTX",
+        "FCX", "NEM", "CLF", "AA", "LIN",
+        "AMT", "PLD", "SPG", "WELL", "EQR",
+        "COIN", "MSTR", "PLTR", "ARM", "SMCI"
+      ]
+    }
+  ]
+}

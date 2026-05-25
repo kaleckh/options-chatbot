@@ -1,6 +1,7 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
+.pytest_cache/
 build/
 dist/
 wheels/
@@ -27,6 +28,8 @@ tsconfig.tsbuildinfo
 # Day-trading lab runtime state
 data/day-trading/
 data/options-validation/
+data/alpaca-cache/
+data/alpaca-options-strategy-lab/
 
 # Polymarket runtime state and credentials (NEVER commit private keys)
 data/polymarket/credentials.json
@@ -37,6 +40,13 @@ research_runs/
 
 # Local runtime state
 data/options-profit/decisions/
+data/profitability-lab/
+data/lane-lab/
+data/ai-commodity-infra/progress/
+data/ai-commodity-infra/alpaca-supporting-history/
+data/ai-commodity-infra/onclickmedia-eod/
+data/ai-commodity-infra/profitability-plan/
+data/ai-commodity-infra/variant-configs/
 tmp/
 tmp_public/
 .tmp/
@@ -49,15 +59,30 @@ tmp_public/
 tmp8zf11ul3/
 .codex_tmp/
 .codex_tmp_test/
+.codex/
+.codex-git-*/
+.codex-temp-xdg/
+.git-xdg/
+.codex-run/
 .codex-logs/
 chat_history.db
+chat_history.backup-*.db
 market_data.db
+forward_tracking.db
 *.db-shm
 *.db-wal
+*.pid
 auto_scan.log
 daily_performance.json
 data/tracked_positions.db
+data/tracked_positions.backup-*
 data/forward-tracking/crypto_options_positions.json
 data/forward-tracking/crypto_scan_log.txt
 data/forward-tracking/position_review_log.txt
 data/forward-tracking/scan_log.txt
+data/forward-tracking/*_log.txt
+data/forward-tracking/*_audit*.json
+data/forward-tracking/*.backup-*.jsonl
+data/forward-tracking/*.before-*.jsonl
+data/forward-tracking/*backup*.json
+=

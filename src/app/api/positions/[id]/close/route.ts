@@ -1,25 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BackendHttpError, closeTrackedPosition } from "@/lib/python-bridge";
+import { closeTrackedPosition } from "@/lib/python-bridge";
+import { jsonError, readJsonObject } from "../../../_utils";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await readJsonObject(req);
+    if (!body) {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const { id } = await params;
-    const result = await closeTrackedPosition(Number(id), body);
+    const positionId = Number(id);
+    if (!Number.isInteger(positionId) || positionId <= 0) {
+      return NextResponse.json({ error: "Invalid tracked position id" }, { status: 400 });
+    }
+    const result = await closeTrackedPosition(positionId, body);
     return NextResponse.json(result);
   } catch (err) {
-    if (err instanceof BackendHttpError) {
-      return NextResponse.json(
-        { error: err.message },
-        { status: err.status }
-      );
-    }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Failed to close tracked position" },
-      { status: 500 }
-    );
+    return jsonError(err, "Failed to close tracked position");
   }
 }

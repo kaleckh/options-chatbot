@@ -14,7 +14,7 @@ PENDING_TRUTH_STATUS = "pending_truth"
 
 def safe_float(value: Any) -> Optional[float]:
     try:
-        if value in (None, ""):
+        if isinstance(value, bool) or value in (None, ""):
             return None
         parsed = float(value)
         if not math.isfinite(parsed):
@@ -26,7 +26,7 @@ def safe_float(value: Any) -> Optional[float]:
 
 def safe_int(value: Any) -> Optional[int]:
     try:
-        if value in (None, ""):
+        if isinstance(value, bool) or value in (None, ""):
             return None
         parsed = int(value)
         return parsed
@@ -35,6 +35,9 @@ def safe_int(value: Any) -> Optional[int]:
 
 
 def normalize_quote_freshness_status(*values: Any) -> str:
+    has_fresh = False
+    has_observed = False
+    has_unknown = False
     for value in values:
         text = str(value or "").strip().lower()
         if not text:
@@ -42,11 +45,17 @@ def normalize_quote_freshness_status(*values: Any) -> str:
         if any(token in text for token in ("stale", "expired", "error", "missing", "unavailable")):
             return "stale"
         if text in {"fresh", "ready", "live", "current", "ok"}:
-            return "fresh"
-        if text in {"observed", "captured"}:
-            return "observed"
-        if text == "unknown":
-            return "unknown"
+            has_fresh = True
+        elif text in {"observed", "captured"}:
+            has_observed = True
+        else:
+            has_unknown = True
+    if has_unknown:
+        return "unknown"
+    if has_fresh:
+        return "fresh"
+    if has_observed:
+        return "observed"
     return "unknown"
 
 
@@ -142,12 +151,10 @@ def resolve_execution_price(
         execution_basis = str(manual_basis or "manual").strip() or "manual"
         executable = True
         freshness = "observed"
-    elif two_sided and freshness != "stale":
+    elif two_sided and freshness in {"fresh", "observed"}:
         raw_execution_price = ask_value if normalized_side == "entry" else bid_value
         execution_basis = "ask" if normalized_side == "entry" else "bid"
         executable = raw_execution_price is not None and raw_execution_price > 0
-        if freshness == "unknown":
-            freshness = "fresh"
     else:
         if freshness == "stale":
             blockers.append("stale_quote_freshness")
@@ -333,6 +340,91 @@ def executable_option_price(
     return result
 
 
+def executable_vertical_spread_entry(
+    *,
+    long_leg: dict[str, Any] | None,
+    short_leg: dict[str, Any] | None,
+    slippage_pct: float = 0.0,
+    quote_freshness_status: Any = None,
+) -> dict[str, Any]:
+    """Executable debit for opening a vertical debit spread.
+
+    Entry execution buys the long leg at ask and sells the short leg at bid.
+    Mid/net debit remains useful for display, but it is not executable.
+    """
+    long_leg = long_leg or {}
+    short_leg = short_leg or {}
+    freshness = normalize_quote_freshness_status(
+        quote_freshness_status,
+        long_leg.get("option_chain_status"),
+        short_leg.get("option_chain_status"),
+        long_leg.get("options_snapshot_status"),
+        short_leg.get("options_snapshot_status"),
+    )
+    long_ask = safe_float(long_leg.get("ask"))
+    short_bid = safe_float(short_leg.get("bid"))
+    blockers: list[str] = []
+
+    if freshness == "stale":
+        blockers.append("stale_quote_freshness")
+    elif freshness == "unknown":
+        blockers.append("unknown_quote_freshness")
+    if long_ask is None or long_ask <= 0:
+        blockers.append("missing_long_leg_ask")
+    if short_bid is None or short_bid <= 0:
+        blockers.append("missing_short_leg_bid")
+
+    execution_price: Optional[float] = None
+    executable = False
+    if not blockers:
+        raw_debit = float(long_ask) - float(short_bid)
+        if raw_debit <= 0:
+            blockers.append("non_positive_spread_entry_debit")
+        else:
+            slippage = float(slippage_pct or 0.0) / 100.0
+            execution_price = round(raw_debit * (1.0 + slippage), 4)
+            executable = True
+
+    long_mid = quote_midpoint(bid=long_leg.get("bid"), ask=long_leg.get("ask"))
+    short_mid = quote_midpoint(bid=short_leg.get("bid"), ask=short_leg.get("ask"))
+    display_price: Optional[float] = None
+    display_basis: Optional[str] = None
+    if long_mid is not None and short_mid is not None:
+        display_price = round(float(long_mid) - float(short_mid), 4)
+        display_basis = "spread_mid"
+    else:
+        long_display, long_basis = display_quote_price(
+            bid=long_leg.get("bid"),
+            ask=long_leg.get("ask"),
+            last=long_leg.get("last"),
+            model_price=long_leg.get("model_price"),
+            preferred=long_leg.get("premium"),
+        )
+        short_display, short_basis = display_quote_price(
+            bid=short_leg.get("bid"),
+            ask=short_leg.get("ask"),
+            last=short_leg.get("last"),
+            model_price=short_leg.get("model_price"),
+            preferred=short_leg.get("premium"),
+        )
+        if long_display is not None and short_display is not None:
+            display_price = round(float(long_display) - float(short_display), 4)
+            display_basis = f"spread_{long_basis or 'unknown'}_{short_basis or 'unknown'}"
+
+    return {
+        "execution_price": execution_price,
+        "execution_basis": "spread_ask_bid" if executable else None,
+        "executable": executable,
+        "quote_freshness_status": freshness,
+        "blockers": blockers,
+        "profitability_blockers": list(blockers),
+        "display_price": display_price if display_price is None else round(max(float(display_price), 0.0), 4),
+        "display_basis": display_basis,
+        "long_ask": long_ask,
+        "short_bid": short_bid,
+    }
+
+
 def profitability_status_with_blockers(
     *,
     base_blockers: Any = None,
@@ -412,33 +504,18 @@ def long_option_pnl(
 
 def option_pnl_snapshot(
     *,
-    entry_price: Any,
-    exit_price: Any,
-    contracts: Any = 1,
-    entry_fee_total_usd: Any = 0.0,
-    exit_fee_total_usd: Any = 0.0,
-) -> dict[str, Optional[float]]:
-    return position_pnl_snapshot(
-        entry_execution_price=entry_price,
-        exit_execution_price=exit_price,
-        contracts=contracts,
-        entry_fee_total_usd=entry_fee_total_usd,
-        exit_fee_total_usd=exit_fee_total_usd,
-    )
-
-
-def option_pnl_snapshot(
-    *,
-    entry_execution_price: Any,
-    exit_execution_price: Any,
+    entry_execution_price: Any = None,
+    exit_execution_price: Any = None,
+    entry_price: Any = None,
+    exit_price: Any = None,
     contracts: Any = 1,
     entry_fee_total_usd: Any = 0.0,
     exit_fee_total_usd: Any = 0.0,
     contract_multiplier: int = CONTRACT_MULTIPLIER,
 ) -> dict[str, Optional[float]]:
     return position_pnl_snapshot(
-        entry_execution_price=entry_execution_price,
-        exit_execution_price=exit_execution_price,
+        entry_execution_price=entry_execution_price if entry_execution_price is not None else entry_price,
+        exit_execution_price=exit_execution_price if exit_execution_price is not None else exit_price,
         contracts=contracts,
         entry_fee_total_usd=entry_fee_total_usd,
         exit_fee_total_usd=exit_fee_total_usd,
@@ -503,6 +580,21 @@ def vertical_spread_pnl(
 
     net_debit = float(l_entry) - float(s_entry)
     net_exit_value = float(l_exit) - float(s_exit)
+    if net_debit <= 0:
+        return {
+            "gross_pnl_usd": None,
+            "net_pnl_usd": None,
+            "gross_pnl_pct": None,
+            "net_pnl_pct": None,
+            "fee_total_usd": 0.0,
+            "entry_fee_total_usd": 0.0,
+            "exit_fee_total_usd": 0.0,
+            "net_debit": round(net_debit, 4),
+            "net_exit_value": round(net_exit_value, 4),
+            "spread_width": safe_float(spread_width),
+            "max_profit": None,
+            "max_loss": None,
+        }
 
     gross_pnl_usd = (net_exit_value - net_debit) * CONTRACT_MULTIPLIER * contract_count
 

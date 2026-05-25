@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Any, Optional
 
 from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
-from options_execution import commission_total_usd, executable_option_price, safe_float as execution_safe_float
+from options_execution import (
+    commission_total_usd,
+    executable_option_price,
+    executable_vertical_spread_entry,
+    safe_float as execution_safe_float,
+)
 
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "python-backend"
@@ -32,10 +37,14 @@ AUTHORITATIVE_FORWARD_LEDGER_DB_ENV = "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_P
 
 LIVE_PRODUCTION_EVIDENCE_CLASS = "live_production"
 MANUAL_OBSERVATION_EVIDENCE_CLASS = "manual_observation"
+MANUAL_BROKER_EXACT_CONTRACT_EVIDENCE_CLASS = "manual_broker_exact_contract"
 FIXTURE_SMOKE_EVIDENCE_CLASS = "fixture_smoke"
 UNIT_TEST_EVIDENCE_CLASS = "unit_test"
 E2E_TEST_EVIDENCE_CLASS = "e2e_test"
 RESEARCH_BACKFILL_EVIDENCE_CLASS = "research_backfill"
+EXACT_SELECTION_SOURCE = "live_chain_exact_contract"
+EXACT_PROMOTION_CLASS = "promotable_exact_contract"
+SPREAD_BID_ASK_ENTRY_BASIS = "spread_ask_bid"
 ELIGIBLE_STATUS = "eligible"
 INELIGIBLE_STATUS = "ineligible"
 PENDING_TRUTH_STATUS = "pending_truth"
@@ -46,6 +55,10 @@ FORWARD_SESSION_OPTIONAL_COLUMNS: dict[str, str] = {
     "evidence_class": "TEXT",
     "is_fixture": "INTEGER NOT NULL DEFAULT 0",
     "policy_artifact_id": "TEXT",
+    "market_data_source": "TEXT",
+    "underlying_data_source": "TEXT",
+    "options_data_source": "TEXT",
+    "quote_source": "TEXT",
     "quote_freshness_status": "TEXT",
     "eligibility_status": "TEXT",
     "eligibility_blockers": "TEXT NOT NULL DEFAULT '[]'",
@@ -88,6 +101,10 @@ FORWARD_EVENT_OPTIONAL_COLUMNS: dict[str, str] = {
     "evidence_class": "TEXT",
     "is_fixture": "INTEGER NOT NULL DEFAULT 0",
     "policy_artifact_id": "TEXT",
+    "market_data_source": "TEXT",
+    "underlying_data_source": "TEXT",
+    "options_data_source": "TEXT",
+    "quote_source": "TEXT",
     "quote_freshness_status": "TEXT",
     "eligibility_status": "TEXT",
     "eligibility_blockers": "TEXT NOT NULL DEFAULT '[]'",
@@ -133,6 +150,10 @@ def _ensure_table_columns(
         if name in existing:
             continue
         conn.execute(f"ALTER TABLE {table_name} ADD COLUMN {name} {ddl}")
+
+
+def _where_clause(clauses: list[str]) -> str:
+    return f"WHERE {' AND '.join(clauses)}" if clauses else ""
 
 
 def init_forward_ledger(db_path: str | Path | None = None) -> Path:
@@ -219,10 +240,18 @@ def init_forward_ledger(db_path: str | Path | None = None) -> Path:
             """
             CREATE INDEX IF NOT EXISTS idx_forward_sessions_recorded_at
                 ON forward_sessions (recorded_at_utc DESC);
+            CREATE INDEX IF NOT EXISTS idx_forward_sessions_source_recorded
+                ON forward_sessions (source_label, recorded_at_utc DESC, id DESC);
+            CREATE INDEX IF NOT EXISTS idx_forward_sessions_evidence_eligibility_recorded
+                ON forward_sessions (evidence_class, eligibility_status, is_fixture, recorded_at_utc DESC, id DESC);
             CREATE INDEX IF NOT EXISTS idx_forward_events_session_type
                 ON forward_events (session_id, event_type, id);
+            CREATE INDEX IF NOT EXISTS idx_forward_events_type_session
+                ON forward_events (event_type, session_id, id);
             CREATE INDEX IF NOT EXISTS idx_forward_events_cohort
                 ON forward_events (cohort_id, event_type, id);
+            CREATE INDEX IF NOT EXISTS idx_forward_events_scan_filters
+                ON forward_events (event_type, cohort_id, ticker, eligibility_status, evidence_class, is_fixture, session_id, id);
             """
         )
         conn.commit()
@@ -364,6 +393,16 @@ def _safe_text(value: Any) -> Optional[str]:
     return text or None
 
 
+def _safe_text_lower(value: Any) -> Optional[str]:
+    text = _safe_text(value)
+    return text.lower() if text else None
+
+
+def _safe_text_upper(value: Any) -> Optional[str]:
+    text = _safe_text(value)
+    return text.upper() if text else None
+
+
 def _json_array(value: Any) -> list[Any]:
     if isinstance(value, list):
         return list(value)
@@ -440,6 +479,8 @@ def _realized_position_summary(
     net_notional_usd = 0.0
     closed_position_count = 0
     for position in list(positions or []):
+        if not bool(position.get("proof_eligible")):
+            continue
         source = dict(position.get("source_pick_snapshot") or {})
         position_cohort = str(
             position.get("cohort_id")
@@ -510,6 +551,8 @@ def _measurement_status_for_event(
     existing_status = str(_event_value("eligibility_status") or "").strip().lower()
     if existing_status == PENDING_TRUTH_STATUS:
         return PENDING_TRUTH_STATUS
+    if not existing_status:
+        return INELIGIBLE_STATUS
     if existing_status and existing_status != ELIGIBLE_STATUS:
         return existing_status
     entry_date = _parse_date(
@@ -519,7 +562,7 @@ def _measurement_status_for_event(
     )
     if trusted_truth_horizon and entry_date and entry_date > trusted_truth_horizon:
         return PENDING_TRUTH_STATUS
-    return ELIGIBLE_STATUS if existing_status == ELIGIBLE_STATUS or existing_status == "" else existing_status
+    return ELIGIBLE_STATUS if existing_status == ELIGIBLE_STATUS else existing_status
 
 
 def _normalize_evidence_class(
@@ -531,6 +574,7 @@ def _normalize_evidence_class(
     if normalized in {
         LIVE_PRODUCTION_EVIDENCE_CLASS,
         MANUAL_OBSERVATION_EVIDENCE_CLASS,
+        MANUAL_BROKER_EXACT_CONTRACT_EVIDENCE_CLASS,
         FIXTURE_SMOKE_EVIDENCE_CLASS,
         UNIT_TEST_EVIDENCE_CLASS,
         E2E_TEST_EVIDENCE_CLASS,
@@ -555,6 +599,8 @@ def _default_run_mode(evidence_class: str) -> str:
     if evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS:
         return "live"
     if evidence_class == MANUAL_OBSERVATION_EVIDENCE_CLASS:
+        return "observation"
+    if evidence_class == MANUAL_BROKER_EXACT_CONTRACT_EVIDENCE_CLASS:
         return "observation"
     if evidence_class == FIXTURE_SMOKE_EVIDENCE_CLASS:
         return "fixture"
@@ -680,15 +726,12 @@ def _eligibility_for_pick(
         fallback=provenance.get("quote_freshness_status"),
     )
     quote_basis = _safe_text(pick.get("quote_basis"))
-    derived_execution = executable_option_price(
-        side="entry",
-        bid=pick.get("bid"),
-        ask=pick.get("ask"),
-        last=pick.get("last"),
-        model_price=pick.get("premium") if quote_basis == "model" else None,
-        slippage_pct=0.0,
+    derived_execution = _derived_entry_execution_for_pick(
+        pick,
+        quote_freshness_status=quote_freshness_status,
+        quote_basis=quote_basis,
     )
-    entry_execution_price = execution_safe_float(pick.get("entry_execution_price")) or derived_execution.get("execution_price")
+    entry_execution_price = derived_execution.get("execution_price")
     profitability_blockers = _normalized_blockers(
         pick.get("profitability_blockers")
         if pick.get("profitability_blockers") is not None
@@ -714,8 +757,7 @@ def _eligibility_for_pick(
         blockers.append("unknown_quote_freshness")
     if entry_execution_price is None:
         blockers.extend(profitability_blockers or ["missing_executable_entry_quote"])
-    if not _safe_text(_pick_contract_symbol(pick)):
-        blockers.append("missing_contract_symbol")
+    blockers.extend(_pick_exact_proof_blockers(pick))
     deduped_blockers = _normalized_blockers(blockers)
     if not deduped_blockers:
         trusted_truth_horizon = _trusted_truth_horizon()
@@ -764,8 +806,18 @@ def _session_eligibility(
         blockers.append("unknown_quote_freshness")
     if not picks:
         blockers.append("no_scan_picks")
-    elif not any(_safe_text(_pick_contract_symbol(pick)) for pick in picks):
-        blockers.append("missing_contract_symbol")
+    else:
+        exact_pick_blockers: list[str] = []
+        has_exact_proof_pick = False
+        for pick in picks:
+            pick_blockers = _pick_exact_proof_blockers(pick)
+            if not pick_blockers:
+                has_exact_proof_pick = True
+                break
+            exact_pick_blockers.extend(pick_blockers)
+        if not has_exact_proof_pick:
+            blockers.append("no_exact_contract_proof_picks")
+            blockers.extend(exact_pick_blockers)
     deduped_blockers = _normalized_blockers(blockers)
     if not deduped_blockers:
         trusted_truth_horizon = _trusted_truth_horizon()
@@ -778,7 +830,7 @@ def _session_eligibility(
             for pick in list(picks or [])
         ]
         pending_dates = [value for value in pending_dates if value is not None]
-        if trusted_truth_horizon and pending_dates and min(pending_dates) > trusted_truth_horizon:
+        if trusted_truth_horizon and pending_dates and max(pending_dates) > trusted_truth_horizon:
             return PENDING_TRUTH_STATUS, ["entry_date_beyond_trusted_truth_horizon"]
     return ELIGIBLE_STATUS if not deduped_blockers else INELIGIBLE_STATUS, deduped_blockers
 
@@ -883,6 +935,123 @@ def _pick_contract_symbol(pick: dict[str, Any]) -> Optional[str]:
     )
 
 
+def _pick_short_contract_symbol(pick: dict[str, Any]) -> Optional[str]:
+    return (
+        pick.get("short_contract_symbol")
+        or pick.get("shortContractSymbol")
+        or pick.get("short_option_contract_symbol")
+    )
+
+
+def _pick_strategy_type(pick: dict[str, Any]) -> str:
+    explicit = _safe_text_lower(pick.get("strategy_type"))
+    if explicit:
+        return explicit
+    if pick.get("short_strike") is not None or _safe_text(_pick_short_contract_symbol(pick)):
+        return "vertical_spread"
+    return "single_leg"
+
+
+def _spread_legs_from_pick(pick: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    long_leg = pick.get("long_leg")
+    short_leg = pick.get("short_leg")
+    if isinstance(long_leg, dict) and isinstance(short_leg, dict):
+        return dict(long_leg), dict(short_leg)
+
+    extracted_long: dict[str, Any] = {}
+    extracted_short: dict[str, Any] = {}
+    legs = pick.get("legs")
+    if isinstance(legs, list):
+        for leg in legs:
+            if not isinstance(leg, dict):
+                continue
+            role = str(leg.get("role") or "").strip().lower()
+            if role == "long":
+                extracted_long = dict(leg)
+            elif role == "short":
+                extracted_short = dict(leg)
+
+    if not extracted_long:
+        extracted_long = {
+            "contract_symbol": _pick_contract_symbol(pick),
+            "strike": pick.get("strike") if pick.get("strike") is not None else pick.get("strike_est"),
+            "bid": pick.get("bid"),
+            "ask": pick.get("ask"),
+            "last": pick.get("last"),
+            "premium": pick.get("premium") if pick.get("premium") is not None else pick.get("est_premium"),
+            "quote_basis": pick.get("quote_basis"),
+            "option_chain_status": pick.get("option_chain_status"),
+            "options_snapshot_status": pick.get("options_snapshot_status"),
+        }
+    if not extracted_short:
+        extracted_short = {
+            "contract_symbol": _pick_short_contract_symbol(pick),
+            "strike": pick.get("short_strike"),
+            "bid": pick.get("short_bid"),
+            "ask": pick.get("short_ask"),
+            "last": pick.get("short_last"),
+            "premium": pick.get("short_premium"),
+            "quote_basis": pick.get("short_quote_basis") or pick.get("quote_basis"),
+            "option_chain_status": pick.get("short_option_chain_status") or pick.get("option_chain_status"),
+            "options_snapshot_status": pick.get("short_options_snapshot_status") or pick.get("options_snapshot_status"),
+        }
+    return extracted_long, extracted_short
+
+
+def _derived_entry_execution_for_pick(
+    pick: dict[str, Any],
+    *,
+    quote_freshness_status: str,
+    quote_basis: str | None,
+) -> dict[str, Any]:
+    if _pick_strategy_type(pick) == "vertical_spread":
+        long_leg, short_leg = _spread_legs_from_pick(pick)
+        return executable_vertical_spread_entry(
+            long_leg=long_leg,
+            short_leg=short_leg,
+            slippage_pct=0.0,
+            quote_freshness_status=quote_freshness_status,
+        )
+    return executable_option_price(
+        side="entry",
+        bid=pick.get("bid"),
+        ask=pick.get("ask"),
+        last=pick.get("last"),
+        model_price=pick.get("premium") if quote_basis == "model" else None,
+        slippage_pct=0.0,
+        quote_freshness_status=quote_freshness_status,
+        allow_research_fallback=False,
+    )
+
+
+def _pick_exact_proof_blockers(pick: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    selection_source = _safe_text_lower(
+        pick.get("selection_source") or pick.get("contract_selection_source")
+    )
+    strategy_type = _pick_strategy_type(pick)
+    contract_symbol = _safe_text(_pick_contract_symbol(pick))
+    short_contract_symbol = _safe_text(_pick_short_contract_symbol(pick))
+
+    if selection_source != EXACT_SELECTION_SOURCE:
+        blockers.append("selection_source_not_exact")
+    if not contract_symbol:
+        blockers.append("missing_contract_symbol")
+    if strategy_type == "vertical_spread":
+        if not short_contract_symbol:
+            blockers.append("missing_short_contract_symbol")
+        if _safe_text_lower(pick.get("entry_execution_basis")) != SPREAD_BID_ASK_ENTRY_BASIS:
+            blockers.append("spread_entry_not_bid_ask")
+    source = _safe_text_lower(
+        pick.get("options_data_source")
+        or pick.get("market_data_source")
+        or pick.get("quote_source")
+    )
+    if source and not (source == "alpaca_opra" or ("alpaca" in source and "opra" in source)):
+        blockers.append("options_source_not_opra")
+    return _normalized_blockers(blockers)
+
+
 def _pick_option_type(pick: dict[str, Any]) -> Optional[str]:
     option_type = (
         pick.get("option_type")
@@ -929,9 +1098,11 @@ def build_forward_scan_snapshot(
     policy_artifact_id: Optional[str] = None,
     quote_freshness_status: Optional[str] = None,
     symbol_diagnostics: Optional[dict[str, Any]] = None,
+    candidate_audit_picks: Optional[list[dict[str, Any]]] = None,
 ) -> dict[str, Any]:
     snapshot = {
         "picks": list(picks or []),
+        "candidate_audit_picks": list(candidate_audit_picks or []),
         "policy_applied": bool(policy_applied),
         "policy": dict(policy or {}),
         "policy_error": policy_error,
@@ -984,10 +1155,13 @@ def _tracked_position_matches_pick(
 
     # 2. Exact contract symbol match
     ticker = str(pick.get("ticker") or "").strip().upper()
-    contract_symbol = str(_pick_contract_symbol(pick) or "").strip().upper()
+    contract_symbol = _safe_text_upper(_pick_contract_symbol(pick))
+    short_contract_symbol = _safe_text_upper(_pick_short_contract_symbol(pick))
+    strategy_type = _pick_strategy_type(pick)
     expiry = str(pick.get("expiry") or "").strip()[:10]
     direction = str(pick.get("direction") or pick.get("type") or "").strip().lower()
     strike = _safe_float(pick.get("strike") if pick.get("strike") is not None else pick.get("strike_est"))
+    short_strike = _safe_float(pick.get("short_strike"))
     cohort_id = str(pick.get("cohort_id") or "").strip()
 
     for position in tracked_positions:
@@ -996,13 +1170,31 @@ def _tracked_position_matches_pick(
             position_cohort = str(source.get("cohort_id") or position.get("cohort_id") or "").strip()
             if position_cohort != cohort_id:
                 continue
-        position_contract = str(
+        position_contract = _safe_text_upper(
             position.get("contract_symbol")
             or source.get("contract_symbol")
             or source.get("contractSymbol")
-            or ""
-        ).strip().upper()
+        )
+        position_short_contract = _safe_text_upper(
+            position.get("short_contract_symbol")
+            or source.get("short_contract_symbol")
+            or source.get("shortContractSymbol")
+        )
+        position_strategy_type = _safe_text_lower(
+            position.get("strategy_type") or source.get("strategy_type")
+        )
+        position_is_spread = (
+            position_strategy_type == "vertical_spread"
+            or bool(position_short_contract)
+            or position.get("short_strike") is not None
+            or source.get("short_strike") is not None
+        )
         if contract_symbol and position_contract and contract_symbol == position_contract:
+            if strategy_type == "vertical_spread":
+                if not short_contract_symbol or position_short_contract != short_contract_symbol:
+                    continue
+            elif position_is_spread:
+                continue
             return True
 
     # 3. Fallback heuristic matching
@@ -1033,6 +1225,37 @@ def _tracked_position_matches_pick(
             else source.get("strike_est")
         )
         if strike is not None and position_strike is not None and round(position_strike, 4) != round(strike, 4):
+            continue
+        position_short_contract = _safe_text_upper(
+            position.get("short_contract_symbol")
+            or source.get("short_contract_symbol")
+            or source.get("shortContractSymbol")
+        )
+        position_short_strike = _safe_float(
+            position.get("short_strike")
+            if position.get("short_strike") is not None
+            else source.get("short_strike")
+        )
+        position_strategy_type = _safe_text_lower(
+            position.get("strategy_type") or source.get("strategy_type")
+        )
+        position_is_spread = (
+            position_strategy_type == "vertical_spread"
+            or bool(position_short_contract)
+            or position_short_strike is not None
+        )
+        if strategy_type == "vertical_spread":
+            if not position_is_spread:
+                continue
+            if short_contract_symbol:
+                if position_short_contract != short_contract_symbol:
+                    continue
+            elif short_strike is not None:
+                if position_short_strike is None or round(position_short_strike, 4) != round(short_strike, 4):
+                    continue
+            else:
+                continue
+        elif position_is_spread:
             continue
         return True
     return False
@@ -1085,13 +1308,13 @@ def _event_fields_from_pick(
         if pick.get("mid") is not None
         else pick.get("premium")
     )
-    derived_execution = executable_option_price(
-        side="entry",
-        bid=pick.get("bid"),
-        ask=pick.get("ask"),
-        last=pick.get("last"),
-        model_price=pick.get("premium") if quote_basis == "model" else None,
-        slippage_pct=0.0,
+    derived_execution = _derived_entry_execution_for_pick(
+        pick,
+        quote_freshness_status=_quote_freshness_status_from_pick(
+            pick,
+            fallback=provenance.get("quote_freshness_status"),
+        ),
+        quote_basis=quote_basis,
     )
     entry_execution_price = execution_safe_float(pick.get("entry_execution_price")) or derived_execution.get("execution_price")
     entry_execution_basis = _safe_text(pick.get("entry_execution_basis")) or _safe_text(derived_execution.get("execution_basis"))
@@ -1112,6 +1335,10 @@ def _event_fields_from_pick(
         "contract_symbol": _pick_contract_symbol(pick),
         "recommendation": policy_state,
         "pricing_source": pick.get("pricing_source") or quote_basis,
+        "market_data_source": _safe_text(pick.get("market_data_source")),
+        "underlying_data_source": _safe_text(pick.get("underlying_data_source")),
+        "options_data_source": _safe_text(pick.get("options_data_source")),
+        "quote_source": _safe_text(pick.get("quote_source")),
         "cohort_id": cohort_id,
         "cohort_role": cohort_role,
         "policy_state": policy_state,
@@ -1224,6 +1451,10 @@ def _insert_forward_event(
     evidence_class: Optional[str] = None,
     is_fixture: Optional[bool] = None,
     policy_artifact_id: Optional[str] = None,
+    market_data_source: Optional[str] = None,
+    underlying_data_source: Optional[str] = None,
+    options_data_source: Optional[str] = None,
+    quote_source: Optional[str] = None,
     quote_freshness_status: Optional[str] = None,
     eligibility_status: Optional[str] = None,
     eligibility_blockers: Optional[str] = None,
@@ -1277,6 +1508,10 @@ def _insert_forward_event(
         "evidence_class",
         "is_fixture",
         "policy_artifact_id",
+        "market_data_source",
+        "underlying_data_source",
+        "options_data_source",
+        "quote_source",
         "quote_freshness_status",
         "eligibility_status",
         "eligibility_blockers",
@@ -1331,6 +1566,10 @@ def _insert_forward_event(
         evidence_class,
         int(bool(is_fixture)),
         policy_artifact_id,
+        market_data_source,
+        underlying_data_source,
+        options_data_source,
+        quote_source,
         quote_freshness_status,
         eligibility_status,
         eligibility_blockers or "[]",
@@ -1360,6 +1599,10 @@ def _position_review_event_fields(position: dict[str, Any], *, provenance: dict[
         ),
         "recommendation": latest_review.get("recommendation"),
         "pricing_source": latest_review.get("pricing_source") or source.get("quote_basis"),
+        "market_data_source": _safe_text(source.get("market_data_source")),
+        "underlying_data_source": _safe_text(source.get("underlying_data_source")),
+        "options_data_source": _safe_text(source.get("options_data_source")),
+        "quote_source": _safe_text(source.get("quote_source")),
         "cohort_id": _safe_text(source.get("cohort_id")),
         "cohort_role": _safe_text(source.get("cohort_role")),
         "policy_state": _safe_text(source.get("policy_decision") or source.get("trade_policy_decision")),
@@ -1698,9 +1941,31 @@ def record_position_opened(
     """Record a position_opened forward event when the user takes a scan pick."""
     recorded_at_utc = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     source = dict(position.get("source_pick_snapshot") or {})
+    position_proof_class = _safe_text(position.get("proof_class") or source.get("proof_class"))
+    position_contract_symbol = _safe_text(
+        position.get("contract_symbol")
+        or source.get("contract_symbol")
+        or source.get("contractSymbol")
+    )
+    source_strategy_type = _safe_text(source.get("strategy_type"))
+    source_short_contract_symbol = _safe_text(source.get("short_contract_symbol"))
+    is_vertical_spread = (
+        source_strategy_type == "vertical_spread"
+        or source.get("short_strike") is not None
+        or bool(source_short_contract_symbol)
+    )
+    has_exact_contract_identity = bool(position_contract_symbol) and (
+        not is_vertical_spread or bool(source_short_contract_symbol)
+    )
+    requested_evidence_class = evidence_class
+    if (
+        not _safe_text(requested_evidence_class)
+        and position_proof_class == MANUAL_BROKER_EXACT_CONTRACT_EVIDENCE_CLASS
+    ):
+        requested_evidence_class = MANUAL_BROKER_EXACT_CONTRACT_EVIDENCE_CLASS
 
     resolved_evidence_class = _normalize_evidence_class(
-        evidence_class,
+        requested_evidence_class,
         source_label=source_label,
     )
     resolved_run_mode = _safe_text(run_mode) or _default_run_mode(resolved_evidence_class)
@@ -1708,6 +1973,16 @@ def record_position_opened(
     resolved_is_fixture = is_fixture if is_fixture is not None else resolved_evidence_class in {
         FIXTURE_SMOKE_EVIDENCE_CLASS, UNIT_TEST_EVIDENCE_CLASS, E2E_TEST_EVIDENCE_CLASS,
     }
+
+    eligibility_blockers: list[str] = []
+    if resolved_evidence_class != LIVE_PRODUCTION_EVIDENCE_CLASS:
+        eligibility_blockers.append("non_live_evidence_class")
+    if resolved_is_fixture:
+        eligibility_blockers.append("fixture_or_test_traffic")
+    if not bool(position.get("proof_eligible")):
+        eligibility_blockers.append("position_not_live_scan_proof")
+    if not has_exact_contract_identity:
+        eligibility_blockers.append("missing_exact_contract_identity")
 
     provenance = {
         "recorded_at_utc": recorded_at_utc,
@@ -1717,8 +1992,8 @@ def record_position_opened(
         "is_fixture": resolved_is_fixture,
         "policy_artifact_id": None,
         "quote_freshness_status": _quote_freshness_status_from_pick(source),
-        "eligibility_status": ELIGIBLE_STATUS if resolved_evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS and not resolved_is_fixture else INELIGIBLE_STATUS,
-        "eligibility_blockers": [] if resolved_evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS and not resolved_is_fixture else ["non_live_evidence_class"],
+        "eligibility_status": INELIGIBLE_STATUS if eligibility_blockers else ELIGIBLE_STATUS,
+        "eligibility_blockers": eligibility_blockers,
     }
 
     path = init_forward_ledger(db_path or _db_path_for_provenance(provenance))
@@ -1847,27 +2122,30 @@ def list_forward_sessions(
         else None
     )
     normalized_eligibility_status = _safe_text(eligibility_status)
+    clauses: list[str] = []
+    params: list[Any] = []
+    normalized_source_label = _safe_text(source_label)
+    if normalized_source_label is not None:
+        clauses.append("source_label = ?")
+        params.append(normalized_source_label)
+    if normalized_evidence_class is not None:
+        clauses.append("evidence_class = ?")
+        params.append(normalized_evidence_class)
+    if normalized_eligibility_status is not None:
+        clauses.append("eligibility_status = ?")
+        params.append(normalized_eligibility_status)
+    params.append(int(limit))
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM forward_sessions
-            WHERE (? IS NULL OR source_label = ?)
-              AND (? IS NULL OR evidence_class = ?)
-              AND (? IS NULL OR eligibility_status = ?)
+            {_where_clause(clauses)}
             ORDER BY recorded_at_utc DESC, id DESC
             LIMIT ?
             """,
-            (
-                _safe_text(source_label),
-                _safe_text(source_label),
-                normalized_evidence_class,
-                normalized_evidence_class,
-                normalized_eligibility_status,
-                normalized_eligibility_status,
-                int(limit),
-            ),
+            tuple(params),
         ).fetchall()
     sessions: list[dict[str, Any]] = []
     for row in rows:
@@ -1900,10 +2178,47 @@ def list_forward_scan_pick_events(
         ELIGIBLE_STATUS if eligible_only and not _safe_text(eligibility_status)
         else _safe_text(eligibility_status)
     )
+    normalized_cohort_id = _safe_text(cohort_id)
+    normalized_tickers = {
+        str(item).strip().upper()
+        for item in list(tickers or [])
+        if str(item).strip()
+    }
+    clauses: list[str] = ["fe.event_type = 'scan_pick'"]
+    params: list[Any] = []
+    normalized_source_label = _safe_text(source_label)
+    normalized_recorded_after = _safe_text(recorded_after_utc)
+    normalized_recorded_before = _safe_text(recorded_before_utc)
+    if normalized_source_label is not None:
+        clauses.append("fs.source_label = ?")
+        params.append(normalized_source_label)
+    if normalized_recorded_after is not None:
+        clauses.append("fs.recorded_at_utc >= ?")
+        params.append(normalized_recorded_after)
+    if normalized_recorded_before is not None:
+        clauses.append("fs.recorded_at_utc < ?")
+        params.append(normalized_recorded_before)
+    if normalized_evidence_class is not None:
+        clauses.append("COALESCE(fe.evidence_class, fs.evidence_class) = ?")
+        params.append(normalized_evidence_class)
+    if normalized_eligibility_status is not None:
+        clauses.append("COALESCE(fe.eligibility_status, fs.eligibility_status) = ?")
+        params.append(normalized_eligibility_status)
+    if eligible_only:
+        clauses.append("COALESCE(fe.is_fixture, fs.is_fixture, 0) = 0")
+    if normalized_cohort_id is not None:
+        # Keep legacy rows with NULL indexed metadata so payload fallback below
+        # can preserve historical behavior while current rows filter in SQL.
+        clauses.append("(fe.cohort_id = ? OR fe.cohort_id IS NULL)")
+        params.append(normalized_cohort_id)
+    if normalized_tickers:
+        placeholders = ", ".join("?" for _ in normalized_tickers)
+        clauses.append(f"(fe.ticker IN ({placeholders}) OR fe.ticker IS NULL)")
+        params.extend(sorted(normalized_tickers))
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 fs.id AS session_id,
                 fs.recorded_at_utc,
@@ -1915,36 +2230,12 @@ def list_forward_scan_pick_events(
             FROM forward_events fe
             JOIN forward_sessions fs
                 ON fs.id = fe.session_id
-            WHERE fe.event_type = 'scan_pick'
-              AND (? IS NULL OR fs.source_label = ?)
-              AND (? IS NULL OR fs.recorded_at_utc >= ?)
-              AND (? IS NULL OR fs.recorded_at_utc < ?)
-              AND (? IS NULL OR COALESCE(fe.evidence_class, fs.evidence_class) = ?)
-              AND (? IS NULL OR COALESCE(fe.eligibility_status, fs.eligibility_status) = ?)
-              AND (? = 0 OR COALESCE(fe.is_fixture, fs.is_fixture, 0) = 0)
+            {_where_clause(clauses)}
             ORDER BY fs.recorded_at_utc ASC, fe.id ASC
             """,
-            (
-                _safe_text(source_label),
-                _safe_text(source_label),
-                _safe_text(recorded_after_utc),
-                _safe_text(recorded_after_utc),
-                _safe_text(recorded_before_utc),
-                _safe_text(recorded_before_utc),
-                normalized_evidence_class,
-                normalized_evidence_class,
-                normalized_eligibility_status,
-                normalized_eligibility_status,
-                int(bool(eligible_only)),
-            ),
+            tuple(params),
         ).fetchall()
         events: list[dict[str, Any]] = []
-    normalized_cohort_id = _safe_text(cohort_id)
-    normalized_tickers = {
-        str(item).strip().upper()
-        for item in list(tickers or [])
-        if str(item).strip()
-    }
     for row in rows:
         payload = json.loads(str(row["payload_json"] or "{}"))
         event = {
@@ -2033,20 +2324,33 @@ def summarize_forward_holdout(
     path = init_forward_ledger(db_path)
     normalized_cohort = str(cohort_id or "").strip() or None
     normalized_source_label = _safe_text(source_label)
+    session_clauses: list[str] = []
+    session_params: list[Any] = []
+    if normalized_source_label is not None:
+        session_clauses.append("source_label = ?")
+        session_params.append(normalized_source_label)
+    event_clauses: list[str] = ["fe.event_type IN ('scan_pick', 'position_review')"]
+    event_params: list[Any] = []
+    if normalized_source_label is not None:
+        event_clauses.append("fs.source_label = ?")
+        event_params.append(normalized_source_label)
+    if normalized_cohort is not None:
+        event_clauses.append("fe.cohort_id = ?")
+        event_params.append(normalized_cohort)
 
     with closing(sqlite3.connect(path)) as conn:
         conn.row_factory = sqlite3.Row
         session_rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM forward_sessions
-            WHERE (? IS NULL OR source_label = ?)
+            {_where_clause(session_clauses)}
             ORDER BY recorded_at_utc ASC, id ASC
             """,
-            (normalized_source_label, normalized_source_label),
+            tuple(session_params),
         ).fetchall()
         rows = conn.execute(
-            """
+            f"""
             SELECT
                 fe.session_id,
                 fs.recorded_at_utc,
@@ -2068,17 +2372,10 @@ def summarize_forward_holdout(
             FROM forward_events fe
             JOIN forward_sessions fs
                 ON fs.id = fe.session_id
-            WHERE fe.event_type IN ('scan_pick', 'position_review')
-              AND (? IS NULL OR fs.source_label = ?)
-              AND (? IS NULL OR fe.cohort_id = ?)
+            {_where_clause(event_clauses)}
             ORDER BY fs.recorded_at_utc ASC, fe.id ASC
             """,
-            (
-                normalized_source_label,
-                normalized_source_label,
-                normalized_cohort,
-                normalized_cohort,
-            ),
+            tuple(event_params),
         ).fetchall()
 
     filtered_sessions: list[sqlite3.Row] = []
@@ -2103,7 +2400,7 @@ def summarize_forward_holdout(
                     sessions_with_zero_scan_picks += 1
                     latest_starvation_stage = _infer_starvation_stage(session_funnel)
 
-    positions_available = _closed_tracked_positions_snapshot()[0]
+    positions_available, closed_positions = _closed_tracked_positions_snapshot()
 
     if not rows and not filtered_sessions:
         return {
@@ -2146,6 +2443,10 @@ def summarize_forward_holdout(
         }
 
     if not rows:
+        realized_position_summary = _realized_position_summary(
+            closed_positions,
+            cohort_id=normalized_cohort,
+        )
         recorded_values: list[datetime] = []
         truth_sources: set[str] = set()
         promotion_statuses: set[str] = set()
@@ -2188,12 +2489,20 @@ def summarize_forward_holdout(
             "blocked_pick_count": 0,
             "skipped_pick_count": 0,
             "review_count": 0,
-            "closed_review_count": 0,
+            "closed_review_count": int(realized_position_summary.get("closed_position_count") or 0),
             "tracked_positions_available": positions_available,
-            "gross_realized_pnl_usd": 0.0,
-            "net_realized_pnl_usd": 0.0,
-            "gross_realized_pnl_pct": None,
-            "net_realized_pnl_pct": None,
+            "gross_realized_pnl_usd": round(float(realized_position_summary.get("gross_realized_pnl_usd") or 0.0), 2),
+            "net_realized_pnl_usd": round(float(realized_position_summary.get("net_realized_pnl_usd") or 0.0), 2),
+            "gross_realized_pnl_pct": (
+                round(float(realized_position_summary["gross_realized_pnl_pct"]), 2)
+                if realized_position_summary.get("gross_realized_pnl_pct") is not None
+                else None
+            ),
+            "net_realized_pnl_pct": (
+                round(float(realized_position_summary["net_realized_pnl_pct"]), 2)
+                if realized_position_summary.get("net_realized_pnl_pct") is not None
+                else None
+            ),
             "recommendation_counts": {},
             "status_counts": {},
             "truth_sources_seen": sorted(truth_sources),
@@ -2244,7 +2553,6 @@ def summarize_forward_holdout(
         "position_review": {"with_contract_count": 0, "missing_contract_count": 0},
     }
     trusted_truth_horizon = _trusted_truth_horizon()
-    positions_available, closed_positions = _closed_tracked_positions_snapshot()
     gross_realized_pnl_usd = 0.0
     net_realized_pnl_usd = 0.0
     gross_realized_pnl_pct_values: list[float] = []

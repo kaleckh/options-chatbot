@@ -26,6 +26,7 @@ INTRADAY_SNAPSHOT_KIND = "intraday"
 DAILY_SNAPSHOT_KIND = "daily_eod"
 TRUSTED_DATA_TRUST = "trusted"
 FIXTURE_DATA_TRUST = "fixture"
+RESEARCH_DATA_TRUST = "research"
 SQLITE_TIMEOUT_SECONDS = 30.0
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 
@@ -59,6 +60,8 @@ def _normalize_data_trust(value: Any) -> str:
     raw = str(value or "").strip().lower()
     if raw == FIXTURE_DATA_TRUST:
         return FIXTURE_DATA_TRUST
+    if raw == RESEARCH_DATA_TRUST:
+        return RESEARCH_DATA_TRUST
     return TRUSTED_DATA_TRUST
 
 
@@ -70,6 +73,20 @@ def _infer_data_trust(source_label: Any, input_path: Any, dataset_kind: Any) -> 
     fixture_tokens = ("fixture", "sample", "demo")
     if any(token in value for value in values for token in fixture_tokens):
         return FIXTURE_DATA_TRUST
+    research_tokens = (
+        "research",
+        "external",
+        "free",
+        "marketdata_free",
+        "thetadata_free",
+        "theta_data_free",
+        "philippdubach",
+        "onclickmedia",
+        "yahoo",
+        "yfinance",
+    )
+    if any(token in value for value in values for token in research_tokens):
+        return RESEARCH_DATA_TRUST
     return TRUSTED_DATA_TRUST
 
 
@@ -221,6 +238,14 @@ def _normalize_option_type(value: Any) -> str:
     raise ValueError("option_type must be call/c or put/p")
 
 
+def _normalize_source_labels(source_labels: Sequence[str] | None) -> list[str]:
+    return [
+        str(source_label).strip()
+        for source_label in (source_labels or [])
+        if str(source_label).strip()
+    ]
+
+
 def _parse_date(value: Any, field_name: str) -> date:
     raw = str(value or "").strip()
     if not raw:
@@ -265,17 +290,6 @@ def _quote_date_et(as_of_utc: datetime) -> tuple[str, int]:
     as_of_et = as_of_utc.astimezone(EASTERN_TZ)
     minute = as_of_et.hour * 60 + as_of_et.minute
     return as_of_et.date().isoformat(), minute
-
-
-def _quote_price(row: dict[str, Any]) -> tuple[Optional[float], Optional[str]]:
-    bid = row.get("bid")
-    ask = row.get("ask")
-    last = row.get("last")
-    if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
-        return round((bid + ask) / 2.0, 4), "mid"
-    if last is not None and last > 0:
-        return round(last, 4), "last"
-    return None, None
 
 
 def _quote_price_with_mode(row: dict[str, Any], *, allow_last_price: bool) -> tuple[Optional[float], Optional[str]]:
@@ -860,7 +874,13 @@ class HistoricalOptionsStore:
         conn.row_factory = sqlite3.Row
         return conn
 
-    def has_quotes(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> bool:
+    def has_quotes(
+        self,
+        snapshot_kind: str | None = None,
+        *,
+        trusted_only: bool = False,
+        source_labels: Sequence[str] | None = None,
+    ) -> bool:
         with closing(self._connect()) as conn:
             query = """
                 SELECT 1
@@ -875,15 +895,27 @@ class HistoricalOptionsStore:
             if trusted_only:
                 clauses.append("b.data_trust = ?")
                 params.append(TRUSTED_DATA_TRUST)
+            normalized_source_labels = _normalize_source_labels(source_labels)
+            if normalized_source_labels:
+                placeholders = ", ".join("?" for _ in normalized_source_labels)
+                clauses.append(f"b.source_label IN ({placeholders})")
+                params.extend(normalized_source_labels)
             if clauses:
                 query += f" WHERE {' AND '.join(clauses)}"
             query += " LIMIT 1"
             row = conn.execute(query, tuple(params)).fetchone()
         return row is not None
 
-    def list_available_underlyings(self, snapshot_kind: str | None = None, *, trusted_only: bool = False) -> list[str]:
+    def list_available_underlyings(
+        self,
+        snapshot_kind: str | None = None,
+        *,
+        trusted_only: bool = False,
+        source_labels: Sequence[str] | None = None,
+    ) -> list[str]:
+        normalized_source_labels = _normalize_source_labels(source_labels)
         with closing(self._connect()) as conn:
-            if not trusted_only:
+            if not trusted_only and not normalized_source_labels:
                 query = "SELECT DISTINCT underlying FROM option_quote_snapshots"
                 clauses: list[str] = []
                 params: list[Any] = []
@@ -906,8 +938,13 @@ class HistoricalOptionsStore:
             if snapshot_kind:
                 clauses.append("q.snapshot_kind = ?")
                 params.append(str(snapshot_kind))
-            clauses.append("b.data_trust = ?")
-            params.append(TRUSTED_DATA_TRUST)
+            if trusted_only:
+                clauses.append("b.data_trust = ?")
+                params.append(TRUSTED_DATA_TRUST)
+            if normalized_source_labels:
+                placeholders = ", ".join("?" for _ in normalized_source_labels)
+                clauses.append(f"b.source_label IN ({placeholders})")
+                params.extend(normalized_source_labels)
             query += f" WHERE {' AND '.join(clauses)}"
             query += " ORDER BY q.underlying"
             rows = conn.execute(query, tuple(params)).fetchall()
@@ -919,6 +956,7 @@ class HistoricalOptionsStore:
         *,
         snapshot_kind: str | None = None,
         trusted_only: bool = False,
+        source_labels: Sequence[str] | None = None,
     ) -> list[str]:
         with closing(self._connect()) as conn:
             query = """
@@ -934,6 +972,11 @@ class HistoricalOptionsStore:
             if trusted_only:
                 clauses.append("b.data_trust = ?")
                 params.append(TRUSTED_DATA_TRUST)
+            normalized_source_labels = _normalize_source_labels(source_labels)
+            if normalized_source_labels:
+                placeholders = ", ".join("?" for _ in normalized_source_labels)
+                clauses.append(f"b.source_label IN ({placeholders})")
+                params.extend(normalized_source_labels)
             query += f" WHERE {' AND '.join(clauses)}"
             query += " ORDER BY q.quote_date_et"
             rows = conn.execute(query, tuple(params)).fetchall()
@@ -945,6 +988,7 @@ class HistoricalOptionsStore:
         *,
         snapshot_kind: str | None = None,
         trusted_only: bool = False,
+        source_labels: Sequence[str] | None = None,
     ) -> list[str]:
         normalized_underlyings = sorted(
             {
@@ -960,6 +1004,7 @@ class HistoricalOptionsStore:
                 normalized_underlyings[0],
                 snapshot_kind=snapshot_kind,
                 trusted_only=trusted_only,
+                source_labels=source_labels,
             )
 
         placeholders = ", ".join("?" for _ in normalized_underlyings)
@@ -977,6 +1022,11 @@ class HistoricalOptionsStore:
             if trusted_only:
                 query += " AND b.data_trust = ?"
                 params.append(TRUSTED_DATA_TRUST)
+            normalized_source_labels = _normalize_source_labels(source_labels)
+            if normalized_source_labels:
+                source_placeholders = ", ".join("?" for _ in normalized_source_labels)
+                query += f" AND b.source_label IN ({source_placeholders})"
+                params.extend(normalized_source_labels)
             query += """
                 GROUP BY q.quote_date_et
                 HAVING COUNT(DISTINCT q.underlying) = ?
@@ -1024,14 +1074,157 @@ class HistoricalOptionsStore:
             "snapshot_kind": snapshot_kind,
         }
 
+    def source_inventory(
+        self,
+        snapshot_kind: str | None = None,
+        *,
+        trusted_only: bool = False,
+        source_labels: Sequence[str] | None = None,
+        underlyings: Sequence[str] | None = None,
+    ) -> dict[str, Any]:
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        normalized_underlyings = sorted(
+            {
+                _normalize_underlying(underlying)
+                for underlying in (underlyings or [])
+                if str(underlying or "").strip()
+            }
+        )
+        dataset_kind = _dataset_kind_for_snapshot_kind(snapshot_kind)
+
+        batch_clauses: list[str] = []
+        batch_params: list[Any] = []
+        if dataset_kind:
+            batch_clauses.append("dataset_kind = ?")
+            batch_params.append(dataset_kind)
+        if trusted_only:
+            batch_clauses.append("data_trust = ?")
+            batch_params.append(TRUSTED_DATA_TRUST)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            batch_clauses.append(f"source_label IN ({placeholders})")
+            batch_params.extend(normalized_source_labels)
+        batch_where = f"WHERE {' AND '.join(batch_clauses)}" if batch_clauses else ""
+
+        quote_clauses: list[str] = []
+        quote_params: list[Any] = []
+        if snapshot_kind:
+            quote_clauses.append("q.snapshot_kind = ?")
+            quote_params.append(str(snapshot_kind))
+        if trusted_only:
+            quote_clauses.append("b.data_trust = ?")
+            quote_params.append(TRUSTED_DATA_TRUST)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            quote_clauses.append(f"b.source_label IN ({placeholders})")
+            quote_params.extend(normalized_source_labels)
+        if normalized_underlyings:
+            placeholders = ", ".join("?" for _ in normalized_underlyings)
+            quote_clauses.append(f"q.underlying IN ({placeholders})")
+            quote_params.extend(normalized_underlyings)
+        quote_where = f"WHERE {' AND '.join(quote_clauses)}" if quote_clauses else ""
+
+        with closing(self._connect()) as conn:
+            batch_rows = conn.execute(
+                f"""
+                SELECT
+                    source_label,
+                    COUNT(*) AS batch_count,
+                    COALESCE(SUM(total_rows), 0) AS batch_total_rows,
+                    COALESCE(SUM(imported_rows), 0) AS batch_imported_rows,
+                    COALESCE(SUM(duplicate_rows), 0) AS batch_duplicate_rows,
+                    COALESCE(SUM(rejected_rows), 0) AS batch_rejected_rows,
+                    MIN(imported_at_utc) AS first_imported_at_utc,
+                    MAX(imported_at_utc) AS latest_imported_at_utc,
+                    GROUP_CONCAT(DISTINCT dataset_kind) AS dataset_kinds,
+                    GROUP_CONCAT(DISTINCT data_trust) AS trust_levels
+                FROM import_batches
+                {batch_where}
+                GROUP BY source_label
+                """,
+                tuple(batch_params),
+            ).fetchall()
+            quote_rows = conn.execute(
+                f"""
+                SELECT
+                    b.source_label AS source_label,
+                    COUNT(*) AS quote_rows,
+                    COUNT(DISTINCT q.quote_date_et) AS quote_date_count,
+                    MIN(q.quote_date_et) AS first_quote_date,
+                    MAX(q.quote_date_et) AS last_quote_date,
+                    COUNT(DISTINCT q.underlying) AS underlying_count,
+                    GROUP_CONCAT(DISTINCT q.underlying) AS underlyings
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                {quote_where}
+                GROUP BY b.source_label
+                """,
+                tuple(quote_params),
+            ).fetchall()
+
+        def _split_csv(value: Any) -> list[str]:
+            return sorted(item for item in str(value or "").split(",") if item)
+
+        batch_by_source = {str(row["source_label"]): row for row in batch_rows}
+        quote_by_source = {str(row["source_label"]): row for row in quote_rows}
+        source_names = sorted(set(batch_by_source) | set(quote_by_source))
+        sources: list[dict[str, Any]] = []
+        for source_label in source_names:
+            batch_row = batch_by_source.get(source_label)
+            quote_row = quote_by_source.get(source_label)
+            quote_date_count = int((quote_row["quote_date_count"] if quote_row else 0) or 0)
+            sources.append(
+                {
+                    "source_label": source_label,
+                    "batch_count": int((batch_row["batch_count"] if batch_row else 0) or 0),
+                    "batch_total_rows": int((batch_row["batch_total_rows"] if batch_row else 0) or 0),
+                    "batch_imported_rows": int((batch_row["batch_imported_rows"] if batch_row else 0) or 0),
+                    "batch_duplicate_rows": int((batch_row["batch_duplicate_rows"] if batch_row else 0) or 0),
+                    "batch_rejected_rows": int((batch_row["batch_rejected_rows"] if batch_row else 0) or 0),
+                    "first_imported_at_utc": (
+                        str((batch_row["first_imported_at_utc"] if batch_row else None) or "") or None
+                    ),
+                    "latest_imported_at_utc": (
+                        str((batch_row["latest_imported_at_utc"] if batch_row else None) or "") or None
+                    ),
+                    "dataset_kinds": _split_csv(batch_row["dataset_kinds"] if batch_row else None),
+                    "trust_levels": _split_csv(batch_row["trust_levels"] if batch_row else None),
+                    "quote_rows_in_scope": int((quote_row["quote_rows"] if quote_row else 0) or 0),
+                    "quote_dates": {
+                        "count": quote_date_count,
+                        "first": str((quote_row["first_quote_date"] if quote_row else None) or "") or None,
+                        "last": str((quote_row["last_quote_date"] if quote_row else None) or "") or None,
+                    },
+                    "underlying_count_in_scope": int((quote_row["underlying_count"] if quote_row else 0) or 0),
+                    "underlyings_in_scope": _split_csv(quote_row["underlyings"] if quote_row else None),
+                    "requested_underlying_count": len(normalized_underlyings),
+                }
+            )
+
+        return {
+            "status": "summarized",
+            "db_path": str(self.db_path),
+            "snapshot_kind": snapshot_kind,
+            "trusted_only": trusted_only,
+            "source_labels_requested": normalized_source_labels,
+            "underlyings_requested": normalized_underlyings,
+            "underlyings_requested_count": len(normalized_underlyings),
+            "source_labels_seen": source_names,
+            "source_labels_with_batches": sorted(batch_by_source),
+            "source_labels_with_quotes_in_scope": sorted(quote_by_source),
+            "sources": sources,
+        }
+
     def snapshot_summary(
         self,
         snapshot_kind: str,
         *,
         trusted_only: bool = False,
         include_available_underlyings: bool = True,
+        source_labels: Sequence[str] | None = None,
     ) -> dict[str, Any]:
         normalized_snapshot_kind = str(snapshot_kind)
+        normalized_source_labels = _normalize_source_labels(source_labels)
         with closing(self._connect()) as conn:
             dataset_kind = _dataset_kind_for_snapshot_kind(normalized_snapshot_kind)
             batch_clauses = ["imported_rows > 0"]
@@ -1042,6 +1235,10 @@ class HistoricalOptionsStore:
             if trusted_only:
                 batch_clauses.append("data_trust = ?")
                 batch_params.append(TRUSTED_DATA_TRUST)
+            if normalized_source_labels:
+                placeholders = ", ".join("?" for _ in normalized_source_labels)
+                batch_clauses.append(f"source_label IN ({placeholders})")
+                batch_params.extend(normalized_source_labels)
             batch_row = conn.execute(
                 f"""
                 SELECT
@@ -1088,7 +1285,7 @@ class HistoricalOptionsStore:
                 ).fetchone()
                 trust_filter_redundant = int((untrusted_count_row[0] if untrusted_count_row else 0) or 0) == 0
 
-            if trust_filter_redundant:
+            if trust_filter_redundant and not normalized_source_labels:
                 earliest_row = conn.execute(
                     """
                     SELECT as_of_utc
@@ -1112,19 +1309,26 @@ class HistoricalOptionsStore:
                 earliest_quote_at_utc = str((earliest_row["as_of_utc"] if earliest_row else None) or "") or None
                 latest_quote_at_utc = str((latest_row["as_of_utc"] if latest_row else None) or "") or None
             else:
+                quote_clauses = ["q.snapshot_kind = ?"]
                 params: list[Any] = [normalized_snapshot_kind]
+                if trusted_only:
+                    quote_clauses.append("b.data_trust = ?")
+                    params.append(TRUSTED_DATA_TRUST)
+                if normalized_source_labels:
+                    placeholders = ", ".join("?" for _ in normalized_source_labels)
+                    quote_clauses.append(f"b.source_label IN ({placeholders})")
+                    params.extend(normalized_source_labels)
                 row = conn.execute(
-                    """
+                    f"""
                     SELECT
                         MIN(q.as_of_utc) AS earliest_quote_at_utc,
                         MAX(q.as_of_utc) AS latest_quote_at_utc
                     FROM option_quote_snapshots q
                     JOIN import_batches b
                       ON b.id = q.source_batch_id
-                    WHERE q.snapshot_kind = ?
-                      AND b.data_trust = ?
+                    WHERE {' AND '.join(quote_clauses)}
                     """,
-                    tuple(params + [TRUSTED_DATA_TRUST]),
+                    tuple(params),
                 ).fetchone()
                 earliest_quote_at_utc = str((row["earliest_quote_at_utc"] if row else None) or "") or None
                 latest_quote_at_utc = str((row["latest_quote_at_utc"] if row else None) or "") or None
@@ -1140,7 +1344,8 @@ class HistoricalOptionsStore:
             "available_underlyings": (
                 self.list_available_underlyings(
                     snapshot_kind=normalized_snapshot_kind,
-                    trusted_only=(trusted_only and not trust_filter_redundant),
+                    trusted_only=(trusted_only if normalized_source_labels else (trusted_only and not trust_filter_redundant)),
+                    source_labels=normalized_source_labels,
                 )
                 if include_available_underlyings
                 else None
@@ -1149,6 +1354,7 @@ class HistoricalOptionsStore:
             "dataset_kinds": [item for item in str((batch_row["dataset_kinds"] if batch_row else "") or "").split(",") if item],
             "trust_levels": [item for item in str((batch_row["trust_levels"] if batch_row else "") or "").split(",") if item],
             "trusted_only": trusted_only,
+            "source_labels_requested": normalized_source_labels,
         }
 
     def get_exact_quote(
@@ -1163,25 +1369,26 @@ class HistoricalOptionsStore:
         prefer_latest: bool = True,
         snapshot_kind: str | None = None,
         allow_last_price: bool = True,
+        source_labels: Sequence[str] | None = None,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = quote_date_et.isoformat() if isinstance(quote_date_et, date) else str(quote_date_et)[:10]
-        clauses = ["quote_date_et = ?"]
+        clauses = ["q.quote_date_et = ?"]
         params: list[Any] = [quote_date_text]
         if snapshot_kind:
-            clauses.append("snapshot_kind = ?")
+            clauses.append("q.snapshot_kind = ?")
             params.append(str(snapshot_kind))
         if contract_symbol:
-            clauses.append("contract_symbol = ?")
+            clauses.append("q.contract_symbol = ?")
             params.append(_normalize_contract_symbol(contract_symbol))
         else:
             if not (underlying and expiry and option_type and strike is not None):
                 raise ValueError("Exact tuple match requires underlying, expiry, option_type, and strike.")
             clauses.extend(
                 [
-                    "underlying = ?",
-                    "expiry = ?",
-                    "option_type = ?",
-                    "ABS(strike - ?) <= 0.0001",
+                    "q.underlying = ?",
+                    "q.expiry = ?",
+                    "q.option_type = ?",
+                    "ABS(q.strike - ?) <= 0.0001",
                 ]
             )
             params.extend(
@@ -1192,15 +1399,21 @@ class HistoricalOptionsStore:
                     float(strike),
                 ]
             )
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            clauses.append(f"b.source_label IN ({placeholders})")
+            params.extend(normalized_source_labels)
 
         order = "DESC" if prefer_latest else "ASC"
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 f"""
-                SELECT *
-                FROM option_quote_snapshots
+                SELECT q.*
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
                 WHERE {' AND '.join(clauses)}
-                ORDER BY quote_minute_et {order}, as_of_utc {order}
+                ORDER BY q.quote_minute_et {order}, q.as_of_utc {order}
                 """,
                 tuple(params),
             ).fetchall()
@@ -1222,32 +1435,43 @@ class HistoricalOptionsStore:
         window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
         snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
         allow_last_price: bool = True,
+        source_labels: Sequence[str] | None = None,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         target_expiry_date = target_expiry if isinstance(target_expiry, date) else date.fromisoformat(str(target_expiry)[:10])
+        clauses = [
+            "q.underlying = ?",
+            "q.snapshot_kind = ?",
+            "q.option_type = ?",
+            "q.quote_date_et = ?",
+            "q.quote_minute_et >= ?",
+            "q.quote_minute_et <= ?",
+        ]
+        params: list[Any] = [
+            _normalize_underlying(underlying),
+            str(snapshot_kind),
+            _normalize_option_type(option_type),
+            quote_date_text,
+            int(earliest_minute_et),
+            int(earliest_minute_et + window_minutes),
+        ]
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            clauses.append(f"b.source_label IN ({placeholders})")
+            params.extend(normalized_source_labels)
+        params.append(float(target_strike))
 
         with closing(self._connect()) as conn:
             rows = conn.execute(
-                """
-                SELECT *
-                FROM option_quote_snapshots
-                WHERE underlying = ?
-                  AND snapshot_kind = ?
-                  AND option_type = ?
-                  AND quote_date_et = ?
-                  AND quote_minute_et >= ?
-                  AND quote_minute_et <= ?
-                ORDER BY quote_minute_et ASC, expiry ASC, ABS(strike - ?) ASC, contract_symbol ASC
+                f"""
+                SELECT q.*
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                WHERE {' AND '.join(clauses)}
+                ORDER BY q.quote_minute_et ASC, q.expiry ASC, ABS(q.strike - ?) ASC, q.contract_symbol ASC
                 """,
-                (
-                    _normalize_underlying(underlying),
-                    str(snapshot_kind),
-                    _normalize_option_type(option_type),
-                    quote_date_text,
-                    int(earliest_minute_et),
-                    int(earliest_minute_et + window_minutes),
-                    float(target_strike),
-                ),
+                tuple(params),
             ).fetchall()
 
         per_contract: dict[str, HistoricalQuote] = {}
@@ -1277,12 +1501,13 @@ class HistoricalOptionsStore:
         window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
         snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
         allow_last_price: bool = True,
+        source_labels: Sequence[str] | None = None,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         clauses = [
-            "contract_symbol = ?",
-            "snapshot_kind = ?",
-            "quote_date_et = ?",
+            "q.contract_symbol = ?",
+            "q.snapshot_kind = ?",
+            "q.quote_date_et = ?",
         ]
         params: list[Any] = [
             _normalize_contract_symbol(contract_symbol),
@@ -1292,8 +1517,8 @@ class HistoricalOptionsStore:
         if str(snapshot_kind) != DAILY_SNAPSHOT_KIND:
             clauses.extend(
                 [
-                    "quote_minute_et >= ?",
-                    "quote_minute_et <= ?",
+                    "q.quote_minute_et >= ?",
+                    "q.quote_minute_et <= ?",
                 ]
             )
             params.extend(
@@ -1302,14 +1527,20 @@ class HistoricalOptionsStore:
                     int(earliest_minute_et + window_minutes),
                 ]
             )
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            clauses.append(f"b.source_label IN ({placeholders})")
+            params.extend(normalized_source_labels)
 
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 f"""
-                SELECT *
-                FROM option_quote_snapshots
+                SELECT q.*
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
                 WHERE {' AND '.join(clauses)}
-                ORDER BY quote_minute_et ASC, as_of_utc ASC
+                ORDER BY q.quote_minute_et ASC, q.as_of_utc ASC
                 """,
                 tuple(params),
             ).fetchall()
@@ -1327,6 +1558,7 @@ class HistoricalOptionsStore:
         quote_date_et: str | date,
         snapshot_kind: str | None = None,
         allow_last_price: bool = True,
+        source_labels: Sequence[str] | None = None,
     ) -> Optional[HistoricalQuote]:
         return self.get_exact_quote(
             quote_date_et=quote_date_et,
@@ -1334,6 +1566,7 @@ class HistoricalOptionsStore:
             prefer_latest=True,
             snapshot_kind=snapshot_kind,
             allow_last_price=allow_last_price,
+            source_labels=source_labels,
         )
 
     def _row_to_quote(self, row: sqlite3.Row, *, allow_last_price: bool = True) -> Optional[HistoricalQuote]:
@@ -1394,6 +1627,7 @@ def available_quote_dates(
     *,
     snapshot_kind: str | None = None,
     trusted_only: bool = False,
+    source_labels: Sequence[str] | None = None,
     db_path: str | Path | None = None,
 ) -> list[str]:
     store = HistoricalOptionsStore(db_path)
@@ -1401,4 +1635,5 @@ def available_quote_dates(
         underlying,
         snapshot_kind=snapshot_kind,
         trusted_only=trusted_only,
+        source_labels=source_labels,
     )

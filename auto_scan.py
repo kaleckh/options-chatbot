@@ -33,7 +33,12 @@ try:
         scan_daily_top_trades,
     )
     from positions_repository import create_positions_repository
-    from supervised_scan import LIVE_SCAN_TRUTH_LANE, run_supervised_scan
+    from supervised_scan import (
+        DEFAULT_SCAN_PLAYBOOK_ID,
+        LIVE_SCAN_TRUTH_LANE,
+        get_scan_playbook,
+        run_supervised_scan,
+    )
 except Exception as e:
     logging.error(f"Import failed: {e}")
     sys.exit(1)
@@ -43,6 +48,24 @@ now_et    = datetime.now(ET)
 today_str = now_et.strftime("%Y-%m-%d")
 
 PERF_FILE = os.path.join(_DIR, "daily_performance.json")
+
+
+def _env_flag_enabled(name: str, default: bool = False) -> bool:
+    raw = str(os.getenv(name, "")).strip().lower()
+    if not raw:
+        return default
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _watchlist_size_for_playbook(playbook_id: str) -> int:
+    try:
+        playbook = get_scan_playbook(playbook_id)
+        symbols = playbook.get("scan_tickers") or playbook.get("allowed_tickers") or []
+        if symbols:
+            return len(symbols)
+    except Exception as exc:
+        logging.warning(f"Could not resolve playbook watchlist size for {playbook_id}: {exc}")
+    return len(DEFAULT_WATCHLIST)
 
 # ── Skip weekends ──────────────────────────────────────────────────────────────
 if now_et.weekday() >= 5:
@@ -94,9 +117,11 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     new_win_rate = round(new_dir_wins / n_new * 100, 1) if n_new else None
 
     # Average estimated option gain
-    gains = [p.get("option_gain_pct") or p.get("est_option_gain_pct")
-             for p in today_graded
-             if p.get("option_gain_pct") is not None or p.get("est_option_gain_pct") is not None]
+    gains = [
+        p.get("option_gain_pct") if p.get("option_gain_pct") is not None else p.get("est_option_gain_pct")
+        for p in today_graded
+        if p.get("option_gain_pct") is not None or p.get("est_option_gain_pct") is not None
+    ]
     avg_gain = round(sum(gains) / len(gains), 1) if gains else None
 
     # Score calibration: split by Dir Score threshold 80
@@ -191,13 +216,19 @@ if _already:
 
 logging.info(f"Starting roll-forward scan for {today_str} ({len(pending)} pending picks)…")
 try:
+    scan_playbook_id = os.getenv("OPTIONS_SCAN_PLAYBOOK") or DEFAULT_SCAN_PLAYBOOK_ID
+    use_recommended_policy = _env_flag_enabled("OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False)
+    logging.info(
+        f"Supervised scan config: playbook={scan_playbook_id}, "
+        f"use_recommended_policy={use_recommended_policy}"
+    )
     supervised = run_supervised_scan(
         scan_func=scan_daily_top_trades,
         positions_repository=create_positions_repository(os.getenv("DATABASE_URL")),
         n_picks=5,
-        watchlist_size=len(DEFAULT_WATCHLIST),
-        playbook_id=os.getenv("OPTIONS_SCAN_PLAYBOOK") or "short_term",
-        use_recommended_policy=True,
+        watchlist_size=_watchlist_size_for_playbook(scan_playbook_id),
+        playbook_id=scan_playbook_id,
+        use_recommended_policy=use_recommended_policy,
         truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,
         min_trades=int(os.getenv("OPTIONS_SCAN_MIN_TRADES", "20")),
     )

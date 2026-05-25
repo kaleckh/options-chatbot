@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import unittest
 from datetime import UTC, datetime, timedelta
@@ -11,6 +12,7 @@ from profit_loop_automation import (
     _load_local_env,
     _proof_context,
     _capture_validation_baseline,
+    _daily_truth_source_freshness,
     _replay_matrix_assessment,
     _refresh_daily_truth,
     _shared_replay_matrix_artifact_path,
@@ -31,6 +33,7 @@ from profit_loop_shared_state import (
     set_latest_snapshot,
     upsert_open_issue,
 )
+from scripts.run_profit_loop_canary import build_strict_gate_summary, main as run_profit_loop_canary_cli
 from workspace_tempdir import WorkspaceTempDir
 
 
@@ -618,6 +621,32 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertEqual(result["artifact_refresh"]["reason"], "source_truth_stale_preflight")
         self.assertTrue(result["artifact_refresh"]["skipped"])
         artifact_refresh_mock.assert_not_called()
+
+    def test_daily_truth_source_freshness_uses_manifest_date_to_for_csv_inputs(self):
+        csv_path = self.state_dir / "alpaca_daily.csv"
+        csv_path.write_text("as_of_utc,underlying\n2026-05-22T19:59:59Z,SPY\n", encoding="utf8")
+        entries = [
+            {
+                "input": str(csv_path),
+                "source": "alpaca_opra_daily_snapshot",
+                "format": "csv",
+                "date_to": "2026-05-22",
+            }
+        ]
+
+        with patch("profit_loop_automation._utc_now", return_value=datetime(2026, 5, 24, tzinfo=UTC)), \
+             patch(
+                 "profit_loop_automation._current_daily_truth_store",
+                 return_value={"latest_quote_at_utc": "2026-05-22T19:59:59Z"},
+             ):
+            freshness = _daily_truth_source_freshness(
+                entries,
+                repo_root=self.state_dir,
+                allowed_staleness_business_days=3,
+            )
+
+        self.assertEqual(freshness["daily_truth_source_horizon"], "2026-05-22")
+        self.assertFalse(freshness["daily_truth_source_stale"])
 
     def test_refresh_daily_truth_fails_when_configured_manifest_is_missing(self):
         missing_manifest = self.state_dir / "missing-manifest.json"
@@ -1735,6 +1764,65 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             result = run_profit_loop_canary(state_dir=self.state_dir, dry_run=False)
         self.assertEqual(result["exit_code"], 2)
 
+    def test_canary_strict_gate_fails_on_high_open_issues_even_when_runner_exits_zero(self):
+        result = {
+            "exit_code": 0,
+            "steps": [
+                {
+                    "automation_id": "hourly-operational-health",
+                    "issues": [
+                        {
+                            "issue_id": "truth-lane-live-policy-mismatch",
+                            "severity": "high",
+                            "status": "open",
+                        }
+                    ],
+                    "targeted_issue": {
+                        "issue_id": "truth-lane-live-policy-mismatch",
+                        "severity": "high",
+                        "status": "open",
+                    },
+                }
+            ],
+        }
+
+        gate = build_strict_gate_summary(result)
+
+        self.assertEqual(gate["status"], "failed")
+        self.assertFalse(gate["passed"])
+        self.assertEqual(gate["strict_issue_ids"], ["truth-lane-live-policy-mismatch"])
+        self.assertEqual(gate["strict_issue_count"], 1)
+
+    def test_canary_report_only_cli_returns_zero_for_nonzero_canary_report(self):
+        result = {"exit_code": 2, "steps": [], "step_health": {"status": "unhealthy"}}
+
+        with patch("scripts.run_profit_loop_canary.run_profit_loop_canary", return_value=result), \
+             patch("sys.stdout", new_callable=io.StringIO) as stdout:
+            exit_code = run_profit_loop_canary_cli(["--dry-run", "--report-only"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["exit_code"], 2)
+
+    def test_canary_strict_gate_passes_when_only_resolved_or_low_issues_remain(self):
+        result = {
+            "exit_code": 0,
+            "steps": [
+                {
+                    "automation_id": "hourly-operational-health",
+                    "issues": [
+                        {"issue_id": "resolved-high", "severity": "high", "status": "resolved"},
+                        {"issue_id": "low-watch", "severity": "low", "status": "open"},
+                    ],
+                }
+            ],
+        }
+
+        gate = build_strict_gate_summary(result)
+
+        self.assertEqual(gate["status"], "passed")
+        self.assertTrue(gate["passed"])
+        self.assertEqual(gate["strict_issue_ids"], [])
+
     def test_canary_skips_later_steps_when_truth_refresh_times_out(self):
         refresh_result = {
             "status": "failed",
@@ -1787,6 +1875,61 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             result["consistency"]["ledger_run_ids"],
             ["health-1", "holdout-1", "validation-1"],
         )
+
+    def test_canary_returns_exit_code_two_when_degraded_steps_have_high_issues(self):
+        refresh_result = {"status": "artifact_refreshed", "commands": ["run_historical_backtest ..."]}
+        health = {
+            "automation_id": "hourly-operational-health",
+            "snapshot": {"run_id": "health-1", "loop_execution_status": "degraded"},
+            "issues": [
+                {
+                    "issue_id": "truth-lane-live-policy-mismatch",
+                    "severity": "high",
+                    "status": "open",
+                }
+            ],
+        }
+        holdout = {
+            "automation_id": "daily-truth-holdout",
+            "snapshot": {"run_id": "holdout-1", "loop_execution_status": "degraded"},
+            "issues": [
+                {
+                    "issue_id": "forward-holdout-no-raw-candidates",
+                    "severity": "high",
+                    "status": "open",
+                }
+            ],
+        }
+        validation = {
+            "automation_id": "daily-profit-validation",
+            "snapshot": {"run_id": "validation-1", "loop_execution_status": "healthy", "evidence_complete": True},
+        }
+        before_events = [{"automation_id": "seed", "run_id": "seed-1"}]
+        after_events = before_events + [
+            {"automation_id": "hourly-operational-health", "run_id": "health-1", "verdict": "degraded-watch"},
+            {"automation_id": "daily-truth-holdout", "run_id": "holdout-1", "verdict": "recorded-no-candidates"},
+            {"automation_id": "daily-profit-validation", "run_id": "validation-1", "verdict": "deferred"},
+        ]
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"run_id": "health-1"}
+        state["latest_truth_holdout"] = {"run_id": "holdout-1"}
+        state["latest_profit_validation"] = {"run_id": "validation-1"}
+
+        with patch("profit_loop_automation._require_daily_truth_refresh", return_value=refresh_result), \
+             patch("profit_loop_automation.run_operational_health", return_value=health), \
+             patch("profit_loop_automation.run_truth_holdout", return_value=holdout), \
+             patch("profit_loop_automation.prepare_profit_validation", return_value=validation), \
+             patch("profit_loop_automation.load_profit_loop_state", return_value=state), \
+             patch("profit_loop_automation.list_run_ledger_events", side_effect=[before_events, after_events]):
+            result = run_profit_loop_canary(state_dir=self.state_dir, dry_run=False)
+
+        self.assertEqual(result["exit_code"], 2)
+        self.assertEqual(
+            result["step_health"]["unhealthy_automation_ids"],
+            ["hourly-operational-health", "daily-truth-holdout"],
+        )
+        health_step = result["step_health"]["steps"][0]
+        self.assertIn("truth-lane-live-policy-mismatch", health_step["unresolved_high_issue_ids"])
 
 
 class CandidateFlowBreakdownTests(unittest.TestCase):

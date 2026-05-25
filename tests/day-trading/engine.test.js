@@ -24,6 +24,7 @@ function loadEngineWithTempDataRoot() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "day-trading-engine-"));
   const dataRoot = path.join(tempRoot, "day-trading-data");
   const resolvedEnginePath = require.resolve(ENGINE_PATH);
+  const previousDataRoot = process.env.DAY_TRADING_DATA_ROOT;
 
   process.env.DAY_TRADING_DATA_ROOT = dataRoot;
   delete require.cache[resolvedEnginePath];
@@ -34,7 +35,11 @@ function loadEngineWithTempDataRoot() {
     dataRoot,
     cleanup() {
       delete require.cache[resolvedEnginePath];
-      delete process.env.DAY_TRADING_DATA_ROOT;
+      if (previousDataRoot === undefined) {
+        delete process.env.DAY_TRADING_DATA_ROOT;
+      } else {
+        process.env.DAY_TRADING_DATA_ROOT = previousDataRoot;
+      }
       fs.rmSync(tempRoot, { recursive: true, force: true });
     },
   };
@@ -117,6 +122,39 @@ test("evaluateTradeRisk blocks oversize, illiquid, and over-loss orders", () => 
     assert.ok(decision.reasons.includes("market_spread_above_maximum"));
     assert.ok(decision.reasons.includes("daily_loss_limit_breached"));
     assert.ok(decision.reasons.includes("strategy_drawdown_limit_breached"));
+  } finally {
+    ctx.cleanup();
+  }
+});
+
+test("resolveDynamicTakeProfitPrice is direction-aware for short positions", () => {
+  const ctx = loadEngineWithTempDataRoot();
+  try {
+    const bar = {
+      indicators: {
+        sessionVwap: 99,
+        sessionRangeMidpoint: 97,
+      },
+    };
+
+    assert.equal(
+      ctx.engine.__internal.resolveDynamicTakeProfitPrice({
+        direction: "short",
+        entryPrice: 100,
+        takeProfitFraction: 0.02,
+        exitTargetMode: "session_vwap_or_range_midpoint",
+      }, bar),
+      99,
+    );
+    assert.equal(
+      ctx.engine.__internal.resolveDynamicTakeProfitPrice({
+        direction: "long",
+        entryPrice: 100,
+        takeProfitFraction: 0.02,
+        exitTargetMode: "session_vwap_or_range_midpoint",
+      }, bar),
+      102,
+    );
   } finally {
     ctx.cleanup();
   }

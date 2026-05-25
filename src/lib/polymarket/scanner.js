@@ -5,7 +5,7 @@
  * Returns structured opportunity objects for the engines to act on.
  */
 
-const { fetchAllEvents, httpGet, GAMMA_HOST } = require("./client");
+const { fetchAllEvents } = require("./client");
 
 const DEFAULT_CONFIG = {
   minLiquidity: 5000,
@@ -69,6 +69,9 @@ function analyzeMultiOutcomeArb(event, config) {
   if (totalLiquidity < config.minEventLiquidity) return null;
 
   const arbType = deviation > 0 ? "OVER" : "UNDER";
+  const fullHedgeTradeable = outcomes.every((outcome) => (
+    outcome.tradeable && (arbType === "UNDER" ? outcome.yesTokenId : outcome.noTokenId)
+  ));
 
   // Estimate fees (taker ~4% * p * (1-p) per leg)
   const estFees = outcomes
@@ -76,9 +79,7 @@ function analyzeMultiOutcomeArb(event, config) {
     .reduce((s, o) => s + 0.04 * o.yesPrice * (1 - o.yesPrice), 0);
   const arbProfit = Math.abs(deviation) - estFees;
 
-  const executable = arbProfit > 0.01 && (
-    arbType === "OVER" ? tradeableCount / outcomes.length >= 0.5 : tradeableCount >= 2
-  );
+  const executable = arbProfit > 0.01 && fullHedgeTradeable;
 
   return {
     type: "multi_outcome_arb",
@@ -93,6 +94,7 @@ function analyzeMultiOutcomeArb(event, config) {
     arbProfit: Math.round(arbProfit * 10000) / 10000,
     estFees: Math.round(estFees * 10000) / 10000,
     executable,
+    fullHedgeTradeable,
     totalLiquidity: Math.round(totalLiquidity),
     outcomes,
   };

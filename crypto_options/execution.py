@@ -8,17 +8,16 @@ Real execution via Deribit API when ready.
 import json
 import os
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from typing import Optional
 
 from .config import (
     RISK_CONFIG, FORWARD_TRACKING_DIR, FORWARD_LOG,
-    SYMBOLS, DERIBIT_CURRENCY_MAP,
+    DERIBIT_CURRENCY_MAP,
 )
-from .signals import scan_crypto_signals, Signal
-from .deribit import DeribitClient, find_best_spread, SpreadCandidate
+from .signals import scan_crypto_signals
+from .deribit import DeribitClient, find_best_spread
 
 
 # ── Data types ────────────────────────────────────────────────────────────────
@@ -66,6 +65,14 @@ def _log_pick(record: dict):
     os.makedirs(FORWARD_TRACKING_DIR, exist_ok=True)
     with open(FORWARD_LOG, "a", encoding="utf-8") as f:
         f.write(json.dumps(record) + "\n")
+
+
+def _live_order_amount() -> float:
+    try:
+        amount = float(os.getenv("CRYPTO_OPTIONS_ORDER_AMOUNT", "1"))
+    except ValueError:
+        return 1.0
+    return amount if amount > 0 else 1.0
 
 
 # ── Risk checks ───────────────────────────────────────────────────────────────
@@ -243,6 +250,32 @@ def run_scan_cycle(
                 "signal_regime": sig.regime,
                 "status": "open",
             }
+            order_results = []
+            if not paper_trade and client:
+                try:
+                    amount = _live_order_amount()
+                    order_results.append(client.place_order(
+                        spread.long_leg.instrument,
+                        "buy",
+                        amount,
+                        price=spread.long_leg.ask,
+                    ))
+                    order_results.append(client.place_order(
+                        spread.short_leg.instrument,
+                        "sell",
+                        amount,
+                        price=spread.short_leg.bid,
+                    ))
+                except Exception as e:
+                    pick_record["order_status"] = "failed"
+                    pick_record["order_error"] = str(e)
+                    actions.append(f"  ORDER FAILED: {e}")
+                    _log_pick(pick_record)
+                    continue
+
+            if order_results:
+                new_pos["order_results"] = order_results
+                pick_record["order_status"] = "placed"
             positions.append(new_pos)
             open_count += 1
             open_symbols.add(currency)
@@ -251,13 +284,6 @@ def run_scan_cycle(
                 f"${spread.net_debit_usd:.0f} R:R={spread.risk_reward:.1f} "
                 f"exp={spread.expiry}"
             )
-
-            if not paper_trade and client:
-                try:
-                    client.place_order(spread.long_leg.instrument, "buy", spread.long_leg.ask)
-                    client.place_order(spread.short_leg.instrument, "sell", spread.short_leg.bid)
-                except Exception as e:
-                    actions.append(f"  ORDER FAILED: {e}")
         else:
             pick_record["spread_available"] = False
             actions.append(f"SIGNAL {currency} {sig.direction} dir={sig.direction_score:.0f} (no spread available)")

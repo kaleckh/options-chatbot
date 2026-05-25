@@ -4,6 +4,7 @@
 $taskName = "Options AI - Daily Scan"
 $pythonPath = "C:\Python312\python.exe"
 $scriptPath = "C:\Users\kalec\options-chatbot\auto_scan.py"
+$batchPath = "C:\Users\kalec\options-chatbot\run_scan.bat"
 $workDir = "C:\Users\kalec\options-chatbot"
 
 # Auto-elevate
@@ -16,11 +17,13 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 Write-Host "Creating scheduled task: $taskName" -ForegroundColor Cyan
 Write-Host "  Python: $pythonPath"
 Write-Host "  Script: $scriptPath"
+Write-Host "  Wrapper: $batchPath"
+Write-Host "  Playbook: bullish_pullback_observation"
 Write-Host "  Time: 10:10 AM daily (Mon-Fri)"
 Write-Host ""
 
 # Create the task
-$action = New-ScheduledTaskAction -Execute $pythonPath -Argument $scriptPath -WorkingDirectory $workDir
+$action = New-ScheduledTaskAction -Execute "cmd.exe" -Argument "/c `"$batchPath`"" -WorkingDirectory $workDir
 $trigger = New-ScheduledTaskTrigger -Daily -At "10:10AM"
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest

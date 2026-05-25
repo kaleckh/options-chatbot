@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { RefreshCw, Timer, CheckCircle, BarChart3, DollarSign, Map, BriefcaseBusiness, Clipboard } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import FinTable from "@/components/ui/FinTable";
-import SentimentBadge from "@/components/ui/SentimentBadge";
 import Button from "@/components/ui/Button";
 import { MetricGridSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
 import { useToast } from "@/components/ui/Toast";
@@ -36,6 +35,7 @@ import type {
 
 const INDEX_TICKERS = new Set(["QQQ", "SPY", "IWM", "DIA", "XLK"]);
 const LEGACY_PREDICTION_TABS = new Set(["pending", "graded", "breakdown", "sim", "sectors"]);
+const COMMODITY_PLAYBOOK_ID = "ai_commodity_infra_observation";
 const REQUEST_TIMEOUT_MS = 30000;
 const POSITION_SYNC_INTERVAL_MS = 60000;
 const SHARE_SAFE_REVIEW_MAX_AGE_MINUTES = 15;
@@ -64,9 +64,42 @@ async function fetchWithTimeout(
   }
 }
 
+function payloadErrorMessage(payload: unknown): string | null {
+  if (
+    payload &&
+    typeof payload === "object" &&
+    !Array.isArray(payload) &&
+    "error" in payload
+  ) {
+    return String((payload as { error?: unknown }).error || "Request failed.");
+  }
+  return null;
+}
+
+async function readJsonResponseOrThrow(res: Response, label: string): Promise<unknown> {
+  const data = await res.json().catch(() => ({}));
+  const errorMessage = payloadErrorMessage(data);
+  if (!res.ok || errorMessage) {
+    throw new Error(errorMessage || `${label} request failed with status ${res.status}`);
+  }
+  return data;
+}
+
+function parseNonnegativePriceInput(value: string): number | null {
+  const normalized = value.trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 function fmtMoney(value?: number | null, digits: number = 2): string {
   if (value == null || Number.isNaN(value)) return "\u2014";
   return `$${value.toFixed(digits)}`;
+}
+
+function fmtSignedMoney(value?: number | null, digits: number = 2): string {
+  if (value == null || Number.isNaN(value)) return "\u2014";
+  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(digits)}`;
 }
 
 function fmtPct(value?: number | null, digits: number = 1): string {
@@ -265,20 +298,6 @@ function buildContractSignature(position: ContractDisplaySource): string {
   ]);
 }
 
-function dedupeOpenContracts<T extends ContractDisplaySource>(items: T[]): T[] {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const signature = buildContractSignature(item);
-    if (seen.has(signature)) return false;
-    seen.add(signature);
-    return true;
-  });
-}
-
-function fmtTrackedContractLabel(position: ContractDisplaySource): string {
-  return fmtContractLabel(getContractDisplayFields(position));
-}
-
 function getReviewedAt(position: TrackedPosition | SuggestedTrade): string | null {
   return position.share_reviewed_at ?? position.latest_review?.reviewed_at ?? position.last_reviewed_at ?? null;
 }
@@ -314,7 +333,7 @@ function isShareSafeLivePosition(position: TrackedPosition | SuggestedTrade): bo
     null;
   if (!contractSymbol || position.source_pick_snapshot?.approximation_only) return false;
   const pricingSource = String(position.latest_review?.pricing_source || "").trim().toLowerCase();
-  if (!["mid", "last_price", "spread_mid_exact"].includes(pricingSource)) return false;
+  if (!["mid", "last_price", "spread_mid_exact", "spread_bid_ask_exact"].includes(pricingSource)) return false;
   if (position.latest_review?.current_option_price == null) return false;
   const reviewedAt = getReviewedAt(position);
   if (!reviewedAt) return false;
@@ -337,6 +356,27 @@ function getShareSafeReason(position: TrackedPosition | SuggestedTrade): string 
   if (!contractSymbol) return "Missing exact contract symbol.";
   if (position.latest_review?.current_option_price == null) return "Live review pending.";
   return "Not share-safe yet.";
+}
+
+function isCommodityLanePosition(position: TrackedPosition | SuggestedTrade): boolean {
+  const source = position.source_pick_snapshot || null;
+  const values = [
+    source?.ai_commodity_bucket,
+    source?.cohort_id,
+    source?.playbook,
+    source?.playbook_label,
+    source?.strategy_label,
+    source?.strategy_comment,
+  ];
+
+  return values.some((value) => {
+    const normalized = String(value || "").trim().toLowerCase();
+    return (
+      normalized === COMMODITY_PLAYBOOK_ID ||
+      normalized.includes("ai_commodity") ||
+      normalized.includes("commodity")
+    );
+  });
 }
 
 function getSpreadWidth(position: ContractDisplaySource): number | null {
@@ -366,6 +406,7 @@ function fmtPricingSource(value?: string | null): string {
   if (!value) return "\u2014";
   if (value === "mid") return "Bid/ask midpoint";
   if (value === "spread_mid_exact") return "Exact spread midpoint";
+  if (value === "spread_bid_ask_exact") return "Exact spread bid/ask";
   if (value === "spread_mid_approx") return "Comparable spread midpoint";
   if (value === "last_price") return "Last trade only";
   if (value === "expired") return "Expired";
@@ -558,10 +599,10 @@ function getCloseNowPnlUsd(position: TrackedPosition | SuggestedTrade): number |
 function getRealizedPnlUsd(position: TrackedPosition | SuggestedTrade): number | null {
   return (
     position.net_pnl_usd ??
-    position.gross_pnl_usd ??
     position.latest_review?.net_pnl_usd ??
-    position.latest_review?.gross_pnl_usd ??
     calcOptionPnlUsd(position, getRealizedExitPrice(position)) ??
+    position.gross_pnl_usd ??
+    position.latest_review?.gross_pnl_usd ??
     null
   );
 }
@@ -619,6 +660,60 @@ function calcAveragePositionPnlPct<T extends TrackedPosition | SuggestedTrade>(
     : null;
 }
 
+function calcTotalPositionPnlUsd<T extends TrackedPosition | SuggestedTrade>(
+  positions: T[],
+  getPnlUsd: (position: T) => number | null
+): number | null {
+  const values = positions
+    .map((position) => getPnlUsd(position))
+    .filter((value): value is number => value != null && !Number.isNaN(value));
+  return values.length > 0
+    ? values.reduce((sum, value) => sum + value, 0)
+    : null;
+}
+
+function getPositionCostRiskUsd(position: TrackedPosition | SuggestedTrade): number | null {
+  const entryPrice = getEntryExecutionPrice(position);
+  const contractCount = Number(position.contracts || 0);
+  if (entryPrice == null || Number.isNaN(entryPrice) || entryPrice <= 0 || contractCount <= 0) return null;
+  return entryPrice * contractCount * 100;
+}
+
+function calcTotalPositionCostRiskUsd<T extends TrackedPosition | SuggestedTrade>(positions: T[]): number | null {
+  const values = positions
+    .map((position) => getPositionCostRiskUsd(position))
+    .filter((value): value is number => value != null && !Number.isNaN(value));
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
+}
+
+function countByLabel<T>(items: T[], getLabel: (item: T) => string | null | undefined): Record<string, number> {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    const label = String(getLabel(item) || "").trim();
+    if (!label) return acc;
+    acc[label] = (acc[label] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function topCountSummary(counts: Record<string, number>, fallback = "None"): string {
+  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  if (!entries.length) return fallback;
+  return `${entries[0][0]} x${entries[0][1]}`;
+}
+
+function getConcentrationWarning(positions: Array<TrackedPosition | SuggestedTrade>): string | null {
+  const tickerCounts = countByLabel(positions, (position) => position.ticker);
+  const sectorCounts = countByLabel(positions, (position) => position.source_pick_snapshot?.sector);
+  const spreadCounts = countByLabel(positions, (position) => buildContractSignature(position));
+  const topTicker = Object.entries(tickerCounts).sort((a, b) => b[1] - a[1])[0];
+  const topSector = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1])[0];
+  const topSpread = Object.entries(spreadCounts).sort((a, b) => b[1] - a[1])[0];
+  if (topSpread?.[1] > 1) return `${topSpread[1]} open rows share one exact contract/spread signature.`;
+  if (topTicker?.[1] > 2) return `${topTicker[0]} has ${topTicker[1]} open tracked positions.`;
+  if (topSector?.[1] > 3) return `${topSector[0]} has ${topSector[1]} open tracked positions.`;
+  return null;
+}
+
 function getPnlExtremes<T extends TrackedPosition | SuggestedTrade>(
   positions: T[],
   getPnlPct: (position: T) => number | null
@@ -636,8 +731,14 @@ function getPnlExtremes<T extends TrackedPosition | SuggestedTrade>(
 function getRealizedPnlPct(position: TrackedPosition | SuggestedTrade): number | null {
   return (
     position.net_pnl_pct ??
-    position.gross_pnl_pct ??
     position.latest_review?.net_pnl_pct ??
+    calcNetOptionPnlPct({
+      entryPrice: getEntryExecutionPrice(position),
+      exitPrice: getRealizedExitPrice(position),
+      contracts: position.contracts,
+      feeTotalUsd: position.fee_total_usd ?? position.latest_review?.fee_total_usd ?? 0,
+    }) ??
+    position.gross_pnl_pct ??
     position.latest_review?.gross_pnl_pct ??
     calcOptionPnlPct(getEntryExecutionPrice(position), getRealizedExitPrice(position)) ??
     null
@@ -719,14 +820,33 @@ function renderOpenPnlCell(position: TrackedPosition | SuggestedTrade) {
   });
 }
 
-function renderAccuracyCell(position: TrackedPosition | SuggestedTrade) {
-  const accuracy = getShareSafeReason(position);
-  const quality = contractQualityLabel(position.source_pick_snapshot);
+function renderRealizedPnlCell(value?: number | null) {
+  const hasValue = value != null && !Number.isNaN(value);
+  const isPositive = hasValue && value > 0;
+  const isNegative = hasValue && value < 0;
+  const toneClass = isPositive ? "text-green" : isNegative ? "text-red" : "text-text-2";
+  const dotClass = isPositive
+    ? "bg-green shadow-[0_0_8px_var(--green)]"
+    : isNegative
+      ? "bg-red shadow-[0_0_8px_var(--red)]"
+      : "bg-border";
+  const label = isPositive
+    ? "Positive realized P&L"
+    : isNegative
+      ? "Negative realized P&L"
+      : hasValue
+        ? "Flat realized P&L"
+        : "Realized P&L unavailable";
+
   return (
-    <div className="space-y-1 leading-tight min-w-[160px]">
-      <div className="text-sm text-text-0">{accuracy}</div>
-      <div className="text-xs text-text-3">{quality}</div>
-    </div>
+    <span
+      className={`inline-flex min-w-[92px] items-center gap-1.5 font-mono text-sm font-semibold ${toneClass}`}
+      aria-label={hasValue ? `${label}: ${fmtPct(value)}` : label}
+      title={label}
+    >
+      <span className={`h-2 w-2 rounded-full ${dotClass}`} aria-hidden="true" />
+      {hasValue ? fmtPct(value) : "\u2014"}
+    </span>
   );
 }
 
@@ -739,6 +859,27 @@ function renderQuoteCell(position: TrackedPosition | SuggestedTrade) {
       <div className="text-xs text-text-3">{context}</div>
     </div>
   );
+}
+
+function renderPositionStatusCell(position: TrackedPosition | SuggestedTrade) {
+  const recommendation = getLatestRecommendation(position);
+  const warning = position.latest_review?.warnings?.[0] || null;
+  const proofLabel = position.proof_eligible
+    ? "proof"
+    : fmtCompactLabel(position.proof_class || position.proof_ineligibility_reason);
+  return (
+    <div className="space-y-1 leading-tight min-w-[150px]">
+      <div className={recommendation === "SELL" ? "text-sm font-semibold text-red" : "text-sm font-semibold text-text-0"}>
+        {recommendation}
+      </div>
+      <div className="text-xs text-text-3">{proofLabel}</div>
+      {warning ? <div className="text-xs text-amber-300 truncate max-w-[220px]">{warning}</div> : null}
+    </div>
+  );
+}
+
+function getLatestRecommendation(position: TrackedPosition | SuggestedTrade): string {
+  return position.last_recommendation || position.latest_review?.recommendation || "\u2014";
 }
 
 function renderReviewedCell(position: TrackedPosition | SuggestedTrade) {
@@ -786,8 +927,8 @@ export default function PredictionsView() {
   const [forwardEvidence, setForwardEvidence] = useState<ForwardEvidenceReport | null>(null);
   const [optionsProfitStatus, setOptionsProfitStatus] = useState<OptionsProfitStatus | null>(null);
   const [truthHealthError, setTruthHealthError] = useState<string | null>(null);
-  const [useRecommendedPolicy, setUseRecommendedPolicy] = useState(true);
-  const [scanPlaybook, setScanPlaybook] = useState<string>("short_term");
+  const [useRecommendedPolicy, setUseRecommendedPolicy] = useState(false);
+  const [scanPlaybook, setScanPlaybook] = useState<string>("bullish_pullback_observation");
   const [showBlockedIdeas, setShowBlockedIdeas] = useState(false);
   const [availablePlaybooks, setAvailablePlaybooks] = useState<ScanPlaybook[]>([]);
   const [exposureSnapshot, setExposureSnapshot] = useState<ExposureSnapshot | null>(null);
@@ -801,6 +942,8 @@ export default function PredictionsView() {
   const [scanLoading, setScanLoading] = useState(false);
   const [predictionsLoaded, setPredictionsLoaded] = useState(false);
   const [sectorsLoaded, setSectorsLoaded] = useState(false);
+  const [predictionsError, setPredictionsError] = useState<string | null>(null);
+  const [sectorsError, setSectorsError] = useState<string | null>(null);
   const [positionsLoaded, setPositionsLoaded] = useState(false);
   const [positionsLoading, setPositionsLoading] = useState(false);
   const [positionsError, setPositionsError] = useState<string | null>(null);
@@ -828,6 +971,11 @@ export default function PredictionsView() {
   const [closingSuggestedTradeId, setClosingSuggestedTradeId] = useState<number | null>(null);
   const toast = useToast();
   const { guard } = useSubmitGuard();
+  const predictionDataRequestIdRef = useRef(0);
+  const scanRequestIdRef = useRef(0);
+  const truthHealthRequestIdRef = useRef(0);
+  const positionsRequestIdRef = useRef(0);
+  const suggestedTradesRequestIdRef = useRef(0);
 
   const mergeTrackedPosition = useCallback((position: TrackedPosition) => {
     setOpenPositions((prev) =>
@@ -859,14 +1007,38 @@ export default function PredictionsView() {
     const reviewedById = new globalThis.Map<number, TrackedPosition>(
       reviewed.map((position) => [position.id, position])
     );
-    setOpenPositions((prev) => prev.map((position) => reviewedById.get(position.id) ?? position));
+    const closedReviewed = reviewed.filter((position) => position.status === "closed");
+    const closedReviewedIds = new Set(closedReviewed.map((position) => position.id));
+    setOpenPositions((prev) =>
+      prev
+        .map((position) => reviewedById.get(position.id) ?? position)
+        .filter((position) => position.status === "open")
+    );
+    if (closedReviewed.length > 0) {
+      setClosedPositions((prev) => [
+        ...closedReviewed,
+        ...prev.filter((position) => !closedReviewedIds.has(position.id)),
+      ]);
+    }
   }, []);
 
   const applyReviewedSuggestedTrades = useCallback((reviewed: SuggestedTrade[]) => {
     const reviewedById = new globalThis.Map<number, SuggestedTrade>(
       reviewed.map((trade) => [trade.id, trade])
     );
-    setOpenSuggestedTrades((prev) => prev.map((trade) => reviewedById.get(trade.id) ?? trade));
+    const closedReviewed = reviewed.filter((trade) => trade.status === "closed");
+    const closedReviewedIds = new Set(closedReviewed.map((trade) => trade.id));
+    setOpenSuggestedTrades((prev) =>
+      prev
+        .map((trade) => reviewedById.get(trade.id) ?? trade)
+        .filter((trade) => trade.status === "open")
+    );
+    if (closedReviewed.length > 0) {
+      setClosedSuggestedTrades((prev) => [
+        ...closedReviewed,
+        ...prev.filter((trade) => !closedReviewedIds.has(trade.id)),
+      ]);
+    }
   }, []);
 
   const fetchPredictionsData = useCallback(async ({
@@ -878,35 +1050,62 @@ export default function PredictionsView() {
     includeSectors?: boolean;
     showToast?: boolean;
   } = {}) => {
-    try {
-      const predRequest = includePredictions
-        ? fetchWithTimeout("/api/predictions", undefined, "Prediction history")
-        : null;
-      const sectorRequest = includeSectors
-        ? fetchWithTimeout("/api/sectors", undefined, "Sector data").catch(() => null)
-        : null;
+    const requestId = ++predictionDataRequestIdRef.current;
+    const isCurrentRequest = () => requestId === predictionDataRequestIdRef.current;
+    const errors: string[] = [];
 
-      const [predRes, sectorRes] = await Promise.all([predRequest, sectorRequest]);
-
-      if (includePredictions && predRes) {
-        const predData = await predRes.json();
-        setPredictions(Array.isArray(predData) ? predData : []);
+    if (includePredictions) {
+      try {
+        const predRes = await fetchWithTimeout("/api/predictions", undefined, "Prediction history");
+        const predData = await readJsonResponseOrThrow(predRes, "Prediction history");
+        if (!Array.isArray(predData)) {
+          throw new Error("Prediction history response was not a list.");
+        }
+        if (!isCurrentRequest()) return;
+        setPredictions(predData as Prediction[]);
         setPredictionsLoaded(true);
+        setPredictionsError(null);
+      } catch (err) {
+        if (!isCurrentRequest()) return;
+        const message = err instanceof Error ? err.message : "Failed to load prediction history.";
+        console.error("Failed to load prediction history:", err);
+        setPredictions([]);
+        setPredictionsLoaded(false);
+        setPredictionsError(message);
+        errors.push(message);
       }
+    }
 
-      if (includeSectors && sectorRes && sectorRes.ok) {
-        setSectors(await sectorRes.json());
+    if (includeSectors) {
+      try {
+        const sectorRes = await fetchWithTimeout("/api/sectors", undefined, "Sector data");
+        const sectorData = await readJsonResponseOrThrow(sectorRes, "Sector data");
+        if (!Array.isArray(sectorData)) {
+          throw new Error("Sector data response was not a list.");
+        }
+        if (!isCurrentRequest()) return;
+        setSectors(sectorData as SectorSentiment[]);
         setSectorsLoaded(true);
+        setSectorsError(null);
+      } catch (err) {
+        if (!isCurrentRequest()) return;
+        const message = err instanceof Error ? err.message : "Failed to load sector data.";
+        console.error("Failed to load sector data:", err);
+        setSectors([]);
+        setSectorsLoaded(false);
+        setSectorsError(message);
+        errors.push(message);
       }
-    } catch (err) {
-      console.error("Failed to load predictions:", err);
-      if (showToast) {
-        toast.error("Failed to load predictions. Please try again.");
-      }
+    }
+
+    if (showToast && errors.length > 0) {
+      toast.error(errors.join(" "));
     }
   }, [toast]);
 
   const fetchScanner = useCallback(async (showToast = false) => {
+    const requestId = ++scanRequestIdRef.current;
+    const isCurrentRequest = () => requestId === scanRequestIdRef.current;
     setScanLoading(true);
     try {
       const res = await fetchWithTimeout("/api/scan", {
@@ -918,11 +1117,13 @@ export default function PredictionsView() {
           playbook: scanPlaybook,
           include_blocked_policy_picks: showBlockedIdeas,
           include_blocked_guardrail_picks: showBlockedIdeas,
+          enforce_portfolio_caps: false,
         }),
       }, "Live scan");
       const data = await res.json();
+      if (!isCurrentRequest()) return;
       if (!res.ok || data.error) {
-        console.warn("Scan returned error:", data.error || res.status);
+        throw new Error(data.error || `Scan request failed with status ${res.status}`);
       }
       setScanPicks(data.picks || []);
       setScanPolicy(data.policy || null);
@@ -934,6 +1135,7 @@ export default function PredictionsView() {
       setAvailablePlaybooks(data.playbooks || []);
       setExposureSnapshot(data.exposure_snapshot || null);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error("Failed to load scan picks:", err);
       const message = err instanceof Error ? err.message : "Failed to load scan picks.";
       setScanPicks([]);
@@ -949,11 +1151,15 @@ export default function PredictionsView() {
         toast.error(message);
       }
     } finally {
-      setScanLoading(false);
+      if (isCurrentRequest()) {
+        setScanLoading(false);
+      }
     }
   }, [showBlockedIdeas, toast, scanPlaybook, useRecommendedPolicy]);
 
   const fetchTruthHealth = useCallback(async (showToast = false) => {
+    const requestId = ++truthHealthRequestIdRef.current;
+    const isCurrentRequest = () => requestId === truthHealthRequestIdRef.current;
     try {
       const [forwardRes, statusRes] = await Promise.all([
         fetchWithTimeout("/api/backtest/forward-evidence", undefined, "Forward evidence report"),
@@ -961,18 +1167,22 @@ export default function PredictionsView() {
       ]);
       const forwardData = await forwardRes.json();
       const statusData = await statusRes.json();
+      if (!isCurrentRequest()) return;
       if (!forwardRes.ok || forwardData.error) {
-        console.warn("Forward evidence not available:", forwardData.error || forwardRes.status);
+        throw new Error(forwardData.error || `Forward evidence request failed with status ${forwardRes.status}`);
       }
       if (!statusRes.ok || statusData.error) {
-        console.warn("Options profit status not available:", statusData.error || statusRes.status);
+        throw new Error(statusData.error || `Options profit status request failed with status ${statusRes.status}`);
       }
       setForwardEvidence((forwardData || null) as ForwardEvidenceReport | null);
       setOptionsProfitStatus((statusData || null) as OptionsProfitStatus | null);
       setTruthHealthError(null);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error("Failed to load truth health:", err);
       const message = err instanceof Error ? err.message : "Failed to load truth health.";
+      setForwardEvidence(null);
+      setOptionsProfitStatus(null);
       setTruthHealthError(message);
       if (showToast) {
         toast.error(message);
@@ -988,10 +1198,13 @@ export default function PredictionsView() {
   }, [fetchScanner, fetchTruthHealth]);
 
   const fetchPositions = useCallback(async (showToast = false) => {
+    const requestId = ++positionsRequestIdRef.current;
+    const isCurrentRequest = () => requestId === positionsRequestIdRef.current;
     setPositionsLoading(true);
     try {
       const res = await fetchWithTimeout("/api/positions?status=all&grouped=1", undefined, "Tracked positions");
       const data = await res.json();
+      if (!isCurrentRequest()) return;
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to load tracked positions");
       }
@@ -1000,22 +1213,35 @@ export default function PredictionsView() {
       setClosedPositions((data.closed || []) as TrackedPosition[]);
       setPositionsLoaded(true);
       setPositionsError(null);
+      let reviewFailed = false;
       if (nextOpenPositions.length > 0) {
-        const reviewRes = await fetchWithTimeout("/api/positions/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ position_ids: nextOpenPositions.map((position) => position.id) }),
-        }, "Tracked position review");
-        const reviewData = await reviewRes.json();
-        if (!reviewRes.ok || reviewData.error) {
-          throw new Error(reviewData.error || "Failed to review tracked positions");
+        try {
+          const reviewRes = await fetchWithTimeout("/api/positions/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ position_ids: nextOpenPositions.map((position) => position.id) }),
+          }, "Tracked position review");
+          const reviewData = await reviewRes.json();
+          if (!reviewRes.ok || reviewData.error) {
+            throw new Error(reviewData.error || "Failed to review tracked positions");
+          }
+          if (!isCurrentRequest()) return;
+          applyReviewedPositions((reviewData.positions || []) as TrackedPosition[]);
+        } catch (reviewErr) {
+          if (!isCurrentRequest()) return;
+          reviewFailed = true;
+          const message = reviewErr instanceof Error ? reviewErr.message : "Failed to review tracked positions.";
+          setPositionsError(`Tracked positions loaded, but repricing failed: ${message}`);
+          if (showToast) {
+            toast.error(`Tracked positions loaded, but repricing failed: ${message}`);
+          }
         }
-        applyReviewedPositions((reviewData.positions || []) as TrackedPosition[]);
       }
-      if (showToast) {
+      if (showToast && !reviewFailed) {
         toast.success(nextOpenPositions.length > 0 ? "Tracked positions refreshed and repriced." : "Tracked positions refreshed.");
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error("Failed to load tracked positions:", err);
       const message = err instanceof Error ? err.message : "Failed to load tracked positions.";
       setOpenPositions([]);
@@ -1025,15 +1251,20 @@ export default function PredictionsView() {
         toast.error(message);
       }
     } finally {
-      setPositionsLoading(false);
+      if (isCurrentRequest()) {
+        setPositionsLoading(false);
+      }
     }
   }, [applyReviewedPositions, toast]);
 
   const fetchSuggestedTrades = useCallback(async (showToast = false) => {
+    const requestId = ++suggestedTradesRequestIdRef.current;
+    const isCurrentRequest = () => requestId === suggestedTradesRequestIdRef.current;
     setSuggestedTradesLoading(true);
     try {
       const res = await fetchWithTimeout("/api/suggested-trades?status=all&grouped=1", undefined, "Suggested trades");
       const data = await res.json();
+      if (!isCurrentRequest()) return;
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to load suggested trades");
       }
@@ -1042,22 +1273,35 @@ export default function PredictionsView() {
       setClosedSuggestedTrades((data.closed || []) as SuggestedTrade[]);
       setSuggestedTradesLoaded(true);
       setSuggestedTradesError(null);
+      let reviewFailed = false;
       if (nextOpenTrades.length > 0) {
-        const reviewRes = await fetchWithTimeout("/api/suggested-trades/review", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ position_ids: nextOpenTrades.map((trade) => trade.id) }),
-        }, "Suggested trade review");
-        const reviewData = await reviewRes.json();
-        if (!reviewRes.ok || reviewData.error) {
-          throw new Error(reviewData.error || "Failed to review suggested trades");
+        try {
+          const reviewRes = await fetchWithTimeout("/api/suggested-trades/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ position_ids: nextOpenTrades.map((trade) => trade.id) }),
+          }, "Suggested trade review");
+          const reviewData = await reviewRes.json();
+          if (!reviewRes.ok || reviewData.error) {
+            throw new Error(reviewData.error || "Failed to review suggested trades");
+          }
+          if (!isCurrentRequest()) return;
+          applyReviewedSuggestedTrades((reviewData.trades || []) as SuggestedTrade[]);
+        } catch (reviewErr) {
+          if (!isCurrentRequest()) return;
+          reviewFailed = true;
+          const message = reviewErr instanceof Error ? reviewErr.message : "Failed to review suggested trades.";
+          setSuggestedTradesError(`Suggested trades loaded, but repricing failed: ${message}`);
+          if (showToast) {
+            toast.error(`Suggested trades loaded, but repricing failed: ${message}`);
+          }
         }
-        applyReviewedSuggestedTrades((reviewData.trades || []) as SuggestedTrade[]);
       }
-      if (showToast) {
+      if (showToast && !reviewFailed) {
         toast.success(nextOpenTrades.length > 0 ? "Suggested trades refreshed and repriced." : "Suggested trades refreshed.");
       }
     } catch (err) {
+      if (!isCurrentRequest()) return;
       console.error("Failed to load suggested trades:", err);
       const message = err instanceof Error ? err.message : "Failed to load suggested trades.";
       setOpenSuggestedTrades([]);
@@ -1067,7 +1311,9 @@ export default function PredictionsView() {
         toast.error(message);
       }
     } finally {
-      setSuggestedTradesLoading(false);
+      if (isCurrentRequest()) {
+        setSuggestedTradesLoading(false);
+      }
     }
   }, [applyReviewedSuggestedTrades, toast]);
 
@@ -1096,6 +1342,11 @@ export default function PredictionsView() {
     if (!includePredictions && !includeSectors) return;
     void fetchPredictionsData({ includePredictions, includeSectors });
   }, [activeSubTab, fetchPredictionsData, predictionsLoaded, sectorsLoaded]);
+
+  useEffect(() => {
+    if (activeSubTab !== "scanner") return;
+    void refreshScannerSurface(false);
+  }, [activeSubTab, refreshScannerSurface]);
 
   useEffect(() => {
     if (loading || activeSubTab !== "positions" || positionsLoaded) return;
@@ -1322,9 +1573,9 @@ export default function PredictionsView() {
 
   const submitClosePosition = async () => {
     if (!closingPosition) return;
-    const parsedExitPrice = Number(exitPrice);
-    if (!Number.isFinite(parsedExitPrice) || parsedExitPrice <= 0) {
-      toast.error("Enter a valid exit price greater than 0.");
+    const parsedExitPrice = parseNonnegativePriceInput(exitPrice);
+    if (parsedExitPrice == null) {
+      toast.error("Enter a valid exit price of 0 or greater.");
       return;
     }
     await guard(async () => {
@@ -1359,9 +1610,9 @@ export default function PredictionsView() {
 
   const submitCloseSuggestedTrade = async () => {
     if (!closingSuggestedTrade) return;
-    const parsedExitPrice = Number(suggestedExitPrice);
-    if (!Number.isFinite(parsedExitPrice) || parsedExitPrice <= 0) {
-      toast.error("Enter a valid exit price greater than 0.");
+    const parsedExitPrice = parseNonnegativePriceInput(suggestedExitPrice);
+    if (parsedExitPrice == null) {
+      toast.error("Enter a valid exit price of 0 or greater.");
       return;
     }
     await guard(async () => {
@@ -1430,6 +1681,7 @@ export default function PredictionsView() {
   const PRIMARY_SUB_TABS = [
     { id: "positions", label: `Tracked Positions (${openPositions.length})`, icon: BriefcaseBusiness, targetView: "open" as const },
     { id: "closed-trades", label: `Closed Trades (${closedPositions.length})`, icon: CheckCircle, targetView: "closed" as const },
+    { id: "scanner", label: `Scanner (${scanPicks.length})`, icon: RefreshCw },
   ] as const;
   const LEGACY_SUB_TABS = [
     { id: "suggestions", label: `Suggested Trades (${openSuggestedTrades.length})`, icon: Clipboard },
@@ -1440,6 +1692,9 @@ export default function PredictionsView() {
     { id: "sectors", label: "Legacy Sectors", icon: Map },
   ] as const;
   const SUB_TABS = showLegacyTabs ? [...PRIMARY_SUB_TABS, ...LEGACY_SUB_TABS] : PRIMARY_SUB_TABS;
+  const legacyDataError = LEGACY_PREDICTION_TABS.has(activeSubTab)
+    ? predictionsError || (activeSubTab === "sectors" ? sectorsError : null)
+    : null;
 
   if (loading) {
     return (
@@ -1457,6 +1712,11 @@ export default function PredictionsView() {
           <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
             These legacy prediction analytics are archival scanner research, not the current supervised tracked-position workflow.
           </div>
+          {legacyDataError ? (
+            <div className="bg-red-dim border border-red/30 rounded-lg px-4 py-3 text-sm text-red">
+              {legacyDataError}
+            </div>
+          ) : null}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <MetricCard label="Total Picks" value={String(scanPreds.length)} />
             <MetricCard label="Active Trades" value={String(pending.length)} />
@@ -1601,6 +1861,43 @@ export default function PredictionsView() {
       </div>
 
       <div role="tabpanel">
+        {activeSubTab === "scanner" && (
+          <ScannerTab
+            picks={scanPicks}
+            loading={scanLoading}
+            useRecommendedPolicy={useRecommendedPolicy}
+            policy={scanPolicy}
+            policyError={scanPolicyError}
+            exitAudit={scanExitAudit}
+            decisionCounts={scanDecisionCounts}
+            guardrailCounts={guardrailDecisionCounts}
+            candidateCount={scanCandidateCount}
+            forwardEvidence={forwardEvidence}
+            optionsProfitStatus={optionsProfitStatus}
+            truthHealthError={truthHealthError}
+            playbook={scanPlaybook}
+            playbooks={availablePlaybooks}
+            exposureSnapshot={exposureSnapshot}
+            showBlockedIdeas={showBlockedIdeas}
+            selectedPick={selectedPick}
+            fillPrice={fillPrice}
+            contracts={contracts}
+            notes={takeNotes}
+            takingTrade={takingTrade}
+            savingSuggestedTrade={savingSuggestedTrade}
+            onRefresh={() => void refreshScannerSurface(true)}
+            onPolicyModeChange={setUseRecommendedPolicy}
+            onPlaybookChange={setScanPlaybook}
+            onShowBlockedIdeasChange={setShowBlockedIdeas}
+            onPick={openTakeTrade}
+            onCancel={cancelTakeTrade}
+            onFillPriceChange={setFillPrice}
+            onContractsChange={setContracts}
+            onNotesChange={setTakeNotes}
+            onSubmit={() => void submitTakeTrade()}
+            onSubmitSuggested={() => void submitSuggestedTrade()}
+          />
+        )}
         {activeSubTab === "suggestions" && (
           <SuggestedTradesTab
             openTrades={openSuggestedTrades}
@@ -1633,7 +1930,13 @@ export default function PredictionsView() {
         {activeSubTab === "graded" && <GradedTab predictions={graded} />}
         {activeSubTab === "breakdown" && <BreakdownTab predictions={graded} />}
         {activeSubTab === "sim" && <SimTab predictions={scanPreds} />}
-        {activeSubTab === "sectors" && <SectorsTab sectors={sectors} />}
+        {activeSubTab === "sectors" && (
+          <SectorsTab
+            sectors={sectors}
+            loading={!sectorsLoaded && !sectorsError}
+            error={sectorsError}
+          />
+        )}
       </div>
 
       <CloseTradeModal
@@ -1817,9 +2120,7 @@ function ScannerTab({
     "Target Move": pick.target_move_pct != null ? `${pick.target_move_pct.toFixed(2)}%` : "\u2014",
     Action: (
       <Button size="sm" variant="secondary" onClick={() => onPick(pick)}>
-        {pick.observation_only
-          ? "Review Speculative"
-          : pick.guardrail_decision === "blocked"
+        {pick.guardrail_decision === "blocked"
           ? "Inspect"
           : pick.guardrail_decision === "caution"
           ? "Take Smaller"
@@ -1841,8 +2142,10 @@ function ScannerTab({
             Supervised decision support for live options ideas. Start from a current scan pick, then either save the trade you actually took or log a clearly hypothetical paper idea.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(playbooks.length ? playbooks : [
+            { id: "bullish_pullback_observation", label: "Bullish Pullback Primary" },
+            { id: "tracked_winner_primary", label: "Tracked Winner Primary" },
             { id: "short_term", label: "Short-Term" },
             { id: "swing", label: "Swing" },
             { id: "speculative", label: "Speculative" },
@@ -1892,20 +2195,23 @@ function ScannerTab({
 
       {activePlaybook && (
         <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
-          {activePlaybook.observation_only && (
-            <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              This lane is observation-only. It surfaces speculative SPY/QQQ ideas for paper tracking and starter-size review, not normal managed-lane approval.
-            </div>
-          )}
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-text-0">{activePlaybook.label} Playbook</div>
               <p className="text-xs text-text-3 mt-1">{activePlaybook.description}</p>
-              {(activePlaybook.observation_only || activePlaybook.allowed_tickers?.length) && (
+              {activePlaybook.allowed_tickers?.length && (
                 <div className="text-[11px] uppercase tracking-wide text-text-3 mt-2">
-                  {activePlaybook.observation_only ? "Observation only" : "Managed lane"}
+                  Managed lane
                   {activePlaybook.allowed_tickers?.length
                     ? ` \u00b7 Universe ${activePlaybook.allowed_tickers.join(" / ")}`
+                    : ""}
+                </div>
+              )}
+              {typeof activePlaybook.historical_scan_ready_count === "number" && (
+                <div className="text-[11px] uppercase tracking-wide text-emerald-200/80 mt-1">
+                  Theta EOD ready {activePlaybook.historical_scan_ready_count}/{activePlaybook.historical_scan_required_count ?? activePlaybook.allowed_tickers?.length ?? 0}
+                  {typeof activePlaybook.historical_core_ready_count === "number"
+                    ? ` \u00b7 Core ${activePlaybook.historical_core_ready_count}/${activePlaybook.historical_core_required_count ?? 0}`
                     : ""}
                 </div>
               )}
@@ -1937,8 +2243,8 @@ function ScannerTab({
                   {policy?.priced_trade_count != null || policy?.unpriced_trade_count != null
                     ? `Priced ${policy?.priced_trade_count ?? 0} / Unpriced ${policy?.unpriced_trade_count ?? 0}`
                     : "Quote windows active"}
-                  {policy.entry_quote_time_et ? ` Â· Entry ${policy.entry_quote_time_et}` : ""}
-                  {policy.exit_quote_time_et ? ` Â· Exit ${policy.exit_quote_time_et}` : ""}
+                  {policy.entry_quote_time_et ? ` | Entry ${policy.entry_quote_time_et}` : ""}
+                  {policy.exit_quote_time_et ? ` | Exit ${policy.exit_quote_time_et}` : ""}
                 </div>
               )}
             </div>
@@ -2197,8 +2503,7 @@ function ScannerTab({
             )}
             {(selectedPick.risk_tier != null
               || selectedPick.upside_tier != null
-              || selectedPick.convexity_class
-              || selectedPick.observation_only) && (
+              || selectedPick.convexity_class) && (
               <div className="text-xs text-text-2 mt-2 space-y-1">
                 <div className="text-[11px] uppercase tracking-wide text-text-3">Risk Profile</div>
                 <div>
@@ -2206,9 +2511,6 @@ function ScannerTab({
                   {" "}&middot; {fmtRiskUpsideLabel(selectedPick)}
                   {selectedPick.speculative_flag ? " \u00b7 SPECULATIVE" : ""}
                 </div>
-                {selectedPick.observation_only && (
-                  <div>{selectedPick.observation_reason || "This lane is watch-only while it builds separate forward evidence."}</div>
-                )}
                 {selectedPick.speculative_reason?.map((reason) => (
                   <div key={reason}>{reason}</div>
                 ))}
@@ -2275,7 +2577,7 @@ function ScannerTab({
             </label>
           </div>
           <div className="text-xs text-text-3">
-            Nothing from the scanner is auto-tracked. Real tracked positions and hypothetical suggested trades stay separate on purpose.
+            Eligible scheduled scanner picks are auto-tracked. Use this form for manual corrections or trades you actually placed outside the scheduled run.
           </div>
           <div className="flex items-center gap-2">
             <Button
@@ -2330,12 +2632,12 @@ function CompactStat({
   help?: string;
 }) {
   return (
-    <div className="bg-bg-2 border border-border rounded-lg px-3 py-2 min-w-0">
-      <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">
+    <div className="bg-bg-2 border border-border rounded-lg px-3 py-1.5 min-w-0">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.09em] text-text-2">
         {label}
         {help && <span className="sr-only">: {help}</span>}
       </div>
-      <div className="font-mono text-base text-text-0 mt-1">{value}</div>
+      <div className="font-mono text-[0.95rem] text-text-0 mt-0.5">{value}</div>
     </div>
   );
 }
@@ -2354,8 +2656,8 @@ function EntryDateFilterControls({
   const hasActiveFilter = preset !== "all";
 
   return (
-    <div className="rounded-lg border border-border bg-bg-2 px-3 py-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="rounded-lg border border-border bg-bg-2 px-3 py-2">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">
             Entry Date
@@ -2387,7 +2689,7 @@ function EntryDateFilterControls({
                 onCustomDateChange(value);
                 onPresetChange(value ? "custom" : "all");
               }}
-              className="rounded border border-border bg-bg-3 px-3 py-1.5 text-sm text-text-0"
+              className="rounded border border-border bg-bg-3 px-2.5 py-1 text-xs text-text-0"
             />
           </label>
           {hasActiveFilter ? (
@@ -2443,14 +2745,15 @@ function CloseTradeModal({
   const exitLabel = mode === "tracked" ? "Actual exit price" : "Hypothetical exit price";
   const liveExitPrice = getCloseNowPrice(item);
   const paperValue = getMarkPrice(item);
-  const parsedExitPrice = Number(exitPrice);
-  const enteredExitPrice =
-    Number.isFinite(parsedExitPrice) && parsedExitPrice > 0
-      ? parsedExitPrice
-      : null;
+  const enteredExitPrice = parseNonnegativePriceInput(exitPrice);
   const exitPnl =
     enteredExitPrice != null
-      ? calcOptionPnlPct(getEntryExecutionPrice(item), enteredExitPrice)
+      ? calcNetOptionPnlPct({
+          entryPrice: getEntryExecutionPrice(item),
+          exitPrice: enteredExitPrice,
+          contracts: item.contracts,
+          feeTotalUsd: item.latest_review?.fee_total_usd ?? item.fee_total_usd ?? 0,
+        })
       : getCloseNowPnlPct(item);
 
   return (
@@ -2526,7 +2829,7 @@ function CloseTradeModal({
               <span className="block">{exitLabel}</span>
               <input
                 type="number"
-                min="0.01"
+                min="0"
                 step="0.01"
                 value={exitPrice}
                 onChange={(e) => onExitPriceChange(e.target.value)}
@@ -2582,7 +2885,7 @@ function SuggestedTradesTab({
   onReviewTrade: (positionId: number) => void;
   onOpenClose: (trade: SuggestedTrade) => void;
 }) {
-  const dedupedOpenTrades = dedupeOpenContracts(openTrades);
+  const dedupedOpenTrades = openTrades;
   const [openFilter, setOpenFilter] = useState<"share-safe" | "all">("all");
   const shareSafeOpenTrades = dedupedOpenTrades.filter((trade) => isShareSafeLivePosition(trade));
   const hiddenOpenTradeCount = Math.max(dedupedOpenTrades.length - shareSafeOpenTrades.length, 0);
@@ -2592,7 +2895,7 @@ function SuggestedTradesTab({
   const holdCount = dedupedOpenTrades.filter((trade) => trade.last_recommendation === "HOLD").length;
   const sellCount = dedupedOpenTrades.filter((trade) => trade.last_recommendation === "SELL").length;
   const openPnlValues = dedupedOpenTrades
-    .map((trade) => trade.last_pnl_pct)
+    .map((trade) => getCloseNowPnlPct(trade))
     .filter((value): value is number => value != null);
   const closedPnlValues = closedTrades
     .map((trade) => getRealizedPnlPct(trade))
@@ -2606,7 +2909,7 @@ function SuggestedTradesTab({
 
   const rows = trades.map((trade) => {
     const displayPnl = view === "open"
-      ? trade.last_pnl_pct
+      ? getCloseNowPnlPct(trade)
       : getRealizedPnlPct(trade);
 
     if (view === "open") {
@@ -2652,7 +2955,7 @@ function SuggestedTradesTab({
       Trade: trade.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
       Entry: fmtMoney(trade.entry_option_price),
       "Exit Px": fmtMoney(getRealizedExitPrice(trade)),
-      "Realized P&L %": fmtPct(displayPnl),
+      "Realized P&L %": renderRealizedPnlCell(displayPnl),
       Recommendation: trade.last_recommendation || "\u2014",
       Action: <span className="text-xs text-text-3">{trade.exit_reason || "manual_hypothetical_close"}</span>,
       "Contract Q": contractQualityLabel(trade.source_pick_snapshot),
@@ -2766,6 +3069,48 @@ function SuggestedTradesTab({
   );
 }
 
+function LanePositionPanel({
+  title,
+  subtitle,
+  emptyMessage,
+  rows,
+  view,
+  tableMaxHeight,
+}: {
+  title: string;
+  subtitle: string;
+  emptyMessage: string;
+  rows: Record<string, unknown>[];
+  view: "open" | "closed";
+  tableMaxHeight: string;
+}) {
+  return (
+    <section className="min-w-0 space-y-2">
+      <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
+        <div>
+          <div className="text-sm font-semibold text-text-0">{title}</div>
+          <div className="text-xs text-text-3">{subtitle}</div>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <div className="text-sm text-text-3 bg-bg-2 rounded-lg p-6 text-center border border-border">
+          {emptyMessage}
+        </div>
+      ) : (
+        <FinTable
+          data={rows}
+          badgeCol="Trade"
+          pnlCols={[]}
+          monoCols={view === "open" ? ["Taken", "Entry", "Target", "Stop"] : ["Taken", "Entry", "Exit Px", "Reviewed", "Expiry", "Target", "Stop", "Closed"]}
+          label={`${title} tracked options positions`}
+          density="compact"
+          maxHeight={tableMaxHeight}
+        />
+      )}
+    </section>
+  );
+}
+
 function TrackedPositionsTab({
   openPositions,
   closedPositions,
@@ -2789,7 +3134,7 @@ function TrackedPositionsTab({
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
 }) {
-  const dedupedOpenPositions = dedupeOpenContracts(openPositions);
+  const dedupedOpenPositions = openPositions;
   const [openFilter, setOpenFilter] = useState<"share-safe" | "all">("all");
   const [entryDatePreset, setEntryDatePreset] = useState<EntryDateFilterPreset>("all");
   const [entryDateValue, setEntryDateValue] = useState("");
@@ -2802,84 +3147,116 @@ function TrackedPositionsTab({
   const filteredClosedPositions = closedPositions.filter((position) =>
     matchesEntryDateFilter(getTradeDateFilterValue(position), entryDatePreset, entryDateValue)
   );
+  const proofOpenPositions = filteredOpenPositions.filter((position) => position.proof_eligible);
+  const proofClosedPositions = filteredClosedPositions.filter((position) => position.proof_eligible);
   const basePositions = view === "open" ? openBasePositions : closedPositions;
   const positions = view === "open" ? filteredOpenPositions : filteredClosedPositions;
+  const normalLanePositions = positions.filter((position) => !isCommodityLanePosition(position));
+  const commodityLanePositions = positions.filter(isCommodityLanePosition);
   const hiddenByEntryDateCount = Math.max(basePositions.length - positions.length, 0);
-  const holdCount = dedupedOpenPositions.filter((position) => position.last_recommendation === "HOLD").length;
-  const sellCount = dedupedOpenPositions.filter((position) => position.last_recommendation === "SELL").length;
+  const holdCount = dedupedOpenPositions.filter((position) => getLatestRecommendation(position) === "HOLD").length;
+  const sellCount = filteredOpenPositions.filter((position) => getLatestRecommendation(position) === "SELL").length;
   const unpricedCount = dedupedOpenPositions.filter((position) => {
     const source = position.latest_review?.pricing_source || null;
     return source === "unavailable" || source === "expired" || source == null;
   }).length;
   const avgOpenExitPnlPct = calcAveragePositionPnlPct(filteredOpenPositions, getCloseNowPnlPct);
   const weightedOpenExitPnlPct = calcWeightedPositionPnlPct(filteredOpenPositions, getCloseNowPnlUsd);
+  const totalOpenExitPnlUsd = calcTotalPositionPnlUsd(filteredOpenPositions, getCloseNowPnlUsd);
+  const totalProofOpenExitPnlUsd = calcTotalPositionPnlUsd(proofOpenPositions, getCloseNowPnlUsd);
+  const totalOpenCostRiskUsd = calcTotalPositionCostRiskUsd(filteredOpenPositions);
+  const visibleSellPositions = filteredOpenPositions.filter((position) => getLatestRecommendation(position) === "SELL");
+  const sellOpenPnlUsd = calcTotalPositionPnlUsd(
+    visibleSellPositions,
+    getCloseNowPnlUsd
+  );
+  const concentrationWarning = getConcentrationWarning(dedupedOpenPositions);
+  const tickerConcentrationLabel = topCountSummary(countByLabel(dedupedOpenPositions, (position) => position.ticker));
   const avgRealizedExitPnlPct = calcAveragePositionPnlPct(filteredClosedPositions, getRealizedPnlPct);
   const realizedExitPnlPct = calcWeightedPositionPnlPct(filteredClosedPositions, getRealizedPnlUsd);
+  const totalRealizedExitPnlUsd = calcTotalPositionPnlUsd(filteredClosedPositions, getRealizedPnlUsd);
+  const totalProofRealizedExitPnlUsd = calcTotalPositionPnlUsd(proofClosedPositions, getRealizedPnlUsd);
   const realizedExtremes = getPnlExtremes(filteredClosedPositions, getRealizedPnlPct);
   const openReviewSummary = view === "open" ? getCollectionReviewSummary(positions) : null;
+  const tableMaxHeight = view === "open"
+    ? "min(calc(100vh - 18rem), 920px)"
+    : "min(calc(100vh - 17rem), 940px)";
+  const lanePnlLabel = view === "open" ? "MTM" : "Realized";
+  const normalLanePnlUsd = calcTotalPositionPnlUsd(
+    normalLanePositions,
+    view === "open" ? getCloseNowPnlUsd : getRealizedPnlUsd
+  );
+  const commodityLanePnlUsd = calcTotalPositionPnlUsd(
+    commodityLanePositions,
+    view === "open" ? getCloseNowPnlUsd : getRealizedPnlUsd
+  );
 
-  const rows = positions.map((position) => {
-    const targetPct = position.profit_target_pct;
-    const stopPct = position.stop_loss_pct;
-    const realizedPnl = getRealizedPnlPct(position);
-    if (view === "open") {
+  const buildRows = (items: TrackedPosition[]) =>
+    items.map((position) => {
+      const targetPct = position.profit_target_pct;
+      const stopPct = position.stop_loss_pct;
+      const realizedPnl = getRealizedPnlPct(position);
+      if (view === "open") {
+        return {
+          __rowKey: position.id,
+          Ticker: position.ticker,
+          Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
+          Taken: fmtTakenDate(position),
+          Entry: fmtMoney(position.entry_option_price),
+          "Live Px": renderOpenPriceCell(position),
+          "Live P&L": renderOpenPnlCell(position),
+          Status: renderPositionStatusCell(position),
+          Action: (
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                loading={reviewingIds.includes(position.id)}
+                onClick={() => onReviewPosition(position.id)}
+              >
+                Review
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => onOpenClose(position)}
+              >
+                Mark Closed
+              </Button>
+            </div>
+          ),
+          Target: fmtTargetLabel(position, position.entry_option_price, targetPct),
+          Stop: fmtStopLabel(position.entry_option_price, stopPct),
+          Quote: renderQuoteCell(position),
+          Expiry: renderExpiryCell(position),
+        };
+      }
+
       return {
         __rowKey: position.id,
         Ticker: position.ticker,
         Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
         Taken: fmtTakenDate(position),
         Entry: fmtMoney(position.entry_option_price),
-        "Live Px": renderOpenPriceCell(position),
-        "Live P&L": renderOpenPnlCell(position),
+        "Exit Px": fmtMoney(getRealizedExitPrice(position)),
+        "Realized P&L %": renderRealizedPnlCell(realizedPnl),
         Recommendation: position.last_recommendation || "\u2014",
-        Action: (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={reviewingIds.includes(position.id)}
-              onClick={() => onReviewPosition(position.id)}
-            >
-              Review
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onOpenClose(position)}
-            >
-              Mark Closed
-            </Button>
-          </div>
-        ),
+        Action: <span className="text-xs text-text-3">{position.exit_reason || "manual_close"}</span>,
         Target: fmtTargetLabel(position, position.entry_option_price, targetPct),
         Stop: fmtStopLabel(position.entry_option_price, stopPct),
-        Quote: renderQuoteCell(position),
-        Expiry: renderExpiryCell(position),
+        Quote: fmtPricingSource(position.latest_review?.pricing_source),
+        Expiry: fmtDate(getResolvedListedExpiry(position)),
+        Reviewed: fmtDateTime(getReviewedAt(position)),
+        Closed: fmtDate(position.closed_at),
       };
-    }
+    });
 
-    return {
-      __rowKey: position.id,
-      Ticker: position.ticker,
-      Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
-      Taken: fmtTakenDate(position),
-      Entry: fmtMoney(position.entry_option_price),
-      "Exit Px": fmtMoney(getRealizedExitPrice(position)),
-      "Realized P&L %": fmtPct(realizedPnl),
-      Recommendation: position.last_recommendation || "\u2014",
-      Action: <span className="text-xs text-text-3">{position.exit_reason || "manual_close"}</span>,
-      Target: fmtTargetLabel(position, position.entry_option_price, targetPct),
-      Stop: fmtStopLabel(position.entry_option_price, stopPct),
-      Quote: fmtPricingSource(position.latest_review?.pricing_source),
-      Expiry: fmtDate(getResolvedListedExpiry(position)),
-      Reviewed: fmtDateTime(getReviewedAt(position)),
-      Closed: fmtDate(position.closed_at),
-    };
-  });
+  const normalRows = buildRows(normalLanePositions);
+  const commodityRows = buildRows(commodityLanePositions);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+    <div className="space-y-2">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2">
         <div className="max-w-3xl">
           <div className="section-header mt-0">Tracked Options Positions</div>
           <p className="text-xs text-text-3">
@@ -2947,28 +3324,32 @@ function TrackedPositionsTab({
       )}
 
       {!error && view === "open" ? (
-        <div className="grid grid-cols-2 lg:grid-cols-7 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-8 gap-1.5">
           <CompactStat label="Open Positions" value={String(openPositions.length)} />
-          <CompactStat label="Share-Safe" value={String(shareSafeOpenPositions.length)} help={`${hiddenOpenPositionCount} hidden from share-safe view`} />
           <CompactStat label="Visible Open" value={String(filteredOpenPositions.length)} help="Matches the rows currently included by the open filters" />
-          <CompactStat label="Avg Exit P&L" value={fmtPct(avgOpenExitPnlPct)} help="Simple average of the visible open-position Exit P&L percentages" />
-          <CompactStat label="Weighted Exit P&L" value={fmtPct(weightedOpenExitPnlPct)} help="Entry-cost-weighted average of the visible open-position Exit P&L values" />
-          <CompactStat label="Last HOLD" value={String(holdCount)} />
-          <CompactStat label="Unpriced" value={String(unpricedCount)} help={`Last SELL ${sellCount}`} />
+          <CompactStat label="Cost Risk" value={fmtMoney(totalOpenCostRiskUsd)} help="Entry debit at risk for visible open positions before any open profit is harvested" />
+          <CompactStat label="Tracked MTM" value={fmtSignedMoney(totalOpenExitPnlUsd)} help="Executable mark-to-market P&L for every visible tracked open position, including non-proof comparable/manual rows" />
+          <CompactStat label="SELL P&L" value={`${fmtSignedMoney(sellOpenPnlUsd)} (${sellCount})`} help={`${sellCount} visible open position(s) currently carry SELL guidance`} />
+          <CompactStat label="Proof Rows" value={`${proofOpenPositions.length}/${filteredOpenPositions.length}`} help="Proof-eligible rows divided by visible tracked rows" />
+          <CompactStat label="Weighted Exit P&L" value={fmtPct(weightedOpenExitPnlPct)} help={`Average ${fmtPct(avgOpenExitPnlPct)}; entry-cost-weighted across visible rows`} />
+          <CompactStat label="Portfolio Conc." value={tickerConcentrationLabel} help={concentrationWarning || "Largest open ticker cluster before visible filters"} />
+          <CompactStat label="Share-Safe" value={String(shareSafeOpenPositions.length)} help={`${hiddenOpenPositionCount} hidden from share-safe view; last HOLD ${holdCount}; unpriced ${unpricedCount}; proof MTM ${fmtSignedMoney(totalProofOpenExitPnlUsd)}`} />
         </div>
       ) : !error ? (
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 lg:grid-cols-8 gap-1.5">
           <CompactStat label="Closed Positions" value={String(closedPositions.length)} />
           <CompactStat label="Visible Closed" value={String(filteredClosedPositions.length)} help="Matches the rows currently included by the closed filters" />
+          <CompactStat label="Tracked Realized" value={fmtSignedMoney(totalRealizedExitPnlUsd)} help="Realized P&L for every visible tracked closed position, including non-proof comparable/manual rows" />
+          <CompactStat label="Proof Realized" value={fmtSignedMoney(totalProofRealizedExitPnlUsd)} help="Realized P&L from visible positions that meet strict proof-lane eligibility" />
+          <CompactStat label="Proof Rows" value={`${proofClosedPositions.length}/${filteredClosedPositions.length}`} help="Proof-eligible rows divided by visible tracked closed rows" />
           <CompactStat label="Avg Realized P&L" value={fmtPct(avgRealizedExitPnlPct)} help="Simple average of the visible closed-trade realized P&L percentages" />
           <CompactStat label="Weighted Realized P&L" value={fmtPct(realizedExitPnlPct)} help="Entry-cost-weighted average of the visible closed-trade realized P&L values" />
           <CompactStat label="Best Closed" value={fmtPct(realizedExtremes.best)} />
-          <CompactStat label="Worst Closed" value={fmtPct(realizedExtremes.worst)} />
         </div>
       ) : null}
 
       {!error && view === "open" ? (
-        <div className="bg-bg-2 border border-border rounded-lg px-3 py-2 text-xs text-text-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div className="bg-bg-2 border border-border rounded-lg px-3 py-1.5 text-xs text-text-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <span>
             {openFilter === "share-safe"
               ? `Showing only exact or comparable-exact positions with fresh live option pricing from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenPositionCount} open position(s) are hidden.`
@@ -2976,6 +3357,8 @@ function TrackedPositionsTab({
             {entryDatePreset !== "all"
               ? ` Entry-date filter is showing ${positions.length} of ${basePositions.length} position(s) from ${entryDateFilterLabel(entryDatePreset, entryDateValue)}.`
               : ""}
+            {` Tracked P&L includes every visible position; Proof P&L only includes strict proof-eligible rows.`}
+            {concentrationWarning ? ` Portfolio concentration: ${concentrationWarning}` : ""}
           </span>
           {openReviewSummary ? (
             <span className="text-text-1 whitespace-nowrap">{openReviewSummary}</span>
@@ -3000,14 +3383,24 @@ function TrackedPositionsTab({
               : "No closed tracked positions yet."}
         </div>
       ) : (
-        <FinTable
-          data={rows}
-          badgeCol="Trade"
-          pnlCols={[]}
-          monoCols={view === "open" ? ["Taken", "Entry", "Target", "Stop"] : ["Taken", "Entry", "Exit Px", "Reviewed", "Expiry", "Target", "Stop", "Closed"]}
-          label="Tracked options positions"
-          maxHeight={view === "open" ? "min(60vh, 760px)" : "min(64vh, 820px)"}
-        />
+        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
+          <LanePositionPanel
+            title="Normal Options Lane"
+            subtitle={`${normalLanePositions.length} ${view} | ${lanePnlLabel} ${fmtSignedMoney(normalLanePnlUsd)}`}
+            emptyMessage={`No normal-lane ${view} positions match the current filters.`}
+            rows={normalRows}
+            view={view}
+            tableMaxHeight={tableMaxHeight}
+          />
+          <LanePositionPanel
+            title="Commodity Lane"
+            subtitle={`${commodityLanePositions.length} ${view} | ${lanePnlLabel} ${fmtSignedMoney(commodityLanePnlUsd)}`}
+            emptyMessage={`No commodity-lane ${view} positions match the current filters.`}
+            rows={commodityRows}
+            view={view}
+            tableMaxHeight={tableMaxHeight}
+          />
+        </div>
       )}
     </div>
   );

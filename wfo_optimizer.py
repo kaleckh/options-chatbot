@@ -4,7 +4,7 @@ and entry/exit parameters.
 
 Pipeline
 --------
-1. Download N years of daily closes via yfinance for one or more tickers.
+1. Load N years of daily closes through the configured market-data provider.
 2. Split into rolling windows: train_months train → test_months test.
 3. For each window, run Optuna to find the full parameter set that maximises
    Profit Factor on training data (9 parameters tuned simultaneously).
@@ -54,6 +54,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
+from alpaca_market_data import alpaca_enabled, make_alpaca_ticker_factory
 from expectancy_calibration import (
     DEFAULT_DIRECTION_BUCKET_SIZE,
     DEFAULT_QUALITY_BUCKET_SIZE,
@@ -62,9 +63,13 @@ from expectancy_calibration import (
     DEFAULT_SURFACE_MIN_TRADES,
     DEFAULT_TECH_BUCKET_SIZE,
     CalibrationAccumulator,
-    build_expectancy_surface_from_trades,
     lookup_calibrated_expectancy,
     normalized_market_regime,
+)
+from ai_commodity_universe import ai_commodity_scan_tickers
+from exact_contract_accounting import (
+    contract_resolution_accounting,
+    is_exact_contract_resolution as _shared_is_exact_contract_resolution,
 )
 from forward_options_ledger import LIVE_PRODUCTION_EVIDENCE_CLASS, list_forward_scan_pick_events
 from market_data_service import (
@@ -88,6 +93,8 @@ from options_execution import (
     long_option_pnl,
     quote_midpoint,
 )
+
+DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK = "bullish_pullback_observation"
 
 try:
     import optuna
@@ -134,6 +141,7 @@ IMPORTED_VALIDATION_UNIVERSE = (
 )
 IMPORTED_TRUTH_SOURCE = "historical_imported"
 IMPORTED_DAILY_TRUTH_SOURCE = "historical_imported_daily"
+ALPACA_OPRA_DAILY_SOURCE_LABEL = "alpaca_opra_daily_snapshot"
 SYNTHETIC_TRUTH_SOURCE = "synthetic_research"
 FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE = "forward_ledger_scan"
 ARCHIVED_FORWARD_SOURCE_LABEL = "api_scan_auto"
@@ -284,12 +292,18 @@ def _cached_history(
         start=start,
         end=end,
         interval=interval,
-        ticker_factory=yf.Ticker,
+        ticker_factory=_replay_ticker_factory(),
     )
 
 
 def _cached_ticker_info(symbol: str) -> dict:
-    return _md_get_ticker_info(symbol, ticker_factory=yf.Ticker)
+    return _md_get_ticker_info(symbol, ticker_factory=_replay_ticker_factory())
+
+
+def _replay_ticker_factory():
+    if alpaca_enabled():
+        return make_alpaca_ticker_factory(fallback_factory=yf.Ticker)
+    return yf.Ticker
 
 
 def _market_data_scoped(fn):
@@ -313,6 +327,63 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
         "min_quality_score": 70.0,
         "requires_calibrated_history": True,
     },
+    "bullish_index_calls": {
+        "id": "bullish_index_calls",
+        "label": "Bullish Index Calls",
+        "allowed_asset_classes": ["index"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+    },
+    "bullish_index_calls_score70": {
+        "id": "bullish_index_calls_score70",
+        "label": "Bullish Index Calls Score 70+",
+        "allowed_asset_classes": ["index"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "min_quality_score": 70.0,
+    },
+    "bullish_index_calls_quality90_debit55": {
+        "id": "bullish_index_calls_quality90_debit55",
+        "label": "Bullish Index Calls Quality 90+ Debit <55%",
+        "allowed_asset_classes": ["index"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "min_quality_score": 90.0,
+        "max_debit_pct_of_width": 55.0,
+    },
+    "bullish_index_calls_score70_debit55": {
+        "id": "bullish_index_calls_score70_debit55",
+        "label": "Bullish Index Calls Score 70+ Debit <55%",
+        "allowed_asset_classes": ["index"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "min_quality_score": 70.0,
+        "max_debit_pct_of_width": 55.0,
+    },
+    "bullish_qqq_calls_score70": {
+        "id": "bullish_qqq_calls_score70",
+        "label": "Bullish QQQ Calls Score 70+",
+        "allowed_tickers": ["QQQ"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "min_quality_score": 70.0,
+    },
+    "bullish_pullback_observation": {
+        "id": "bullish_pullback_observation",
+        "label": "Bullish Pullback Primary",
+        "entry_signal_id": "pullback_uptrend",
+        "historical_required_underlyings": list(IMPORTED_VALIDATION_UNIVERSE),
+        "allowed_directions": ["call"],
+        "allowed_signal_families": ["bullish_pullback"],
+        "target_dte": 35,
+        "scan_min_confidence": 0.0,
+        "scan_min_tech_score": 0.0,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 55.0,
+        "pullback_ret5_min": -4.0,
+        "pullback_ret5_max": 0.25,
+        "pullback_ret20_min": 2.0,
+    },
     "bullish_mean_reversion": {
         "id": "bullish_mean_reversion",
         "label": "Bullish Mean Reversion",
@@ -334,6 +405,46 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
         "allowed_sectors": ["Healthcare", "Consumer Defensive"],
         "allowed_directions": ["put"],
         "min_quality_score": 70.0,
+    },
+    "bearish_index_put_observation": {
+        "id": "bearish_index_put_observation",
+        "label": "Bearish Index Put Observation",
+        "allowed_asset_classes": ["index"],
+        "allowed_tickers": ["SPY", "QQQ", "IWM", "DIA"],
+        "allowed_market_regimes": ["bearish"],
+        "allowed_directions": ["put"],
+        "min_quality_score": 65.0,
+        "max_debit_pct_of_width": 60.0,
+    },
+    "range_breakout_observation": {
+        "id": "range_breakout_observation",
+        "label": "Range Breakout Observation",
+        "allowed_asset_classes": ["index"],
+        "allowed_tickers": ["SPY", "QQQ", "IWM", "DIA"],
+        "allowed_market_regimes": ["neutral"],
+        "allowed_directions": ["call", "put"],
+        "min_quality_score": 65.0,
+        "max_debit_pct_of_width": 55.0,
+    },
+    "volatility_expansion_observation": {
+        "id": "volatility_expansion_observation",
+        "label": "Volatility Expansion Observation",
+        "allowed_asset_classes": ["index"],
+        "allowed_tickers": ["SPY", "QQQ", "IWM", "DIA"],
+        "allowed_directions": ["call", "put"],
+        "min_quality_score": 70.0,
+        "max_debit_pct_of_width": 55.0,
+    },
+    "ai_commodity_infra_observation": {
+        "id": "ai_commodity_infra_observation",
+        "label": "AI Commodity Infra",
+        "allowed_asset_classes": ["index", "equity"],
+        "allowed_tickers": list(ai_commodity_scan_tickers()),
+        "historical_required_underlyings": list(ai_commodity_scan_tickers()),
+        "historical_source_labels": [ALPACA_OPRA_DAILY_SOURCE_LABEL],
+        "allowed_directions": ["call", "put"],
+        "min_quality_score": 70.0,
+        "max_debit_pct_of_width": 55.0,
     },
 }
 
@@ -582,6 +693,7 @@ def _precompute(
 
         S0    = prices[i]
         ret5  = (S0 / prices[i - 5] - 1) * 100
+        ret20 = (S0 / prices[i - 20] - 1) * 100
         sma20 = float(np.mean(prices[i - 20 : i]))
 
         # Store ALL valid HV days — simulation loop applies the actual
@@ -593,6 +705,7 @@ def _precompute(
             "hv30":   float(hv30),
             "iv_pct": float(iv_pct),
             "ret5":   float(ret5),
+            "ret20":  float(ret20),
             "sma20":  float(sma20),
             "sma50":  sma50,
             "rsi14":  float(rsi14_arr[i]),
@@ -2016,11 +2129,13 @@ def _preferred_truth_window_status(
 ) -> str:
     if not result:
         return "unknown"
+    explicit_status = str(result.get("truth_window_status") or "").strip().lower()
+    if explicit_status == "stale":
+        return "stale"
     candidate_source = str(result.get("candidate_source") or "").strip().lower()
     pending_truth_horizon_count = int(result.get("pending_truth_horizon_count") or 0)
-    primary_judge_trade_count = int(result.get("primary_judge_trade_count") or 0)
     if candidate_source == FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE or evidence_mode == "archived_forward_daily":
-        if pending_truth_horizon_count > 0 and primary_judge_trade_count <= 0:
+        if pending_truth_horizon_count > 0:
             return "stale"
         if evidence_status in {ARCHIVED_EXACT_PRIMARY_STATUS, ARCHIVED_EXACT_INSUFFICIENT_STATUS}:
             return "current"
@@ -2195,6 +2310,19 @@ def _parse_forward_entry_date(value: Any) -> Optional[date]:
             return None
 
 
+def _forward_pick_truth_required_date(pick: dict[str, Any], entry_date: date) -> date:
+    expiry_date = _parse_forward_entry_date(pick.get("expiry"))
+    if expiry_date is not None:
+        return max(entry_date, expiry_date)
+    try:
+        dte = int(float(pick.get("dte") or 0))
+    except (TypeError, ValueError):
+        dte = 0
+    if dte > 0:
+        return entry_date + timedelta(days=dte)
+    return entry_date
+
+
 def _archived_sample_date_coverage(
     picks: Sequence[dict[str, Any]],
     *,
@@ -2253,7 +2381,9 @@ def _insufficient_archived_forward_result(
         "insufficient_reason": str(reason or "missing_archived_scan_pick_evidence"),
         "mode": "backtest",
         "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
-        "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+        "requested_pricing_lane": "pessimistic",
+        "effective_pricing_lane": "pessimistic",
+        "pricing_lane": "pessimistic",
         "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
         "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
         "evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
@@ -2412,12 +2542,19 @@ def run_archived_forward_daily_backtest(
             continue
         current = dict(pick)
         current["entry_date"] = entry_date.isoformat()
-        if latest_quote_date is not None and entry_date > latest_quote_date:
+        truth_required_date = _forward_pick_truth_required_date(current, entry_date)
+        if latest_quote_date is not None and truth_required_date > latest_quote_date:
+            pending_reason = (
+                "entry_date_beyond_trusted_truth_horizon"
+                if entry_date > latest_quote_date
+                else "exit_horizon_beyond_trusted_truth_horizon"
+            )
             pending_truth_horizon.append(
                 {
                     **current,
-                    "pending_reason": "entry_date_beyond_trusted_truth_horizon",
+                    "pending_reason": pending_reason,
                     "latest_truth_quote_date": latest_quote_date.isoformat(),
+                    "truth_required_date": truth_required_date.isoformat(),
                 }
             )
             continue
@@ -2650,7 +2787,9 @@ def run_archived_forward_daily_backtest(
             "mode": "backtest",
             "profile": "mixed",
             "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
-            "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+            "requested_pricing_lane": "pessimistic",
+            "effective_pricing_lane": "pessimistic",
+            "pricing_lane": "pessimistic",
             "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
             "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
             "evidence_status": ARCHIVED_EXACT_INSUFFICIENT_STATUS,
@@ -2728,9 +2867,14 @@ def run_archived_forward_daily_backtest(
     gross_loss = abs(sum(losses))
     pf = gross_win / max(gross_loss, 0.01)
     win_rate = len(wins) / len(pnl_list) * 100.0
-    full_hits = sum(1 for trade in priced_trades if trade.get("prediction_outcome") == "hit")
+    full_hit_outcomes = [
+        str(trade.get("prediction_outcome") or "").strip().lower()
+        for trade in priced_trades
+        if str(trade.get("prediction_outcome") or "").strip().lower() in {"hit", "miss"}
+    ]
+    full_hits = sum(1 for outcome in full_hit_outcomes if outcome == "hit")
     directional_hits = sum(1 for trade in priced_trades if trade.get("directional_correct"))
-    full_hit_rate = full_hits / len(priced_trades) * 100.0
+    full_hit_rate = full_hits / len(full_hit_outcomes) * 100.0 if full_hit_outcomes else None
     directional_accuracy = directional_hits / len(priced_trades) * 100.0
     avg_pnl = sum(pnl_list) / len(pnl_list)
     sharpe = _sharpe(pnl_list)
@@ -2740,6 +2884,18 @@ def run_archived_forward_daily_backtest(
     for trade in priced_trades:
         daily_pnl[str(trade.get("date") or "")].append(float(trade.get("pnl_pct") or 0.0))
         selection_source_counts[str(trade.get("selection_source") or "unknown")] += 1
+
+    def _single_pricing_field(field: str, fallback: str = "pessimistic") -> str:
+        values = sorted(
+            {
+                str(trade.get(field) or "").strip().lower()
+                for trade in priced_trades
+                if str(trade.get(field) or "").strip()
+            }
+        )
+        if not values:
+            return fallback
+        return values[0] if len(values) == 1 else "mixed"
 
     eq_curve: list[dict[str, Any]] = []
     cumulative = 0.0
@@ -2789,10 +2945,12 @@ def run_archived_forward_daily_backtest(
         "mode": "backtest",
         "profile": "mixed",
         "truth_source": IMPORTED_DAILY_TRUTH_SOURCE,
-        "pricing_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+        "requested_pricing_lane": _single_pricing_field("requested_pricing_lane"),
+        "effective_pricing_lane": _single_pricing_field("effective_pricing_lane"),
+        "pricing_lane": _single_pricing_field("pricing_lane"),
         "candidate_source": FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
         "primary_judge_trade_class": PRIMARY_JUDGE_TRADE_CLASS,
-        "truth_window_status": "stale" if pending_truth_horizon and not archived_exact_trades else "current",
+        "truth_window_status": "stale" if pending_truth_horizon else "current",
         "authoritative_evidence_source": "archived_forward_daily",
         "lookback_years": round(max((max_entry_date - min_entry_date).days, 0) / 365.25, 2),
         "playbook": playbook_id,
@@ -2812,7 +2970,7 @@ def run_archived_forward_daily_backtest(
         "entry_quote_time_et": _imported_entry_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
         "exit_quote_time_et": _imported_exit_quote_label(IMPORTED_DAILY_TRUTH_SOURCE),
         "win_rate_pct": round(win_rate, 1),
-        "full_hit_rate_pct": round(full_hit_rate, 1),
+        "full_hit_rate_pct": round(full_hit_rate, 1) if full_hit_rate is not None else None,
         "directional_accuracy_pct": round(directional_accuracy, 1),
         "profit_factor": round(pf, 2),
         "avg_pnl_pct": round(avg_pnl, 2),
@@ -2892,28 +3050,17 @@ def _direction_score_bucket(score: float) -> str:
 
 def _contract_resolution_summary(result: Optional[dict]) -> dict[str, Any]:
     trades = list((result or {}).get("trades") or [])
-    counts: Counter[str] = Counter(
-        str(trade.get("entry_contract_resolution") or "").strip().lower()
-        for trade in trades
-        if str(trade.get("entry_contract_resolution") or "").strip()
-    )
     priced_trade_count = int((result or {}).get("priced_trade_count", len(trades)) or len(trades))
     candidate_trade_count = int((result or {}).get("candidate_trade_count", priced_trade_count) or priced_trade_count)
-    exact_count = int(counts.get("exact_target_contract", 0) or 0) + int(counts.get("exact_archived_contract", 0) or 0)
-    nearest_count = int(counts.get("nearest_listed_contract", 0))
-    unresolved_candidates = max(candidate_trade_count - exact_count - nearest_count, 0)
+    accounting = contract_resolution_accounting(
+        trades,
+        priced_trade_count=priced_trade_count,
+        candidate_trade_count=candidate_trade_count,
+    )
     return {
-        "contract_resolution_counts": {
-            "exact_target_contract": int(counts.get("exact_target_contract", 0) or 0),
-            "exact_archived_contract": int(counts.get("exact_archived_contract", 0) or 0),
-            "nearest_listed_contract": nearest_count,
-            "unresolved_candidates": unresolved_candidates,
-        },
-        "exact_contract_match_count": exact_count,
-        "nearest_contract_match_count": nearest_count,
-        "unresolved_contract_count": unresolved_candidates,
-        "exact_contract_match_pct": round(exact_count / max(priced_trade_count, 1) * 100.0, 1) if priced_trade_count else 0.0,
-        "nearest_contract_match_pct": round(nearest_count / max(priced_trade_count, 1) * 100.0, 1) if priced_trade_count else 0.0,
+        key: value
+        for key, value in accounting.items()
+        if key not in {"priced_trade_count", "candidate_trade_count"}
     }
 
 
@@ -2933,8 +3080,7 @@ def _contract_resolution_overview(
 
 
 def _is_exact_contract_resolution(value: Any) -> bool:
-    resolution = str(value or "").strip().lower()
-    return resolution in {"exact_target_contract", "exact_archived_contract"}
+    return _shared_is_exact_contract_resolution(value)
 
 
 def _trade_promotion_class(trade: dict[str, Any]) -> str:
@@ -3159,6 +3305,24 @@ def _get_replay_playbook(playbook_id: Optional[str] = None) -> dict:
     return dict(REPLAY_PLAYBOOKS.get(key) or REPLAY_PLAYBOOKS["broad"])
 
 
+def _imported_replay_underlyings_for_playbook(playbook: dict) -> tuple[str, ...]:
+    raw_underlyings = playbook.get("historical_required_underlyings")
+    if raw_underlyings is None:
+        raw_underlyings = IMPORTED_VALIDATION_UNIVERSE
+
+    underlyings: list[str] = []
+    seen: set[str] = set()
+    for symbol in raw_underlyings:
+        if symbol is None:
+            continue
+        normalized = str(symbol).strip().upper()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        underlyings.append(normalized)
+    return tuple(underlyings)
+
+
 def _trade_calibration_density(trade: dict) -> str:
     density = str(trade.get("calibration_density") or "").strip().lower()
     if density in {"dense", "sparse"}:
@@ -3225,6 +3389,11 @@ def _selection_calibration_summary(trades: list[dict], required_trades: int = DE
 
 
 def _candidate_matches_replay_playbook(candidate: dict, playbook: dict) -> bool:
+    allowed_tickers = {str(item).strip().upper() for item in playbook.get("allowed_tickers") or [] if str(item).strip()}
+    ticker = str(candidate.get("ticker") or "").strip().upper()
+    if allowed_tickers and ticker not in allowed_tickers:
+        return False
+
     allowed_asset_classes = {str(item).strip().lower() for item in playbook.get("allowed_asset_classes") or [] if str(item).strip()}
     if allowed_asset_classes and _trade_asset_class(candidate) not in allowed_asset_classes:
         return False
@@ -3254,6 +3423,28 @@ def _candidate_matches_replay_playbook(candidate: dict, playbook: dict) -> bool:
     return True
 
 
+def _trade_debit_pct_of_width(trade: dict) -> float | None:
+    try:
+        net_debit = float(trade.get("net_debit"))
+        spread_width = float(trade.get("spread_width"))
+    except (TypeError, ValueError):
+        return None
+    if net_debit is None or spread_width is None or spread_width <= 0:
+        return None
+    return net_debit / spread_width * 100.0
+
+
+def _trade_matches_replay_post_entry_filters(trade: dict, playbook: dict) -> tuple[bool, str | None]:
+    max_debit_pct = playbook.get("max_debit_pct_of_width")
+    if max_debit_pct is not None:
+        debit_pct = _trade_debit_pct_of_width(trade)
+        if debit_pct is None:
+            return False, "missing_debit_pct_of_width"
+        if debit_pct >= float(max_debit_pct):
+            return False, "debit_pct_of_width_above_playbook_max"
+    return True, None
+
+
 def _resolve_replay_entry_signal(
     day_data: dict,
     playbook: dict,
@@ -3265,11 +3456,40 @@ def _resolve_replay_entry_signal(
 
     S0 = float(day_data.get("S0", 0.0) or 0.0)
     ret5 = float(day_data.get("ret5", 0.0) or 0.0)
+    ret20 = float(day_data.get("ret20", 0.0) or 0.0)
     sma20 = float(day_data.get("sma20", S0) or S0)
     sma50 = float(day_data.get("sma50", sma20) or sma20)
     rsi14 = float(day_data.get("rsi14", 50.0) or 50.0)
     macd = float(day_data.get("macd", 0.0) or 0.0)
     macd_prev = float(day_data.get("macd_prev", macd) or macd)
+
+    if signal_id == "pullback_uptrend":
+        ret5_min = float(playbook.get("pullback_ret5_min", -4.0) or -4.0)
+        ret5_max = float(playbook.get("pullback_ret5_max", 0.25) or 0.25)
+        ret20_min = float(playbook.get("pullback_ret20_min", 2.0) or 2.0)
+        if not (S0 > sma50 and ret20 > ret20_min and ret5_min < ret5 < ret5_max):
+            return None
+
+        pullback_depth_score = max(0.0, 100.0 - abs(ret5 + 1.5) * 30.0)
+        ret20_score = min(100.0, max(0.0, (ret20 - ret20_min) / 6.0 * 100.0))
+        sma50_gap_pct = (S0 / sma50 - 1.0) * 100.0 if sma50 > 0 else 0.0
+        trend_score = min(100.0, max(0.0, sma50_gap_pct * 20.0))
+        direction_score_override = round(
+            pullback_depth_score * 0.45
+            + ret20_score * 0.35
+            + trend_score * 0.20,
+            1,
+        )
+        return {
+            "trade_type": "call",
+            "signal_family": "bullish_pullback",
+            "signal_variant": "pullback_uptrend",
+            "direction_score_override": direction_score_override,
+            "signal_ret5": ret5,
+            "signal_ret20": ret20,
+            "signal_sma20": sma20,
+            "signal_sma50": sma50,
+        }
 
     if signal_id == "bullish_mean_reversion":
         ret1 = 0.0
@@ -4284,6 +4504,17 @@ def _classify_trade_against_live_policy(trade: dict, scan_policy: dict) -> dict:
     ticker = str(trade.get("ticker") or "").strip().upper()
     promotion_class = str(trade.get("promotion_class") or _trade_promotion_class(trade)).strip().lower()
 
+    def _policy_float(value: Any) -> float | None:
+        try:
+            if value is None:
+                return None
+            parsed = float(value)
+            if math.isnan(parsed) or math.isinf(parsed):
+                return None
+            return parsed
+        except (TypeError, ValueError):
+            return None
+
     hard_failures: list[str] = []
     score_min = hard_filters.get("direction_score_min")
     score_max = hard_filters.get("direction_score_max")
@@ -4294,6 +4525,13 @@ def _classify_trade_against_live_policy(trade: dict, scan_policy: dict) -> dict:
         hard_failures.append("above_score_cap")
     if tech_score_min is not None and tech_score < float(tech_score_min):
         hard_failures.append("below_tech_floor")
+    if hard_filters.get("require_dense_calibration") is True and trade.get("calibration_is_dense") is not True:
+        hard_failures.append("sparse_calibration")
+    min_expectancy = _policy_float(hard_filters.get("min_calibrated_expectancy_pct"))
+    if min_expectancy is not None:
+        calibrated_expectancy = _policy_float(trade.get("calibrated_expectancy_pct"))
+        if calibrated_expectancy is None or calibrated_expectancy < min_expectancy:
+            hard_failures.append("below_calibrated_expectancy_floor")
 
     fit_score = 0
     preferred_asset_class = str(preferred_filters.get("asset_class") or "").strip().lower()
@@ -4339,13 +4577,16 @@ def _classify_trade_against_live_policy(trade: dict, scan_policy: dict) -> dict:
         "market_regime": market_regime,
         "asset_class": asset_class,
         "promotion_class": promotion_class,
+        "hard_failures": hard_failures,
     }
 
 
 def _playbook_trade_window(playbook: str) -> dict[str, int]:
-    playbook_id = str(playbook or "short_term").strip().lower()
+    playbook_id = str(playbook or DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK).strip().lower()
     if playbook_id == "swing":
         return {"min_dte": 13, "max_dte": 35}
+    if playbook_id in {"bullish_pullback_observation", "tracked_winner_primary", "tracked_winner_observation"}:
+        return {"min_dte": 13, "max_dte": 45}
     if playbook_id == "speculative":
         return {"min_dte": 5, "max_dte": 9}
     if playbook_id == "bullish_momentum":
@@ -4414,7 +4655,7 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
 def build_playbook_exit_audit(
     result: Optional[dict] = None,
     policy_bundle: Optional[dict] = None,
-    playbook: str = "short_term",
+    playbook: str = DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK,
     truth_lane: Optional[str] = None,
     min_trades: int = 20,
     score_floors: Optional[list[int]] = None,
@@ -4449,7 +4690,7 @@ def build_playbook_exit_audit(
     if not trades:
         return {"error": "No backtest trades found"}
 
-    playbook_id = str(playbook or "short_term").strip().lower()
+    playbook_id = str(playbook or DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK).strip().lower()
     window = _playbook_trade_window(playbook_id)
     filtered = [
         trade
@@ -4539,6 +4780,25 @@ def _comparison_lane_summary(result: dict) -> dict[str, Any]:
         "entry_quote_time_et": result.get("entry_quote_time_et"),
         "exit_quote_time_et": result.get("exit_quote_time_et"),
     }
+
+
+def _comparison_authoritative_lane_summary(result: dict) -> dict[str, Any]:
+    summary = _comparison_lane_summary(result)
+    metrics = result.get("authoritative_profitability_metrics")
+    if isinstance(metrics, dict) and metrics:
+        summary.update(
+            {
+                "total_trades": metrics.get("trade_count", summary.get("total_trades")),
+                "profit_factor": metrics.get("profit_factor", summary.get("profit_factor")),
+                "avg_pnl_pct": metrics.get("avg_pnl_pct", summary.get("avg_pnl_pct")),
+                "directional_accuracy_pct": metrics.get(
+                    "directional_accuracy_pct",
+                    summary.get("directional_accuracy_pct"),
+                ),
+                "authoritative_profitability_basis": result.get("authoritative_profitability_basis"),
+            }
+        )
+    return summary
 
 
 def _comparison_trade_subset_summary(trades: list[dict[str, Any]]) -> dict[str, Any]:
@@ -5026,17 +5286,27 @@ def build_truth_lane_comparison(
 
     synthetic_summary = _comparison_lane_summary(synthetic)
     imported_summary = _comparison_lane_summary(imported)
+    imported_authoritative_summary = _comparison_authoritative_lane_summary(imported)
+    aggregate_deltas = {
+        "total_trades": int(imported_summary.get("total_trades") or 0) - int(synthetic_summary.get("total_trades") or 0),
+        "profit_factor": round(float(imported_summary.get("profit_factor") or 0.0) - float(synthetic_summary.get("profit_factor") or 0.0), 2),
+        "avg_pnl_pct": round(float(imported_summary.get("avg_pnl_pct") or 0.0) - float(synthetic_summary.get("avg_pnl_pct") or 0.0), 2),
+        "directional_accuracy_pct": round(float(imported_summary.get("directional_accuracy_pct") or 0.0) - float(synthetic_summary.get("directional_accuracy_pct") or 0.0), 1),
+        "quote_coverage_pct": round(float(imported_summary.get("quote_coverage_pct") or 0.0) - float(synthetic_summary.get("quote_coverage_pct") or 100.0), 1),
+    }
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "synthetic": synthetic_summary,
         "imported": imported_summary,
+        "imported_authoritative": imported_authoritative_summary,
         "deltas": {
-            "total_trades": int(imported_summary.get("total_trades") or 0) - int(synthetic_summary.get("total_trades") or 0),
-            "profit_factor": round(float(imported_summary.get("profit_factor") or 0.0) - float(synthetic_summary.get("profit_factor") or 0.0), 2),
-            "avg_pnl_pct": round(float(imported_summary.get("avg_pnl_pct") or 0.0) - float(synthetic_summary.get("avg_pnl_pct") or 0.0), 2),
-            "directional_accuracy_pct": round(float(imported_summary.get("directional_accuracy_pct") or 0.0) - float(synthetic_summary.get("directional_accuracy_pct") or 0.0), 1),
+            "total_trades": int(imported_authoritative_summary.get("total_trades") or 0) - int(synthetic_summary.get("total_trades") or 0),
+            "profit_factor": round(float(imported_authoritative_summary.get("profit_factor") or 0.0) - float(synthetic_summary.get("profit_factor") or 0.0), 2),
+            "avg_pnl_pct": round(float(imported_authoritative_summary.get("avg_pnl_pct") or 0.0) - float(synthetic_summary.get("avg_pnl_pct") or 0.0), 2),
+            "directional_accuracy_pct": round(float(imported_authoritative_summary.get("directional_accuracy_pct") or 0.0) - float(synthetic_summary.get("directional_accuracy_pct") or 0.0), 1),
             "quote_coverage_pct": round(float(imported_summary.get("quote_coverage_pct") or 0.0) - float(synthetic_summary.get("quote_coverage_pct") or 100.0), 1),
         },
+        "aggregate_deltas": aggregate_deltas,
         "matching_priced_trade_count": len(priced_in_both),
         "unsupported_by_import_count": len(unsupported_by_import),
         "unsupported_by_import": unsupported_by_import[:25],
@@ -5599,6 +5869,7 @@ def _simulate_spread_outcome_imported(
     pricing_lane: str = "pessimistic",
     entry_anchor_source: Optional[str] = None,
     execution_realism: Optional[str] = None,
+    source_labels: Optional[Sequence[str]] = None,
 ) -> dict:
     """
     Simulate a vertical spread using real archived option quotes.
@@ -5632,7 +5903,7 @@ def _simulate_spread_outcome_imported(
         underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
         target_expiry=target_expiry, target_strike=long_strike,
         earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
-        snapshot_kind=snapshot_kind, allow_last_price=False,
+        snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
     )
     if long_entry_quote is None:
         return _not_priced("missing_long_entry_quote")
@@ -5652,10 +5923,20 @@ def _simulate_spread_outcome_imported(
         underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
         target_expiry=target_expiry, target_strike=short_strike,
         earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
-        snapshot_kind=snapshot_kind, allow_last_price=False,
+        snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
     )
     if short_entry_quote is None:
         return _not_priced("missing_short_entry_quote")
+
+    expiry_date = date.fromisoformat(long_entry_quote.expiry)
+    short_expiry_date = date.fromisoformat(short_entry_quote.expiry)
+    if short_expiry_date != expiry_date:
+        return _not_priced(
+            "mismatched_spread_expiry",
+            target_expiry=target_expiry.isoformat(),
+            long_expiry=long_entry_quote.expiry,
+            short_expiry=short_entry_quote.expiry,
+        )
 
     # Validate spread width
     spread_width = abs(float(long_entry_quote.strike) - float(short_entry_quote.strike))
@@ -5684,8 +5965,17 @@ def _simulate_spread_outcome_imported(
         return _not_priced("zero_or_negative_net_debit")
 
     # Exit thresholds
-    expiry_date = date.fromisoformat(long_entry_quote.expiry)
     actual_dte = max((expiry_date - entry_date).days, 1)
+    long_is_exact_target = (
+        expiry_date == target_expiry
+        and abs(float(long_entry_quote.strike) - float(long_strike)) <= 0.0001
+    )
+    short_is_exact_target = (
+        short_expiry_date == target_expiry
+        and abs(float(short_entry_quote.strike) - float(short_strike)) <= 0.0001
+    )
+    contract_resolution = "exact_target_contract" if long_is_exact_target and short_is_exact_target else "nearest_listed_contract"
+    contract_selection_source = "model_target_spread"
     time_exit_day = max(1, math.ceil(actual_dte * time_exit_pct / 100))
     stop_value = net_debit * (1.0 - stop_loss_pct / 100.0)
     target_value = net_debit * (1.0 + profit_target_pct / 100.0)
@@ -5725,10 +6015,12 @@ def _simulate_spread_outcome_imported(
         long_quote = store.get_closing_quote(
             contract_symbol=long_entry_quote.contract_symbol,
             quote_date_et=quote_date, snapshot_kind=snapshot_kind, allow_last_price=False,
+            source_labels=source_labels,
         )
         short_quote = store.get_closing_quote(
             contract_symbol=short_entry_quote.contract_symbol,
             quote_date_et=quote_date, snapshot_kind=snapshot_kind, allow_last_price=False,
+            source_labels=source_labels,
         )
 
         if long_quote is None or short_quote is None:
@@ -5850,8 +6142,11 @@ def _simulate_spread_outcome_imported(
         "execution_realism": execution_realism_label,
         "contract_symbol": long_entry_quote.contract_symbol,
         "short_contract_symbol": short_entry_quote.contract_symbol,
-        "entry_contract_resolution": "model_target_spread",
-        "contract_selection_source": "model_target_contract",
+        "entry_contract_resolution": contract_resolution,
+        "contract_selection_source": contract_selection_source,
+        "target_expiry": target_expiry.isoformat(),
+        "target_strike": round(float(long_strike), 2),
+        "target_short_strike": round(float(short_strike), 2),
         "long_entry_quote_basis": long_entry_quote.price_basis,
         "short_entry_quote_basis": short_entry_quote.price_basis,
     }
@@ -5898,6 +6193,7 @@ def _simulate_trade_outcome_imported(
     pricing_lane: str = "pessimistic",
     entry_anchor_source: Optional[str] = None,
     execution_realism: Optional[str] = None,
+    source_labels: Optional[Sequence[str]] = None,
 ) -> dict:
     normalized_truth_source = str(truth_source or IMPORTED_TRUTH_SOURCE).strip().lower() or IMPORTED_TRUTH_SOURCE
     requested_pricing_lane = _normalize_requested_pricing_lane(pricing_lane)
@@ -5928,6 +6224,7 @@ def _simulate_trade_outcome_imported(
             window_minutes=entry_window_minutes,
             snapshot_kind=snapshot_kind,
             allow_last_price=False,
+            source_labels=source_labels,
         )
         if entry_quote is not None:
             contract_resolution = "exact_archived_contract"
@@ -5959,6 +6256,7 @@ def _simulate_trade_outcome_imported(
             window_minutes=entry_window_minutes,
             snapshot_kind=snapshot_kind,
             allow_last_price=False,
+            source_labels=source_labels,
         )
         if entry_quote is not None:
             expiry_date = date.fromisoformat(entry_quote.expiry)
@@ -6061,6 +6359,7 @@ def _simulate_trade_outcome_imported(
             quote_date_et=quote_date,
             snapshot_kind=snapshot_kind,
             allow_last_price=False,
+            source_labels=source_labels,
         )
         if quote is None:
             if quote_date >= expiry_date:
@@ -6368,6 +6667,18 @@ def _build_profile_config(sp: dict) -> tuple[dict, "TradeEvaluator"]:
     return config, evaluator
 
 
+def _apply_replay_playbook_config_overrides(config: dict, playbook: dict) -> dict:
+    """Apply scan-lane settings that intentionally override profile defaults."""
+    resolved = dict(config)
+    if playbook.get("target_dte") is not None:
+        resolved["dte_at_entry"] = max(DTE_MIN, min(DTE_MAX, int(playbook["target_dte"])))
+    if playbook.get("scan_min_confidence") is not None:
+        resolved["min_confidence"] = float(playbook["scan_min_confidence"])
+    if playbook.get("scan_min_tech_score") is not None:
+        resolved["min_tech_score"] = float(playbook["scan_min_tech_score"])
+    return resolved
+
+
 def _replay_underlying_filter_summary() -> dict:
     return {
         "history_days_min": int(UNDERLYING_FILTERS["history_days_min"]),
@@ -6474,6 +6785,10 @@ def run_historical_backtest(
     playbook: Optional[str] = None,
     allowed_directions: Optional[Sequence[str]] = None,
     progress_callback: Optional[Callable[[str, float], None]] = None,
+    min_imported_calendar_dates: int = 100,
+    save_result: bool = True,
+    historical_source_labels: Optional[Sequence[str] | str] = None,
+    allow_research_imported_data: bool = False,
 ) -> dict:
     """
     Historical replay of the daily scan.
@@ -6493,6 +6808,8 @@ def run_historical_backtest(
     eq_config,  eq_evaluator  = _build_profile_config(_eq_sp)
     idx_config, idx_evaluator = _build_profile_config(_idx_sp)
     replay_playbook = _get_replay_playbook(playbook)
+    eq_config = _apply_replay_playbook_config_overrides(eq_config, replay_playbook)
+    idx_config = _apply_replay_playbook_config_overrides(idx_config, replay_playbook)
     normalized_allowed_directions = sorted(
         {
             str(item).strip().lower()
@@ -6508,6 +6825,10 @@ def run_historical_backtest(
         normalized_truth_lane = SYNTHETIC_TRUTH_SOURCE
     if normalized_truth_lane not in {SYNTHETIC_TRUTH_SOURCE, IMPORTED_TRUTH_SOURCE, IMPORTED_DAILY_TRUTH_SOURCE}:
         return {"error": f"Unsupported truth_lane: {truth_lane}"}
+    try:
+        required_imported_calendar_dates = max(1, int(min_imported_calendar_dates))
+    except (TypeError, ValueError):
+        required_imported_calendar_dates = 100
 
     imported_store: Optional[HistoricalOptionsStore] = None
     imported_snapshot_kind: Optional[str] = None
@@ -6515,28 +6836,66 @@ def run_historical_backtest(
     imported_calendar_underlying: Optional[str] = None
     imported_calendar_quote_dates: list[str] = []
     imported_shared_quote_dates: list[str] = []
+    imported_source_labels: list[str] = []
+    imported_trusted_only = not bool(allow_research_imported_data)
+    imported_data_scope_label = "trusted" if imported_trusted_only else "research_included"
     replay_calendar_summary: dict[str, Any] | None = None
     replay_watchlist = list(DEFAULT_WATCHLIST)
     if _is_imported_truth_source(normalized_truth_lane):
         imported_store = HistoricalOptionsStore()
         imported_snapshot_kind = _imported_snapshot_kind(normalized_truth_lane)
-        if not imported_store.has_quotes(snapshot_kind=imported_snapshot_kind, trusted_only=True):
+        raw_source_labels: Sequence[str] | str | None = (
+            historical_source_labels
+            if historical_source_labels is not None
+            else replay_playbook.get("historical_source_labels")
+        )
+        if isinstance(raw_source_labels, str):
+            imported_source_labels = [
+                label.strip()
+                for label in raw_source_labels.replace(";", ",").split(",")
+                if label.strip()
+            ]
+        else:
+            imported_source_labels = [
+                str(label).strip()
+                for label in list(raw_source_labels or [])
+                if str(label).strip()
+            ]
+        if not imported_store.has_quotes(
+            snapshot_kind=imported_snapshot_kind,
+            trusted_only=imported_trusted_only,
+            source_labels=imported_source_labels,
+        ):
             return {
                 "error": (
-                    "No trusted imported historical option data found for this lane. "
-                    "Import real market data first; fixture or acceptance imports do not count."
-                )
+                    "No trusted imported historical option data found for this lane under the requested trust scope. "
+                    "Import real market data first; fixture or acceptance imports do not count for proof."
+                ),
+                "source_labels_required": imported_source_labels,
+                "imported_data_scope": imported_data_scope_label,
             }
-        imported_truth_store = imported_store.snapshot_summary(imported_snapshot_kind, trusted_only=True)
-        imported_truth_store["data_trust"] = TRUSTED_DATA_TRUST
+        imported_truth_store = imported_store.snapshot_summary(
+            imported_snapshot_kind,
+            trusted_only=imported_trusted_only,
+            source_labels=imported_source_labels,
+        )
+        imported_truth_store["data_trust"] = TRUSTED_DATA_TRUST if imported_trusted_only else "research_included"
+        imported_truth_store["trusted_only"] = imported_trusted_only
+        imported_truth_store["research_imported_data_allowed"] = not imported_trusted_only
+        imported_truth_store["source_labels_required"] = imported_source_labels
         available_underlyings = {
             symbol.upper()
             for symbol in imported_store.list_available_underlyings(
                 snapshot_kind=imported_snapshot_kind,
-                trusted_only=True,
+                trusted_only=imported_trusted_only,
+                source_labels=imported_source_labels,
             )
         }
-        required_imported_underlyings = tuple(str(symbol).strip().upper() for symbol in IMPORTED_VALIDATION_UNIVERSE)
+        required_imported_underlyings = _imported_replay_underlyings_for_playbook(replay_playbook)
+        if not required_imported_underlyings:
+            return {
+                "error": "Imported historical validation has no required underlyings configured for this playbook."
+            }
         replay_watchlist = [
             symbol for symbol in required_imported_underlyings
             if symbol.upper() in available_underlyings
@@ -6547,26 +6906,61 @@ def run_historical_backtest(
                     "Imported historical validation is missing one or more required underlyings. "
                     f"Required: {list(required_imported_underlyings)}. "
                     f"Available underlyings: {sorted(available_underlyings)}"
-                )
+                ),
+                "source_labels_required": imported_source_labels,
             }
         imported_calendar_underlying = "SPY" if "SPY" in replay_watchlist else str(replay_watchlist[0]).upper()
         imported_calendar_quote_dates = imported_store.available_quote_dates(
             imported_calendar_underlying,
             snapshot_kind=imported_snapshot_kind,
-            trusted_only=True,
+            trusted_only=imported_trusted_only,
+            source_labels=imported_source_labels,
         )
         if not imported_calendar_quote_dates:
             return {
                 "error": (
-                    "Imported historical validation has no trusted benchmark quote dates for the replay calendar. "
+                    "Imported historical validation has no benchmark quote dates for the replay calendar under the requested trust scope. "
                     f"Benchmark underlying: {imported_calendar_underlying}."
-                )
+                ),
+                "source_labels_required": imported_source_labels,
+                "imported_data_scope": imported_data_scope_label,
             }
         imported_shared_quote_dates = imported_store.shared_quote_dates(
             replay_watchlist,
             snapshot_kind=imported_snapshot_kind,
-            trusted_only=True,
+            trusted_only=imported_trusted_only,
+            source_labels=imported_source_labels,
         )
+        if len(imported_calendar_quote_dates) < required_imported_calendar_dates:
+            imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_calendar_quote_dates))
+            replay_calendar_summary = _build_replay_calendar_summary(
+                source=f"{imported_data_scope_label}_imported_benchmark_quote_dates",
+                index=imported_quote_index,
+                raw_history_date_count=len(imported_quote_index),
+                quote_date_count=len(imported_quote_index),
+                underlyings=[imported_calendar_underlying] if imported_calendar_underlying else [],
+                snapshot_kind=imported_snapshot_kind,
+            )
+            replay_calendar_summary["benchmark_underlying"] = imported_calendar_underlying
+            replay_calendar_summary["source_labels_required"] = imported_source_labels
+            replay_calendar_summary["trusted_only"] = imported_trusted_only
+            replay_calendar_summary["research_imported_data_allowed"] = not imported_trusted_only
+            replay_calendar_summary["shared_quote_date_count"] = len(imported_shared_quote_dates)
+            replay_calendar_summary["calendar_gap_date_count"] = max(
+                len(imported_quote_index) - len(imported_shared_quote_dates),
+                0,
+            )
+            replay_calendar_summary["required_quote_date_count"] = required_imported_calendar_dates
+            return {
+                "error": (
+                    "Imported historical validation has insufficient trusted benchmark quote dates before replay under the requested trust scope. "
+                    f"Selected dates: {len(imported_calendar_quote_dates)}."
+                ),
+                "source_labels_required": imported_source_labels,
+                "imported_data_scope": imported_data_scope_label,
+                "replay_calendar": replay_calendar_summary,
+                "required_imported_calendar_dates": required_imported_calendar_dates,
+            }
     calibration_min_trades = int(DEFAULT_SURFACE_MIN_TRADES)
     calibration_shrinkage_trades = float(DEFAULT_SHRINKAGE_TRADES)
     calibration_sparse_warning_trades = int(DEFAULT_SPARSE_WARNING_TRADES)
@@ -6579,6 +6973,7 @@ def run_historical_backtest(
     calibration_density_aggregate: dict[str, dict[str, Any]] = {}
     calibration_selected_sparse_warnings: Counter[str] = Counter()
     last_expectancy_surface: Optional[dict[str, Any]] = None
+    post_entry_filtered_trades: list[dict[str, Any]] = []
     calibration_accumulator = CalibrationAccumulator(
         min_trades=calibration_min_trades,
         bucket_size=DEFAULT_DIRECTION_BUCKET_SIZE,
@@ -6644,7 +7039,7 @@ def run_historical_backtest(
         imported_quote_set = set(imported_quote_index)
         spy_index = pd.DatetimeIndex([stamp for stamp in spy_index if stamp in imported_quote_set])
         replay_calendar_summary = _build_replay_calendar_summary(
-            source="trusted_imported_benchmark_quote_dates",
+            source=f"{imported_data_scope_label}_imported_benchmark_quote_dates",
             index=spy_index,
             raw_history_date_count=len(raw_spy_index),
             quote_date_count=len(imported_quote_index),
@@ -6652,17 +7047,25 @@ def run_historical_backtest(
             snapshot_kind=imported_snapshot_kind,
         )
         replay_calendar_summary["benchmark_underlying"] = imported_calendar_underlying
+        replay_calendar_summary["source_labels_required"] = imported_source_labels
+        replay_calendar_summary["trusted_only"] = imported_trusted_only
+        replay_calendar_summary["research_imported_data_allowed"] = not imported_trusted_only
         replay_calendar_summary["shared_quote_date_count"] = len(imported_shared_quote_dates)
         replay_calendar_summary["calendar_gap_date_count"] = max(
             len(imported_quote_index) - len(imported_shared_quote_dates),
             0,
         )
-        if len(spy_index) < 100:
+        replay_calendar_summary["required_quote_date_count"] = required_imported_calendar_dates
+        if len(spy_index) < required_imported_calendar_dates:
             return {
                 "error": (
-                    "Imported historical validation has insufficient trusted benchmark quote dates after aligning the replay calendar. "
+                    "Imported historical validation has insufficient trusted benchmark quote dates after aligning the replay calendar under the requested trust scope. "
                     f"Selected dates: {len(spy_index)}."
-                )
+                ),
+                "source_labels_required": imported_source_labels,
+                "imported_data_scope": imported_data_scope_label,
+                "replay_calendar": replay_calendar_summary,
+                "required_imported_calendar_dates": required_imported_calendar_dates,
             }
     else:
         replay_calendar_summary = _build_replay_calendar_summary(
@@ -6897,6 +7300,8 @@ def run_historical_backtest(
                 spy_ret5_today,
                 sp=t_sp,
             )
+            if signal.get("direction_score_override") is not None:
+                dir_score = float(signal["direction_score_override"])
             if dir_score < t_config["min_confidence"]:
                 continue
 
@@ -6969,6 +7374,11 @@ def run_historical_backtest(
                 "day_idx": day_idx,
                 "trade_type": trade_type,
                 "signal_family": signal.get("signal_family"),
+                "signal_variant": signal.get("signal_variant"),
+                "signal_ret5": signal.get("signal_ret5", ret5),
+                "signal_ret20": signal.get("signal_ret20", day_data.get("ret20")),
+                "signal_sma20": signal.get("signal_sma20", day_data.get("sma20")),
+                "signal_sma50": signal.get("signal_sma50", day_data.get("sma50")),
                 "direction_score": dir_score,
                 "quality_score": qual_score,
                 "tech_score": tech,
@@ -7059,6 +7469,7 @@ def run_historical_backtest(
                         pricing_lane=requested_pricing_lane,
                         entry_anchor_source=entry_anchor_source,
                         execution_realism=_execution_realism_label(normalized_truth_lane),
+                        source_labels=imported_source_labels,
                     )
                 else:
                     outcome = _simulate_trade_outcome_imported(
@@ -7100,6 +7511,7 @@ def run_historical_backtest(
                         pricing_lane=requested_pricing_lane,
                         entry_anchor_source=entry_anchor_source,
                         execution_realism=_execution_realism_label(normalized_truth_lane),
+                        source_labels=imported_source_labels,
                     )
             else:
                 _is_spread_sim = p_config.get("strategy_type") == "vertical_spread"
@@ -7161,6 +7573,12 @@ def run_historical_backtest(
                     "ticker": t_sym,
                     "date": pick["date"],
                     "type": pick["trade_type"],
+                    "signal_family": pick.get("signal_family"),
+                    "signal_variant": pick.get("signal_variant"),
+                    "signal_ret5": pick.get("signal_ret5"),
+                    "signal_ret20": pick.get("signal_ret20"),
+                    "signal_sma20": pick.get("signal_sma20"),
+                    "signal_sma50": pick.get("signal_sma50"),
                     "direction_score": round(pick["direction_score"], 1),
                     "quality_score": round(pick["quality_score"], 1),
                     "tech_score": round(pick["tech_score"], 1),
@@ -7207,6 +7625,11 @@ def run_historical_backtest(
                 "exit_date":       str(all_closes["SPY"].index[int(outcome["exit_day_idx"])].date()),
                 "type":            pick["trade_type"],
                 "signal_family":   pick.get("signal_family"),
+                "signal_variant":  pick.get("signal_variant"),
+                "signal_ret5":     pick.get("signal_ret5"),
+                "signal_ret20":    pick.get("signal_ret20"),
+                "signal_sma20":    pick.get("signal_sma20"),
+                "signal_sma50":    pick.get("signal_sma50"),
                 "direction_score": round(pick["direction_score"], 1),
                 "quality_score":   round(pick["quality_score"],   1),
                 "tech_score":      round(pick["tech_score"],       1),
@@ -7232,6 +7655,19 @@ def run_historical_backtest(
                 "truth_source":    normalized_truth_lane,
                 **outcome,
             }
+            post_entry_allowed, post_entry_reject_reason = _trade_matches_replay_post_entry_filters(
+                trade_record,
+                replay_playbook,
+            )
+            if not post_entry_allowed:
+                post_entry_filtered_trades.append(
+                    {
+                        **trade_record,
+                        "post_entry_filter_reject_reason": post_entry_reject_reason,
+                        "post_entry_filter_debit_pct_of_width": _trade_debit_pct_of_width(trade_record),
+                    }
+                )
+                continue
             trade_record["promotion_class"] = _trade_promotion_class(trade_record)
             trade_record["promotable"] = _is_trade_promotable(trade_record)
             trade_record["non_promotable_reason"] = _trade_non_promotable_reason(trade_record)
@@ -7317,12 +7753,16 @@ def run_historical_backtest(
             "playbook": replay_playbook["id"],
             "requested_directions": normalized_allowed_directions,
             "truth_source": normalized_truth_lane,
+            "imported_data_scope": imported_data_scope_label if _is_imported_truth_source(normalized_truth_lane) else None,
+            "research_imported_data_allowed": (not imported_trusted_only) if _is_imported_truth_source(normalized_truth_lane) else False,
             "entry_anchor_policy": _entry_anchor_policy_label(normalized_truth_lane),
             "execution_realism": _execution_realism_label(normalized_truth_lane),
             "n_picks": n_picks,
             "total_days": days_simulated, "total_trades": 0,
             "priced_trade_count": priced_trade_count,
             "unpriced_trade_count": unpriced_trade_count,
+            "post_entry_filtered_trade_count": len(post_entry_filtered_trades),
+            "post_entry_filtered_trade_reasons": dict(Counter(str(item.get("post_entry_filter_reject_reason") or "unknown") for item in post_entry_filtered_trades)),
             "candidate_trade_count": candidate_trade_count,
             "quote_coverage_pct": quote_coverage_pct,
             **contract_resolution,
@@ -7351,14 +7791,18 @@ def run_historical_backtest(
             "promotion_trade_count": 0,
             "non_promotable_trade_count": 0,
             "truth_store": imported_truth_store if _is_imported_truth_source(normalized_truth_lane) else None,
+            "required_imported_calendar_dates": (
+                required_imported_calendar_dates if _is_imported_truth_source(normalized_truth_lane) else None
+            ),
             "replay_calendar": replay_calendar_summary,
             "validation_universe": list(replay_watchlist),
             "eligible_tickers": eligible_tickers,
             "excluded_tickers": excluded_tickers,
             "equity_curve": [], "trades": [], "unpriced_trades": unpriced_candidates,
+            "post_entry_filtered_trades": post_entry_filtered_trades,
             "unpriced_trade_diagnostics": unpriced_trade_diagnostics,
         }
-        return _save_backtest_result(output)
+        return _save_backtest_result(output) if save_result else output
 
     pnl_list   = [t["pnl_pct"] for t in all_trades]
     wins       = [p for p in pnl_list if p > 0]
@@ -7490,6 +7934,8 @@ def run_historical_backtest(
         "mode":              "backtest",
         "profile":           "mixed",
         "truth_source":      normalized_truth_lane,
+        "imported_data_scope": imported_data_scope_label if _is_imported_truth_source(normalized_truth_lane) else None,
+        "research_imported_data_allowed": (not imported_trusted_only) if _is_imported_truth_source(normalized_truth_lane) else False,
         "lookback_years":    lookback_years,
         "iv_adj":            iv_adj,
         "requested_pricing_lane": requested_pricing_lane,
@@ -7504,6 +7950,8 @@ def run_historical_backtest(
         "total_trades":      len(all_trades),
         "priced_trade_count": priced_trade_count,
         "unpriced_trade_count": unpriced_trade_count,
+        "post_entry_filtered_trade_count": len(post_entry_filtered_trades),
+        "post_entry_filtered_trade_reasons": dict(Counter(str(item.get("post_entry_filter_reject_reason") or "unknown") for item in post_entry_filtered_trades)),
         "candidate_trade_count": candidate_trade_count,
         "quote_coverage_pct": quote_coverage_pct,
         **contract_resolution,
@@ -7537,6 +7985,9 @@ def run_historical_backtest(
         "promotion_trade_count": int(promotion_metrics.get("trade_count") or 0),
         "non_promotable_trade_count": len([trade for trade in all_trades if not _is_trade_promotable(trade)]),
         "truth_store":       imported_truth_store if _is_imported_truth_source(normalized_truth_lane) else None,
+        "required_imported_calendar_dates": (
+            required_imported_calendar_dates if _is_imported_truth_source(normalized_truth_lane) else None
+        ),
         "replay_calendar":   replay_calendar_summary,
         "validation_universe": list(replay_watchlist),
         "eligible_tickers":  eligible_tickers,
@@ -7544,11 +7995,12 @@ def run_historical_backtest(
         "equity_curve":      eq_curve,
         "trades":            all_trades,
         "unpriced_trades":   unpriced_candidates,
+        "post_entry_filtered_trades": post_entry_filtered_trades,
         "unpriced_trade_diagnostics": unpriced_trade_diagnostics,
     }
     if progress_callback:
         progress_callback("Done.", 1.0)
-    return _save_backtest_result(output)
+    return _save_backtest_result(output) if save_result else output
 
 
 def build_prediction_replay_report(

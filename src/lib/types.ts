@@ -86,8 +86,10 @@ export interface ScanPick {
   speculative_flag?: boolean;
   speculative_reason?: string[];
   convexity_class?: "core" | "aggressive" | "speculative" | string | null;
-  observation_only?: boolean;
-  observation_reason?: string | null;
+  historical_data_ready?: boolean | null;
+  historical_data_source?: string | null;
+  historical_data_readiness_status?: string | null;
+  ai_commodity_bucket?: "core_options" | "conditional_options" | string | null;
   quote_time_et?: string | null;
   quote_time_utc?: string | null;
   quote_basis?: string | null;
@@ -259,16 +261,34 @@ export interface ScanPlaybook {
   max_correlated_index_positions?: number;
   daily_loss_limit_pct?: number;
   weekly_loss_limit_pct?: number;
-  observation_only?: boolean;
   allowed_tickers?: string[];
+  scan_tickers?: string[];
+  core_tickers?: string[];
+  conditional_tickers?: string[];
+  historical_data_ready_tickers?: string[];
+  historical_core_ready_tickers?: string[];
+  historical_conditional_ready_tickers?: string[];
+  historical_missing_tickers?: string[];
+  historical_data_readiness_status?: string;
+  historical_core_ready_count?: number;
+  historical_core_required_count?: number;
+  historical_scan_ready_count?: number;
+  historical_scan_required_count?: number;
+  allowed_directions?: string[];
+  allowed_strategy_types?: string[];
+  theme_tags?: string[];
 }
 
 export interface ExposureSnapshot {
+  available?: boolean;
   open_positions: number;
   opened_today: number;
   ticker_counts: Record<string, number>;
   sector_counts: Record<string, number>;
   regime_counts: Record<string, number>;
+  sector_direction_counts?: Record<string, number>;
+  vertical_spread_signature_counts?: Record<string, number>;
+  open_cost_risk_usd?: number;
   warnings: string[];
 }
 
@@ -552,6 +572,10 @@ export interface TrackedPosition {
   share_review_age_minutes?: number | null;
   share_reviewed_at?: string | null;
   exact_contract_symbol?: string | null;
+  proof_eligible?: boolean;
+  proof_ineligibility_reason?: string | null;
+  proof_class?: string | null;
+  proof_class_reason?: string | null;
 }
 
 export interface CreateTrackedPositionRequest {
@@ -568,11 +592,11 @@ export interface CloseTrackedPositionRequest {
   notes?: string;
 }
 
-export interface SuggestedTrade extends TrackedPosition {}
+export type SuggestedTrade = TrackedPosition;
 
-export interface CreateSuggestedTradeRequest extends CreateTrackedPositionRequest {}
+export type CreateSuggestedTradeRequest = CreateTrackedPositionRequest;
 
-export interface CloseSuggestedTradeRequest extends CloseTrackedPositionRequest {}
+export type CloseSuggestedTradeRequest = CloseTrackedPositionRequest;
 
 export interface StrategyProfile {
   name: string;
@@ -650,11 +674,12 @@ export interface SectorSentiment {
   sector: string;
   etf: string;
   near_sent: string;
-  near_ret: number;
+  near_ret: number | null;
   med_sent: string;
-  med_ret: number;
+  med_ret: number | null;
   long_sent: string;
-  long_ret: number;
+  long_ret: number | null;
+  data_status?: "available" | "unavailable";
 }
 
 export interface DailyPerformance {
@@ -690,14 +715,14 @@ export interface BacktestResult {
   source?: TruthLaneSummary & Record<string, unknown>;
   total_days: number;
   total_trades: number;
-  win_rate_pct: number;
-  full_hit_rate_pct: number;
-  directional_accuracy_pct: number;
-  profit_factor: number;
-  avg_pnl_pct: number;
-  avg_picks_per_day: number;
-  sharpe: number;
-  max_drawdown_pct: number;
+  win_rate_pct: number | null;
+  full_hit_rate_pct: number | null;
+  directional_accuracy_pct: number | null;
+  profit_factor: number | null;
+  avg_pnl_pct: number | null;
+  avg_picks_per_day: number | null;
+  sharpe: number | null;
+  max_drawdown_pct: number | null;
   trades: BacktestTrade[];
   equity_curve: { date: string; cum_pnl_pct: number }[];
 }
@@ -755,17 +780,17 @@ export interface BacktestTrade {
   ticker: string;
   type: string;
   sector?: string | null;
-  direction_score: number;
-  quality_score?: number;
-  tech_score: number;
-  ev: number;
-  target_move_pct?: number;
+  direction_score?: number | null;
+  quality_score?: number | null;
+  tech_score?: number | null;
+  ev?: number | null;
+  target_move_pct?: number | null;
   prediction_outcome?: string;
   market_regime?: string;
-  strike: number;
-  entry_px: number;
-  exit_px: number;
-  pnl_pct: number;
+  strike?: number | null;
+  entry_px?: number | null;
+  exit_px?: number | null;
+  pnl_pct?: number | null;
   exit_reason: string;
 }
 

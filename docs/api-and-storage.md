@@ -25,7 +25,7 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 ### Scan And Replay
 
 - `POST /api/scan`
-  - live options scan
+  - live options scan; defaults to `bullish_pullback_observation` / Bullish Pullback Primary when no playbook is supplied
 - `POST /api/backtest`
   - run replay
 - `GET /api/backtest/summary`

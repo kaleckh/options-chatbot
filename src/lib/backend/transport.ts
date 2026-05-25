@@ -1,6 +1,13 @@
 const PYTHON_BACKEND_URL =
   process.env.PYTHON_BACKEND_URL || "http://localhost:8100";
-const PYTHON_BACKEND_TIMEOUT_MS = Number(process.env.PYTHON_BACKEND_TIMEOUT_MS || 30000);
+function parseBackendTimeoutMs(value: string | undefined): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30000;
+}
+
+const PYTHON_BACKEND_TIMEOUT_MS = parseBackendTimeoutMs(
+  process.env.PYTHON_BACKEND_TIMEOUT_MS
+);
 const JSON_REQUEST_HEADERS = { "Content-Type": "application/json" };
 
 export class BackendHttpError extends Error {
@@ -48,12 +55,27 @@ export async function fetchBackendJson<T = Record<string, unknown>>(
   errorPrefix: string = "Python backend error"
 ): Promise<T> {
   const res = await fetchBackendResponse(path, init);
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || (data as Record<string, unknown>).error) {
+  const text = await res.text();
+  let data: unknown = {};
+  if (text.trim()) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (res.ok) {
+        throw new BackendHttpError(
+          `${errorPrefix}: invalid JSON response`,
+          502,
+          { message: text.slice(0, 500) }
+        );
+      }
+      data = { message: text };
+    }
+  }
+  if (!res.ok) {
     const payload = data as Record<string, unknown>;
     throw new BackendHttpError(
-      String(payload.error || `${errorPrefix}: ${res.status}`),
-      res.ok ? 500 : res.status,
+      String(payload.error || payload.detail || payload.message || `${errorPrefix}: ${res.status}`),
+      res.status,
       payload
     );
   }
@@ -116,18 +138,14 @@ export async function callTool(
   toolName: string,
   args: Record<string, unknown>
 ): Promise<string> {
-  const res = await fetchBackendResponse(`/api/tools/${toolName}`, {
-    method: "POST",
-    headers: JSON_REQUEST_HEADERS,
-    body: toJsonBody(args),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    return JSON.stringify({
-      error: `Python backend error: ${res.status}`,
-      message: text,
-    });
-  }
-  const data = await res.json();
+  const data = await fetchBackendJson<{ result?: unknown }>(
+    `/api/tools/${encodeURIComponent(toolName)}`,
+    {
+      method: "POST",
+      headers: JSON_REQUEST_HEADERS,
+      body: toJsonBody(args),
+    },
+    "Tool call failed"
+  );
   return normalizeToolResult(data.result);
 }

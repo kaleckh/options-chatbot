@@ -87,6 +87,10 @@ body {
   white-space: nowrap;
 }
 
+.ft-table.ft-table-compact {
+  font-size: 0.74rem;
+}
+
 .ft-table thead {
   position: sticky;
   top: 0;
@@ -105,10 +109,19 @@ body {
   border-bottom: 2px solid var(--border-subtle);
 }
 
+.ft-table.ft-table-compact th {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.7rem;
+}
+
 .ft-table td {
   padding: 0.45rem 0.75rem;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-1);
+}
+
+.ft-table.ft-table-compact td {
+  padding: 0.35rem 0.6rem;
 }
 
 .ft-table tbody tr:hover td {

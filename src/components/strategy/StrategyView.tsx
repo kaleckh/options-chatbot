@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { useSubmitGuard } from "@/lib/hooks";
 import type {
@@ -45,6 +45,9 @@ export default function StrategyView() {
   const [metricTruthReport, setMetricTruthReport] = useState<MetricTruthReport | null>(null);
   const [comparisonReport, setComparisonReport] = useState<TruthLaneComparisonReport | null>(null);
   const [artifactNotice, setArtifactNotice] = useState<string | null>(null);
+  const artifactRequestIdRef = useRef(0);
+  const backtestRequestIdRef = useRef(0);
+  const truthLaneRef = useRef(truthLane);
 
   const fetchProfiles = useCallback(async () => {
     try {
@@ -79,17 +82,32 @@ export default function StrategyView() {
   }, [toast]);
 
   const fetchChangelog = useCallback(async () => {
+    const requestedProfile = profileType;
+    setChangelog([]);
+    setChangelogLoadedProfile(null);
     try {
-      const response = await fetch(`/api/changelog?profile=${profileType}`);
-      if (!response.ok) return;
+      const response = await fetch(`/api/changelog?profile=${requestedProfile}`);
+      if (!response.ok) {
+        throw new Error(`Failed to load ${requestedProfile} changelog (${response.status})`);
+      }
       setChangelog(await response.json());
-      setChangelogLoadedProfile(profileType);
+      setChangelogLoadedProfile(requestedProfile);
     } catch (err) {
+      setChangelog([]);
+      setChangelogLoadedProfile(requestedProfile);
       toast.error(`Failed to load changelog: ${err instanceof Error ? err.message : "unknown error"}`);
     }
   }, [profileType, toast]);
 
+  useEffect(() => {
+    truthLaneRef.current = truthLane;
+  }, [truthLane]);
+
   const loadBacktestArtifacts = useCallback(async (lane: TruthLane) => {
+    const requestId = ++artifactRequestIdRef.current;
+    const isCurrentRequest = () =>
+      requestId === artifactRequestIdRef.current && lane === truthLaneRef.current;
+
     try {
       const params = new URLSearchParams({
         truth_lane: lane,
@@ -98,6 +116,7 @@ export default function StrategyView() {
       });
       const response = await fetch(`/api/backtest/summary?${params.toString()}`);
       const payload = await response.json().catch(() => ({}));
+      if (!isCurrentRequest()) return;
       if (!response.ok || hasError(payload)) {
         throw new Error(hasError(payload) ? payload.error : `Failed to load ${lane} backtest summary.`);
       }
@@ -115,7 +134,9 @@ export default function StrategyView() {
             ? reportData.error
             : hasError(truthData)
               ? truthData.error
-              : null;
+              : hasError(comparisonData)
+                ? comparisonData.error
+                : null;
 
       setBacktestResult(hasError(lastData) ? null : (lastData as BacktestResult | null));
       setBacktestReport(hasError(reportData) ? null : (reportData as BacktestReplayReport | null));
@@ -125,6 +146,7 @@ export default function StrategyView() {
       );
       setArtifactNotice(primaryError);
     } catch (err) {
+      if (!isCurrentRequest()) return;
       setBacktestResult(null);
       setBacktestReport(null);
       setMetricTruthReport(null);
@@ -200,6 +222,10 @@ export default function StrategyView() {
 
   const runBacktest = async () => {
     await backtestGuard.guard(async () => {
+      const lane = truthLane;
+      const requestId = ++backtestRequestIdRef.current;
+      const isCurrentRequest = () =>
+        requestId === backtestRequestIdRef.current && lane === truthLaneRef.current;
       setBacktestRunning(true);
       try {
         const response = await fetch("/api/backtest", {
@@ -208,19 +234,22 @@ export default function StrategyView() {
           body: JSON.stringify({
             lookback_years: backtestYears,
             iv_adj: ivAdj,
-            truth_lane: truthLane,
-            pricing_lane: truthLane === "synthetic" ? pricingLane : undefined,
+            truth_lane: lane,
+            pricing_lane: lane === "synthetic" ? pricingLane : undefined,
           }),
         });
         const payload = await response.json().catch(() => ({}));
+        if (!isCurrentRequest()) return;
         if (!response.ok || hasError(payload)) {
           throw new Error(hasError(payload) ? payload.error : `Backtest failed with status ${response.status}`);
         }
 
         setBacktestResult(payload as BacktestResult);
-        await loadBacktestArtifacts(truthLane);
+        await loadBacktestArtifacts(lane);
+        if (!isCurrentRequest()) return;
         toast.success("Backtest completed successfully");
       } catch (err) {
+        if (!isCurrentRequest()) return;
         setBacktestResult(null);
         setBacktestReport(null);
         setMetricTruthReport(null);
@@ -228,7 +257,9 @@ export default function StrategyView() {
         setArtifactNotice(err instanceof Error ? err.message : "unknown error");
         toast.error(`Backtest failed: ${err instanceof Error ? err.message : "unknown error"}`);
       } finally {
-        setBacktestRunning(false);
+        if (requestId === backtestRequestIdRef.current) {
+          setBacktestRunning(false);
+        }
       }
     });
   };

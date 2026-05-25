@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,6 +77,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
                     "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
                     "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
+                    "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
+                    "OPTIONS_RUN_MODE": "test",
                 },
                 clear=False,
             )
@@ -191,8 +194,124 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["active_incumbents"]["SPY"]["put"]["candidate_id"].startswith("SPY__put__"))
         self.assertTrue(payload["active_incumbents"]["QQQ"]["call"]["candidate_id"].startswith("QQQ__call__"))
 
+    def test_scan_endpoint_defaults_to_bullish_pullback_primary(self):
+        captured: dict[str, object] = {}
+        scan_pick = {
+            "ticker": "SPY",
+            "type": "daily_scan",
+            "prediction_type": "daily_scan",
+            "option_type": "call",
+            "direction": "call",
+            "direction_score": 78.0,
+            "quality_score": 62.0,
+            "tech_score": 54.0,
+            "ev": 18.5,
+            "ev_pct": 18.5,
+            "dte": 34,
+            "target_move_pct": 2.5,
+            "stock_price": 650.0,
+            "current_spot": 650.0,
+            "underlying_price_at_selection": 650.0,
+            "strike": 650.0,
+            "short_strike": 680.0,
+            "spread_width": 30.0,
+            "net_debit": 12.0,
+            "premium": 12.0,
+            "mid": 12.0,
+            "entry_execution_price": 12.0,
+            "entry_execution_basis": "spread_ask_bid",
+            "entry_fee_total_usd": 1.3,
+            "contract_symbol": "SPY260626C00650000",
+            "short_contract_symbol": "SPY260626C00680000",
+            "expiry": "2026-06-26",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "neutral",
+            "strategy_type": "vertical_spread",
+            "candidate_execution_label": "executable_opra_paper_candidate",
+            "selection_source": "live_chain_exact_contract",
+            "promotion_class": "promotable_exact_contract",
+            "promotable": True,
+            "quote_basis": "spread_ask_bid",
+            "quote_time_et": "2026-05-22T15:55:00-04:00",
+            "quote_time_utc": "2026-05-22T19:55:00Z",
+            "original_logged_expiry": "2026-06-26",
+            "resolved_listed_expiry": "2026-06-26",
+            "profitability_eligibility": "eligible",
+            "profitability_blockers": [],
+        }
+
+        def _scan_func(**kwargs):
+            captured.update(kwargs)
+            return [scan_pick]
+
+        with patch.object(self.backend, "scan_daily_top_trades", side_effect=_scan_func):
+            response = self.client.post("/api/scan", json={"n_picks": 1, "use_recommended_policy": False})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["playbook"]["id"], "bullish_pullback_observation")
+        self.assertEqual(payload["playbook"]["label"], "Bullish Pullback Primary")
+        self.assertEqual(payload["playbook"]["lane_role"], "primary_profit_candidate")
+        self.assertEqual(captured["symbols"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(captured["allowed_directions"], ["call"])
+        self.assertEqual(captured["signal_variant"], "pullback_uptrend")
+        self.assertEqual(payload["picks"][0]["cohort_id"], "bullish_pullback_observation")
+        self.assertEqual(payload["picks"][0]["cohort_role"], "primary")
+
+    def test_scan_request_parsing_rejects_ambiguous_numeric_and_boolean_inputs(self):
+        invalid_cases = [
+            ("/api/scan", {"n_picks": True}, "n_picks"),
+            ("/api/scan", {"n_picks": 1, "min_trades": True}, "min_trades"),
+            ("/api/scan", {"n_picks": 1, "include_blocked_policy_picks": "sometimes"}, "include_blocked_policy_picks"),
+            ("/api/scan", {"n_picks": 1, "playbook": True}, "playbook"),
+            ("/api/scan/recommendations", {"n_picks": True}, "n_picks"),
+            ("/api/scan/roll", {"n_picks": True}, "n_picks"),
+        ]
+
+        for path, payload, expected_field in invalid_cases:
+            with self.subTest(path=path, payload=payload):
+                response = self.client.post(path, json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(expected_field, response.text)
+
+    def test_scan_request_parsing_honors_string_false_without_enabling_policy(self):
+        scan_pick = {
+            "ticker": "SPY",
+            "type": "call",
+            "prediction_type": "call",
+            "direction": "call",
+            "direction_score": 72.0,
+            "quality_score": 74.0,
+            "tech_score": 70.0,
+            "ev": 10.0,
+            "dte": 21,
+            "strike": 650.0,
+            "premium": 2.1,
+            "expiry": "2026-06-26",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "neutral",
+        }
+
+        with patch.object(self.backend, "scan_daily_top_trades", return_value=[scan_pick]):
+            response = self.client.post(
+                "/api/scan",
+                json={
+                    "n_picks": "1",
+                    "use_recommended_policy": "false",
+                    "enforce_portfolio_caps": "false",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["policy_applied"])
+
     def test_scan_endpoint_returns_sorted_normalized_contract(self):
-        response = self.client.post("/api/scan", json={"n_picks": 3, "use_recommended_policy": False})
+        response = self.client.post(
+            "/api/scan",
+            json={"playbook": "short_term", "n_picks": 3, "use_recommended_policy": False},
+        )
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
@@ -266,10 +385,17 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertGreaterEqual(evidence["scan_pick_count"], len(picks))
         self.assertGreaterEqual(evidence["eligible_scan_pick_count"], 0)
         self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], len(picks))
-        self.assertTrue(evidence["activation_check"]["active"])
-        self.assertEqual(evidence["activation_check"]["status"], "active")
+        self.assertFalse(evidence["activation_check"]["active"])
+        self.assertEqual(evidence["activation_check"]["status"], "archived_forward_unavailable")
         self.assertEqual(evidence["forward_truth_recording_failure_count"], 0)
-        self.assertGreaterEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 1)
+        self.assertEqual(evidence["exact_contract_capture_counts"]["with_contract_count"], 0)
+        self.assertGreaterEqual(evidence["exact_contract_capture_counts"]["all_with_contract_count"], 1)
+
+        proof_response = self.client.get("/api/proof-summary")
+        self.assertEqual(proof_response.status_code, 200)
+        proof_counts = proof_response.json()["evidence_counts"]
+        self.assertGreaterEqual(proof_counts["forward_event_count"], len(picks))
+        self.assertGreaterEqual(proof_counts["scan_pick_event_count"], len(picks))
 
     def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
         def _lookup(_surface, *, direction_score, **_kwargs):
@@ -289,7 +415,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
         with patch.object(oc, "_load_expectancy_surface_for_live", return_value={"available": True}), \
              patch.object(oc, "lookup_calibrated_expectancy", side_effect=_lookup):
-            response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+            response = self.client.post(
+                "/api/scan",
+                json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -300,7 +429,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(picks, sorted(picks, key=oc._candidate_rank_tuple, reverse=True))
 
     def test_scan_endpoint_records_bootstrap_expectancy_source_when_dense_calibration_is_missing(self):
-        response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+        response = self.client.post(
+            "/api/scan",
+            json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
+        )
         self.assertEqual(response.status_code, 200)
 
         payload = response.json()
@@ -338,6 +470,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "n_picks": 3,
                     "playbook": "short_term",
                     "use_recommended_policy": False,
+                    "enforce_portfolio_caps": True,
                     "include_blocked_guardrail_picks": True,
                 },
             )
@@ -354,7 +487,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
     def test_scan_endpoint_fail_open_when_forward_truth_recording_fails(self):
         with patch.object(self.backend, "record_forward_snapshot", side_effect=RuntimeError("ledger down")):
-            response = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+            response = self.client.post(
+                "/api/scan",
+                json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
+            )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
@@ -381,7 +517,67 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(payload["evidence_status"], wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS)
 
     def test_forward_evidence_report_marks_latest_authoritative_empty_scan_as_archived_unavailable(self):
-        first = self.client.post("/api/scan", json={"n_picks": 2, "use_recommended_policy": False})
+        eligible_pick = build_tracked_position_scan_pick(self.bundle)
+        eligible_pick.update(
+            {
+                "policy_decision": "approved",
+                "guardrail_decision": "clear",
+                "profitability_eligibility": "eligible",
+                "profitability_blockers": [],
+                "selection_source": "live_chain_exact_contract",
+                "entry_execution_basis": "spread_ask_bid",
+                "entry_execution_price": 2.4,
+                "quote_basis": "spread_ask_bid",
+                "quote_freshness_status": "fresh",
+                "options_data_source": "alpaca_opra",
+                "bid": 2.35,
+                "ask": 2.4,
+                "short_bid": 0.9,
+                "short_ask": 0.95,
+                "long_leg": {
+                    "contract_symbol": eligible_pick.get("contract_symbol"),
+                    "bid": 2.35,
+                    "ask": 2.4,
+                    "data_source": "alpaca_opra",
+                },
+                "short_leg": {
+                    "contract_symbol": eligible_pick.get("short_contract_symbol"),
+                    "bid": 0.9,
+                    "ask": 0.95,
+                    "data_source": "alpaca_opra",
+                },
+            }
+        )
+        eligible_scan_result = {
+            "picks": [eligible_pick],
+            "watch_picks": [],
+            "ranked_picks": [eligible_pick],
+            "policy_applied": True,
+            "policy": {
+                "truth_source": "historical_imported_daily",
+                "promotion_status": "observed",
+            },
+            "playbook": {"id": "short_term"},
+            "truth_lane": "historical_imported_daily",
+            "candidate_count": 1,
+            "returned_count": 1,
+            "scan_funnel": {
+                "raw_candidates": 1,
+                "post_policy_visible": 1,
+                "post_guardrails_visible": 1,
+                "returned_picks": 1,
+                "policy_filtered_out": 0,
+                "guardrail_filtered_out": 0,
+                "final_trimmed": 0,
+            },
+            "policy_decision_counts": {"approved": 1},
+            "guardrail_decision_counts": {"clear": 1},
+        }
+        with patch.object(self.backend, "run_supervised_scan", return_value=eligible_scan_result):
+            first = self.client.post(
+                "/api/scan",
+                json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": True},
+            )
         self.assertEqual(first.status_code, 200)
         self.assertTrue(first.json()["forward_truth_recorded"])
         self.assertEqual(first.json()["forward_truth_evidence_class"], "live_production")
@@ -453,6 +649,47 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(len(first.json()), 11)
         self.assertEqual(len(second.json()), 11)
+
+    def test_sector_endpoint_marks_missing_etf_data_unavailable(self):
+        sector_symbols = ["XLK", "XLV", "XLF", "XLE", "XLY", "XLP", "XLI", "XLB", "XLRE", "XLU", "XLC"]
+        close_frame = pd.DataFrame(
+            {
+                symbol: make_history(length=820, start=50.0 + idx * 5.0, step=0.15, wave=1.0)["Close"]
+                for idx, symbol in enumerate(sector_symbols, start=1)
+                if symbol != "XLV"
+            }
+        )
+
+        with patch.object(self.backend, "_md_download_history_batch", return_value={"Close": close_frame}):
+            response = self.client.get("/api/sectors")
+
+        self.assertEqual(response.status_code, 200)
+        rows = {row["etf"]: row for row in response.json()}
+        self.assertEqual(rows["XLV"]["data_status"], "unavailable")
+        self.assertEqual(rows["XLV"]["near_sent"], "Unavailable")
+        self.assertIsNone(rows["XLV"]["near_ret"])
+        self.assertNotEqual(rows["XLV"]["near_sent"], "Neutral")
+
+    def test_sector_endpoint_marks_short_history_windows_partial(self):
+        sector_symbols = ["XLK", "XLV", "XLF", "XLE", "XLY", "XLP", "XLI", "XLB", "XLRE", "XLU", "XLC"]
+        close_frame = pd.DataFrame(
+            {
+                symbol: make_history(length=40, start=50.0 + idx * 5.0, step=0.15, wave=1.0)["Close"]
+                for idx, symbol in enumerate(sector_symbols, start=1)
+            }
+        )
+
+        with patch.object(self.backend, "_md_download_history_batch", return_value={"Close": close_frame}):
+            response = self.client.get("/api/sectors")
+
+        self.assertEqual(response.status_code, 200)
+        rows = {row["etf"]: row for row in response.json()}
+        self.assertEqual(rows["XLK"]["data_status"], "partial")
+        self.assertNotEqual(rows["XLK"]["near_sent"], "Unavailable")
+        self.assertEqual(rows["XLK"]["med_sent"], "Unavailable")
+        self.assertIsNone(rows["XLK"]["med_ret"])
+        self.assertEqual(rows["XLK"]["long_sent"], "Unavailable")
+        self.assertIsNone(rows["XLK"]["long_ret"])
 
     def test_market_data_cache_stats_endpoint_reports_and_resets_counters(self):
         sector_tickers = {}
@@ -893,6 +1130,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "n_picks": 4,
                     "playbook": "short_term",
                     "use_recommended_policy": False,
+                    "enforce_portfolio_caps": True,
                     "include_blocked_guardrail_picks": True,
                 },
             )
@@ -942,6 +1180,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "n_picks": 1,
                     "playbook": "short_term",
                     "use_recommended_policy": False,
+                    "enforce_portfolio_caps": True,
                 },
             )
 
@@ -965,6 +1204,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             response = self.client.post(
                 "/api/scan",
                 json={
+                    "playbook": "short_term",
                     "n_picks": 1,
                     "use_recommended_policy": False,
                 },
@@ -979,7 +1219,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(pick["cohort_id"], expected_profit_context["cohort_id"])
         self.assertEqual(pick["cohort_role"], expected_profit_context["mode"])
 
-    def test_speculative_playbook_stays_observation_only_and_keeps_its_own_cohort(self):
+    def test_speculative_playbook_keeps_its_own_candidate_cohort(self):
         speculative_pick = {
             "ticker": "SPY",
             "direction": "call",
@@ -1050,7 +1290,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         picks = {pick["ticker"]: pick for pick in payload["picks"]}
         self.assertEqual(picks["SPY"]["guardrail_decision"], "clear")
         self.assertEqual(picks["SPY"]["suggested_size_tier"], "starter")
-        self.assertTrue(picks["SPY"]["observation_only"])
+        self.assertFalse(picks["SPY"].get("observation_only", False))
         self.assertTrue(picks["SPY"]["speculative_flag"])
         self.assertEqual(picks["SPY"]["convexity_class"], "speculative")
         self.assertGreaterEqual(picks["SPY"]["risk_tier"], 4)
@@ -1058,7 +1298,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(picks["SPY"]["profit_candidate_id"], "SPY__call__speculative_short_dte")
         self.assertEqual(picks["SPY"]["policy_artifact_id"], "SPY__call__speculative_short_dte")
         self.assertEqual(picks["SPY"]["cohort_id"], "speculative_short_dte")
-        self.assertEqual(picks["SPY"]["cohort_role"], "observation")
+        self.assertEqual(picks["SPY"]["cohort_role"], "candidate")
         self.assertEqual(picks["IWM"]["guardrail_decision"], "blocked")
         self.assertTrue(picks["IWM"]["guardrail_reasons"])
 
@@ -1202,11 +1442,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(focused_scan["policy_fail_closed"])
         self.assertEqual(focused_scan["picks"], [])
 
-        roll_response = self.client.post("/api/scan/roll", json={"n_picks": 3})
+        roll_response = self.client.post("/api/scan/roll", json={"n_picks": 3, "use_recommended_policy": True})
         self.assertEqual(roll_response.status_code, 200)
         self.assertTrue(roll_response.json()["policy_fail_closed"])
 
-        recommendations_response = self.client.post("/api/scan/recommendations", json={"n_picks": 3})
+        recommendations_response = self.client.post(
+            "/api/scan/recommendations",
+            json={"n_picks": 3, "use_recommended_policy": True},
+        )
         self.assertEqual(recommendations_response.status_code, 200)
         self.assertTrue(recommendations_response.json()["policy_fail_closed"])
 
@@ -1215,14 +1458,63 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(exit_audit_response.json(), {"error": "No backtest results found"})
 
     def test_secondary_scan_routes_return_success_payloads_with_policy_context(self):
-        pending = [
-            {
-                **build_tracked_position_scan_pick(self.bundle),
-                "type": "daily_scan",
-                "outcome": None,
-                "current_pnl_pct": 0.0,
-            }
-        ]
+        pending_pick = {
+            **build_tracked_position_scan_pick(self.bundle),
+            "ticker": "OLD",
+            "type": "daily_scan",
+            "prediction_type": "daily_scan",
+            "option_type": "call",
+            "direction": "call",
+            "direction_score": 20.0,
+            "quality_score": 20.0,
+            "outcome": None,
+            "current_pnl_pct": 0.0,
+        }
+        replacement_pick = {
+            **build_tracked_position_scan_pick(self.bundle),
+            "ticker": "AAA",
+            "type": "daily_scan",
+            "prediction_type": "daily_scan",
+            "option_type": "call",
+            "direction": "call",
+            "direction_score": 82.0,
+            "quality_score": 82.0,
+            "entry_date": "2026-05-22",
+        }
+        new_pick = {
+            **build_tracked_position_scan_pick(self.bundle),
+            "ticker": "BBB",
+            "type": "daily_scan",
+            "prediction_type": "daily_scan",
+            "option_type": "put",
+            "direction": "put",
+            "direction_score": 76.0,
+            "quality_score": 76.0,
+            "entry_date": "2026-05-22",
+        }
+        pending = [pending_pick]
+        supervised_scan_result = {
+            "picks": [replacement_pick, new_pick],
+            "watch_picks": [],
+            "ranked_picks": [replacement_pick, new_pick],
+            "policy_applied": False,
+            "policy": {},
+            "playbook": {"id": "short_term"},
+            "truth_lane": "synthetic",
+            "candidate_count": 2,
+            "returned_count": 2,
+            "scan_funnel": {
+                "raw_candidates": 2,
+                "post_policy_visible": 2,
+                "post_guardrails_visible": 2,
+                "returned_picks": 2,
+                "policy_filtered_out": 0,
+                "guardrail_filtered_out": 0,
+                "final_trimmed": 0,
+            },
+            "policy_decision_counts": {},
+            "guardrail_decision_counts": {},
+        }
 
         backtest_response = self.client.post(
             "/api/backtest",
@@ -1230,14 +1522,15 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         )
         self.assertEqual(backtest_response.status_code, 200)
 
-        with patch.object(self.backend, "_load_predictions", return_value=pending):
+        with patch.object(self.backend, "_load_predictions", return_value=pending), \
+             patch.object(self.backend, "_run_supervised_scan_request", return_value=supervised_scan_result):
             roll_response = self.client.post(
                 "/api/scan/roll",
-                json={"n_picks": 3, "use_recommended_policy": True, "min_trades": 1, "truth_lane": "synthetic"},
+                json={"n_picks": 3, "use_recommended_policy": False, "min_trades": 1, "truth_lane": "synthetic"},
             )
             recommendations_response = self.client.post(
                 "/api/scan/recommendations",
-                json={"n_picks": 3, "use_recommended_policy": True, "min_trades": 1, "truth_lane": "synthetic"},
+                json={"n_picks": 3, "use_recommended_policy": False, "min_trades": 1, "truth_lane": "synthetic"},
             )
 
         self.assertEqual(roll_response.status_code, 200)
@@ -1252,6 +1545,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("watch_picks", roll_payload)
         self.assertIn("managed_lane_status", roll_payload)
         self.assertIn("truth_window_status", roll_payload)
+        normalized_roll_picks = roll_payload["rolled"] + roll_payload["new"] + roll_payload["dropped"]
+        self.assertTrue(normalized_roll_picks)
+        for pick in normalized_roll_picks:
+            self.assertEqual(pick["prediction_type"], "daily_scan")
+            self.assertIn(pick["type"], {"call", "put"})
 
         self.assertEqual(recommendations_response.status_code, 200)
         rec_payload = recommendations_response.json()
@@ -1264,6 +1562,16 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("watch_picks", rec_payload)
         self.assertIn("managed_lane_status", rec_payload)
         self.assertIn("truth_window_status", rec_payload)
+        normalized_recommendation_picks = list(rec_payload["new_opportunities"])
+        normalized_recommendation_picks.extend(
+            item["replace_with"]
+            for item in rec_payload["active_positions"]
+            if isinstance(item.get("replace_with"), dict)
+        )
+        self.assertTrue(normalized_recommendation_picks)
+        for pick in normalized_recommendation_picks:
+            self.assertEqual(pick["prediction_type"], "daily_scan")
+            self.assertIn(pick["type"], {"call", "put"})
 
     def test_imported_daily_endpoint_hides_stale_artifact_without_backing_store(self):
         os.makedirs(self.imported_results_dir, exist_ok=True)
@@ -1367,7 +1675,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
         scan_response = self.client.post(
             "/api/scan",
-            json={"n_picks": 3, "use_recommended_policy": False},
+            json={"playbook": "short_term", "n_picks": 3, "use_recommended_policy": False},
         )
         self.assertEqual(scan_response.status_code, 200)
         scan = scan_response.json()

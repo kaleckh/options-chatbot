@@ -9,7 +9,10 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 import options_chatbot as oc
+import market_data_service as mds
 import wfo_optimizer as wfo
+
+from options_execution import commission_total_usd
 
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -44,10 +47,24 @@ class TrackedPositionsApiTests(unittest.TestCase):
         cls._backend_tmp.cleanup()
 
     def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
         self.bundle = build_options_algorithm_fixture_bundle()
         self.stack = ExitStack()
         self.addCleanup(self._cleanup)
 
+        self.stack.enter_context(
+            patch.dict(
+                os.environ,
+                {
+                    "MARKET_DATA_DB_PATH": self.market_data_db_path,
+                    "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
+                    "OPTIONS_RUN_MODE": "test",
+                },
+                clear=False,
+            )
+        )
         self.stack.enter_context(patch.object(oc, "DEFAULT_WATCHLIST", self.bundle.watchlist))
         self.stack.enter_context(patch.object(wfo, "DEFAULT_WATCHLIST", self.bundle.watchlist))
         self.stack.enter_context(patch.object(oc.yf, "Ticker", side_effect=self.bundle.make_ticker))
@@ -58,8 +75,11 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.stack.enter_context(patch.object(psvc, "datetime", FrozenDateTime))
         self.stack.enter_context(patch.object(oc, "_market_is_open", return_value=False))
         self.stack.enter_context(patch.object(self.backend, "POSITIONS_REPOSITORY", MemoryTrackedPositionsRepository()))
+        mds._MEMORY_CACHE.clear()
+        mds._SCHEMA_READY.clear()
 
     def _cleanup(self):
+        mds._MEMORY_CACHE.clear()
         self.stack.close()
 
     def test_positions_workflow_create_list_review_and_close(self):
@@ -93,6 +113,8 @@ class TrackedPositionsApiTests(unittest.TestCase):
         grouped_open_payload = grouped_open_response.json()
         self.assertEqual(len(grouped_open_payload["open"]), 1)
         self.assertEqual(grouped_open_payload["closed"], [])
+        self.assertEqual(grouped_open_payload["summary"]["open"]["tracked"]["count"], 1)
+        self.assertIn("proof", grouped_open_payload["summary"]["open"])
 
         review_response = self.client.post("/api/positions/review", json={})
         self.assertEqual(review_response.status_code, 200)
@@ -127,6 +149,10 @@ class TrackedPositionsApiTests(unittest.TestCase):
         closed_position = close_response.json()["position"]
         self.assertEqual(closed_position["status"], "closed")
         self.assertEqual(closed_position["exit_option_price"], 2.45)
+        self.assertEqual(closed_position["last_recommendation"], "SELL")
+        self.assertEqual(closed_position["latest_review"]["recommendation"], "SELL")
+        self.assertEqual(closed_position["latest_review"]["current_option_price"], 2.45)
+        self.assertEqual(closed_position["latest_review"]["current_pnl_pct"], closed_position["gross_pnl_pct"])
 
         list_closed_response = self.client.get("/api/positions", params={"status": "closed"})
         self.assertEqual(list_closed_response.status_code, 200)
@@ -139,6 +165,9 @@ class TrackedPositionsApiTests(unittest.TestCase):
         grouped_closed_payload = grouped_closed_response.json()
         self.assertEqual(grouped_closed_payload["open"], [])
         self.assertEqual(len(grouped_closed_payload["closed"]), 1)
+        self.assertEqual(grouped_closed_payload["summary"]["closed"]["tracked"]["count"], 1)
+        self.assertEqual(grouped_closed_payload["summary"]["closed"]["tracked"]["priced_count"], 1)
+        self.assertIn("proof", grouped_closed_payload["summary"]["closed"])
 
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -155,7 +184,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("position_ids", response.text)
 
-    def test_close_rejects_non_positive_exit_price(self):
+    def test_close_rejects_negative_exit_price_and_allows_zero(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         create_response = self.client.post(
             "/api/positions",
@@ -167,9 +196,144 @@ class TrackedPositionsApiTests(unittest.TestCase):
         )
         position_id = create_response.json()["position"]["id"]
 
-        response = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": 0})
+        response = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": -0.01})
         self.assertEqual(response.status_code, 400)
         self.assertIn("exit_price", response.text)
+
+        zero_response = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": 0})
+        self.assertEqual(zero_response.status_code, 200)
+        self.assertEqual(zero_response.json()["position"]["exit_option_price"], 0.0)
+
+    def test_create_and_close_reject_json_booleans_as_numbers(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+
+        bool_fill = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": True,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(bool_fill.status_code, 400)
+        self.assertIn("fill_price", bool_fill.text)
+
+        bool_contracts = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": True,
+            },
+        )
+        self.assertEqual(bool_contracts.status_code, 400)
+        self.assertIn("contracts", bool_contracts.text)
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        bool_exit = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": True})
+        self.assertEqual(bool_exit.status_code, 400)
+        self.assertIn("exit_price", bool_exit.text)
+
+    def test_create_rejects_bool_scan_pick_numeric_fields(self):
+        for field in ("strike", "stop_loss_pct", "profit_target_pct", "time_exit_day"):
+            with self.subTest(field=field):
+                scan_pick = build_tracked_position_scan_pick(self.bundle)
+                scan_pick[field] = True
+                response = self.client.post(
+                    "/api/positions",
+                    json={
+                        "scan_pick": scan_pick,
+                        "fill_price": 4.50,
+                        "contracts": 1,
+                    },
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field, response.text)
+
+    def test_create_rejects_non_object_scan_pick_and_invalid_text_fields(self):
+        for scan_pick in ([1], True, "not-an-object"):
+            with self.subTest(scan_pick=scan_pick):
+                response = self.client.post(
+                    "/api/positions",
+                    json={"scan_pick": scan_pick, "fill_price": 4.50, "contracts": 1},
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn("scan_pick", response.text)
+
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "selection_source": "live_chain_exact_contract",
+                "contract_selection_source": "live_chain_exact_contract",
+                "quote_time_et": "2026-04-06T10:00:00-04:00",
+                "bid": 4.4,
+                "ask": 4.6,
+                "entry_execution_price": 4.5,
+                "entry_execution_basis": "ask",
+                "contract_symbol": True,
+                "options_data_source": "alpaca_opra",
+            }
+        )
+        bool_contract = self.client.post(
+            "/api/positions",
+            json={"scan_pick": scan_pick, "fill_price": 4.50, "contracts": 1},
+        )
+        self.assertEqual(bool_contract.status_code, 400)
+        self.assertIn("contract_symbol", bool_contract.text)
+
+        bad_notes = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": build_tracked_position_scan_pick(self.bundle),
+                "fill_price": 4.50,
+                "contracts": 1,
+                "notes": {"not": "text"},
+            },
+        )
+        self.assertEqual(bad_notes.status_code, 400)
+        self.assertIn("notes", bad_notes.text)
+
+    def test_create_and_close_reject_malformed_timestamps(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_bad_time = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+                "filled_at": True,
+            },
+        )
+        self.assertEqual(create_bad_time.status_code, 400)
+        self.assertIn("filled_at", create_bad_time.text)
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        close_bad_time = self.client.post(
+            f"/api/positions/{position_id}/close",
+            json={"exit_price": 1.0, "closed_at": True},
+        )
+        self.assertEqual(close_bad_time.status_code, 400)
+        self.assertIn("closed_at", close_bad_time.text)
 
     def test_close_rejects_already_closed_position(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -189,6 +353,87 @@ class TrackedPositionsApiTests(unittest.TestCase):
         second_close = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": 2.25})
         self.assertEqual(second_close.status_code, 409)
         self.assertIn("already closed", second_close.text)
+
+    def test_manual_close_charges_both_spread_exit_legs(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        chain = self.bundle.tickers["AAA"].option_chain(scan_pick["expiry"]).calls
+        short_contract = chain[chain["strike"] > scan_pick["strike"]].iloc[0]
+        scan_pick.update(
+            {
+                "strategy_type": "vertical_spread",
+                "short_strike": float(short_contract["strike"]),
+                "short_contract_symbol": str(short_contract["contractSymbol"]),
+            }
+        )
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position = create_response.json()["position"]
+        self.assertEqual(position["entry_fee_total_usd"], commission_total_usd(contracts=1, sides=2))
+
+        close_response = self.client.post(
+            f"/api/positions/{position['id']}/close",
+            json={"exit_price": 2.45},
+        )
+
+        self.assertEqual(close_response.status_code, 200)
+        closed = close_response.json()["position"]
+        self.assertEqual(closed["fee_total_usd"], commission_total_usd(contracts=1, sides=4))
+
+    def test_create_position_allows_second_open_same_ticker_when_contract_differs(self):
+        first_pick = build_tracked_position_scan_pick(self.bundle)
+        first_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": first_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(first_response.status_code, 200)
+
+        second_pick = build_tracked_position_scan_pick(self.bundle)
+        chain = self.bundle.tickers["AAA"].option_chain(second_pick["expiry"]).calls
+        alt_contract = chain[chain["contractSymbol"] != second_pick["contract_symbol"]].iloc[0]
+        second_pick.update(
+            {
+                "strike": float(alt_contract["strike"]),
+                "contract_symbol": str(alt_contract["contractSymbol"]),
+                "selection_source": "live_chain_exact_contract",
+                "contract_selection_source": "live_chain_exact_contract",
+                "promotion_class": "promotable_exact_contract",
+                "quote_time_et": "2026-04-06T10:00:00-04:00",
+                "bid": float(alt_contract["bid"]),
+                "ask": float(alt_contract["ask"]),
+                "mid": round((float(alt_contract["bid"]) + float(alt_contract["ask"])) / 2, 2),
+                "entry_execution_price": float(alt_contract["ask"]),
+                "entry_execution_basis": "ask",
+            }
+        )
+
+        second_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": second_pick,
+                "fill_price": float(alt_contract["ask"]),
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(second_response.status_code, 200)
+        second_position = second_response.json()["position"]
+        self.assertEqual(second_position["ticker"], "AAA")
+        self.assertEqual(second_position["contract_symbol"], str(alt_contract["contractSymbol"]))
+
+        list_open_response = self.client.get("/api/positions", params={"status": "open"})
+        self.assertEqual(list_open_response.status_code, 200)
+        self.assertEqual(len(list_open_response.json()["positions"]), 2)
 
     def test_create_position_stores_scan_provenance(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -234,6 +479,8 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(position["source_scan_run_id"], "api_scan_20260406T100000Z")
         self.assertTrue(position["proof_eligible"])
         self.assertIsNone(position["proof_ineligibility_reason"])
+        self.assertEqual(position["proof_class"], "live_scan_exact_contract")
+        self.assertIsNone(position["proof_class_reason"])
         self.assertEqual(position["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
         self.assertEqual(position["source_pick_snapshot"]["bid"], 4.4)
         self.assertEqual(position["source_pick_snapshot"]["ask"], 4.6)
@@ -258,8 +505,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
 
     def test_create_position_without_provenance_marks_not_proof_eligible(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
-        # No provenance, no exact contract metadata
-        scan_pick.pop("contract_symbol", None)
+        # Exact contract is present, but scan/proof provenance is not.
 
         create_response = self.client.post(
             "/api/positions",
@@ -273,7 +519,31 @@ class TrackedPositionsApiTests(unittest.TestCase):
         position = create_response.json()["position"]
         self.assertFalse(position["proof_eligible"])
         self.assertIsNotNone(position["proof_ineligibility_reason"])
+        self.assertEqual(position["proof_class"], "manual_broker_exact_contract")
         self.assertIn("selection_source_not_exact", position["proof_ineligibility_reason"])
+
+    def test_exact_contract_manual_fill_gets_separate_proof_class(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.75,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertIn("entry_execution_price_mismatch", payload["proof_ineligibility_reason"])
+        self.assertIn("manual_fill_not_scan_execution", payload["proof_ineligibility_reason"])
+        self.assertEqual(payload["proof_class"], "manual_broker_exact_contract")
+        self.assertIn("manual/broker fill", payload["proof_class_reason"])
 
     def test_proof_lane_validation_blocks_missing_contract_symbol(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

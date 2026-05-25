@@ -17,12 +17,16 @@ class TestProfitLoopEndToEnd(unittest.TestCase):
 
     def setUp(self):
         self._tmpdir = tempfile.mkdtemp(prefix="profit_loop_e2e_")
+        self._previous_state_dir = os.environ.get("OPTIONS_PROFIT_STATE_DIR")
         os.environ["OPTIONS_PROFIT_STATE_DIR"] = self._tmpdir
 
     def tearDown(self):
         import shutil
         shutil.rmtree(self._tmpdir, ignore_errors=True)
-        os.environ.pop("OPTIONS_PROFIT_STATE_DIR", None)
+        if self._previous_state_dir is None:
+            os.environ.pop("OPTIONS_PROFIT_STATE_DIR", None)
+        else:
+            os.environ["OPTIONS_PROFIT_STATE_DIR"] = self._previous_state_dir
 
     def _make_synthetic_trades(self, count: int = 50) -> list[dict]:
         """Generate synthetic trades with realistic score distributions."""

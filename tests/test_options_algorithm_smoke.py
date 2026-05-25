@@ -27,8 +27,7 @@ class OptionsAlgorithmSmokeTests(unittest.TestCase):
             "forward_truth_runtime_db_path": str(Path.cwd() / "forward_tracking_fixture.db"),
         }
 
-        with patch.dict(os.environ, {}, clear=False), \
-             patch.object(sys, "argv", ["options_algorithm_smoke.py", "--fixture"]), \
+        with patch.object(sys, "argv", ["options_algorithm_smoke.py", "--fixture"]), \
              patch.object(smoke, "_run_fixture_smoke", return_value=fake_summary) as fixture_runner, \
              patch.object(smoke, "_run_live_smoke") as live_runner, \
              patch.object(smoke, "_runtime_context", return_value={"repo_root": str(smoke.ROOT.resolve())}), \
@@ -88,8 +87,7 @@ class OptionsAlgorithmSmokeTests(unittest.TestCase):
              patch.object(smoke.mds, "datetime", smoke.FrozenDateTime), \
              patch.object(smoke.oc, "_market_is_open", return_value=False), \
              patch.object(smoke.oc, "_load_expectancy_surface_for_live", return_value=None), \
-             patch.object(smoke.wfo, "WFO_RESULTS_FILE", str(ROOT / "tmp_wfo_results.json")), \
-             patch.dict(os.environ, {}, clear=False):
+             patch.object(smoke.wfo, "WFO_RESULTS_FILE", str(ROOT / "tmp_wfo_results.json")):
             summary = smoke._run_fixture_smoke(
                 scan_picks=3,
                 lookback_years=1,

@@ -310,7 +310,6 @@ function assertValidStrategySpec(strategy) {
 
 function synchronizeManagedStrategies(strategies) {
   const storedStrategies = Array.isArray(strategies) ? strategies.slice() : [];
-  const defaultsById = new Map(DEFAULT_STRATEGIES.map((strategy) => [strategy.strategyId, strategy]));
   const storedById = new Map(storedStrategies.map((strategy) => [strategy.strategyId, strategy]));
   const merged = [];
   const seen = new Set();
@@ -1065,23 +1064,30 @@ function resolveDynamicTakeProfitPrice(position, bar) {
     return null;
   }
 
+  const entryPrice = Number(position.entryPrice);
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
+    return null;
+  }
+  const isShort = String(position.direction || "").toLowerCase() === "short";
+  const isProfitableTarget = (value) => (isShort ? value < entryPrice : value > entryPrice);
   const candidates = [];
   if (mode === "session_vwap_or_range_midpoint") {
     for (const value of [bar.indicators.sessionVwap, bar.indicators.sessionRangeMidpoint]) {
       const numeric = Number(value);
-      if (Number.isFinite(numeric) && numeric > Number(position.entryPrice || 0)) {
+      if (Number.isFinite(numeric) && isProfitableTarget(numeric)) {
         candidates.push(numeric);
       }
     }
   }
 
-  const fallbackPrice = Number(position.entryPrice) * (1 + Number(position.takeProfitFraction || 0));
-  if (Number.isFinite(fallbackPrice) && fallbackPrice > Number(position.entryPrice || 0)) {
+  const takeProfitFraction = Number(position.takeProfitFraction || 0);
+  const fallbackPrice = entryPrice * (isShort ? (1 - takeProfitFraction) : (1 + takeProfitFraction));
+  if (Number.isFinite(fallbackPrice) && isProfitableTarget(fallbackPrice)) {
     candidates.push(fallbackPrice);
   }
 
   if (candidates.length === 0) return null;
-  return Math.min(...candidates);
+  return isShort ? Math.max(...candidates) : Math.min(...candidates);
 }
 
 function calculateTradeOutcome(position, bars, feesFraction) {
@@ -1488,25 +1494,6 @@ function sma(values, period, index) {
   return sum / period;
 }
 
-function stddev(values, period, index) {
-  const mean = sma(values, period, index);
-  if (mean == null) return null;
-  let variance = 0;
-  for (let i = index - period + 1; i <= index; i += 1) {
-    variance += (values[i] - mean) ** 2;
-  }
-  return Math.sqrt(variance / period);
-}
-
-function highest(values, period, index) {
-  if (index + 1 < period) return null;
-  let max = -Infinity;
-  for (let i = index - period + 1; i <= index; i += 1) {
-    if (values[i] > max) max = values[i];
-  }
-  return max;
-}
-
 function computeEmaSeries(values, period) {
   const multiplier = 2 / (period + 1);
   const result = new Array(values.length).fill(null);
@@ -1605,7 +1592,6 @@ function computeSessionOpeningRangeHighs(bars, openingRangeBars) {
 
 function enrichBarsWithSignals(bars, strategy) {
   const closes = bars.map((bar) => Number(bar.close));
-  const highs = bars.map((bar) => Number(bar.high));
   const volumes = bars.map((bar) => Number(bar.volume || 0));
   const ema20 = computeEmaSeries(closes, 20);
   const ema50 = computeEmaSeries(closes, 50);
@@ -2777,6 +2763,7 @@ const __internal = {
   simulateExecution,
   PaperBroker,
   evaluateTradeRisk,
+  resolveDynamicTakeProfitPrice,
   buildSummary,
   runBacktest,
   saveBacktestResult,

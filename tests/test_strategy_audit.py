@@ -4,6 +4,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime as _RealDateTime
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -134,7 +135,15 @@ class StrategyAuditTests(unittest.TestCase):
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
-        self._env_patch = patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.market_data_db_path}, clear=False)
+        self._env_patch = patch.dict(
+            os.environ,
+            {
+                "MARKET_DATA_DB_PATH": self.market_data_db_path,
+                "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
+                "OPTIONS_RUN_MODE": "test",
+            },
+            clear=False,
+        )
         self._env_patch.start()
         self.addCleanup(self._env_patch.stop)
         self._md_datetime_patch = patch.object(mds, "datetime", _StrategyAuditDateTime)
@@ -316,6 +325,137 @@ class StrategyAuditTests(unittest.TestCase):
             wfo._candidate_matches_replay_playbook({**allowed, "quality_score": 62.0}, playbook)
         )
 
+    def test_replay_playbook_filters_to_bullish_index_calls_slice(self):
+        playbook = wfo._get_replay_playbook("bullish_index_calls")
+        allowed = {
+            "ticker": "SPY",
+            "trade_type": "call",
+            "quality_score": 62.0,
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+        }
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "ticker": "AAPL"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "trade_type": "put"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "market_regime": "neutral"}, playbook)
+        )
+
+    def test_replay_playbook_filters_to_score70_bullish_index_calls_slice(self):
+        playbook = wfo._get_replay_playbook("bullish_index_calls_score70")
+        allowed = {
+            "ticker": "QQQ",
+            "trade_type": "call",
+            "quality_score": 71.0,
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+        }
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "ticker": "MSFT"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "trade_type": "put"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "quality_score": 69.9}, playbook)
+        )
+
+    def test_replay_playbook_filters_to_quality90_debit55_slice(self):
+        playbook = wfo._get_replay_playbook("bullish_index_calls_quality90_debit55")
+        allowed = {
+            "ticker": "SPY",
+            "trade_type": "call",
+            "quality_score": 91.0,
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+        }
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "quality_score": 89.9}, playbook)
+        )
+
+        self.assertTrue(
+            wfo._trade_matches_replay_post_entry_filters(
+                {"net_debit": 5.49, "spread_width": 10.0},
+                playbook,
+            )[0]
+        )
+        allowed_entry, reason = wfo._trade_matches_replay_post_entry_filters(
+            {"net_debit": 5.5, "spread_width": 10.0},
+            playbook,
+        )
+        self.assertFalse(allowed_entry)
+        self.assertEqual(reason, "debit_pct_of_width_above_playbook_max")
+
+    def test_replay_playbook_filters_to_score70_bullish_qqq_calls_slice(self):
+        playbook = wfo._get_replay_playbook("bullish_qqq_calls_score70")
+        allowed = {
+            "ticker": "QQQ",
+            "trade_type": "call",
+            "quality_score": 72.0,
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+        }
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "ticker": "SPY"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "trade_type": "put"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "market_regime": "neutral"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "quality_score": 69.9}, playbook)
+        )
+
+    def test_replay_playbook_filters_to_bullish_pullback_observation_slice(self):
+        playbook = wfo._get_replay_playbook("bullish_pullback_observation")
+        allowed = {
+            "ticker": "SPY",
+            "trade_type": "call",
+            "signal_family": "bullish_pullback",
+            "quality_score": 12.0,
+            "market_regime": "neutral",
+            "sector": "Index ETF",
+        }
+
+        self.assertEqual(playbook["entry_signal_id"], "pullback_uptrend")
+        self.assertEqual(playbook["target_dte"], 35)
+        self.assertEqual(playbook["scan_min_confidence"], 0.0)
+        self.assertEqual(playbook["scan_min_tech_score"], 0.0)
+        self.assertEqual(playbook["historical_required_underlyings"], list(wfo.IMPORTED_VALIDATION_UNIVERSE))
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "signal_family": "momentum"}, playbook)
+        )
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "trade_type": "put"}, playbook)
+        )
+
+        self.assertTrue(
+            wfo._trade_matches_replay_post_entry_filters(
+                {"net_debit": 5.49, "spread_width": 10.0},
+                playbook,
+            )[0]
+        )
+        allowed_entry, reason = wfo._trade_matches_replay_post_entry_filters(
+            {"net_debit": 5.5, "spread_width": 10.0},
+            playbook,
+        )
+        self.assertFalse(allowed_entry)
+        self.assertEqual(reason, "debit_pct_of_width_above_playbook_max")
+
     def test_replay_playbook_filters_to_bullish_mean_reversion_slice(self):
         playbook = wfo._get_replay_playbook("bullish_mean_reversion")
         allowed = {
@@ -337,6 +477,74 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertFalse(
             wfo._candidate_matches_replay_playbook({**allowed, "market_regime": "neutral"}, playbook)
         )
+
+    def test_replay_entry_signal_matches_live_pullback_uptrend_variant(self):
+        playbook = wfo._get_replay_playbook("bullish_pullback_observation")
+        day_data = {
+            "S0": 105.0,
+            "ret5": -1.5,
+            "ret20": 5.0,
+            "sma20": 106.0,
+            "sma50": 100.0,
+            "rsi14": 52.0,
+            "macd": 1.2,
+            "macd_prev": 1.0,
+        }
+
+        signal = wfo._resolve_replay_entry_signal(
+            day_data,
+            playbook,
+            {"entry_momentum": 0.5},
+            prior_close=104.0,
+        )
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal["trade_type"], "call")
+        self.assertEqual(signal["signal_family"], "bullish_pullback")
+        self.assertEqual(signal["signal_variant"], "pullback_uptrend")
+        self.assertEqual(signal["signal_ret5"], -1.5)
+        self.assertEqual(signal["signal_ret20"], 5.0)
+        self.assertGreater(signal["direction_score_override"], 0.0)
+
+        self.assertIsNone(
+            wfo._resolve_replay_entry_signal(
+                {**day_data, "S0": 99.0},
+                playbook,
+                {"entry_momentum": 0.5},
+                prior_close=104.0,
+            )
+        )
+        self.assertIsNone(
+            wfo._resolve_replay_entry_signal(
+                {**day_data, "ret20": 2.0},
+                playbook,
+                {"entry_momentum": 0.5},
+                prior_close=104.0,
+            )
+        )
+        self.assertIsNone(
+            wfo._resolve_replay_entry_signal(
+                {**day_data, "ret5": 0.3},
+                playbook,
+                {"entry_momentum": 0.5},
+                prior_close=104.0,
+            )
+        )
+
+    def test_replay_playbook_overrides_apply_live_scan_dte_and_gate_floors(self):
+        playbook = wfo._get_replay_playbook("bullish_pullback_observation")
+        config = {
+            "dte_at_entry": 21,
+            "min_confidence": 55.0,
+            "min_tech_score": 65.0,
+        }
+
+        resolved = wfo._apply_replay_playbook_config_overrides(config, playbook)
+
+        self.assertEqual(resolved["dte_at_entry"], 35)
+        self.assertEqual(resolved["min_confidence"], 0.0)
+        self.assertEqual(resolved["min_tech_score"], 0.0)
+        self.assertEqual(config["dte_at_entry"], 21)
 
     def test_replay_entry_signal_requires_trend_pullback_and_reversal_for_mean_reversion(self):
         playbook = wfo._get_replay_playbook("bullish_mean_reversion")
@@ -518,6 +726,42 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertGreater(open_ret5, 0.0)
         self.assertLess(closed_ret5, 0.0)
 
+    def test_scan_records_momentum_drop_signal_context_for_ai_commodity_lane(self):
+        dates = pd.date_range("2026-01-01", periods=400, freq="B")
+        closes = [100.0 + (0.2 if i % 2 else -0.2) for i in range(400)]
+        history = pd.DataFrame(
+            {
+                "Open": [close - 0.1 for close in closes],
+                "Close": closes,
+                "Volume": [8_000_000.0] * 400,
+            },
+            index=dates,
+        )
+
+        def fake_history(symbol, *args, **kwargs):
+            if str(symbol).upper() == "^VIX":
+                return pd.DataFrame(
+                    {"Close": [18.0, 18.1, 17.9, 18.2, 18.0]},
+                    index=pd.date_range("2026-01-01", periods=5, freq="B"),
+                )
+            return history.copy()
+
+        with patch.object(oc, "_cached_history", side_effect=fake_history), \
+             patch.object(oc, "_market_is_open", return_value=False):
+            picks = oc.scan_daily_top_trades(n_picks=1, symbols=["AA"])
+
+        self.assertEqual(picks, [])
+        drop = oc.scan_daily_top_trades._last_scan_drop_reasons["AA"]
+        self.assertEqual(drop["drop_key"], "momentum")
+        details = drop["details"]
+        self.assertEqual(details["signal_variant"], "momentum")
+        self.assertIn("ret5", details)
+        self.assertIn("price", details)
+        self.assertIn("sma20", details)
+        self.assertIn("sma50", details)
+        self.assertIn("call_entry_momentum_pct", details)
+        self.assertIn("put_entry_momentum_pct", details)
+
     def test_scan_reuses_cached_history_and_sector_between_identical_calls(self):
         tickers = {symbol: _CountingScanTicker(symbol) for symbol in ["SPY", "AAPL", "^VIX"]}
 
@@ -572,6 +816,302 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(len(tickers["AAPL"].history_calls), 2)
         # SPY history is fetched for two different periods (10d and 70d) per scan run
         self.assertEqual(len(tickers["SPY"].history_calls), 4)
+
+    def test_spread_liquidity_metrics_require_both_legs(self):
+        profile = copy.deepcopy(oc.STRATEGY_PROFILES["index"])
+        profile["filters"]["liquidity_spread_max_pct"] = 10.0
+        profile["filters"]["min_option_volume"] = 10
+        profile["filters"]["min_option_open_interest"] = 10
+
+        metrics = oc._spread_liquidity_metrics(
+            {"bid": 4.9, "ask": 5.1, "volume": 200, "open_interest": 500},
+            {"bid": 1.0, "ask": 1.8, "volume": 200, "open_interest": 500},
+            sp=profile,
+        )
+
+        self.assertEqual(metrics["spread_mid_debit"], 3.6)
+        self.assertEqual(metrics["spread_entry_debit"], 4.1)
+        self.assertTrue(metrics["is_illiquid"])
+        self.assertIn("wide_leg_spread", metrics["reasons"])
+
+    def test_ai_commodity_underlying_filter_allows_lower_share_volume_with_real_dollars(self):
+        hist = _make_close_history(length=276, start=280.0, volume=1_300_000)
+
+        broad = oc._underlying_liquidity_snapshot(hist)
+        commodity = oc._underlying_liquidity_snapshot(
+            hist,
+            filters=oc.AI_COMMODITY_UNDERLYING_FILTERS,
+        )
+
+        self.assertFalse(broad["eligible"])
+        self.assertIn("Average stock volume too low", broad["failures"])
+        self.assertTrue(commodity["eligible"])
+        self.assertEqual(commodity["liquidity_tier"], "liquid")
+
+    def test_ai_commodity_option_filter_allows_executable_commodity_spread_boundary(self):
+        broad = copy.deepcopy(oc.STRATEGY_PROFILES["equity"])
+        commodity = oc._profile_with_filter_overrides(
+            broad,
+            oc.AI_COMMODITY_OPTION_FILTERS,
+        )
+
+        broad_metrics = oc._spread_liquidity_metrics(
+            {"bid": 5.0, "ask": 5.3, "volume": 234, "open_interest": 16103, "quote_age_hours": 5.6},
+            {"bid": 2.0, "ask": 2.15, "volume": 234, "open_interest": 16103, "quote_age_hours": 5.6},
+            entry_execution={"execution_price": 3.3, "profitability_blockers": []},
+            sp=broad,
+        )
+        commodity_metrics = oc._spread_liquidity_metrics(
+            {"bid": 5.0, "ask": 5.3, "volume": 234, "open_interest": 16103, "quote_age_hours": 5.6},
+            {"bid": 2.0, "ask": 2.15, "volume": 234, "open_interest": 16103, "quote_age_hours": 5.6},
+            entry_execution={"execution_price": 3.3, "profitability_blockers": []},
+            sp=commodity,
+        )
+
+        self.assertTrue(broad_metrics["is_illiquid"])
+        self.assertIn("wide_leg_spread", broad_metrics["reasons"])
+        self.assertFalse(commodity_metrics["is_illiquid"])
+        self.assertEqual(commodity_metrics["reasons"], [])
+
+    def test_bootstrap_expectancy_exposes_ev_shortfall_without_passing_floor(self):
+        ev_pct = oc._bootstrap_heuristic_ev_pct(
+            direction_score=68.9,
+            profit_target_pct=35.0,
+            stop_loss_pct=30.0,
+        )
+        selected_ev, calibration, source = oc._select_live_expectancy(
+            calibration_lookup=None,
+            direction_score=68.9,
+            profit_target_pct=35.0,
+            stop_loss_pct=30.0,
+            min_calibrated_expectancy_pct=10.0,
+            min_ev_return_pct=5.0,
+        )
+
+        self.assertAlmostEqual(ev_pct, 1.3495, places=4)
+        self.assertIsNone(selected_ev)
+        self.assertIsNone(calibration)
+        self.assertEqual(source, "bootstrap_heuristic")
+
+    def test_fetch_best_spread_prefers_liquid_alternative_over_delta_only_pair(self):
+        expiry = "2025-04-18"
+        calls = pd.DataFrame(
+            [
+                {
+                    "contractSymbol": "AAA250418C00099000",
+                    "strike": 99.0,
+                    "bid": 5.35,
+                    "ask": 5.45,
+                    "lastPrice": 5.4,
+                    "impliedVolatility": 0.25,
+                    "volume": 500,
+                    "openInterest": 1000,
+                },
+                {
+                    "contractSymbol": "AAA250418C00100000",
+                    "strike": 100.0,
+                    "bid": 4.0,
+                    "ask": 6.0,
+                    "lastPrice": 5.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 500,
+                    "openInterest": 1000,
+                },
+                {
+                    "contractSymbol": "AAA250418C00104000",
+                    "strike": 104.0,
+                    "bid": 3.35,
+                    "ask": 3.45,
+                    "lastPrice": 3.4,
+                    "impliedVolatility": 0.25,
+                    "volume": 500,
+                    "openInterest": 1000,
+                },
+                {
+                    "contractSymbol": "AAA250418C00105000",
+                    "strike": 105.0,
+                    "bid": 2.0,
+                    "ask": 4.0,
+                    "lastPrice": 3.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 500,
+                    "openInterest": 1000,
+                },
+            ]
+        )
+        chain = SimpleNamespace(calls=calls, puts=pd.DataFrame())
+
+        with patch.object(oc, "datetime", _StrategyAuditDateTime), \
+             patch.object(oc, "_cached_options_metadata", return_value=SimpleNamespace(status="fresh", value=[expiry])), \
+             patch.object(oc, "_cached_option_chain_metadata", return_value=SimpleNamespace(status="fresh", value=chain)):
+            result = oc._fetch_best_spread(
+                "AAA",
+                "call",
+                long_delta_target=0.50,
+                short_delta_target=0.20,
+                target_dte=25,
+                stock_price=100.0,
+                hv30_fallback=0.25,
+                max_width_pct=10.0,
+                min_net_debit=0.30,
+                max_debit_pct_of_width=90.0,
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["long_leg"]["strike"], 99.0)
+        self.assertEqual(result["short_leg"]["strike"], 104.0)
+        self.assertEqual(result["spread_alternatives"][0]["long_strike"], 99.0)
+        self.assertLess(result["spread_bid_ask_pct_of_mid"], 10.0)
+
+    def test_scan_blocks_live_spread_when_short_leg_is_illiquid(self):
+        tickers = {symbol: _CountingScanTicker(symbol) for symbol in ["SPY", "AAPL", "^VIX"]}
+        bad_spread = {
+            "long_leg": {
+                "strike": 95.0, "premium": 3.0, "delta": 0.50,
+                "bid": 2.99, "ask": 3.01, "iv": None, "last": None,
+                "contract_symbol": "AAPL260417C00095000", "volume": 500, "open_interest": 1000,
+                "quote_age_hours": 0.1, "quote_basis": "mid", "live_chain": True,
+            },
+            "short_leg": {
+                "strike": 100.0, "premium": 1.5, "delta": 0.20,
+                "bid": 0.5, "ask": 2.5, "iv": None, "last": None,
+                "contract_symbol": "AAPL260417C00100000", "volume": 500, "open_interest": 1000,
+                "quote_age_hours": 0.1, "quote_basis": "mid", "live_chain": True,
+            },
+            "spread_width": 5.0,
+            "net_debit": 1.5,
+            "max_profit": 3.5,
+            "max_loss": 1.5,
+            "net_delta": 0.30,
+            "debit_pct_of_width": 30.0,
+            "risk_reward_ratio": 2.33,
+            "expiry": "2026-04-17",
+            "dte": 10,
+            "live_chain": True,
+            "options_snapshot_status": "fresh",
+            "option_chain_status": "fresh",
+        }
+
+        with patch.object(oc, "DEFAULT_WATCHLIST", ["AAPL"]), \
+             patch.object(oc.yf, "Ticker", side_effect=lambda symbol: tickers[symbol]), \
+             patch.object(oc, "_compute_tech_score_from_close_series", return_value=(80.0, 55.0, 2.0)), \
+             patch.object(oc, "_compute_direction_score", return_value=72.0), \
+             patch.object(oc, "_load_expectancy_surface_for_live", return_value=None), \
+             patch.object(oc, "_fetch_best_spread", return_value=bad_spread):
+            result = oc.scan_daily_top_trades(n_picks=1)
+
+        self.assertEqual(result, [])
+
+    def test_scan_bullish_pullback_variant_produces_exact_opra_spread_candidate(self):
+        dates = pd.date_range("2025-01-01", periods=400, freq="B")
+        closes = (
+            list(np.linspace(400.0, 580.0, 380))
+            + list(np.linspace(590.0, 660.0, 15))
+            + [658.0, 656.0, 654.0, 652.0, 650.0]
+        )
+        hist = pd.DataFrame(
+            {
+                "Open": [value - 0.5 for value in closes],
+                "Close": closes,
+                "Volume": [50_000_000.0] * len(closes),
+            },
+            index=dates,
+        )
+        spread = {
+            "strategy_type": "vertical_spread",
+            "long_leg": {
+                "strike": 650.0,
+                "premium": 20.1,
+                "delta": 0.52,
+                "bid": 20.0,
+                "ask": 20.2,
+                "last": 20.1,
+                "contract_symbol": "SPY260626C00650000",
+                "volume": 1200,
+                "open_interest": 8000,
+                "quote_age_hours": 0.1,
+                "quote_basis": "mid",
+                "data_source": "alpaca_opra",
+                "quote_source": "alpaca_opra",
+                "live_chain": True,
+                "quote_freshness_status": "fresh",
+                "options_snapshot_status": "fresh",
+                "option_chain_status": "fresh",
+            },
+            "short_leg": {
+                "strike": 680.0,
+                "premium": 10.05,
+                "delta": 0.22,
+                "bid": 10.0,
+                "ask": 10.1,
+                "last": 10.05,
+                "contract_symbol": "SPY260626C00680000",
+                "volume": 900,
+                "open_interest": 7000,
+                "quote_age_hours": 0.1,
+                "quote_basis": "mid",
+                "data_source": "alpaca_opra",
+                "quote_source": "alpaca_opra",
+                "live_chain": True,
+                "quote_freshness_status": "fresh",
+                "options_snapshot_status": "fresh",
+                "option_chain_status": "fresh",
+            },
+            "spread_width": 30.0,
+            "net_debit": 10.05,
+            "max_profit": 19.95,
+            "max_loss": 10.05,
+            "net_delta": 0.30,
+            "debit_pct_of_width": 33.5,
+            "risk_reward_ratio": 1.99,
+            "expiry": "2026-06-26",
+            "dte": 35,
+            "live_chain": True,
+            "options_data_source": "alpaca_opra",
+            "market_data_source": "alpaca_opra",
+            "quote_source": "alpaca_opra",
+            "quote_freshness_status": "fresh",
+            "options_snapshot_status": "fresh",
+            "option_chain_status": "fresh",
+        }
+
+        def fake_history(symbol, *args, **kwargs):
+            if str(symbol).upper() == "^VIX":
+                return pd.DataFrame({"Close": [18.0, 18.1, 17.9, 18.2, 18.0]}, index=pd.date_range("2026-01-01", periods=5, freq="B"))
+            return hist.copy()
+
+        with patch.object(oc, "DEFAULT_WATCHLIST", ["SPY"]), \
+             patch.object(oc, "_cached_history", side_effect=fake_history), \
+             patch.object(oc, "_market_is_open", return_value=False), \
+             patch.object(oc, "_fetch_best_spread", return_value=copy.deepcopy(spread)), \
+             patch.object(oc, "_calculate_iv_skew", return_value={"iv_crush_penalty_pts": 0.0, "iv_crush_warning": ""}), \
+             patch.object(oc, "_get_market_regime", return_value={
+                 "position_size_mult": 1.0,
+                 "stop_loss_mult": 1.0,
+                 "regime_notes": ["Normal market conditions"],
+                 "defense_mode": False,
+                 "vix": 18.0,
+                 "atr_14d": 0.015,
+             }):
+            picks = oc.scan_daily_top_trades(
+                n_picks=1,
+                symbols=["SPY"],
+                allowed_directions=["call"],
+                signal_variant="pullback_uptrend",
+                min_confidence=0.0,
+                min_tech_score=0.0,
+            )
+
+        self.assertEqual(len(picks), 1)
+        pick = picks[0]
+        self.assertEqual(pick["signal_variant"], "pullback_uptrend")
+        self.assertEqual(pick["signal_family"], "bullish_pullback")
+        self.assertEqual(pick["selection_source"], "live_chain_exact_contract")
+        self.assertEqual(pick["candidate_execution_label"], "executable_opra_paper_candidate")
+        self.assertEqual(pick["contract_symbol"], "SPY260626C00650000")
+        self.assertEqual(pick["short_contract_symbol"], "SPY260626C00680000")
+        self.assertGreater(pick["signal_ret20"], 2.0)
+        self.assertLess(pick["signal_ret5"], 0.25)
 
     def test_put_call_ratio_reuses_cached_options_data_between_calls(self):
         class _RatioTicker:
@@ -2242,6 +2782,61 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
 
         self.assertEqual([pick["ticker"] for pick in ranked], ["SPY", "QQQ"])
 
+    def test_live_policy_enforces_dense_calibration_and_expectancy_floor(self):
+        policy = {
+            "scan_policy": {
+                "promotion_status": "promote",
+                "hard_filters": {
+                    "direction_score_min": 0.0,
+                    "tech_score_min": 0.0,
+                    "approved_tickers": ["SPY", "QQQ", "IWM"],
+                    "require_dense_calibration": True,
+                    "min_calibrated_expectancy_pct": 10.0,
+                },
+                "preferred_filters": {},
+            },
+        }
+        base = {
+            "direction": "call",
+            "asset_class": "index",
+            "market_regime": "bullish",
+            "sector": "Index ETF",
+            "direction_score": 75.0,
+            "quality_score": 75.0,
+            "tech_score": 75.0,
+            "promotion_class": "promotable_exact_contract",
+        }
+        sparse = {
+            **base,
+            "ticker": "SPY",
+            "calibration_is_dense": False,
+            "calibrated_expectancy_pct": 25.0,
+        }
+        low_expectancy = {
+            **base,
+            "ticker": "QQQ",
+            "calibration_is_dense": True,
+            "calibrated_expectancy_pct": 5.0,
+        }
+        approved = {
+            **base,
+            "ticker": "IWM",
+            "calibration_is_dense": True,
+            "calibrated_expectancy_pct": 12.0,
+        }
+
+        result = ss.apply_trade_policy_to_scan(
+            [sparse, low_expectancy, approved],
+            policy=policy,
+            include_blocked=True,
+        )
+
+        self.assertEqual([pick["ticker"] for pick in result["approved_picks"]], ["IWM"])
+        self.assertEqual(result["decision_counts"], {"approved": 1, "watch": 0, "blocked": 2})
+        blocked = {pick["ticker"]: pick for pick in result["blocked_picks"]}
+        self.assertIn("sparse_calibration", blocked["SPY"]["policy_hard_failures"])
+        self.assertIn("below_calibrated_expectancy_floor", blocked["QQQ"]["policy_hard_failures"])
+
     def test_run_supervised_scan_returns_approved_only_picks_and_separate_watch_picks(self):
         class _AvailablePositionsRepo:
             is_available = True
@@ -2323,6 +2918,851 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertFalse(result["watch_picks"][0]["managed_eligible"])
         self.assertEqual(result["watch_picks"][0]["managed_block_reason"], "promotion_class:research_bootstrap")
 
+    def test_guardrails_block_duplicate_open_vertical_spread(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str):
+                return [
+                    {
+                        "status": "open",
+                        "ticker": "AAA",
+                        "direction": "call",
+                        "strategy_type": "vertical_spread",
+                        "expiry": "2026-04-17",
+                        "strike": 105.0,
+                        "short_strike": 110.0,
+                        "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                    }
+                ]
+
+        pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "short_strike": 110.0,
+            "contract_symbol": "AAA260417C00105000",
+            "short_contract_symbol": "AAA260417C00110000",
+            "direction_score": 75.0,
+            "quality_score": 75.0,
+            "tech_score": 75.0,
+            "calibrated_expectancy_pct": 18.0,
+        }
+        playbook = {
+            **ss.get_scan_playbook("short_term"),
+            "block_same_ticker": False,
+            "max_sector_open_positions": 10,
+            "max_regime_open_positions": 10,
+            "max_correlated_index_positions": 10,
+            "max_concurrent_positions": 10,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertIn("exact vertical spread", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
+        self.assertIn("vertical_spread_signature_counts", result["exposure_snapshot"])
+
+    def test_guardrails_can_disable_portfolio_caps_for_tracking_every_suggestion(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return [
+                    {
+                        "status": "open",
+                        "ticker": "AAA",
+                        "direction": "call",
+                        "strategy_type": "vertical_spread",
+                        "expiry": "2026-04-17",
+                        "strike": 105.0,
+                        "short_strike": 110.0,
+                        "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                    }
+                    for _ in range(12)
+                ]
+
+        pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "short_strike": 110.0,
+            "contract_symbol": "AAA260417C00105000",
+            "short_contract_symbol": "AAA260417C00110000",
+            "direction_score": 75.0,
+            "quality_score": 75.0,
+            "tech_score": 75.0,
+            "calibrated_expectancy_pct": 18.0,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=ss.get_scan_playbook("short_term"),
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+            enforce_portfolio_caps=False,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "clear")
+        self.assertEqual(ranked["guardrail_reasons"], [])
+        self.assertFalse(result["exposure_snapshot"]["portfolio_caps_enforced"])
+
+    def test_guardrails_preserve_blocked_candidates_for_audit_when_hidden(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return [
+                    {
+                        "status": "open",
+                        "ticker": "BBB",
+                        "direction": "call",
+                        "expiry": "2026-04-17",
+                        "strike": 100.0,
+                        "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                    }
+                ]
+
+        pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "contract_symbol": "AAA260417C00105000",
+            "direction_score": 75.0,
+            "quality_score": 75.0,
+            "tech_score": 75.0,
+        }
+        playbook = {
+            **ss.get_scan_playbook("short_term"),
+            "max_concurrent_positions": 1,
+            "max_sector_open_positions": 10,
+            "max_regime_open_positions": 10,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=False,
+        )
+
+        self.assertEqual(result["ranked_picks"], [])
+        self.assertEqual(len(result["all_ranked_picks"]), 1)
+        self.assertEqual(result["all_ranked_picks"][0]["guardrail_decision"], "blocked")
+
+    def test_run_supervised_scan_returns_candidate_audit_picks_when_guardrails_hide_all(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return [
+                    {
+                        "status": "open",
+                        "ticker": f"OPEN{idx}",
+                        "direction": "call",
+                        "expiry": "2026-04-17",
+                        "strike": 100.0,
+                        "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                    }
+                    for idx in range(4)
+                ]
+
+        def _scan_func(**kwargs):
+            return [
+                {
+                    "ticker": "AAA",
+                    "direction": "call",
+                    "type": "call",
+                    "asset_class": "equity",
+                    "sector": "Technology",
+                    "market_regime": "bullish",
+                    "expiry": "2026-04-17",
+                    "strike": 105.0,
+                    "contract_symbol": "AAA260417C00105000",
+                    "direction_score": 75.0,
+                    "quality_score": 75.0,
+                    "tech_score": 75.0,
+                }
+            ]
+
+        result = ss.run_supervised_scan(
+            scan_func=_scan_func,
+            positions_repository=_AvailablePositionsRepo(),
+            n_picks=2,
+            watchlist_size=2,
+            playbook_id="short_term",
+            use_recommended_policy=False,
+        )
+
+        self.assertEqual(result["picks"], [])
+        self.assertEqual(result["ranked_picks"], [])
+        self.assertEqual(len(result["candidate_audit_picks"]), 1)
+        self.assertEqual(result["candidate_audit_picks"][0]["guardrail_decision"], "blocked")
+
+    def test_guardrails_count_positions_opened_today_even_if_closed(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                if status == "open":
+                    return []
+                return [
+                    {
+                        "status": "closed",
+                        "ticker": "AAA",
+                        "direction": "call",
+                        "expiry": "2026-04-17",
+                        "strike": 105.0,
+                        "contracts": 1,
+                        "entry_option_price": 3.0,
+                        "filled_at": _RealDateTime.now(ss._ET).isoformat(),
+                        "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                    }
+                ]
+
+        exposure = ss.load_open_position_context(_AvailablePositionsRepo())
+
+        self.assertEqual(exposure["open_positions"], 0)
+        self.assertEqual(exposure["opened_today"], 1)
+
+    def test_guardrails_block_position_cost_risk_over_cap(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "contract_symbol": "AAA260417C00105000",
+            "entry_execution_price": 11.0,
+            "contracts": 1,
+            "direction_score": 80.0,
+            "quality_score": 80.0,
+            "tech_score": 80.0,
+        }
+        playbook = {**ss.get_scan_playbook("short_term"), "max_position_cost_risk_pct": 10.0, "account_size": 10_000}
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertIn("Position cost risk", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
+
+    def test_quality90_debit55_canary_blocks_expensive_spreads(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "SPY",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 500.0,
+            "short_strike": 510.0,
+            "net_debit": 5.6,
+            "spread_width": 10.0,
+            "quality_score": 91.0,
+            "direction_score": 80.0,
+            "tech_score": 80.0,
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
+        playbook = ss.get_scan_playbook("quality90_debit55_canary")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "blocked")
+        self.assertEqual(ranked["debit_pct_of_width"], 56.0)
+        self.assertIn("Spread debit", " ".join(ranked["guardrail_reasons"]))
+
+    def test_quality90_debit55_canary_tags_clear_candidate_pick(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "QQQ",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 430.0,
+            "short_strike": 440.0,
+            "net_debit": 5.49,
+            "spread_width": 10.0,
+            "quality_score": 91.0,
+            "direction_score": 80.0,
+            "tech_score": 80.0,
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
+        playbook = ss.get_scan_playbook("quality90_debit55_canary")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "clear")
+        self.assertFalse(ranked.get("observation_only", False))
+        self.assertEqual(ranked["cohort_id"], "quality90_debit55_canary")
+        self.assertEqual(ranked["cohort_role"], "candidate")
+        self.assertEqual(ranked["suggested_size_tier"], "starter")
+        self.assertEqual(playbook["lane_role"], "proof_control_yardstick")
+        self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
+
+    def test_tracked_winner_observation_tags_broad_winner_shape(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "GOOGL",
+            "asset_class": "equity",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 320.0,
+            "short_strike": 345.0,
+            "spread_width": 25.0,
+            "net_debit": 7.5,
+            "market_regime": "bullish",
+            "quality_score": 60.5,
+            "direction_score": 87.0,
+            "tech_score": 78.0,
+        }
+        playbook = ss.get_scan_playbook("tracked_winner_observation")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "clear")
+        self.assertFalse(ranked.get("observation_only", False))
+        self.assertEqual(ranked["cohort_id"], "tracked_winner_observation")
+        self.assertEqual(ranked["cohort_role"], "candidate")
+        self.assertEqual(ranked["suggested_size_tier"], "starter")
+
+    def test_tracked_winner_observation_blocks_expensive_or_wrong_shape(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        playbook = ss.get_scan_playbook("tracked_winner_observation")
+        expensive = {
+            "ticker": "SPY",
+            "asset_class": "index",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 700.0,
+            "short_strike": 720.0,
+            "spread_width": 20.0,
+            "net_debit": 9.0,
+            "market_regime": "bullish",
+            "quality_score": 95.0,
+            "direction_score": 80.0,
+        }
+        wrong_strategy = {
+            **expensive,
+            "net_debit": 3.0,
+            "strategy_type": "single_leg",
+            "short_strike": None,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [expensive, wrong_strategy],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])
+        self.assertIn("Spread debit", reasons)
+        self.assertIn("only allows strategies", reasons)
+
+    def test_bullish_pullback_observation_exposes_broad_live_opra_universe(self):
+        playbook = ss.get_scan_playbook("bullish_pullback_observation")
+
+        self.assertEqual(playbook["scan_tickers"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(playbook["allowed_tickers"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(oc.DEFAULT_WATCHLIST, list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertIn("AAPL", playbook["scan_tickers"])
+        self.assertIn("NVDA", playbook["scan_tickers"])
+        self.assertIn("TSLA", playbook["scan_tickers"])
+        self.assertEqual(playbook["expansion_tickers"], list(ss.BULLISH_PULLBACK_EXPANSION_TICKERS))
+        self.assertEqual(playbook["historical_data_ready_tickers"], ["SPY", "QQQ"])
+        self.assertEqual(playbook["signal_variant"], "pullback_uptrend")
+        self.assertEqual(playbook["lane_role"], "primary_profit_candidate")
+        self.assertEqual(playbook["proof_yardstick_playbook"], "quality90_debit55_canary")
+        self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
+        self.assertFalse(playbook.get("observation_only", False))
+
+    def test_bullish_pullback_observation_requires_executable_opra_candidate(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        base = {
+            "ticker": "SPY",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 650.0,
+            "short_strike": 680.0,
+            "spread_width": 30.0,
+            "net_debit": 12.0,
+            "market_regime": "neutral",
+            "quality_score": 50.0,
+            "direction_score": 78.0,
+            "tech_score": 42.0,
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
+        fallback = {**base, "ticker": "QQQ", "candidate_execution_label": "fallback_delayed"}
+        off_universe = {**base, "ticker": "IBM"}
+        playbook = ss.get_scan_playbook("bullish_pullback_observation")
+
+        result = ss.apply_playbook_guardrails(
+            [base, fallback, off_universe],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        by_ticker = {pick["ticker"]: pick for pick in result["ranked_picks"]}
+        self.assertEqual(by_ticker["SPY"]["guardrail_decision"], "clear")
+        self.assertFalse(by_ticker["SPY"].get("observation_only", False))
+        self.assertEqual(by_ticker["SPY"]["cohort_id"], "bullish_pullback_observation")
+        self.assertEqual(by_ticker["SPY"]["cohort_role"], "primary")
+        self.assertEqual(by_ticker["SPY"]["suggested_size_tier"], "starter")
+        self.assertEqual(by_ticker["QQQ"]["guardrail_decision"], "blocked")
+        self.assertEqual(by_ticker["IBM"]["guardrail_decision"], "blocked")
+        reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])
+        self.assertIn("requires executable_opra_paper_candidate", reasons)
+        self.assertIn("only runs on tickers", reasons)
+
+    def test_bearish_index_put_observation_tags_clear_put_spread(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "SPY",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "direction": "put",
+            "strategy_type": "vertical_spread",
+            "strike": 700.0,
+            "short_strike": 675.0,
+            "spread_width": 25.0,
+            "net_debit": 12.5,
+            "market_regime": "bearish",
+            "quality_score": 72.0,
+            "direction_score": 80.0,
+            "tech_score": 75.0,
+        }
+        playbook = ss.get_scan_playbook("bearish_index_put_observation")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "clear")
+        self.assertFalse(ranked.get("observation_only", False))
+        self.assertEqual(ranked["cohort_id"], "bearish_index_put_observation")
+        self.assertEqual(ranked["cohort_role"], "candidate")
+        self.assertEqual(ranked["suggested_size_tier"], "starter")
+
+    def test_bearish_index_put_observation_blocks_wrong_direction_or_regime(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        base = {
+            "ticker": "SPY",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "strategy_type": "vertical_spread",
+            "strike": 700.0,
+            "short_strike": 675.0,
+            "spread_width": 25.0,
+            "net_debit": 12.5,
+            "quality_score": 72.0,
+            "direction_score": 80.0,
+            "tech_score": 75.0,
+        }
+        call_pick = {**base, "direction": "call", "market_regime": "bearish"}
+        bullish_pick = {**base, "direction": "put", "market_regime": "bullish"}
+        playbook = ss.get_scan_playbook("bearish_index_put_observation")
+
+        result = ss.apply_playbook_guardrails(
+            [call_pick, bullish_pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])
+        self.assertIn("only allows directions", reasons)
+        self.assertIn("only runs in bearish regimes", reasons)
+
+    def test_range_breakout_observation_allows_neutral_index_verticals(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "QQQ",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 650.0,
+            "short_strike": 680.0,
+            "spread_width": 30.0,
+            "net_debit": 15.0,
+            "market_regime": "neutral",
+            "quality_score": 70.0,
+            "direction_score": 78.0,
+            "tech_score": 73.0,
+        }
+        playbook = ss.get_scan_playbook("range_breakout_observation")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "clear")
+        self.assertFalse(ranked.get("observation_only", False))
+        self.assertEqual(ranked["cohort_id"], "range_breakout_observation")
+        self.assertEqual(ranked["cohort_role"], "candidate")
+
+    def test_ai_commodity_infra_observation_exposes_liquid_universe(self):
+        playbook = ss.get_scan_playbook("ai_commodity_infra_observation")
+
+        self.assertEqual(playbook["id"], "ai_commodity_infra_observation")
+        self.assertFalse(playbook.get("observation_only", False))
+        self.assertEqual(playbook["allowed_directions"], ["call", "put"])
+        self.assertEqual(playbook["allowed_strategy_types"], ["vertical_spread"])
+        self.assertEqual(playbook["max_debit_pct_of_width"], 55.0)
+        self.assertEqual(playbook["core_tickers"], list(ss.AI_COMMODITY_INFRA_CORE_TICKERS))
+        self.assertEqual(playbook["conditional_tickers"], list(ss.AI_COMMODITY_INFRA_CONDITIONAL_TICKERS))
+        self.assertIn("historical_data_ready_tickers", playbook)
+        self.assertIn("FCX", playbook["allowed_tickers"])
+        self.assertIn("SLV", playbook["allowed_tickers"])
+        self.assertIn("VRT", playbook["allowed_tickers"])
+        self.assertIn("CCJ", playbook["scan_tickers"])
+        self.assertIn("PWR", playbook["scan_tickers"])
+        self.assertNotIn("CPER", playbook["scan_tickers"])
+        self.assertNotIn("LIT", playbook["scan_tickers"])
+
+    def test_ai_commodity_replay_playbook_matches_scan_universe(self):
+        playbook = wfo.REPLAY_PLAYBOOKS["ai_commodity_infra_observation"]
+
+        self.assertEqual(playbook["allowed_tickers"], list(ss.AI_COMMODITY_INFRA_TICKERS))
+        self.assertEqual(playbook["historical_required_underlyings"], list(ss.AI_COMMODITY_INFRA_TICKERS))
+        self.assertIn("ALB", playbook["allowed_tickers"])
+        self.assertIn("XME", playbook["historical_required_underlyings"])
+
+    def test_ai_commodity_infra_observation_tags_clear_pick_and_blocks_wrong_shape(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        playbook = {
+            **ss.get_scan_playbook("ai_commodity_infra_observation"),
+            "historical_data_ready_tickers": ["FCX"],
+        }
+        clear = {
+            "ticker": "FCX",
+            "asset_class": "equity",
+            "sector": "Basic Materials",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 55.0,
+            "short_strike": 60.0,
+            "spread_width": 5.0,
+            "net_debit": 2.25,
+            "market_regime": "neutral",
+            "quality_score": 74.0,
+            "direction_score": 80.0,
+            "tech_score": 76.0,
+        }
+        wrong_ticker = {**clear, "ticker": "NVDA"}
+        expensive = {**clear, "ticker": "SLV", "asset_class": "index", "net_debit": 3.0}
+        missing_history = {**clear, "ticker": "ALB", "asset_class": "equity"}
+
+        result = ss.apply_playbook_guardrails(
+            [clear, wrong_ticker, expensive, missing_history],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        by_ticker = {pick["ticker"]: pick for pick in result["ranked_picks"]}
+        self.assertEqual(by_ticker["FCX"]["guardrail_decision"], "clear")
+        self.assertFalse(by_ticker["FCX"].get("observation_only", False))
+        self.assertEqual(by_ticker["FCX"]["cohort_id"], "ai_commodity_infra_observation")
+        self.assertEqual(by_ticker["FCX"]["cohort_role"], "candidate")
+        self.assertEqual(by_ticker["FCX"]["suggested_size_tier"], "starter")
+        self.assertTrue(by_ticker["FCX"]["historical_data_ready"])
+        self.assertEqual(by_ticker["FCX"]["ai_commodity_bucket"], "core_options")
+        self.assertEqual(by_ticker["ALB"]["guardrail_decision"], "caution")
+        self.assertFalse(by_ticker["ALB"]["historical_data_ready"])
+        self.assertEqual(by_ticker["ALB"]["ai_commodity_bucket"], "conditional_options")
+
+        reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])
+        self.assertIn("only runs on tickers", reasons)
+        self.assertIn("Spread debit", reasons)
+        self.assertIn("no trusted daily EOD option history", reasons)
+
+    def test_supervised_scan_passes_playbook_symbols_to_scan_func(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        captured: dict[str, object] = {}
+
+        def _scan_func(**kwargs):
+            captured.update(kwargs)
+            return []
+
+        ss.run_supervised_scan(
+            scan_func=_scan_func,
+            positions_repository=_AvailablePositionsRepo(),
+            n_picks=2,
+            watchlist_size=2,
+            playbook_id="ai_commodity_infra_observation",
+            use_recommended_policy=False,
+        )
+
+        self.assertEqual(captured["symbols"], list(ss.AI_COMMODITY_INFRA_TICKERS))
+
+    def test_supervised_scan_passes_playbook_allowed_directions_to_scan_func(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        captured: dict[str, object] = {}
+
+        def _scan_func(**kwargs):
+            captured.update(kwargs)
+            return []
+
+        ss.run_supervised_scan(
+            scan_func=_scan_func,
+            positions_repository=_AvailablePositionsRepo(),
+            n_picks=2,
+            watchlist_size=2,
+            playbook_id="bearish_index_put_observation",
+            use_recommended_policy=False,
+        )
+
+        self.assertEqual(captured["allowed_directions"], ["put"])
+
+    def test_supervised_scan_passes_bullish_pullback_scan_controls(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        captured: dict[str, object] = {}
+
+        def _scan_func(**kwargs):
+            captured.update(kwargs)
+            return []
+
+        result = ss.run_supervised_scan(
+            scan_func=_scan_func,
+            positions_repository=_AvailablePositionsRepo(),
+            n_picks=2,
+            watchlist_size=2,
+            playbook_id="bullish_pullback_observation",
+            use_recommended_policy=False,
+        )
+
+        self.assertEqual(captured["symbols"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(captured["allowed_directions"], ["call"])
+        self.assertEqual(captured["signal_variant"], "pullback_uptrend")
+        self.assertEqual(captured["min_confidence"], 0.0)
+        self.assertEqual(captured["min_tech_score"], 0.0)
+        readiness = result["data_readiness"]
+        self.assertEqual(readiness["historical_data_ready_tickers"], ["SPY", "QQQ"])
+        self.assertEqual(
+            [item["ticker"] for item in readiness["research_only_tickers"]],
+            list(ss.BULLISH_PULLBACK_EXPANSION_TICKERS),
+        )
+
+    def test_guardrails_block_same_scan_duplicate_vertical_spread(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str):
+                return []
+
+        base_pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "short_strike": 110.0,
+            "contract_symbol": "AAA260417C00105000",
+            "short_contract_symbol": "AAA260417C00110000",
+            "direction_score": 80.0,
+            "quality_score": 80.0,
+            "tech_score": 80.0,
+            "calibrated_expectancy_pct": 20.0,
+        }
+        duplicate_pick = {**base_pick, "direction_score": 74.0, "quality_score": 74.0}
+        playbook = {
+            **ss.get_scan_playbook("short_term"),
+            "block_same_ticker": False,
+            "max_scan_picks_per_ticker": 5,
+            "max_sector_open_positions": 10,
+            "max_regime_open_positions": 10,
+            "max_concurrent_positions": 10,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [base_pick, duplicate_pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        decisions = [pick["guardrail_decision"] for pick in result["ranked_picks"]]
+        self.assertEqual(decisions.count("clear"), 1)
+        self.assertEqual(decisions.count("blocked"), 1)
+        blocked = next(pick for pick in result["ranked_picks"] if pick["guardrail_decision"] == "blocked")
+        self.assertIn("same exact vertical spread", " ".join(blocked["guardrail_reasons"]))
+
+    def test_guardrails_block_same_scan_ticker_cluster(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str):
+                return []
+
+        first = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "contract_symbol": "AAA260417C00105000",
+            "direction_score": 80.0,
+            "quality_score": 80.0,
+            "tech_score": 80.0,
+            "calibrated_expectancy_pct": 20.0,
+        }
+        second = {**first, "strike": 110.0, "contract_symbol": "AAA260417C00110000", "direction_score": 74.0}
+        playbook = {
+            **ss.get_scan_playbook("short_term"),
+            "block_same_ticker": True,
+            "max_sector_open_positions": 10,
+            "max_regime_open_positions": 10,
+            "max_concurrent_positions": 10,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [first, second],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        blocked = next(pick for pick in result["ranked_picks"] if pick["guardrail_decision"] == "blocked")
+        self.assertIn("same-scan ticker cap", " ".join(blocked["guardrail_reasons"]))
+
     def test_scan_daily_top_trades_skips_equity_when_earnings_lookup_fails(self):
         with patch.object(oc, "DEFAULT_WATCHLIST", ["AAA", "SPY"]), \
              patch.object(oc.yf, "Ticker", side_effect=lambda symbol: _ScanTicker(symbol)), \
@@ -2355,6 +3795,23 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertFalse(preferred["preferred_evidence_source"]["fallback_used"])
         self.assertEqual(preferred["preferred_evidence_source"]["status"], wfo.ARCHIVED_EXACT_PRIMARY_STATUS)
         self.assertEqual(preferred["evidence_status"], wfo.ARCHIVED_EXACT_PRIMARY_STATUS)
+
+    def test_preferred_loader_marks_any_pending_archived_forward_truth_stale(self):
+        archived = {
+            "truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE,
+            "candidate_source": wfo.FORWARD_LEDGER_SCAN_CANDIDATE_SOURCE,
+            "primary_judge_trade_class": "exact_archived_contract",
+            "primary_judge_trade_count": 30,
+            "pending_truth_horizon_count": 1,
+        }
+        fallback = {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE}
+        with patch.object(wfo, "load_last_archived_forward_daily_results", return_value=archived), \
+             patch.object(wfo, "load_last_imported_daily_results", return_value=fallback):
+            preferred = wfo.load_preferred_results_by_truth_lane(wfo.IMPORTED_DAILY_TRUTH_SOURCE)
+
+        self.assertEqual(preferred["evidence_status"], wfo.ARCHIVED_EXACT_PRIMARY_STATUS)
+        self.assertEqual(preferred["truth_window_status"], "stale")
+        self.assertEqual(preferred["preferred_evidence_source"]["truth_window_status"], "stale")
 
     def test_preferred_loader_keeps_archived_forward_primary_when_insufficient(self):
         fallback = {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE}

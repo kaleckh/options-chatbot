@@ -2,7 +2,7 @@
 #  python3
 """
 Options Trading Engine
-Powered by Yahoo Finance (yfinance)
+Powered by Alpaca SIP/OPRA market data
 
 Specializes in:
 - US large-cap stocks and ETFs with high options liquidity
@@ -34,12 +34,23 @@ import pandas as pd
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import yfinance as yf
+from ai_commodity_universe import ai_commodity_index_like_tickers, ai_commodity_scan_tickers
+from lane_universe_manifest import lane_universe_symbols
+from alpaca_market_data import (
+    ALPACA_OPTIONS_SOURCE,
+    alpaca_provider_requested,
+    make_alpaca_ticker_factory,
+    primary_provider_label,
+)
 import market_data_service as _mds
 from options_execution import (
     commission_total_usd,
     executable_option_price,
+    executable_vertical_spread_entry,
     profitability_status_with_blockers,
+    quote_midpoint,
 )
+from us_equity_market_calendar import is_us_equity_market_day
 
 from expectancy_calibration import (
     DEFAULT_SHRINKAGE_TRADES,
@@ -93,9 +104,25 @@ def _entry_quote_snapshot_from_candidate(candidate: dict[str, Any]) -> dict[str,
         "promotion_class": candidate.get("promotion_class"),
         "underlying_price": candidate.get("underlying_price_at_selection"),
         "quote_basis": candidate.get("quote_basis"),
+        "market_data_provider": candidate.get("market_data_provider"),
+        "market_data_source": candidate.get("market_data_source"),
+        "underlying_data_source": candidate.get("underlying_data_source"),
+        "options_data_source": candidate.get("options_data_source"),
+        "quote_source": candidate.get("quote_source"),
         "quote_freshness_status": candidate.get("quote_freshness_status"),
+        "quote_timestamp_utc": candidate.get("quote_timestamp_utc"),
+        "quote_timestamp_et": candidate.get("quote_timestamp_et"),
+        "quote_timestamp_source": candidate.get("quote_timestamp_source"),
         "options_snapshot_status": candidate.get("options_snapshot_status"),
         "option_chain_status": candidate.get("option_chain_status"),
+        "iv_rank_source": candidate.get("iv_rank_source"),
+        "iv_rank_proof_grade": candidate.get("iv_rank_proof_grade"),
+        "iv_rank_quality_flag": candidate.get("iv_rank_quality_flag"),
+        "data_quality_status": candidate.get("data_quality_status"),
+        "data_quality_flags": candidate.get("data_quality_flags"),
+        "pricing_evidence_class": candidate.get("pricing_evidence_class"),
+        "profitability_evidence_class": candidate.get("profitability_evidence_class"),
+        "source_separation": candidate.get("source_separation"),
         "entry_execution_price": candidate.get("entry_execution_price"),
         "entry_execution_basis": candidate.get("entry_execution_basis"),
         "entry_fee_total_usd": candidate.get("entry_fee_total_usd"),
@@ -121,6 +148,8 @@ def _entry_quote_snapshot_from_candidate(candidate: dict[str, Any]) -> dict[str,
                 "last": candidate.get("last"),
                 "mid": candidate.get("mid"),
                 "quote_basis": candidate.get("quote_basis"),
+                "quote_source": candidate.get("quote_source"),
+                "data_source": candidate.get("options_data_source") or candidate.get("market_data_source"),
                 "quote_age_hours": candidate.get("quote_age_hours"),
                 "volume": candidate.get("contract_volume"),
                 "open_interest": candidate.get("contract_open_interest"),
@@ -129,10 +158,58 @@ def _entry_quote_snapshot_from_candidate(candidate: dict[str, Any]) -> dict[str,
         snapshot["display_price"] = candidate.get("mid")
     return snapshot
 
+
+def _spread_entry_execution_basis(spread_payload: dict[str, Any]) -> str:
+    leg_bases: list[str] = []
+    for leg_key in ("long_leg", "short_leg"):
+        leg = spread_payload.get(leg_key)
+        if isinstance(leg, dict):
+            basis = str(leg.get("quote_basis") or "").strip().lower()
+            if basis:
+                leg_bases.append(basis)
+    unique_bases = {basis for basis in leg_bases if basis}
+    if len(unique_bases) == 1:
+        basis = next(iter(unique_bases))
+        if basis in {"mid", "last", "model"}:
+            return f"spread_{basis}"
+    quote_basis = str(spread_payload.get("quote_basis") or "").strip().lower()
+    if quote_basis in {"mid", "last", "model"}:
+        return f"spread_{quote_basis}"
+    return "spread_net_debit"
+
+
+def _normalize_spread_entry_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    if str(candidate.get("strategy_type") or "").strip().lower() != "vertical_spread":
+        return candidate
+    try:
+        spread_debit = round(float(candidate.get("net_debit")), 4)
+    except (TypeError, ValueError):
+        return candidate
+    if spread_debit <= 0:
+        return candidate
+    existing_execution = candidate.get("entry_execution_price")
+    existing_basis = str(candidate.get("entry_execution_basis") or "").strip().lower()
+    has_explicit_execution_context = (
+        "entry_profitability_blockers" in candidate
+        or "entry_display_price" in candidate
+        or "entry_display_basis" in candidate
+    )
+    if (
+        (existing_execution is None and not has_explicit_execution_context)
+        or existing_basis in {"ask", "bid", "mid", "last", "model", "spread_mid", "spread_last", "spread_model", "spread_net_debit"}
+    ):
+        candidate["entry_execution_price"] = spread_debit
+        candidate["entry_execution_basis"] = _spread_entry_execution_basis(candidate)
+    if candidate.get("mid") is None:
+        candidate["mid"] = spread_debit
+    if candidate.get("est_premium") is None:
+        candidate["est_premium"] = spread_debit
+    return candidate
+
 def _market_is_open() -> bool:
     """Return True only if US equities market is currently in regular session (9:30–16:00 ET, Mon–Fri)."""
     now = datetime.now(_ET)
-    if now.weekday() >= 5:
+    if not is_us_equity_market_day(now.date()):
         return False
     open_  = now.replace(hour=9,  minute=30, second=0, microsecond=0)
     close_ = now.replace(hour=16, minute=0,  second=0, microsecond=0)
@@ -153,32 +230,51 @@ UNDERLYING_FILTERS = {
     "avg_volume_20d_min": 3_000_000,
     "avg_dollar_volume_20d_min": 250_000_000,
 }
+AI_COMMODITY_UNDERLYING_FILTERS = {
+    **UNDERLYING_FILTERS,
+    "avg_volume_20d_min": 1_000_000,
+    "avg_dollar_volume_20d_min": 100_000_000,
+}
+AI_COMMODITY_OPTION_FILTERS = {
+    "liquidity_spread_max_pct": 8.0,
+    "spread_liquidity_slippage_max_pct": 10.0,
+    "min_option_volume": 1,
+    "min_option_open_interest": 50,
+    "max_option_quote_age_hours": 8.0,
+}
 
-DEFAULT_WATCHLIST = [
-    # ── Validated with imported daily historical data ─────────────────────────
-    "SPY", "QQQ",
-    # ── Index ETFs (same index profile as SPY/QQQ) ───────────────────────────
-    "IWM", "DIA", "XLK",
-    # ── Mega-cap equities (equity profile, paper-trade validation) ────────────
+_DEFAULT_BULLISH_PULLBACK_WATCHLIST = [
+    "SPY", "QQQ", "IWM", "DIA", "XLK",
     "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META",
     "AMD", "NFLX", "JPM", "TSLA",
-]
-
-# Full universe — re-enable as each ticker is validated with real option data
-_EXPANSION_WATCHLIST = [
-    "IWM", "DIA", "XLK",
-    "AAPL", "NVDA", "MSFT", "META", "AMD",
-    "GOOGL", "NFLX", "DIS", "T", "CMCSA",
-    "JPM", "GS", "BAC", "V", "C",
+    "DIS", "T", "CMCSA",
+    "GS", "BAC", "V", "C",
     "UNH", "LLY", "JNJ", "ABBV", "PFE",
     "XOM", "CVX", "OXY", "COP", "SLB",
-    "TSLA", "AMZN", "MCD", "NKE", "SBUX",
+    "MCD", "NKE", "SBUX",
     "WMT", "KO", "COST", "PG", "PM",
     "CAT", "BA", "DE", "LMT", "RTX",
     "FCX", "NEM", "CLF", "AA", "LIN",
     "AMT", "PLD", "SPG", "WELL", "EQR",
     "COIN", "MSTR", "PLTR", "ARM", "SMCI",
 ]
+DEFAULT_WATCHLIST = list(
+    lane_universe_symbols(
+        "bullish_pullback_observation",
+        fallback=_DEFAULT_BULLISH_PULLBACK_WATCHLIST,
+    )
+)
+
+# Full universe — re-enable as each ticker is validated with real option data
+AI_COMMODITY_INFRA_WATCHLIST = list(ai_commodity_scan_tickers())
+
+_EXPANSION_WATCHLIST = list(
+    lane_universe_symbols(
+        "bullish_pullback_observation",
+        tiers=["expansion_candidates"],
+        fallback=[symbol for symbol in _DEFAULT_BULLISH_PULLBACK_WATCHLIST if symbol not in {"SPY", "QQQ"}],
+    )
+)
 
 # High-beta names most likely to make the big % moves needed for 2x options gains
 HIGH_BETA_WATCHLIST = [
@@ -187,12 +283,53 @@ HIGH_BETA_WATCHLIST = [
     "LLY", "OXY", "FCX", "CLF",   # high-IV / high-beta additions
 ]
 
-# Tickers treated as broad-market indexes (use index strategy profile, no earnings filter)
-INDEX_TICKERS = {"QQQ", "SPY", "IWM", "DIA", "XLK"}
+# Tickers treated as ETF/index-style instruments (use index strategy profile, no earnings filter)
+_BASE_INDEX_TICKERS = {"QQQ", "SPY", "IWM", "DIA", "XLK"}
+INDEX_TICKERS = _BASE_INDEX_TICKERS | set(ai_commodity_index_like_tickers())
 
 def _asset_class(ticker: str) -> str:
     """'index' for broad-market ETFs, 'equity' for everything else."""
     return "index" if ticker.upper() in INDEX_TICKERS else "equity"
+
+
+def _market_ticker_factory():
+    if alpaca_provider_requested():
+        return make_alpaca_ticker_factory(fallback_factory=None)
+    return yf.Ticker
+
+
+def _data_source_from(value: Any, default: str | None = None) -> str | None:
+    for attr in ("market_data_source", "data_source", "quote_source", "source", "snapshot_source"):
+        try:
+            raw = getattr(value, attr)
+        except Exception:
+            raw = None
+        if raw:
+            return str(raw)
+    if isinstance(value, dict):
+        for key in ("market_data_source", "data_source", "quote_source", "source", "snapshot_source"):
+            raw = value.get(key)
+            if raw:
+                return str(raw)
+    try:
+        attrs = getattr(value, "attrs", {}) or {}
+        raw = attrs.get("market_data_source") or attrs.get("data_source")
+        if raw:
+            return str(raw)
+    except Exception:
+        pass
+    return default
+
+
+def _row_data_source(row: Any, default: str | None = None) -> str | None:
+    for key in ("data_source", "quote_source", "market_data_source", "snapshot_source", "source"):
+        try:
+            raw = row.get(key)
+        except Exception:
+            raw = None
+        if raw:
+            return str(raw)
+    return default
 
 
 def _cached_history(
@@ -209,36 +346,36 @@ def _cached_history(
         start=start,
         end=end,
         interval=interval,
-        ticker_factory=yf.Ticker,
+        ticker_factory=_market_ticker_factory(),
     )
 
 
 def _cached_ticker_info(symbol: str) -> dict:
-    return _md_get_ticker_info(symbol, ticker_factory=yf.Ticker)
+    return _md_get_ticker_info(symbol, ticker_factory=_market_ticker_factory())
 
 
 def _cached_earnings_dates(symbol: str) -> pd.DataFrame:
-    return _md_get_earnings_dates(symbol, ticker_factory=yf.Ticker)
+    return _md_get_earnings_dates(symbol, ticker_factory=_market_ticker_factory())
 
 
 def _cached_options(symbol: str) -> list[str]:
-    return _md_get_options(symbol, ticker_factory=yf.Ticker)
+    return _md_get_options(symbol, ticker_factory=_market_ticker_factory())
 
 
 def _cached_options_metadata(symbol: str):
-    return _md_get_options(symbol, ticker_factory=yf.Ticker, include_metadata=True)
+    return _md_get_options(symbol, ticker_factory=_market_ticker_factory(), include_metadata=True)
 
 
 def _cached_option_chain(symbol: str, expiry: str):
-    return _md_get_option_chain(symbol, expiry, ticker_factory=yf.Ticker)
+    return _md_get_option_chain(symbol, expiry, ticker_factory=_market_ticker_factory())
 
 
 def _cached_option_chain_metadata(symbol: str, expiry: str):
-    return _md_get_option_chain(symbol, expiry, ticker_factory=yf.Ticker, include_metadata=True)
+    return _md_get_option_chain(symbol, expiry, ticker_factory=_market_ticker_factory(), include_metadata=True)
 
 
 def _cached_fast_info(symbol: str):
-    return _md_get_fast_info(symbol, ticker_factory=yf.Ticker)
+    return _md_get_fast_info(symbol, ticker_factory=_market_ticker_factory())
 
 
 def _next_earnings_datetime_from_info(info: Optional[dict]) -> datetime | None:
@@ -308,8 +445,14 @@ def _market_data_scoped(fn):
     return _wrapped
 
 
-def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WINDOW) -> dict:
+def _underlying_liquidity_snapshot(
+    hist,
+    window: int = UNDERLYING_LIQUIDITY_WINDOW,
+    *,
+    filters: Optional[dict] = None,
+) -> dict:
     """Summarize whether an underlying is seasoned and liquid enough to trade."""
+    active_filters = {**UNDERLYING_FILTERS, **dict(filters or {})}
     if hist is None or hist.empty or "Close" not in hist or "Volume" not in hist:
         return {
             "eligible": False,
@@ -317,6 +460,7 @@ def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WIND
             "avg_volume_20d": 0.0,
             "avg_dollar_volume_20d": 0.0,
             "liquidity_tier": "insufficient",
+            "filter_thresholds": active_filters,
             "failures": ["Missing close/volume history"],
         }
 
@@ -328,6 +472,7 @@ def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WIND
             "avg_volume_20d": 0.0,
             "avg_dollar_volume_20d": 0.0,
             "liquidity_tier": "insufficient",
+            "filter_thresholds": active_filters,
             "failures": ["Missing close history"],
         }
 
@@ -338,16 +483,16 @@ def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WIND
     avg_dollar_volume_20d = float((closes.tail(calc_window) * volumes.tail(calc_window)).mean()) if calc_window else 0.0
 
     failures: list[str] = []
-    if history_days < int(UNDERLYING_FILTERS["history_days_min"]):
+    if history_days < int(active_filters["history_days_min"]):
         failures.append("Insufficient trading history")
-    if avg_volume_20d < float(UNDERLYING_FILTERS["avg_volume_20d_min"]):
+    if avg_volume_20d < float(active_filters["avg_volume_20d_min"]):
         failures.append("Average stock volume too low")
-    if avg_dollar_volume_20d < float(UNDERLYING_FILTERS["avg_dollar_volume_20d_min"]):
+    if avg_dollar_volume_20d < float(active_filters["avg_dollar_volume_20d_min"]):
         failures.append("Average dollar volume too low")
 
     if avg_volume_20d >= 10_000_000 and avg_dollar_volume_20d >= 1_000_000_000:
         tier = "elite"
-    elif avg_volume_20d >= float(UNDERLYING_FILTERS["avg_volume_20d_min"]) and avg_dollar_volume_20d >= float(UNDERLYING_FILTERS["avg_dollar_volume_20d_min"]):
+    elif avg_volume_20d >= float(active_filters["avg_volume_20d_min"]) and avg_dollar_volume_20d >= float(active_filters["avg_dollar_volume_20d_min"]):
         tier = "liquid"
     else:
         tier = "thin"
@@ -358,6 +503,7 @@ def _underlying_liquidity_snapshot(hist, window: int = UNDERLYING_LIQUIDITY_WIND
         "avg_volume_20d": round(avg_volume_20d, 0),
         "avg_dollar_volume_20d": round(avg_dollar_volume_20d, 2),
         "liquidity_tier": tier,
+        "filter_thresholds": active_filters,
         "failures": failures,
     }
 
@@ -404,11 +550,140 @@ def _candidate_signal_value(candidate: dict) -> float:
     return float(candidate.get("direction_score", 0.0) or 0.0)
 
 
+def _is_opra_backed_source(value: Any) -> bool:
+    source = str(value or "").strip().lower()
+    if not source:
+        return False
+    if source == ALPACA_OPTIONS_SOURCE:
+        return True
+    return "alpaca" in source and "opra" in source
+
+
+def _candidate_execution_label(candidate: dict[str, Any] | None) -> str:
+    candidate = candidate or {}
+    sources = {
+        str(candidate.get("options_data_source") or "").strip().lower(),
+        str(candidate.get("market_data_source") or "").strip().lower(),
+        str(candidate.get("quote_source") or "").strip().lower(),
+    }
+    if any("yahoo" in source or "fallback" in source for source in sources if source):
+        return "fallback_delayed"
+
+    liquidity = candidate.get("spread_liquidity")
+    if isinstance(liquidity, dict) and liquidity.get("is_illiquid"):
+        return "rejected_liquidity"
+
+    selection_source = str(
+        candidate.get("selection_source")
+        or candidate.get("contract_selection_source")
+        or ""
+    ).strip().lower()
+    quote_status = str(candidate.get("quote_freshness_status") or "").strip().lower()
+    entry_basis = str(candidate.get("entry_execution_basis") or "").strip().lower()
+    entry_price = _finite_float(candidate.get("entry_execution_price"))
+    strategy_type = str(candidate.get("strategy_type") or "").strip().lower()
+
+    if strategy_type == "vertical_spread":
+        long_leg: dict[str, Any] | None = None
+        short_leg: dict[str, Any] | None = None
+        for leg in list(candidate.get("legs") or []):
+            if not isinstance(leg, dict):
+                continue
+            role = str(leg.get("role") or "").strip().lower()
+            if role == "long":
+                long_leg = leg
+            elif role == "short":
+                short_leg = leg
+        if not isinstance(long_leg, dict) or not isinstance(short_leg, dict):
+            return "research_only"
+        has_contracts = bool(long_leg.get("contract_symbol") and short_leg.get("contract_symbol"))
+        has_quotes = (
+            quote_midpoint(bid=long_leg.get("bid"), ask=long_leg.get("ask")) is not None
+            and quote_midpoint(bid=short_leg.get("bid"), ask=short_leg.get("ask")) is not None
+        )
+        opra_backed = (
+            _is_opra_backed_source(_data_source_from(long_leg, candidate.get("options_data_source")))
+            and _is_opra_backed_source(_data_source_from(short_leg, candidate.get("options_data_source")))
+        )
+        blockers = {
+            str(item or "").strip().lower()
+            for item in list(candidate.get("entry_profitability_blockers") or [])
+            if str(item or "").strip()
+        }
+        if (
+            selection_source == "live_chain_exact_contract"
+            and quote_status == "fresh"
+            and has_contracts
+            and has_quotes
+            and opra_backed
+            and entry_price is not None
+            and entry_price > 0
+            and entry_basis == "spread_ask_bid"
+            and not blockers
+        ):
+            return "executable_opra_paper_candidate"
+        return "research_only"
+
+    has_contract = bool(candidate.get("contract_symbol"))
+    has_quote = quote_midpoint(bid=candidate.get("bid"), ask=candidate.get("ask")) is not None
+    opra_backed = _is_opra_backed_source(candidate.get("options_data_source") or candidate.get("quote_source"))
+    if (
+        selection_source == "live_chain_exact_contract"
+        and quote_status == "fresh"
+        and has_contract
+        and has_quote
+        and opra_backed
+        and entry_price is not None
+        and entry_price > 0
+        and entry_basis == "ask"
+    ):
+        return "executable_opra_paper_candidate"
+    return "research_only"
+
+
+def _has_executable_options_source(option_snapshot: dict | None) -> bool:
+    if not option_snapshot:
+        return False
+    if not alpaca_provider_requested():
+        return True
+    if str(option_snapshot.get("strategy_type") or "").strip().lower() == "vertical_spread":
+        long_leg = option_snapshot.get("long_leg")
+        short_leg = option_snapshot.get("short_leg")
+        if not isinstance(long_leg, dict) or not isinstance(short_leg, dict):
+            return False
+        return (
+            _is_opra_backed_source(_data_source_from(long_leg))
+            and _is_opra_backed_source(_data_source_from(short_leg))
+        )
+    return _is_opra_backed_source(_data_source_from(option_snapshot))
+
+
 def _live_contract_selection_source(option_snapshot: dict | None) -> str:
     if not option_snapshot:
         return "model_contract_fallback"
-    if bool(option_snapshot.get("live_chain")) and option_snapshot.get("contract_symbol"):
+    if str(option_snapshot.get("strategy_type") or "").strip().lower() == "vertical_spread":
+        long_leg = option_snapshot.get("long_leg")
+        short_leg = option_snapshot.get("short_leg")
+        has_live_legs = bool(option_snapshot.get("live_chain"))
+        has_contracts = (
+            isinstance(long_leg, dict)
+            and isinstance(short_leg, dict)
+            and bool(long_leg.get("contract_symbol"))
+            and bool(short_leg.get("contract_symbol"))
+        )
+        if has_live_legs and has_contracts and _has_executable_options_source(option_snapshot):
+            return "live_chain_exact_contract"
+        if has_live_legs and has_contracts:
+            return "fallback_chain_contract"
+        return "model_contract_fallback"
+    if (
+        bool(option_snapshot.get("live_chain"))
+        and option_snapshot.get("contract_symbol")
+        and _has_executable_options_source(option_snapshot)
+    ):
         return "live_chain_exact_contract"
+    if bool(option_snapshot.get("live_chain")) and option_snapshot.get("contract_symbol"):
+        return "fallback_chain_contract"
     return "model_contract_fallback"
 
 
@@ -436,6 +711,211 @@ def _quote_capture_timestamps() -> dict[str, str]:
     }
 
 
+def _quote_freshness_from_age(quote_age_hours: float | None, *, fallback: Any = None) -> str:
+    fallback_status = str(fallback or "").strip().lower()
+    if fallback_status in {"stale", "error", "missing", "unavailable"}:
+        return "stale"
+    if fallback_status in {"unknown"}:
+        return "unknown"
+    if quote_age_hours is None:
+        return fallback_status or "unknown"
+    try:
+        stale_hours = float(os.getenv("OPTIONS_LIVE_QUOTE_STALE_HOURS") or "24")
+    except Exception:
+        stale_hours = 24.0
+    return "stale" if float(quote_age_hours) > max(stale_hours, 0.0) else "fresh"
+
+
+def _parse_market_timestamp(value: Any) -> datetime | None:
+    if value in (None, ""):
+        return None
+    try:
+        if hasattr(value, "to_pydatetime"):
+            parsed = value.to_pydatetime()
+        elif isinstance(value, datetime):
+            parsed = value
+        else:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except Exception:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _quote_timestamp_context_from_row(
+    row: Any,
+    *,
+    now_utc: datetime | None = None,
+) -> dict[str, Any]:
+    if not isinstance(row, dict) and not hasattr(row, "get"):
+        return {
+            "quote_timestamp_utc": None,
+            "quote_timestamp_et": None,
+            "quote_timestamp_source": None,
+            "quote_age_hours": None,
+        }
+    candidates = (
+        ("latest_quote", row.get("latestQuoteTime") or row.get("latest_quote_time") or row.get("quote_timestamp")),
+        ("latest_trade", row.get("latestTradeDate") or row.get("latest_trade_date")),
+        ("last_trade", row.get("lastTradeDate")),
+    )
+    now = now_utc or datetime.now(timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    now = now.astimezone(timezone.utc)
+    for source, raw_timestamp in candidates:
+        parsed = _parse_market_timestamp(raw_timestamp)
+        if parsed is None:
+            continue
+        age_hours = max((now - parsed).total_seconds() / 3600.0, 0.0)
+        return {
+            "quote_timestamp_utc": parsed.isoformat().replace("+00:00", "Z"),
+            "quote_timestamp_et": parsed.astimezone(_ET).isoformat(),
+            "quote_timestamp_source": source,
+            "quote_age_hours": round(age_hours, 2),
+        }
+    return {
+        "quote_timestamp_utc": None,
+        "quote_timestamp_et": None,
+        "quote_timestamp_source": None,
+        "quote_age_hours": None,
+    }
+
+
+def _spread_quote_timestamp_context(
+    long_leg: dict[str, Any] | None,
+    short_leg: dict[str, Any] | None,
+) -> dict[str, Any]:
+    contexts = []
+    for role, leg in (("long", long_leg), ("short", short_leg)):
+        if not isinstance(leg, dict):
+            continue
+        parsed = _parse_market_timestamp(leg.get("quote_timestamp_utc") or leg.get("quote_captured_at_utc"))
+        if parsed is None:
+            continue
+        contexts.append((parsed, role, leg))
+    if not contexts:
+        return {
+            "quote_timestamp_utc": None,
+            "quote_timestamp_et": None,
+            "quote_timestamp_source": None,
+            "quote_age_hours": None,
+        }
+    oldest, role, leg = min(contexts, key=lambda item: item[0])
+    age_values = [
+        _finite_float((leg_payload or {}).get("quote_age_hours"))
+        for leg_payload in (long_leg, short_leg)
+        if isinstance(leg_payload, dict)
+    ]
+    age_values = [float(value) for value in age_values if value is not None]
+    return {
+        "quote_timestamp_utc": oldest.isoformat().replace("+00:00", "Z"),
+        "quote_timestamp_et": oldest.astimezone(_ET).isoformat(),
+        "quote_timestamp_source": f"{role}_{leg.get('quote_timestamp_source') or 'quote'}",
+        "quote_age_hours": round(max(age_values), 2) if age_values else None,
+    }
+
+
+def _point_in_time_rank_context(
+    current_value: Any,
+    history_values: Any,
+    *,
+    source_label: str,
+    value_label: str,
+    as_of_index: int | None = None,
+) -> dict[str, Any]:
+    current = _finite_float(current_value)
+    valid_history: list[float] = []
+    for value in list(history_values or []):
+        parsed = _finite_float(value)
+        if parsed is not None:
+            valid_history.append(float(parsed))
+    if current is None or not valid_history:
+        return {
+            "rank": None,
+            "source_label": source_label,
+            "value_label": value_label,
+            "lookback_count": len(valid_history),
+            "point_in_time": True,
+            "proof_grade": False,
+            "quality_flag": "missing_rank_history",
+            "as_of_index": as_of_index,
+        }
+    rank = float(np.sum(np.array(valid_history) <= current) / len(valid_history) * 100.0)
+    proof_grade = str(value_label).strip().lower() in {"option_iv", "implied_volatility"}
+    return {
+        "rank": round(rank, 4),
+        "source_label": source_label,
+        "value_label": value_label,
+        "lookback_count": len(valid_history),
+        "point_in_time": True,
+        "proof_grade": proof_grade,
+        "quality_flag": "proof_point_in_time_option_iv" if proof_grade else "research_realized_vol_proxy",
+        "as_of_index": as_of_index,
+    }
+
+
+def _candidate_data_quality(candidate: dict[str, Any]) -> dict[str, Any]:
+    flags: list[str] = []
+    strategy_type = str(candidate.get("strategy_type") or "").strip().lower()
+    if not candidate.get("quote_time_utc") and not candidate.get("quote_timestamp_utc"):
+        flags.append("missing_quote_timestamp")
+    if str(candidate.get("quote_freshness_status") or "").strip().lower() != "fresh":
+        flags.append("non_fresh_quote")
+    if not candidate.get("options_data_source") and not candidate.get("quote_source"):
+        flags.append("missing_options_source")
+    if candidate.get("entry_execution_price") is None:
+        flags.append("missing_entry_execution_price")
+    if strategy_type == "vertical_spread":
+        legs = [leg for leg in list(candidate.get("legs") or []) if isinstance(leg, dict)]
+        roles = {str(leg.get("role") or "").strip().lower() for leg in legs}
+        if {"long", "short"} - roles:
+            flags.append("missing_spread_leg")
+        for leg in legs:
+            role = str(leg.get("role") or "leg").strip().lower()
+            if not leg.get("contract_symbol"):
+                flags.append(f"missing_{role}_contract_symbol")
+            if quote_midpoint(bid=leg.get("bid"), ask=leg.get("ask")) is None:
+                flags.append(f"missing_{role}_bid_ask")
+    else:
+        if not candidate.get("contract_symbol"):
+            flags.append("missing_contract_symbol")
+        if quote_midpoint(bid=candidate.get("bid"), ask=candidate.get("ask")) is None:
+            flags.append("missing_bid_ask")
+
+    candidate_label = str(candidate.get("candidate_execution_label") or "").strip()
+    promotion_class = str(candidate.get("promotion_class") or "").strip()
+    selection_source = str(candidate.get("selection_source") or candidate.get("contract_selection_source") or "").strip()
+    if candidate_label == "executable_opra_paper_candidate":
+        evidence_class = "proof_live_opra_exact_contract"
+    elif selection_source == "live_chain_exact_contract":
+        evidence_class = "research_live_exact_contract"
+    elif "model" in selection_source:
+        evidence_class = "research_model_fallback"
+    else:
+        evidence_class = "research_unverified_source"
+    profitability_evidence_class = (
+        "proof_profitability_calibration"
+        if promotion_class == "promotable_exact_contract"
+        else "research_profitability_calibration"
+    )
+    if evidence_class.startswith("proof_") and profitability_evidence_class.startswith("research_"):
+        source_separation = "pricing_proof_profitability_research"
+    elif evidence_class.startswith("proof_") and profitability_evidence_class.startswith("proof_"):
+        source_separation = "proof"
+    else:
+        source_separation = "research"
+
+    return {
+        "status": "complete" if not flags else "missing_or_research_limited",
+        "flags": sorted(set(flags)),
+        "pricing_evidence_class": evidence_class,
+        "profitability_evidence_class": profitability_evidence_class,
+        "source_separation": source_separation,
+    }
+
+
 def _build_entry_quote_snapshot(option_snapshot: dict[str, Any], *, quote_role: str | None = None) -> dict[str, Any]:
     snapshot = copy.deepcopy(option_snapshot or {})
     if not snapshot:
@@ -444,6 +924,9 @@ def _build_entry_quote_snapshot(option_snapshot: dict[str, Any], *, quote_role: 
         "quote_role": quote_role,
         "quote_captured_at_utc": snapshot.get("quote_captured_at_utc"),
         "quote_captured_at_et": snapshot.get("quote_captured_at_et"),
+        "quote_timestamp_utc": snapshot.get("quote_timestamp_utc"),
+        "quote_timestamp_et": snapshot.get("quote_timestamp_et"),
+        "quote_timestamp_source": snapshot.get("quote_timestamp_source"),
         "ticker": snapshot.get("ticker"),
         "direction": snapshot.get("direction"),
         "strategy_type": snapshot.get("strategy_type"),
@@ -457,7 +940,19 @@ def _build_entry_quote_snapshot(option_snapshot: dict[str, Any], *, quote_role: 
         "last": snapshot.get("last"),
         "mid": snapshot.get("premium"),
         "quote_basis": snapshot.get("quote_basis"),
+        "quote_source": snapshot.get("quote_source"),
+        "data_source": snapshot.get("data_source") or snapshot.get("market_data_source"),
+        "source_feed": snapshot.get("source_feed"),
         "quote_age_hours": snapshot.get("quote_age_hours"),
+        "quote_freshness_status": snapshot.get("quote_freshness_status"),
+        "iv_rank_source": snapshot.get("iv_rank_source"),
+        "iv_rank_proof_grade": snapshot.get("iv_rank_proof_grade"),
+        "iv_rank_quality_flag": snapshot.get("iv_rank_quality_flag"),
+        "data_quality_status": snapshot.get("data_quality_status"),
+        "data_quality_flags": snapshot.get("data_quality_flags"),
+        "pricing_evidence_class": snapshot.get("pricing_evidence_class"),
+        "profitability_evidence_class": snapshot.get("profitability_evidence_class"),
+        "source_separation": snapshot.get("source_separation"),
         "live_chain": snapshot.get("live_chain"),
         "options_snapshot_status": snapshot.get("options_snapshot_status"),
         "option_chain_status": snapshot.get("option_chain_status"),
@@ -468,6 +963,18 @@ def _build_entry_quote_snapshot(option_snapshot: dict[str, Any], *, quote_role: 
         "promotion_class": snapshot.get("promotion_class"),
         "entry_quote_snapshot": copy.deepcopy(snapshot.get("entry_quote_snapshot") or {}),
     }
+
+
+def _bootstrap_heuristic_ev_pct(
+    *,
+    direction_score: float,
+    profit_target_pct: float,
+    stop_loss_pct: float,
+) -> float:
+    raw_p_win = max(0.0, min(float(direction_score) / 100.0, 1.0))
+    # Apply 30% haircut to account for theta decay, spread slippage, and real-world friction.
+    p_win = raw_p_win * 0.70
+    return p_win * float(profit_target_pct) - (1.0 - p_win) * float(stop_loss_pct)
 
 
 def _select_live_expectancy(
@@ -490,10 +997,11 @@ def _select_live_expectancy(
             return None, dense_calibration, "replay_calibrated"
         return ev_pct, dense_calibration, "replay_calibrated"
 
-    raw_p_win = max(0.0, min(float(direction_score) / 100.0, 1.0))
-    # Apply 30% haircut to account for theta decay, spread slippage, and real-world friction
-    p_win = raw_p_win * 0.70
-    ev_pct = p_win * float(profit_target_pct) - (1.0 - p_win) * float(stop_loss_pct)
+    ev_pct = _bootstrap_heuristic_ev_pct(
+        direction_score=direction_score,
+        profit_target_pct=profit_target_pct,
+        stop_loss_pct=stop_loss_pct,
+    )
     if ev_pct < float(min_ev_return_pct):
         return None, None, "bootstrap_heuristic"
     return ev_pct, None, "bootstrap_heuristic"
@@ -512,6 +1020,43 @@ def _should_mark_non_executable_quote(profitability_blockers: Any) -> bool:
     return any(blocker.startswith("research_only_quote_basis:") for blocker in blockers)
 
 
+_ALPACA_EXPECTANCY_SOURCE_LABEL = "alpaca_opra_daily_snapshot"
+
+
+def _contains_alpaca_expectancy_requirement(value: Any) -> bool:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            key_text = str(key or "").strip().lower()
+            if key_text in {"source_labels_required", "historical_source_labels"}:
+                labels = nested if isinstance(nested, list) else [nested]
+                if any(str(label or "").strip().lower() == _ALPACA_EXPECTANCY_SOURCE_LABEL for label in labels):
+                    return True
+            if key_text in {"source_label_requirement", "proof_source_label"}:
+                if str(nested or "").strip().lower() == _ALPACA_EXPECTANCY_SOURCE_LABEL:
+                    return True
+            if _contains_alpaca_expectancy_requirement(nested):
+                return True
+    if isinstance(value, list):
+        return any(_contains_alpaca_expectancy_requirement(item) for item in value)
+    return False
+
+
+def _is_alpaca_backed_expectancy_surface(surface: dict | None) -> bool:
+    if not isinstance(surface, dict):
+        return False
+    truth_source = str(surface.get("source_truth_source") or "").strip().lower()
+    if truth_source != "historical_imported_daily":
+        return False
+    return _contains_alpaca_expectancy_requirement(surface.get("source_metadata") or surface)
+
+
+def _load_trusted_persisted_expectancy_surface() -> dict | None:
+    surface = load_persisted_expectancy_surface()
+    if alpaca_provider_requested() and not _is_alpaca_backed_expectancy_surface(surface):
+        return None
+    return surface
+
+
 def _load_expectancy_surface_for_live(
     min_trades: int = DEFAULT_SURFACE_MIN_TRADES,
     bucket_size: int = 10,
@@ -526,21 +1071,23 @@ def _load_expectancy_surface_for_live(
             load_last_imported_daily_results,
         )
     except Exception:
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
 
     normalized_truth_lane = str(truth_lane or IMPORTED_DAILY_TRUTH_SOURCE).strip().lower() or IMPORTED_DAILY_TRUTH_SOURCE
     if normalized_truth_lane != IMPORTED_DAILY_TRUTH_SOURCE:
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
 
     result = load_last_imported_daily_results()
     if not result:
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
     if str(result.get("truth_source") or "").strip().lower() != IMPORTED_DAILY_TRUTH_SOURCE:
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
+    if alpaca_provider_requested() and not _contains_alpaca_expectancy_requirement(result):
+        return _load_trusted_persisted_expectancy_surface()
     if str(result.get("playbook") or "").strip().lower() != str(playbook or "broad").strip().lower():
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
     if float(result.get("quote_coverage_pct", 0.0) or 0.0) < float(MIN_IMPORTED_QUOTE_COVERAGE_PCT):
-        return load_persisted_expectancy_surface()
+        return _load_trusted_persisted_expectancy_surface()
 
     surface = build_expectancy_surface(
         result=result,
@@ -552,8 +1099,7 @@ def _load_expectancy_surface_for_live(
     if surface is not None:
         save_expectancy_surface(surface)
         return surface
-    # Fall back to previously persisted surface
-    return load_persisted_expectancy_surface()
+    return _load_trusted_persisted_expectancy_surface()
 
 
 def _compute_tech_score_from_close_series(
@@ -623,6 +1169,14 @@ def _get_profile(ticker: str, direction: str | None = None) -> dict:
     base_profile = STRATEGY_PROFILES[_asset_class(ticker)]
     merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker, direction)
     return merged_profile
+
+
+def _profile_with_filter_overrides(profile: dict, overrides: dict[str, Any]) -> dict:
+    adjusted = copy.deepcopy(profile)
+    filters = dict(adjusted.get("filters") or {})
+    filters.update(overrides)
+    adjusted["filters"] = filters
+    return adjusted
 
 
 def _normalize_profile_direction(direction: Any) -> str | None:
@@ -1182,7 +1736,7 @@ def get_stock_snapshot(symbol: str) -> str:
             "change_pct": change_pct,
             "market_cap": info.get("marketCap"),
             "sector": info.get("sector"),
-            "source": "Yahoo Finance (~15-min delayed)",
+            "source": primary_provider_label(),
         })
     except Exception as e:
         return json.dumps({"error": str(e), "symbol": symbol.upper()})
@@ -1548,15 +2102,15 @@ def get_earnings_info(symbol: str) -> str:
             if ed is not None and not ed.empty:
                 future = ed[ed.index.tz_localize(None) >= today] if ed.index.tzinfo else ed[ed.index >= today]
                 if not future.empty:
-                    next_date = future.index[-1]  # yfinance lists newest first, take last for soonest future
+                    next_date = future.index[-1]  # Some providers list newest first; take last for soonest future.
                     # Actually earnings_dates may be sorted descending, get the earliest future date
                     future_sorted = future.sort_index()
                     next_date = future_sorted.index[0]
         except Exception:
             pass
 
-        # Fallback: try calendar
-        if next_date is None:
+        # Calendar metadata can use yfinance only when the app is explicitly not in Alpaca mode.
+        if next_date is None and not alpaca_provider_requested():
             try:
                 t = t or yf.Ticker(symbol_up)
                 cal = t.calendar
@@ -3100,15 +3654,24 @@ def backtest_strategy(
                          float(spy_closes.iloc[spy_idx_5]) - 1) * 100
 
             # Tech score — same formula as _compute_tech_score_live
-            def _tech_score_bt(tt: str) -> float:
+            def _tech_score_bt(
+                tt: str,
+                *,
+                underlying_price: float = S0,
+                sma20_value: float = sma20,
+                sma50_value: float = sma50,
+                rsi_value: float = rsi14,
+                macd_value: float = macd,
+                macd_is_rising: bool = macd_rising,
+            ) -> float:
                 if tt == "call":
-                    _tr  = (50.0 if S0 > sma20 else 0.0) + (50.0 if sma20 > sma50 else 0.0)
-                    _rs  = max(0.0, 100.0 - abs(rsi14 - 55.0) * (100.0 / 35.0))
-                    _mcd = 100.0 if macd > 0 and macd_rising else (50.0 if macd > 0 else 0.0)
+                    _tr  = (50.0 if underlying_price > sma20_value else 0.0) + (50.0 if sma20_value > sma50_value else 0.0)
+                    _rs  = max(0.0, 100.0 - abs(rsi_value - 55.0) * (100.0 / 35.0))
+                    _mcd = 100.0 if macd_value > 0 and macd_is_rising else (50.0 if macd_value > 0 else 0.0)
                 else:
-                    _tr  = (50.0 if S0 < sma20 else 0.0) + (50.0 if sma20 < sma50 else 0.0)
-                    _rs  = max(0.0, 100.0 - abs(rsi14 - 45.0) * (100.0 / 35.0))
-                    _mcd = 100.0 if macd < 0 and not macd_rising else (50.0 if macd < 0 else 0.0)
+                    _tr  = (50.0 if underlying_price < sma20_value else 0.0) + (50.0 if sma20_value < sma50_value else 0.0)
+                    _rs  = max(0.0, 100.0 - abs(rsi_value - 45.0) * (100.0 / 35.0))
+                    _mcd = 100.0 if macd_value < 0 and not macd_is_rising else (50.0 if macd_value < 0 else 0.0)
                 return _tr * 0.40 + _rs * 0.35 + _mcd * 0.25
 
             if option_type == "signal":
@@ -3483,7 +4046,7 @@ def _fetch_best_option(
     Fetch the real options chain and return the strike/premium closest to delta_target.
 
     Works both during market hours (uses bid/ask mid) and after hours (uses lastPrice).
-    Falls back to Black-Scholes on HV30 if the chain is completely unavailable.
+    Falls back to Black-Scholes on HV30 only outside strict Alpaca mode.
 
     Returns a dict with keys: strike, premium, expiry, dte, delta, iv, live_chain
     Returns None if no valid option could be found at all.
@@ -3526,6 +4089,12 @@ def _fetch_best_option(
                 raise ValueError("option chain snapshot is not fresh")
             _chain = _chain_snapshot.value
             _df         = _chain.calls if trade_type == "call" else _chain.puts
+            _chain_source = (
+                _data_source_from(_chain_snapshot, None)
+                or _data_source_from(_chain, None)
+                or _data_source_from(_df, None)
+                or primary_provider_label()
+            )
             chain_context = {
                 "spot_price": _S,
                 "selected_expiry": _best_exp,
@@ -3534,6 +4103,7 @@ def _fetch_best_option(
                 "expiries_snapshot": _exp_snapshot,
                 "all_expiries": list(_exps),
                 "valid_expiries": list(_valid_exps),
+                "options_data_source": _chain_source,
             }
 
             for _, _row in _df.iterrows():
@@ -3556,20 +4126,7 @@ def _fetch_best_option(
 
                 _contract_volume = int(_row.get("volume") or 0)
                 _open_interest = int(_row.get("openInterest") or 0)
-                _last_trade_age_hours = None
-                _last_trade_raw = _row.get("lastTradeDate")
-                if _last_trade_raw is not None:
-                    try:
-                        if hasattr(_last_trade_raw, "to_pydatetime"):
-                            _last_trade_dt = _last_trade_raw.to_pydatetime()
-                        elif isinstance(_last_trade_raw, datetime):
-                            _last_trade_dt = _last_trade_raw
-                        else:
-                            _last_trade_dt = datetime.fromisoformat(str(_last_trade_raw).replace("Z", "+00:00"))
-                        _now_dt = datetime.now(_last_trade_dt.tzinfo) if getattr(_last_trade_dt, "tzinfo", None) else datetime.now()
-                        _last_trade_age_hours = max((_now_dt - _last_trade_dt).total_seconds() / 3600.0, 0.0)
-                    except Exception:
-                        _last_trade_age_hours = None
+                _quote_time_context = _quote_timestamp_context_from_row(_row)
 
                 # IV: use chain value when available, else HV30 for delta calc only
                 _iv  = float(_row.get("impliedVolatility") or 0)
@@ -3587,11 +4144,18 @@ def _fetch_best_option(
                 _g = _bs_greeks(_S, _K, _T, RISK_FREE_RATE, _vol_adjusted, trade_type)
                 if not _g:
                     continue
+                _chain_delta = _finite_float(_row.get("delta"))
+                _delta_abs = abs(_chain_delta) if _chain_delta is not None and abs(_chain_delta) > 0 else abs(_g.get("delta", 0))
 
-                _diff = abs(abs(_g.get("delta", 0)) - delta_target)
+                _diff = abs(_delta_abs - delta_target)
                 if _diff < best_diff:
                     best_diff = _diff
                     _capture = _quote_capture_timestamps()
+                    _row_source = _row_data_source(_row, _chain_source)
+                    _quote_status = _quote_freshness_from_age(
+                        _quote_time_context.get("quote_age_hours"),
+                        fallback=getattr(_chain_snapshot, "status", None),
+                    )
                     best = {
                         "ticker":    ticker,
                         "direction":  trade_type,
@@ -3603,13 +4167,22 @@ def _fetch_best_option(
                         "last":       round(_last, 4) if _last > 0 else None,
                         "expiry":     _best_exp,
                         "dte":        _actual_dte,
-                        "delta":      round(abs(_g.get("delta", 0)), 3),
+                        "delta":      round(_delta_abs, 3),
                         "iv":         round(_iv, 4),
                         "volume":     _contract_volume,
                         "open_interest": _open_interest,
-                        "quote_age_hours": round(_last_trade_age_hours, 2) if _last_trade_age_hours is not None else None,
+                        "quote_age_hours": _quote_time_context.get("quote_age_hours"),
+                        "quote_timestamp_utc": _quote_time_context.get("quote_timestamp_utc"),
+                        "quote_timestamp_et": _quote_time_context.get("quote_timestamp_et"),
+                        "quote_timestamp_source": _quote_time_context.get("quote_timestamp_source"),
                         "contract_symbol": str(_row.get("contractSymbol") or "").strip().upper() or None,
                         "quote_basis": "mid" if (_bid > 0 and _ask > 0) else "last",
+                        "quote_source": _row_source,
+                        "data_source": _row_source,
+                        "market_data_source": _row_source,
+                        "options_data_source": _row_source,
+                        "source_feed": str(_row.get("source_feed") or "").strip().lower() or None,
+                        "quote_freshness_status": _quote_status,
                         "live_chain": True,
                         "options_snapshot_status": getattr(_exp_snapshot, "status", None),
                         "option_chain_status": getattr(_chain_snapshot, "status", None),
@@ -3628,7 +4201,14 @@ def _fetch_best_option(
                             "last": round(_last, 4) if _last > 0 else None,
                             "premium": round(_mid, 4),
                             "quote_basis": "mid" if (_bid > 0 and _ask > 0) else "last",
-                            "quote_age_hours": round(_last_trade_age_hours, 2) if _last_trade_age_hours is not None else None,
+                            "quote_source": _row_source,
+                            "data_source": _row_source,
+                            "source_feed": str(_row.get("source_feed") or "").strip().lower() or None,
+                            "quote_age_hours": _quote_time_context.get("quote_age_hours"),
+                            "quote_timestamp_utc": _quote_time_context.get("quote_timestamp_utc"),
+                            "quote_timestamp_et": _quote_time_context.get("quote_timestamp_et"),
+                            "quote_timestamp_source": _quote_time_context.get("quote_timestamp_source"),
+                            "quote_freshness_status": _quote_status,
                             "live_chain": True,
                             "options_snapshot_status": getattr(_exp_snapshot, "status", None),
                             "option_chain_status": getattr(_chain_snapshot, "status", None),
@@ -3651,6 +4231,9 @@ def _fetch_best_option(
         return best
 
     # ── BS fallback: real-increment strikes priced on HV30 ───────────────────
+    if alpaca_provider_requested():
+        return None
+
     try:
         _S_fb = _S  # already fetched above
         if _S >= 200:  _inc = 5.0
@@ -3680,6 +4263,11 @@ def _fetch_best_option(
                     "iv":         round(hv30_fallback, 4),
                     "contract_symbol": None,
                     "quote_basis": "model",
+                    "quote_source": "model_hv30_fallback",
+                    "data_source": "model_hv30_fallback",
+                    "market_data_source": "model_hv30_fallback",
+                    "options_data_source": "model_hv30_fallback",
+                    "quote_freshness_status": "unknown",
                     "live_chain": False,
                     "quote_captured_at_utc": _capture["quote_captured_at_utc"],
                     "quote_captured_at_et": _capture["quote_captured_at_et"],
@@ -3696,6 +4284,9 @@ def _fetch_best_option(
                         "last": None,
                         "premium": round(float(_g.get("bs_price", 0)), 4),
                         "quote_basis": "model",
+                        "quote_source": "model_hv30_fallback",
+                        "data_source": "model_hv30_fallback",
+                        "quote_freshness_status": "unknown",
                         "live_chain": False,
                         "stock_price": _S,
                     },
@@ -3707,6 +4298,438 @@ def _fetch_best_option(
         best["chain_context"] = chain_context
 
     return best
+
+
+def _finite_float(value: Any) -> float | None:
+    try:
+        if value in (None, ""):
+            return None
+        parsed = float(value)
+        if not math.isfinite(parsed):
+            return None
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def _finite_int(value: Any) -> int | None:
+    try:
+        if value in (None, ""):
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _liquidity_filter_snapshot(sp: dict | None = None) -> dict[str, Any]:
+    profile = sp or STRATEGY_PROFILE
+    filters = dict((profile or {}).get("filters") or {})
+    max_leg_spread_pct = float(filters.get("liquidity_spread_max_pct", 15.0) or 15.0)
+    return {
+        "liquidity_spread_max_pct": max_leg_spread_pct,
+        "spread_liquidity_slippage_max_pct": float(
+            filters.get("spread_liquidity_slippage_max_pct", max(max_leg_spread_pct * 2.0, 10.0)) or 10.0
+        ),
+        "min_option_volume": int(filters.get("min_option_volume", 0) or 0),
+        "min_option_open_interest": int(filters.get("min_option_open_interest", 0) or 0),
+        "max_option_quote_age_hours": float(filters.get("max_option_quote_age_hours", 9999.0) or 9999.0),
+    }
+
+
+def _leg_bid_ask_spread_pct(leg: dict[str, Any]) -> float | None:
+    bid = _finite_float(leg.get("bid"))
+    ask = _finite_float(leg.get("ask"))
+    mid = quote_midpoint(bid=bid, ask=ask)
+    if bid is None or ask is None or mid is None or mid <= 0:
+        return None
+    return round((ask - bid) / mid * 100.0, 2)
+
+
+def _spread_liquidity_metrics(
+    long_leg: dict[str, Any],
+    short_leg: dict[str, Any],
+    *,
+    entry_execution: dict[str, Any] | None = None,
+    sp: dict | None = None,
+) -> dict[str, Any]:
+    profile = sp or STRATEGY_PROFILE
+    filters = dict((profile or {}).get("filters") or {})
+    max_leg_spread_pct = float(filters.get("liquidity_spread_max_pct", 15.0) or 15.0)
+    max_spread_slippage_pct = float(
+        filters.get("spread_liquidity_slippage_max_pct", max(max_leg_spread_pct * 2.0, 10.0)) or 10.0
+    )
+    min_volume = int(filters.get("min_option_volume", 0) or 0)
+    min_open_interest = int(filters.get("min_option_open_interest", 0) or 0)
+    max_quote_age_hours = float(filters.get("max_option_quote_age_hours", 9999.0) or 9999.0)
+
+    long_mid = quote_midpoint(bid=long_leg.get("bid"), ask=long_leg.get("ask"))
+    short_mid = quote_midpoint(bid=short_leg.get("bid"), ask=short_leg.get("ask"))
+    long_ask = _finite_float(long_leg.get("ask"))
+    short_bid = _finite_float(short_leg.get("bid"))
+    entry_execution = entry_execution or executable_vertical_spread_entry(
+        long_leg=long_leg,
+        short_leg=short_leg,
+        slippage_pct=0.0,
+        quote_freshness_status="fresh",
+    )
+
+    spread_mid_debit = None
+    if long_mid is not None and short_mid is not None:
+        spread_mid_debit = round(max(float(long_mid) - float(short_mid), 0.0), 4)
+
+    spread_entry_debit = _finite_float(entry_execution.get("execution_price"))
+    if spread_entry_debit is None and long_ask is not None and short_bid is not None:
+        spread_entry_debit = round(max(long_ask - short_bid, 0.0), 4)
+
+    spread_bid_ask_slippage = None
+    spread_bid_ask_pct_of_mid = None
+    if spread_entry_debit is not None and spread_mid_debit is not None:
+        spread_bid_ask_slippage = round(max(spread_entry_debit - spread_mid_debit, 0.0), 4)
+        if spread_mid_debit > 0:
+            spread_bid_ask_pct_of_mid = round(spread_bid_ask_slippage / spread_mid_debit * 100.0, 2)
+
+    long_spread_pct = _leg_bid_ask_spread_pct(long_leg)
+    short_spread_pct = _leg_bid_ask_spread_pct(short_leg)
+    leg_spreads = [value for value in (long_spread_pct, short_spread_pct) if value is not None]
+    worst_leg_spread_pct = round(max(leg_spreads), 2) if leg_spreads else None
+    long_volume = _finite_int(long_leg.get("volume"))
+    short_volume = _finite_int(short_leg.get("volume"))
+    long_oi = _finite_int(long_leg.get("open_interest"))
+    short_oi = _finite_int(short_leg.get("open_interest"))
+    min_leg_volume = min(value for value in (long_volume, short_volume) if value is not None) if any(value is not None for value in (long_volume, short_volume)) else None
+    min_leg_open_interest = min(value for value in (long_oi, short_oi) if value is not None) if any(value is not None for value in (long_oi, short_oi)) else None
+    quote_ages = [
+        _finite_float(long_leg.get("quote_age_hours")),
+        _finite_float(short_leg.get("quote_age_hours")),
+    ]
+    quote_ages = [value for value in quote_ages if value is not None]
+    max_leg_quote_age_hours = round(max(quote_ages), 2) if quote_ages else None
+
+    reasons: list[str] = []
+    if long_mid is None or short_mid is None or spread_mid_debit is None or spread_mid_debit <= 0:
+        reasons.append("missing_two_sided_leg_quote")
+    if spread_entry_debit is None or spread_entry_debit <= 0:
+        reasons.append("missing_executable_spread_entry")
+    if worst_leg_spread_pct is None or worst_leg_spread_pct > max_leg_spread_pct:
+        reasons.append("wide_leg_spread")
+    if spread_bid_ask_pct_of_mid is None or spread_bid_ask_pct_of_mid > max_spread_slippage_pct:
+        reasons.append("wide_spread_entry_slippage")
+    if min_leg_volume is not None and min_leg_volume < min_volume:
+        reasons.append("low_leg_volume")
+    if min_leg_open_interest is not None and min_leg_open_interest < min_open_interest:
+        reasons.append("low_leg_open_interest")
+    if max_leg_quote_age_hours is not None and max_leg_quote_age_hours > max_quote_age_hours:
+        reasons.append("stale_leg_quote")
+    for blocker in entry_execution.get("profitability_blockers") or []:
+        if blocker and blocker not in reasons:
+            reasons.append(str(blocker))
+
+    return {
+        "long_bid_ask_spread_pct": long_spread_pct,
+        "short_bid_ask_spread_pct": short_spread_pct,
+        "worst_leg_bid_ask_spread_pct": worst_leg_spread_pct,
+        "spread_mid_debit": spread_mid_debit,
+        "spread_entry_debit": round(float(spread_entry_debit), 4) if spread_entry_debit is not None else None,
+        "spread_bid_ask_slippage": spread_bid_ask_slippage,
+        "spread_bid_ask_pct_of_mid": spread_bid_ask_pct_of_mid,
+        "min_leg_volume": min_leg_volume,
+        "min_leg_open_interest": min_leg_open_interest,
+        "max_quote_age_hours": max_leg_quote_age_hours,
+        "is_illiquid": bool(reasons),
+        "reasons": reasons,
+        "flag": f"Spread blocked: {', '.join(reasons)}" if reasons else "Liquid executable spread",
+    }
+
+
+def _option_leg_from_chain_row(
+    row: Any,
+    *,
+    ticker: str,
+    trade_type: str,
+    expiry: str,
+    dte: int,
+    stock_price: float,
+    hv30_fallback: float,
+    options_snapshot_status: Any = None,
+    option_chain_status: Any = None,
+) -> dict[str, Any] | None:
+    strike = _finite_float(row.get("strike"))
+    if strike is None or strike <= 0:
+        return None
+    bid = _finite_float(row.get("bid")) or 0.0
+    ask = _finite_float(row.get("ask")) or 0.0
+    last = _finite_float(row.get("lastPrice"))
+    mid = quote_midpoint(bid=bid, ask=ask)
+    quote_basis = "mid"
+    if mid is None:
+        if last is None or last <= 0:
+            return None
+        mid = round(float(last), 4)
+        quote_basis = "last"
+    if mid < 0.01:
+        return None
+
+    iv = _finite_float(row.get("impliedVolatility")) or 0.0
+    vol = iv if iv > 0.01 else hv30_fallback
+    if iv <= 0.01 and stock_price > 0:
+        vol *= 1.0 + 0.15 * abs(1.0 - strike / stock_price)
+    greeks = _bs_greeks(stock_price, strike, max(int(dte), 1) / 365.0, RISK_FREE_RATE, vol, trade_type)
+    if not greeks:
+        return None
+    row_delta = _finite_float(row.get("delta"))
+    delta_abs = abs(row_delta) if row_delta is not None and abs(row_delta) > 0 else abs(greeks.get("delta", 0))
+
+    quote_time_context = _quote_timestamp_context_from_row(row)
+
+    capture = _quote_capture_timestamps()
+    row_source = _row_data_source(row, primary_provider_label())
+    quote_status = _quote_freshness_from_age(
+        quote_time_context.get("quote_age_hours"),
+        fallback=option_chain_status or options_snapshot_status,
+    )
+    return {
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "single_leg",
+        "strike": strike,
+        "premium": round(float(mid), 4),
+        "bid": round(float(bid), 4),
+        "ask": round(float(ask), 4),
+        "last": round(float(last), 4) if last is not None and last > 0 else None,
+        "expiry": expiry,
+        "dte": int(dte),
+        "delta": round(delta_abs, 3),
+        "iv": round(float(iv), 4),
+        "volume": int(_finite_int(row.get("volume")) or 0),
+        "open_interest": int(_finite_int(row.get("openInterest")) or 0),
+        "quote_age_hours": quote_time_context.get("quote_age_hours"),
+        "quote_timestamp_utc": quote_time_context.get("quote_timestamp_utc"),
+        "quote_timestamp_et": quote_time_context.get("quote_timestamp_et"),
+        "quote_timestamp_source": quote_time_context.get("quote_timestamp_source"),
+        "contract_symbol": str(row.get("contractSymbol") or "").strip().upper() or None,
+        "quote_basis": quote_basis,
+        "quote_source": row_source,
+        "data_source": row_source,
+        "market_data_source": row_source,
+        "options_data_source": row_source,
+        "source_feed": str(row.get("source_feed") or "").strip().lower() or None,
+        "quote_freshness_status": quote_status,
+        "live_chain": True,
+        "options_snapshot_status": options_snapshot_status,
+        "option_chain_status": option_chain_status,
+        "stock_price": stock_price,
+        "quote_captured_at_utc": capture["quote_captured_at_utc"],
+        "quote_captured_at_et": capture["quote_captured_at_et"],
+    }
+
+
+def _compact_spread_alternative(candidate: dict[str, Any], rank: int) -> dict[str, Any]:
+    long_leg = candidate["long_leg"]
+    short_leg = candidate["short_leg"]
+    liquidity = candidate.get("spread_liquidity") or {}
+    return {
+        "rank": rank,
+        "long_strike": long_leg.get("strike"),
+        "short_strike": short_leg.get("strike"),
+        "long_contract_symbol": long_leg.get("contract_symbol"),
+        "short_contract_symbol": short_leg.get("contract_symbol"),
+        "net_debit": candidate.get("net_debit"),
+        "entry_debit": liquidity.get("spread_entry_debit"),
+        "spread_width": candidate.get("spread_width"),
+        "debit_pct_of_width": candidate.get("debit_pct_of_width"),
+        "spread_bid_ask_pct_of_mid": liquidity.get("spread_bid_ask_pct_of_mid"),
+        "worst_leg_bid_ask_spread_pct": liquidity.get("worst_leg_bid_ask_spread_pct"),
+        "min_leg_volume": liquidity.get("min_leg_volume"),
+        "min_leg_open_interest": liquidity.get("min_leg_open_interest"),
+        "delta_miss": candidate.get("delta_miss"),
+        "liquidity_first_score": candidate.get("liquidity_first_score"),
+        "is_illiquid": liquidity.get("is_illiquid"),
+        "liquidity_reasons": liquidity.get("reasons"),
+    }
+
+
+def _compact_spread_rejection_snapshot(spread_result: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(spread_result, dict):
+        return {}
+    liquidity = spread_result.get("spread_liquidity") if isinstance(spread_result.get("spread_liquidity"), dict) else {}
+
+    def _leg_snapshot(leg: dict[str, Any] | None) -> dict[str, Any]:
+        leg = leg if isinstance(leg, dict) else {}
+        return {
+            "contract_symbol": leg.get("contract_symbol"),
+            "strike": leg.get("strike"),
+            "bid": leg.get("bid"),
+            "ask": leg.get("ask"),
+            "premium": leg.get("premium"),
+            "quote_age_hours": leg.get("quote_age_hours"),
+            "quote_timestamp_utc": leg.get("quote_timestamp_utc"),
+            "quote_timestamp_et": leg.get("quote_timestamp_et"),
+            "quote_timestamp_source": leg.get("quote_timestamp_source"),
+            "volume": leg.get("volume"),
+            "open_interest": leg.get("open_interest"),
+            "quote_basis": leg.get("quote_basis"),
+            "data_source": leg.get("data_source") or leg.get("options_data_source"),
+        }
+
+    return {
+        "expiry": spread_result.get("expiry"),
+        "dte": spread_result.get("dte"),
+        "long_leg": _leg_snapshot(spread_result.get("long_leg")),
+        "short_leg": _leg_snapshot(spread_result.get("short_leg")),
+        "spread_width": spread_result.get("spread_width"),
+        "net_debit": spread_result.get("net_debit"),
+        "entry_execution_price": spread_result.get("entry_execution_price"),
+        "entry_execution_basis": spread_result.get("entry_execution_basis"),
+        "spread_mid_debit": liquidity.get("spread_mid_debit"),
+        "spread_entry_debit": liquidity.get("spread_entry_debit"),
+        "spread_bid_ask_pct_of_mid": liquidity.get("spread_bid_ask_pct_of_mid"),
+        "worst_leg_bid_ask_spread_pct": liquidity.get("worst_leg_bid_ask_spread_pct"),
+        "min_leg_volume": liquidity.get("min_leg_volume"),
+        "min_leg_open_interest": liquidity.get("min_leg_open_interest"),
+        "max_quote_age_hours": liquidity.get("max_quote_age_hours"),
+        "liquidity_reasons": liquidity.get("reasons"),
+        "liquidity_first_score": spread_result.get("liquidity_first_score"),
+    }
+
+
+def _select_liquidity_first_spread(
+    *,
+    ticker: str,
+    trade_type: str,
+    long_delta_target: float,
+    short_delta_target: float,
+    target_dte: int,
+    stock_price: float,
+    hv30_fallback: float,
+    max_width_pct: float,
+    min_net_debit: float,
+    max_debit_pct_of_width: float,
+    chain_context: dict[str, Any] | None,
+    alternative_count: int,
+) -> dict[str, Any] | None:
+    if not chain_context:
+        return None
+    chain = chain_context.get("selected_chain")
+    expiry = str(chain_context.get("selected_expiry") or "").strip()
+    if chain is None or not expiry:
+        return None
+    df = getattr(chain, "calls", None) if trade_type == "call" else getattr(chain, "puts", None)
+    if df is None or getattr(df, "empty", True):
+        return None
+
+    try:
+        today_d = datetime.now().date()
+        dte = (datetime.strptime(expiry, "%Y-%m-%d").date() - today_d).days
+    except Exception:
+        dte = int(target_dte)
+    dte = max(int(dte), 1)
+    spot = float(stock_price or chain_context.get("spot_price") or 0.0)
+    if spot <= 0:
+        return None
+    chain_snapshot = chain_context.get("selected_chain_snapshot")
+    expiries_snapshot = chain_context.get("expiries_snapshot")
+    legs: list[dict[str, Any]] = []
+    for _, row in df.iterrows():
+        leg = _option_leg_from_chain_row(
+            row,
+            ticker=ticker,
+            trade_type=trade_type,
+            expiry=expiry,
+            dte=dte,
+            stock_price=spot,
+            hv30_fallback=hv30_fallback,
+            options_snapshot_status=getattr(expiries_snapshot, "status", None),
+            option_chain_status=getattr(chain_snapshot, "status", None),
+        )
+        if leg is not None:
+            legs.append(leg)
+    if len(legs) < 2:
+        return None
+
+    candidates: list[dict[str, Any]] = []
+    for long_leg in legs:
+        for short_leg in legs:
+            if long_leg is short_leg:
+                continue
+            long_strike = float(long_leg["strike"])
+            short_strike = float(short_leg["strike"])
+            if trade_type == "call":
+                if long_strike >= short_strike:
+                    continue
+                spread_width = short_strike - long_strike
+            else:
+                if long_strike <= short_strike:
+                    continue
+                spread_width = long_strike - short_strike
+            if spread_width <= 0:
+                continue
+            if spot > 0 and (spread_width / spot * 100.0) > max_width_pct:
+                continue
+
+            net_debit = round(float(long_leg["premium"]) - float(short_leg["premium"]), 4)
+            if net_debit < min_net_debit or net_debit <= 0:
+                continue
+            debit_pct_of_width = round(net_debit / spread_width * 100.0, 2)
+            if debit_pct_of_width > max_debit_pct_of_width:
+                continue
+
+            entry_execution = executable_vertical_spread_entry(
+                long_leg=long_leg,
+                short_leg=short_leg,
+                slippage_pct=0.0,
+                quote_freshness_status="fresh",
+            )
+            entry_debit = _finite_float(entry_execution.get("execution_price"))
+            if entry_debit is None or entry_debit <= 0:
+                continue
+            if entry_debit < min_net_debit:
+                continue
+            if entry_debit / spread_width * 100.0 > max_debit_pct_of_width:
+                continue
+
+            liquidity = _spread_liquidity_metrics(long_leg, short_leg, entry_execution=entry_execution)
+            delta_miss = round(
+                abs(float(long_leg.get("delta") or 0.0) - float(long_delta_target))
+                + abs(float(short_leg.get("delta") or 0.0) - float(short_delta_target)),
+                4,
+            )
+            spread_slippage = float(liquidity.get("spread_bid_ask_pct_of_mid") or 999.0)
+            worst_leg_spread = float(liquidity.get("worst_leg_bid_ask_spread_pct") or 999.0)
+            min_volume = int(liquidity.get("min_leg_volume") or 0)
+            min_open_interest = int(liquidity.get("min_leg_open_interest") or 0)
+            liquidity_score = (
+                (0.0 if liquidity.get("is_illiquid") else 100.0)
+                - spread_slippage * 1.8
+                - worst_leg_spread * 0.8
+                - delta_miss * 80.0
+                - debit_pct_of_width * 0.15
+                + min(math.log1p(max(min_volume, 0)) * 4.0, 20.0)
+                + min(math.log1p(max(min_open_interest, 0)) * 3.0, 20.0)
+            )
+            candidates.append(
+                {
+                    "long_leg": copy.deepcopy(long_leg),
+                    "short_leg": copy.deepcopy(short_leg),
+                    "spread_width": round(spread_width, 4),
+                    "net_debit": net_debit,
+                    "debit_pct_of_width": round(debit_pct_of_width, 1),
+                    "entry_execution": entry_execution,
+                    "spread_liquidity": liquidity,
+                    "delta_miss": delta_miss,
+                    "liquidity_first_score": round(liquidity_score, 2),
+                }
+            )
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: float(item.get("liquidity_first_score") or -9999.0), reverse=True)
+    selected = copy.deepcopy(candidates[0])
+    selected["chain_context"] = chain_context
+    selected["spread_alternatives"] = [
+        _compact_spread_alternative(candidate, rank)
+        for rank, candidate in enumerate(candidates[: max(int(alternative_count), 1)], start=1)
+    ]
+    return selected
 
 
 def _fetch_best_spread(
@@ -3722,6 +4745,8 @@ def _fetch_best_spread(
     max_debit_pct_of_width: float = 65.0,
     *,
     return_context: bool = False,
+    liquidity_first: bool = True,
+    alternative_count: int = 3,
 ) -> dict | None:
     """
     Fetch two legs from the real options chain for a vertical debit spread.
@@ -3731,10 +4756,11 @@ def _fetch_best_spread(
 
     Returns dict with long_leg, short_leg, spread metrics, or None if no valid spread found.
     """
+    fetch_context = bool(return_context or liquidity_first)
     long_opt = _fetch_best_option(
         ticker, trade_type, long_delta_target, target_dte,
         stock_price=stock_price, hv30_fallback=hv30_fallback,
-        return_context=return_context,
+        return_context=fetch_context,
     )
     if long_opt is None:
         return None
@@ -3742,10 +4768,35 @@ def _fetch_best_spread(
     short_opt = _fetch_best_option(
         ticker, trade_type, short_delta_target, target_dte,
         stock_price=stock_price, hv30_fallback=hv30_fallback,
-        return_context=return_context,
+        return_context=fetch_context,
     )
     if short_opt is None:
         return None
+
+    spread_alternatives: list[dict[str, Any]] = []
+    liquidity_first_score = None
+    if liquidity_first:
+        liquidity_selected = _select_liquidity_first_spread(
+            ticker=ticker,
+            trade_type=trade_type,
+            long_delta_target=long_delta_target,
+            short_delta_target=short_delta_target,
+            target_dte=target_dte,
+            stock_price=stock_price or long_opt.get("stock_price", 0.0),
+            hv30_fallback=hv30_fallback,
+            max_width_pct=max_width_pct,
+            min_net_debit=min_net_debit,
+            max_debit_pct_of_width=max_debit_pct_of_width,
+            chain_context=long_opt.get("chain_context") or short_opt.get("chain_context"),
+            alternative_count=alternative_count,
+        )
+        if liquidity_selected is not None:
+            long_opt = liquidity_selected["long_leg"]
+            short_opt = liquidity_selected["short_leg"]
+            if fetch_context and liquidity_selected.get("chain_context") is not None:
+                long_opt["chain_context"] = liquidity_selected.get("chain_context")
+            spread_alternatives = list(liquidity_selected.get("spread_alternatives") or [])
+            liquidity_first_score = liquidity_selected.get("liquidity_first_score")
 
     long_strike = long_opt["strike"]
     short_strike = short_opt["strike"]
@@ -3788,8 +4839,28 @@ def _fetch_best_spread(
     max_loss = net_debit
     net_delta = abs(long_opt.get("delta", long_delta_target)) - abs(short_opt.get("delta", short_delta_target))
     _spread_capture = _quote_capture_timestamps()
+    _spread_quote_context = _spread_quote_timestamp_context(long_opt, short_opt)
     long_snapshot = _build_entry_quote_snapshot(long_opt, quote_role="long")
     short_snapshot = _build_entry_quote_snapshot(short_opt, quote_role="short")
+    _spread_status_values = [
+        str(long_opt.get("quote_freshness_status") or "").strip().lower(),
+        str(short_opt.get("quote_freshness_status") or "").strip().lower(),
+        str(long_opt.get("option_chain_status") or long_opt.get("options_snapshot_status") or "").strip().lower(),
+        str(short_opt.get("option_chain_status") or short_opt.get("options_snapshot_status") or "").strip().lower(),
+    ]
+    if any(any(token in status for token in ("stale", "expired", "error", "missing", "unavailable")) for status in _spread_status_values):
+        spread_quote_status = "stale"
+    elif long_opt.get("live_chain", False) and short_opt.get("live_chain", False):
+        spread_quote_status = "fresh"
+    else:
+        spread_quote_status = "unknown"
+    entry_execution = executable_vertical_spread_entry(
+        long_leg=long_opt,
+        short_leg=short_opt,
+        slippage_pct=0.0,
+        quote_freshness_status=spread_quote_status,
+    )
+    spread_liquidity = _spread_liquidity_metrics(long_opt, short_opt, entry_execution=entry_execution)
 
     result = {
         "ticker": ticker,
@@ -3807,7 +4878,17 @@ def _fetch_best_spread(
             "volume":          long_opt.get("volume"),
             "open_interest":   long_opt.get("open_interest"),
             "quote_age_hours": long_opt.get("quote_age_hours"),
+            "quote_timestamp_utc": long_opt.get("quote_timestamp_utc"),
+            "quote_timestamp_et": long_opt.get("quote_timestamp_et"),
+            "quote_timestamp_source": long_opt.get("quote_timestamp_source"),
             "quote_basis":     long_opt.get("quote_basis"),
+            "quote_source":    long_opt.get("quote_source"),
+            "data_source":     long_opt.get("data_source") or long_opt.get("options_data_source"),
+            "source_feed":     long_opt.get("source_feed"),
+            "quote_freshness_status": long_opt.get("quote_freshness_status"),
+            "live_chain":       long_opt.get("live_chain"),
+            "options_snapshot_status": long_opt.get("options_snapshot_status"),
+            "option_chain_status":    long_opt.get("option_chain_status"),
         },
         "short_leg": {
             "strike":          short_strike,
@@ -3821,7 +4902,17 @@ def _fetch_best_spread(
             "volume":          short_opt.get("volume"),
             "open_interest":   short_opt.get("open_interest"),
             "quote_age_hours": short_opt.get("quote_age_hours"),
+            "quote_timestamp_utc": short_opt.get("quote_timestamp_utc"),
+            "quote_timestamp_et": short_opt.get("quote_timestamp_et"),
+            "quote_timestamp_source": short_opt.get("quote_timestamp_source"),
             "quote_basis":     short_opt.get("quote_basis"),
+            "quote_source":    short_opt.get("quote_source"),
+            "data_source":     short_opt.get("data_source") or short_opt.get("options_data_source"),
+            "source_feed":     short_opt.get("source_feed"),
+            "quote_freshness_status": short_opt.get("quote_freshness_status"),
+            "live_chain":       short_opt.get("live_chain"),
+            "options_snapshot_status": short_opt.get("options_snapshot_status"),
+            "option_chain_status":    short_opt.get("option_chain_status"),
         },
         "spread_width":       round(spread_width, 4),
         "net_debit":           round(net_debit, 4),
@@ -3833,8 +4924,27 @@ def _fetch_best_spread(
         "expiry":              long_opt.get("expiry"),
         "dte":                 long_opt.get("dte"),
         "live_chain":          long_opt.get("live_chain", False) and short_opt.get("live_chain", False),
+        "market_data_provider": primary_provider_label(),
+        "market_data_source": long_opt.get("market_data_source") or long_opt.get("options_data_source"),
+        "options_data_source": long_opt.get("options_data_source") or long_opt.get("data_source"),
+        "quote_source": long_opt.get("quote_source"),
+        "quote_freshness_status": spread_quote_status,
+        "quote_age_hours": _spread_quote_context.get("quote_age_hours"),
+        "quote_timestamp_utc": _spread_quote_context.get("quote_timestamp_utc"),
+        "quote_timestamp_et": _spread_quote_context.get("quote_timestamp_et"),
+        "quote_timestamp_source": _spread_quote_context.get("quote_timestamp_source"),
         "options_snapshot_status": long_opt.get("options_snapshot_status"),
         "option_chain_status":    long_opt.get("option_chain_status"),
+        "entry_execution_price": entry_execution.get("execution_price"),
+        "entry_execution_basis": entry_execution.get("execution_basis"),
+        "entry_profitability_blockers": entry_execution.get("profitability_blockers"),
+        "entry_display_price": entry_execution.get("display_price"),
+        "entry_display_basis": entry_execution.get("display_basis"),
+        "spread_liquidity": spread_liquidity,
+        "spread_bid_ask_pct_of_mid": spread_liquidity.get("spread_bid_ask_pct_of_mid"),
+        "spread_entry_debit": spread_liquidity.get("spread_entry_debit"),
+        "spread_alternatives": spread_alternatives,
+        "liquidity_first_score": liquidity_first_score,
         "quote_captured_at_utc": _spread_capture["quote_captured_at_utc"],
         "quote_captured_at_et": _spread_capture["quote_captured_at_et"],
         "entry_quote_snapshot": {
@@ -3853,6 +4963,21 @@ def _fetch_best_spread(
             "debit_pct_of_width": round(debit_pct_of_width, 1),
             "risk_reward_ratio": round(max_profit / max_loss, 2) if max_loss > 0 else None,
             "live_chain": long_opt.get("live_chain", False) and short_opt.get("live_chain", False),
+            "market_data_provider": primary_provider_label(),
+            "market_data_source": long_opt.get("market_data_source") or long_opt.get("options_data_source"),
+            "options_data_source": long_opt.get("options_data_source") or long_opt.get("data_source"),
+            "quote_source": long_opt.get("quote_source"),
+            "quote_freshness_status": spread_quote_status,
+            "quote_age_hours": _spread_quote_context.get("quote_age_hours"),
+            "quote_timestamp_utc": _spread_quote_context.get("quote_timestamp_utc"),
+            "quote_timestamp_et": _spread_quote_context.get("quote_timestamp_et"),
+            "quote_timestamp_source": _spread_quote_context.get("quote_timestamp_source"),
+            "entry_execution_price": entry_execution.get("execution_price"),
+            "entry_execution_basis": entry_execution.get("execution_basis"),
+            "entry_display_price": entry_execution.get("display_price"),
+            "entry_display_basis": entry_execution.get("display_basis"),
+            "spread_liquidity": copy.deepcopy(spread_liquidity),
+            "spread_alternatives": copy.deepcopy(spread_alternatives),
         },
     }
 
@@ -4196,6 +5321,9 @@ def scan_daily_top_trades(
     min_tech_score: float = None,
     calibration_playbook: str = "broad",
     positions_repository: object = None,
+    allowed_directions: list[str] | tuple[str, ...] | set[str] | str | None = None,
+    symbols: list[str] | tuple[str, ...] | set[str] | str | None = None,
+    signal_variant: str | None = None,
 ) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
@@ -4214,9 +5342,39 @@ def scan_daily_top_trades(
 
     min_confidence_override = min_confidence
     min_tech_score_override = min_tech_score
+    if isinstance(allowed_directions, str):
+        scan_allowed_directions = {
+            item.strip().lower()
+            for item in allowed_directions.split(",")
+            if item.strip()
+        }
+    else:
+        scan_allowed_directions = {
+            str(item or "").strip().lower()
+            for item in list(allowed_directions or [])
+            if str(item or "").strip()
+        }
     # Entry gates from STRATEGY_PROFILE — overridable by caller for testing
+    signal_variant_key = str(signal_variant or "").strip().lower()
+    if isinstance(symbols, str):
+        scan_symbols = [item.strip().upper() for item in symbols.split(",") if item.strip()]
+    elif symbols is None:
+        scan_symbols = list(DEFAULT_WATCHLIST)
+    else:
+        scan_symbols = [str(item or "").strip().upper() for item in symbols if str(item or "").strip()]
+    scan_symbols = list(dict.fromkeys(scan_symbols))
+    scan_daily_top_trades._last_scan_symbols = list(scan_symbols)
+
     candidates: list[dict] = []
     scan_drop_counts = _empty_scan_drop_counts()
+    scan_drop_reasons: dict[str, dict] = {}
+
+    def _drop(symbol: str, key: str, details: dict | None = None) -> None:
+        _bump_scan_drop(scan_drop_counts, key)
+        scan_drop_reasons[str(symbol or "").strip().upper()] = {
+            "drop_key": key,
+            "details": details or {},
+        }
 
     # Fetch SPY regime data once for all tickers
     _spy_ret5 = 0.0
@@ -4283,28 +5441,39 @@ def scan_daily_top_trades(
         except Exception:
             pass  # If repo unavailable, allow all trades
 
-    for ticker in DEFAULT_WATCHLIST:
+    ai_commodity_scan_symbol_set = {symbol.upper() for symbol in AI_COMMODITY_INFRA_WATCHLIST}
+    use_ai_commodity_underlying_filters = bool(scan_symbols) and all(
+        symbol.upper() in ai_commodity_scan_symbol_set for symbol in scan_symbols
+    )
+    underlying_filters = AI_COMMODITY_UNDERLYING_FILTERS if use_ai_commodity_underlying_filters else UNDERLYING_FILTERS
+
+    for ticker in scan_symbols:
         _ac = _asset_class(ticker)
         base_sp = _get_profile(ticker)
         call_sp = _get_profile(ticker, "call")
         put_sp = _get_profile(ticker, "put")
+        if use_ai_commodity_underlying_filters:
+            base_sp = _profile_with_filter_overrides(base_sp, AI_COMMODITY_OPTION_FILTERS)
+            call_sp = _profile_with_filter_overrides(call_sp, AI_COMMODITY_OPTION_FILTERS)
+            put_sp = _profile_with_filter_overrides(put_sp, AI_COMMODITY_OPTION_FILTERS)
         try:
             hist_frame = _cached_history(ticker, period="400d")
-            liquidity_snapshot = _underlying_liquidity_snapshot(hist_frame)
+            _underlying_data_source = _data_source_from(hist_frame, primary_provider_label())
+            liquidity_snapshot = _underlying_liquidity_snapshot(hist_frame, filters=underlying_filters)
             if not liquidity_snapshot["eligible"]:
-                _bump_scan_drop(scan_drop_counts, "history_or_liquidity")
+                _drop(ticker, "history_or_liquidity", liquidity_snapshot)
                 continue
 
             close_history = hist_frame["Close"].dropna()
             hist = close_history.tail(90)
             if len(hist) < 55:
-                _bump_scan_drop(scan_drop_counts, "min_history")
+                _drop(ticker, "min_history", {"history_days": int(len(hist))})
                 continue
             prices = hist.values.astype(float)
             n      = len(prices)
             signal_idx = n - 2 if market_open and n >= 2 else n - 1
             if signal_idx < 50:
-                _bump_scan_drop(scan_drop_counts, "signal_index")
+                _drop(ticker, "signal_index", {"signal_idx": int(signal_idx), "history_days": int(n)})
                 continue
             price  = float(prices[signal_idx])
             _entry_stock_price = price
@@ -4328,7 +5497,7 @@ def scan_daily_top_trades(
             log_rets = np.log(prices[1:] / prices[:-1])
             hv30 = float(np.std(log_rets[signal_idx - 30 : signal_idx]) * math.sqrt(252))
             if hv30 <= 0:
-                _bump_scan_drop(scan_drop_counts, "history_or_liquidity")
+                _drop(ticker, "history_or_liquidity", {"reason": "non_positive_hv30", "hv30": hv30})
                 continue
 
             # IV percentile (rank of today's hv30 vs 90-day rolling hv30 history)
@@ -4337,38 +5506,68 @@ def scan_daily_top_trades(
                 hv_i = float(np.std(log_rets[max(0, i - 30) : i]) * math.sqrt(252))
                 if hv_i > 0:
                     hv_hist.append(hv_i)
-            iv_pct = float(np.sum(np.array(hv_hist) <= hv30) / max(len(hv_hist), 1) * 100) if hv_hist else 50.0
+            iv_rank_context = _point_in_time_rank_context(
+                hv30,
+                hv_hist,
+                source_label="underlying_hv30_point_in_time_proxy",
+                value_label="realized_vol_proxy",
+                as_of_index=signal_idx,
+            )
+            iv_pct = float(iv_rank_context["rank"]) if iv_rank_context.get("rank") is not None else 50.0
 
             # Momentum signal (same logic as backtest)
             ret5  = (price / float(prices[signal_idx - 5]) - 1) * 100
+            ret20 = (price / float(prices[signal_idx - 20]) - 1) * 100 if signal_idx >= 20 else 0.0
             sma20 = float(np.mean(prices[signal_idx - 20 : signal_idx]))
             sma50 = float(np.mean(prices[signal_idx - 50 : signal_idx]))
 
-            bullish = ret5 > float(call_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price > sma20
-            bearish = ret5 < -float(put_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price < sma20
+            signal_details = {
+                "signal_variant": signal_variant_key or "momentum",
+                "ret5": round(float(ret5), 4),
+                "ret20": round(float(ret20), 4),
+                "price": round(float(price), 4),
+                "sma20": round(float(sma20), 4),
+                "sma50": round(float(sma50), 4),
+            }
+            if signal_variant_key == "pullback_uptrend":
+                bullish = price > sma50 and ret20 > 2.0 and -4.0 < ret5 < 0.25
+                bearish = False
+            else:
+                bullish = ret5 > float(call_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price > sma20
+                bearish = ret5 < -float(put_sp.get("entry", {}).get("entry_momentum_pct", 0.5)) and price < sma20
             if not bullish and not bearish:
-                _bump_scan_drop(scan_drop_counts, "momentum")
+                drop_payload = dict(signal_details)
+                drop_payload["call_entry_momentum_pct"] = float(call_sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+                drop_payload["put_entry_momentum_pct"] = float(put_sp.get("entry", {}).get("entry_momentum_pct", 0.5))
+                if signal_variant_key == "pullback_uptrend":
+                    drop_payload["required_signal"] = "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%"
+                _drop(
+                    ticker,
+                    "momentum",
+                    drop_payload,
+                )
                 continue
             trade_type = "call" if bullish else "put"
+            signal_family = "bullish_pullback" if signal_variant_key == "pullback_uptrend" else "momentum"
             # Direction filter — skip if this direction isn't allowed by profile
-            _allowed_dirs = base_sp.get("entry", {}).get("allowed_directions")
+            _allowed_dirs = scan_allowed_directions or base_sp.get("entry", {}).get("allowed_directions")
             if _allowed_dirs and trade_type not in _allowed_dirs:
-                _bump_scan_drop(scan_drop_counts, "direction_filter")
+                _drop(ticker, "direction_filter", {"trade_type": trade_type, "allowed_directions": sorted(_allowed_dirs)})
                 continue
 
             # Per-ticker entry filters (e.g. QQQ requires bullish regime + low vol)
             _entry_filters = base_sp.get("entry_filters", {})
             # Stop cooldown — skip ticker if recently stopped out
             if ticker in _stop_cooldown_tickers:
-                _bump_scan_drop(scan_drop_counts, "stop_cooldown")
+                _drop(ticker, "stop_cooldown")
                 continue
             if ticker == "QQQ":
                 if _entry_filters.get("qqq_require_bullish_regime") and market_regime_bucket != "bullish":
-                    _bump_scan_drop(scan_drop_counts, "ticker_regime_filter")
+                    _drop(ticker, "ticker_regime_filter", {"market_regime": market_regime_bucket})
                     continue
                 _qqq_max_hv = float(_entry_filters.get("qqq_max_hv30", 999.0))
                 if hv30 > _qqq_max_hv:
-                    _bump_scan_drop(scan_drop_counts, "ticker_vol_filter")
+                    _drop(ticker, "ticker_vol_filter", {"hv30": hv30, "max_hv30": _qqq_max_hv})
                     continue
 
             sp = call_sp if trade_type == "call" else put_sp
@@ -4390,11 +5589,41 @@ def scan_daily_top_trades(
             rsi14 = _rsi14_live
             ret5 = _ret5_live
             if tech < ticker_min_tech_score:
-                _bump_scan_drop(scan_drop_counts, "tech_score")
+                _drop(
+                    ticker,
+                    "tech_score",
+                    {
+                        "tech_score": round(float(tech), 4),
+                        "min_tech_score": round(float(ticker_min_tech_score), 4),
+                        "trade_type": trade_type,
+                        "rsi14": round(float(rsi14), 4),
+                        "ret5": round(float(ret5), 4),
+                    },
+                )
                 continue
             direction_score = _compute_direction_score(tech, trade_type, rsi14, ret5, _spy_ret5, sp=sp)
+            if signal_variant_key == "pullback_uptrend":
+                pullback_depth_score = max(0.0, 100.0 - abs(float(signal_details["ret5"]) + 1.5) * 30.0)
+                ret20_score = min(100.0, max(0.0, (float(signal_details["ret20"]) - 2.0) / 6.0 * 100.0))
+                sma50_gap_pct = (price / sma50 - 1.0) * 100.0 if sma50 > 0 else 0.0
+                trend_score = min(100.0, max(0.0, sma50_gap_pct * 20.0))
+                direction_score = round(
+                    pullback_depth_score * 0.45
+                    + ret20_score * 0.35
+                    + trend_score * 0.20,
+                    1,
+                )
             if direction_score < ticker_min_confidence:
-                _bump_scan_drop(scan_drop_counts, "direction_score")
+                _drop(
+                    ticker,
+                    "direction_score",
+                    {
+                        "direction_score": round(float(direction_score), 4),
+                        "min_direction_score": round(float(ticker_min_confidence), 4),
+                        "trade_type": trade_type,
+                        "signal_variant": signal_variant_key or None,
+                    },
+                )
                 continue
 
             ticker_target_dte = (
@@ -4427,7 +5656,7 @@ def scan_daily_top_trades(
                 except Exception:
                     _earnings_skip = True
                 if _earnings_skip:
-                    _bump_scan_drop(scan_drop_counts, "earnings")
+                    _drop(ticker, "earnings", {"next_earnings": str(_next_earn) if _next_earn is not None else None})
                     continue
 
             # ── Fetch options: spread (default) or single-leg ─────────────────
@@ -4454,10 +5683,20 @@ def scan_daily_top_trades(
                 except Exception:
                     _spread_result = None
                 if _spread_result is None:
-                    _bump_scan_drop(scan_drop_counts, "option_liquidity")
+                    _drop(
+                        ticker,
+                        "option_liquidity",
+                        {
+                            "reason": "no_valid_spread",
+                            "trade_type": trade_type,
+                            "signal_variant": signal_variant_key or None,
+                            "candidate_execution_label": "rejected_liquidity",
+                        },
+                    )
                     continue
-                # Map spread fields to single-leg variable names for downstream compat
-                _opt = _spread_result["long_leg"]  # primary leg for liquidity checks
+                # Map spread fields to single-leg variable names for downstream compat.
+                # Liquidity is checked at the full-spread level below.
+                _opt = _spread_result["long_leg"]
                 best_strike = _spread_result["long_leg"]["strike"]
                 est_premium = _spread_result["net_debit"]  # cost basis = net debit
                 delta_val   = _spread_result["net_delta"]
@@ -4486,7 +5725,16 @@ def scan_daily_top_trades(
                         hv30_fallback=hv30,
                     )
                 if _opt is None:
-                    _bump_scan_drop(scan_drop_counts, "option_liquidity")
+                    _drop(
+                        ticker,
+                        "option_liquidity",
+                        {
+                            "reason": "no_valid_option",
+                            "trade_type": trade_type,
+                            "signal_variant": signal_variant_key or None,
+                            "candidate_execution_label": "rejected_liquidity",
+                        },
+                    )
                     continue
                 best_strike = _opt["strike"]
                 est_premium = _opt["premium"]
@@ -4495,19 +5743,50 @@ def scan_daily_top_trades(
                 actual_dte  = _opt["dte"]
 
             # Liquidity gate — same as brain (skip if bid/ask spread too wide)
-            _liq = _check_trade_liquidity(
-                _opt.get("bid"),
-                _opt.get("ask"),
-                contract_volume=_opt.get("volume"),
-                open_interest=_opt.get("open_interest"),
-                quote_age_hours=_opt.get("quote_age_hours"),
-                sp=sp,
-            )
+            if _is_spread and _spread_result is not None:
+                _liq = _spread_liquidity_metrics(
+                    _spread_result["long_leg"],
+                    _spread_result["short_leg"],
+                    entry_execution={
+                        "execution_price": _spread_result.get("entry_execution_price"),
+                        "execution_basis": _spread_result.get("entry_execution_basis"),
+                        "profitability_blockers": _spread_result.get("entry_profitability_blockers") or [],
+                    },
+                    sp=sp,
+                )
+                _spread_result["spread_liquidity"] = _liq
+                _spread_result["spread_bid_ask_pct_of_mid"] = _liq.get("spread_bid_ask_pct_of_mid")
+                _spread_result["spread_entry_debit"] = _liq.get("spread_entry_debit")
+            else:
+                _liq = _check_trade_liquidity(
+                    _opt.get("bid"),
+                    _opt.get("ask"),
+                    contract_volume=_opt.get("volume"),
+                    open_interest=_opt.get("open_interest"),
+                    quote_age_hours=_opt.get("quote_age_hours"),
+                    sp=sp,
+                )
             _is_live_chain = (
                 _spread_result.get("live_chain", True) if (_is_spread and _spread_result) else _opt.get("live_chain", True)
             )
             if _liq["is_illiquid"] and _is_live_chain:
-                _bump_scan_drop(scan_drop_counts, "option_liquidity")
+                liquidity_drop_details = {
+                    "reason": "illiquid_quote",
+                    "liquidity": _liq,
+                    "liquidity_filters": _liquidity_filter_snapshot(sp),
+                    "signal_variant": signal_variant_key or None,
+                    "candidate_execution_label": "rejected_liquidity",
+                }
+                if _is_spread and _spread_result is not None:
+                    liquidity_drop_details["selected_spread"] = _compact_spread_rejection_snapshot(_spread_result)
+                    liquidity_drop_details["spread_alternatives"] = copy.deepcopy(
+                        _spread_result.get("spread_alternatives") or []
+                    )
+                _drop(
+                    ticker,
+                    "option_liquidity",
+                    liquidity_drop_details,
+                )
                 continue
 
             # IV crush check — same as brain (penalise if strike IV >> HV distribution)
@@ -4531,9 +5810,14 @@ def scan_daily_top_trades(
                 pass
 
             if not _is_spread and direction_score < ticker_min_confidence:
-                _bump_scan_drop(
-                    scan_drop_counts,
+                _drop(
+                    ticker,
                     "iv_crush_penalty" if float(_iv_pen or 0.0) > 0 else "direction_score",
+                    {
+                        "direction_score": round(float(direction_score), 4),
+                        "min_direction_score": round(float(ticker_min_confidence), 4),
+                        "iv_crush_penalty_pts": round(float(_iv_pen or 0.0), 4),
+                    },
                 )
                 continue
             _direction_score_for_expectancy = _direction_score_pre_iv if _is_spread else direction_score
@@ -4592,7 +5876,40 @@ def scan_daily_top_trades(
                 min_ev_return_pct=min_heuristic_ev,
             )
             if ev_pct is None:
-                _bump_scan_drop(scan_drop_counts, "ev_floor")
+                drop_details = {
+                    "direction_score": round(float(_direction_score_for_expectancy), 4),
+                    "quality_score": round(float(quality_score), 4),
+                    "expectancy_selection_source": expectancy_selection_source,
+                    "min_calibrated_expectancy_pct": _min_empirical_ev,
+                    "min_heuristic_ev": min_heuristic_ev,
+                    "profit_target_pct": round(float(_profit_target_pct), 4),
+                    "stop_loss_pct": round(float(_adj_stop_pct), 4),
+                }
+                if calibration is not None:
+                    try:
+                        drop_details["candidate_calibrated_ev_pct"] = round(float(calibration.get("avg_pnl_pct")), 4)
+                    except (TypeError, ValueError):
+                        pass
+                    if calibration.get("trades") is not None:
+                        drop_details["calibration_trades"] = calibration.get("trades")
+                    if calibration.get("source"):
+                        drop_details["calibration_source"] = calibration.get("source")
+                else:
+                    drop_details["candidate_heuristic_ev_pct"] = round(
+                        float(
+                            _bootstrap_heuristic_ev_pct(
+                                direction_score=_direction_score_for_expectancy,
+                                profit_target_pct=_profit_target_pct,
+                                stop_loss_pct=_adj_stop_pct,
+                            )
+                        ),
+                        4,
+                    )
+                _drop(
+                    ticker,
+                    "ev_floor",
+                    drop_details,
+                )
                 continue
 
             # Kelly-informed position sizing recommendation
@@ -4611,7 +5928,11 @@ def scan_daily_top_trades(
 
             # Build human-readable signal reasons
             reasons: list[str] = []
-            if bullish:
+            if signal_variant_key == "pullback_uptrend":
+                reasons.append(f"Close ${price:.0f} above SMA50 ${sma50:.0f}")
+                reasons.append(f"20-day return {float(signal_details['ret20']):+.1f}%")
+                reasons.append(f"5-day pullback {float(signal_details['ret5']):+.1f}%")
+            elif bullish:
                 if price > sma20:  reasons.append(f"Price ${price:.0f} above SMA20 ${sma20:.0f}")
                 if sma20 > sma50:  reasons.append("SMA20 above SMA50 — uptrend confirmed")
                 reasons.append(f"+{ret5:.1f}% 5-day momentum")
@@ -4656,7 +5977,8 @@ def scan_daily_top_trades(
             )
             target_move_pct = round(abs((strategy["stock_tp"] / _live_underlying_price - 1) * 100), 2) if _live_underlying_price else None
 
-            contract_selection_source = _live_contract_selection_source(_opt)
+            selection_payload = _spread_result if (_is_spread and _spread_result is not None) else _opt
+            contract_selection_source = _live_contract_selection_source(selection_payload)
             has_exact_contract = contract_selection_source == "live_chain_exact_contract"
             promotion_class = _live_pick_promotion_class(
                 has_exact_contract=has_exact_contract,
@@ -4664,31 +5986,59 @@ def scan_daily_top_trades(
                 dense_calibration=calibration,
             )
             quote_freshness_status = (
-                str(_opt.get("option_chain_status") or _opt.get("options_snapshot_status") or "").strip().lower()
+                str(
+                    selection_payload.get("quote_freshness_status")
+                    or selection_payload.get("option_chain_status")
+                    or selection_payload.get("options_snapshot_status")
+                    or ""
+                ).strip().lower()
                 or ("fresh" if has_exact_contract else "unknown")
             )
-            entry_execution = executable_option_price(
-                side="entry",
-                bid=_opt.get("bid"),
-                ask=_opt.get("ask"),
-                last=_opt.get("last"),
-                model_price=_opt.get("model_price") if _opt.get("quote_basis") == "model" else None,
-                slippage_pct=float(sp["filters"].get("entry_slippage_pct", 0.0)),
-                quote_freshness_status=quote_freshness_status,
-            )
+            if _is_spread and _spread_result is not None:
+                entry_execution = executable_vertical_spread_entry(
+                    long_leg=_spread_result.get("long_leg"),
+                    short_leg=_spread_result.get("short_leg"),
+                    slippage_pct=float(sp["filters"].get("entry_slippage_pct", 0.0)),
+                    quote_freshness_status=quote_freshness_status,
+                )
+            else:
+                entry_execution = executable_option_price(
+                    side="entry",
+                    bid=_opt.get("bid"),
+                    ask=_opt.get("ask"),
+                    last=_opt.get("last"),
+                    model_price=_opt.get("model_price") if _opt.get("quote_basis") == "model" else None,
+                    slippage_pct=float(sp["filters"].get("entry_slippage_pct", 0.0)),
+                    quote_freshness_status=quote_freshness_status,
+                )
+            candidate_entry_execution_price = entry_execution.get("execution_price")
+            candidate_entry_execution_basis = entry_execution.get("execution_basis")
             profitability = profitability_status_with_blockers(
                 base_blockers=entry_execution.get("profitability_blockers"),
                 contract_symbol=_opt.get("contract_symbol"),
                 quote_freshness_status=quote_freshness_status,
                 promotion_class=promotion_class,
                 selection_source=contract_selection_source,
-                entry_execution_price=entry_execution.get("execution_price"),
+                entry_execution_price=candidate_entry_execution_price,
             )
             if _should_mark_non_executable_quote(profitability.get("profitability_blockers")):
                 promotion_class = "research_non_executable_quote"
             quote_timestamps = _quote_timestamp_snapshot()
-            candidate_quote_time_et = _opt.get("quote_captured_at_et") or quote_timestamps["quote_time_et"]
-            candidate_quote_time_utc = _opt.get("quote_captured_at_utc") or quote_timestamps["quote_time_utc"]
+            quote_time_payload = _spread_result if (_is_spread and _spread_result is not None) else _opt
+            candidate_quote_time_et = (
+                quote_time_payload.get("quote_timestamp_et")
+                or _opt.get("quote_timestamp_et")
+                or quote_time_payload.get("quote_captured_at_et")
+                or _opt.get("quote_captured_at_et")
+                or quote_timestamps["quote_time_et"]
+            )
+            candidate_quote_time_utc = (
+                quote_time_payload.get("quote_timestamp_utc")
+                or _opt.get("quote_timestamp_utc")
+                or quote_time_payload.get("quote_captured_at_utc")
+                or _opt.get("quote_captured_at_utc")
+                or quote_timestamps["quote_time_utc"]
+            )
 
             _time_exit_pct = float(
                 _spread_cfg.get("time_exit_pct", sp["risk"].get("time_exit_pct", 50.0))
@@ -4700,12 +6050,20 @@ def scan_daily_top_trades(
                 "direction":          trade_type,
                 "option_type":        trade_type,
                 "strategy_type":      _strategy_type,
+                "signal_variant":     signal_variant_key or None,
+                "signal_family":      signal_family,
                 "direction_score":    round(direction_score, 1),
                 "quality_score":      round(quality_score, 1),
                 "tech_score":         round(tech, 1),
                 "iv_rank":            round(iv_pct, 1),
                 "iv_percentile":      round(iv_pct, 1),
                 "iv_pct":             round(iv_pct, 1),
+                "iv_rank_source":     iv_rank_context.get("source_label"),
+                "iv_rank_value_label": iv_rank_context.get("value_label"),
+                "iv_rank_lookback_count": iv_rank_context.get("lookback_count"),
+                "iv_rank_point_in_time": iv_rank_context.get("point_in_time"),
+                "iv_rank_proof_grade": iv_rank_context.get("proof_grade"),
+                "iv_rank_quality_flag": iv_rank_context.get("quality_flag"),
                 "delta_est":          round(delta_val, 2),
                 "delta":              round(float(_opt.get("delta") or delta_val), 3),
                 "stock_price":        round(_live_underlying_price, 2),
@@ -4722,13 +6080,19 @@ def scan_daily_top_trades(
                 "last":               _opt.get("last"),
                 "mid":                round(est_premium, 4),
                 "est_premium":        round(est_premium, 4),
-                "entry_execution_price": entry_execution.get("execution_price"),
-                "entry_execution_basis": entry_execution.get("execution_basis"),
-                "entry_fee_total_usd": commission_total_usd(contracts=1) if entry_execution.get("execution_price") is not None else 0.0,
+                "entry_execution_price": candidate_entry_execution_price,
+                "entry_execution_basis": candidate_entry_execution_basis,
+                "entry_profitability_blockers": entry_execution.get("profitability_blockers"),
+                "entry_display_price": entry_execution.get("display_price"),
+                "entry_display_basis": entry_execution.get("display_basis"),
+                "entry_fee_total_usd": commission_total_usd(contracts=1) if candidate_entry_execution_price is not None else 0.0,
                 "quote_captured_at_utc": _opt.get("quote_captured_at_utc"),
                 "quote_captured_at_et": _opt.get("quote_captured_at_et"),
-                "entry_quote_timestamp_utc": _opt.get("quote_captured_at_utc"),
-                "entry_quote_timestamp_et": _opt.get("quote_captured_at_et"),
+                "quote_timestamp_utc": quote_time_payload.get("quote_timestamp_utc") or _opt.get("quote_timestamp_utc"),
+                "quote_timestamp_et": quote_time_payload.get("quote_timestamp_et") or _opt.get("quote_timestamp_et"),
+                "quote_timestamp_source": quote_time_payload.get("quote_timestamp_source") or _opt.get("quote_timestamp_source"),
+                "entry_quote_timestamp_utc": quote_time_payload.get("quote_timestamp_utc") or _opt.get("quote_timestamp_utc") or _opt.get("quote_captured_at_utc"),
+                "entry_quote_timestamp_et": quote_time_payload.get("quote_timestamp_et") or _opt.get("quote_timestamp_et") or _opt.get("quote_captured_at_et"),
                 "profitability_eligibility": profitability["profitability_eligibility"],
                 "profitability_blockers": profitability["profitability_blockers"],
                 "stop_loss_pct":      _adj_stop_pct,
@@ -4747,19 +6111,27 @@ def scan_daily_top_trades(
                 "calibration_is_dense": bool(calibration_lookup.get("dense_cohort")) if calibration_lookup else False,
                 "surface_provenance": calibration_lookup.get("surface_provenance") if calibration_lookup else None,
                 "ret5":               round(ret5, 2),
+                "signal_ret5":        round(float(signal_details["ret5"]), 2),
+                "signal_ret20":       round(float(signal_details["ret20"]), 2),
+                "signal_sma50":       round(float(signal_details["sma50"]), 2),
                 "rsi14":              round(rsi14, 1),
                 "spy_ret5":           round(_spy_ret5, 2),
                 "entry_date":         today_str,
                 "quote_time_et":      candidate_quote_time_et,
                 "quote_time_utc":     candidate_quote_time_utc,
                 "quote_basis":        _opt.get("quote_basis"),
+                "market_data_provider": primary_provider_label(),
+                "underlying_data_source": _underlying_data_source,
+                "market_data_source": _opt.get("market_data_source") or _opt.get("options_data_source") or _underlying_data_source,
+                "options_data_source": _opt.get("options_data_source") or _opt.get("data_source"),
+                "quote_source":       _opt.get("quote_source") or _opt.get("options_data_source") or _opt.get("data_source"),
                 "quote_freshness_status": quote_freshness_status,
                 "options_snapshot_status": _opt.get("options_snapshot_status"),
                 "option_chain_status": _opt.get("option_chain_status"),
                 "selection_source":   contract_selection_source,
                 "contract_selection_source": contract_selection_source,
                 "promotion_class":    promotion_class,
-                "promotable":         promotion_class == "promotable_exact_contract" and entry_execution.get("execution_price") is not None,
+                "promotable":         promotion_class == "promotable_exact_contract" and candidate_entry_execution_price is not None,
                 "original_logged_expiry": actual_exp or target_str,
                 "resolved_listed_expiry": actual_exp,
                 "target_date":        target_str,
@@ -4804,16 +6176,39 @@ def scan_daily_top_trades(
                 _candidate["net_delta"]            = _spread_result["net_delta"]
                 _candidate["debit_pct_of_width"]   = _spread_result["debit_pct_of_width"]
                 _candidate["risk_reward_ratio"]    = _spread_result["risk_reward_ratio"]
+                _candidate["spread_liquidity"]     = _spread_result.get("spread_liquidity")
+                _candidate["spread_bid_ask_pct_of_mid"] = _spread_result.get("spread_bid_ask_pct_of_mid")
+                _candidate["spread_entry_debit"]   = _spread_result.get("spread_entry_debit")
+                _candidate["spread_alternatives"]  = _spread_result.get("spread_alternatives")
+                _candidate["liquidity_first_score"] = _spread_result.get("liquidity_first_score")
                 _candidate["short_strike"]         = _spread_result["short_leg"]["strike"]
                 _candidate["short_contract_symbol"] = _spread_result["short_leg"].get("contract_symbol")
                 _candidate["quote_captured_at_utc"] = _spread_result.get("quote_captured_at_utc")
                 _candidate["quote_captured_at_et"] = _spread_result.get("quote_captured_at_et")
-                _candidate["entry_quote_timestamp_utc"] = _spread_result.get("quote_captured_at_utc")
-                _candidate["entry_quote_timestamp_et"] = _spread_result.get("quote_captured_at_et")
-                _candidate["quote_time_et"] = _spread_result.get("quote_captured_at_et") or _candidate.get("quote_time_et")
-                _candidate["quote_time_utc"] = _spread_result.get("quote_captured_at_utc") or _candidate.get("quote_time_utc")
+                _candidate["quote_timestamp_utc"] = _spread_result.get("quote_timestamp_utc")
+                _candidate["quote_timestamp_et"] = _spread_result.get("quote_timestamp_et")
+                _candidate["quote_timestamp_source"] = _spread_result.get("quote_timestamp_source")
+                _candidate["entry_quote_timestamp_utc"] = (
+                    _spread_result.get("quote_timestamp_utc") or _spread_result.get("quote_captured_at_utc")
+                )
+                _candidate["entry_quote_timestamp_et"] = (
+                    _spread_result.get("quote_timestamp_et") or _spread_result.get("quote_captured_at_et")
+                )
+                _candidate["quote_time_et"] = (
+                    _spread_result.get("quote_timestamp_et")
+                    or _spread_result.get("quote_captured_at_et")
+                    or _candidate.get("quote_time_et")
+                )
+                _candidate["quote_time_utc"] = (
+                    _spread_result.get("quote_timestamp_utc")
+                    or _spread_result.get("quote_captured_at_utc")
+                    or _candidate.get("quote_time_utc")
+                )
+                _candidate["options_data_source"] = _spread_result.get("options_data_source") or _candidate.get("options_data_source")
+                _candidate["market_data_source"] = _spread_result.get("market_data_source") or _candidate.get("market_data_source")
+                _candidate["quote_source"] = _spread_result.get("quote_source") or _candidate.get("quote_source")
                 # Override fee for spreads: 4 legs total (2 on entry, 2 on exit)
-                if entry_execution.get("execution_price") is not None:
+                if candidate_entry_execution_price is not None:
                     _candidate["entry_fee_total_usd"] = commission_total_usd(contracts=1, sides=2)
                 # Spread-specific signal reasons
                 _candidate["signal_reasons"] = reasons + [
@@ -4825,15 +6220,25 @@ def scan_daily_top_trades(
                 ]
                 _candidate["resolved_listed_expiry"] = _spread_result.get("expiry") or _candidate.get("resolved_listed_expiry")
 
+            _candidate = _normalize_spread_entry_candidate(_candidate)
+            _candidate["candidate_execution_label"] = _candidate_execution_label(_candidate)
+            _candidate["execution_candidate_label"] = _candidate["candidate_execution_label"]
+            _quality = _candidate_data_quality(_candidate)
+            _candidate["data_quality_status"] = _quality["status"]
+            _candidate["data_quality_flags"] = _quality["flags"]
+            _candidate["pricing_evidence_class"] = _quality["pricing_evidence_class"]
+            _candidate["profitability_evidence_class"] = _quality["profitability_evidence_class"]
+            _candidate["source_separation"] = _quality["source_separation"]
             _candidate["entry_quote_snapshot"] = _entry_quote_snapshot_from_candidate(_candidate)
 
             candidates.append(_candidate)
-        except Exception:
-            _bump_scan_drop(scan_drop_counts, "exceptions")
+        except Exception as exc:
+            _drop(ticker, "exceptions", {"type": exc.__class__.__name__, "message": str(exc)})
             continue
 
     candidates.sort(key=_candidate_rank_tuple, reverse=True)
     scan_daily_top_trades._last_scan_drop_counts = dict(scan_drop_counts)
+    scan_daily_top_trades._last_scan_drop_reasons = dict(scan_drop_reasons)
 
     # ── Sector concentration: equity picks — max 2 from same sector ───────────
     _sector_counts: dict[str, int] = {}
@@ -6288,8 +7693,6 @@ def _get_system_prompt() -> str:
     d_w     = round(cw["delta"]         * 100)
     dte_w   = round(cw["dte"]           * 100)
 
-    illiq_total = round(flt["min_ev_return_pct"] + flt["illiquid_extra_margin_pct"])
-
     return f"""You are a strategy explainer for an options trading model. Your role is strictly limited to:
 
 1. Explaining how this strategy and model work
@@ -6375,8 +7778,8 @@ Key metrics to explain:
 - `stopped_out_pct`: % of trades stopped out
 
 ## Data Notes
-- Market data from Yahoo Finance (~15-min delayed)
-- Greeks via Black-Scholes from live IV
+- Market data from Alpaca SIP/OPRA when Alpaca mode is active
+- Greeks via live OPRA metadata when available; otherwise research-only estimates stay out of executable tracking
 - HV Rank uses realized vol as proxy for true IV rank
 - This platform is for informational and educational purposes only. Nothing here is financial advice.
 
@@ -6402,7 +7805,7 @@ def chat():
     print()
     print("=" * 66)
     print("  📈  Options Trading Assistant  —  Enhanced Edition")
-    print("  Claude Sonnet 4.6  x  Yahoo Finance (free, ~15-min delayed)")
+    print(f"  Claude Sonnet 4.6  x  {primary_provider_label()}")
     print("  16 tools: Greeks · IV Rank · Earnings · VIX · P/C Ratio")
     print("    · 2x Screener · Position Sizing · Risk Management")
     print("    · Paper Trading Journal · Strategy Backtester · Brain")

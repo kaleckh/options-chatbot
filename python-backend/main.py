@@ -12,6 +12,7 @@ import math
 import sqlite3
 import contextlib
 import threading
+from collections import deque
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
@@ -86,6 +87,7 @@ from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
 from suggested_trades_repository import create_suggested_trades_repository
 from supervised_scan import (
+    DEFAULT_SCAN_PLAYBOOK_ID,
     LIVE_SCAN_TRUTH_LANE,
     run_supervised_scan,
     scan_pick_market_regime,
@@ -245,8 +247,9 @@ def _db():
 
 
 @app.post("/api/tools/{tool_name}")
-async def call_tool_endpoint(tool_name: str, body: dict[str, Any] = {}):
+async def call_tool_endpoint(tool_name: str, body: dict[str, Any] | None = None):
     """Execute any of the 16 tool functions by name."""
+    body = body or {}
     fn = TOOL_DISPATCH.get(tool_name)
     if not fn:
         raise HTTPException(404, f"Unknown tool: {tool_name}")
@@ -303,8 +306,9 @@ async def get_predictions():
 
 
 @app.post("/api/predictions/grade")
-async def grade_predictions(body: dict[str, Any] = {}):
+async def grade_predictions(body: dict[str, Any] | None = None):
     """Grade predictions."""
+    body = body or {}
     scan_date = body.get("scan_date")
     kwargs = {}
     if scan_date:
@@ -366,15 +370,29 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["speculative_flag"] = bool(pick.get("speculative_flag"))
     normalized["speculative_reason"] = pick.get("speculative_reason")
     normalized["convexity_class"] = pick.get("convexity_class")
-    normalized["observation_only"] = bool(pick.get("observation_only"))
-    normalized["observation_reason"] = pick.get("observation_reason")
+    normalized["historical_data_ready"] = pick.get("historical_data_ready")
+    normalized["historical_data_source"] = pick.get("historical_data_source")
+    normalized["historical_data_readiness_status"] = pick.get("historical_data_readiness_status")
+    normalized["ai_commodity_bucket"] = pick.get("ai_commodity_bucket")
     normalized["quote_time_et"] = pick.get("quote_time_et")
     normalized["quote_time_utc"] = pick.get("quote_time_utc")
     normalized["quote_basis"] = pick.get("quote_basis")
+    normalized["market_data_provider"] = pick.get("market_data_provider")
+    normalized["market_data_source"] = pick.get("market_data_source")
+    normalized["underlying_data_source"] = pick.get("underlying_data_source")
+    normalized["options_data_source"] = pick.get("options_data_source")
+    normalized["quote_source"] = pick.get("quote_source")
     normalized["quote_freshness_status"] = pick.get("quote_freshness_status")
     normalized["original_logged_expiry"] = pick.get("original_logged_expiry")
     normalized["resolved_listed_expiry"] = pick.get("resolved_listed_expiry")
-    normalized["entry_quote_snapshot"] = pick.get("entry_quote_snapshot")
+    entry_quote_snapshot = pick.get("entry_quote_snapshot")
+    if isinstance(entry_quote_snapshot, dict):
+        entry_quote_snapshot = dict(entry_quote_snapshot)
+        if normalized.get("quote_time_et"):
+            entry_quote_snapshot["captured_at_et"] = normalized.get("quote_time_et")
+        if normalized.get("quote_time_utc"):
+            entry_quote_snapshot["captured_at_utc"] = normalized.get("quote_time_utc")
+    normalized["entry_quote_snapshot"] = entry_quote_snapshot
     normalized["expectancy_selection_source"] = pick.get("expectancy_selection_source")
     normalized["underlying_price_at_selection"] = (
         pick.get("underlying_price_at_selection")
@@ -394,7 +412,7 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["bid"] = pick.get("bid")
     normalized["ask"] = pick.get("ask")
     normalized["last"] = pick.get("last")
-    normalized["mid"] = pick.get("mid")
+    normalized["mid"] = pick.get("mid") if pick.get("mid") is not None else normalized.get("mid")
     normalized["entry_execution_price"] = pick.get("entry_execution_price")
     normalized["entry_execution_basis"] = pick.get("entry_execution_basis")
     normalized["entry_fee_total_usd"] = pick.get("entry_fee_total_usd")
@@ -433,6 +451,45 @@ def _normalize_scan_picks(picks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized["candidate_rank"] = int(normalized.get("candidate_rank") or idx)
         normalized_picks.append(normalized)
     return normalized_picks
+
+
+def _normalize_scan_pick_payload_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    normalized = dict(payload)
+    for field in fields:
+        value = normalized.get(field)
+        if isinstance(value, list):
+            normalized_items: list[Any] = []
+            rank = 1
+            for item in value:
+                if not isinstance(item, dict):
+                    normalized_items.append(item)
+                    continue
+                normalized_pick = _normalize_scan_pick(item)
+                normalized_pick["candidate_rank"] = int(normalized_pick.get("candidate_rank") or rank)
+                normalized_items.append(normalized_pick)
+                rank += 1
+            normalized[field] = normalized_items
+    return normalized
+
+
+def _normalize_recommendation_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_scan_pick_payload_fields(payload, ("new_opportunities",))
+    active_positions = []
+    for item in list(normalized.get("active_positions") or []):
+        if not isinstance(item, dict):
+            active_positions.append(item)
+            continue
+        active = dict(item)
+        replacement = active.get("replace_with")
+        if isinstance(replacement, dict):
+            active["replace_with"] = _normalize_scan_pick(replacement)
+        active_positions.append(active)
+    normalized["active_positions"] = active_positions
+    return normalized
+
+
+def _normalize_roll_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    return _normalize_scan_pick_payload_fields(payload, ("rolled", "new", "dropped"))
 
 
 def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
@@ -543,7 +600,7 @@ def _annotate_share_safety(row: dict[str, Any]) -> dict[str, Any]:
         share_safe_reason = "Live review pending."
     elif current_option_price is None:
         share_safe_reason = "No live market option price is saved yet."
-    elif pricing_source not in {"mid", "last_price", "spread_mid_exact"}:
+    elif pricing_source not in {"mid", "last_price", "spread_mid_exact", "spread_bid_ask_exact"}:
         if pricing_source == "spread_mid_approx":
             share_safe_reason = "Estimated from proxy contract pricing."
         elif pricing_source == "expired":
@@ -589,8 +646,6 @@ def _scan_evidence_class() -> str:
     explicit = str(os.getenv("OPTIONS_EVIDENCE_CLASS") or "").strip().lower()
     if explicit:
         return explicit
-    if str(os.getenv("PYTEST_CURRENT_TEST") or "").strip():
-        return "e2e_test"
     return LIVE_PRODUCTION_EVIDENCE_CLASS
 
 
@@ -698,8 +753,15 @@ def _record_forward_truth_for_scan(
         positions_error = getattr(POSITIONS_REPOSITORY, "error_message", None)
 
     evidence_class = _scan_evidence_class()
+    candidate_audit_picks = result.get("candidate_audit_picks")
+    normalized_candidate_audit_picks = (
+        _normalize_scan_picks(list(candidate_audit_picks or []))
+        if candidate_audit_picks is not None
+        else []
+    )
     scan_snapshot = build_forward_scan_snapshot(
         picks=normalized_picks,
+        candidate_audit_picks=normalized_candidate_audit_picks,
         policy_applied=bool(result.get("policy_applied")),
         policy=result.get("policy"),
         policy_error=result.get("policy_error"),
@@ -738,7 +800,35 @@ def _record_forward_truth_for_scan(
 def _position_event_payload(position: dict[str, Any], *, reason: str) -> dict[str, Any]:
     payload = copy.deepcopy(position)
     latest_review = dict(payload.get("latest_review") or {})
-    if not latest_review:
+    is_closed = str(payload.get("status") or "").strip().lower() == "closed" or payload.get("closed_at") is not None
+
+    def _first_present(*values: Any) -> Any:
+        for value in values:
+            if value is not None:
+                return value
+        return None
+
+    if is_closed:
+        latest_review = {
+            "reviewed_at": _first_present(payload.get("closed_at"), payload.get("last_reviewed_at"), latest_review.get("reviewed_at"), datetime.now().isoformat()),
+            "pricing_source": _first_present(payload.get("exit_execution_basis"), payload.get("exit_reason"), reason, latest_review.get("pricing_source")),
+            "current_option_price": _first_present(payload.get("exit_option_price"), payload.get("last_option_price"), latest_review.get("current_option_price")),
+            "current_pnl_pct": _first_present(payload.get("gross_pnl_pct"), payload.get("last_pnl_pct"), latest_review.get("current_pnl_pct")),
+            "gross_pnl_pct": _first_present(payload.get("gross_pnl_pct"), latest_review.get("gross_pnl_pct")),
+            "net_pnl_pct": _first_present(payload.get("net_pnl_pct"), latest_review.get("net_pnl_pct")),
+            "gross_pnl_usd": _first_present(payload.get("gross_pnl_usd"), latest_review.get("gross_pnl_usd")),
+            "net_pnl_usd": _first_present(payload.get("net_pnl_usd"), latest_review.get("net_pnl_usd")),
+            "entry_execution_price": _first_present(payload.get("entry_execution_price"), latest_review.get("entry_execution_price")),
+            "exit_execution_price": _first_present(payload.get("exit_execution_price"), latest_review.get("exit_execution_price")),
+            "entry_execution_basis": _first_present(payload.get("entry_execution_basis"), latest_review.get("entry_execution_basis")),
+            "exit_execution_basis": _first_present(payload.get("exit_execution_basis"), reason, latest_review.get("exit_execution_basis")),
+            "fee_total_usd": _first_present(payload.get("fee_total_usd"), latest_review.get("fee_total_usd")),
+            "recommendation": "SELL",
+            "reason": _first_present(payload.get("exit_reason"), reason, latest_review.get("reason")),
+            "warnings": [],
+            "metrics_snapshot": dict(latest_review.get("metrics_snapshot") or {}),
+        }
+    elif not latest_review:
         latest_review = {
             "reviewed_at": payload.get("closed_at") or payload.get("last_reviewed_at") or datetime.now().isoformat(),
             "pricing_source": payload.get("exit_execution_basis") or reason,
@@ -839,7 +929,7 @@ def _read_forward_evidence_events(limit: int = 200) -> list[dict[str, Any]]:
     path = _forward_evidence_log_path()
     if not os.path.exists(path):
         return []
-    events: list[dict[str, Any]] = []
+    events = deque(maxlen=int(limit)) if limit > 0 else []
     with open(path, "r", encoding="utf8") as handle:
         for line in handle:
             raw = line.strip()
@@ -849,9 +939,7 @@ def _read_forward_evidence_events(limit: int = 200) -> list[dict[str, Any]]:
                 events.append(json.loads(raw))
             except json.JSONDecodeError:
                 continue
-    if limit > 0:
-        return events[-int(limit):]
-    return events
+    return list(events)
 
 
 def _latest_artifact_timestamp(path: str) -> str | None:
@@ -889,6 +977,9 @@ def _build_forward_evidence_report() -> dict[str, Any]:
         db_path=authoritative_db_path,
     )
     authoritative_exact_contract_count = sum(
+        1 for event in authoritative_events if str(event.get("contract_symbol") or "").strip()
+    )
+    all_exact_contract_count = sum(
         1 for event in authoritative_all_events if str(event.get("contract_symbol") or "").strip()
     )
     events = _read_forward_evidence_events()
@@ -903,14 +994,30 @@ def _build_forward_evidence_report() -> dict[str, Any]:
     latest_artifact = load_last_archived_forward_daily_results()
     latest_artifact_path = wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE
     latest_artifact_timestamp = _latest_artifact_timestamp(latest_artifact_path)
-    historical_evidence_available = len(authoritative_all_events) > 0
-    latest_capture_created_picks = bool(latest_authoritative_event) and int(latest_authoritative_event.get("scan_pick_count") or 0) > 0
+    historical_evidence_available = len(authoritative_events) > 0
+    latest_eligible_session = authoritative_sessions[0] if authoritative_sessions else None
+
+    def _session_id(value: Any) -> int | None:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    latest_recorded_session_id = _session_id(latest_authoritative_event.get("forward_truth_session_id")) if latest_authoritative_event else None
+    latest_eligible_session_id = _session_id(latest_eligible_session.get("id")) if latest_eligible_session else None
+    latest_capture_created_picks = (
+        bool(latest_authoritative_event)
+        and latest_recorded_session_id is not None
+        and latest_recorded_session_id == latest_eligible_session_id
+        and int(latest_eligible_session.get("scan_picks_count") or 0) > 0
+    ) if latest_eligible_session else False
     if latest_capture_created_picks:
         activation_status = "active"
         activation_message = "The latest eligible live-production capture created authoritative archived scan_pick evidence."
     elif latest_event and str(latest_event.get("evidence_class") or "").strip().lower() != LIVE_PRODUCTION_EVIDENCE_CLASS:
-        activation_status = "observation_only_latest_scan"
-        activation_message = "The latest /api/scan was recorded as observation-only and did not enter the authoritative forward lane."
+        activation_status = "non_authoritative_latest_scan"
+        activation_message = "The latest /api/scan was not recorded as eligible live-production evidence."
     elif historical_evidence_available:
         activation_status = "historical_evidence_only_latest_scan_empty"
         activation_message = "Authoritative archived forward evidence exists, but the latest eligible live-production capture did not add new scan_pick rows."
@@ -928,7 +1035,9 @@ def _build_forward_evidence_report() -> dict[str, Any]:
         "eligible_scan_pick_count": len(authoritative_events),
         "exact_contract_capture_counts": {
             "with_contract_count": authoritative_exact_contract_count,
-            "without_contract_count": max(len(authoritative_all_events) - authoritative_exact_contract_count, 0),
+            "without_contract_count": max(len(authoritative_events) - authoritative_exact_contract_count, 0),
+            "all_with_contract_count": all_exact_contract_count,
+            "all_without_contract_count": max(len(authoritative_all_events) - all_exact_contract_count, 0),
         },
         "forward_truth_recording_failure_count": len(failure_events),
         "latest_archived_forward_artifact_timestamp": latest_artifact_timestamp,
@@ -1247,7 +1356,83 @@ def _parse_position_ids(raw_ids: Any) -> list[int] | None:
     return parsed
 
 
-def _group_rows_by_status(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+def _summary_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        parsed = float(value)
+        if math.isnan(parsed) or math.isinf(parsed):
+            return None
+        return parsed
+    except (TypeError, ValueError):
+        return None
+
+
+def _row_net_pnl_usd(row: dict[str, Any]) -> float | None:
+    latest_review = row.get("latest_review") if isinstance(row.get("latest_review"), dict) else {}
+    for value in (
+        row.get("net_pnl_usd"),
+        latest_review.get("net_pnl_usd"),
+        row.get("gross_pnl_usd"),
+        latest_review.get("gross_pnl_usd"),
+    ):
+        parsed = _summary_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _row_net_pnl_pct(row: dict[str, Any]) -> float | None:
+    latest_review = row.get("latest_review") if isinstance(row.get("latest_review"), dict) else {}
+    for value in (
+        row.get("net_pnl_pct"),
+        latest_review.get("net_pnl_pct"),
+        row.get("gross_pnl_pct"),
+        latest_review.get("gross_pnl_pct"),
+        row.get("last_pnl_pct"),
+    ):
+        parsed = _summary_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _pnl_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    priced_rows: list[tuple[float | None, float | None]] = []
+    for row in list(rows or []):
+        pnl_usd = _row_net_pnl_usd(row)
+        pnl_pct = _row_net_pnl_pct(row)
+        if pnl_usd is not None or pnl_pct is not None:
+            priced_rows.append((pnl_usd, pnl_pct))
+
+    directional_values = [
+        pnl_usd if pnl_usd is not None else pnl_pct
+        for pnl_usd, pnl_pct in priced_rows
+        if (pnl_usd if pnl_usd is not None else pnl_pct) is not None
+    ]
+    pct_values = [pnl_pct for _, pnl_pct in priced_rows if pnl_pct is not None]
+    usd_values = [pnl_usd for pnl_usd, _ in priced_rows if pnl_usd is not None]
+    return {
+        "count": len(rows or []),
+        "priced_count": len(priced_rows),
+        "wins": sum(1 for value in directional_values if value > 0),
+        "losses": sum(1 for value in directional_values if value < 0),
+        "flat": sum(1 for value in directional_values if value == 0),
+        "net_pnl_usd": round(sum(usd_values), 2) if usd_values else None,
+        "avg_pnl_pct": round(sum(pct_values) / len(pct_values), 2) if pct_values else None,
+    }
+
+
+def _tracked_vs_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    all_rows = list(rows or [])
+    proof_rows = [row for row in all_rows if bool(row.get("proof_eligible"))]
+    return {
+        "tracked": _pnl_summary(all_rows),
+        "proof": _pnl_summary(proof_rows),
+    }
+
+
+def _group_rows_by_status(rows: list[dict[str, Any]]) -> dict[str, Any]:
     open_rows: list[dict[str, Any]] = []
     closed_rows: list[dict[str, Any]] = []
     for row in list(rows or []):
@@ -1256,10 +1441,20 @@ def _group_rows_by_status(rows: list[dict[str, Any]]) -> dict[str, list[dict[str
             closed_rows.append(row)
         else:
             open_rows.append(row)
-    return {"open": open_rows, "closed": closed_rows}
+    return {
+        "open": open_rows,
+        "closed": closed_rows,
+        "summary": {
+            "open": _tracked_vs_proof_summary(open_rows),
+            "closed": _tracked_vs_proof_summary(closed_rows),
+            "all": _tracked_vs_proof_summary(open_rows + closed_rows),
+        },
+    }
 
 
 def _parse_positive_price(value: Any, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a finite number greater than 0.")
     try:
         parsed = float(value)
     except (TypeError, ValueError):
@@ -1267,6 +1462,89 @@ def _parse_positive_price(value: Any, field_name: str) -> float:
     if not math.isfinite(parsed) or parsed <= 0:
         raise ValueError(f"{field_name} must be a finite number greater than 0.")
     return parsed
+
+
+def _parse_positive_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive integer.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a positive integer.")
+    if not math.isfinite(parsed) or parsed <= 0 or not parsed.is_integer():
+        raise ValueError(f"{field_name} must be a positive integer.")
+    return int(parsed)
+
+
+def _parse_positive_int_or_default(value: Any, field_name: str, default: int) -> int:
+    if value in (None, ""):
+        return default
+    return _parse_positive_int(value, field_name)
+
+
+def _parse_nonnegative_price(value: Any, field_name: str) -> float:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a finite number greater than or equal to 0.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a finite number greater than or equal to 0.")
+    if not math.isfinite(parsed) or parsed < 0:
+        raise ValueError(f"{field_name} must be a finite number greater than or equal to 0.")
+    return parsed
+
+
+def _parse_positive_price_or_default(value: Any, field_name: str, default: float) -> float:
+    if value in (None, ""):
+        return default
+    return _parse_positive_price(value, field_name)
+
+
+def _parse_nonnegative_price_or_default(value: Any, field_name: str, default: float) -> float:
+    if value in (None, ""):
+        return default
+    return _parse_nonnegative_price(value, field_name)
+
+
+def _parse_bool_param(value: Any, field_name: str, default: bool = False) -> bool:
+    if value in (None, ""):
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    raise ValueError(f"{field_name} must be a boolean.")
+
+
+def _parse_optional_string(value: Any, field_name: str) -> str | None:
+    if value in (None, ""):
+        return None
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise ValueError(f"{field_name} must be a string.")
+    normalized = value.strip()
+    return normalized or None
+
+
+def _parse_optional_iso_datetime(value: Any, field_name: str) -> datetime:
+    if value in (None, ""):
+        return datetime.now()
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, bool) or not isinstance(value, str):
+        raise ValueError(f"{field_name} must be an ISO timestamp.")
+    raw = value.strip()
+    if not raw:
+        return datetime.now()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO timestamp.") from exc
 
 
 def _run_supervised_scan_request(
@@ -1280,28 +1558,34 @@ def _run_supervised_scan_request(
         positions_repository=POSITIONS_REPOSITORY,
         n_picks=n_picks,
         watchlist_size=len(DEFAULT_WATCHLIST),
-        playbook_id=body.get("playbook"),
-        use_recommended_policy=bool(body.get("use_recommended_policy", True)),
-        include_blocked_policy_picks=bool(body.get("include_blocked_policy_picks"))
+        playbook_id=_parse_optional_string(body.get("playbook"), "playbook") or DEFAULT_SCAN_PLAYBOOK_ID,
+        use_recommended_policy=_parse_bool_param(body.get("use_recommended_policy"), "use_recommended_policy"),
+        include_blocked_policy_picks=_parse_bool_param(body.get("include_blocked_policy_picks"), "include_blocked_policy_picks")
         if include_policy_flags
         else False,
-        include_blocked_guardrail_picks=bool(body.get("include_blocked_guardrail_picks"))
+        include_blocked_guardrail_picks=_parse_bool_param(body.get("include_blocked_guardrail_picks"), "include_blocked_guardrail_picks")
         if include_policy_flags
         else False,
-        truth_lane=body.get("truth_lane") or LIVE_SCAN_TRUTH_LANE,
-        min_trades=int(body.get("min_trades", 20)),
-        max_tickers=int(body.get("max_tickers", 8)),
-        max_sectors=int(body.get("max_sectors", 8)),
-        min_profit_factor=float(body.get("min_profit_factor", 1.05)),
-        min_directional_accuracy_pct=float(body.get("min_directional_accuracy_pct", 50.0)),
+        enforce_portfolio_caps=_parse_bool_param(body.get("enforce_portfolio_caps"), "enforce_portfolio_caps"),
+        truth_lane=_parse_optional_string(body.get("truth_lane"), "truth_lane") or LIVE_SCAN_TRUTH_LANE,
+        min_trades=_parse_positive_int_or_default(body.get("min_trades"), "min_trades", 20),
+        max_tickers=_parse_positive_int_or_default(body.get("max_tickers"), "max_tickers", 8),
+        max_sectors=_parse_positive_int_or_default(body.get("max_sectors"), "max_sectors", 8),
+        min_profit_factor=_parse_positive_price_or_default(body.get("min_profit_factor"), "min_profit_factor", 1.05),
+        min_directional_accuracy_pct=_parse_nonnegative_price_or_default(
+            body.get("min_directional_accuracy_pct"),
+            "min_directional_accuracy_pct",
+            50.0,
+        ),
     )
 
 
 @app.post("/api/scan")
-async def run_scan_endpoint(body: dict[str, Any] = {}):
+async def run_scan_endpoint(body: dict[str, Any] | None = None):
     """Run daily top trades scan."""
-    n_picks = int(body.get("n_picks", DEFAULT_SCAN_PICKS))
+    body = body or {}
     try:
+        n_picks = _parse_positive_int_or_default(body.get("n_picks"), "n_picks", DEFAULT_SCAN_PICKS)
         result = await _run_in_worker(
             _run_supervised_scan_request,
             body,
@@ -1343,11 +1627,13 @@ async def run_scan_endpoint(body: dict[str, Any] = {}):
         except Exception:
             pass
         return {
-            **{key: value for key, value in result.items() if key not in {"picks", "ranked_picks", "watch_picks"}},
+            **{key: value for key, value in result.items() if key not in {"picks", "ranked_picks", "watch_picks", "candidate_audit_picks"}},
             "picks": normalized_picks,
             "watch_picks": normalized_watch_picks,
             **forward_truth_meta,
         }
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as e:
         raise HTTPException(500, str(e))
 
@@ -1361,10 +1647,10 @@ async def create_position_endpoint(body: dict[str, Any]):
     try:
         payload = build_position_payload(
             scan_pick=body.get("scan_pick") or {},
-            fill_price=float(body.get("fill_price") or 0.0),
-            contracts=int(body.get("contracts") or 0),
+            fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
+            contracts=_parse_positive_int(body.get("contracts"), "contracts"),
             filled_at=body.get("filled_at"),
-            notes=body.get("notes"),
+            notes=_parse_optional_string(body.get("notes"), "notes"),
             require_resolved_contract=True,
             preserve_fill_price=True,
         )
@@ -1387,6 +1673,8 @@ async def create_position_endpoint(body: dict[str, Any]):
         return {"position": position}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -1411,8 +1699,9 @@ async def list_positions_endpoint(status: str = "open", grouped: bool = False):
 
 
 @app.post("/api/positions/review")
-async def review_positions_endpoint(body: dict[str, Any] = {}):
+async def review_positions_endpoint(body: dict[str, Any] | None = None):
     """Review open tracked positions and return HOLD/SELL guidance."""
+    body = body or {}
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
 
@@ -1490,14 +1779,14 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
         raise HTTPException(400, "exit_price is required")
 
     try:
-        closed_at_raw = body.get("closed_at")
-        closed_at = datetime.fromisoformat(closed_at_raw.replace("Z", "+00:00")) if closed_at_raw else datetime.now()
+        closed_at = _parse_optional_iso_datetime(body.get("closed_at"), "closed_at")
         position = POSITIONS_REPOSITORY.close_position(
             position_id=position_id,
-            exit_price=_parse_positive_price(body.get("exit_price"), "exit_price"),
+            exit_price=_parse_nonnegative_price(body.get("exit_price"), "exit_price"),
             closed_at=closed_at,
             exit_reason="manual_close",
-            notes=body.get("notes"),
+            notes=_parse_optional_string(body.get("notes"), "notes"),
+            allow_zero_exit_price=True,
         )
         if position is None:
             raise HTTPException(404, f"Tracked position {position_id} was not found")
@@ -1530,10 +1819,10 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
     try:
         payload = build_position_payload(
             scan_pick=body.get("scan_pick") or {},
-            fill_price=float(body.get("fill_price") or 0.0),
-            contracts=int(body.get("contracts") or 1),
+            fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
+            contracts=_parse_positive_int(body.get("contracts", 1), "contracts"),
             filled_at=body.get("filled_at"),
-            notes=body.get("notes"),
+            notes=_parse_optional_string(body.get("notes"), "notes"),
             require_resolved_contract=True,
             preserve_fill_price=True,
         )
@@ -1568,14 +1857,14 @@ async def list_suggested_trades_endpoint(status: str = "open", grouped: bool = F
 
 
 @app.post("/api/suggested-trades/review")
-async def review_suggested_trades_endpoint(body: dict[str, Any] = {}):
+async def review_suggested_trades_endpoint(body: dict[str, Any] | None = None):
     """Review open suggested trades and refresh their hypothetical P/L."""
+    body = body or {}
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
 
     try:
-        raw_ids = body.get("position_ids") or []
-        position_ids = [int(position_id) for position_id in raw_ids] if raw_ids else None
+        position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, SUGGESTED_TRADES_REPOSITORY, position_ids=position_ids)
         reviewed = _annotate_share_safety_rows(reviewed)
         return {"trades": reviewed}
@@ -1596,14 +1885,14 @@ async def close_suggested_trade_endpoint(position_id: int, body: dict[str, Any])
         raise HTTPException(400, "exit_price is required")
 
     try:
-        closed_at_raw = body.get("closed_at")
-        closed_at = datetime.fromisoformat(closed_at_raw.replace("Z", "+00:00")) if closed_at_raw else datetime.now()
+        closed_at = _parse_optional_iso_datetime(body.get("closed_at"), "closed_at")
         trade = SUGGESTED_TRADES_REPOSITORY.close_position(
             position_id=position_id,
-            exit_price=float(exit_price),
+            exit_price=_parse_nonnegative_price(exit_price, "exit_price"),
             closed_at=closed_at,
             exit_reason="manual_hypothetical_close",
-            notes=body.get("notes"),
+            notes=_parse_optional_string(body.get("notes"), "notes"),
+            allow_zero_exit_price=True,
         )
         if trade is None:
             raise HTTPException(404, f"Suggested trade {position_id} was not found")
@@ -1617,12 +1906,16 @@ async def close_suggested_trade_endpoint(position_id: int, body: dict[str, Any])
 
 
 @app.post("/api/scan/recommendations")
-async def get_recommendations(body: dict[str, Any] = {}):
+async def get_recommendations(body: dict[str, Any] | None = None):
     """Generate position recommendations for pending picks."""
+    body = body or {}
     preds = _load_predictions()
     pending = [p for p in preds if not p.get("outcome") and p.get("type") == "daily_scan"]
-    n_picks = int(body.get("n_picks", DEFAULT_SCAN_PICKS))
-    supervised = _run_supervised_scan_request(body, n_picks=n_picks)
+    try:
+        n_picks = _parse_positive_int_or_default(body.get("n_picks"), "n_picks", DEFAULT_SCAN_PICKS)
+        supervised = _run_supervised_scan_request(body, n_picks=n_picks)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     if supervised.get("policy_fail_closed"):
         return supervised
     candidates = supervised["picks"] if supervised.get("policy_applied") else supervised["ranked_picks"]
@@ -1631,6 +1924,7 @@ async def get_recommendations(body: dict[str, Any] = {}):
         n_picks=n_picks,
         candidates=candidates,
     )
+    result = _normalize_recommendation_payload(result)
     return {
         **result,
         "policy_applied": supervised["policy_applied"],
@@ -1648,12 +1942,16 @@ async def get_recommendations(body: dict[str, Any] = {}):
 
 
 @app.post("/api/scan/roll")
-async def roll_picks(body: dict[str, Any] = {}):
+async def roll_picks(body: dict[str, Any] | None = None):
     """Roll forward daily picks."""
+    body = body or {}
     preds = _load_predictions()
     pending = [p for p in preds if not p.get("outcome") and p.get("type") == "daily_scan"]
-    n_picks = int(body.get("n_picks", DEFAULT_SCAN_PICKS))
-    supervised = _run_supervised_scan_request(body, n_picks=n_picks)
+    try:
+        n_picks = _parse_positive_int_or_default(body.get("n_picks"), "n_picks", DEFAULT_SCAN_PICKS)
+        supervised = _run_supervised_scan_request(body, n_picks=n_picks)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     if supervised.get("policy_fail_closed"):
         return supervised
     candidates = supervised["picks"] if supervised.get("policy_applied") else supervised["ranked_picks"]
@@ -1662,6 +1960,7 @@ async def roll_picks(body: dict[str, Any] = {}):
         n_picks=n_picks,
         candidates=candidates,
     )
+    result = _normalize_roll_payload(result)
     return {
         **result,
         "policy_applied": supervised["policy_applied"],
@@ -1702,7 +2001,7 @@ async def get_sector_sentiments():
 
     def sentiment_for_window(closes, window):
         if len(closes) < window + 5:
-            return "Neutral", 0.0
+            return "Unavailable", None, "unavailable"
         recent = float(closes.iloc[-1])
         start = float(closes.iloc[-window])
         ret_pct = (recent / start - 1) * 100
@@ -1723,7 +2022,7 @@ async def get_sector_sentiments():
         score += 0.5 if above_sma else -0.5
         score += 0.5 if slope > 0.05 else (-0.5 if slope < -0.05 else 0.0)
 
-        return score_to_sentiment(score), round(ret_pct, 1)
+        return score_to_sentiment(score), round(ret_pct, 1), "available"
 
     tickers = [etf for _, etf in SECTORS]
     with _market_data_request_scope():
@@ -1735,21 +2034,31 @@ async def get_sector_sentiments():
             closes = hist[etf].dropna()
             if len(closes) < 30:
                 raise ValueError("insufficient data")
-            nt_sent, nt_ret = sentiment_for_window(closes, 21)
-            mt_sent, mt_ret = sentiment_for_window(closes, 126)
-            lt_sent, lt_ret = sentiment_for_window(closes, 252)
+            nt_sent, nt_ret, nt_status = sentiment_for_window(closes, 21)
+            mt_sent, mt_ret, mt_status = sentiment_for_window(closes, 126)
+            lt_sent, lt_ret, lt_status = sentiment_for_window(closes, 252)
+            window_statuses = {nt_status, mt_status, lt_status}
+            data_status = (
+                "available"
+                if window_statuses == {"available"}
+                else "partial"
+                if "available" in window_statuses
+                else "unavailable"
+            )
             rows.append({
                 "sector": sector, "etf": etf,
                 "near_sent": nt_sent, "near_ret": nt_ret,
                 "med_sent": mt_sent, "med_ret": mt_ret,
                 "long_sent": lt_sent, "long_ret": lt_ret,
+                "data_status": data_status,
             })
         except Exception:
             rows.append({
                 "sector": sector, "etf": etf,
-                "near_sent": "Neutral", "near_ret": 0.0,
-                "med_sent": "Neutral", "med_ret": 0.0,
-                "long_sent": "Neutral", "long_ret": 0.0,
+                "near_sent": "Unavailable", "near_ret": None,
+                "med_sent": "Unavailable", "med_ret": None,
+                "long_sent": "Unavailable", "long_ret": None,
+                "data_status": "unavailable",
             })
     return rows
 
@@ -1789,13 +2098,16 @@ async def run_backtest_endpoint(body: dict[str, Any]):
             playbook=playbook,
         )
         return result
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as e:
         raise HTTPException(500, str(e))
 
 
 @app.post("/api/backtest/archived-forward")
-async def run_archived_forward_backtest_endpoint(body: dict[str, Any] = {}):
+async def run_archived_forward_backtest_endpoint(body: dict[str, Any] | None = None):
     """Run archived-forward exact-contract imported-daily replay over /api/scan picks."""
+    body = body or {}
     try:
         result = await _run_in_worker(
             run_archived_forward_daily_backtest,
@@ -1840,8 +2152,9 @@ async def get_metric_truth_report(min_trades: int = 20, bucket_size: int = 10, t
 
 
 @app.post("/api/backtest/experiments")
-async def get_backtest_experiments(body: dict[str, Any] = {}):
+async def get_backtest_experiments(body: dict[str, Any] | None = None):
     """Return a ranked options-only experiment matrix from the most recent backtest."""
+    body = body or {}
     result = await _run_in_worker(_cached_backtest_experiments, body)
     if result.get("error"):
         return result
@@ -1896,7 +2209,7 @@ async def get_live_trade_policy(
 
 @app.get("/api/backtest/exit-audit")
 async def get_playbook_exit_audit(
-    playbook: str = "short_term",
+    playbook: str = DEFAULT_SCAN_PLAYBOOK_ID,
     min_trades: int = 20,
     max_tickers: int = 8,
     max_sectors: int = 8,
@@ -2035,10 +2348,32 @@ async def get_proof_summary():
 
             # Forward evidence counts
             forward_evidence = _cached_forward_evidence_report()
-            forward_events = list(forward_evidence.get("authoritative_events") or [])
-            scan_pick_events = [e for e in forward_events if str(e.get("event_type") or "") == "scan_pick"]
-            position_opened_events = [e for e in forward_events if str(e.get("event_type") or "") == "position_opened"]
-            review_events = [e for e in forward_events if str(e.get("event_type") or "") == "position_review"]
+            ledger_summary = dict(forward_evidence.get("ledger_summary") or {})
+
+            def _evidence_count(*values: Any) -> int:
+                for value in values:
+                    try:
+                        count = int(value)
+                    except (TypeError, ValueError):
+                        continue
+                    if count >= 0:
+                        return count
+                return 0
+
+            eligible_scan_pick_event_count = _evidence_count(
+                forward_evidence.get("eligible_scan_pick_count"),
+                ledger_summary.get("eligible_scan_pick_count"),
+            )
+            scan_pick_event_count = _evidence_count(
+                forward_evidence.get("scan_pick_count"),
+                ledger_summary.get("scan_pick_count"),
+                eligible_scan_pick_event_count,
+            )
+            forward_event_count = _evidence_count(
+                forward_evidence.get("scan_pick_count"),
+                ledger_summary.get("scan_pick_count"),
+                scan_pick_event_count,
+            )
 
             return {
                 "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -2054,10 +2389,13 @@ async def get_proof_summary():
                     "blockers": claim_readiness["blockers"],
                 },
                 "evidence_counts": {
-                    "forward_event_count": len(forward_events),
-                    "scan_pick_event_count": len(scan_pick_events),
-                    "position_opened_event_count": len(position_opened_events),
-                    "review_event_count": len(review_events),
+                    "forward_event_count": forward_event_count,
+                    "scan_pick_event_count": scan_pick_event_count,
+                    "eligible_scan_pick_event_count": eligible_scan_pick_event_count,
+                    "position_opened_event_count": _evidence_count(
+                        ledger_summary.get("position_opened_event_count")
+                    ),
+                    "review_event_count": _evidence_count(ledger_summary.get("review_event_count")),
                     "eligible_event_count": claim_readiness.get("eligible_event_count", 0),
                     "pending_truth_event_count": claim_readiness.get("pending_truth_event_count", 0),
                     "by_symbol": claim_readiness.get("by_symbol", {}),

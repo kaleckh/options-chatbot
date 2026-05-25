@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -281,6 +282,30 @@ def _append_jsonl(path: Path, payload: dict[str, Any]) -> Path:
         handle.write(json.dumps(payload, sort_keys=True))
         handle.write("\n")
     return path
+
+
+def _unlink_with_retries(
+    path: Path,
+    *,
+    missing_ok: bool = True,
+    attempts: int = 8,
+    delay_seconds: float = 0.05,
+) -> None:
+    remaining_attempts = max(int(attempts), 1)
+    for attempt_index in range(remaining_attempts):
+        try:
+            path.unlink(missing_ok=missing_ok)
+            return
+        except FileNotFoundError:
+            if missing_ok:
+                return
+            raise
+        except (PermissionError, OSError):
+            if missing_ok and not path.exists():
+                return
+            if attempt_index >= remaining_attempts - 1:
+                raise
+            time.sleep(float(delay_seconds) * float(attempt_index + 1))
 
 
 def _load_json(path: Path) -> dict[str, Any] | None:
@@ -654,7 +679,7 @@ def recover_pending_run_ledger(state_dir: str | Path | None = None) -> dict[str,
     expected_state_hash = str(pending_payload.get("expected_state_hash") or "").strip()
     current_state_payload = _load_json(state_path(state_dir))
     if not event or not expected_state_hash or current_state_payload is None:
-        pending_path.unlink(missing_ok=True)
+        _unlink_with_retries(pending_path, missing_ok=True)
         return {
             "status": "discarded",
             "reason": "missing_event_or_state",
@@ -663,7 +688,7 @@ def recover_pending_run_ledger(state_dir: str | Path | None = None) -> dict[str,
     current_state = validate_profit_loop_state(current_state_payload)
     current_state_hash = _state_hash_payload(current_state)
     if current_state_hash != expected_state_hash:
-        pending_path.unlink(missing_ok=True)
+        _unlink_with_retries(pending_path, missing_ok=True)
         return {
             "status": "discarded",
             "reason": "state_hash_mismatch",
@@ -676,14 +701,14 @@ def recover_pending_run_ledger(state_dir: str | Path | None = None) -> dict[str,
     if not ledger_path.exists():
         ledger_path.touch()
     if _ledger_contains_event(ledger_path, event):
-        pending_path.unlink(missing_ok=True)
+        _unlink_with_retries(pending_path, missing_ok=True)
         return {
             "status": "deduped",
             "event": event,
         }
 
     _append_jsonl(ledger_path, event)
-    pending_path.unlink(missing_ok=True)
+    _unlink_with_retries(pending_path, missing_ok=True)
     return {
         "status": "recovered",
         "event": event,
@@ -806,7 +831,7 @@ def save_profit_loop_state_with_ledger(
     )
     path = _atomic_write_json(state_path(state_dir), normalized)
     _append_jsonl(runs_ledger_path(state_dir), ledger_payload)
-    pending_path.unlink(missing_ok=True)
+    _unlink_with_retries(pending_path, missing_ok=True)
     _sync_saved_payload(payload, normalized)
     return path
 
