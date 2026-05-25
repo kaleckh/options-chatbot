@@ -65,6 +65,8 @@ AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID = "ai_commodity_infra_observation"
 AI_COMMODITY_INFRA_OBSERVATION_COHORT_ROLE = "candidate"
 BULLISH_PULLBACK_OBSERVATION_COHORT_ID = "bullish_pullback_observation"
 BULLISH_PULLBACK_OBSERVATION_COHORT_ROLE = "primary"
+REGULAR_BEARISH_PUT_PRIMARY_COHORT_ID = "regular_bearish_put_primary"
+REGULAR_BEARISH_PUT_PRIMARY_COHORT_ROLE = "candidate"
 INDEX_LANE_TICKERS = ("SPY", "QQQ", "IWM", "DIA")
 TRACKED_WINNER_TICKERS = ("SPY", "GOOGL", "XLK", "DIA")
 _DEFAULT_BULLISH_PULLBACK_HISTORICAL_READY_TICKERS = ("SPY", "QQQ")
@@ -323,6 +325,39 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "forced_cohort_id": BEARISH_INDEX_PUT_OBSERVATION_COHORT_ID,
         "forced_cohort_role": BEARISH_INDEX_PUT_OBSERVATION_COHORT_ROLE,
     },
+    "regular_bearish_put_primary": {
+        "id": "regular_bearish_put_primary",
+        "label": "Regular Bearish Put Primary",
+        "description": "Broad liquid-universe bear put vertical lane for confirmed weak market regimes.",
+        "lane_role": "research_profit_candidate",
+        "promotion_basis": "closed_forward_alpaca_opra_required",
+        "target_dte": 35,
+        "max_new_positions_per_day": 1,
+        "max_scan_picks_per_ticker": 1,
+        "max_sector_open_positions": 2,
+        "max_regime_open_positions": 2,
+        "block_same_ticker": True,
+        "allowed_asset_classes": ["index", "equity"],
+        "allowed_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
+        "scan_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
+        "allowed_market_regimes": ["bearish"],
+        "allowed_directions": ["put"],
+        "scan_allowed_directions": ["put"],
+        "allowed_strategy_types": ["vertical_spread"],
+        "min_quality_score": 65.0,
+        "max_debit_pct_of_width": 60.0,
+        "calibration_playbook": "regular_bearish_put_primary",
+        "max_concurrent_positions": 2,
+        "max_correlated_index_positions": 2,
+        "daily_loss_limit_pct": 1.0,
+        "weekly_loss_limit_pct": 2.5,
+        "max_position_cost_risk_pct": 5.0,
+        "max_portfolio_cost_risk_pct": 10.0,
+        "forced_size_tier": "starter",
+        "forced_cohort_id": REGULAR_BEARISH_PUT_PRIMARY_COHORT_ID,
+        "forced_cohort_role": REGULAR_BEARISH_PUT_PRIMARY_COHORT_ROLE,
+        "required_candidate_execution_label": "executable_opra_paper_candidate",
+    },
     "range_breakout_observation": {
         "id": "range_breakout_observation",
         "label": "Range Breakout Observation",
@@ -479,6 +514,7 @@ _LANE_PRIORITIES = {
     "swing": 35,
     "bullish_momentum": 40,
     "bearish_defensive": 45,
+    "regular_bearish_put_primary": 46,
     "tracked_winner_observation": 80,
     "quality90_debit55_canary": 90,
     "bearish_index_put_observation": 95,

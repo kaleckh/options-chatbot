@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import inspect
 import json
 import os
 import re
@@ -239,6 +240,48 @@ def _ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, ddl
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
 
 
+def _daily_history_pk_columns(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute("PRAGMA table_info(daily_history)").fetchall()
+    pk_rows = [row for row in rows if int(row[5] or 0) > 0]
+    return [
+        str(row[1])
+        for row in sorted(pk_rows, key=lambda row: int(row[5] or 0))
+    ]
+
+
+def _ensure_daily_history_adjustment_mode_schema(conn: sqlite3.Connection) -> None:
+    _ensure_sqlite_column(conn, "daily_history", "adjustment_mode", "TEXT")
+    if _daily_history_pk_columns(conn) == ["symbol", "bar_date", "adjustment_mode"]:
+        return
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS daily_history_v2 (
+            symbol TEXT NOT NULL,
+            bar_date TEXT NOT NULL,
+            open REAL,
+            high REAL,
+            low REAL,
+            close REAL,
+            adj_close REAL,
+            volume REAL,
+            fetched_at TEXT NOT NULL,
+            source TEXT,
+            adjustment_mode TEXT NOT NULL DEFAULT 'adjusted',
+            PRIMARY KEY (symbol, bar_date, adjustment_mode)
+        );
+        INSERT OR REPLACE INTO daily_history_v2 (
+            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at, source, adjustment_mode
+        )
+        SELECT
+            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at, source,
+            COALESCE(NULLIF(adjustment_mode, ''), 'adjusted')
+        FROM daily_history;
+        DROP TABLE daily_history;
+        ALTER TABLE daily_history_v2 RENAME TO daily_history;
+        """
+    )
+
+
 def _sqlite_connection() -> sqlite3.Connection:
     path = _db_path()
     request_active = _REQUEST_MEMO.get() is not None
@@ -288,7 +331,8 @@ def _ensure_schema() -> None:
                     volume REAL,
                     fetched_at TEXT NOT NULL,
                     source TEXT,
-                    PRIMARY KEY (symbol, bar_date)
+                    adjustment_mode TEXT NOT NULL DEFAULT 'adjusted',
+                    PRIMARY KEY (symbol, bar_date, adjustment_mode)
                 );
                 CREATE TABLE IF NOT EXISTS ticker_info_cache (
                     symbol TEXT PRIMARY KEY,
@@ -321,6 +365,7 @@ def _ensure_schema() -> None:
                 """
             )
             _ensure_sqlite_column(conn, "daily_history", "source", "TEXT")
+            _ensure_daily_history_adjustment_mode_schema(conn)
             _ensure_sqlite_column(conn, "ticker_info_cache", "source", "TEXT")
             _ensure_sqlite_column(conn, "earnings_dates_cache", "source", "TEXT")
             conn.commit()
@@ -422,6 +467,28 @@ def _ticker_factory_or_default(ticker_factory: Optional[Callable[[str], Any]]) -
     return yf.Ticker
 
 
+def _history_adjustment_mode(auto_adjust: bool) -> str:
+    return "adjusted" if bool(auto_adjust) else "raw"
+
+
+def _callable_accepts_explicit_keyword(func: Callable[..., Any], keyword: str) -> bool:
+    try:
+        signature = inspect.signature(func)
+    except (TypeError, ValueError):
+        return True
+    for parameter in signature.parameters.values():
+        if parameter.name == keyword:
+            return True
+    return False
+
+
+def _history_supports_auto_adjust(ticker: Any) -> bool:
+    module = str(getattr(ticker.__class__, "__module__", ""))
+    if module.startswith("yfinance") or module == "alpaca_market_data":
+        return True
+    return _callable_accepts_explicit_keyword(ticker.history, "auto_adjust")
+
+
 def _fetch_history_direct(
     symbol: str,
     *,
@@ -429,6 +496,7 @@ def _fetch_history_direct(
     start: Optional[Any] = None,
     end: Optional[Any] = None,
     interval: str = "1d",
+    auto_adjust: Optional[bool] = None,
     ticker_factory: Optional[Callable[[str], Any]] = None,
 ) -> pd.DataFrame:
     ticker = _ticker_factory_or_default(ticker_factory)(symbol)
@@ -439,10 +507,15 @@ def _fetch_history_direct(
         kwargs["start"] = start
     if end is not None:
         kwargs["end"] = end
+    supports_auto_adjust = auto_adjust is not None and _history_supports_auto_adjust(ticker)
+    if supports_auto_adjust:
+        kwargs["auto_adjust"] = bool(auto_adjust)
     raw = ticker.history(**kwargs)
     source = _market_data_source_label(raw, _market_data_source_label(ticker, "network"))
     normalized = _normalize_history_frame(raw)
     normalized.attrs["market_data_source"] = source
+    if auto_adjust is not None:
+        normalized.attrs["adjustment_mode"] = _history_adjustment_mode(bool(auto_adjust))
     required_source = _required_stock_cache_source()
     _require_data_source(source, required_source, symbol=symbol, payload="stock history")
     return normalized
@@ -505,21 +578,37 @@ def _business_dates(start_date: date, end_date: date) -> set[str]:
     }
 
 
-def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+def _load_daily_history_rows(
+    symbol: str,
+    start_date: date,
+    end_date: date,
+    *,
+    adjustment_mode: str = "adjusted",
+) -> pd.DataFrame:
     required_source = _required_stock_cache_source()
     with _sqlite_connection() as conn:
         raw_conn = _unwrap_sqlite_connection(conn)
         columns = {str(row[1]) for row in raw_conn.execute("PRAGMA table_info(daily_history)").fetchall()}
         source_expr = "source" if "source" in columns else "NULL AS source"
+        if "adjustment_mode" in columns:
+            adjustment_expr = "adjustment_mode"
+            adjustment_clause = "AND adjustment_mode = ?"
+            params = (symbol.upper(), start_date.isoformat(), end_date.isoformat(), adjustment_mode)
+        else:
+            if adjustment_mode != "adjusted":
+                return pd.DataFrame()
+            adjustment_expr = "'adjusted' AS adjustment_mode"
+            adjustment_clause = ""
+            params = (symbol.upper(), start_date.isoformat(), end_date.isoformat())
         rows = pd.read_sql_query(
             f"""
-            SELECT bar_date, open, high, low, close, adj_close, volume, {source_expr}
+            SELECT bar_date, open, high, low, close, adj_close, volume, {source_expr}, {adjustment_expr}
             FROM daily_history
-            WHERE symbol = ? AND bar_date >= ? AND bar_date <= ?
+            WHERE symbol = ? AND bar_date >= ? AND bar_date <= ? {adjustment_clause}
             ORDER BY bar_date
             """,
             raw_conn,
-            params=(symbol.upper(), start_date.isoformat(), end_date.isoformat()),
+            params=params,
         )
     if rows.empty:
         return pd.DataFrame()
@@ -549,7 +638,7 @@ def _load_daily_history_rows(symbol: str, start_date: date, end_date: date) -> p
     return frame
 
 
-def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
+def _store_daily_history(symbol: str, frame: pd.DataFrame, *, adjustment_mode: str) -> None:
     normalized = _normalize_history_frame(frame)
     if normalized.empty:
         return
@@ -571,15 +660,16 @@ def _store_daily_history(symbol: str, frame: pd.DataFrame) -> None:
                 _as_float(row.get("Volume")),
                 fetched_at,
                 source,
+                adjustment_mode,
             )
         )
     conn = _sqlite_connection()
     conn.executemany(
         """
         INSERT INTO daily_history (
-            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(symbol, bar_date) DO UPDATE SET
+            symbol, bar_date, open, high, low, close, adj_close, volume, fetched_at, source, adjustment_mode
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(symbol, bar_date, adjustment_mode) DO UPDATE SET
             open = excluded.open,
             high = excluded.high,
             low = excluded.low,
@@ -1087,10 +1177,12 @@ def get_history(
     start: Optional[Any] = None,
     end: Optional[Any] = None,
     interval: str = "1d",
+    auto_adjust: bool = True,
     ticker_factory: Optional[Callable[[str], Any]] = None,
 ) -> pd.DataFrame:
     namespace = "history"
-    key = ("history", symbol.upper(), period, str(start), str(end), interval)
+    adjustment_mode = _history_adjustment_mode(auto_adjust)
+    key = ("history", symbol.upper(), period, str(start), str(end), interval, adjustment_mode)
     memo_hit = _request_memo_get(key)
     if memo_hit is not None:
         _record_stat(namespace, "request_memo_hits")
@@ -1104,6 +1196,7 @@ def get_history(
                 start=start,
                 end=end,
                 interval=interval,
+                auto_adjust=auto_adjust,
                 ticker_factory=ticker_factory,
             )
 
@@ -1119,6 +1212,7 @@ def get_history(
             start=start,
             end=end,
             interval=interval,
+            auto_adjust=auto_adjust,
             ticker_factory=ticker_factory,
         )
         _request_memo_set(key, direct)
@@ -1126,7 +1220,12 @@ def get_history(
 
     start_date, end_date = normalized_window
     try:
-        cached = _load_daily_history_rows(symbol, start_date, end_date)
+        cached = _load_daily_history_rows(
+            symbol,
+            start_date,
+            end_date,
+            adjustment_mode=adjustment_mode,
+        )
         first_cached: date | None = None
         last_cached: date | None = None
         if cached.empty:
@@ -1160,10 +1259,11 @@ def get_history(
                     start=start_date.isoformat(),
                     end=(end_date + timedelta(days=1)).isoformat(),
                     interval="1d",
+                    auto_adjust=auto_adjust,
                     ticker_factory=ticker_factory,
                 )
                 if not fetched.empty:
-                    _store_daily_history(symbol, fetched)
+                    _store_daily_history(symbol, fetched, adjustment_mode=adjustment_mode)
             except Exception:
                 if stale_recent_tail_only:
                     _record_stat(namespace, "full_refresh_failures")
@@ -1181,10 +1281,11 @@ def get_history(
                     start=refresh_start.isoformat(),
                     end=(end_date + timedelta(days=1)).isoformat(),
                     interval="1d",
+                    auto_adjust=auto_adjust,
                     ticker_factory=ticker_factory,
                 )
                 if not fetched.empty:
-                    _store_daily_history(symbol, fetched)
+                    _store_daily_history(symbol, fetched, adjustment_mode=adjustment_mode)
             except Exception:
                 if not cached.empty:
                     _record_stat(namespace, "recent_refresh_failures")
@@ -1193,7 +1294,12 @@ def get_history(
                     return _normalize_history_frame(cached)
                 raise
 
-        frame = _load_daily_history_rows(symbol, start_date, end_date)
+        frame = _load_daily_history_rows(
+            symbol,
+            start_date,
+            end_date,
+            adjustment_mode=adjustment_mode,
+        )
         if frame.empty:
             _record_stat(namespace, "fallback_fetches")
             _record_stat(namespace, "network_fetches")
@@ -1202,6 +1308,7 @@ def get_history(
                 start=start_date.isoformat(),
                 end=(end_date + timedelta(days=1)).isoformat(),
                 interval="1d",
+                auto_adjust=auto_adjust,
                 ticker_factory=ticker_factory,
             )
         _request_memo_set(key, frame)
@@ -1216,10 +1323,47 @@ def get_history(
             start=start,
             end=end,
             interval=interval,
+            auto_adjust=auto_adjust,
             ticker_factory=ticker_factory,
         )
         _request_memo_set(key, direct)
         return direct
+
+
+def _coerce_batch_download_frames(downloaded: Any, symbols: list[str]) -> dict[str, pd.DataFrame]:
+    if downloaded is None:
+        return {}
+    frame = _normalize_history_frame(downloaded)
+    if frame.empty:
+        return {}
+
+    normalized_symbols = [symbol.upper() for symbol in symbols]
+    frames: dict[str, pd.DataFrame] = {}
+    if isinstance(frame.columns, pd.MultiIndex):
+        level_values = [
+            {str(value).upper() for value in frame.columns.get_level_values(level)}
+            for level in range(frame.columns.nlevels)
+        ]
+        symbol_level = next(
+            (idx for idx, values in enumerate(level_values) if any(symbol in values for symbol in normalized_symbols)),
+            None,
+        )
+        if symbol_level is not None:
+            for symbol in normalized_symbols:
+                if symbol not in level_values[symbol_level]:
+                    continue
+                try:
+                    symbol_frame = frame.xs(symbol, axis=1, level=symbol_level, drop_level=True)
+                except (KeyError, ValueError):
+                    continue
+                symbol_frame = _normalize_history_frame(symbol_frame)
+                if not symbol_frame.empty:
+                    frames[symbol] = symbol_frame
+            return frames
+
+    if len(normalized_symbols) == 1:
+        frames[normalized_symbols[0]] = frame
+    return frames
 
 
 def download_history_batch(
@@ -1232,13 +1376,15 @@ def download_history_batch(
 ) -> pd.DataFrame:
     namespace = "download_history_batch"
     symbols = [str(t).upper() for t in tickers if str(t).strip()]
-    key = ("download_history_batch", tuple(symbols), period, bool(auto_adjust))
+    adjustment_mode = _history_adjustment_mode(auto_adjust)
+    key = ("download_history_batch", tuple(symbols), period, adjustment_mode)
     memo_hit = _request_memo_get(key)
     if memo_hit is not None:
         _record_stat(namespace, "request_memo_hits")
         return memo_hit
     frames: dict[str, pd.DataFrame] = {}
     missing_symbols: list[str] = []
+    daily_cache_events: dict[str, str] = {}
     normalized_window = _normalize_daily_window(period=period)
     try:
         if normalized_window is None:
@@ -1246,34 +1392,78 @@ def download_history_batch(
         else:
             start_date, end_date = normalized_window
             for symbol in symbols:
-                cached = _load_daily_history_rows(symbol, start_date, end_date)
+                cached = _load_daily_history_rows(
+                    symbol,
+                    start_date,
+                    end_date,
+                    adjustment_mode=adjustment_mode,
+                )
                 if cached.empty:
+                    daily_cache_events[symbol] = "persistent_misses"
                     missing_symbols.append(symbol)
                     continue
                 first_cached = cached.index.min().date()
                 last_cached = cached.index.max().date()
                 if first_cached > start_date or last_cached < end_date:
+                    daily_cache_events[symbol] = "persistent_partial_hits"
                     missing_symbols.append(symbol)
                     continue
+                daily_cache_events[symbol] = "persistent_hits"
+                _record_stat("history", "persistent_hits")
                 frames[symbol] = cached
     except Exception:
         _record_stat(namespace, "cache_failures")
+        _record_stat("history", "cache_failures")
         frames = {}
         missing_symbols = symbols[:]
 
     if missing_symbols:
+        fetched_symbols: set[str] = set()
+        if ticker_factory is None:
+            batch_fetch = download_fn or yf.download
+            try:
+                _record_stat(namespace, "batch_network_fetches")
+                downloaded = batch_fetch(
+                    " ".join(missing_symbols),
+                    period=period,
+                    auto_adjust=auto_adjust,
+                    progress=False,
+                    group_by="column",
+                    threads=True,
+                )
+                batch_frames = _coerce_batch_download_frames(downloaded, missing_symbols)
+                for symbol, frame in batch_frames.items():
+                    if frame.empty:
+                        continue
+                    frames[symbol] = frame
+                    fetched_symbols.add(symbol)
+                    cache_event = daily_cache_events.get(symbol)
+                    if cache_event:
+                        _record_stat("history", cache_event)
+                    _record_stat("history", "full_refreshes")
+                    _record_stat("history", "network_fetches")
+                    try:
+                        _store_daily_history(symbol, frame, adjustment_mode=adjustment_mode)
+                    except Exception:
+                        _record_stat(namespace, "cache_write_failures")
+            except Exception:
+                _record_stat(namespace, "batch_network_failures")
+
         for symbol in missing_symbols:
+            if symbol in fetched_symbols:
+                continue
             frame = get_history(
                 symbol,
                 period=period,
                 interval="1d",
+                auto_adjust=auto_adjust,
                 ticker_factory=ticker_factory,
             )
             if frame.empty:
                 continue
             frames[symbol] = frame
             try:
-                _store_daily_history(symbol, frame)
+                _store_daily_history(symbol, frame, adjustment_mode=adjustment_mode)
             except Exception:
                 _record_stat(namespace, "cache_write_failures")
 
@@ -1285,6 +1475,7 @@ def download_history_batch(
                 symbol,
                 period=period,
                 interval="1d",
+                auto_adjust=auto_adjust,
                 ticker_factory=ticker_factory,
             )
             if frame.empty:
@@ -1293,7 +1484,7 @@ def download_history_batch(
                 continue
             frames[symbol] = frame
             try:
-                _store_daily_history(symbol, frame)
+                _store_daily_history(symbol, frame, adjustment_mode=adjustment_mode)
             except Exception:
                 _record_stat(namespace, "cache_write_failures")
         if frames:
@@ -1519,7 +1710,7 @@ def get_options(
             else:
                 _record_stat(namespace, "persistent_misses")
         _record_stat(namespace, "persistent_misses")
-    except Exception as exc:
+    except Exception:
         _record_stat(namespace, "cache_failures")
         record = None
 

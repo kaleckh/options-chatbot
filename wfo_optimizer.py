@@ -72,6 +72,7 @@ from exact_contract_accounting import (
     is_exact_contract_resolution as _shared_is_exact_contract_resolution,
 )
 from forward_options_ledger import LIVE_PRODUCTION_EVIDENCE_CLASS, list_forward_scan_pick_events
+from lane_universe_manifest import lane_universe_symbols
 from market_data_service import (
     get_history as _md_get_history,
     get_ticker_info as _md_get_ticker_info,
@@ -139,6 +140,21 @@ IMPORTED_VALIDATION_UNIVERSE = (
     "SPY",
     "QQQ",
 )
+
+
+def _lane_replay_universe(lane_id: str, fallback: Sequence[str]) -> tuple[str, ...]:
+    try:
+        symbols = tuple(lane_universe_symbols(lane_id, fallback=fallback))
+    except Exception:
+        symbols = tuple(str(symbol).strip().upper() for symbol in fallback if str(symbol).strip())
+    return tuple(dict.fromkeys(symbols))
+
+
+BULLISH_PULLBACK_REPLAY_UNIVERSE = _lane_replay_universe(
+    "bullish_pullback_observation",
+    IMPORTED_VALIDATION_UNIVERSE,
+)
+REGULAR_OPTIONS_REPLAY_UNIVERSE = BULLISH_PULLBACK_REPLAY_UNIVERSE
 IMPORTED_TRUTH_SOURCE = "historical_imported"
 IMPORTED_DAILY_TRUTH_SOURCE = "historical_imported_daily"
 ALPACA_OPRA_DAILY_SOURCE_LABEL = "alpaca_opra_daily_snapshot"
@@ -368,11 +384,149 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
         "allowed_directions": ["call"],
         "min_quality_score": 70.0,
     },
+    "tracked_winner_primary": {
+        "id": "tracked_winner_primary",
+        "label": "Tracked Winner Primary",
+        "allowed_tickers": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
+        "historical_required_underlyings": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 40.0,
+    },
+    "tracked_winner_index_core": {
+        "id": "tracked_winner_index_core",
+        "label": "Tracked Winner Index Core",
+        "allowed_tickers": ["SPY", "XLK", "DIA"],
+        "historical_required_underlyings": ["SPY", "XLK", "DIA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 40.0,
+    },
+    "tracked_winner_spy_core": {
+        "id": "tracked_winner_spy_core",
+        "label": "Tracked Winner SPY Core",
+        "allowed_tickers": ["SPY"],
+        "historical_required_underlyings": ["SPY"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 40.0,
+    },
+    "tracked_winner_loose_research": {
+        "id": "tracked_winner_loose_research",
+        "label": "Tracked Winner Loose Research",
+        "allowed_tickers": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
+        "historical_required_underlyings": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 80.0,
+    },
+    "tracked_winner_chain_native_research": {
+        "id": "tracked_winner_chain_native_research",
+        "label": "Tracked Winner Chain-Native Research",
+        "allowed_tickers": ["SPY", "GOOGL", "DIA", "NVDA"],
+        "historical_required_underlyings": ["SPY", "GOOGL", "DIA", "NVDA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 80.0,
+        "chain_native_spread_selection": True,
+        "chain_native_min_dte": 28,
+        "chain_native_max_dte": 45,
+    },
+    "tracked_winner_chain_native_qqq_time65_research": {
+        "id": "tracked_winner_chain_native_qqq_time65_research",
+        "label": "Tracked Winner Chain-Native QQQ Time65 Research",
+        "allowed_tickers": ["SPY", "QQQ", "GOOGL", "DIA", "NVDA"],
+        "historical_required_underlyings": ["SPY", "QQQ", "GOOGL", "DIA", "NVDA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 65.0,
+        "chain_native_spread_selection": True,
+        "chain_native_min_dte": 28,
+        "chain_native_max_dte": 45,
+    },
+    "tracked_winner_chain_native_qqq_time80_research": {
+        "id": "tracked_winner_chain_native_qqq_time80_research",
+        "label": "Tracked Winner Chain-Native QQQ Time80 Research",
+        "allowed_tickers": ["SPY", "QQQ", "GOOGL", "DIA", "NVDA"],
+        "historical_required_underlyings": ["SPY", "QQQ", "GOOGL", "DIA", "NVDA"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 80.0,
+        "chain_native_spread_selection": True,
+        "chain_native_min_dte": 28,
+        "chain_native_max_dte": 45,
+    },
+    "tracked_winner_chain_native_spy_qqq_time60_research": {
+        "id": "tracked_winner_chain_native_spy_qqq_time60_research",
+        "label": "Tracked Winner Chain-Native SPY QQQ Time60 Research",
+        "allowed_tickers": ["SPY", "QQQ"],
+        "historical_required_underlyings": ["SPY", "QQQ"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 60.0,
+        "chain_native_spread_selection": True,
+        "chain_native_min_dte": 28,
+        "chain_native_max_dte": 45,
+    },
+    "tracked_winner_chain_native_spy_qqq_time65_research": {
+        "id": "tracked_winner_chain_native_spy_qqq_time65_research",
+        "label": "Tracked Winner Chain-Native SPY QQQ Time65 Research",
+        "allowed_tickers": ["SPY", "QQQ"],
+        "historical_required_underlyings": ["SPY", "QQQ"],
+        "allowed_market_regimes": ["bullish"],
+        "allowed_directions": ["call"],
+        "target_dte": 35,
+        "min_quality_score": 0.0,
+        "max_debit_pct_of_width": 70.0,
+        "spread_max_width_pct": 20.0,
+        "spread_stop_loss_pct": 100.0,
+        "spread_profit_target_pct": 150.0,
+        "spread_time_exit_pct": 65.0,
+        "chain_native_spread_selection": True,
+        "chain_native_min_dte": 28,
+        "chain_native_max_dte": 45,
+    },
     "bullish_pullback_observation": {
         "id": "bullish_pullback_observation",
         "label": "Bullish Pullback Primary",
         "entry_signal_id": "pullback_uptrend",
-        "historical_required_underlyings": list(IMPORTED_VALIDATION_UNIVERSE),
+        "historical_required_underlyings": list(BULLISH_PULLBACK_REPLAY_UNIVERSE),
         "allowed_directions": ["call"],
         "allowed_signal_families": ["bullish_pullback"],
         "target_dte": 35,
@@ -383,6 +537,21 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
         "pullback_ret5_min": -4.0,
         "pullback_ret5_max": 0.25,
         "pullback_ret20_min": 2.0,
+    },
+    "regular_bearish_put_primary": {
+        "id": "regular_bearish_put_primary",
+        "label": "Regular Bearish Put Primary",
+        "allowed_asset_classes": ["index", "equity"],
+        "allowed_tickers": list(REGULAR_OPTIONS_REPLAY_UNIVERSE),
+        "historical_required_underlyings": list(REGULAR_OPTIONS_REPLAY_UNIVERSE),
+        "allowed_market_regimes": ["bearish"],
+        "allowed_directions": ["put"],
+        "allowed_signal_families": ["momentum"],
+        "target_dte": 35,
+        "scan_min_confidence": 0.0,
+        "scan_min_tech_score": 0.0,
+        "min_quality_score": 65.0,
+        "max_debit_pct_of_width": 60.0,
     },
     "bullish_mean_reversion": {
         "id": "bullish_mean_reversion",
@@ -3073,6 +3242,7 @@ def _contract_resolution_overview(
     return {
         "exact_archived_contract": int(counts.get("exact_archived_contract", 0) or 0),
         "exact_target_contract": int(counts.get("exact_target_contract", 0) or 0),
+        "exact_listed_spread_contract": int(counts.get("exact_listed_spread_contract", 0) or 0),
         "nearest_listed_contract": int(counts.get("nearest_listed_contract", 0) or 0),
         "unresolved_candidates": int(counts.get("unresolved_candidates", 0) or 0),
         "pending_truth_horizon": int(pending_truth_horizon_count or 0),
@@ -3418,6 +3588,18 @@ def _candidate_matches_replay_playbook(candidate: dict, playbook: dict) -> bool:
 
     min_quality_score = playbook.get("min_quality_score")
     if min_quality_score is not None and float(candidate.get("quality_score", 0.0) or 0.0) < float(min_quality_score):
+        return False
+    min_signal_ret5 = playbook.get("min_signal_ret5")
+    if min_signal_ret5 is not None and float(candidate.get("signal_ret5", 0.0) or 0.0) < float(min_signal_ret5):
+        return False
+    max_signal_ret5 = playbook.get("max_signal_ret5")
+    if max_signal_ret5 is not None and float(candidate.get("signal_ret5", 0.0) or 0.0) > float(max_signal_ret5):
+        return False
+    min_signal_ret20 = playbook.get("min_signal_ret20")
+    if min_signal_ret20 is not None and float(candidate.get("signal_ret20", 0.0) or 0.0) < float(min_signal_ret20):
+        return False
+    max_signal_ret20 = playbook.get("max_signal_ret20")
+    if max_signal_ret20 is not None and float(candidate.get("signal_ret20", 0.0) or 0.0) > float(max_signal_ret20):
         return False
 
     return True
@@ -5834,6 +6016,188 @@ def _select_target_contract(
     return best_strike, best_g
 
 
+def _quote_spread_pct(quote: Any) -> float:
+    bid = getattr(quote, "bid", None)
+    ask = getattr(quote, "ask", None)
+    if bid is None or ask is None:
+        return 999.0
+    try:
+        bid_f = float(bid)
+        ask_f = float(ask)
+    except (TypeError, ValueError):
+        return 999.0
+    midpoint = (bid_f + ask_f) / 2.0
+    if bid_f <= 0 or ask_f <= 0 or ask_f < bid_f or midpoint <= 0:
+        return 999.0
+    return (ask_f - bid_f) / midpoint * 100.0
+
+
+def _quote_liquidity_score(quote: Any) -> float:
+    volume = getattr(quote, "volume", None)
+    open_interest = getattr(quote, "open_interest", None)
+    try:
+        vol_f = float(volume or 0.0)
+    except (TypeError, ValueError):
+        vol_f = 0.0
+    try:
+        oi_f = float(open_interest or 0.0)
+    except (TypeError, ValueError):
+        oi_f = 0.0
+    return math.log1p(max(vol_f, 0.0)) + 0.25 * math.log1p(max(oi_f, 0.0))
+
+
+def _option_delta_for_quote(
+    quote: Any,
+    *,
+    stock_px: float,
+    hv30: float,
+    trade_type: str,
+    entry_date: date,
+    iv_adj: float,
+) -> float:
+    expiry_date = date.fromisoformat(str(quote.expiry)[:10])
+    dte = max((expiry_date - entry_date).days, 1)
+    greeks = _bs_greeks(
+        float(stock_px),
+        float(quote.strike),
+        dte / 365.0,
+        RISK_FREE_RATE,
+        float(hv30) * float(iv_adj),
+        trade_type,
+    )
+    if not greeks:
+        return 0.0
+    return abs(float(greeks.get("delta", 0.0) or 0.0))
+
+
+def _select_chain_native_spread(
+    *,
+    store: "HistoricalOptionsStore",
+    ticker: str,
+    entry_date: date,
+    trade_type: str,
+    S0: float,
+    hv30: float,
+    long_delta_target: float,
+    short_delta_target: float,
+    target_dte: int,
+    min_dte: int,
+    max_dte: int,
+    max_width_pct: float,
+    max_debit_pct_of_width: float | None,
+    iv_adj: float,
+    requested_pricing_lane: str,
+    entry_slippage_pct: float,
+    snapshot_kind: str,
+    entry_quote_minute_et: int,
+    entry_window_minutes: int,
+    source_labels: Optional[Sequence[str]],
+) -> tuple[Any, Any, float, float, float, float] | None:
+    min_expiry = entry_date + timedelta(days=max(int(min_dte), 1))
+    max_expiry = entry_date + timedelta(days=max(int(max_dte), max(int(min_dte), 1)))
+    quotes = store.list_entry_contracts(
+        underlying=ticker,
+        trade_date_et=entry_date,
+        option_type=trade_type,
+        earliest_minute_et=entry_quote_minute_et,
+        window_minutes=entry_window_minutes,
+        snapshot_kind=snapshot_kind,
+        allow_last_price=False,
+        min_expiry=min_expiry,
+        max_expiry=max_expiry,
+        source_labels=source_labels,
+    )
+    if not quotes:
+        return None
+
+    quotes_by_expiry: dict[str, list[Any]] = defaultdict(list)
+    for quote in quotes:
+        if quote.bid is None or quote.ask is None:
+            continue
+        try:
+            if float(quote.bid) <= 0 or float(quote.ask) <= 0 or float(quote.ask) < float(quote.bid):
+                continue
+        except (TypeError, ValueError):
+            continue
+        quotes_by_expiry[str(quote.expiry)[:10]].append(quote)
+
+    best: tuple[float, Any, Any, float, float, float, float] | None = None
+    for expiry, expiry_quotes in quotes_by_expiry.items():
+        expiry_date = date.fromisoformat(expiry)
+        dte = max((expiry_date - entry_date).days, 1)
+        sorted_quotes = sorted(expiry_quotes, key=lambda quote: float(quote.strike))
+        deltas = {
+            quote.contract_symbol: _option_delta_for_quote(
+                quote,
+                stock_px=S0,
+                hv30=hv30,
+                trade_type=trade_type,
+                entry_date=entry_date,
+                iv_adj=iv_adj,
+            )
+            for quote in sorted_quotes
+        }
+        long_candidates = sorted(
+            sorted_quotes,
+            key=lambda quote: abs(deltas.get(quote.contract_symbol, 0.0) - float(long_delta_target)),
+        )[:30]
+        short_candidates = sorted(
+            sorted_quotes,
+            key=lambda quote: abs(deltas.get(quote.contract_symbol, 0.0) - float(short_delta_target)),
+        )[:50]
+        for long_quote in long_candidates:
+            for short_quote in short_candidates:
+                if long_quote.contract_symbol == short_quote.contract_symbol:
+                    continue
+                if trade_type == "call" and float(short_quote.strike) <= float(long_quote.strike):
+                    continue
+                if trade_type == "put" and float(short_quote.strike) >= float(long_quote.strike):
+                    continue
+                spread_width = abs(float(short_quote.strike) - float(long_quote.strike))
+                if spread_width <= 0 or (spread_width / float(S0) * 100.0) > float(max_width_pct):
+                    continue
+                long_entry_exec = _resolve_imported_execution_price(
+                    side="entry",
+                    requested_pricing_lane=requested_pricing_lane,
+                    bid=long_quote.bid,
+                    ask=long_quote.ask,
+                    last=long_quote.last,
+                    slippage_pct=entry_slippage_pct,
+                )
+                short_entry_exec = _resolve_imported_execution_price(
+                    side="exit",
+                    requested_pricing_lane=requested_pricing_lane,
+                    bid=short_quote.bid,
+                    ask=short_quote.ask,
+                    last=short_quote.last,
+                    slippage_pct=entry_slippage_pct,
+                )
+                long_px = float(long_entry_exec.get("execution_price") or 0.0)
+                short_px = float(short_entry_exec.get("execution_price") or 0.0)
+                net_debit = long_px - short_px
+                if net_debit <= 0.01:
+                    continue
+                debit_pct = net_debit / spread_width * 100.0
+                if max_debit_pct_of_width is not None and debit_pct >= float(max_debit_pct_of_width):
+                    continue
+                long_delta = deltas.get(long_quote.contract_symbol, 0.0)
+                short_delta = deltas.get(short_quote.contract_symbol, 0.0)
+                score = (
+                    abs(long_delta - float(long_delta_target)) * 100.0
+                    + abs(short_delta - float(short_delta_target)) * 100.0
+                    + abs(dte - int(target_dte)) * 0.75
+                    + debit_pct * 0.05
+                    + (_quote_spread_pct(long_quote) + _quote_spread_pct(short_quote)) * 0.02
+                    - (_quote_liquidity_score(long_quote) + _quote_liquidity_score(short_quote)) * 0.05
+                )
+                if best is None or score < best[0]:
+                    best = (score, long_quote, short_quote, net_debit, spread_width, long_delta, short_delta)
+    if best is None:
+        return None
+    _, long_quote, short_quote, net_debit, spread_width, long_delta, short_delta = best
+    return long_quote, short_quote, net_debit, spread_width, long_delta, short_delta
+
+
 def _simulate_spread_outcome_imported(
     *,
     store: "HistoricalOptionsStore",
@@ -5870,6 +6234,10 @@ def _simulate_spread_outcome_imported(
     entry_anchor_source: Optional[str] = None,
     execution_realism: Optional[str] = None,
     source_labels: Optional[Sequence[str]] = None,
+    chain_native_spread_selection: bool = False,
+    chain_native_min_dte: int | None = None,
+    chain_native_max_dte: int | None = None,
+    max_debit_pct_of_width: float | None = None,
 ) -> dict:
     """
     Simulate a vertical spread using real archived option quotes.
@@ -5894,39 +6262,74 @@ def _simulate_spread_outcome_imported(
         **extra,
     }
 
-    # Find long leg (higher delta, closer to ATM)
-    long_strike, long_greeks = _select_target_contract(S0, hv30, trade_type, long_delta_target, dte_at_entry, iv_adj)
-    if long_strike is None:
-        return _not_priced("no_long_leg_target")
+    long_greeks: dict[str, Any] | None = None
+    short_greeks: dict[str, Any] | None = None
+    contract_selection_source = "model_target_spread"
+    selected_long_delta: float | None = None
+    selected_short_delta: float | None = None
+    if chain_native_spread_selection:
+        selected = _select_chain_native_spread(
+            store=store,
+            ticker=ticker,
+            entry_date=entry_date,
+            trade_type=trade_type,
+            S0=S0,
+            hv30=hv30,
+            long_delta_target=long_delta_target,
+            short_delta_target=short_delta_target,
+            target_dte=dte_at_entry,
+            min_dte=int(chain_native_min_dte if chain_native_min_dte is not None else max(1, dte_at_entry - 7)),
+            max_dte=int(chain_native_max_dte if chain_native_max_dte is not None else dte_at_entry + 10),
+            max_width_pct=max_width_pct,
+            max_debit_pct_of_width=max_debit_pct_of_width,
+            iv_adj=iv_adj,
+            requested_pricing_lane=requested_pricing_lane,
+            entry_slippage_pct=entry_slippage_pct,
+            snapshot_kind=snapshot_kind,
+            entry_quote_minute_et=entry_quote_minute_et,
+            entry_window_minutes=entry_window_minutes,
+            source_labels=source_labels,
+        )
+        if selected is None:
+            return _not_priced("no_chain_native_spread")
+        long_entry_quote, short_entry_quote, selected_net_debit, selected_spread_width, selected_long_delta, selected_short_delta = selected
+        long_strike = float(long_entry_quote.strike)
+        short_strike = float(short_entry_quote.strike)
+        contract_selection_source = "chain_native_listed_spread"
+    else:
+        # Find long leg (higher delta, closer to ATM)
+        long_strike, long_greeks = _select_target_contract(S0, hv30, trade_type, long_delta_target, dte_at_entry, iv_adj)
+        if long_strike is None:
+            return _not_priced("no_long_leg_target")
 
-    long_entry_quote = store.find_entry_contract(
-        underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
-        target_expiry=target_expiry, target_strike=long_strike,
-        earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
-        snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
-    )
-    if long_entry_quote is None:
-        return _not_priced("missing_long_entry_quote")
+        long_entry_quote = store.find_entry_contract(
+            underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
+            target_expiry=target_expiry, target_strike=long_strike,
+            earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
+            snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
+        )
+        if long_entry_quote is None:
+            return _not_priced("missing_long_entry_quote")
 
-    # Find short leg (lower delta, more OTM)
-    short_strike, short_greeks = _select_target_contract(S0, hv30, trade_type, short_delta_target, dte_at_entry, iv_adj)
-    if short_strike is None:
-        return _not_priced("no_short_leg_target")
+        # Find short leg (lower delta, more OTM)
+        short_strike, short_greeks = _select_target_contract(S0, hv30, trade_type, short_delta_target, dte_at_entry, iv_adj)
+        if short_strike is None:
+            return _not_priced("no_short_leg_target")
 
-    # Ensure short is more OTM
-    if trade_type == "call" and short_strike <= long_strike:
-        short_strike = long_strike + (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
-    elif trade_type == "put" and short_strike >= long_strike:
-        short_strike = long_strike - (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
+        # Ensure short is more OTM
+        if trade_type == "call" and short_strike <= long_strike:
+            short_strike = long_strike + (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
+        elif trade_type == "put" and short_strike >= long_strike:
+            short_strike = long_strike - (_market_strike_grid(S0)[1] - _market_strike_grid(S0)[0] if len(_market_strike_grid(S0)) > 1 else 5.0)
 
-    short_entry_quote = store.find_entry_contract(
-        underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
-        target_expiry=target_expiry, target_strike=short_strike,
-        earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
-        snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
-    )
-    if short_entry_quote is None:
-        return _not_priced("missing_short_entry_quote")
+        short_entry_quote = store.find_entry_contract(
+            underlying=ticker, trade_date_et=entry_date, option_type=trade_type,
+            target_expiry=target_expiry, target_strike=short_strike,
+            earliest_minute_et=entry_quote_minute_et, window_minutes=entry_window_minutes,
+            snapshot_kind=snapshot_kind, allow_last_price=False, source_labels=source_labels,
+        )
+        if short_entry_quote is None:
+            return _not_priced("missing_short_entry_quote")
 
     expiry_date = date.fromisoformat(long_entry_quote.expiry)
     short_expiry_date = date.fromisoformat(short_entry_quote.expiry)
@@ -5974,8 +6377,11 @@ def _simulate_spread_outcome_imported(
         short_expiry_date == target_expiry
         and abs(float(short_entry_quote.strike) - float(short_strike)) <= 0.0001
     )
-    contract_resolution = "exact_target_contract" if long_is_exact_target and short_is_exact_target else "nearest_listed_contract"
-    contract_selection_source = "model_target_spread"
+    contract_resolution = (
+        "exact_listed_spread_contract"
+        if chain_native_spread_selection
+        else ("exact_target_contract" if long_is_exact_target and short_is_exact_target else "nearest_listed_contract")
+    )
     time_exit_day = max(1, math.ceil(actual_dte * time_exit_pct / 100))
     stop_value = net_debit * (1.0 - stop_loss_pct / 100.0)
     target_value = net_debit * (1.0 + profit_target_pct / 100.0)
@@ -6123,7 +6529,15 @@ def _simulate_spread_outcome_imported(
         "net_debit": round(net_debit, 4),
         "max_profit": round(spread_width - net_debit, 4),
         "max_loss": round(net_debit, 4),
-        "delta_val": round(abs(float((long_greeks or {}).get("delta", 0.0))), 4),
+        "delta_val": round(
+            abs(float(selected_long_delta if selected_long_delta is not None else (long_greeks or {}).get("delta", 0.0))),
+            4,
+        ),
+        "short_delta_val": (
+            round(abs(float(selected_short_delta)), 4)
+            if selected_short_delta is not None
+            else round(abs(float((short_greeks or {}).get("delta", 0.0))), 4)
+        ),
         "stock_px": round(S0, 4),
         "exit_stock_px": round(exit_stock_px, 4),
         "stock_move_pct": round(stock_move_pct, 2),
@@ -6676,6 +7090,27 @@ def _apply_replay_playbook_config_overrides(config: dict, playbook: dict) -> dic
         resolved["min_confidence"] = float(playbook["scan_min_confidence"])
     if playbook.get("scan_min_tech_score") is not None:
         resolved["min_tech_score"] = float(playbook["scan_min_tech_score"])
+    override_map = {
+        "spread_long_delta": "spread_long_delta",
+        "spread_short_delta": "spread_short_delta",
+        "spread_max_width_pct": "spread_max_width_pct",
+        "spread_stop_loss_pct": "spread_stop_loss_pct",
+        "spread_profit_target_pct": "spread_profit_target_pct",
+        "spread_time_exit_pct": "spread_time_exit_pct",
+        "entry_slippage_pct": "entry_slippage_pct",
+        "exit_slippage_pct": "exit_slippage_pct",
+        "chain_native_spread_selection": "chain_native_spread_selection",
+        "chain_native_min_dte": "chain_native_min_dte",
+        "chain_native_max_dte": "chain_native_max_dte",
+    }
+    for playbook_key, config_key in override_map.items():
+        if playbook.get(playbook_key) is not None:
+            if isinstance(playbook[playbook_key], bool):
+                resolved[config_key] = bool(playbook[playbook_key])
+            elif playbook_key in {"chain_native_min_dte", "chain_native_max_dte"}:
+                resolved[config_key] = int(playbook[playbook_key])
+            else:
+                resolved[config_key] = float(playbook[playbook_key])
     return resolved
 
 
@@ -6836,6 +7271,8 @@ def run_historical_backtest(
     imported_calendar_underlying: Optional[str] = None
     imported_calendar_quote_dates: list[str] = []
     imported_shared_quote_dates: list[str] = []
+    imported_replay_quote_dates: list[str] = []
+    imported_replay_quote_date_source: str = "benchmark_quote_dates"
     imported_source_labels: list[str] = []
     imported_trusted_only = not bool(allow_research_imported_data)
     imported_data_scope_label = "trusted" if imported_trusted_only else "research_included"
@@ -6931,30 +7368,38 @@ def run_historical_backtest(
             trusted_only=imported_trusted_only,
             source_labels=imported_source_labels,
         )
-        if len(imported_calendar_quote_dates) < required_imported_calendar_dates:
-            imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_calendar_quote_dates))
+        if imported_shared_quote_dates:
+            imported_replay_quote_dates = imported_shared_quote_dates
+            imported_replay_quote_date_source = "shared_required_quote_dates"
+        else:
+            imported_replay_quote_dates = imported_calendar_quote_dates
+            imported_replay_quote_date_source = "benchmark_quote_dates"
+        if len(imported_replay_quote_dates) < required_imported_calendar_dates:
+            imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_replay_quote_dates))
             replay_calendar_summary = _build_replay_calendar_summary(
-                source=f"{imported_data_scope_label}_imported_benchmark_quote_dates",
+                source=f"{imported_data_scope_label}_imported_{imported_replay_quote_date_source}",
                 index=imported_quote_index,
                 raw_history_date_count=len(imported_quote_index),
                 quote_date_count=len(imported_quote_index),
-                underlyings=[imported_calendar_underlying] if imported_calendar_underlying else [],
+                underlyings=list(replay_watchlist),
                 snapshot_kind=imported_snapshot_kind,
             )
             replay_calendar_summary["benchmark_underlying"] = imported_calendar_underlying
             replay_calendar_summary["source_labels_required"] = imported_source_labels
             replay_calendar_summary["trusted_only"] = imported_trusted_only
             replay_calendar_summary["research_imported_data_allowed"] = not imported_trusted_only
+            replay_calendar_summary["benchmark_quote_date_count"] = len(imported_calendar_quote_dates)
             replay_calendar_summary["shared_quote_date_count"] = len(imported_shared_quote_dates)
             replay_calendar_summary["calendar_gap_date_count"] = max(
-                len(imported_quote_index) - len(imported_shared_quote_dates),
+                len(imported_calendar_quote_dates) - len(imported_shared_quote_dates),
                 0,
             )
             replay_calendar_summary["required_quote_date_count"] = required_imported_calendar_dates
+            replay_calendar_summary["replay_quote_date_source"] = imported_replay_quote_date_source
             return {
                 "error": (
-                    "Imported historical validation has insufficient trusted benchmark quote dates before replay under the requested trust scope. "
-                    f"Selected dates: {len(imported_calendar_quote_dates)}."
+                    "Imported historical validation has insufficient imported replay quote dates before replay under the requested trust scope. "
+                    f"Selected dates: {len(imported_replay_quote_dates)}."
                 ),
                 "source_labels_required": imported_source_labels,
                 "imported_data_scope": imported_data_scope_label,
@@ -7026,7 +7471,7 @@ def run_historical_backtest(
         except Exception:
             pass
 
-    if len(all_histories) < 2 or "SPY" not in all_histories:
+    if "SPY" not in all_histories:
         return {"error": "Could not fetch price history for watchlist tickers"}
 
     # Align the replay to SPY's date index and exclude newer listings that cannot
@@ -7034,32 +7479,34 @@ def run_historical_backtest(
     spy_reference = all_histories["SPY"]["Close"].dropna()
     spy_index = spy_reference.index
     raw_spy_index = spy_index
-    if imported_calendar_quote_dates:
-        imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_calendar_quote_dates))
+    if imported_replay_quote_dates:
+        imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_replay_quote_dates))
         imported_quote_set = set(imported_quote_index)
         spy_index = pd.DatetimeIndex([stamp for stamp in spy_index if stamp in imported_quote_set])
         replay_calendar_summary = _build_replay_calendar_summary(
-            source=f"{imported_data_scope_label}_imported_benchmark_quote_dates",
+            source=f"{imported_data_scope_label}_imported_{imported_replay_quote_date_source}",
             index=spy_index,
             raw_history_date_count=len(raw_spy_index),
             quote_date_count=len(imported_quote_index),
-            underlyings=[imported_calendar_underlying] if imported_calendar_underlying else [],
+            underlyings=list(replay_watchlist),
             snapshot_kind=imported_snapshot_kind,
         )
         replay_calendar_summary["benchmark_underlying"] = imported_calendar_underlying
         replay_calendar_summary["source_labels_required"] = imported_source_labels
         replay_calendar_summary["trusted_only"] = imported_trusted_only
         replay_calendar_summary["research_imported_data_allowed"] = not imported_trusted_only
+        replay_calendar_summary["benchmark_quote_date_count"] = len(imported_calendar_quote_dates)
         replay_calendar_summary["shared_quote_date_count"] = len(imported_shared_quote_dates)
         replay_calendar_summary["calendar_gap_date_count"] = max(
-            len(imported_quote_index) - len(imported_shared_quote_dates),
+            len(imported_calendar_quote_dates) - len(imported_shared_quote_dates),
             0,
         )
         replay_calendar_summary["required_quote_date_count"] = required_imported_calendar_dates
+        replay_calendar_summary["replay_quote_date_source"] = imported_replay_quote_date_source
         if len(spy_index) < required_imported_calendar_dates:
             return {
                 "error": (
-                    "Imported historical validation has insufficient trusted benchmark quote dates after aligning the replay calendar under the requested trust scope. "
+                    "Imported historical validation has insufficient imported replay quote dates after aligning the replay calendar under the requested trust scope. "
                     f"Selected dates: {len(spy_index)}."
                 ),
                 "source_labels_required": imported_source_labels,
@@ -7101,7 +7548,7 @@ def run_historical_backtest(
         aligned["Volume"] = aligned["Volume"].fillna(0.0)
         aligned_histories[sym] = aligned
 
-    if len(aligned_histories) < 2 or "SPY" not in aligned_histories:
+    if "SPY" not in aligned_histories:
         return {"error": "Could not align enough ticker history for replay"}
 
     all_closes = {sym: hist["Close"].astype(float) for sym, hist in aligned_histories.items()}
@@ -7319,6 +7766,8 @@ def run_historical_backtest(
                 "ticker": ticker,
                 "trade_type": trade_type,
                 "signal_family": signal.get("signal_family"),
+                "signal_ret5": signal.get("signal_ret5", ret5),
+                "signal_ret20": signal.get("signal_ret20", day_data.get("ret20")),
                 "quality_score": qual_score,
                 "market_regime": _market_regime_bucket(spy_ret5_today),
                 "sector": ticker_sectors.get(ticker, "Unknown"),
@@ -7470,6 +7919,10 @@ def run_historical_backtest(
                         entry_anchor_source=entry_anchor_source,
                         execution_realism=_execution_realism_label(normalized_truth_lane),
                         source_labels=imported_source_labels,
+                        chain_native_spread_selection=bool(p_config.get("chain_native_spread_selection", False)),
+                        chain_native_min_dte=p_config.get("chain_native_min_dte"),
+                        chain_native_max_dte=p_config.get("chain_native_max_dte"),
+                        max_debit_pct_of_width=replay_playbook.get("max_debit_pct_of_width"),
                     )
                 else:
                     outcome = _simulate_trade_outcome_imported(

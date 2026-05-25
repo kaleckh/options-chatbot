@@ -1,7 +1,9 @@
 import os
+import sqlite3
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -58,6 +60,21 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertTrue(all("warnings" in batch for batch in batches))
         self.assertTrue(all(batch["data_trust"] == "trusted" for batch in batches))
 
+    def test_schema_has_snapshot_summary_query_path_indexes(self):
+        HistoricalOptionsStore(self.db_path)
+        with sqlite3.connect(self.db_path) as conn:
+            indexes = {
+                row[1]: [info[2] for info in conn.execute(f"PRAGMA index_info('{row[1]}')").fetchall()]
+                for row in conn.execute("PRAGMA index_list(option_quote_snapshots)").fetchall()
+            }
+
+        self.assertEqual(indexes["idx_option_quotes_snapshot_underlying"], ["snapshot_kind", "underlying"])
+        self.assertEqual(indexes["idx_option_quotes_snapshot_asof"], ["snapshot_kind", "as_of_utc"])
+        self.assertEqual(
+            indexes["idx_option_quotes_snapshot_quote_date"],
+            ["snapshot_kind", "quote_date_et", "underlying"],
+        )
+
     def test_free_vendor_imports_are_research_not_trusted(self):
         result = import_daily_option_parquet(
             self.daily_parquet_path,
@@ -104,6 +121,27 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         )
         self.assertIsNotNone(exact)
         self.assertEqual(exact.contract_symbol, quote.contract_symbol)
+
+    def test_replay_quote_lookups_reuse_store_cache(self):
+        import_historical_option_snapshots(self.csv_path, "lab_intraday", db_path=self.db_path)
+        store = HistoricalOptionsStore(self.db_path)
+        trade_date = self.histories["SPY"].index[0].date()
+        quote = store.find_entry_contract(
+            underlying="SPY",
+            trade_date_et=trade_date,
+            option_type="call",
+            target_expiry=trade_date,
+            target_strike=501.0,
+        )
+        self.assertIsNotNone(quote)
+
+        with patch.object(store, "_connect", wraps=store._connect) as connect:
+            first = store.get_closing_quote(contract_symbol=quote.contract_symbol, quote_date_et=trade_date)
+            second = store.get_closing_quote(contract_symbol=quote.contract_symbol, quote_date_et=trade_date)
+
+        self.assertIsNotNone(first)
+        self.assertEqual(second, first)
+        self.assertEqual(connect.call_count, 1)
 
     def test_import_rejects_rows_missing_contract_identity(self):
         bad_csv = Path(self._tmp.name) / "bad.csv"

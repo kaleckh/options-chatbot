@@ -693,17 +693,23 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
     def test_market_data_cache_stats_endpoint_reports_and_resets_counters(self):
         sector_tickers = {}
+        batch_frames = {}
         for idx, symbol in enumerate(["XLK", "XLV", "XLF", "XLE", "XLY", "XLP", "XLI", "XLB", "XLRE", "XLU", "XLC"], start=1):
+            history_frame = make_history(length=820, start=45.0 + idx * 4.0, step=0.1, wave=0.6, volume=9_000_000)
+            batch_frames[symbol] = history_frame
+
             class _SectorTicker:
-                def __init__(self, start_price: float):
-                    self.start_price = start_price
+                def __init__(self, frame: pd.DataFrame):
+                    self.frame = frame
 
                 def history(self, period=None, start=None, end=None, interval=None):
-                    return make_history(length=820, start=self.start_price, step=0.1, wave=0.6, volume=9_000_000)
+                    return self.frame
 
-            sector_tickers[symbol] = _SectorTicker(45.0 + idx * 4.0)
+            sector_tickers[symbol] = _SectorTicker(history_frame)
 
+        batch_download = pd.concat(batch_frames, axis=1)
         with patch.object(mds.yf, "Ticker", side_effect=lambda symbol: sector_tickers[symbol]), \
+             patch.object(mds.yf, "download", return_value=batch_download), \
              patch.object(mds, "_recent_refresh_start", return_value=FrozenDateTime.now().date() + mds.timedelta(days=365)):
             sectors_response = self.client.get("/api/sectors")
             self.assertEqual(sectors_response.status_code, 200)
@@ -714,8 +720,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             self.assertIn("stats", payload)
             self.assertIn("totals", payload)
             self.assertGreaterEqual(payload["stats"]["download_history_batch"]["cache_hits"], 1)
+            self.assertEqual(payload["stats"]["download_history_batch"]["batch_network_fetches"], 1)
             history_stats = payload["stats"].get("history", {})
             self.assertEqual(history_stats.get("persistent_misses"), 11)
+            self.assertEqual(history_stats.get("full_refreshes"), 11)
             self.assertEqual(payload["totals"].get("network_fetches"), 11)
 
             reset_response = self.client.post("/api/market-data/cache-stats/reset")

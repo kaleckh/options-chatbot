@@ -9,6 +9,7 @@ EXACT_CONTRACT_RESOLUTIONS = frozenset(
         "exact_target_contract",
         "exact_archived_contract",
         "exact_contract",
+        "exact_listed_spread_contract",
     }
 )
 NEAREST_CONTRACT_RESOLUTION = "nearest_listed_contract"
@@ -60,6 +61,7 @@ def contract_resolution_accounting(
     normalized_counts.setdefault("exact_target_contract", 0)
     normalized_counts.setdefault("exact_archived_contract", 0)
     normalized_counts.setdefault("exact_contract", 0)
+    normalized_counts.setdefault("exact_listed_spread_contract", 0)
     normalized_counts.setdefault(NEAREST_CONTRACT_RESOLUTION, 0)
     normalized_counts["unresolved_candidates"] = unresolved_count
     return {

@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tomllib
+from collections import deque
 from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -8022,9 +8023,6 @@ def build_exact_replay_readiness_checklist(report: dict[str, Any]) -> dict[str, 
     gates = verification.get("gates") if isinstance(verification.get("gates"), dict) else {}
     readiness = report.get("readiness") if isinstance(report.get("readiness"), dict) else {}
     replay = report.get("replay") if isinstance(report.get("replay"), dict) else {}
-    diagnostic_replay = (
-        report.get("diagnostic_replay") if isinstance(report.get("diagnostic_replay"), dict) else {}
-    )
     proof_source_isolation = _proof_source_isolation_contract(report)
     capture_continuity = (
         exact_history.get("capture_continuity_contract")
@@ -8057,12 +8055,6 @@ def build_exact_replay_readiness_checklist(report: dict[str, Any]) -> dict[str, 
     can_run_diagnostic_replay_now = current_shared >= diagnostic_required
     full_history_count_available = current_shared >= full_required
     readiness_ready = readiness.get("status") == "ready_for_exact_replay"
-    has_required_exact_history_depth = (
-        full_history_count_available
-        and gates.get("enough_exact_shared_quote_dates") is True
-        and readiness_ready
-        and gates.get("readiness_ready_for_exact_replay") is True
-    )
     exact_replay_completed = gates.get("exact_replay_completed") is True
     exact_replay_profitable = (
         exact_replay_completed
@@ -12360,7 +12352,7 @@ def _zero_candidate_read_only_recovery_summary(
         for item in watchlist_by_symbol.values()
         if item.get("distance_measurement_status") != "measured"
     ]
-    for drop_key, items in queue_by_drop.items():
+    for _drop_key, items in queue_by_drop.items():
         if items:
             first_review_by_drop.append(items[0])
     priority_order = [
@@ -13917,7 +13909,6 @@ def materialize_deferred_variant_configs(
         if isinstance(backlog.get("deferred_variant_recipe_audit"), dict)
         else {}
     )
-    queue = list(backlog.get("deferred_test_queue") or [])
     activation_blockers = list(audit.get("activation_blockers") or backlog.get("activation_blockers") or [])
     recipes = _deferred_variant_recipes_from_backlog(backlog)
     preflight_checks = [
@@ -16881,10 +16872,6 @@ def render_markdown(report: dict[str, Any]) -> str:
     )
     audit_report = report if report.get("iteration_ledger") else {**report, "iteration_ledger": iteration_ledger}
     goal_audit = report.get("goal_completion_audit") or build_goal_completion_audit(audit_report)
-    goal_proof_source_requirement = _goal_requirement_by_name(
-        goal_audit,
-        GOAL_REQUIREMENT_EXACT_PROOF_SOURCE_ISOLATION,
-    )
     goal_evidence_plan = report.get("goal_completion_evidence_plan") or build_goal_completion_evidence_plan(
         {**audit_report, "goal_completion_audit": goal_audit, "next_execution_runbook_card": next_execution_runbook_card}
     )
@@ -16994,7 +16981,6 @@ def render_markdown(report: dict[str, Any]) -> str:
         if isinstance(post_fresh_scan_backlog.get("deferred_variant_execution_plan"), dict)
         else {}
     )
-    first_deferred_variant_sweep = _first_deferred_variant_sweep(deferred_variant_execution_plan)
     exact_replay_unlock_contract = (
         report.get("exact_replay_unlock_contract")
         if isinstance(report.get("exact_replay_unlock_contract"), dict)
@@ -18366,19 +18352,25 @@ def render_markdown(report: dict[str, Any]) -> str:
 def _load_recent_progress_history_entries(history_path: Path, *, limit: int = 20) -> list[dict[str, Any]]:
     if not history_path.exists():
         return []
-    entries: list[dict[str, Any]] = []
+    limit = max(int(limit), 0)
+    if limit <= 0:
+        return []
     try:
-        lines = history_path.read_text(encoding="utf8").splitlines()
+        with history_path.open("r", encoding="utf8") as handle:
+            recent_lines = deque(handle, maxlen=max(limit * 5, limit))
     except OSError:
         return []
-    for line in lines[-int(limit) :]:
+    entries: list[dict[str, Any]] = []
+    for line in reversed(recent_lines):
         try:
             payload = json.loads(line)
         except json.JSONDecodeError:
             continue
         if isinstance(payload, dict):
             entries.append(payload)
-    return entries
+            if len(entries) >= limit:
+                break
+    return list(reversed(entries))
 
 
 def _history_shared_quote_count(entry: dict[str, Any]) -> int | None:
@@ -23645,6 +23637,9 @@ def run_progress(
     }
     if skip_capture:
         capture["status"] = "skipped_by_request"
+    elif not write:
+        capture["status"] = "skipped_no_write"
+        capture["write_guard"] = "no_write_disables_capture_and_import"
     elif not force_capture and not missing_target:
         capture["status"] = "skipped_existing_shared_date"
     else:
@@ -23999,6 +23994,21 @@ def build_strict_accuracy_gate(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def attach_strict_accuracy_gate(report: dict[str, Any]) -> dict[str, Any]:
+    strict_gate = report.get("strict_accuracy_gate")
+    if not isinstance(strict_gate, dict):
+        strict_gate = build_strict_accuracy_gate(report)
+        report["strict_accuracy_gate"] = strict_gate
+    return strict_gate
+
+
+def strict_accuracy_gate_exit_code(report: dict[str, Any], *, enabled: bool) -> int:
+    if not enabled:
+        return 0
+    strict_gate = attach_strict_accuracy_gate(report)
+    return 0 if strict_gate.get("passed") is True else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Advance the AI commodity lane proof loop with Alpaca OPRA capture, readiness, replay, and scan evidence."
@@ -24154,6 +24164,8 @@ def main() -> int:
             reference_now=reference_now,
             refresh_automation_health=True,
         )
+        if args.strict_gate:
+            attach_strict_accuracy_gate(report)
         if not args.no_write:
             report["artifacts"] = write_progress_report(report, Path(args.output_dir))
         if args.next_execution:
@@ -24170,8 +24182,11 @@ def main() -> int:
         elif args.json:
             print(json.dumps(report, indent=2))
         else:
-            print(json.dumps(build_compact_progress_summary(report), indent=2))
-        return 0
+            summary = build_compact_progress_summary(report)
+            if args.strict_gate:
+                summary["strict_accuracy_gate"] = report.get("strict_accuracy_gate")
+            print(json.dumps(summary, indent=2))
+        return strict_accuracy_gate_exit_code(report, enabled=bool(args.strict_gate))
 
     if args.from_latest:
         if not args.next_execution:
@@ -24185,6 +24200,8 @@ def main() -> int:
             reference_now=reference_now,
             refresh_automation_health=True,
         )
+        if args.strict_gate:
+            attach_strict_accuracy_gate(report)
         print(
             json.dumps(
                 build_next_execution_cli_payload(
@@ -24195,7 +24212,7 @@ def main() -> int:
                 indent=2,
             )
         )
-        return 0
+        return strict_accuracy_gate_exit_code(report, enabled=bool(args.strict_gate))
 
     load_env_file(Path(args.env_file))
     os.environ.setdefault("OPTIONS_MARKET_DATA_PROVIDER", "alpaca")
@@ -24255,20 +24272,14 @@ def main() -> int:
         print(json.dumps(build_next_execution_cli_payload(report, payload_source="current_run"), indent=2))
     elif args.json:
         if args.strict_gate:
-            report["strict_accuracy_gate"] = build_strict_accuracy_gate(report)
+            attach_strict_accuracy_gate(report)
         print(json.dumps(report, indent=2))
     else:
         summary = build_compact_progress_summary(report)
         if args.strict_gate:
-            summary["strict_accuracy_gate"] = build_strict_accuracy_gate(report)
+            summary["strict_accuracy_gate"] = attach_strict_accuracy_gate(report)
         print(json.dumps(summary, indent=2))
-    if args.strict_gate:
-        strict_gate = report.get("strict_accuracy_gate")
-        if not isinstance(strict_gate, dict):
-            strict_gate = build_strict_accuracy_gate(report)
-        if strict_gate.get("passed") is not True:
-            return 2
-    return 0
+    return strict_accuracy_gate_exit_code(report, enabled=bool(args.strict_gate))
 
 
 if __name__ == "__main__":

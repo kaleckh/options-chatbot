@@ -438,13 +438,39 @@ function Sync-ValidationArtifacts([string]$CanonicalRoot, [string]$RepoRoot) {
         New-Item -ItemType Directory -Path $targetParent -Force | Out-Null
     }
 
+    $fullArtifactSync = $env:RUN_REPO_PYTHON_SYNC_FULL_VALIDATION_ARTIFACTS -eq "1"
     Write-Host "Syncing validation artifacts from $CanonicalRoot"
     try {
-        if (Test-Path -LiteralPath $targetValidationRoot) {
-            Copy-Item -Path (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
+        if ($fullArtifactSync) {
+            if (Test-Path -LiteralPath $targetValidationRoot) {
+                Copy-Item -Path (Join-Path $sourceValidationRoot "*") -Destination $targetValidationRoot -Recurse -Force
+            }
+            else {
+                Copy-Item -LiteralPath $sourceValidationRoot -Destination $targetValidationRoot -Recurse -Force
+            }
         }
         else {
-            Copy-Item -LiteralPath $sourceValidationRoot -Destination $targetValidationRoot -Recurse -Force
+            if (-not (Test-Path -LiteralPath $targetValidationRoot)) {
+                New-Item -ItemType Directory -Path $targetValidationRoot -Force | Out-Null
+            }
+
+            $sourceRootFull = [System.IO.Path]::GetFullPath($sourceValidationRoot).TrimEnd([char[]]@('\', '/'))
+            $metadataExtensions = @(".csv", ".json", ".jsonl", ".md", ".txt")
+            $maxMetadataBytes = 50MB
+            Get-ChildItem -LiteralPath $sourceValidationRoot -Recurse -File | Where-Object {
+                $metadataExtensions -contains $_.Extension.ToLowerInvariant() -and
+                $_.Length -le $maxMetadataBytes -and
+                $_.Name -notmatch "\.db($|-)"
+            } | ForEach-Object {
+                $itemFull = [System.IO.Path]::GetFullPath($_.FullName)
+                $relative = $itemFull.Substring($sourceRootFull.Length).TrimStart([char[]]@('\', '/'))
+                $targetPath = Join-Path $targetValidationRoot $relative
+                $targetDir = Split-Path -Parent $targetPath
+                if (-not (Test-Path -LiteralPath $targetDir)) {
+                    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+                }
+                Copy-Item -LiteralPath $_.FullName -Destination $targetPath -Force
+            }
         }
     }
     catch {

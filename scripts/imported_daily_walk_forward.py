@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -217,7 +218,10 @@ def run_imported_daily_walk_forward_validation(
     source_labels: str | None = None,
     all_source_labels: bool = False,
     allow_research_data: bool = False,
+    db_path: str | Path | None = None,
 ) -> dict[str, Any]:
+    if db_path is not None:
+        os.environ["HISTORICAL_OPTIONS_DB_PATH"] = str(db_path)
     source_label_override = "" if all_source_labels else source_labels
     replay = wfo.run_historical_backtest(
         lookback_years=int(lookback_years),
@@ -275,6 +279,7 @@ def main() -> int:
         help="Allow research-grade imported data for exploratory replay. Does not make results promotion-ready.",
     )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--db-path", help="Historical options SQLite DB path to use for imported replay.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
@@ -290,6 +295,7 @@ def main() -> int:
         source_labels=args.source_labels,
         all_source_labels=bool(args.all_source_labels),
         allow_research_data=bool(args.allow_research_data),
+        db_path=args.db_path,
     )
     artifacts = write_report(report, output_dir=Path(args.output_dir))
     payload = {"artifacts": artifacts, "report": report}

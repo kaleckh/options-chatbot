@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import copy
 from collections import defaultdict
 from datetime import datetime
 from typing import Any, Optional
@@ -464,6 +465,8 @@ class CalibrationAccumulator:
         self._with_tech_counts: dict[str, int] = defaultdict(int)
         self._level_stats: dict[str, dict[str, dict[str, Any]]] = {}
         self._all_levels, self._lookup_order = _surface_level_definitions(True)
+        self._snapshot_core_cache: Optional[dict[str, Any]] = None
+        self._snapshot_core_cache_trade_count = -1
 
     @property
     def trade_count(self) -> int:
@@ -477,6 +480,8 @@ class CalibrationAccumulator:
             tech_bucket_size=int(self.tech_bucket_size),
         )
         self._total_trades += 1
+        self._snapshot_core_cache = None
+        self._snapshot_core_cache_trade_count = -1
         base_key = "|".join(
             [
                 normalized.get("market_regime"),
@@ -520,45 +525,68 @@ class CalibrationAccumulator:
 
         metadata = dict(source_metadata or {})
         source_metadata_payload = _surface_source_metadata(metadata)
-        include_tech_band = _should_include_tech_band_from_counts(
-            self._without_tech_counts,
-            self._with_tech_counts,
-            min_trades=self.min_trades,
-        )
-        levels, lookup_order = _surface_level_definitions(include_tech_band)
-        nodes_by_level: dict[str, dict[str, dict[str, Any]]] = {}
-
-        for level in levels:
-            level_id = level["id"]
-            level_nodes = self._level_stats.get(level_id, {})
-            nodes_by_level[level_id] = {
-                key: _summarize_group_from_stats(
-                    stats,
-                    fields=list(level["fields"]),
-                    field_values=dict(stats.get("field_values") or {}),
-                    level_id=level_id,
-                )
-                for key, stats in level_nodes.items()
-            }
-
-        _attach_shrinkage(
-            nodes_by_level,
-            levels,
-            shrinkage_trades=float(self.shrinkage_trades),
-            sparse_warning_trades=int(self.sparse_warning_trades),
-        )
-
-        density_rows = [
-            _level_density(
-                level,
-                nodes_by_level.get(level["id"], {}),
-                total_trades=self._total_trades,
-                min_trades=int(self.min_trades),
+        if (
+            self._snapshot_core_cache is None
+            or self._snapshot_core_cache_trade_count != self._total_trades
+        ):
+            include_tech_band = _should_include_tech_band_from_counts(
+                self._without_tech_counts,
+                self._with_tech_counts,
+                min_trades=self.min_trades,
             )
-            for level in levels
-        ]
-        warnings = _surface_warnings(density_rows, min_trades=int(self.min_trades))
-        overall = dict((nodes_by_level.get("overall") or {}).get("overall") or {})
+            levels, lookup_order = _surface_level_definitions(include_tech_band)
+            nodes_by_level: dict[str, dict[str, dict[str, Any]]] = {}
+
+            for level in levels:
+                level_id = level["id"]
+                level_nodes = self._level_stats.get(level_id, {})
+                nodes_by_level[level_id] = {
+                    key: _summarize_group_from_stats(
+                        stats,
+                        fields=list(level["fields"]),
+                        field_values=dict(stats.get("field_values") or {}),
+                        level_id=level_id,
+                    )
+                    for key, stats in level_nodes.items()
+                }
+
+            _attach_shrinkage(
+                nodes_by_level,
+                levels,
+                shrinkage_trades=float(self.shrinkage_trades),
+                sparse_warning_trades=int(self.sparse_warning_trades),
+            )
+
+            density_rows = [
+                _level_density(
+                    level,
+                    nodes_by_level.get(level["id"], {}),
+                    total_trades=self._total_trades,
+                    min_trades=int(self.min_trades),
+                )
+                for level in levels
+            ]
+            warnings = _surface_warnings(density_rows, min_trades=int(self.min_trades))
+            overall = dict((nodes_by_level.get("overall") or {}).get("overall") or {})
+            self._snapshot_core_cache = {
+                "min_trades": int(self.min_trades),
+                "bucket_size": int(self.bucket_size),
+                "direction_bucket_size": int(self.bucket_size),
+                "quality_bucket_size": int(self.quality_bucket_size),
+                "tech_bucket_size": int(self.tech_bucket_size),
+                "shrinkage_trades": float(self.shrinkage_trades),
+                "sparse_warning_trades": int(self.sparse_warning_trades),
+                "include_tech_band": include_tech_band,
+                "lookup_order": list(lookup_order),
+                "levels": nodes_by_level,
+                "overall": overall,
+                "diagnostics": {
+                    "level_density": density_rows,
+                    "sparse_warnings": warnings,
+                },
+            }
+            self._snapshot_core_cache_trade_count = self._total_trades
+        core_payload = copy.deepcopy(self._snapshot_core_cache or {})
 
         return {
             "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -577,21 +605,7 @@ class CalibrationAccumulator:
             "source_contract_selection_basis": metadata.get("contract_selection_basis"),
             "source_universe_filters": metadata.get("universe_filters"),
             "source_metadata": source_metadata_payload,
-            "min_trades": int(self.min_trades),
-            "bucket_size": int(self.bucket_size),
-            "direction_bucket_size": int(self.bucket_size),
-            "quality_bucket_size": int(self.quality_bucket_size),
-            "tech_bucket_size": int(self.tech_bucket_size),
-            "shrinkage_trades": float(self.shrinkage_trades),
-            "sparse_warning_trades": int(self.sparse_warning_trades),
-            "include_tech_band": include_tech_band,
-            "lookup_order": list(lookup_order),
-            "levels": nodes_by_level,
-            "overall": overall,
-            "diagnostics": {
-                "level_density": density_rows,
-                "sparse_warnings": warnings,
-            },
+            **core_payload,
         }
 
 

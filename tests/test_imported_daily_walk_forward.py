@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import patch
 
@@ -139,6 +140,22 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
         self.assertEqual(run_backtest.call_args.kwargs["playbook"], "bullish_pullback_observation")
         self.assertFalse(run_backtest.call_args.kwargs["save_result"])
         self.assertEqual(run_backtest.call_args.kwargs["min_imported_calendar_dates"], 1)
+
+    def test_runner_can_pin_historical_options_db_path(self):
+        with patch("scripts.imported_daily_walk_forward.wfo.run_historical_backtest", return_value={"trades": []}):
+            with patch.dict(os.environ, {}, clear=True):
+                run_imported_daily_walk_forward_validation(
+                    playbook="bullish_pullback_observation",
+                    lookback_years=1,
+                    n_picks=1,
+                    pricing_lane="pessimistic",
+                    train_days=1,
+                    test_days=1,
+                    min_exact_test_trades=1,
+                    min_imported_calendar_dates=1,
+                    db_path="custom_options_history.db",
+                )
+                self.assertEqual(os.environ["HISTORICAL_OPTIONS_DB_PATH"], "custom_options_history.db")
 
 
 if __name__ == "__main__":

@@ -38,6 +38,7 @@ const LEGACY_PREDICTION_TABS = new Set(["pending", "graded", "breakdown", "sim",
 const COMMODITY_PLAYBOOK_ID = "ai_commodity_infra_observation";
 const REQUEST_TIMEOUT_MS = 30000;
 const POSITION_SYNC_INTERVAL_MS = 60000;
+const AUTO_REVIEW_STALE_MS = 5 * 60 * 1000;
 const SHARE_SAFE_REVIEW_MAX_AGE_MINUTES = 15;
 
 function buildTimeoutError(label: string, timeoutMs: number): Error {
@@ -83,6 +84,23 @@ async function readJsonResponseOrThrow(res: Response, label: string): Promise<un
     throw new Error(errorMessage || `${label} request failed with status ${res.status}`);
   }
   return data;
+}
+
+function idsNeedingAutoReview<T extends { id: number }>(
+  items: T[],
+  lastReviewedAtById: globalThis.Map<number, number>,
+  {
+    force,
+    staleMs = AUTO_REVIEW_STALE_MS,
+  }: {
+    force: boolean;
+    staleMs?: number;
+  }
+): number[] {
+  const now = Date.now();
+  return items
+    .map((item) => item.id)
+    .filter((id) => force || now - (lastReviewedAtById.get(id) ?? 0) >= staleMs);
 }
 
 function parseNonnegativePriceInput(value: string): number | null {
@@ -976,6 +994,10 @@ export default function PredictionsView() {
   const truthHealthRequestIdRef = useRef(0);
   const positionsRequestIdRef = useRef(0);
   const suggestedTradesRequestIdRef = useRef(0);
+  const positionsReviewInFlightRef = useRef(false);
+  const suggestedTradesReviewInFlightRef = useRef(false);
+  const positionsLastReviewedAtRef = useRef<globalThis.Map<number, number>>(new globalThis.Map());
+  const suggestedTradesLastReviewedAtRef = useRef<globalThis.Map<number, number>>(new globalThis.Map());
 
   const mergeTrackedPosition = useCallback((position: TrackedPosition) => {
     setOpenPositions((prev) =>
@@ -1214,19 +1236,31 @@ export default function PredictionsView() {
       setPositionsLoaded(true);
       setPositionsError(null);
       let reviewFailed = false;
-      if (nextOpenPositions.length > 0) {
+      const reviewIds = idsNeedingAutoReview(
+        nextOpenPositions,
+        positionsLastReviewedAtRef.current,
+        { force: showToast }
+      );
+      let reviewAttempted = false;
+      if (reviewIds.length > 0 && !positionsReviewInFlightRef.current) {
+        reviewAttempted = true;
+        positionsReviewInFlightRef.current = true;
         try {
           const reviewRes = await fetchWithTimeout("/api/positions/review", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ position_ids: nextOpenPositions.map((position) => position.id) }),
+            body: JSON.stringify({ position_ids: reviewIds }),
           }, "Tracked position review");
           const reviewData = await reviewRes.json();
           if (!reviewRes.ok || reviewData.error) {
             throw new Error(reviewData.error || "Failed to review tracked positions");
           }
           if (!isCurrentRequest()) return;
-          applyReviewedPositions((reviewData.positions || []) as TrackedPosition[]);
+          const reviewedPositions = (reviewData.positions || []) as TrackedPosition[];
+          const reviewedAt = Date.now();
+          reviewIds.forEach((id) => positionsLastReviewedAtRef.current.set(id, reviewedAt));
+          reviewedPositions.forEach((position) => positionsLastReviewedAtRef.current.set(position.id, reviewedAt));
+          applyReviewedPositions(reviewedPositions);
         } catch (reviewErr) {
           if (!isCurrentRequest()) return;
           reviewFailed = true;
@@ -1235,10 +1269,12 @@ export default function PredictionsView() {
           if (showToast) {
             toast.error(`Tracked positions loaded, but repricing failed: ${message}`);
           }
+        } finally {
+          positionsReviewInFlightRef.current = false;
         }
       }
       if (showToast && !reviewFailed) {
-        toast.success(nextOpenPositions.length > 0 ? "Tracked positions refreshed and repriced." : "Tracked positions refreshed.");
+        toast.success(reviewAttempted ? "Tracked positions refreshed and repriced." : "Tracked positions refreshed.");
       }
     } catch (err) {
       if (!isCurrentRequest()) return;
@@ -1274,19 +1310,31 @@ export default function PredictionsView() {
       setSuggestedTradesLoaded(true);
       setSuggestedTradesError(null);
       let reviewFailed = false;
-      if (nextOpenTrades.length > 0) {
+      const reviewIds = idsNeedingAutoReview(
+        nextOpenTrades,
+        suggestedTradesLastReviewedAtRef.current,
+        { force: showToast }
+      );
+      let reviewAttempted = false;
+      if (reviewIds.length > 0 && !suggestedTradesReviewInFlightRef.current) {
+        reviewAttempted = true;
+        suggestedTradesReviewInFlightRef.current = true;
         try {
           const reviewRes = await fetchWithTimeout("/api/suggested-trades/review", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ position_ids: nextOpenTrades.map((trade) => trade.id) }),
+            body: JSON.stringify({ position_ids: reviewIds }),
           }, "Suggested trade review");
           const reviewData = await reviewRes.json();
           if (!reviewRes.ok || reviewData.error) {
             throw new Error(reviewData.error || "Failed to review suggested trades");
           }
           if (!isCurrentRequest()) return;
-          applyReviewedSuggestedTrades((reviewData.trades || []) as SuggestedTrade[]);
+          const reviewedTrades = (reviewData.trades || []) as SuggestedTrade[];
+          const reviewedAt = Date.now();
+          reviewIds.forEach((id) => suggestedTradesLastReviewedAtRef.current.set(id, reviewedAt));
+          reviewedTrades.forEach((trade) => suggestedTradesLastReviewedAtRef.current.set(trade.id, reviewedAt));
+          applyReviewedSuggestedTrades(reviewedTrades);
         } catch (reviewErr) {
           if (!isCurrentRequest()) return;
           reviewFailed = true;
@@ -1295,10 +1343,12 @@ export default function PredictionsView() {
           if (showToast) {
             toast.error(`Suggested trades loaded, but repricing failed: ${message}`);
           }
+        } finally {
+          suggestedTradesReviewInFlightRef.current = false;
         }
       }
       if (showToast && !reviewFailed) {
-        toast.success(nextOpenTrades.length > 0 ? "Suggested trades refreshed and repriced." : "Suggested trades refreshed.");
+        toast.success(reviewAttempted ? "Suggested trades refreshed and repriced." : "Suggested trades refreshed.");
       }
     } catch (err) {
       if (!isCurrentRequest()) return;
@@ -1368,6 +1418,7 @@ export default function PredictionsView() {
   useEffect(() => {
     if (activeSubTab !== "positions") return;
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void fetchPositions(false);
     }, POSITION_SYNC_INTERVAL_MS);
     return () => {
@@ -1378,6 +1429,7 @@ export default function PredictionsView() {
   useEffect(() => {
     if (activeSubTab !== "suggestions") return;
     const intervalId = window.setInterval(() => {
+      if (document.visibilityState === "hidden") return;
       void fetchSuggestedTrades(false);
     }, POSITION_SYNC_INTERVAL_MS);
     return () => {

@@ -175,6 +175,21 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(sized["sizing"]["max_contracts"], 1)
         self.assertEqual(sized["sizing"]["max_loss_if_zero"], 200.0)
 
+    def test_calibration_accumulator_reuses_surface_core_with_fresh_metadata(self):
+        accumulator = ec.CalibrationAccumulator(min_trades=1)
+        accumulator.add_trade(_make_calibration_trade(pnl_pct=12.0))
+
+        first = accumulator.snapshot(source_metadata={"run_at": "first-run", "n_picks": 2})
+        second = accumulator.snapshot(source_metadata={"run_at": "second-run", "n_picks": 3})
+
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertEqual(first["overall"], second["overall"])
+        self.assertEqual(first["diagnostics"], second["diagnostics"])
+        self.assertEqual(first["source_run_at"], "first-run")
+        self.assertEqual(second["source_run_at"], "second-run")
+        self.assertEqual(second["source_n_picks"], 3)
+
     def test_replay_time_exit_does_not_capture_beyond_profit_target(self):
         prices = np.array([100.0, 100.0, 100.0, 100.0, 100.0], dtype=float)
         rsi = np.full(len(prices), 50.0)
@@ -433,7 +448,8 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(playbook["target_dte"], 35)
         self.assertEqual(playbook["scan_min_confidence"], 0.0)
         self.assertEqual(playbook["scan_min_tech_score"], 0.0)
-        self.assertEqual(playbook["historical_required_underlyings"], list(wfo.IMPORTED_VALIDATION_UNIVERSE))
+        self.assertEqual(playbook["historical_required_underlyings"], list(wfo.BULLISH_PULLBACK_REPLAY_UNIVERSE))
+        self.assertEqual(playbook["historical_required_underlyings"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
         self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
 
         self.assertFalse(
@@ -455,6 +471,25 @@ class StrategyAuditTests(unittest.TestCase):
         )
         self.assertFalse(allowed_entry)
         self.assertEqual(reason, "debit_pct_of_width_above_playbook_max")
+
+    def test_regular_bearish_put_primary_replays_full_regular_universe(self):
+        playbook = wfo._get_replay_playbook("regular_bearish_put_primary")
+        allowed = {
+            "ticker": "NVDA",
+            "trade_type": "put",
+            "signal_family": "momentum",
+            "quality_score": 70.0,
+            "market_regime": "bearish",
+            "sector": "Technology",
+        }
+
+        self.assertEqual(playbook["allowed_tickers"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(playbook["historical_required_underlyings"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(playbook["allowed_directions"], ["put"])
+        self.assertTrue(wfo._candidate_matches_replay_playbook(allowed, playbook))
+        self.assertFalse(
+            wfo._candidate_matches_replay_playbook({**allowed, "trade_type": "call"}, playbook)
+        )
 
     def test_replay_playbook_filters_to_bullish_mean_reversion_slice(self):
         playbook = wfo._get_replay_playbook("bullish_mean_reversion")
@@ -943,7 +978,11 @@ class StrategyAuditTests(unittest.TestCase):
 
         with patch.object(oc, "datetime", _StrategyAuditDateTime), \
              patch.object(oc, "_cached_options_metadata", return_value=SimpleNamespace(status="fresh", value=[expiry])), \
-             patch.object(oc, "_cached_option_chain_metadata", return_value=SimpleNamespace(status="fresh", value=chain)):
+             patch.object(
+                 oc,
+                 "_cached_option_chain_metadata",
+                 return_value=SimpleNamespace(status="fresh", value=chain),
+             ) as chain_fetch:
             result = oc._fetch_best_spread(
                 "AAA",
                 "call",
@@ -962,6 +1001,7 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(result["short_leg"]["strike"], 104.0)
         self.assertEqual(result["spread_alternatives"][0]["long_strike"], 99.0)
         self.assertLess(result["spread_bid_ask_pct_of_mid"], 10.0)
+        self.assertEqual(chain_fetch.call_count, 1)
 
     def test_scan_blocks_live_spread_when_short_leg_is_illiquid(self):
         tickers = {symbol: _CountingScanTicker(symbol) for symbol in ["SPY", "AAPL", "^VIX"]}

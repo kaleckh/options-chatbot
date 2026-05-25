@@ -484,13 +484,13 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                     save_result=False,
                 )
 
-        self.assertIn("insufficient trusted benchmark quote dates", imported["error"])
+        self.assertIn("insufficient imported replay quote dates", imported["error"])
         self.assertEqual(imported["source_labels_required"], ["alpaca_opra_daily_snapshot"])
         self.assertEqual(imported["replay_calendar"]["source_labels_required"], ["alpaca_opra_daily_snapshot"])
         self.assertEqual(imported["required_imported_calendar_dates"], 100)
         self.assertEqual(imported["replay_calendar"]["required_quote_date_count"], 100)
         self.assertLess(imported["replay_calendar"]["quote_date_count"], 100)
-        self.assertNotIn("insufficient trusted benchmark quote dates", diagnostic.get("error", ""))
+        self.assertNotIn("insufficient imported replay quote dates", diagnostic.get("error", ""))
         self.assertEqual(diagnostic["required_imported_calendar_dates"], 1)
         self.assertEqual(diagnostic["replay_calendar"]["required_quote_date_count"], 1)
 
@@ -713,7 +713,7 @@ class HistoricalTruthLaneTests(unittest.TestCase):
             "missing_current_store",
         )
 
-    def test_daily_imported_backtest_uses_trusted_benchmark_quote_calendar_without_hiding_peer_gaps(self):
+    def test_daily_imported_backtest_uses_shared_quote_calendar_to_avoid_peer_gaps(self):
         daily_db_path = os.path.join(self._tmp.name, "options_history_daily_calendar.db")
         spy_path = os.path.join(self._tmp.name, "spy_calendar.parquet")
         qqq_path = os.path.join(self._tmp.name, "qqq_calendar.parquet")
@@ -749,19 +749,12 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                 truth_lane="historical_imported_daily",
             )
 
-        unpriced_dates = {
-            str(item.get("date"))
-            for item in (imported.get("unpriced_trades") or [])
-            if str(item.get("date") or "").strip()
-        }
-        self.assertEqual(imported["replay_calendar"]["source"], "trusted_imported_benchmark_quote_dates")
+        self.assertEqual(imported["replay_calendar"]["source"], "trusted_imported_shared_required_quote_dates")
         self.assertEqual(imported["replay_calendar"]["benchmark_underlying"], "SPY")
+        self.assertEqual(imported["replay_calendar"]["replay_quote_date_source"], "shared_required_quote_dates")
         self.assertEqual(imported["replay_calendar"]["calendar_gap_date_count"], 1)
-        self.assertIn(missing_date, unpriced_dates)
-        self.assertEqual(
-            imported["unpriced_trade_diagnostics"]["reason_counts"].get("missing_entry_quote"),
-            1,
-        )
+        self.assertEqual(imported["replay_calendar"]["quote_date_count"], len(self.histories["SPY"]) - 1)
+        self.assertEqual(imported["unpriced_trade_diagnostics"]["reason_counts"].get("missing_entry_quote"), None)
 
     def test_daily_imported_backtest_emits_missing_quote_diagnostics_summary(self):
         daily_db_path = os.path.join(self._tmp.name, "options_history_daily_diagnostics.db")

@@ -97,6 +97,19 @@ class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
         self.assertEqual(playbook["allowed_strategy_types"], ["vertical_spread"])
         self.assertEqual(playbook["max_debit_pct_of_width"], 40.0)
 
+    def test_regular_bearish_put_primary_scans_full_regular_universe(self):
+        playbook = ss.get_scan_playbook("regular_bearish_put_primary")
+
+        self.assertEqual(playbook["id"], "regular_bearish_put_primary")
+        self.assertEqual(playbook["calibration_playbook"], "regular_bearish_put_primary")
+        self.assertEqual(playbook["allowed_tickers"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(playbook["scan_tickers"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
+        self.assertEqual(playbook["allowed_market_regimes"], ["bearish"])
+        self.assertEqual(playbook["allowed_directions"], ["put"])
+        self.assertEqual(playbook["scan_allowed_directions"], ["put"])
+        self.assertEqual(playbook["allowed_strategy_types"], ["vertical_spread"])
+        self.assertFalse(playbook.get("observation_only", False))
+
     def test_primary_playbook_applies_tracked_winner_shape_constraints(self):
         playbook = ss.get_scan_playbook("tracked_winner_primary")
         clear = _tracked_winner_pick()

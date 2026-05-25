@@ -634,6 +634,7 @@ class PaperBroker {
         lastPrice: Number(execution.fillPrice.toFixed(8)),
         openedAt: currentPosition?.openedAt || timestamp,
         updatedAt: timestamp,
+        metadata: currentPosition?.metadata || orderInput.metadata || {},
       };
     } else {
       realizedPnl = (execution.fillPrice - currentPosition.avgEntryPrice) * execution.filledQuantity - execution.fees;
@@ -1877,6 +1878,31 @@ function rankStrategy(strategy, backtestSummary, paperSummary) {
   };
 }
 
+function hasTrustedMarketData(marketData) {
+  return marketData?.source !== "sample_fallback";
+}
+
+function paperTradingUnsupportedReason(strategy) {
+  const direction = String(strategy?.simulation?.direction || "long").toLowerCase();
+  return direction === "long" ? null : `paper_direction_unsupported:${direction}`;
+}
+
+function elapsedBarsSince(priceSeries, timestamp) {
+  if (!timestamp || !Array.isArray(priceSeries) || priceSeries.length === 0) return null;
+  const openedMs = new Date(timestamp).getTime();
+  if (!Number.isFinite(openedMs)) return null;
+  let entryIndex = -1;
+  for (let i = 0; i < priceSeries.length; i += 1) {
+    const barMs = new Date(priceSeries[i]?.timestamp).getTime();
+    if (Number.isFinite(barMs) && barMs >= openedMs) {
+      entryIndex = i;
+      break;
+    }
+  }
+  if (entryIndex < 0) return null;
+  return Math.max(0, priceSeries.length - 1 - entryIndex);
+}
+
 function parseClockToMinutes(clockValue, fallbackMinutes) {
   const match = /^(\d{1,2}):(\d{2})$/.exec(String(clockValue || "").trim());
   if (!match) return fallbackMinutes;
@@ -2199,7 +2225,7 @@ async function runDayTradingExperiments(options = {}) {
   for (const strategy of strategies) {
     const marketData = await marketDataLoader(strategy, { bars, persistArtifacts });
     marketDataByBase.set(strategy.strategyId, marketData);
-    const trustedMarketData = marketData?.source !== "sample_fallback";
+    const trustedMarketData = hasTrustedMarketData(marketData);
     const variants = buildDayTradingExperimentVariants(strategy, experimentOptions);
 
     for (const variant of variants) {
@@ -2353,7 +2379,7 @@ async function buildMorningWatchlist(options = {}) {
     const lastBarSignalValue = lastBar ? Number(getSignalValue(lastBar, signalName) || 0) : 0;
     const lastBarWindow = lastBar ? classifyMorningWindow(lastBar.timestamp, DEFAULT_DAY_TRADING_CONFIG) : { active: false };
     const barAgeMinutes = calculateBarAgeMinutes(lastBar?.timestamp, now);
-    const currentDataTrusted = marketData?.source !== "sample_fallback";
+    const currentDataTrusted = hasTrustedMarketData(marketData);
     const dataFresh = latestSessionDate != null &&
       latestSessionDate === nowSessionDate &&
       barAgeMinutes != null &&
@@ -2479,7 +2505,11 @@ function nextPromotionDecision(strategy, context = {}) {
   let nextStatus = currentStatus;
   let reason = "no_change";
 
-  if (hasBacktestVeto || backtest.eligibleForPromotion === false) {
+  if (context.trustedMarketData === false) {
+    reason = "untrusted_market_data";
+  } else if (context.paperUnsupportedReason) {
+    reason = context.paperUnsupportedReason;
+  } else if (hasBacktestVeto || backtest.eligibleForPromotion === false) {
     nextStatus = "backtest_failed";
     reason = hasBacktestVeto ? "backtest_veto" : "backtest_ineligible";
   } else if (tradeCount === 0) {
@@ -2538,6 +2568,14 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
   if (!paperBroker || !marketData?.priceSeries?.length) {
     return { action: "skipped", reason: "no_broker_or_data" };
   }
+  if (!hasTrustedMarketData(marketData)) {
+    return { action: "skipped", reason: "untrusted_market_data" };
+  }
+
+  const unsupportedReason = paperTradingUnsupportedReason(strategy);
+  if (unsupportedReason) {
+    return { action: "skipped", reason: unsupportedReason };
+  }
 
   const symbol = marketData.symbol;
   const account = paperBroker.getAccount(accountId);
@@ -2587,6 +2625,7 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
       side: "buy",
       quantity,
       price: lastBar.close,
+      timestamp: lastBar.timestamp,
       market: marketData.marketSnapshot || {},
       metadata: { source: marketData.source, trigger: "validation_cycle_entry" },
     });
@@ -2594,13 +2633,25 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
   }
 
   if (position) {
+    const maxHoldBars = Number(strategy.simulation.maxHoldBars || 0);
+    const heldBars = elapsedBarsSince(marketData.priceSeries, position.openedAt);
+    const timeExitDue = Number.isFinite(maxHoldBars) && maxHoldBars > 0 &&
+      heldBars != null && heldBars >= maxHoldBars;
     const takeProfitPrice = resolveDynamicTakeProfitPrice({
+      direction: "long",
       entryPrice: position.avgEntryPrice,
       takeProfitFraction: strategy.simulation.takeProfitFraction,
       exitTargetMode: strategy.simulation.exitTargetMode,
     }, lastBar) || (position.avgEntryPrice * (1 + strategy.simulation.takeProfitFraction));
     const stopLossPrice = position.avgEntryPrice * (1 - strategy.simulation.stopLossFraction);
-    if (lastBar.close >= takeProfitPrice || lastBar.close <= stopLossPrice) {
+    const exitReason = timeExitDue
+      ? "time_exit"
+      : lastBar.close >= takeProfitPrice
+        ? "take_profit"
+        : lastBar.close <= stopLossPrice
+          ? "stop_loss"
+          : null;
+    if (exitReason) {
       const riskDecision = evaluateTradeRisk({
         strategy,
         order: {
@@ -2625,12 +2676,13 @@ async function maybePaperTrade({ paperBroker, strategy, marketData, accountId = 
         side: "sell",
         quantity: position.quantity,
         price: lastBar.close,
+        timestamp: lastBar.timestamp,
         market: marketData.marketSnapshot || {},
-        metadata: { source: marketData.source, trigger: "validation_cycle_exit" },
+        metadata: { source: marketData.source, trigger: `validation_cycle_${exitReason}` },
       });
-      return { action: result.accepted ? "closed" : "rejected", result };
+      return { action: result.accepted ? "closed" : "rejected", reason: exitReason, heldBars, result };
     }
-    return { action: "held", price: lastBar.close };
+    return { action: "held", price: lastBar.close, heldBars };
   }
 
   return { action: "skipped", reason: "signal_below_threshold" };
@@ -2644,6 +2696,7 @@ async function runDayTradingValidation(options = {}) {
   const feesFraction = Number.isFinite(options.feesFraction) ? Number(options.feesFraction) : DEFAULT_DAY_TRADING_CONFIG.feesFraction;
   const startingCash = Number(options.startingCash) || DEFAULT_DAY_TRADING_CONFIG.startingCash;
   const accountId = String(options.accountId || DEFAULT_ACCOUNT_ID);
+  const strictMarketData = options.strictMarketData !== false;
   const marketDataLoader = typeof options.marketDataLoader === "function"
     ? options.marketDataLoader
     : fetchMarketDataForStrategy;
@@ -2654,36 +2707,56 @@ async function runDayTradingValidation(options = {}) {
   const report = {
     generatedAt: nowIso(),
     strategiesScanned: strategies.length,
+    strictMarketData,
     results: [],
   };
 
   for (const strategy of strategies) {
     const previousBacktest = getBacktestResult(strategy.strategyId);
     const marketData = await marketDataLoader(strategy, { bars });
+    const trustedMarketData = hasTrustedMarketData(marketData) || !strictMarketData;
+    const paperUnsupportedReason = paperTradingUnsupportedReason(strategy);
     const backtest = runBacktest({
       strategySpec: strategy,
       priceSeries: marketData.priceSeries,
       feesFraction,
     });
-    const saved = saveBacktestResult({
+    const effectiveBacktestSummary = trustedMarketData
+      ? backtest.summary
+      : {
+        ...backtest.summary,
+        eligibleForPromotion: false,
+        vetoReasons: [...(backtest.summary.vetoReasons || []), "synthetic_market_data"],
+      };
+    const effectiveBacktest = {
       ...backtest,
-      marketDataSource: marketData.source,
-      marketDataWarning: marketData.warning || null,
-    });
-    const paperAction = await maybePaperTrade({
-      paperBroker: broker,
-      strategy,
-      marketData,
-      accountId,
-    });
+      summary: effectiveBacktestSummary,
+    };
+    const saved = trustedMarketData
+      ? saveBacktestResult({
+        ...effectiveBacktest,
+        marketDataSource: marketData.source,
+        marketDataWarning: marketData.warning || null,
+      })
+      : null;
+    const paperAction = trustedMarketData
+      ? await maybePaperTrade({
+        paperBroker: broker,
+        strategy,
+        marketData,
+        accountId,
+      })
+      : { action: "skipped", reason: "untrusted_market_data" };
 
     report.results.push({
       strategyId: strategy.strategyId,
       marketDataSource: marketData.source,
       marketDataWarning: marketData.warning || null,
-      savedTo: saved.filePath,
-      backtestSummary: backtest.summary,
+      trustedMarketData,
+      savedTo: saved?.filePath || null,
+      backtestSummary: effectiveBacktestSummary,
       paperAction,
+      paperUnsupportedReason,
       previousBacktestSummary: previousBacktest?.summary || null,
     });
   }
@@ -2697,6 +2770,8 @@ async function runDayTradingValidation(options = {}) {
     const decision = nextPromotionDecision(strategy, {
       backtestSummary: result.backtestSummary,
       paperSummary: paperMap.get(strategy.strategyId) || null,
+      trustedMarketData: result.trustedMarketData,
+      paperUnsupportedReason: result.paperUnsupportedReason,
     });
     result.promotionDecision = decision;
     return applyPromotionDecision(strategy, decision, report.generatedAt);

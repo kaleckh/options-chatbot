@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.run_ai_commodity_opra_progress import (  # noqa: E402
+    _load_recent_progress_history_entries,
     _scan_summary,
     annotate_scan_quote_freshness_timing,
     annotate_scheduled_capture_timing,
@@ -90,6 +91,7 @@ from scripts.run_ai_commodity_opra_progress import (  # noqa: E402
     replay_simulation_min_shared_quote_dates,
     render_markdown,
     run_deferred_variant_sweeps,
+    run_progress,
     scheduled_capture_time_for_trade_date,
     symbols_missing_target_date,
     write_progress_report,
@@ -2087,6 +2089,7 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(summary["same_next_blocker_streak"], 2)
         self.assertEqual(summary["latest_shared_quote_dates"], 2)
         self.assertEqual(summary["previous_shared_quote_dates"], 1)
+
         self.assertEqual(summary["shared_quote_dates_delta_from_previous_entry"], 1)
         self.assertEqual(summary["remaining_quote_dates_delta_from_previous_entry"], -1)
         self.assertEqual(summary["latest_improvements"], ["source_filtered_shared_quote_dates_increased"])
@@ -2109,6 +2112,22 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             summary["latest_previous_auxiliary_proof_event_blockers"],
             ["waiting_until_not_before:2026-05-21T14:10:00Z"],
         )
+
+    def test_recent_progress_history_loader_tails_jsonl_without_full_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_path = Path(tmp) / "progress_history.jsonl"
+            history_path.write_text(
+                "\n".join(
+                    [json.dumps({"sequence": idx}) for idx in range(10)]
+                    + ["not-json"]
+                    + [json.dumps({"sequence": 10})]
+                ),
+                encoding="utf8",
+            )
+
+            entries = _load_recent_progress_history_entries(history_path, limit=3)
+
+        self.assertEqual([entry["sequence"] for entry in entries], [8, 9, 10])
 
     def test_build_iteration_ledger_records_blockers_and_next_evidence_action(self):
         report = {
@@ -6465,6 +6484,108 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             json.loads(output.getvalue()),
             {"payload_source": "latest_artifact", "historical_store_refreshed": True},
         )
+
+    def test_main_refresh_derived_from_latest_enforces_strict_gate(self):
+        latest_report = {"generated_at": "2026-05-21T10:37:15Z"}
+        refreshed_report = {
+            "generated_at": "2026-05-21T10:37:15Z",
+            "verification_gate": {"status": "not_verified", "verified": False},
+            "goal_completion_verification_contract": {
+                "completion_claim_allowed": False,
+                "unproven_requirements": ["exact_replay_is_profitable"],
+            },
+        }
+        output = io.StringIO()
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "run_ai_commodity_opra_progress.py",
+                "--refresh-derived-from-latest",
+                "--no-write",
+                "--strict-gate",
+                "--json",
+                "--output-dir",
+                "ignored-output-dir",
+            ],
+        ), patch("sys.stdout", output), patch(
+            "scripts.run_ai_commodity_opra_progress.load_previous_progress_report",
+            return_value=latest_report,
+        ), patch(
+            "scripts.run_ai_commodity_opra_progress.refresh_derived_fields_from_latest",
+            return_value=refreshed_report,
+        ):
+            result = main()
+
+        payload = json.loads(output.getvalue())
+        self.assertEqual(result, 2)
+        self.assertEqual(payload["strict_accuracy_gate"]["status"], "failed")
+        self.assertFalse(payload["strict_accuracy_gate"]["passed"])
+
+    def test_main_from_latest_enforces_strict_gate_exit_code(self):
+        latest_report = {"generated_at": "2026-05-21T10:37:15Z"}
+        refreshed_report = {
+            "generated_at": "2026-05-21T10:37:15Z",
+            "verification_gate": {"status": "not_verified", "verified": False},
+            "goal_completion_verification_contract": {
+                "completion_claim_allowed": False,
+                "unproven_requirements": ["live_scan_has_verifiable_candidate"],
+            },
+        }
+        output = io.StringIO()
+
+        with patch.object(
+            sys,
+            "argv",
+            [
+                "run_ai_commodity_opra_progress.py",
+                "--next-execution",
+                "--from-latest",
+                "--strict-gate",
+                "--output-dir",
+                "ignored-output-dir",
+            ],
+        ), patch("sys.stdout", output), patch(
+            "scripts.run_ai_commodity_opra_progress.load_previous_progress_report",
+            return_value=latest_report,
+        ), patch(
+            "scripts.run_ai_commodity_opra_progress.refresh_derived_fields_from_latest",
+            return_value=refreshed_report,
+        ), patch(
+            "scripts.run_ai_commodity_opra_progress.build_next_execution_cli_payload",
+            return_value={"payload_source": "latest_artifact"},
+        ):
+            result = main()
+
+        self.assertEqual(result, 2)
+        self.assertEqual(json.loads(output.getvalue()), {"payload_source": "latest_artifact"})
+
+    def test_run_progress_no_write_disables_capture_and_import(self):
+        with tempfile.TemporaryDirectory() as tmpdir, patch(
+            "scripts.run_ai_commodity_opra_progress.build_alpaca_opra_daily_snapshot",
+        ) as build_snapshot, patch(
+            "scripts.run_ai_commodity_opra_progress.write_snapshot_csv",
+        ) as write_csv:
+            report = run_progress(
+                symbols=["SPY"],
+                min_shared_quote_dates=2,
+                db_path=Path(tmpdir) / "history.db",
+                output_dir=Path(tmpdir) / "progress",
+                capture_output_dir=Path(tmpdir) / "captures",
+                readiness_output_dir=Path(tmpdir) / "readiness",
+                lane_lab_output_dir=Path(tmpdir) / "lane_lab",
+                force_capture=True,
+                skip_replay=True,
+                skip_scan=True,
+                target_date="2026-05-21",
+                write=False,
+            )
+
+        self.assertEqual(report["capture"]["status"], "skipped_no_write")
+        self.assertEqual(report["capture"]["write_guard"], "no_write_disables_capture_and_import")
+        build_snapshot.assert_not_called()
+        write_csv.assert_not_called()
 
     def test_build_strict_accuracy_gate_fails_when_completion_contract_is_unproven(self):
         report = {

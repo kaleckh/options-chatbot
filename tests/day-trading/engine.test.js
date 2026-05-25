@@ -443,12 +443,19 @@ test("buildMorningWatchlist never notifies from synthetic fallback data", async 
       }),
     });
 
-    await ctx.engine.runDayTradingValidation({
+    const validation = await ctx.engine.runDayTradingValidation({
       strategies: [strategy],
       bars: 240,
       startingCash: 10000,
       marketDataLoader,
     });
+
+    assert.equal(validation.results[0].trustedMarketData, false);
+    assert.equal(validation.results[0].savedTo, null);
+    assert.equal(validation.results[0].paperAction.action, "skipped");
+    assert.equal(validation.results[0].paperAction.reason, "untrusted_market_data");
+    assert.equal(validation.results[0].backtestSummary.eligibleForPromotion, false);
+    assert.ok(validation.results[0].backtestSummary.vetoReasons.includes("synthetic_market_data"));
 
     const watchlist = await ctx.engine.buildMorningWatchlist({
       strategies: [strategy],
@@ -459,10 +466,158 @@ test("buildMorningWatchlist never notifies from synthetic fallback data", async 
     });
 
     assert.equal(watchlist.notifyNowCount, 0);
-    assert.equal(watchlist.items[0].alertEligible, true);
+    assert.equal(watchlist.items[0].alertEligible, false);
     assert.equal(watchlist.items[0].currentDataTrusted, false);
     assert.equal(watchlist.items[0].liveStatus, "untrusted_data");
     assert.equal(watchlist.items[0].notifyNow, false);
+  } finally {
+    ctx.cleanup();
+  }
+});
+
+test("runDayTradingValidation keeps short strategies out of paper/live promotion", async () => {
+  const ctx = loadEngineWithTempDataRoot();
+  try {
+    const strategy = createStrategy({
+      strategyId: "spy-short-backtest-only",
+      name: "SPY Short Backtest Only",
+      status: "draft",
+      evaluationWindow: {
+        timeframe: "5m",
+        warmupBars: 6,
+        minimumTrades: 1,
+      },
+      simulation: {
+        direction: "short",
+        entrySignal: "opening_range_breakout",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.008,
+        stopLossFraction: 0.004,
+        maxHoldBars: 10,
+        cooldownBars: 4,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.72,
+      },
+    });
+
+    const marketDataLoader = createMarketDataLoader({
+      [strategy.strategyId]: createMarketDataFixture({
+        symbol: "SPY",
+        marketSnapshot: HIGH_LIQUIDITY_SNAPSHOT,
+        priceSeries: buildSignalSeries({
+          symbol: "SPY",
+          signalName: strategy.simulation.entrySignal,
+          signalStrength: -0.88,
+          warmupBars: strategy.evaluationWindow.warmupBars,
+          cooldownBars: strategy.simulation.cooldownBars,
+          maxHoldBars: strategy.simulation.maxHoldBars,
+          takeProfitFraction: strategy.simulation.takeProfitFraction,
+          stopLossFraction: strategy.simulation.stopLossFraction,
+          outcomes: ["flat"],
+          appendLiveSignal: true,
+        }),
+      }),
+    });
+
+    const report = await ctx.engine.runDayTradingValidation({
+      strategies: [strategy],
+      bars: 120,
+      startingCash: 10000,
+      marketDataLoader,
+    });
+
+    assert.equal(report.results[0].paperAction.action, "skipped");
+    assert.equal(report.results[0].paperAction.reason, "paper_direction_unsupported:short");
+    assert.equal(report.results[0].promotionDecision.reason, "paper_direction_unsupported:short");
+    assert.equal(report.paperAccount.positions.length, 0);
+  } finally {
+    ctx.cleanup();
+  }
+});
+
+test("maybePaperTrade closes long paper positions at maxHoldBars", async () => {
+  const ctx = loadEngineWithTempDataRoot();
+  try {
+    const strategy = createStrategy({
+      strategyId: "spy-paper-time-exit",
+      simulation: {
+        direction: "long",
+        entrySignal: "opening_range_breakout",
+        entryExecution: "next_open",
+        takeProfitFraction: 0.5,
+        stopLossFraction: 0.5,
+        maxHoldBars: 2,
+        cooldownBars: 0,
+        maxConcurrentPositions: 1,
+        useSignalStrengthThreshold: 0.72,
+      },
+    });
+    const broker = new ctx.engine.__internal.PaperBroker({
+      ledgerPath: path.join(ctx.dataRoot, "paper-time-exit-ledger.json"),
+    });
+    broker.ensureAccount({ accountId: "paper-main", startingCash: 10000 });
+
+    const openingSeries = buildSignalSeries({
+      symbol: "SPY",
+      signalName: strategy.simulation.entrySignal,
+      warmupBars: strategy.evaluationWindow.warmupBars,
+      cooldownBars: strategy.simulation.cooldownBars,
+      maxHoldBars: strategy.simulation.maxHoldBars,
+      takeProfitFraction: strategy.simulation.takeProfitFraction,
+      stopLossFraction: strategy.simulation.stopLossFraction,
+      outcomes: ["flat"],
+      appendLiveSignal: true,
+    });
+    const opened = await ctx.engine.__internal.maybePaperTrade({
+      paperBroker: broker,
+      strategy,
+      marketData: createMarketDataFixture({
+        symbol: "SPY",
+        marketSnapshot: HIGH_LIQUIDITY_SNAPSHOT,
+        priceSeries: openingSeries,
+      }),
+      accountId: "paper-main",
+    });
+    assert.equal(opened.action, "opened");
+
+    const lastBar = openingSeries[openingSeries.length - 1];
+    const lastMs = new Date(lastBar.timestamp).getTime();
+    const laterSeries = openingSeries.concat([
+      {
+        ...lastBar,
+        timestamp: new Date(lastMs + 5 * 60 * 1000).toISOString(),
+        open: lastBar.close,
+        high: lastBar.close * 1.001,
+        low: lastBar.close * 0.999,
+        close: lastBar.close,
+        signals: {},
+      },
+      {
+        ...lastBar,
+        timestamp: new Date(lastMs + 10 * 60 * 1000).toISOString(),
+        open: lastBar.close,
+        high: lastBar.close * 1.001,
+        low: lastBar.close * 0.999,
+        close: lastBar.close,
+        signals: {},
+      },
+    ]);
+
+    const closed = await ctx.engine.__internal.maybePaperTrade({
+      paperBroker: broker,
+      strategy,
+      marketData: createMarketDataFixture({
+        symbol: "SPY",
+        marketSnapshot: HIGH_LIQUIDITY_SNAPSHOT,
+        priceSeries: laterSeries,
+      }),
+      accountId: "paper-main",
+    });
+
+    assert.equal(closed.action, "closed");
+    assert.equal(closed.reason, "time_exit");
+    assert.equal(closed.heldBars, 2);
+    assert.equal(broker.getAccountSummary({ accountId: "paper-main" }).positions.length, 0);
   } finally {
     ctx.cleanup();
   }

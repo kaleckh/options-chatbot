@@ -64,6 +64,7 @@ from expectancy_calibration import (
     normalized_market_regime,
 )
 from market_data_service import (
+    download_history_batch as _md_download_history_batch,
     get_earnings_dates as _md_get_earnings_dates,
     get_fast_info as _md_get_fast_info,
     get_history as _md_get_history,
@@ -348,6 +349,49 @@ def _cached_history(
         interval=interval,
         ticker_factory=_market_ticker_factory(),
     )
+
+
+def _cached_history_batch(symbols: list[str], *, period: str) -> pd.DataFrame:
+    return _md_download_history_batch(
+        symbols,
+        period=period,
+        ticker_factory=_market_ticker_factory(),
+    )
+
+
+def _split_batched_history_frame(batch: pd.DataFrame, symbol: str) -> pd.DataFrame:
+    if batch is None or getattr(batch, "empty", True):
+        return pd.DataFrame()
+    symbol_key = str(symbol or "").strip().upper()
+    if not isinstance(batch.columns, pd.MultiIndex):
+        return batch.copy()
+    for level in range(batch.columns.nlevels):
+        values = {str(value).upper() for value in batch.columns.get_level_values(level)}
+        if symbol_key not in values:
+            continue
+        try:
+            frame = batch.xs(symbol_key, axis=1, level=level, drop_level=True)
+        except (KeyError, ValueError):
+            return pd.DataFrame()
+        return frame.copy()
+    return pd.DataFrame()
+
+
+def _prefetch_scan_histories(symbols: list[str], *, period: str = "400d") -> dict[str, pd.DataFrame]:
+    if os.getenv("OPTIONS_RUN_MODE", "").strip().lower() == "test":
+        return {}
+    normalized_symbols = [str(symbol or "").strip().upper() for symbol in symbols if str(symbol or "").strip()]
+    if not normalized_symbols:
+        return {}
+    try:
+        batch = _cached_history_batch(normalized_symbols, period=period)
+    except Exception:
+        return {}
+    return {
+        symbol: frame
+        for symbol in normalized_symbols
+        if not (frame := _split_batched_history_frame(batch, symbol)).empty
+    }
 
 
 def _cached_ticker_info(symbol: str) -> dict:
@@ -4523,6 +4567,63 @@ def _option_leg_from_chain_row(
     }
 
 
+def _best_option_from_chain_context(
+    *,
+    ticker: str,
+    trade_type: str,
+    delta_target: float,
+    target_dte: int,
+    stock_price: float,
+    hv30_fallback: float,
+    chain_context: dict[str, Any] | None,
+    return_context: bool = False,
+) -> dict[str, Any] | None:
+    if not chain_context:
+        return None
+    chain = chain_context.get("selected_chain")
+    expiry = str(chain_context.get("selected_expiry") or "").strip()
+    if chain is None or not expiry:
+        return None
+    df = getattr(chain, "calls", None) if trade_type == "call" else getattr(chain, "puts", None)
+    if df is None or getattr(df, "empty", True):
+        return None
+    try:
+        today_d = datetime.now().date()
+        dte = (datetime.strptime(expiry, "%Y-%m-%d").date() - today_d).days
+    except Exception:
+        dte = int(target_dte)
+    spot = float(stock_price or chain_context.get("spot_price") or 0.0)
+    if spot <= 0:
+        return None
+    chain_snapshot = chain_context.get("selected_chain_snapshot")
+    expiries_snapshot = chain_context.get("expiries_snapshot")
+    best: dict[str, Any] | None = None
+    best_diff = 999.0
+    for _, row in df.iterrows():
+        leg = _option_leg_from_chain_row(
+            row,
+            ticker=ticker,
+            trade_type=trade_type,
+            expiry=expiry,
+            dte=max(int(dte), 1),
+            stock_price=spot,
+            hv30_fallback=hv30_fallback,
+            options_snapshot_status=getattr(expiries_snapshot, "status", None),
+            option_chain_status=getattr(chain_snapshot, "status", None),
+        )
+        if leg is None:
+            continue
+        diff = abs(float(leg.get("delta") or 0.0) - float(delta_target))
+        if diff < best_diff:
+            best = leg
+            best_diff = diff
+    if best is None or best_diff > 0.20:
+        return None
+    if return_context:
+        best["chain_context"] = chain_context
+    return best
+
+
 def _compact_spread_alternative(candidate: dict[str, Any], rank: int) -> dict[str, Any]:
     long_leg = candidate["long_leg"]
     short_leg = candidate["short_leg"]
@@ -4646,79 +4747,106 @@ def _select_liquidity_first_spread(
     if len(legs) < 2:
         return None
 
-    candidates: list[dict[str, Any]] = []
-    for long_leg in legs:
-        for short_leg in legs:
-            if long_leg is short_leg:
-                continue
-            long_strike = float(long_leg["strike"])
-            short_strike = float(short_leg["strike"])
-            if trade_type == "call":
-                if long_strike >= short_strike:
+    def _leg_sort_key(leg: dict[str, Any], target_delta: float) -> tuple[float, float, int, int, float]:
+        spread_pct = _leg_bid_ask_spread_pct(leg)
+        return (
+            abs(float(leg.get("delta") or 0.0) - float(target_delta)),
+            spread_pct if spread_pct is not None else 999.0,
+            -int(leg.get("volume") or 0),
+            -int(leg.get("open_interest") or 0),
+            float(leg.get("strike") or 0.0),
+        )
+
+    def _leg_pool(target_delta: float, limit: int = 24) -> list[dict[str, Any]]:
+        return sorted(
+            legs,
+            key=lambda leg: _leg_sort_key(leg, target_delta),
+        )[:limit]
+
+    def _build_spread_candidates(
+        long_pool: list[dict[str, Any]],
+        short_pool: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        pool_candidates: list[dict[str, Any]] = []
+        for long_leg in long_pool:
+            for short_leg in short_pool:
+                if long_leg is short_leg:
                     continue
-                spread_width = short_strike - long_strike
-            else:
-                if long_strike <= short_strike:
+                long_strike = float(long_leg["strike"])
+                short_strike = float(short_leg["strike"])
+                if trade_type == "call":
+                    if long_strike >= short_strike:
+                        continue
+                    spread_width = short_strike - long_strike
+                else:
+                    if long_strike <= short_strike:
+                        continue
+                    spread_width = long_strike - short_strike
+                if spread_width <= 0:
                     continue
-                spread_width = long_strike - short_strike
-            if spread_width <= 0:
-                continue
-            if spot > 0 and (spread_width / spot * 100.0) > max_width_pct:
-                continue
+                if spot > 0 and (spread_width / spot * 100.0) > max_width_pct:
+                    continue
 
-            net_debit = round(float(long_leg["premium"]) - float(short_leg["premium"]), 4)
-            if net_debit < min_net_debit or net_debit <= 0:
-                continue
-            debit_pct_of_width = round(net_debit / spread_width * 100.0, 2)
-            if debit_pct_of_width > max_debit_pct_of_width:
-                continue
+                net_debit = round(float(long_leg["premium"]) - float(short_leg["premium"]), 4)
+                if net_debit < min_net_debit or net_debit <= 0:
+                    continue
+                debit_pct_of_width = round(net_debit / spread_width * 100.0, 2)
+                if debit_pct_of_width > max_debit_pct_of_width:
+                    continue
 
-            entry_execution = executable_vertical_spread_entry(
-                long_leg=long_leg,
-                short_leg=short_leg,
-                slippage_pct=0.0,
-                quote_freshness_status="fresh",
-            )
-            entry_debit = _finite_float(entry_execution.get("execution_price"))
-            if entry_debit is None or entry_debit <= 0:
-                continue
-            if entry_debit < min_net_debit:
-                continue
-            if entry_debit / spread_width * 100.0 > max_debit_pct_of_width:
-                continue
+                entry_execution = executable_vertical_spread_entry(
+                    long_leg=long_leg,
+                    short_leg=short_leg,
+                    slippage_pct=0.0,
+                    quote_freshness_status="fresh",
+                )
+                entry_debit = _finite_float(entry_execution.get("execution_price"))
+                if entry_debit is None or entry_debit <= 0:
+                    continue
+                if entry_debit < min_net_debit:
+                    continue
+                if entry_debit / spread_width * 100.0 > max_debit_pct_of_width:
+                    continue
 
-            liquidity = _spread_liquidity_metrics(long_leg, short_leg, entry_execution=entry_execution)
-            delta_miss = round(
-                abs(float(long_leg.get("delta") or 0.0) - float(long_delta_target))
-                + abs(float(short_leg.get("delta") or 0.0) - float(short_delta_target)),
-                4,
-            )
-            spread_slippage = float(liquidity.get("spread_bid_ask_pct_of_mid") or 999.0)
-            worst_leg_spread = float(liquidity.get("worst_leg_bid_ask_spread_pct") or 999.0)
-            min_volume = int(liquidity.get("min_leg_volume") or 0)
-            min_open_interest = int(liquidity.get("min_leg_open_interest") or 0)
-            liquidity_score = (
-                (0.0 if liquidity.get("is_illiquid") else 100.0)
-                - spread_slippage * 1.8
-                - worst_leg_spread * 0.8
-                - delta_miss * 80.0
-                - debit_pct_of_width * 0.15
-                + min(math.log1p(max(min_volume, 0)) * 4.0, 20.0)
-                + min(math.log1p(max(min_open_interest, 0)) * 3.0, 20.0)
-            )
-            candidates.append(
-                {
-                    "long_leg": copy.deepcopy(long_leg),
-                    "short_leg": copy.deepcopy(short_leg),
-                    "spread_width": round(spread_width, 4),
-                    "net_debit": net_debit,
-                    "debit_pct_of_width": round(debit_pct_of_width, 1),
-                    "entry_execution": entry_execution,
-                    "spread_liquidity": liquidity,
-                    "delta_miss": delta_miss,
-                    "liquidity_first_score": round(liquidity_score, 2),
-                }
-            )
+                liquidity = _spread_liquidity_metrics(long_leg, short_leg, entry_execution=entry_execution)
+                delta_miss = round(
+                    abs(float(long_leg.get("delta") or 0.0) - float(long_delta_target))
+                    + abs(float(short_leg.get("delta") or 0.0) - float(short_delta_target)),
+                    4,
+                )
+                spread_slippage = float(liquidity.get("spread_bid_ask_pct_of_mid") or 999.0)
+                worst_leg_spread = float(liquidity.get("worst_leg_bid_ask_spread_pct") or 999.0)
+                min_volume = int(liquidity.get("min_leg_volume") or 0)
+                min_open_interest = int(liquidity.get("min_leg_open_interest") or 0)
+                liquidity_score = (
+                    (0.0 if liquidity.get("is_illiquid") else 100.0)
+                    - spread_slippage * 1.8
+                    - worst_leg_spread * 0.8
+                    - delta_miss * 80.0
+                    - debit_pct_of_width * 0.15
+                    + min(math.log1p(max(min_volume, 0)) * 4.0, 20.0)
+                    + min(math.log1p(max(min_open_interest, 0)) * 3.0, 20.0)
+                )
+                pool_candidates.append(
+                    {
+                        "long_leg": copy.deepcopy(long_leg),
+                        "short_leg": copy.deepcopy(short_leg),
+                        "spread_width": round(spread_width, 4),
+                        "net_debit": net_debit,
+                        "debit_pct_of_width": round(debit_pct_of_width, 1),
+                        "entry_execution": entry_execution,
+                        "spread_liquidity": liquidity,
+                        "delta_miss": delta_miss,
+                        "liquidity_first_score": round(liquidity_score, 2),
+                    }
+                )
+        return pool_candidates
+
+    long_pool = _leg_pool(long_delta_target)
+    short_pool = _leg_pool(short_delta_target)
+    candidates = _build_spread_candidates(long_pool, short_pool)
+    if not candidates and (len(long_pool) < len(legs) or len(short_pool) < len(legs)):
+        candidates = _build_spread_candidates(legs, legs)
 
     if not candidates:
         return None
@@ -4765,11 +4893,22 @@ def _fetch_best_spread(
     if long_opt is None:
         return None
 
-    short_opt = _fetch_best_option(
-        ticker, trade_type, short_delta_target, target_dte,
-        stock_price=stock_price, hv30_fallback=hv30_fallback,
+    short_opt = _best_option_from_chain_context(
+        ticker=ticker,
+        trade_type=trade_type,
+        delta_target=short_delta_target,
+        target_dte=target_dte,
+        stock_price=stock_price or long_opt.get("stock_price", 0.0),
+        hv30_fallback=hv30_fallback,
+        chain_context=long_opt.get("chain_context"),
         return_context=fetch_context,
     )
+    if short_opt is None:
+        short_opt = _fetch_best_option(
+            ticker, trade_type, short_delta_target, target_dte,
+            stock_price=stock_price, hv30_fallback=hv30_fallback,
+            return_context=fetch_context,
+        )
     if short_opt is None:
         return None
 
@@ -5446,6 +5585,7 @@ def scan_daily_top_trades(
         symbol.upper() in ai_commodity_scan_symbol_set for symbol in scan_symbols
     )
     underlying_filters = AI_COMMODITY_UNDERLYING_FILTERS if use_ai_commodity_underlying_filters else UNDERLYING_FILTERS
+    prefetched_scan_histories = _prefetch_scan_histories(scan_symbols, period="400d")
 
     for ticker in scan_symbols:
         _ac = _asset_class(ticker)
@@ -5457,7 +5597,9 @@ def scan_daily_top_trades(
             call_sp = _profile_with_filter_overrides(call_sp, AI_COMMODITY_OPTION_FILTERS)
             put_sp = _profile_with_filter_overrides(put_sp, AI_COMMODITY_OPTION_FILTERS)
         try:
-            hist_frame = _cached_history(ticker, period="400d")
+            hist_frame = prefetched_scan_histories.get(ticker)
+            if hist_frame is None or hist_frame.empty:
+                hist_frame = _cached_history(ticker, period="400d")
             _underlying_data_source = _data_source_from(hist_frame, primary_provider_label())
             liquidity_snapshot = _underlying_liquidity_snapshot(hist_frame, filters=underlying_filters)
             if not liquidity_snapshot["eligible"]:

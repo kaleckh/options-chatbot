@@ -29,6 +29,32 @@ FIXTURE_DATA_TRUST = "fixture"
 RESEARCH_DATA_TRUST = "research"
 SQLITE_TIMEOUT_SECONDS = 30.0
 SQLITE_BUSY_TIMEOUT_MS = 30_000
+QUOTE_INSERT_CHUNK_SIZE = 5_000
+QUOTE_LOOKUP_CACHE_MAX_ENTRIES = 100_000
+
+_QUOTE_CACHE_MISS = object()
+
+_OPTION_QUOTE_INSERT_SQL = """
+    INSERT OR IGNORE INTO option_quote_snapshots (
+        as_of_utc,
+        quote_date_et,
+        quote_minute_et,
+        snapshot_kind,
+        underlying,
+        contract_symbol,
+        expiry,
+        option_type,
+        strike,
+        bid,
+        ask,
+        last,
+        iv,
+        underlying_price,
+        volume,
+        open_interest,
+        source_batch_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
 
 
 def _sqlite_connect(path: str | Path) -> sqlite3.Connection:
@@ -194,6 +220,12 @@ def _rebuild_option_quote_snapshots_table(conn: sqlite3.Connection) -> None:
             ON option_quote_snapshots (contract_symbol, snapshot_kind, quote_date_et, quote_minute_et DESC);
         CREATE INDEX IF NOT EXISTS idx_option_quotes_tuple_date
             ON option_quote_snapshots (underlying, snapshot_kind, expiry, option_type, strike, quote_date_et, quote_minute_et DESC);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_underlying
+            ON option_quote_snapshots (snapshot_kind, underlying);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_asof
+            ON option_quote_snapshots (snapshot_kind, as_of_utc);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_quote_date
+            ON option_quote_snapshots (snapshot_kind, quote_date_et, underlying);
         """
     )
 
@@ -303,6 +335,54 @@ def _quote_price_with_mode(row: dict[str, Any], *, allow_last_price: bool) -> tu
     return None, None
 
 
+def _valid_quote_sql_clause(alias: str = "q", *, allow_last_price: bool = True) -> str:
+    prefix = f"{alias}." if alias else ""
+    bid_ask_clause = (
+        f"({prefix}bid IS NOT NULL AND {prefix}ask IS NOT NULL "
+        f"AND {prefix}bid > 0 AND {prefix}ask > 0 AND {prefix}ask >= {prefix}bid)"
+    )
+    if allow_last_price:
+        return f"({bid_ask_clause} OR ({prefix}last IS NOT NULL AND {prefix}last > 0))"
+    return bid_ask_clause
+
+
+def _quote_insert_values(normalized: dict[str, Any], batch_id: int) -> tuple[Any, ...]:
+    return (
+        normalized["as_of_utc"],
+        normalized["quote_date_et"],
+        normalized["quote_minute_et"],
+        normalized["snapshot_kind"],
+        normalized["underlying"],
+        normalized["contract_symbol"],
+        normalized["expiry"],
+        normalized["option_type"],
+        normalized["strike"],
+        normalized["bid"],
+        normalized["ask"],
+        normalized["last"],
+        normalized["iv"],
+        normalized["underlying_price"],
+        normalized["volume"],
+        normalized["open_interest"],
+        batch_id,
+    )
+
+
+def _insert_option_quote_batch(
+    conn: sqlite3.Connection,
+    cursor: sqlite3.Cursor,
+    values: list[tuple[Any, ...]],
+) -> tuple[int, int]:
+    if not values:
+        return 0, 0
+    before_changes = int(conn.total_changes)
+    cursor.executemany(_OPTION_QUOTE_INSERT_SQL, values)
+    inserted = max(int(conn.total_changes) - before_changes, 0)
+    duplicate = max(len(values) - inserted, 0)
+    values.clear()
+    return inserted, duplicate
+
+
 @dataclass(frozen=True)
 class HistoricalQuote:
     as_of_utc: str
@@ -374,6 +454,12 @@ def init_schema(db_path: str | Path | None = None) -> Path:
                 ON option_quote_snapshots (contract_symbol, snapshot_kind, quote_date_et, quote_minute_et DESC);
             CREATE INDEX IF NOT EXISTS idx_option_quotes_tuple_date
                 ON option_quote_snapshots (underlying, snapshot_kind, expiry, option_type, strike, quote_date_et, quote_minute_et DESC);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_underlying
+                ON option_quote_snapshots (snapshot_kind, underlying);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_asof
+                ON option_quote_snapshots (snapshot_kind, as_of_utc);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_quote_date
+                ON option_quote_snapshots (snapshot_kind, quote_date_et, underlying);
             """
         )
         _ensure_column(conn, "import_batches", "dataset_kind", "TEXT NOT NULL DEFAULT 'intraday_csv'")
@@ -469,6 +555,7 @@ def import_historical_option_snapshots(
             ),
         )
         batch_id = int(cursor.lastrowid)
+        pending_values: list[tuple[Any, ...]] = []
 
         with csv_path.open("r", encoding="utf8", newline="") as handle:
             reader = csv.DictReader(handle)
@@ -482,52 +569,15 @@ def import_historical_option_snapshots(
                         warnings.append(f"Row {row_index}: {exc}")
                     continue
 
-                cursor.execute(
-                    """
-                    INSERT OR IGNORE INTO option_quote_snapshots (
-                        as_of_utc,
-                        quote_date_et,
-                        quote_minute_et,
-                        snapshot_kind,
-                        underlying,
-                        contract_symbol,
-                        expiry,
-                        option_type,
-                        strike,
-                        bid,
-                        ask,
-                        last,
-                        iv,
-                        underlying_price,
-                        volume,
-                        open_interest,
-                        source_batch_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        normalized["as_of_utc"],
-                        normalized["quote_date_et"],
-                        normalized["quote_minute_et"],
-                        normalized["snapshot_kind"],
-                        normalized["underlying"],
-                        normalized["contract_symbol"],
-                        normalized["expiry"],
-                        normalized["option_type"],
-                        normalized["strike"],
-                        normalized["bid"],
-                        normalized["ask"],
-                        normalized["last"],
-                        normalized["iv"],
-                        normalized["underlying_price"],
-                        normalized["volume"],
-                        normalized["open_interest"],
-                        batch_id,
-                    ),
-                )
-                if cursor.rowcount > 0:
-                    imported_rows += 1
-                else:
-                    duplicate_rows += 1
+                pending_values.append(_quote_insert_values(normalized, batch_id))
+                if len(pending_values) >= QUOTE_INSERT_CHUNK_SIZE:
+                    inserted, duplicate = _insert_option_quote_batch(conn, cursor, pending_values)
+                    imported_rows += inserted
+                    duplicate_rows += duplicate
+
+        inserted, duplicate = _insert_option_quote_batch(conn, cursor, pending_values)
+        imported_rows += inserted
+        duplicate_rows += duplicate
 
         cursor.execute(
             """
@@ -729,6 +779,7 @@ def import_daily_option_parquet(
 
         row_index = 1
         saw_rows = False
+        pending_values: list[tuple[Any, ...]] = []
         for raw_row in _iter_daily_parquet_records(
             parquet_path,
             date_from=date_from,
@@ -773,55 +824,18 @@ def import_daily_option_parquet(
                     warnings.append(f"Row {row_index}: {exc}")
                 continue
 
-            cursor.execute(
-                """
-                INSERT OR IGNORE INTO option_quote_snapshots (
-                    as_of_utc,
-                    quote_date_et,
-                    quote_minute_et,
-                    snapshot_kind,
-                    underlying,
-                    contract_symbol,
-                    expiry,
-                    option_type,
-                    strike,
-                    bid,
-                    ask,
-                    last,
-                    iv,
-                    underlying_price,
-                    volume,
-                    open_interest,
-                    source_batch_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    normalized["as_of_utc"],
-                    normalized["quote_date_et"],
-                    normalized["quote_minute_et"],
-                    normalized["snapshot_kind"],
-                    normalized["underlying"],
-                    normalized["contract_symbol"],
-                    normalized["expiry"],
-                    normalized["option_type"],
-                    normalized["strike"],
-                    normalized["bid"],
-                    normalized["ask"],
-                    normalized["last"],
-                    normalized["iv"],
-                    normalized["underlying_price"],
-                    normalized["volume"],
-                    normalized["open_interest"],
-                    batch_id,
-                ),
-            )
-            if cursor.rowcount > 0:
-                imported_rows += 1
-            else:
-                duplicate_rows += 1
+            pending_values.append(_quote_insert_values(normalized, batch_id))
+            if len(pending_values) >= QUOTE_INSERT_CHUNK_SIZE:
+                inserted, duplicate = _insert_option_quote_batch(conn, cursor, pending_values)
+                imported_rows += inserted
+                duplicate_rows += duplicate
 
         if not saw_rows:
             raise ValueError("The parquet file contained no option rows for the selected date range.")
+
+        inserted, duplicate = _insert_option_quote_batch(conn, cursor, pending_values)
+        imported_rows += inserted
+        duplicate_rows += duplicate
 
         cursor.execute(
             """
@@ -868,11 +882,21 @@ class HistoricalOptionsStore:
     def __init__(self, db_path: str | Path | None = None):
         self.db_path = Path(db_path) if db_path else _db_path()
         init_schema(self.db_path)
+        self._quote_lookup_cache: dict[tuple[Any, ...], Optional[HistoricalQuote]] = {}
 
     def _connect(self) -> sqlite3.Connection:
         conn = _sqlite_connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
+
+    def _quote_cache_get(self, key: tuple[Any, ...]) -> object:
+        return self._quote_lookup_cache.get(key, _QUOTE_CACHE_MISS)
+
+    def _quote_cache_set(self, key: tuple[Any, ...], value: Optional[HistoricalQuote]) -> Optional[HistoricalQuote]:
+        if len(self._quote_lookup_cache) >= QUOTE_LOOKUP_CACHE_MAX_ENTRIES:
+            self._quote_lookup_cache.clear()
+        self._quote_lookup_cache[key] = value
+        return value
 
     def has_quotes(
         self,
@@ -1374,15 +1398,25 @@ class HistoricalOptionsStore:
         quote_date_text = quote_date_et.isoformat() if isinstance(quote_date_et, date) else str(quote_date_et)[:10]
         clauses = ["q.quote_date_et = ?"]
         params: list[Any] = [quote_date_text]
+        normalized_snapshot_kind = str(snapshot_kind) if snapshot_kind else None
         if snapshot_kind:
             clauses.append("q.snapshot_kind = ?")
-            params.append(str(snapshot_kind))
+            params.append(normalized_snapshot_kind)
+        normalized_contract_symbol = None
         if contract_symbol:
+            normalized_contract_symbol = _normalize_contract_symbol(contract_symbol)
             clauses.append("q.contract_symbol = ?")
-            params.append(_normalize_contract_symbol(contract_symbol))
+            params.append(normalized_contract_symbol)
+            normalized_tuple = None
         else:
             if not (underlying and expiry and option_type and strike is not None):
                 raise ValueError("Exact tuple match requires underlying, expiry, option_type, and strike.")
+            normalized_tuple = (
+                _normalize_underlying(underlying),
+                expiry.isoformat() if isinstance(expiry, date) else str(expiry)[:10],
+                _normalize_option_type(option_type),
+                float(strike),
+            )
             clauses.extend(
                 [
                     "q.underlying = ?",
@@ -1391,37 +1425,44 @@ class HistoricalOptionsStore:
                     "ABS(q.strike - ?) <= 0.0001",
                 ]
             )
-            params.extend(
-                [
-                    _normalize_underlying(underlying),
-                    expiry.isoformat() if isinstance(expiry, date) else str(expiry)[:10],
-                    _normalize_option_type(option_type),
-                    float(strike),
-                ]
-            )
+            params.extend(normalized_tuple)
         normalized_source_labels = _normalize_source_labels(source_labels)
+        normalized_source_label_tuple = tuple(normalized_source_labels)
         if normalized_source_labels:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
+
+        cache_key = (
+            "exact",
+            quote_date_text,
+            normalized_snapshot_kind,
+            normalized_contract_symbol,
+            normalized_tuple,
+            bool(prefer_latest),
+            bool(allow_last_price),
+            normalized_source_label_tuple,
+        )
+        cached = self._quote_cache_get(cache_key)
+        if cached is not _QUOTE_CACHE_MISS:
+            return cached  # type: ignore[return-value]
 
         order = "DESC" if prefer_latest else "ASC"
         with closing(self._connect()) as conn:
-            rows = conn.execute(
+            row = conn.execute(
                 f"""
                 SELECT q.*
                 FROM option_quote_snapshots q
                 JOIN import_batches b ON b.id = q.source_batch_id
                 WHERE {' AND '.join(clauses)}
                 ORDER BY q.quote_minute_et {order}, q.as_of_utc {order}
+                LIMIT 1
                 """,
                 tuple(params),
-            ).fetchall()
-        for row in rows:
-            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
-            if candidate is not None:
-                return candidate
-        return None
+            ).fetchone()
+        candidate = self._row_to_quote(row, allow_last_price=allow_last_price) if row is not None else None
+        return self._quote_cache_set(cache_key, candidate)
 
     def find_entry_contract(
         self,
@@ -1439,6 +1480,11 @@ class HistoricalOptionsStore:
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         target_expiry_date = target_expiry if isinstance(target_expiry, date) else date.fromisoformat(str(target_expiry)[:10])
+        target_expiry_text = target_expiry_date.isoformat()
+        normalized_underlying = _normalize_underlying(underlying)
+        normalized_option_type = _normalize_option_type(option_type)
+        normalized_snapshot_kind = str(snapshot_kind)
+        end_minute_et = int(earliest_minute_et + window_minutes)
         clauses = [
             "q.underlying = ?",
             "q.snapshot_kind = ?",
@@ -1448,49 +1494,145 @@ class HistoricalOptionsStore:
             "q.quote_minute_et <= ?",
         ]
         params: list[Any] = [
-            _normalize_underlying(underlying),
-            str(snapshot_kind),
-            _normalize_option_type(option_type),
+            normalized_underlying,
+            normalized_snapshot_kind,
+            normalized_option_type,
             quote_date_text,
             int(earliest_minute_et),
-            int(earliest_minute_et + window_minutes),
+            end_minute_et,
         ]
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        normalized_source_label_tuple = tuple(normalized_source_labels)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            clauses.append(f"b.source_label IN ({placeholders})")
+            params.extend(normalized_source_labels)
+        clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
+
+        cache_key = (
+            "entry_contract",
+            normalized_underlying,
+            quote_date_text,
+            normalized_option_type,
+            target_expiry_text,
+            float(target_strike),
+            int(earliest_minute_et),
+            end_minute_et,
+            normalized_snapshot_kind,
+            bool(allow_last_price),
+            normalized_source_label_tuple,
+        )
+        cached = self._quote_cache_get(cache_key)
+        if cached is not _QUOTE_CACHE_MISS:
+            return cached  # type: ignore[return-value]
+
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                f"""
+                WITH first_valid_quotes AS (
+                    SELECT
+                        q.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY q.contract_symbol
+                            ORDER BY q.quote_minute_et ASC, q.as_of_utc ASC
+                        ) AS quote_rank
+                    FROM option_quote_snapshots q
+                    JOIN import_batches b ON b.id = q.source_batch_id
+                    WHERE {' AND '.join(clauses)}
+                )
+                SELECT *
+                FROM first_valid_quotes
+                WHERE quote_rank = 1
+                ORDER BY
+                    ABS(julianday(expiry) - julianday(?)) ASC,
+                    ABS(strike - ?) ASC,
+                    quote_minute_et ASC,
+                    contract_symbol ASC
+                LIMIT 1
+                """,
+                tuple(params + [target_expiry_text, float(target_strike)]),
+            ).fetchone()
+
+        candidate = self._row_to_quote(row, allow_last_price=allow_last_price) if row is not None else None
+        return self._quote_cache_set(cache_key, candidate)
+
+    def list_entry_contracts(
+        self,
+        *,
+        underlying: str,
+        trade_date_et: str | date,
+        option_type: str,
+        earliest_minute_et: int = ENTRY_QUOTE_MINUTE_ET,
+        window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
+        snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+        allow_last_price: bool = True,
+        min_expiry: str | date | None = None,
+        max_expiry: str | date | None = None,
+        source_labels: Sequence[str] | None = None,
+    ) -> list[HistoricalQuote]:
+        quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
+        normalized_underlying = _normalize_underlying(underlying)
+        normalized_option_type = _normalize_option_type(option_type)
+        normalized_snapshot_kind = str(snapshot_kind)
+        end_minute_et = int(earliest_minute_et + window_minutes)
+        clauses = [
+            "q.underlying = ?",
+            "q.snapshot_kind = ?",
+            "q.option_type = ?",
+            "q.quote_date_et = ?",
+            "q.quote_minute_et >= ?",
+            "q.quote_minute_et <= ?",
+        ]
+        params: list[Any] = [
+            normalized_underlying,
+            normalized_snapshot_kind,
+            normalized_option_type,
+            quote_date_text,
+            int(earliest_minute_et),
+            end_minute_et,
+        ]
+        if min_expiry is not None:
+            min_expiry_text = min_expiry.isoformat() if isinstance(min_expiry, date) else str(min_expiry)[:10]
+            clauses.append("q.expiry >= ?")
+            params.append(min_expiry_text)
+        if max_expiry is not None:
+            max_expiry_text = max_expiry.isoformat() if isinstance(max_expiry, date) else str(max_expiry)[:10]
+            clauses.append("q.expiry <= ?")
+            params.append(max_expiry_text)
         normalized_source_labels = _normalize_source_labels(source_labels)
         if normalized_source_labels:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
-        params.append(float(target_strike))
+        clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
 
         with closing(self._connect()) as conn:
             rows = conn.execute(
                 f"""
-                SELECT q.*
-                FROM option_quote_snapshots q
-                JOIN import_batches b ON b.id = q.source_batch_id
-                WHERE {' AND '.join(clauses)}
-                ORDER BY q.quote_minute_et ASC, q.expiry ASC, ABS(q.strike - ?) ASC, q.contract_symbol ASC
+                WITH first_valid_quotes AS (
+                    SELECT
+                        q.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY q.contract_symbol
+                            ORDER BY q.quote_minute_et ASC, q.as_of_utc ASC
+                        ) AS quote_rank
+                    FROM option_quote_snapshots q
+                    JOIN import_batches b ON b.id = q.source_batch_id
+                    WHERE {' AND '.join(clauses)}
+                )
+                SELECT *
+                FROM first_valid_quotes
+                WHERE quote_rank = 1
+                ORDER BY expiry ASC, strike ASC, contract_symbol ASC
                 """,
                 tuple(params),
             ).fetchall()
-
-        per_contract: dict[str, HistoricalQuote] = {}
+        quotes: list[HistoricalQuote] = []
         for row in rows:
-            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
-            if candidate is None:
-                continue
-            per_contract.setdefault(candidate.contract_symbol, candidate)
-
-        ranked = sorted(
-            per_contract.values(),
-            key=lambda item: (
-                abs((date.fromisoformat(item.expiry) - target_expiry_date).days),
-                abs(float(item.strike) - float(target_strike)),
-                item.quote_minute_et,
-                item.contract_symbol,
-            ),
-        )
-        return ranked[0] if ranked else None
+            quote = self._row_to_quote(row, allow_last_price=allow_last_price)
+            if quote is not None:
+                quotes.append(quote)
+        return quotes
 
     def find_entry_quote_for_contract(
         self,
@@ -1504,17 +1646,20 @@ class HistoricalOptionsStore:
         source_labels: Sequence[str] | None = None,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
+        normalized_contract_symbol = _normalize_contract_symbol(contract_symbol)
+        normalized_snapshot_kind = str(snapshot_kind)
+        end_minute_et = int(earliest_minute_et + window_minutes)
         clauses = [
             "q.contract_symbol = ?",
             "q.snapshot_kind = ?",
             "q.quote_date_et = ?",
         ]
         params: list[Any] = [
-            _normalize_contract_symbol(contract_symbol),
-            str(snapshot_kind),
+            normalized_contract_symbol,
+            normalized_snapshot_kind,
             quote_date_text,
         ]
-        if str(snapshot_kind) != DAILY_SNAPSHOT_KIND:
+        if normalized_snapshot_kind != DAILY_SNAPSHOT_KIND:
             clauses.extend(
                 [
                     "q.quote_minute_et >= ?",
@@ -1524,32 +1669,46 @@ class HistoricalOptionsStore:
             params.extend(
                 [
                     int(earliest_minute_et),
-                    int(earliest_minute_et + window_minutes),
+                    end_minute_et,
                 ]
             )
         normalized_source_labels = _normalize_source_labels(source_labels)
+        normalized_source_label_tuple = tuple(normalized_source_labels)
         if normalized_source_labels:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
+
+        cache_key = (
+            "entry_quote_contract",
+            normalized_contract_symbol,
+            quote_date_text,
+            int(earliest_minute_et),
+            end_minute_et,
+            normalized_snapshot_kind,
+            bool(allow_last_price),
+            normalized_source_label_tuple,
+        )
+        cached = self._quote_cache_get(cache_key)
+        if cached is not _QUOTE_CACHE_MISS:
+            return cached  # type: ignore[return-value]
 
         with closing(self._connect()) as conn:
-            rows = conn.execute(
+            row = conn.execute(
                 f"""
                 SELECT q.*
                 FROM option_quote_snapshots q
                 JOIN import_batches b ON b.id = q.source_batch_id
                 WHERE {' AND '.join(clauses)}
                 ORDER BY q.quote_minute_et ASC, q.as_of_utc ASC
+                LIMIT 1
                 """,
                 tuple(params),
-            ).fetchall()
+            ).fetchone()
 
-        for row in rows:
-            candidate = self._row_to_quote(row, allow_last_price=allow_last_price)
-            if candidate is not None:
-                return candidate
-        return None
+        candidate = self._row_to_quote(row, allow_last_price=allow_last_price) if row is not None else None
+        return self._quote_cache_set(cache_key, candidate)
 
     def get_closing_quote(
         self,

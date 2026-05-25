@@ -524,6 +524,53 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(self.ticker.history_calls[0][1]["interval"], "1d")
         self.assertEqual(ticker_b.history_calls[0][1]["start"], "2025-12-31")
 
+    def test_download_history_batch_uses_single_batch_fetch_for_cold_symbols(self):
+        service = self._service()
+        batch_calls: list[dict] = []
+        frame_a = make_history(length=120, start=100.0, step=0.5, volume=8_000_000)
+        frame_b = make_history(length=120, start=80.0, step=0.3, volume=7_000_000)
+        downloaded = pd.concat({"AAA": frame_a, "BBB": frame_b}, axis=1)
+
+        def _batch_download(*args, **kwargs):
+            batch_calls.append({"args": args, "kwargs": kwargs})
+            return downloaded
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", FrozenDateTime):
+            result = service.download_history_batch(["AAA", "BBB"], period="90d", download_fn=_batch_download)
+
+        self.assertFalse(result.empty)
+        self.assertEqual(len(batch_calls), 1)
+        self.assertEqual(batch_calls[0]["args"][0], "AAA BBB")
+        self.assertEqual(result["Close"]["AAA"].tolist(), frame_a["Close"].tolist())
+        self.assertEqual(result["Close"]["BBB"].tolist(), frame_b["Close"].tolist())
+        stats = service.get_cache_stats()["stats"]
+        self.assertEqual(stats["download_history_batch"]["batch_network_fetches"], 1)
+        self.assertEqual(stats["history"]["persistent_misses"], 2)
+        self.assertEqual(stats["history"]["full_refreshes"], 2)
+        self.assertEqual(stats["history"]["network_fetches"], 2)
+
+    def test_download_history_batch_keeps_adjusted_and_raw_daily_cache_separate(self):
+        service = self._service()
+        adjusted = make_history(length=120, start=10.0, step=0.1, volume=8_000_000)
+        raw = make_history(length=120, start=20.0, step=0.1, volume=8_000_000)
+        calls: list[bool] = []
+
+        def _batch_download(*args, **kwargs):
+            auto_adjust = bool(kwargs.get("auto_adjust"))
+            calls.append(auto_adjust)
+            frame = adjusted if auto_adjust else raw
+            return pd.concat({"AAA": frame}, axis=1)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", FrozenDateTime):
+            first = service.download_history_batch(["AAA"], period="90d", auto_adjust=True, download_fn=_batch_download)
+            second = service.download_history_batch(["AAA"], period="90d", auto_adjust=False, download_fn=_batch_download)
+
+        self.assertEqual(calls, [True, False])
+        self.assertEqual(first["Close"]["AAA"].iloc[-1], adjusted["Close"].iloc[-1])
+        self.assertEqual(second["Close"]["AAA"].iloc[-1], raw["Close"].iloc[-1])
+
     def test_cache_stats_track_memory_hits_request_hits_and_network_fetches(self):
         service = self._service()
         with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
