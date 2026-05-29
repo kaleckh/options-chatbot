@@ -82,6 +82,9 @@ def run_lane_a_exit_sweep(
     n_picks: int = 3,
     min_trades: int = 5,
     min_profit_factor: float = 1.05,
+    truth_lane: str = "historical_imported",
+    min_imported_calendar_dates: int = 252,
+    historical_source_labels: str | None = "thetadata_opra_nbbo_1m",
 ) -> dict[str, Any]:
     return run_exit_sweep(
         configs=parse_exit_configs(LANE_A_EXIT_CONFIGS),
@@ -89,9 +92,11 @@ def run_lane_a_exit_sweep(
         lookback_years=int(lookback_years),
         pricing_lane=pricing_lane,
         n_picks=int(n_picks),
-        truth_lane="historical_imported_daily",
+        truth_lane=truth_lane,
         min_trades=int(min_trades),
         min_profit_factor=float(min_profit_factor),
+        min_imported_calendar_dates=int(min_imported_calendar_dates),
+        historical_source_labels=historical_source_labels,
     )
 
 
@@ -116,6 +121,9 @@ def main() -> int:
     parser.add_argument("--lookback-years", type=int, default=2)
     parser.add_argument("--pricing-lane", default="pessimistic")
     parser.add_argument("--n-picks", type=int, default=3)
+    parser.add_argument("--truth-lane", default="historical_imported")
+    parser.add_argument("--min-imported-calendar-dates", type=int, default=252)
+    parser.add_argument("--historical-source-labels", default="thetadata_opra_nbbo_1m")
     parser.add_argument("--min-trades", type=int, default=5)
     parser.add_argument("--min-profit-factor", type=float, default=1.05)
     parser.add_argument("--json", action="store_true")
@@ -139,6 +147,9 @@ def main() -> int:
             n_picks=args.n_picks,
             min_trades=args.min_trades,
             min_profit_factor=args.min_profit_factor,
+            truth_lane=args.truth_lane,
+            min_imported_calendar_dates=args.min_imported_calendar_dates,
+            historical_source_labels=args.historical_source_labels,
         )
         payload["exit_sweep"] = exit_report
         payload["artifacts"]["exit_sweep"] = write_exit_report(exit_report, output_root=output_dir / "exit-sweeps")

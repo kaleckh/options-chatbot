@@ -24,6 +24,7 @@ from historical_options_store import (
     HistoricalOptionsStore,
     import_historical_option_snapshots,
 )
+from us_equity_market_calendar import is_us_equity_market_day
 
 
 DEFAULT_THETA_URL = "http://127.0.0.1:25510"
@@ -76,7 +77,7 @@ def _business_dates(start: date, end: date) -> list[date]:
     dates: list[date] = []
     current = start
     while current <= end:
-        if current.weekday() < 5:
+        if is_us_equity_market_day(current):
             dates.append(current)
         current += timedelta(days=1)
     return dates

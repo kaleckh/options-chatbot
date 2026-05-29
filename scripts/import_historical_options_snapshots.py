@@ -5,6 +5,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -23,7 +24,8 @@ from historical_options_store import (
 
 def _download_to_temp(url: str) -> tuple[str, tempfile.TemporaryDirectory]:
     tmpdir = tempfile.TemporaryDirectory()
-    filename = url.rstrip("/").split("/")[-1] or "downloaded.dat"
+    parsed = urlparse(url)
+    filename = _safe_download_filename(Path(unquote(parsed.path)).name or "downloaded.dat")
     target = Path(tmpdir.name) / filename
     response = requests.get(url, stream=True, timeout=120)
     response.raise_for_status()
@@ -32,6 +34,12 @@ def _download_to_temp(url: str) -> tuple[str, tempfile.TemporaryDirectory]:
             if chunk:
                 handle.write(chunk)
     return str(target), tmpdir
+
+
+def _safe_download_filename(filename: str) -> str:
+    sanitized = "".join("_" if char in '<>:"\\|?*' or ord(char) < 32 else char for char in filename)
+    sanitized = sanitized.strip().strip(".")
+    return sanitized or "downloaded.dat"
 
 
 def _resolve_input_path(value: str) -> tuple[str, tempfile.TemporaryDirectory | None]:

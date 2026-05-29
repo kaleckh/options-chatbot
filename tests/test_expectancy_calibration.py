@@ -6,6 +6,40 @@ import expectancy_calibration as ec
 
 
 class ExpectancyCalibrationTests(unittest.TestCase):
+    def test_score_bucket_handles_nan_inputs(self):
+        self.assertEqual(ec.score_bucket(float("nan")), "00-09")
+
+    def test_surface_metrics_sanitize_non_finite_pnl_inputs(self):
+        surface = ec.build_expectancy_surface_from_trades(
+            [
+                {
+                    "direction_score": 78,
+                    "quality_score": 66,
+                    "tech_score": 72,
+                    "market_regime": "bullish",
+                    "direction": "call",
+                    "pnl_pct": float("inf"),
+                    "directional_correct": True,
+                },
+                {
+                    "direction_score": 78,
+                    "quality_score": 66,
+                    "tech_score": 72,
+                    "market_regime": "bullish",
+                    "direction": "call",
+                    "pnl_pct": -10.0,
+                    "directional_correct": False,
+                },
+            ],
+            min_trades=1,
+            shrinkage_trades=0.0,
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertEqual(surface["overall"]["avg_pnl_pct"], -5.0)
+        self.assertEqual(surface["overall"]["profit_factor"], 0.0)
+
     def test_build_expectancy_surface_preserves_provenance(self):
         trades = [
             {

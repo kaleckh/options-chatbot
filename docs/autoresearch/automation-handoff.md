@@ -6,7 +6,7 @@
 
 - Live automation state now lives outside repo worktrees under `%CODEX_HOME%/automations/shared/options-chatbot/`.
 - The repo copy is documentation only so worktree runs do not fight over a tracked file.
-- The authoritative contract for the patch-capable automation loop is now [Profit Loop Contract](/C:/Users/kalec/options-chatbot/docs/profit-loop/contract.md).
+- The authoritative contract for the patch-capable automation loop is now [Profit Loop Contract](../profit-loop/contract.md).
 
 ## What Stays Here
 

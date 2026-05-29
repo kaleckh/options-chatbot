@@ -1,4 +1,4 @@
-import { fetchBackendJson, putBackendJson } from "@/lib/backend/transport";
+import { fetchBackendJson, putBackendJson, toSearchSuffix } from "@/lib/backend/transport";
 
 export async function getRiskSettings(): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>("/api/risk");
@@ -12,7 +12,7 @@ export async function getProfile(
   profileType: "equity" | "index" = "equity"
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/profile?type=${profileType}`,
+    `/api/profile${toSearchSuffix({ type: profileType })}`,
     undefined,
     "Failed to fetch profile"
   );

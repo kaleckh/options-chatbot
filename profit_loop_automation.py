@@ -5,6 +5,7 @@ import contextlib
 import copy
 import hashlib
 import json
+import math
 import os
 import re
 import subprocess
@@ -79,6 +80,7 @@ DEFAULT_DAILY_TRUTH_REFRESH_PRICING_LANE = "pessimistic"
 DEFAULT_DAILY_TRUTH_REFRESH_PLAYBOOK = "broad"
 DEFAULT_DAILY_TRUTH_IMPORT_TIMEOUT_SECONDS = 600
 DEFAULT_DAILY_TRUTH_ARTIFACT_TIMEOUT_SECONDS = 1800
+DEFAULT_COMMAND_TIMEOUT_SECONDS = 900
 DEFAULT_SUBPROCESS_HEARTBEAT_SECONDS = 60
 BOOTSTRAP_DOMINANCE_THRESHOLD_PCT = 80.0
 BOOTSTRAP_RECOVERY_EXTENDED_LOOKBACK_YEARS = 3
@@ -163,23 +165,8 @@ def _run_command(
     heartbeat_every_seconds: int | None = None,
     heartbeat: Any = None,
 ) -> dict[str, Any]:
-    if timeout_seconds is None and heartbeat_every_seconds is None and heartbeat is None:
-        completed = subprocess.run(
-            command,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return {
-            "command": _command_text(command),
-            "returncode": int(completed.returncode),
-            "passed": completed.returncode == 0,
-            "stdout": completed.stdout,
-            "stderr": completed.stderr,
-            "timed_out": False,
-            "duration_seconds": None,
-        }
+    if timeout_seconds is None:
+        timeout_seconds = DEFAULT_COMMAND_TIMEOUT_SECONDS
 
     started_at = time.monotonic()
     process = subprocess.Popen(
@@ -1528,6 +1515,16 @@ def _run_proof_modules(modules: list[str], *, repo_root: Path = ROOT_DIR, dry_ru
     }
 
 
+def _finite_float(value: Any, default: float = 0.0) -> tuple[float, bool]:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default, False
+    if not math.isfinite(parsed):
+        return default, False
+    return parsed, True
+
+
 def _evaluate_profitability_verdict(before_after_comparison: dict[str, Any]) -> str:
     comparison = dict(before_after_comparison or {})
     comparison_spec = dict(comparison.get("comparison_spec") or {})
@@ -1543,12 +1540,14 @@ def _evaluate_profitability_verdict(before_after_comparison: dict[str, Any]) -> 
     safety_regressed = bool(comparison.get("safety_regressed"))
     drawdown_regressed = bool(comparison.get("material_drawdown_worsened"))
     forward_status = str(comparison.get("forward_evidence_status") or "sparse").strip().lower()
-    baseline_pf = float(baseline.get("profit_factor") or 0.0)
-    after_pf = float(after.get("profit_factor") or 0.0)
-    baseline_avg = float(baseline.get("avg_pnl_pct") or 0.0)
-    after_avg = float(after.get("avg_pnl_pct") or 0.0)
+    baseline_pf, baseline_pf_finite = _finite_float(baseline.get("profit_factor"))
+    after_pf, after_pf_finite = _finite_float(after.get("profit_factor"))
+    baseline_avg, baseline_avg_finite = _finite_float(baseline.get("avg_pnl_pct"))
+    after_avg, after_avg_finite = _finite_float(after.get("avg_pnl_pct"))
     after_is_profitable = after_pf > 1.0 and after_avg > 0.0
 
+    if not all((baseline_pf_finite, after_pf_finite, baseline_avg_finite, after_avg_finite)):
+        return "regressed"
     if truth_quality_regressed or safety_regressed or drawdown_regressed:
         return "regressed"
     if after_pf < baseline_pf or after_avg < baseline_avg:
@@ -1567,6 +1566,33 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
             "is_valid": False,
             "failure_reason": "missing_required_cells",
             "meaningfully_distinct": False,
+        }
+    expected_cells = {
+        (int(case["lookback_years"]), str(case["pricing_lane"]))
+        for case in VALIDATION_REPLAY_CASES
+    }
+    observed_cells: list[tuple[int | None, str]] = []
+    for case in cases:
+        try:
+            lookback_years = int(case.get("lookback_years"))
+        except (TypeError, ValueError):
+            lookback_years = None
+        pricing_lane = str(
+            case.get("requested_pricing_lane")
+            or case.get("pricing_lane")
+            or ""
+        ).strip()
+        observed_cells.append((lookback_years, pricing_lane))
+    observed_cell_set = set(observed_cells)
+    if observed_cell_set != expected_cells or len(observed_cells) != len(observed_cell_set):
+        return {
+            "is_valid": False,
+            "failure_reason": "missing_or_duplicate_required_cells",
+            "meaningfully_distinct": False,
+            "missing_cells": sorted(expected_cells - observed_cell_set),
+            "duplicate_cells": sorted(
+                cell for cell in observed_cell_set if observed_cells.count(cell) > 1
+            ),
         }
     if any(bool(case.get("error")) for case in cases):
         return {
@@ -1591,10 +1617,13 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
             "invalid_cases": invalid_cases,
             "expected_imported_truth_normalization": False,
         }
+    dimension_values: dict[str, dict[Any, set[str]]] = {
+        "lookback_years": {},
+        "pricing_lane": {},
+    }
     fingerprints = set()
     for case in cases:
         fingerprint = {
-            "lookback_years": case.get("lookback_years"),
             "truth_source": case.get("truth_source"),
             "selection_source_counts": case.get("selection_source_counts"),
             "calibration_summary": case.get("calibration_summary"),
@@ -1604,16 +1633,25 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
             "directional_accuracy_pct": case.get("directional_accuracy_pct"),
             "max_drawdown_pct": case.get("max_drawdown_pct"),
         }
-        fingerprint["requested_pricing_lane"] = case.get("requested_pricing_lane")
-        fingerprint["effective_pricing_lane"] = case.get("effective_pricing_lane")
-        fingerprints.add(json.dumps(fingerprint, sort_keys=True))
+        encoded = json.dumps(fingerprint, sort_keys=True)
+        fingerprints.add(encoded)
+        dimension_values["lookback_years"].setdefault(case.get("lookback_years"), set()).add(encoded)
+        dimension_values["pricing_lane"].setdefault(
+            case.get("effective_pricing_lane") or case.get("requested_pricing_lane"),
+            set(),
+        ).add(encoded)
     meaningfully_distinct = len(fingerprints) > 1
+    effective_dimensions = [
+        dimension
+        for dimension, values in dimension_values.items()
+        if len(values) > 1 and len({frozenset(fingerprints) for fingerprints in values.values()}) > 1
+    ]
     return {
         "is_valid": meaningfully_distinct,
         "failure_reason": None if meaningfully_distinct else "collapsed_identical_cells",
         "meaningfully_distinct": meaningfully_distinct,
         "expected_imported_truth_normalization": False,
-        "effective_dimensions": ["lookback_years", "pricing_lane"],
+        "effective_dimensions": effective_dimensions,
     }
 
 

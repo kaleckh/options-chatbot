@@ -18,9 +18,13 @@ export async function PUT(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
+    const updates = Object.prototype.hasOwnProperty.call(body, "updates") ? body.updates : {};
+    if (!updates || typeof updates !== "object" || Array.isArray(updates)) {
+      return NextResponse.json({ error: "updates must be an object" }, { status: 400 });
+    }
     await saveProfile(
       String(body.type || "equity"),
-      (body.updates as Record<string, unknown>) || {},
+      updates as Record<string, unknown>,
       body.note != null ? String(body.note) : undefined
     );
     return NextResponse.json({ ok: true });

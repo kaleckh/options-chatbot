@@ -7,7 +7,7 @@ import os
 import sqlite3
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -226,6 +226,10 @@ def _rebuild_option_quote_snapshots_table(conn: sqlite3.Connection) -> None:
             ON option_quote_snapshots (snapshot_kind, as_of_utc);
         CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_quote_date
             ON option_quote_snapshots (snapshot_kind, quote_date_et, underlying);
+        CREATE INDEX IF NOT EXISTS idx_option_quotes_source_batch_snapshot_date
+            ON option_quote_snapshots (source_batch_id, snapshot_kind, quote_date_et);
+        CREATE INDEX IF NOT EXISTS idx_import_batches_source_trust_kind
+            ON import_batches (source_label, data_trust, dataset_kind, id);
         """
     )
 
@@ -460,6 +464,10 @@ def init_schema(db_path: str | Path | None = None) -> Path:
                 ON option_quote_snapshots (snapshot_kind, as_of_utc);
             CREATE INDEX IF NOT EXISTS idx_option_quotes_snapshot_quote_date
                 ON option_quote_snapshots (snapshot_kind, quote_date_et, underlying);
+            CREATE INDEX IF NOT EXISTS idx_option_quotes_source_batch_snapshot_date
+                ON option_quote_snapshots (source_batch_id, snapshot_kind, quote_date_et);
+            CREATE INDEX IF NOT EXISTS idx_import_batches_source_trust_kind
+                ON import_batches (source_label, data_trust, dataset_kind, id);
             """
         )
         _ensure_column(conn, "import_batches", "dataset_kind", "TEXT NOT NULL DEFAULT 'intraday_csv'")
@@ -644,7 +652,9 @@ def _maybe_read_underlying_prices(
         return {}
 
     frame = frame[[date_column, close_column]].copy()
-    frame["quote_date_et"] = pd.to_datetime(frame[date_column], utc=False, errors="coerce").dt.date.astype(str)
+    frame["quote_date_et"] = _coerce_date_series(frame[date_column]).map(
+        lambda value: value.isoformat() if pd.notna(value) else None
+    )
     frame["underlying_price"] = pd.to_numeric(frame[close_column], errors="coerce")
     frame = frame.dropna(subset=["quote_date_et", "underlying_price"])
     if date_from is not None:
@@ -659,12 +669,65 @@ def _maybe_read_underlying_prices(
     }
 
 
+def _coerce_date_series(values: pd.Series, *, allow_truncated_unix_seconds: bool = False) -> pd.Series:
+    series = pd.Series(values)
+    parsed = pd.Series(pd.to_datetime(series, utc=False, errors="coerce").dt.date, index=series.index, dtype=object)
+    numeric = pd.to_numeric(series, errors="coerce")
+    numeric_present = numeric.notna()
+
+    integer_like = (numeric % 1 == 0).fillna(False)
+    yyyymmdd = numeric_present & integer_like & numeric.abs().between(10_000_000, 99_999_999)
+    if yyyymmdd.any():
+        parsed.loc[yyyymmdd] = pd.to_datetime(
+            numeric.loc[yyyymmdd].astype("int64").astype(str),
+            format="%Y%m%d",
+            errors="coerce",
+        ).dt.date
+
+    unix_seconds = numeric_present & ~yyyymmdd & numeric.abs().between(1_000_000_000, 99_999_999_999)
+    if unix_seconds.any():
+        parsed.loc[unix_seconds] = pd.to_datetime(
+            numeric.loc[unix_seconds],
+            unit="s",
+            utc=True,
+            errors="coerce",
+        ).dt.date
+
+    unix_millis = numeric_present & ~yyyymmdd & numeric.abs().between(100_000_000_000, 99_999_999_999_999)
+    if unix_millis.any():
+        parsed.loc[unix_millis] = pd.to_datetime(
+            numeric.loc[unix_millis],
+            unit="ms",
+            utc=True,
+            errors="coerce",
+        ).dt.date
+
+    truncated_unix_seconds = numeric_present & ~yyyymmdd & numeric.abs().between(1_000_000, 9_999_999)
+    if allow_truncated_unix_seconds and truncated_unix_seconds.any():
+        parsed.loc[truncated_unix_seconds] = pd.to_datetime(
+            numeric.loc[truncated_unix_seconds] * 1000,
+            unit="s",
+            utc=True,
+            errors="coerce",
+        ).dt.date
+
+    recognized_numeric = yyyymmdd | unix_seconds | unix_millis
+    if allow_truncated_unix_seconds:
+        recognized_numeric = recognized_numeric | truncated_unix_seconds
+    unrecognized_numeric = numeric_present & ~recognized_numeric
+    if unrecognized_numeric.any():
+        parsed.loc[unrecognized_numeric] = pd.NaT
+
+    return parsed
+
+
 def _iter_daily_parquet_records(
     parquet_path: Path,
     *,
     date_from: date | None = None,
     date_to: date | None = None,
     batch_size: int = 50_000,
+    allow_truncated_unix_seconds: bool = False,
 ) -> Iterable[dict[str, Any]]:
     parquet_file = pq.ParquetFile(parquet_path)
     preferred_columns = [
@@ -679,6 +742,8 @@ def _iter_daily_parquet_records(
         "type",
         "option_type",
         "date",
+        "Date",
+        "timestamp",
         "bid",
         "ask",
         "last",
@@ -702,8 +767,16 @@ def _iter_daily_parquet_records(
             for row in frame.to_dict(orient="records"):
                 yield row
             continue
-        parsed_dates = pd.to_datetime(frame["date"], utc=False, errors="coerce").dt.date
+        parsed_dates = _coerce_date_series(
+            frame["date"],
+            allow_truncated_unix_seconds=allow_truncated_unix_seconds,
+        )
         frame = frame.assign(_parsed_date=parsed_dates)
+        invalid_dates = frame.loc[frame["_parsed_date"].isna()].copy()
+        if not invalid_dates.empty:
+            invalid_dates["date"] = None
+            for row in invalid_dates.drop(columns=["_parsed_date"]).to_dict(orient="records"):
+                yield row
         frame = frame.dropna(subset=["_parsed_date"])
         if date_from is not None:
             frame = frame.loc[frame["_parsed_date"] >= date_from]
@@ -711,6 +784,7 @@ def _iter_daily_parquet_records(
             frame = frame.loc[frame["_parsed_date"] <= date_to]
         if frame.empty:
             continue
+        frame["date"] = frame["_parsed_date"].map(lambda value: value.isoformat())
         frame = frame.drop(columns=["_parsed_date"])
         for row in frame.to_dict(orient="records"):
             yield row
@@ -784,6 +858,7 @@ def import_daily_option_parquet(
             parquet_path,
             date_from=date_from,
             date_to=date_to,
+            allow_truncated_unix_seconds=bool(underlying_prices),
         ):
             row_index += 1
             saw_rows = True
@@ -1394,6 +1469,7 @@ class HistoricalOptionsStore:
         snapshot_kind: str | None = None,
         allow_last_price: bool = True,
         source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = quote_date_et.isoformat() if isinstance(quote_date_et, date) else str(quote_date_et)[:10]
         clauses = ["q.quote_date_et = ?"]
@@ -1432,6 +1508,9 @@ class HistoricalOptionsStore:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        if trusted_only:
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
         clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
 
         cache_key = (
@@ -1443,6 +1522,7 @@ class HistoricalOptionsStore:
             bool(prefer_latest),
             bool(allow_last_price),
             normalized_source_label_tuple,
+            bool(trusted_only),
         )
         cached = self._quote_cache_get(cache_key)
         if cached is not _QUOTE_CACHE_MISS:
@@ -1477,6 +1557,7 @@ class HistoricalOptionsStore:
         snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
         allow_last_price: bool = True,
         source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         target_expiry_date = target_expiry if isinstance(target_expiry, date) else date.fromisoformat(str(target_expiry)[:10])
@@ -1507,6 +1588,9 @@ class HistoricalOptionsStore:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        if trusted_only:
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
         clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
 
         cache_key = (
@@ -1521,6 +1605,7 @@ class HistoricalOptionsStore:
             normalized_snapshot_kind,
             bool(allow_last_price),
             normalized_source_label_tuple,
+            bool(trusted_only),
         )
         cached = self._quote_cache_get(cache_key)
         if cached is not _QUOTE_CACHE_MISS:
@@ -1569,6 +1654,7 @@ class HistoricalOptionsStore:
         min_expiry: str | date | None = None,
         max_expiry: str | date | None = None,
         source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
     ) -> list[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         normalized_underlying = _normalize_underlying(underlying)
@@ -1604,6 +1690,9 @@ class HistoricalOptionsStore:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        if trusted_only:
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
         clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
 
         with closing(self._connect()) as conn:
@@ -1634,6 +1723,67 @@ class HistoricalOptionsStore:
                 quotes.append(quote)
         return quotes
 
+    def contract_quote_continuity_metrics(
+        self,
+        *,
+        contract_symbol: str,
+        before_date_et: str | date,
+        lookback_calendar_days: int = 14,
+        snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+        source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
+    ) -> dict[str, Any]:
+        before_date = before_date_et if isinstance(before_date_et, date) else date.fromisoformat(str(before_date_et)[:10])
+        start_date = before_date - timedelta(days=max(int(lookback_calendar_days), 1))
+        normalized_contract_symbol = _normalize_contract_symbol(contract_symbol)
+        normalized_snapshot_kind = str(snapshot_kind)
+        clauses = [
+            "q.contract_symbol = ?",
+            "q.snapshot_kind = ?",
+            "q.quote_date_et >= ?",
+            "q.quote_date_et < ?",
+            _valid_quote_sql_clause("q", allow_last_price=False),
+        ]
+        params: list[Any] = [
+            normalized_contract_symbol,
+            normalized_snapshot_kind,
+            start_date.isoformat(),
+            before_date.isoformat(),
+        ]
+        normalized_source_labels = _normalize_source_labels(source_labels)
+        if normalized_source_labels:
+            placeholders = ", ".join("?" for _ in normalized_source_labels)
+            clauses.append(f"b.source_label IN ({placeholders})")
+            params.extend(normalized_source_labels)
+        if trusted_only:
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
+
+        with closing(self._connect()) as conn:
+            row = conn.execute(
+                f"""
+                SELECT
+                    COUNT(DISTINCT q.quote_date_et) AS quote_date_count,
+                    MIN(q.quote_date_et) AS first_quote_date_et,
+                    MAX(q.quote_date_et) AS last_quote_date_et,
+                    AVG((q.ask - q.bid) / ((q.ask + q.bid) / 2.0) * 100.0) AS avg_bid_ask_pct
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                WHERE {' AND '.join(clauses)}
+                """,
+                tuple(params),
+            ).fetchone()
+        quote_date_count = int(row["quote_date_count"] or 0) if row is not None else 0
+        avg_bid_ask_pct = row["avg_bid_ask_pct"] if row is not None else None
+        return {
+            "contract_symbol": normalized_contract_symbol,
+            "lookback_calendar_days": int(lookback_calendar_days),
+            "quote_date_count": quote_date_count,
+            "first_quote_date_et": row["first_quote_date_et"] if row is not None else None,
+            "last_quote_date_et": row["last_quote_date_et"] if row is not None else None,
+            "avg_bid_ask_pct": round(float(avg_bid_ask_pct), 2) if avg_bid_ask_pct is not None else None,
+        }
+
     def find_entry_quote_for_contract(
         self,
         *,
@@ -1644,6 +1794,7 @@ class HistoricalOptionsStore:
         snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
         allow_last_price: bool = True,
         source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
     ) -> Optional[HistoricalQuote]:
         quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
         normalized_contract_symbol = _normalize_contract_symbol(contract_symbol)
@@ -1678,6 +1829,9 @@ class HistoricalOptionsStore:
             placeholders = ", ".join("?" for _ in normalized_source_labels)
             clauses.append(f"b.source_label IN ({placeholders})")
             params.extend(normalized_source_labels)
+        if trusted_only:
+            clauses.append("b.data_trust = ?")
+            params.append(TRUSTED_DATA_TRUST)
         clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
 
         cache_key = (
@@ -1689,6 +1843,7 @@ class HistoricalOptionsStore:
             normalized_snapshot_kind,
             bool(allow_last_price),
             normalized_source_label_tuple,
+            bool(trusted_only),
         )
         cached = self._quote_cache_get(cache_key)
         if cached is not _QUOTE_CACHE_MISS:
@@ -1718,6 +1873,7 @@ class HistoricalOptionsStore:
         snapshot_kind: str | None = None,
         allow_last_price: bool = True,
         source_labels: Sequence[str] | None = None,
+        trusted_only: bool = False,
     ) -> Optional[HistoricalQuote]:
         return self.get_exact_quote(
             quote_date_et=quote_date_et,
@@ -1726,6 +1882,7 @@ class HistoricalOptionsStore:
             snapshot_kind=snapshot_kind,
             allow_last_price=allow_last_price,
             source_labels=source_labels,
+            trusted_only=trusted_only,
         )
 
     def _row_to_quote(self, row: sqlite3.Row, *, allow_last_price: bool = True) -> Optional[HistoricalQuote]:

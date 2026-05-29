@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import sqlite3
 import sys
+import tempfile
+import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -9,7 +13,9 @@ if str(ROOT) not in sys.path:
 
 from scripts.build_ai_commodity_profitability_plan import (
     build_cohort_throughput,
+    build_forward_session_summary,
     build_lane_b_throughput_diagnostics,
+    build_liquidity_near_miss_log_summary,
     build_profitability_plan,
 )
 
@@ -75,6 +81,12 @@ def _sample_progress():
                             "liquidity_reasons": ["wide_leg_spread", "stale_leg_quote"],
                             "worst_leg_spread_excess_pct": 7.83,
                             "quote_age_excess_hours": 10.26,
+                            "ask_bid": {"ask": 1.12, "bid": 0.78},
+                            "executable_debit": 1.18,
+                            "top_spread_alternatives": [
+                                {"legs": ["CCJ250619C00045000", "CCJ250619C00050000"], "executable_debit": 1.18},
+                                {"legs": ["CCJ250619C00044000", "CCJ250619C00049000"], "executable_debit": 1.06},
+                            ],
                         }
                     ],
                 }
@@ -140,6 +152,66 @@ def test_build_profitability_plan_blocks_profit_claim_and_counts_true_playbook_o
     assert "Do not promote OnclickMedia EOD chains as OPRA proof-grade intraday NBBO." in plan["non_goals"]
 
 
+class AiCommodityProfitabilityPlanUnitTests(unittest.TestCase):
+    def test_forward_session_summary_rejects_non_finite_pnl(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "forward.db"
+            conn = sqlite3.connect(db_path)
+            try:
+                conn.executescript(
+                    """
+                    CREATE TABLE forward_sessions (
+                        id INTEGER PRIMARY KEY,
+                        playbook TEXT,
+                        recorded_at_utc TEXT,
+                        scan_picks_count INTEGER,
+                        reviewed_positions_count INTEGER,
+                        eligibility_status TEXT,
+                        quote_freshness_status TEXT
+                    );
+                    CREATE TABLE forward_events (
+                        id INTEGER PRIMARY KEY,
+                        session_id INTEGER,
+                        event_type TEXT,
+                        payload_json TEXT,
+                        net_pnl_pct REAL,
+                        net_pnl_usd REAL
+                    );
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO forward_sessions (
+                        id, playbook, recorded_at_utc, scan_picks_count, reviewed_positions_count,
+                        eligibility_status, quote_freshness_status
+                    ) VALUES (1, 'ai_commodity_infra_observation', '2026-05-25T14:00:00Z', 1, 1, 'eligible', 'fresh')
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO forward_events (
+                        session_id, event_type, payload_json, net_pnl_pct, net_pnl_usd
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        1,
+                        "position_review",
+                        json.dumps({"source_pick_snapshot": {"playbook_id": "ai_commodity_infra_observation"}}),
+                        float("inf"),
+                        float("inf"),
+                    ),
+                )
+                conn.commit()
+            finally:
+                conn.close()
+
+            summary = build_forward_session_summary(db_path)
+
+        self.assertEqual(summary["true_playbook_position_review_pnl"]["review_count"], 1)
+        self.assertIsNone(summary["true_playbook_position_review_pnl"]["avg_net_pnl_pct"])
+        self.assertIsNone(summary["true_playbook_position_review_pnl"]["sum_net_pnl_usd"])
+
+
 def test_lane_b_throughput_diagnostics_preserves_gates_and_ranks_near_misses():
     diagnostics = build_lane_b_throughput_diagnostics(
         _sample_progress(),
@@ -159,8 +231,16 @@ def test_lane_b_throughput_diagnostics_preserves_gates_and_ranks_near_misses():
     assert diagnostics["latest_funnel"]["returned_picks"] == 0
     assert diagnostics["cohort_throughput"][0]["cohort"] == "full_24"
     assert diagnostics["near_miss_queue"][0]["symbol"] == "CCJ"
+    assert diagnostics["near_miss_queue"][0]["ask_bid"] == {"ask": 1.12, "bid": 0.78}
+    assert diagnostics["near_miss_queue"][0]["executable_debit"] == 1.18
+    assert diagnostics["near_miss_queue"][0]["top_spread_alternatives"][1]["executable_debit"] == 1.06
+    assert diagnostics["near_miss_queue"][0]["research_only"] is True
+    assert diagnostics["near_miss_queue"][0]["non_promotable"] is True
     assert diagnostics["near_miss_log_status"] == "active"
     assert "rerun_live_scan_inside_fresh_opra_window_before_filter_changes" in diagnostics["next_diagnostic_actions"]
+    assert diagnostics["research_policy"]["research_only"] is True
+    assert diagnostics["research_policy"]["non_promotable"] is True
+    assert diagnostics["research_policy"]["near_miss_diagnostics_promotable"] is False
     assert "widen_spread_or_slippage_gates" in diagnostics["research_policy"]["forbidden_production_changes"]
 
 
@@ -172,4 +252,110 @@ def test_profitability_plan_embeds_lane_b_diagnostics_and_keeps_gate_closed():
 
     assert plan["lane_b_throughput_diagnostics"]["dominant_drop_key"] == "option_liquidity"
     assert plan["lane_b_throughput_diagnostics"]["production_gate_policy"] == "diagnostic_only_preserve_production_gates"
+    assert plan["opportunity_denominator_diagnostics"]["near_miss_log_status"] == "evidence_gap_missing_liquidity_near_misses_jsonl"
+    assert plan["opportunity_denominator_diagnostics"]["near_miss_log_evidence_gap"]["kind"] == "missing_liquidity_near_misses_jsonl"
+    assert plan["opportunity_denominator_diagnostics"]["dominant_drop_key"] == "option_liquidity"
+    assert plan["opportunity_denominator_diagnostics"]["drop_counts"]["option_liquidity"] == 2
+    assert plan["opportunity_denominator_diagnostics"]["near_miss_queue"][0]["non_promotable"] is True
+    assert plan["opportunity_denominator_diagnostics"]["research_policy"]["near_miss_diagnostics_promotable"] is False
+    assert plan["opportunity_throughput"]["denominator_diagnostics"]["near_miss_queue"][0]["research_only"] is True
     assert plan["gates"]["safe_to_tune_production_filters"] is False
+
+
+def test_missing_liquidity_near_miss_log_is_explicit_evidence_gap(tmp_path):
+    log_path = tmp_path / "liquidity_near_misses.jsonl"
+
+    summary = build_liquidity_near_miss_log_summary(log_path)
+    plan = build_profitability_plan(_sample_progress(), liquidity_near_miss_log=summary)
+
+    assert summary["available"] is False
+    assert summary["status"] == "evidence_gap_missing_liquidity_near_misses_jsonl"
+    assert summary["evidence_gap"]["kind"] == "missing_liquidity_near_misses_jsonl"
+    assert plan["near_miss_fillability_log"]["evidence_gap"]["log_path"] == str(log_path)
+    assert plan["opportunity_denominator_diagnostics"]["near_miss_log_evidence_gap"]["severity"] == "evidence_gap"
+
+
+def test_liquidity_near_miss_log_summary_preserves_executable_cost_fields_and_aliases(tmp_path):
+    log_path = tmp_path / "liquidity_near_misses.jsonl"
+    rows = [
+        {
+            "event_type": "liquidity_near_miss",
+            "playbook_id": "ai_commodity_infra_observation",
+            "logged_at": "2026-05-25T14:00:00Z",
+            "scan_date": "2026-05-25",
+            "ticker": "CCJ",
+            "liquidity_reasons": ["wide_spread"],
+            "distance_to_current_filters": 0.25,
+            "distance_components": {"spread_slippage_excess_pct": 0.3},
+            "ask_bid": {"ask": 1.12, "bid": 0.78},
+            "intended_ask_bid_debit": 0.34,
+            "intended_limit_debit": 0.34,
+            "executable_debit": 1.18,
+            "max_quote_age_hours": 12.5,
+            "quote_age_excess_hours": 4.5,
+            "no_fill_reason": "spread_ask_bid_not_fillable_inside_filters",
+            "liquidity_reason": "wide_spread",
+            "top_alternatives": [
+                {"symbol": "CCJ", "executable_debit": 1.18, "spread_slippage_excess_pct": 0.3},
+                {"symbol": "CCJ", "executable_debit": 1.06, "spread_slippage_excess_pct": 0.1},
+            ],
+        },
+        {
+            "event_type": "liquidity_near_miss",
+            "playbook_id": "other_playbook",
+            "ticker": "AA",
+            "executable_debit": 9.99,
+        },
+    ]
+    log_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+
+    summary = build_liquidity_near_miss_log_summary(log_path)
+
+    assert summary["status"] == "active"
+    assert summary["record_count"] == 1
+    assert summary["research_policy"]["research_only"] is True
+    assert summary["research_policy"]["non_promotable"] is True
+    assert summary["research_policy"]["near_miss_diagnostics_promotable"] is False
+    nearest = summary["nearest_records"][0]
+    assert nearest["ticker"] == "CCJ"
+    assert nearest["ask_bid"] == {"ask": 1.12, "bid": 0.78}
+    assert nearest["intended_ask_bid_debit"] == 0.34
+    assert nearest["intended_limit_debit"] == 0.34
+    assert nearest["executable_debit"] == 1.18
+    assert nearest["max_quote_age_hours"] == 12.5
+    assert nearest["quote_age_excess_hours"] == 4.5
+    assert nearest["no_fill_reason"] == "spread_ask_bid_not_fillable_inside_filters"
+    assert nearest["liquidity_reason"] == "wide_spread"
+    assert nearest["distance_to_current_filters"] == 0.25
+    assert nearest["distance_components"]["spread_slippage_excess_pct"] == 0.3
+    assert nearest["top_alternatives"][1]["executable_debit"] == 1.06
+    assert nearest["top_spread_alternatives"][1]["executable_debit"] == 1.06
+    assert nearest["research_only"] is True
+    assert nearest["non_promotable"] is True
+
+
+def test_profitability_plan_marks_manual_log_records_research_only():
+    plan = build_profitability_plan(
+        _sample_progress(),
+        liquidity_near_miss_log={
+            "status": "active",
+            "record_count": 1,
+            "nearest_records": [
+                {
+                    "ticker": "CCJ",
+                    "ask_bid": {"ask": 1.12, "bid": 0.78},
+                    "executable_debit": 1.18,
+                    "top_alternatives": [{"executable_debit": 1.18}],
+                }
+            ],
+        },
+    )
+
+    nearest = plan["near_miss_fillability_log"]["nearest_records"][0]
+    assert nearest["executable_debit"] == 1.18
+    assert nearest["top_alternatives"][0]["executable_debit"] == 1.18
+    assert nearest["top_spread_alternatives"][0]["executable_debit"] == 1.18
+    assert nearest["research_only"] is True
+    assert nearest["non_promotable"] is True
+    assert plan["opportunity_denominator_diagnostics"]["near_miss_log_record_count"] == 1
+    assert plan["opportunity_denominator_diagnostics"]["nearest_near_miss_log_records"][0]["research_only"] is True

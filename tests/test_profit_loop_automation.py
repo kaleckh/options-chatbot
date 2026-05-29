@@ -13,6 +13,7 @@ from profit_loop_automation import (
     _proof_context,
     _capture_validation_baseline,
     _daily_truth_source_freshness,
+    _evaluate_profitability_verdict,
     _replay_matrix_assessment,
     _refresh_daily_truth,
     _shared_replay_matrix_artifact_path,
@@ -49,6 +50,28 @@ class ProfitLoopAutomationTests(unittest.TestCase):
 
     def _healthy_context(self) -> dict[str, object]:
         return dict(_proof_context())
+
+    def test_profitability_verdict_rejects_non_finite_metrics(self):
+        verdict = _evaluate_profitability_verdict(
+            {
+                "comparison_spec": {
+                    "playbook": "broad",
+                    "truth_lane": "historical_imported_daily",
+                    "pricing_lane": "pessimistic",
+                    "lookback_years": 2,
+                    "n_picks": 1,
+                    "iv_adj": 1.2,
+                },
+                "baseline": {"profit_factor": 0.8, "avg_pnl_pct": -1.0},
+                "after": {"profit_factor": float("inf"), "avg_pnl_pct": float("inf")},
+                "forward_evidence_status": "improved",
+                "truth_quality_regressed": False,
+                "safety_regressed": False,
+                "material_drawdown_worsened": False,
+            }
+        )
+
+        self.assertEqual(verdict, "regressed")
 
     def _seed_healthy_validation_artifacts(
         self,
@@ -1183,6 +1206,61 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         self.assertTrue(baseline["replay_matrix_assessment"]["is_valid"])
         self.assertFalse(baseline["replay_matrix_assessment"]["expected_imported_truth_normalization"])
 
+    def test_replay_matrix_assessment_rejects_label_only_distinct_cells(self):
+        cases = [
+            {
+                "lookback_years": lookback_years,
+                "requested_pricing_lane": pricing_lane,
+                "effective_pricing_lane": pricing_lane,
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 70},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 70,
+                "profit_factor": 0.45,
+                "avg_pnl_pct": -21.27,
+                "directional_accuracy_pct": 50.0,
+                "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": False,
+                "error": None,
+            }
+            for lookback_years in (1, 2)
+            for pricing_lane in ("mid", "pessimistic")
+        ]
+
+        assessment = _replay_matrix_assessment(cases)
+
+        self.assertFalse(assessment["is_valid"])
+        self.assertEqual(assessment["failure_reason"], "collapsed_identical_cells")
+        self.assertFalse(assessment["meaningfully_distinct"])
+        self.assertEqual(assessment["effective_dimensions"], [])
+
+    def test_replay_matrix_assessment_rejects_duplicate_required_cells(self):
+        cases = [
+            {
+                "lookback_years": 1,
+                "requested_pricing_lane": "mid",
+                "effective_pricing_lane": "mid",
+                "truth_source": "historical_imported_daily",
+                "selection_source_counts": {"bootstrap_heuristic": 70},
+                "calibration_summary": {"status": "sparse_calibrated"},
+                "total_trades": 70 + index,
+                "profit_factor": 0.45 + index,
+                "avg_pnl_pct": -21.27 + index,
+                "directional_accuracy_pct": 50.0,
+                "max_drawdown_pct": 100.0,
+                "invalid_for_matrix_comparison": False,
+                "error": None,
+            }
+            for index in range(4)
+        ]
+
+        assessment = _replay_matrix_assessment(cases)
+
+        self.assertFalse(assessment["is_valid"])
+        self.assertEqual(assessment["failure_reason"], "missing_or_duplicate_required_cells")
+        self.assertEqual(assessment["duplicate_cells"], [(1, "mid")])
+        self.assertIn((1, "pessimistic"), assessment["missing_cells"])
+
     def test_replay_matrix_assessment_accepts_distinct_pricing_lanes(self):
         assessment = _replay_matrix_assessment(
             [
@@ -1209,9 +1287,9 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "selection_source_counts": {"bootstrap_heuristic": 70},
                     "calibration_summary": {"status": "sparse_calibrated"},
                     "total_trades": 70,
-                    "profit_factor": 0.45,
-                    "avg_pnl_pct": -21.27,
-                    "directional_accuracy_pct": 50.0,
+                    "profit_factor": 0.4,
+                    "avg_pnl_pct": -22.27,
+                    "directional_accuracy_pct": 48.0,
                     "max_drawdown_pct": 100.0,
                     "invalid_for_matrix_comparison": False,
                     "error": None,
@@ -1239,9 +1317,9 @@ class ProfitLoopAutomationTests(unittest.TestCase):
                     "selection_source_counts": {"bootstrap_heuristic": 351, "replay_calibrated": 3},
                     "calibration_summary": {"status": "sparse_calibrated"},
                     "total_trades": 354,
-                    "profit_factor": 0.48,
-                    "avg_pnl_pct": -20.03,
-                    "directional_accuracy_pct": 41.5,
+                    "profit_factor": 0.44,
+                    "avg_pnl_pct": -23.03,
+                    "directional_accuracy_pct": 39.5,
                     "max_drawdown_pct": 100.0,
                     "invalid_for_matrix_comparison": False,
                     "error": None,

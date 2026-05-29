@@ -2,6 +2,8 @@
 
 The unattended profit loop is separate from `scripts/autoresearch_cycle.py`.
 
+Snapshot note: this contract describes the profit-loop automation sidecar. It is not the mounted browser product, and it does not reopen paused day-trading, crypto, or Polymarket lanes by itself. Active project scope is governed by `docs/DECISIONS.md` and `docs/PROJECT_CONTEXT.md`.
+
 ## Purpose
 
 - The loop optimizes for `Truthful Improvement`, not forced win rate.
@@ -32,7 +34,7 @@ Shared state is schema-versioned and now tracks:
 - `open_issues`
 - `resolved_issues`
 
-The repo also keeps a separate BTC profitability pilot surface. Its current docs and scripts surface:
+Historical note: the repo has carried a separate BTC profitability pilot surface. Treat that pilot as paused sidecar context unless the user explicitly reopens day-trading work. Its docs and scripts have surfaced:
 
 - `dailyTradeCap`
 - `todayGate`
@@ -98,7 +100,7 @@ If freshness fails, validation must write a blocker and stop before any code edi
 
 ## BTC Pilot Boundary
 
-The BTC profitability pilot is documented and exercised separately from the unattended profit loop.
+The BTC profitability pilot is documented and exercised separately from the unattended profit loop, and is currently out of active scope unless the user explicitly reopens it.
 
 - profit-loop automation should not rewrite the BTC pilot contract
 - BTC pilot state is read through the day-trading scripts and docs, not this automation contract

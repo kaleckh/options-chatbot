@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { BackendHttpError } from "@/lib/backend/transport";
 
 export async function readJsonObject(
-  req: NextRequest
+  req: NextRequest,
+  options: { defaultValue?: Record<string, unknown> } = {}
 ): Promise<Record<string, unknown> | null> {
+  const text = await req.text();
+  if (!text.trim()) {
+    return options.defaultValue ?? null;
+  }
   try {
-    const body = await req.json();
+    const body = JSON.parse(text);
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return null;
     }
@@ -21,8 +26,9 @@ export function jsonError(
   status: number = 500
 ) {
   if (error instanceof BackendHttpError) {
+    const body = { error: error.message, details: error.payload };
     return NextResponse.json(
-      { error: error.message },
+      body,
       { status: error.status }
     );
   }

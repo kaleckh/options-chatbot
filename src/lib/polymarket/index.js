@@ -34,7 +34,10 @@ class Orchestrator {
   constructor(options = {}) {
     this.config = { ...DEFAULT_ORCHESTRATOR_CONFIG, ...options };
     this.risk = new RiskManager(this.config.risk);
-    this.mm = new MarketMaker(this.risk, this.config.mm);
+    this.mm = new MarketMaker(this.risk, {
+      ...this.config.mm,
+      dryRun: this.config.mode !== "live",
+    });
     this.arb = new ArbEngine(this.risk, {
       ...this.config.arb,
       dryRun: this.config.mode !== "live",

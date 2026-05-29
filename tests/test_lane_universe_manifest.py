@@ -34,9 +34,12 @@ def test_bullish_pullback_manifest_drives_scan_and_history_tiers():
     assert rows["AAPL"]["admission_status"] == "scan_allowed_history_backfill_needed"
 
     summary = lane_universe_summary("bullish_pullback_observation")
-    assert summary["symbol_count"] == 60
-    assert summary["scan_eligible_count"] == 60
-    assert summary["by_tier"] == {"historical_ready": 2, "expansion_candidates": 58}
+    assert summary["symbol_count"] == len(ss.BULLISH_PULLBACK_SCAN_TICKERS)
+    assert summary["scan_eligible_count"] == len(ss.BULLISH_PULLBACK_SCAN_TICKERS)
+    assert summary["by_tier"] == {
+        "historical_ready": len(ss.BULLISH_PULLBACK_HISTORICAL_READY_TICKERS),
+        "expansion_candidates": len(ss.BULLISH_PULLBACK_EXPANSION_TICKERS),
+    }
 
 
 def test_ai_commodity_manifest_preserves_core_and_conditional_tiers():

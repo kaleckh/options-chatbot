@@ -10,7 +10,8 @@ const { ethers } = require("ethers");
 const fs = require("fs");
 const path = require("path");
 
-const CREDENTIALS_PATH = path.resolve("data/polymarket/credentials.json");
+const CONFIG_DIR = path.resolve(process.env.POLYMARKET_CONFIG_DIR || path.join(process.cwd(), "data", "polymarket"));
+const CREDENTIALS_PATH = path.join(CONFIG_DIR, "credentials.json");
 const POLYGON_RPC = "https://polygon-bor-rpc.publicnode.com";
 
 // Polymarket exchange contracts that need USDC approval
@@ -39,9 +40,29 @@ const CT_ABI = [
   "function setApprovalForAll(address operator, bool approved) returns (bool)",
 ];
 
-const MAX_UINT256 = ethers.constants.MaxUint256;
+function parseArgs(argv) {
+  const options = {
+    executeApprovals: false,
+    allowanceUsd: null,
+  };
+  for (const arg of argv) {
+    if (arg === "--live") {
+      options.live = true;
+    } else if (arg === "--confirm-allowance") {
+      options.confirmAllowance = true;
+    } else if (arg.startsWith("--allowance-usdc=")) {
+      const value = Number(arg.slice("--allowance-usdc=".length));
+      if (Number.isFinite(value) && value > 0) {
+        options.allowanceUsd = value;
+      }
+    }
+  }
+  options.executeApprovals = Boolean(options.live && options.confirmAllowance);
+  return options;
+}
 
 async function main() {
+  const options = parseArgs(process.argv.slice(2));
   const creds = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, "utf8"));
   const provider = new ethers.providers.JsonRpcProvider(POLYGON_RPC);
   const wallet = new ethers.Wallet(creds.privateKey, provider);
@@ -49,7 +70,12 @@ async function main() {
 
   console.log("Polymarket Wallet Setup");
   console.log("Address: " + address);
+  console.log("Mode: " + (options.executeApprovals ? "live approvals" : "dry-run checks only"));
+  if (!options.executeApprovals) {
+    console.log("Approval transactions require --live --confirm-allowance.");
+  }
   console.log("");
+  const readinessBlockers = [];
 
   // Check balances
   console.log("--- Balances ---");
@@ -66,11 +92,13 @@ async function main() {
   if (usdcFormatted < 1) {
     console.log("WARNING: No USDC.e balance. Fund the wallet before trading.");
     console.log("Send USDC to " + address + " on Polygon network.");
+    process.exitCode = 1;
     return;
   }
 
   if (Number(ethers.utils.formatEther(polBalance)) < 0.01) {
     console.log("WARNING: Very low POL balance. Need gas for approvals and trades.");
+    process.exitCode = 1;
     return;
   }
 
@@ -83,14 +111,24 @@ async function main() {
     if (allowanceFormatted >= usdcFormatted) {
       console.log(contract.name + ": OK (allowance: $" + allowanceFormatted.toFixed(2) + ")");
     } else {
-      console.log(contract.name + ": Approving unlimited USDC...");
+      const approvalAmount = options.allowanceUsd == null
+        ? usdcBalance
+        : ethers.utils.parseUnits(String(options.allowanceUsd), usdcDecimals);
+      const approvalFormatted = Number(approvalAmount) / (10 ** usdcDecimals);
+      if (!options.executeApprovals) {
+        console.log(contract.name + ": DRY-RUN would approve $" + approvalFormatted.toFixed(2) + " USDC.e");
+        readinessBlockers.push(contract.name + " USDC approval not confirmed");
+        continue;
+      }
+      console.log(contract.name + ": Approving $" + approvalFormatted.toFixed(2) + " USDC.e...");
       try {
-        const tx = await usdc.approve(contract.address, MAX_UINT256);
+        const tx = await usdc.approve(contract.address, approvalAmount);
         console.log("  TX sent: " + tx.hash);
         await tx.wait();
         console.log("  Confirmed.");
       } catch (err) {
         console.log("  FAILED: " + err.message.slice(0, 100));
+        readinessBlockers.push(contract.name + " USDC approval failed");
       }
     }
   }
@@ -103,6 +141,11 @@ async function main() {
     if (approved) {
       console.log(contract.name + ": OK");
     } else {
+      if (!options.executeApprovals) {
+        console.log(contract.name + ": DRY-RUN would set approval-for-all");
+        readinessBlockers.push(contract.name + " conditional-token approval not confirmed");
+        continue;
+      }
       console.log(contract.name + ": Approving...");
       try {
         const tx = await ct.setApprovalForAll(contract.address, true);
@@ -111,8 +154,18 @@ async function main() {
         console.log("  Confirmed.");
       } catch (err) {
         console.log("  FAILED: " + err.message.slice(0, 100));
+        readinessBlockers.push(contract.name + " conditional-token approval failed");
       }
     }
+  }
+
+  if (readinessBlockers.length) {
+    console.log("\n--- Not Ready ---");
+    for (const blocker of readinessBlockers) {
+      console.log("- " + blocker);
+    }
+    process.exitCode = 1;
+    return;
   }
 
   console.log("\n--- Ready to Trade ---");
@@ -121,4 +174,7 @@ async function main() {
   console.log("\nRun: node scripts/polymarket-run.js --mode=live --loop");
 }
 
-main().catch((err) => console.error("Setup failed:", err.message));
+main().catch((err) => {
+  console.error("Setup failed:", err.message);
+  process.exitCode = 1;
+});

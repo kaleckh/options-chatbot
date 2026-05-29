@@ -18,6 +18,8 @@ The current user-facing browser flow is the supervised options lane:
 - review tracked positions
 - manage suggested trades
 
+The active non-browser proof lane is the AI commodity / commodity-infrastructure lane. It is orchestrated by `scripts/run_ai_commodity_opra_progress.py`, uses `data/ai-commodity-infra/universe.json`, and currently treats Alpaca SIP/OPRA bid/ask snapshots labeled `alpaca_opra_daily_snapshot` as the proof source.
+
 The main scan lane defaults to `bullish_pullback_observation` (Bullish Pullback Primary). Despite the legacy ID suffix, this lane is not observation-only; it scans the broad liquid options universe while SPY/QQQ remain the currently historical-ready subset. `quality90_debit55_canary` is the proof/control yardstick and `tracked_winner_primary` is secondary shape guidance.
 
 The current snapshot does not include the old app-facing day-trading route files or `DayTradingLab` component. The `src/app/api/day-trading/*` directories still exist as empty scaffolding folders in this worktree, but they do not currently expose route handlers. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
@@ -85,6 +87,7 @@ This layer is intentionally thin. If behavior seems surprising, the real logic u
 
 The backend also exposes support endpoints that are not mirrored through `src/app/api/*` yet, including:
 - `/api/profiles`
+- `DELETE /api/predictions/{pred_id}`
 - `/api/proof-summary`
 - `/api/positions/{position_id}/close-prefill`
 - `/api/backtest/experiments`
@@ -171,6 +174,10 @@ Replay summary flow:
   - options profitability status, live profile, decisions, and candidate artifacts
 - `data/forward-tracking/*`
   - forward scan evidence
+- `data/ai-commodity-infra/*`
+  - AI commodity universe, OPRA capture progress, provider probes, and acquisition plans
+- `data/alpaca-options-strategy-lab/*`
+  - research-only exact bid/ask strategy lab artifacts
 - `market_data.db`
   - market data cache
 
@@ -180,6 +187,8 @@ Replay summary flow:
   - legacy or CLI-oriented research code in this snapshot, not an active Next surface
 - `src/lib/polymarket/*`
   - experimental or adjacent tooling, not currently wired into the main app shell
+- `scripts/run_ai_commodity_opra_progress.py`
+  - active proof-lane orchestrator, but not part of the mounted browser product
 
 ## Recommended Reading Order For A Senior Engineer
 

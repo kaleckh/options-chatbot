@@ -4,7 +4,7 @@ import { runBacktest } from "@/lib/python-bridge";
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await readJsonObject(req);
+    const body = await readJsonObject(req, { defaultValue: {} });
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }

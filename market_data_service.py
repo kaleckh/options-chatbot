@@ -18,6 +18,7 @@ import pandas as pd
 import yfinance as yf
 
 from alpaca_market_data import alpaca_provider_requested, make_alpaca_ticker_factory
+from us_equity_market_calendar import is_us_equity_market_day
 
 
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -573,9 +574,27 @@ def _business_dates(start_date: date, end_date: date) -> set[str]:
     if start_date > end_date:
         return set()
     return {
-        ts.date().isoformat()
-        for ts in pd.bdate_range(start=start_date, end=end_date)
+        current.isoformat()
+        for current in (start_date + timedelta(days=offset) for offset in range((end_date - start_date).days + 1))
+        if is_us_equity_market_day(current)
     }
+
+
+def _history_has_all_business_dates(frame: pd.DataFrame, start_date: date, end_date: date) -> bool:
+    if frame.empty:
+        return False
+    expected = _business_dates(start_date, end_date)
+    if not expected:
+        return True
+    actual = {pd.Timestamp(index).date().isoformat() for index in frame.index}
+    return expected.issubset(actual)
+
+
+def _expected_history_bounds(start_date: date, end_date: date) -> tuple[date, date] | None:
+    expected = sorted(_business_dates(start_date, end_date))
+    if not expected:
+        return None
+    return date.fromisoformat(expected[0]), date.fromisoformat(expected[-1])
 
 
 def _load_daily_history_rows(
@@ -1234,7 +1253,15 @@ def get_history(
         else:
             first_cached = cached.index.min().date()
             last_cached = cached.index.max().date()
-            needs_full_refresh = first_cached > start_date or last_cached < end_date
+            expected_bounds = _expected_history_bounds(start_date, end_date)
+            has_all_business_dates = _history_has_all_business_dates(cached, start_date, end_date)
+            needs_full_refresh = (
+                not has_all_business_dates
+                or (
+                    expected_bounds is not None
+                    and (first_cached > expected_bounds[0] or last_cached < expected_bounds[1])
+                )
+            )
             if needs_full_refresh:
                 _record_stat(namespace, "persistent_partial_hits")
             else:
@@ -1288,6 +1315,7 @@ def get_history(
                     _store_daily_history(symbol, fetched, adjustment_mode=adjustment_mode)
             except Exception:
                 if not cached.empty:
+                    _record_stat(namespace, "full_refresh_failures")
                     _record_stat(namespace, "recent_refresh_failures")
                     _record_stat(namespace, "stale_cache_returns")
                     _request_memo_set(key, cached)
@@ -1404,13 +1432,25 @@ def download_history_batch(
                     continue
                 first_cached = cached.index.min().date()
                 last_cached = cached.index.max().date()
-                if first_cached > start_date or last_cached < end_date:
+                expected_bounds = _expected_history_bounds(start_date, end_date)
+                has_all_business_dates = _history_has_all_business_dates(cached, start_date, end_date)
+                if (
+                    not has_all_business_dates
+                    or (
+                        expected_bounds is not None
+                        and (first_cached > expected_bounds[0] or last_cached < expected_bounds[1])
+                    )
+                ):
                     daily_cache_events[symbol] = "persistent_partial_hits"
+                    missing_symbols.append(symbol)
+                    continue
+                frames[symbol] = cached
+                if end_date >= _recent_refresh_start():
+                    daily_cache_events[symbol] = "recent_refreshes"
                     missing_symbols.append(symbol)
                     continue
                 daily_cache_events[symbol] = "persistent_hits"
                 _record_stat("history", "persistent_hits")
-                frames[symbol] = cached
     except Exception:
         _record_stat(namespace, "cache_failures")
         _record_stat("history", "cache_failures")
@@ -1419,7 +1459,7 @@ def download_history_batch(
 
     if missing_symbols:
         fetched_symbols: set[str] = set()
-        if ticker_factory is None:
+        if ticker_factory is None and not alpaca_provider_requested():
             batch_fetch = download_fn or yf.download
             try:
                 _record_stat(namespace, "batch_network_fetches")

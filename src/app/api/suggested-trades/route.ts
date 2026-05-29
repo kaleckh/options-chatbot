@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
     const status = (req.nextUrl.searchParams.get("status") || "open") as "open" | "closed" | "all";
     const grouped = isTruthyQueryParam(req.nextUrl.searchParams.get("grouped"));
     if (grouped) {
-      return NextResponse.json(await getGroupedSuggestedTrades());
+      return NextResponse.json(await getGroupedSuggestedTrades(status));
     }
     const result = await getSuggestedTrades(status);
     return NextResponse.json(result);

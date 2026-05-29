@@ -100,12 +100,13 @@ def _summarize_replay(
     }
 
 
-def _set_index_spread_exit(*, stop_loss_pct: float, time_exit_pct: float) -> None:
+def _set_spread_exit(*, stop_loss_pct: float, time_exit_pct: float) -> None:
     for module_profiles in (oc.STRATEGY_PROFILES, wfo.STRATEGY_PROFILES):
-        index_profile = module_profiles.setdefault("index", {})
-        spread = index_profile.setdefault("spread", {})
-        spread["stop_loss_pct"] = float(stop_loss_pct)
-        spread["time_exit_pct"] = float(time_exit_pct)
+        for profile_name in ("index", "equity"):
+            profile = module_profiles.setdefault(profile_name, {})
+            spread = profile.setdefault("spread", {})
+            spread["stop_loss_pct"] = float(stop_loss_pct)
+            spread["time_exit_pct"] = float(time_exit_pct)
 
 
 def run_exit_sweep(
@@ -119,6 +120,9 @@ def run_exit_sweep(
     min_trades: int = 20,
     min_profit_factor: float = 1.05,
     min_directional_accuracy_pct: float = 50.0,
+    min_imported_calendar_dates: int = 100,
+    historical_source_labels: str | None = None,
+    allow_research_imported_data: bool = False,
 ) -> dict[str, Any]:
     original_profiles = copy.deepcopy(oc.STRATEGY_PROFILES)
     started_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -127,7 +131,7 @@ def run_exit_sweep(
         for config in configs:
             stop_loss_pct = float(config["spread_stop_loss_pct"])
             time_exit_pct = float(config["spread_time_exit_pct"])
-            _set_index_spread_exit(
+            _set_spread_exit(
                 stop_loss_pct=stop_loss_pct,
                 time_exit_pct=time_exit_pct,
             )
@@ -138,6 +142,9 @@ def run_exit_sweep(
                 truth_lane=truth_lane,
                 playbook=variant,
                 allowed_directions=["call"],
+                min_imported_calendar_dates=int(min_imported_calendar_dates),
+                historical_source_labels=historical_source_labels,
+                allow_research_imported_data=bool(allow_research_imported_data),
             )
             results.append(
                 {
@@ -145,6 +152,10 @@ def run_exit_sweep(
                     "lookback_years": int(lookback_years),
                     "pricing_lane": pricing_lane,
                     "n_picks": int(n_picks),
+                    "truth_lane": truth_lane,
+                    "historical_source_labels": historical_source_labels,
+                    "min_imported_calendar_dates": int(min_imported_calendar_dates),
+                    "allow_research_imported_data": bool(allow_research_imported_data),
                     "spread_stop_loss_pct": stop_loss_pct,
                     "spread_time_exit_pct": time_exit_pct,
                     "summary": _summarize_replay(
@@ -200,6 +211,9 @@ def main() -> int:
     parser.add_argument("--pricing-lane", default="pessimistic")
     parser.add_argument("--n-picks", type=int, default=3)
     parser.add_argument("--truth-lane", default="historical_imported_daily")
+    parser.add_argument("--min-imported-calendar-dates", type=int, default=100)
+    parser.add_argument("--historical-source-labels")
+    parser.add_argument("--allow-research-imported-data", action="store_true")
     parser.add_argument("--output-root", default=str(DEFAULT_OUTPUT_ROOT))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -211,6 +225,9 @@ def main() -> int:
         pricing_lane=args.pricing_lane,
         n_picks=args.n_picks,
         truth_lane=args.truth_lane,
+        min_imported_calendar_dates=args.min_imported_calendar_dates,
+        historical_source_labels=args.historical_source_labels,
+        allow_research_imported_data=bool(args.allow_research_imported_data),
     )
     artifacts = write_report(report, output_root=Path(args.output_root))
     if args.json:

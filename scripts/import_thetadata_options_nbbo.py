@@ -23,6 +23,7 @@ from historical_options_store import (  # noqa: E402
     INTRADAY_SNAPSHOT_KIND,
     import_historical_option_snapshots,
 )
+from us_equity_market_calendar import is_us_equity_market_day  # noqa: E402
 
 
 DEFAULT_THETA_URL = "http://127.0.0.1:25503"
@@ -69,7 +70,7 @@ def _business_dates(start: date, end: date) -> list[date]:
     dates: list[date] = []
     current = start
     while current <= end:
-        if current.weekday() < 5:
+        if is_us_equity_market_day(current):
             dates.append(current)
         current += timedelta(days=1)
     return dates
@@ -142,7 +143,19 @@ def _extract_rows(payload: Any) -> list[dict[str, Any]]:
     if isinstance(payload, dict):
         response = payload.get("response")
         if isinstance(response, list):
-            return [item for item in response if isinstance(item, dict)]
+            rows: list[dict[str, Any]] = []
+            for item in response:
+                if not isinstance(item, dict):
+                    continue
+                contract = item.get("contract")
+                data_rows = item.get("data")
+                if isinstance(contract, dict) and isinstance(data_rows, list):
+                    for data_row in data_rows:
+                        if isinstance(data_row, dict):
+                            rows.append({**contract, **data_row})
+                    continue
+                rows.append(item)
+            return rows
         data = payload.get("data")
         if isinstance(data, list):
             return [item for item in data if isinstance(item, dict)]

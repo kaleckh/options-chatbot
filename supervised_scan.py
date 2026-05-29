@@ -47,6 +47,7 @@ SCAN_FUNNEL_DROP_KEYS = (
 )
 
 SPECULATIVE_ALLOWED_TICKERS = ("SPY", "QQQ")
+EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL = "executable_opra_paper_candidate"
 SPECULATIVE_COHORT_ID = "speculative_short_dte"
 SPECULATIVE_COHORT_ROLE = "candidate"
 TRACKED_WINNER_PRIMARY_COHORT_ID = "tracked_winner_primary"
@@ -74,7 +75,7 @@ _DEFAULT_BULLISH_PULLBACK_SCAN_TICKERS = (
     "SPY", "QQQ", "IWM", "DIA", "XLK",
     "AAPL", "NVDA", "MSFT", "AMZN", "GOOGL", "META",
     "AMD", "NFLX", "JPM", "TSLA",
-    "DIS", "T", "CMCSA",
+    "DIS", "T",
     "GS", "BAC", "V", "C",
     "UNH", "LLY", "JNJ", "ABBV", "PFE",
     "XOM", "CVX", "OXY", "COP", "SLB",
@@ -442,6 +443,8 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "forced_size_tier": "starter",
         "forced_cohort_id": AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID,
         "forced_cohort_role": AI_COMMODITY_INFRA_OBSERVATION_COHORT_ROLE,
+        "required_candidate_execution_label": EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL,
+        "conditional_required_candidate_execution_label": EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL,
         "theme_tags": ["ai_power", "grid", "copper", "silver", "lithium", "uranium"],
     },
     "quality90_debit55_canary": {
@@ -584,9 +587,10 @@ def _enrich_ai_commodity_playbook_with_readiness(playbook: dict[str, Any]) -> di
 
 def get_scan_playbook(playbook_id: Optional[str] = None) -> dict[str, Any]:
     key = str(playbook_id or DEFAULT_SCAN_PLAYBOOK_ID).strip().lower()
-    return _enrich_ai_commodity_playbook_with_readiness(
-        dict(SCAN_PLAYBOOKS.get(key) or SCAN_PLAYBOOKS[DEFAULT_SCAN_PLAYBOOK_ID])
-    )
+    if key not in SCAN_PLAYBOOKS:
+        available = ", ".join(sorted(SCAN_PLAYBOOKS))
+        raise ValueError(f"Unknown scan playbook '{playbook_id}'. Available playbooks: {available}")
+    return _enrich_ai_commodity_playbook_with_readiness(dict(SCAN_PLAYBOOKS[key]))
 
 
 def get_scan_playbooks() -> list[dict[str, Any]]:
@@ -624,7 +628,7 @@ def _scan_allowed_directions_for_playbook(playbook: dict[str, Any]) -> list[str]
 def _scan_symbols_for_playbook(playbook: dict[str, Any]) -> list[str]:
     raw_values = playbook.get("scan_tickers")
     if raw_values is None:
-        raw_values = []
+        raw_values = playbook.get("allowed_tickers") or []
     if isinstance(raw_values, str):
         values = [item.strip().upper() for item in raw_values.split(",") if item.strip()]
     else:
@@ -981,6 +985,55 @@ def _record_source(record: dict[str, Any]) -> dict[str, Any]:
     return dict(source) if isinstance(source, dict) else {}
 
 
+def _nested_mapping(record: dict[str, Any], key: str) -> dict[str, Any]:
+    value = record.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _pick_execution_basis(record: dict[str, Any]) -> str:
+    entry_quote_snapshot = _nested_mapping(record, "entry_quote_snapshot")
+    return str(
+        record.get("entry_execution_basis")
+        or entry_quote_snapshot.get("entry_execution_basis")
+        or record.get("intended_limit_basis")
+        or record.get("attempted_limit_basis")
+        or ""
+    ).strip().lower()
+
+
+def _pick_candidate_execution_label(record: dict[str, Any]) -> str:
+    return str(
+        record.get("candidate_execution_label")
+        or record.get("execution_candidate_label")
+        or ""
+    ).strip().lower()
+
+
+def _execution_basis_is_ask_bid_style(value: Any) -> bool:
+    return str(value or "").strip().lower() in {"ask", "spread_ask_bid"}
+
+
+def _candidate_label_is_opra_executable(value: Any) -> bool:
+    return str(value or "").strip().lower() == EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL
+
+
+def _debit_provenance_flags(
+    *,
+    debit_source: str,
+    context: dict[str, Any],
+    fallback_context: dict[str, Any],
+    intrinsically_ask_bid_style: bool = False,
+) -> tuple[bool, bool, str | None, str | None]:
+    basis = _pick_execution_basis(context) or _pick_execution_basis(fallback_context)
+    label = _pick_candidate_execution_label(context) or _pick_candidate_execution_label(fallback_context)
+    is_ask_bid_style = bool(intrinsically_ask_bid_style or _execution_basis_is_ask_bid_style(basis))
+    is_opra_executable = _candidate_label_is_opra_executable(label)
+    if debit_source.endswith("entry_execution_price") and not basis and not label:
+        is_ask_bid_style = False
+        is_opra_executable = False
+    return is_ask_bid_style, is_opra_executable, basis or None, label or None
+
+
 def vertical_spread_signature(record: dict[str, Any]) -> tuple[Any, ...] | None:
     source = _record_source(record)
     strategy_type = str(
@@ -1038,25 +1091,50 @@ def _position_cost_risk_usd(record: dict[str, Any]) -> float | None:
     return round(price * contracts * 100.0, 2)
 
 
+def _debit_for_width(record: dict[str, Any]) -> tuple[float | None, str | None, bool, bool, str | None, str | None]:
+    source = _record_source(record)
+    record_liquidity = record.get("spread_liquidity") if isinstance(record.get("spread_liquidity"), dict) else {}
+    source_liquidity = source.get("spread_liquidity") if isinstance(source.get("spread_liquidity"), dict) else {}
+    candidates = [
+        ("entry_execution_price", record.get("entry_execution_price"), record, False),
+        ("spread_entry_debit", record.get("spread_entry_debit"), record, True),
+        ("spread_liquidity.spread_entry_debit", record_liquidity.get("spread_entry_debit"), record, True),
+        ("source_pick_snapshot.entry_execution_price", source.get("entry_execution_price"), source, False),
+        ("source_pick_snapshot.spread_entry_debit", source.get("spread_entry_debit"), source, True),
+        ("source_pick_snapshot.spread_liquidity.spread_entry_debit", source_liquidity.get("spread_entry_debit"), source, True),
+        ("net_debit", record.get("net_debit"), record, False),
+        ("spread_mid_debit", record.get("spread_mid_debit"), record, False),
+        ("spread_liquidity.spread_mid_debit", record_liquidity.get("spread_mid_debit"), record, False),
+        ("source_pick_snapshot.net_debit", source.get("net_debit"), source, False),
+        ("source_pick_snapshot.spread_mid_debit", source.get("spread_mid_debit"), source, False),
+        ("source_pick_snapshot.spread_liquidity.spread_mid_debit", source_liquidity.get("spread_mid_debit"), source, False),
+    ]
+    for source_name, value, context, intrinsically_ask_bid_style in candidates:
+        debit = _safe_float(value)
+        if debit is not None:
+            if source_name.endswith("net_debit") or "spread_mid_debit" in source_name:
+                return debit, source_name, False, False, None, None
+            is_ask_bid_style, is_opra_executable, basis, label = _debit_provenance_flags(
+                debit_source=source_name,
+                context=context,
+                fallback_context=record,
+                intrinsically_ask_bid_style=intrinsically_ask_bid_style,
+            )
+            return debit, source_name, is_ask_bid_style, is_opra_executable, basis, label
+    return None, None, False, False, None, None
+
+
 def _debit_pct_of_width(record: dict[str, Any]) -> float | None:
     source = _record_source(record)
-    net_debit = _safe_float(
-        record.get("net_debit")
-        if record.get("net_debit") is not None
-        else record.get("entry_execution_price")
-        if record.get("entry_execution_price") is not None
-        else source.get("net_debit")
-        if source.get("net_debit") is not None
-        else source.get("entry_execution_price")
-    )
+    debit, _, _, _, _, _ = _debit_for_width(record)
     spread_width = _safe_float(
         record.get("spread_width")
         if record.get("spread_width") is not None
         else source.get("spread_width")
     )
-    if net_debit is None or spread_width is None or spread_width <= 0:
+    if debit is None or spread_width is None or spread_width <= 0:
         return None
-    return round(net_debit / spread_width * 100.0, 2)
+    return round(debit / spread_width * 100.0, 2)
 
 
 def _tracked_winner_fit(record: dict[str, Any], playbook: dict[str, Any]) -> tuple[float, list[str]]:
@@ -1329,12 +1407,25 @@ def annotate_pick_with_guardrails(
     market_regime = str(annotated.get("market_regime") or scan_pick_market_regime(annotated)).strip().lower()
     asset_class = str(annotated.get("asset_class") or "").strip().lower()
     direction = str(annotated.get("direction") or annotated.get("type") or "").strip().lower()
+    candidate_execution_label = _pick_candidate_execution_label(annotated)
     quality_score = float(annotated.get("quality_score", 0.0) or 0.0)
     opened_today = int(exposure.get("opened_today", 0) or 0)
     ticker_counts = dict(exposure.get("ticker_counts") or {})
     sector_counts = dict(exposure.get("sector_counts") or {})
     regime_counts = dict(exposure.get("regime_counts") or {})
     vertical_spread_signature_counts = dict(exposure.get("vertical_spread_signature_counts") or {})
+    playbook_id = str(playbook.get("id") or "").strip()
+    is_ai_commodity_playbook = playbook_id == AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID
+    core_tickers = _normalized_label_set(playbook.get("core_tickers") or [])
+    conditional_tickers = _normalized_label_set(playbook.get("conditional_tickers") or [])
+    ai_commodity_bucket = ""
+    if is_ai_commodity_playbook:
+        if ticker.lower() in core_tickers:
+            ai_commodity_bucket = "core_options"
+        elif ticker.lower() in conditional_tickers:
+            ai_commodity_bucket = "conditional_options"
+        if ai_commodity_bucket:
+            annotated["ai_commodity_bucket"] = ai_commodity_bucket
 
     blocked: list[str] = []
     cautions: list[str] = []
@@ -1356,21 +1447,20 @@ def annotate_pick_with_guardrails(
         blocked.append(f"{playbook['label']} only runs on tickers: {', '.join(sorted(playbook.get('allowed_tickers') or []))}.")
 
     historical_data_ready_tickers = _normalized_label_set(playbook.get("historical_data_ready_tickers") or [])
-    if historical_data_ready_tickers:
+    has_historical_readiness_context = bool(historical_data_ready_tickers) or is_ai_commodity_playbook
+    if has_historical_readiness_context:
         annotated["historical_data_ready"] = ticker.lower() in historical_data_ready_tickers
         annotated["historical_data_source"] = playbook.get("historical_data_source")
         annotated["historical_data_readiness_status"] = playbook.get("historical_data_readiness_status")
-        core_tickers = _normalized_label_set(playbook.get("core_tickers") or [])
-        conditional_tickers = _normalized_label_set(playbook.get("conditional_tickers") or [])
-        if ticker.lower() in core_tickers:
-            annotated["ai_commodity_bucket"] = "core_options"
-        elif ticker.lower() in conditional_tickers:
-            annotated["ai_commodity_bucket"] = "conditional_options"
         if ticker and not annotated["historical_data_ready"]:
-            cautions.append(
+            missing_history_reason = (
                 f"{playbook['label']} has no trusted daily EOD option history loaded for {ticker} yet; "
                 "treat this as discovery-only until Theta history is imported."
             )
+            if is_ai_commodity_playbook and ai_commodity_bucket == "conditional_options":
+                blocked.append(missing_history_reason)
+            elif historical_data_ready_tickers:
+                cautions.append(missing_history_reason)
 
     allowed_market_regimes = _normalized_label_set(playbook.get("allowed_market_regimes") or [])
     if allowed_market_regimes and market_regime not in allowed_market_regimes:
@@ -1394,17 +1484,31 @@ def annotate_pick_with_guardrails(
 
     required_execution_label = str(playbook.get("required_candidate_execution_label") or "").strip().lower()
     if required_execution_label:
-        candidate_execution_label = str(
-            annotated.get("candidate_execution_label")
-            or annotated.get("execution_candidate_label")
-            or ""
-        ).strip().lower()
         annotated["required_candidate_execution_label"] = required_execution_label
         if candidate_execution_label != required_execution_label:
             blocked.append(
                 f"{playbook['label']} requires {required_execution_label}; "
                 f"candidate is {candidate_execution_label or 'unlabeled'}."
             )
+    conditional_required_execution_label = str(
+        playbook.get("conditional_required_candidate_execution_label") or ""
+    ).strip().lower()
+    if is_ai_commodity_playbook and ai_commodity_bucket == "conditional_options":
+        annotated["conditional_required_candidate_execution_label"] = conditional_required_execution_label
+        if conditional_required_execution_label and candidate_execution_label != conditional_required_execution_label:
+            blocked.append(
+                f"{playbook['label']} conditional tickers require {conditional_required_execution_label}; "
+                f"candidate is {candidate_execution_label or 'unlabeled'}."
+            )
+    if is_ai_commodity_playbook:
+        annotated["ai_commodity_diagnostics"] = {
+            "bucket": ai_commodity_bucket or "unbucketed",
+            "historical_data_ready": annotated.get("historical_data_ready"),
+            "historical_data_readiness_status": playbook.get("historical_data_readiness_status"),
+            "candidate_execution_label": candidate_execution_label or None,
+            "required_candidate_execution_label": required_execution_label or None,
+            "conditional_required_candidate_execution_label": conditional_required_execution_label or None,
+        }
 
     min_quality_score = playbook.get("min_quality_score")
     if min_quality_score is not None and quality_score < float(min_quality_score):
@@ -1412,8 +1516,24 @@ def annotate_pick_with_guardrails(
 
     max_debit_pct = playbook.get("max_debit_pct_of_width")
     if max_debit_pct is not None:
+        (
+            debit,
+            debit_source,
+            debit_source_is_ask_bid_style,
+            debit_source_is_opra_executable,
+            debit_source_execution_basis,
+            debit_source_candidate_execution_label,
+        ) = _debit_for_width(annotated)
         debit_pct = _debit_pct_of_width(annotated)
         annotated["debit_pct_of_width"] = debit_pct
+        annotated["debit_pct_of_width_source"] = debit_source
+        annotated["debit_pct_of_width_source_is_ask_bid_style"] = debit_source_is_ask_bid_style
+        annotated["debit_pct_of_width_source_is_opra_executable"] = debit_source_is_opra_executable
+        annotated["debit_pct_of_width_source_is_executable"] = debit_source_is_opra_executable
+        annotated["debit_pct_of_width_source_execution_basis"] = debit_source_execution_basis
+        annotated["debit_pct_of_width_source_candidate_execution_label"] = debit_source_candidate_execution_label
+        if debit is not None:
+            annotated["debit_pct_of_width_debit"] = debit
         if debit_pct is None:
             blocked.append(f"{playbook['label']} requires spread debit/width data before it can be tracked.")
         elif debit_pct >= float(max_debit_pct):

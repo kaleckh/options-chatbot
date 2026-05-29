@@ -10,12 +10,19 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 DEFAULT_LEDGER_DB = ROOT / "data" / "options-validation" / "forward_tracking_authoritative.db"
 LOG_SCAN_SCRIPT = ROOT / "scripts" / "log_scan_picks.py"
 try:
     from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID
 except Exception:
     DEFAULT_SCAN_PLAYBOOK_ID = "bullish_pullback_observation"
+try:
+    from us_equity_market_calendar import is_us_equity_market_day
+except Exception:
+    def is_us_equity_market_day(value: date) -> bool:
+        return value.weekday() < 5
 
 
 def _parse_date(value: str | None) -> date:
@@ -87,8 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     scan_date = _parse_date(args.scan_date)
-    if scan_date.weekday() >= 5:
-        print(f"{datetime.now().isoformat(timespec='seconds')} skip weekend scan_date={scan_date.isoformat()}")
+    if not is_us_equity_market_day(scan_date):
+        print(f"{datetime.now().isoformat(timespec='seconds')} skip market-closed scan_date={scan_date.isoformat()}")
         return 0
 
     db_path = _ledger_db_path()

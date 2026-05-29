@@ -1,5 +1,6 @@
-const PYTHON_BACKEND_URL =
-  process.env.PYTHON_BACKEND_URL || "http://localhost:8100";
+const PYTHON_BACKEND_URL = (
+  process.env.PYTHON_BACKEND_URL || "http://localhost:8100"
+).trim().replace(/\/+$/, "");
 function parseBackendTimeoutMs(value: string | undefined): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 30000;
@@ -74,7 +75,7 @@ export async function fetchBackendJson<T = Record<string, unknown>>(
   if (!res.ok) {
     const payload = data as Record<string, unknown>;
     throw new BackendHttpError(
-      String(payload.error || payload.detail || payload.message || `${errorPrefix}: ${res.status}`),
+      backendErrorMessage(payload, `${errorPrefix}: ${res.status}`),
       res.status,
       payload
     );
@@ -96,10 +97,39 @@ export function toSearchSuffix(params: Record<string, unknown> = {}): string {
   return search.toString() ? `?${search.toString()}` : "";
 }
 
-function normalizeToolResult(result: unknown): string {
-  if (result == null) return "";
-  if (typeof result === "string") return result;
-  return JSON.stringify(result) ?? "";
+function backendErrorMessage(
+  payload: Record<string, unknown>,
+  fallback: string
+): string {
+  const raw = payload.error || payload.detail || payload.message;
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw)) {
+    const messages = raw
+      .map((item) => {
+        if (!item || typeof item !== "object") return String(item);
+        const record = item as Record<string, unknown>;
+        const location = Array.isArray(record.loc)
+          ? record.loc.join(".")
+          : String(record.loc || "").trim();
+        const message = String(record.msg || record.message || "").trim();
+        return [location, message].filter(Boolean).join(": ");
+      })
+      .filter(Boolean);
+    if (messages.length) return messages.join("; ");
+  }
+  if (raw && typeof raw === "object") {
+    const record = raw as Record<string, unknown>;
+    const message = record.message || record.msg || record.error;
+    if (typeof message === "string" && message.trim()) {
+      return message;
+    }
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
 }
 
 export async function postBackendJson<T = Record<string, unknown>>(
@@ -137,7 +167,7 @@ export async function putBackendJson(
 export async function callTool(
   toolName: string,
   args: Record<string, unknown>
-): Promise<string> {
+): Promise<unknown> {
   const data = await fetchBackendJson<{ result?: unknown }>(
     `/api/tools/${encodeURIComponent(toolName)}`,
     {
@@ -147,5 +177,5 @@ export async function callTool(
     },
     "Tool call failed"
   );
-  return normalizeToolResult(data.result);
+  return data.result;
 }

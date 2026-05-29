@@ -32,6 +32,13 @@ class UsEquityMarketCalendarTests(unittest.TestCase):
         self.assertIn(date(2027, 12, 24), holidays_2027)
         self.assertFalse(is_us_equity_market_day(date(2027, 12, 24)))
 
+    def test_ad_hoc_full_market_closures_are_not_trading_days(self):
+        holidays_2025 = us_equity_market_holidays(2025)
+
+        self.assertIn(date(2025, 1, 9), holidays_2025)
+        self.assertFalse(is_us_equity_market_day(date(2025, 1, 9)))
+        self.assertEqual(previous_market_day(date(2025, 1, 10)), date(2025, 1, 8))
+
     def test_market_day_navigation_skips_weekends_and_holidays(self):
         self.assertEqual(previous_market_day(date(2026, 5, 26)), date(2026, 5, 22))
         self.assertEqual(next_market_day(date(2026, 5, 23)), date(2026, 5, 26))

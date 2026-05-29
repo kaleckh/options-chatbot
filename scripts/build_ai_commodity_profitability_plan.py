@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -28,6 +29,69 @@ DEFAULT_SUPPORTING_HISTORY_PATH = ROOT / "data" / "ai-commodity-infra" / "alpaca
 DEFAULT_ONCLICKMEDIA_EOD_PATH = ROOT / "data" / "ai-commodity-infra" / "onclickmedia-eod" / "latest.json"
 DEFAULT_LIQUIDITY_NEAR_MISS_LOG_PATH = ROOT / "data" / "forward-tracking" / "liquidity_near_misses.jsonl"
 DEFAULT_PLAYBOOK = "ai_commodity_infra_observation"
+
+_NEAR_MISS_COST_FIELD_KEYS = (
+    "ask",
+    "bid",
+    "ask_bid",
+    "bid_ask",
+    "ask_price",
+    "bid_price",
+    "entry_ask",
+    "entry_bid",
+    "intended_limit_debit",
+    "limit_debit",
+    "executable_cost",
+    "executable_debit",
+    "executable_credit",
+    "estimated_executable_cost",
+    "estimated_executable_debit",
+    "spread_alternatives",
+    "top_alternatives",
+    "top_spread_alternatives",
+    "best_spread_alternative",
+    "leg_quotes",
+    "legs",
+    "quote",
+    "intended_ask_bid_debit",
+    "quote_age_hours",
+    "max_quote_age_hours",
+    "quote_age_excess_hours",
+    "no_fill_reason",
+    "liquidity_reason",
+    "reason",
+    "distance_to_current_filters",
+    "distance_components",
+    "worst_leg_spread_excess_pct",
+    "spread_slippage_excess_pct",
+    "min_leg_volume_shortfall",
+    "min_leg_open_interest_shortfall",
+)
+
+_NEAR_MISS_RESEARCH_POLICY = {
+    "allowed": True,
+    "label": "research_only",
+    "research_only": True,
+    "non_promotable": True,
+    "near_miss_diagnostics_promotable": False,
+    "scope": "research_only_after_exact_replay_unlock",
+    "promotion_policy": "near_miss_diagnostics_can_rank_research_variants_but_cannot_promote_or_relax_production_gates",
+    "forbidden_production_changes": [
+        "widen_spread_or_slippage_gates",
+        "increase_quote_age_limit",
+        "lower_open_interest_or_volume_floors",
+        "relax_signal_thresholds_for_live_trading",
+    ],
+}
+
+
+def _near_miss_missing_log_gap(log_path: Path | None = None) -> dict[str, Any]:
+    return {
+        "kind": "missing_liquidity_near_misses_jsonl",
+        "severity": "evidence_gap",
+        "log_path": str(log_path or DEFAULT_LIQUIDITY_NEAR_MISS_LOG_PATH),
+        "message": "liquidity_near_misses.jsonl is missing, so near-miss fillability evidence has not been captured yet.",
+    }
 
 
 def _utc_now_iso() -> str:
@@ -59,13 +123,55 @@ def _as_float(value: Any) -> float | None:
     try:
         if value is None:
             return None
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _symbols(values: Sequence[Any] | None) -> list[str]:
     return sorted({str(value or "").strip().upper() for value in values or [] if str(value or "").strip()})
+
+
+def _near_miss_cost_fields(source: dict[str, Any]) -> dict[str, Any]:
+    fields = {key: source.get(key) for key in _NEAR_MISS_COST_FIELD_KEYS if key in source}
+    alternatives = (
+        source.get("top_spread_alternatives")
+        if source.get("top_spread_alternatives") is not None
+        else source.get("top_alternatives")
+    )
+    if alternatives is None:
+        alternatives = source.get("spread_alternatives")
+    if alternatives is not None:
+        fields["top_spread_alternatives"] = alternatives
+        fields["top_alternatives"] = alternatives
+    return fields
+
+
+def _near_miss_research_policy() -> dict[str, Any]:
+    return dict(_NEAR_MISS_RESEARCH_POLICY)
+
+
+def _normalize_near_miss_record(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    normalized.update(_near_miss_cost_fields(row))
+    normalized["research_only"] = True
+    normalized["non_promotable"] = True
+    normalized["diagnostic_label"] = "research_only_near_miss"
+    normalized["promotion_policy"] = _NEAR_MISS_RESEARCH_POLICY["promotion_policy"]
+    return normalized
+
+
+def _normalize_liquidity_near_miss_log_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(summary)
+    nearest_records = normalized.get("nearest_records")
+    if isinstance(nearest_records, list):
+        normalized["nearest_records"] = [
+            _normalize_near_miss_record(record) if isinstance(record, dict) else record
+            for record in nearest_records
+        ]
+    normalized.setdefault("research_policy", _near_miss_research_policy())
+    return normalized
 
 
 def _drop_symbols_by_key(progress: dict[str, Any]) -> dict[str, list[str]]:
@@ -203,7 +309,9 @@ def build_liquidity_near_miss_log_summary(
             "log_path": str(log_path),
             "playbook": playbook,
             "record_count": 0,
-            "status": "implemented_waiting_for_next_scan_records",
+            "status": "evidence_gap_missing_liquidity_near_misses_jsonl",
+            "evidence_gap": _near_miss_missing_log_gap(log_path),
+            "research_policy": _near_miss_research_policy(),
         }
     rows: list[dict[str, Any]] = []
     for line in log_path.read_text(encoding="utf8").splitlines()[-max(int(tail_limit), 1) :]:
@@ -233,6 +341,14 @@ def build_liquidity_near_miss_log_summary(
             if reason_text:
                 reason_counts[reason_text] = reason_counts.get(reason_text, 0) + 1
     latest = filtered[-1] if filtered else None
+    nearest_records = sorted(
+        filtered,
+        key=lambda row: (
+            row.get("distance_to_current_filters") is None,
+            float(row.get("distance_to_current_filters") or 999999.0),
+            str(row.get("ticker") or ""),
+        ),
+    )[:8]
     return {
         "available": True,
         "log_path": str(log_path),
@@ -248,15 +364,9 @@ def build_liquidity_near_miss_log_summary(
             {"reason": reason, "count": count}
             for reason, count in sorted(reason_counts.items(), key=lambda item: (-item[1], item[0]))[:8]
         ],
-        "nearest_records": sorted(
-            filtered,
-            key=lambda row: (
-                row.get("distance_to_current_filters") is None,
-                float(row.get("distance_to_current_filters") or 999999.0),
-                str(row.get("ticker") or ""),
-            ),
-        )[:8],
+        "nearest_records": [_normalize_near_miss_record(row) for row in nearest_records],
         "status": "active" if filtered else "implemented_waiting_for_next_scan_records",
+        "research_policy": _near_miss_research_policy(),
     }
 
 
@@ -308,22 +418,26 @@ def _near_miss_queue(progress: dict[str, Any]) -> list[dict[str, Any]]:
         for example in examples[:3]:
             if not isinstance(example, dict):
                 continue
-            queue.append(
-                {
-                    "drop_key": drop_key,
-                    "drop_count": count,
-                    "symbol": example.get("symbol"),
-                    "liquidity_reasons": example.get("liquidity_reasons"),
-                    "worst_leg_spread_excess_pct": example.get("worst_leg_spread_excess_pct"),
-                    "spread_slippage_excess_pct": example.get("spread_slippage_excess_pct"),
-                    "quote_age_excess_hours": example.get("quote_age_excess_hours"),
-                    "min_leg_open_interest_shortfall": example.get("min_leg_open_interest_shortfall"),
-                    "tech_score_shortfall": example.get("tech_score_shortfall"),
-                    "momentum_signal_distance_pct": example.get("momentum_signal_distance_pct"),
-                    "production_filter_action": diagnostic.get("production_filter_action"),
-                    "next_diagnostic_action": diagnostic.get("next_diagnostic_action"),
-                }
-            )
+            item = {
+                "drop_key": drop_key,
+                "drop_count": count,
+                "symbol": example.get("symbol"),
+                "liquidity_reasons": example.get("liquidity_reasons"),
+                "worst_leg_spread_excess_pct": example.get("worst_leg_spread_excess_pct"),
+                "spread_slippage_excess_pct": example.get("spread_slippage_excess_pct"),
+                "quote_age_excess_hours": example.get("quote_age_excess_hours"),
+                "min_leg_open_interest_shortfall": example.get("min_leg_open_interest_shortfall"),
+                "tech_score_shortfall": example.get("tech_score_shortfall"),
+                "momentum_signal_distance_pct": example.get("momentum_signal_distance_pct"),
+                "production_filter_action": diagnostic.get("production_filter_action"),
+                "next_diagnostic_action": diagnostic.get("next_diagnostic_action"),
+                "research_only": True,
+                "non_promotable": True,
+                "diagnostic_label": "research_only_near_miss",
+                "promotion_policy": _NEAR_MISS_RESEARCH_POLICY["promotion_policy"],
+            }
+            item.update(_near_miss_cost_fields(example))
+            queue.append(item)
     return queue[:12]
 
 
@@ -377,6 +491,22 @@ def _dominant_drop_action(drop_key: str | None) -> list[str]:
     )
 
 
+def _opportunity_denominator_diagnostic_packet(lane_b_throughput: dict[str, Any]) -> dict[str, Any]:
+    latest_funnel = lane_b_throughput.get("latest_funnel") if isinstance(lane_b_throughput.get("latest_funnel"), dict) else {}
+    return {
+        "status": lane_b_throughput.get("status"),
+        "near_miss_log_status": lane_b_throughput.get("near_miss_log_status"),
+        "near_miss_log_record_count": _as_int(lane_b_throughput.get("near_miss_log_record_count")),
+        "near_miss_log_evidence_gap": lane_b_throughput.get("near_miss_log_evidence_gap"),
+        "dominant_drop_key": lane_b_throughput.get("dominant_drop_key"),
+        "drop_counts": latest_funnel.get("drop_counts") or {},
+        "drop_rank": lane_b_throughput.get("drop_rank") or [],
+        "near_miss_queue": lane_b_throughput.get("near_miss_queue") or [],
+        "nearest_near_miss_log_records": lane_b_throughput.get("nearest_near_miss_log_records") or [],
+        "research_policy": lane_b_throughput.get("research_policy") or _near_miss_research_policy(),
+    }
+
+
 def build_lane_b_throughput_diagnostics(
     progress: dict[str, Any],
     *,
@@ -391,7 +521,11 @@ def build_lane_b_throughput_diagnostics(
     returned_picks = _as_int(funnel.get("returned_picks") if funnel.get("returned_picks") is not None else scan.get("returned_count"))
     raw_candidates = _as_int(funnel.get("raw_candidates"))
     drop_reason_count = _as_int(scan.get("scan_drop_reason_count") or progress.get("scan_drop_reason_count"))
-    near_miss_log = liquidity_near_miss_log if isinstance(liquidity_near_miss_log, dict) else {}
+    near_miss_log = (
+        _normalize_liquidity_near_miss_log_summary(liquidity_near_miss_log)
+        if isinstance(liquidity_near_miss_log, dict)
+        else {}
+    )
 
     if returned_picks > 0 or candidate_count > 0:
         status = "has_live_candidate"
@@ -435,17 +569,10 @@ def build_lane_b_throughput_diagnostics(
         "near_miss_queue": _near_miss_queue(progress),
         "near_miss_log_status": near_miss_log.get("status") or "not_loaded",
         "near_miss_log_record_count": _as_int(near_miss_log.get("record_count")) if near_miss_log else 0,
+        "near_miss_log_evidence_gap": near_miss_log.get("evidence_gap"),
+        "nearest_near_miss_log_records": near_miss_log.get("nearest_records") or [],
         "next_diagnostic_actions": _dominant_drop_action(dominant_drop),
-        "research_policy": {
-            "allowed": True,
-            "scope": "research_only_after_exact_replay_unlock",
-            "forbidden_production_changes": [
-                "widen_spread_or_slippage_gates",
-                "increase_quote_age_limit",
-                "lower_open_interest_or_volume_floors",
-                "relax_signal_thresholds_for_live_trading",
-            ],
-        },
+        "research_policy": _near_miss_research_policy(),
     }
 
 
@@ -505,12 +632,22 @@ def build_profitability_plan(
     )
     supporting_history = supporting_history if isinstance(supporting_history, dict) else {}
     onclickmedia_eod = onclickmedia_eod if isinstance(onclickmedia_eod, dict) else {}
-    liquidity_near_miss_log = liquidity_near_miss_log if isinstance(liquidity_near_miss_log, dict) else {}
+    liquidity_near_miss_log = (
+        _normalize_liquidity_near_miss_log_summary(liquidity_near_miss_log)
+        if isinstance(liquidity_near_miss_log, dict)
+        else {
+            "status": "evidence_gap_missing_liquidity_near_misses_jsonl",
+            "record_count": 0,
+            "evidence_gap": _near_miss_missing_log_gap(),
+            "research_policy": _near_miss_research_policy(),
+        }
+    )
     near_miss_status = liquidity_near_miss_log.get("status") or "implemented_waiting_for_next_scan_records"
     lane_b_throughput = build_lane_b_throughput_diagnostics(
         progress,
         liquidity_near_miss_log=liquidity_near_miss_log,
     )
+    opportunity_denominator_diagnostics = _opportunity_denominator_diagnostic_packet(lane_b_throughput)
     event_macro_concentration_controls = build_event_macro_concentration_controls(
         _research_control_records(progress),
         lane_id=DEFAULT_PLAYBOOK,
@@ -556,8 +693,10 @@ def build_profitability_plan(
                 {"drop_key": key, "count": value}
                 for key, value in sorted(positive_drops.items(), key=lambda item: item[1], reverse=True)
             ],
+            "denominator_diagnostics": opportunity_denominator_diagnostics,
             "forward_session_summary": forward_summary or {},
         },
+        "opportunity_denominator_diagnostics": opportunity_denominator_diagnostics,
         "pre_registered_cohort_throughput": build_cohort_throughput(progress),
         "near_miss_queue": _near_miss_queue(progress),
         "lane_b_throughput_diagnostics": lane_b_throughput,
@@ -790,6 +929,7 @@ def render_markdown(plan: dict[str, Any]) -> str:
             "",
             "## Fillability Log",
             f"- Status: `{fillability_log.get('status')}`",
+            f"- Evidence gap: `{fillability_log.get('evidence_gap') or 'none'}`",
             f"- Records: `{fillability_log.get('record_count')}` latest `{fillability_log.get('latest_scan_date')}`",
             f"- Top tickers: `{fillability_log.get('top_tickers')}`",
             f"- Top liquidity reasons: `{fillability_log.get('top_liquidity_reasons')}`",

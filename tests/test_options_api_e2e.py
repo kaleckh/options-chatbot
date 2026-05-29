@@ -125,6 +125,58 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["active_incumbents"]["QQQ"]["put"]["candidate_id"].startswith("QQQ__put__"))
         self.assertFalse(Path(self.options_profit_state_dir).exists())
 
+    def test_tool_endpoint_accepts_empty_body_and_decodes_json_string_results(self):
+        with patch.object(
+            self.backend,
+            "TOOL_DISPATCH",
+            {"fixture_tool": lambda: json.dumps({"ok": True, "items": [1, 2]})},
+        ):
+            response = self.client.post("/api/tools/fixture_tool")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"result": {"ok": True, "items": [1, 2]}})
+
+    def test_tool_endpoint_preserves_non_json_string_results(self):
+        with patch.object(
+            self.backend,
+            "TOOL_DISPATCH",
+            {"fixture_tool": lambda: "plain text result"},
+        ):
+            response = self.client.post("/api/tools/fixture_tool", json={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"result": "plain text result"})
+
+    def test_backtest_endpoint_accepts_empty_body_and_uses_defaults(self):
+        captured: dict[str, object] = {}
+
+        def _fake_backtest(**kwargs):
+            captured.update(kwargs)
+            return {"ok": True, "total_trades": 0}
+
+        with patch.object(self.backend, "run_historical_backtest", side_effect=_fake_backtest):
+            response = self.client.post("/api/backtest")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True, "total_trades": 0})
+        self.assertEqual(captured["lookback_years"], 5)
+        self.assertEqual(captured["iv_adj"], 1.20)
+        self.assertEqual(captured["n_picks"], self.backend.DEFAULT_SCAN_PICKS)
+        self.assertEqual(captured["pricing_lane"], "pessimistic")
+        self.assertIsNone(captured["truth_lane"])
+        self.assertIsNone(captured["playbook"])
+
+    def test_backtest_endpoint_rejects_bool_numeric_knobs(self):
+        for payload, field in (
+            ({"lookback_years": True}, "lookback_years"),
+            ({"iv_adj": True}, "iv_adj"),
+            ({"n_picks": True}, "n_picks"),
+        ):
+            with self.subTest(field=field):
+                response = self.client.post("/api/backtest", json=payload)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(field, response.json()["detail"])
+
     def test_options_profit_status_endpoint_normalizes_legacy_symbol_status_artifact(self):
         state_dir = Path(self.options_profit_state_dir)
         state_dir.mkdir(parents=True, exist_ok=True)

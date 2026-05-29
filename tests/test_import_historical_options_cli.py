@@ -5,6 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 TESTS_DIR = Path(__file__).resolve().parent
 ROOT = TESTS_DIR.parent
@@ -18,9 +19,50 @@ from historical_options_fixtures import (
     write_daily_options_parquet,
     write_underlying_daily_parquet,
 )
+import scripts.import_historical_options_snapshots as import_cli
+
+
+class _FakeResponse:
+    def raise_for_status(self):
+        return None
+
+    def iter_content(self, chunk_size):
+        yield b"contract_symbol\n"
 
 
 class HistoricalOptionsImportCliTests(unittest.TestCase):
+    def test_url_download_temp_filename_ignores_query_string(self):
+        with patch.object(import_cli.requests, "get", return_value=_FakeResponse()):
+            path, tmpdir = import_cli._resolve_input_path("https://example.test/data.csv?sig=abc")
+            try:
+                self.assertEqual(Path(path).name, "data.csv")
+                self.assertTrue(Path(path).exists())
+            finally:
+                assert tmpdir is not None
+                tmpdir.cleanup()
+
+    def test_url_download_temp_filename_sanitizes_encoded_slashes(self):
+        with patch.object(import_cli.requests, "get", return_value=_FakeResponse()):
+            path, tmpdir = import_cli._resolve_input_path("https://example.test/signed%2Fspy.parquet?sig=abc")
+            try:
+                self.assertEqual(Path(path).name, "spy.parquet")
+                self.assertEqual(Path(path).parent, Path(tmpdir.name))
+                self.assertTrue(Path(path).exists())
+            finally:
+                assert tmpdir is not None
+                tmpdir.cleanup()
+
+    def test_url_download_temp_filename_sanitizes_windows_invalid_characters(self):
+        with patch.object(import_cli.requests, "get", return_value=_FakeResponse()):
+            path, tmpdir = import_cli._resolve_input_path("https://example.test/bad%3Cname.parquet?sig=abc")
+            try:
+                self.assertEqual(Path(path).name, "bad_name.parquet")
+                self.assertEqual(Path(path).parent, Path(tmpdir.name))
+                self.assertTrue(Path(path).exists())
+            finally:
+                assert tmpdir is not None
+                tmpdir.cleanup()
+
     def test_manifest_import_loads_multiple_daily_parquets_and_emits_store_summary(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp = Path(tmpdir)

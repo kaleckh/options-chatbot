@@ -65,6 +65,10 @@ def _metrics(trades: list[dict[str, Any]], *, total_trades: int | None = None) -
 
 
 def _window_dates(dates: list[str], *, train_days: int, test_days: int) -> list[tuple[list[str], list[str]]]:
+    if int(train_days) <= 0:
+        raise ValueError("train_days must be positive")
+    if int(test_days) <= 0:
+        raise ValueError("test_days must be positive")
     windows: list[tuple[list[str], list[str]]] = []
     start = 0
     while start + int(train_days) + int(test_days) <= len(dates):

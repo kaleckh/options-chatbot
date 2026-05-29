@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -79,6 +80,7 @@ from scripts.run_ai_commodity_opra_progress import (  # noqa: E402
     collect_deferred_variant_results,
     diagnostic_replay_required_shared_quote_dates,
     diagnostic_replay_blockers,
+    diagnostic_replay_max_dte_from_wfo,
     load_capture_automation_health,
     load_latest_commodity_research_lab,
     load_latest_exact_replay_smoke_probe_observation,
@@ -125,6 +127,50 @@ class _FakeStore:
 
     def summarize_imports(self, snapshot_kind=None, *, trusted_only=False):
         return {"source_labels": list(self.source_labels)}
+
+
+class _ScopedInventoryFakeStore(_FakeStore):
+    def source_inventory(
+        self,
+        snapshot_kind=None,
+        *,
+        trusted_only=False,
+        source_labels=None,
+        underlyings=None,
+    ):
+        requested = [str(symbol or "").strip().upper() for symbol in underlyings or [] if str(symbol or "").strip()]
+        labels_with_quotes: list[str] = []
+        sources: list[dict[str, object]] = []
+        for source_label in self.source_labels:
+            source_dates = self.source_dates_by_symbol.get(source_label, {})
+            underlyings_in_scope = [
+                symbol for symbol in requested
+                if source_dates.get(symbol)
+            ]
+            if underlyings_in_scope:
+                labels_with_quotes.append(source_label)
+            sources.append(
+                {
+                    "source_label": source_label,
+                    "quote_rows_in_scope": len(underlyings_in_scope),
+                    "underlyings_in_scope": underlyings_in_scope,
+                    "quote_dates": {
+                        "count": len(
+                            {
+                                date_text
+                                for symbol in underlyings_in_scope
+                                for date_text in source_dates.get(symbol, [])
+                            }
+                        )
+                    },
+                }
+            )
+        return {
+            "status": "summarized",
+            "source_labels_seen": list(self.source_labels),
+            "source_labels_with_quotes_in_scope": labels_with_quotes,
+            "sources": sources,
+        }
 
 
 class AiCommodityOpraProgressTests(unittest.TestCase):
@@ -487,6 +533,65 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(delta["non_material_flags"], [])
         self.assertEqual(delta["improvement_flags"], [])
         self.assertEqual(delta["regression_flags"], [])
+
+    def test_scan_summary_requires_proof_grade_source_for_proof_eligible_picks(self):
+        summary = _scan_summary(
+            {
+                "candidate_count": 1,
+                "candidate_audit_picks": [
+                    {
+                        "ticker": "FCX",
+                        "proof_eligible": True,
+                        "guardrail_decision": "clear",
+                        "source_label": "onclickmedia_research_grade_eod_bidask",
+                    },
+                    {
+                        "ticker": "NUE",
+                        "proof_eligible": True,
+                        "guardrail_decision": "clear",
+                        "source_label": "non_opra_vendor",
+                    },
+                    {
+                        "ticker": "AA",
+                        "proof_eligible": True,
+                        "guardrail_decision": "clear",
+                        "source_label": "alpaca_opra_daily_snapshot",
+                    },
+                ],
+            }
+        )
+
+        self.assertEqual(summary["proof_eligible_candidate_count"], 1)
+        self.assertEqual(summary["proof_eligible_candidate_symbols"], ["AA"])
+
+    def test_verified_profitability_gate_rejects_non_finite_replay_metrics(self):
+        gate = build_verified_profitability_gate(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "proof_window": {"current_shared_quote_dates": 100, "required_shared_quote_dates": 100},
+                "automation_health": {"healthy": True},
+                "source_quality": {"status": "usable"},
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {"error": None, "total_trades": 12, "profit_factor": float("inf"), "total_return_pct": float("inf")},
+                "scan": {"proof_eligible_candidate_count": 1, "proof_eligible_candidate_symbols": ["FCX"]},
+                "scan_proof_universe_alignment": {
+                    "status": "scan_universe_aligned_with_exact_proof_universe",
+                    "scan_universe_count": 1,
+                    "proof_universe_count": 1,
+                    "live_scan_candidates_all_inside_exact_proof": True,
+                },
+                "capture": {
+                    "scope": "ai_commodity_scan_universe",
+                    "symbol_count": 1,
+                    "target_capture_complete": True,
+                },
+            }
+        )
+
+        self.assertFalse(gate["verified"])
+        self.assertFalse(gate["gates"]["exact_replay_profit_factor_positive"])
+        self.assertFalse(gate["gates"]["exact_replay_total_return_positive"])
 
     def test_build_progress_delta_classifies_watchlist_distance_regression_and_noise(self):
         previous = {
@@ -1476,6 +1581,26 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         delta = {
             "status": "improved",
             "material_progress": True,
+            "evidence_progress": True,
+            "material_evidence_progress": True,
+            "evidence_progress_reasons": ["alpaca_opra_shared_quote_dates_increased"],
+            "profit_improved": False,
+            "profit_improvement_reason": None,
+            "profitability_metrics_before": {
+                "profit_factor": None,
+                "total_return_pct": None,
+                "current_shared_quote_dates": 2,
+                "required_shared_quote_dates": 100,
+            },
+            "profitability_metrics_after": {
+                "profit_factor": None,
+                "total_return_pct": None,
+                "current_shared_quote_dates": 3,
+                "required_shared_quote_dates": 100,
+            },
+            "profitability_metrics_same_window": False,
+            "profitability_metric_improvements": [],
+            "profitability_metric_regressions": [],
             "passed_requirement_count_before": 2,
             "passed_requirement_count_after": 3,
             "passed_requirement_count_delta": 1,
@@ -1526,6 +1651,32 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             "profitability_evidence_scorecard_delta": delta,
             "profitability_evidence_scorecard_delta_status": delta["status"],
             "profitability_evidence_scorecard_delta_material_progress": delta["material_progress"],
+            "profitability_evidence_scorecard_delta_evidence_progress": delta["evidence_progress"],
+            "profitability_evidence_scorecard_delta_material_evidence_progress": delta[
+                "material_evidence_progress"
+            ],
+            "profitability_evidence_scorecard_delta_evidence_progress_reasons": delta[
+                "evidence_progress_reasons"
+            ],
+            "profitability_evidence_scorecard_delta_profit_improved": delta["profit_improved"],
+            "profitability_evidence_scorecard_delta_profit_improvement_reason": delta[
+                "profit_improvement_reason"
+            ],
+            "profitability_evidence_scorecard_delta_profitability_metrics_before": delta[
+                "profitability_metrics_before"
+            ],
+            "profitability_evidence_scorecard_delta_profitability_metrics_after": delta[
+                "profitability_metrics_after"
+            ],
+            "profitability_evidence_scorecard_delta_profitability_metrics_same_window": delta[
+                "profitability_metrics_same_window"
+            ],
+            "profitability_evidence_scorecard_delta_profitability_metric_improvements": delta[
+                "profitability_metric_improvements"
+            ],
+            "profitability_evidence_scorecard_delta_profitability_metric_regressions": delta[
+                "profitability_metric_regressions"
+            ],
             "profitability_evidence_scorecard_delta_passed_requirement_count_before": delta[
                 "passed_requirement_count_before"
             ],
@@ -1593,6 +1744,13 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(report["profitability_evidence_scorecard_delta"], delta)
         self.assertEqual(report["profitability_evidence_scorecard_delta_status"], "improved")
         self.assertTrue(report["profitability_evidence_scorecard_delta_material_progress"])
+        self.assertTrue(report["profitability_evidence_scorecard_delta_evidence_progress"])
+        self.assertTrue(report["profitability_evidence_scorecard_delta_material_evidence_progress"])
+        self.assertFalse(report["profitability_evidence_scorecard_delta_profit_improved"])
+        self.assertEqual(
+            report["profitability_evidence_scorecard_delta_evidence_progress_reasons"],
+            ["alpaca_opra_shared_quote_dates_increased"],
+        )
         self.assertEqual(report["profitability_evidence_scorecard_delta_passed_requirement_count_delta"], 1)
         self.assertEqual(report["profitability_evidence_scorecard_delta_current_shared_quote_dates_delta"], 1)
         self.assertTrue(report["profitability_evidence_scorecard_delta_auxiliary_progress"])
@@ -2754,6 +2912,31 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(audit["failed_requirements"], [])
         self.assertEqual(audit["blockers"], [])
         self.assertEqual(audit["next_action"], "goal_complete")
+
+    def test_build_goal_completion_audit_blocks_lowered_history_threshold_below_default_floor(self):
+        report = self._verified_profitable_goal_report()
+        report["proof_window"] = {
+            "current_shared_quote_dates": 2,
+            "required_shared_quote_dates": 2,
+        }
+
+        audit = build_goal_completion_audit(report)
+        history_requirement = next(
+            item
+            for item in audit["requirements"]
+            if item["requirement"] == "has_required_exact_alpaca_opra_history_depth"
+        )
+
+        self.assertEqual(audit["status"], "not_complete")
+        self.assertFalse(audit["may_mark_goal_complete"])
+        self.assertIn("has_required_exact_alpaca_opra_history_depth", audit["failed_requirements"])
+        self.assertEqual(history_requirement["blocker"], "exact_history_depth_floor_not_satisfied")
+        self.assertEqual(history_requirement["evidence"]["current_shared_quote_dates"], 2)
+        self.assertEqual(history_requirement["evidence"]["requested_required_shared_quote_dates"], 2)
+        self.assertEqual(history_requirement["evidence"]["default_required_shared_quote_dates_floor"], 100)
+        self.assertEqual(history_requirement["evidence"]["effective_goal_required_shared_quote_dates"], 100)
+        self.assertFalse(history_requirement["evidence"]["exact_history_depth_floor_satisfied"])
+        self.assertIn("exact_history_depth_floor_not_satisfied", audit["blockers"])
 
     def test_build_goal_completion_audit_blocks_when_proof_source_isolation_contract_is_missing(self):
         report = self._verified_profitable_goal_report()
@@ -4808,7 +4991,7 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
 
         self.assertEqual(scorecard["status"], "recording_progress_waiting_for_exact_history_depth")
         self.assertEqual(scorecard["passed_requirement_count"], 2)
-        self.assertEqual(scorecard["total_requirement_count"], 8)
+        self.assertEqual(scorecard["total_requirement_count"], 9)
         self.assertEqual(scorecard["current_shared_quote_dates"], 2)
         self.assertIn("alpaca_opra_daily_snapshot_shared_quote_dates:2/100", scorecard["blockers"])
         self.assertIn("first_replay_entry_runway_not_ready", scorecard["blockers"])
@@ -5020,7 +5203,8 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
 
         self.assertFalse(live_row["passed"])
         self.assertEqual(live_row["blocker"], "live_scan_candidate_not_inside_exact_proof_universe")
-        self.assertEqual(live_row["actual"]["candidate_count"], 1)
+        self.assertEqual(live_row["actual"]["proof_eligible_candidate_count"], 1)
+        self.assertEqual(live_row["actual"]["raw_candidate_count"], 1)
         self.assertTrue(live_row["actual"]["live_scan_has_candidate_gate"])
         self.assertFalse(live_row["actual"]["live_scan_candidate_inside_exact_proof_gate"])
 
@@ -5044,6 +5228,67 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertTrue(verified_live_row["passed"])
         self.assertIsNone(verified_live_row["blocker"])
         self.assertTrue(verified_live_row["actual"]["live_scan_candidate_inside_exact_proof_gate"])
+
+    def test_build_profitability_evidence_scorecard_rejects_custom_proof_scope(self):
+        scorecard = build_profitability_evidence_scorecard(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "verification_gate": {
+                    "verified": False,
+                    "gates": {
+                        "exact_replay_completed": True,
+                        "exact_replay_has_trades": True,
+                        "exact_replay_profit_factor_positive": True,
+                        "exact_replay_total_return_positive": True,
+                        "live_scan_has_candidate": True,
+                        "live_scan_candidate_inside_exact_proof_universe": True,
+                        "capture_scope_full_scan_universe": False,
+                        "proof_scan_universe_aligned": True,
+                    },
+                    "replay_total_trades": 12,
+                    "replay_profit_factor": 1.25,
+                    "replay_total_return_pct": 8.4,
+                },
+                "scan": {
+                    "candidate_count": 1,
+                    "candidate_symbols": ["FCX"],
+                    "proof_eligible_candidate_count": 1,
+                    "proof_eligible_candidate_symbols": ["FCX"],
+                },
+                "capture": {"scope": "custom_symbols", "symbol_count": 9},
+                "scan_proof_universe_alignment": {
+                    "status": "scan_universe_aligned_with_exact_proof_universe",
+                    "proof_universe_count": 24,
+                    "scan_universe_count": 24,
+                },
+                "alpaca_opra_data_usage_audit": {
+                    "status": "using_alpaca_opra_daily_snapshot",
+                    "proof_source_label": "alpaca_opra_daily_snapshot",
+                    "proof_window_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                    "blockers": [],
+                },
+                "exact_replay_runway_progress": {
+                    "status": "full_exact_replay_runway_ready",
+                    "proof_source_label": "alpaca_opra_daily_snapshot",
+                    "current_shared_quote_dates": 100,
+                    "full_required_shared_quote_dates": 100,
+                    "shortfall_to_first_entry": 0,
+                    "shortfall_to_diagnostic_replay": 0,
+                    "shortfall_to_full_exact_replay": 0,
+                },
+            }
+        )
+
+        scope_row = next(
+            row for row in scorecard["rows"] if row["requirement"] == "full_scan_universe_proof_scope"
+        )
+
+        self.assertNotEqual(scorecard["status"], "verified_profitable")
+        self.assertFalse(scope_row["passed"])
+        self.assertEqual(scope_row["actual"]["capture_scope"], "custom_symbols")
+        self.assertIn("full_scan_universe_proof_scope_not_satisfied", scorecard["blockers"])
 
     def test_build_profitability_evidence_scorecard_delta_records_material_progress(self):
         previous = {
@@ -5118,6 +5363,10 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
 
         self.assertEqual(delta["status"], "improved")
         self.assertTrue(delta["material_progress"])
+        self.assertTrue(delta["evidence_progress"])
+        self.assertTrue(delta["material_evidence_progress"])
+        self.assertFalse(delta["profit_improved"])
+        self.assertIn("alpaca_opra_shared_quote_dates_increased", delta["evidence_progress_reasons"])
         self.assertEqual(delta["passed_requirement_count_before"], 2)
         self.assertEqual(delta["passed_requirement_count_after"], 3)
         self.assertEqual(delta["passed_requirement_count_delta"], 1)
@@ -5134,6 +5383,88 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             delta["post_event_readback_command"],
             "python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest",
         )
+
+    def test_build_profitability_evidence_scorecard_delta_splits_shared_date_evidence_from_profit(self):
+        previous = {
+            "profitability_evidence_scorecard": {
+                "status": "recording_progress_waiting_for_exact_history_depth",
+                "verified": False,
+                "passed_requirement_count": 2,
+                "total_requirement_count": 8,
+                "current_shared_quote_dates": 2,
+                "required_shared_quote_dates": 100,
+                "replay_runway_status": "waiting_for_first_replay_entry_runway",
+                "next_evidence_event_kind": "exact_opra_forward_capture",
+                "blockers": [
+                    "alpaca_opra_daily_snapshot_shared_quote_dates:2/100",
+                    "exact_replay_profitability_not_verified",
+                ],
+                "rows": [
+                    {
+                        "requirement": "required_exact_history_depth",
+                        "passed": False,
+                        "blocker": "alpaca_opra_daily_snapshot_shared_quote_dates:2/100",
+                    },
+                    {
+                        "requirement": "full_exact_replay_profitability",
+                        "passed": False,
+                        "actual": {
+                            "completed": False,
+                            "total_trades": 0,
+                            "profit_factor": 0.8,
+                            "total_return_pct": -4.0,
+                        },
+                        "blocker": "exact_replay_profitability_not_verified",
+                    },
+                ],
+            }
+        }
+        current = {
+            "profitability_evidence_scorecard": {
+                "status": "recording_progress_waiting_for_exact_history_depth",
+                "verified": False,
+                "passed_requirement_count": 2,
+                "total_requirement_count": 8,
+                "current_shared_quote_dates": 3,
+                "required_shared_quote_dates": 100,
+                "replay_runway_status": "waiting_for_first_replay_entry_runway",
+                "next_evidence_event_kind": "exact_opra_forward_capture",
+                "blockers": [
+                    "alpaca_opra_daily_snapshot_shared_quote_dates:3/100",
+                    "exact_replay_profitability_not_verified",
+                ],
+                "rows": [
+                    {
+                        "requirement": "required_exact_history_depth",
+                        "passed": False,
+                        "blocker": "alpaca_opra_daily_snapshot_shared_quote_dates:3/100",
+                    },
+                    {
+                        "requirement": "full_exact_replay_profitability",
+                        "passed": False,
+                        "actual": {
+                            "completed": False,
+                            "total_trades": 0,
+                            "profit_factor": 0.9,
+                            "total_return_pct": -2.0,
+                        },
+                        "blocker": "exact_replay_profitability_not_verified",
+                    },
+                ],
+            }
+        }
+
+        delta = build_profitability_evidence_scorecard_delta(previous, current)
+
+        self.assertEqual(delta["status"], "improved")
+        self.assertTrue(delta["material_progress"])
+        self.assertTrue(delta["evidence_progress"])
+        self.assertTrue(delta["material_evidence_progress"])
+        self.assertIn("alpaca_opra_shared_quote_dates_increased", delta["evidence_progress_reasons"])
+        self.assertFalse(delta["profit_improved"])
+        self.assertFalse(delta["profitability_metrics_same_window"])
+        self.assertEqual(delta["current_shared_quote_dates_delta"], 1)
+        self.assertEqual(delta["passed_requirement_count_delta"], 0)
 
     def test_build_profitability_evidence_scorecard_delta_scores_prior_readback_baseline(self):
         previous = {
@@ -6587,6 +6918,54 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         build_snapshot.assert_not_called()
         write_csv.assert_not_called()
 
+    def test_run_progress_no_write_disables_primary_replay_artifacts(self):
+        replay_calls = []
+
+        def fake_run_historical_backtest(**kwargs):
+            replay_calls.append(kwargs)
+            return {
+                "error": None,
+                "total_trades": 1,
+                "profit_factor": 1.1,
+                "total_return_pct": 1.0,
+            }
+
+        fake_wfo = SimpleNamespace(
+            DTE_MIN=1,
+            DTE_MAX=60,
+            STRATEGY_PROFILE={"targets": {"dte_optimal": 25}},
+            STRATEGY_PROFILES={
+                "equity": {"targets": {"dte_optimal": 25}},
+                "index": {"targets": {"dte_optimal": 21}},
+            },
+            REPLAY_PLAYBOOKS={
+                "ai_commodity_infra_observation": {
+                    "id": "ai_commodity_infra_observation",
+                    "target_dte": 25,
+                }
+            },
+            run_historical_backtest=fake_run_historical_backtest,
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(sys.modules, {"wfo_optimizer": fake_wfo}):
+            run_progress(
+                symbols=["SPY"],
+                min_shared_quote_dates=2,
+                db_path=Path(tmpdir) / "history.db",
+                output_dir=Path(tmpdir) / "progress",
+                capture_output_dir=Path(tmpdir) / "captures",
+                readiness_output_dir=Path(tmpdir) / "readiness",
+                lane_lab_output_dir=Path(tmpdir) / "lane_lab",
+                skip_capture=True,
+                skip_scan=True,
+                target_date="2026-05-21",
+                write=False,
+            )
+
+        self.assertEqual(len(replay_calls), 1)
+        self.assertIn("save_result", replay_calls[0])
+        self.assertIs(replay_calls[0]["save_result"], False)
+
     def test_build_strict_accuracy_gate_fails_when_completion_contract_is_unproven(self):
         report = {
             "next_blocker": "alpaca_opra_daily_snapshot_shared_quote_dates:1/100",
@@ -6618,6 +6997,10 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
 
     def test_build_strict_accuracy_gate_passes_only_when_completion_contract_allows_claim(self):
         report = {
+            "proof_window": {
+                "current_shared_quote_dates": 100,
+                "required_shared_quote_dates": 100,
+            },
             "verification_gate": {"status": "verified_profitable", "verified": True, "blockers": []},
             "goal_completion_audit": {
                 "status": "complete",
@@ -6636,6 +7019,26 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(gate["status"], "passed")
         self.assertTrue(gate["passed"])
         self.assertEqual(gate["blockers"], [])
+
+    def test_build_strict_accuracy_gate_blocks_lowered_history_threshold_below_default_floor(self):
+        report = self._verified_profitable_goal_report()
+        report["proof_window"] = {
+            "current_shared_quote_dates": 2,
+            "required_shared_quote_dates": 2,
+        }
+
+        gate = build_strict_accuracy_gate(report)
+
+        self.assertEqual(gate["status"], "failed")
+        self.assertFalse(gate["passed"])
+        self.assertFalse(gate["completion_claim_allowed"])
+        self.assertIn("has_required_exact_alpaca_opra_history_depth", gate["unproven_requirements"])
+        self.assertIn("exact_history_depth_floor_not_satisfied", gate["blockers"])
+        self.assertEqual(gate["exact_history_depth_floor"]["current_shared_quote_dates"], 2)
+        self.assertEqual(gate["exact_history_depth_floor"]["requested_required_shared_quote_dates"], 2)
+        self.assertEqual(gate["exact_history_depth_floor"]["default_required_shared_quote_dates_floor"], 100)
+        self.assertEqual(gate["exact_history_depth_floor"]["effective_goal_required_shared_quote_dates"], 100)
+        self.assertFalse(gate["exact_history_depth_floor"]["exact_history_depth_floor_satisfied"])
 
     def test_build_exact_history_acquisition_plan_tracks_alpaca_opra_capture_blocker(self):
         report = {
@@ -10264,6 +10667,285 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             result["ranked_results"][0]["failed_checks"],
         )
 
+    def test_collect_deferred_variant_results_blocks_duplicate_sweep_artifacts(self):
+        backlog = build_post_fresh_scan_research_backlog(
+            {
+                "exact_history_acquisition_plan": {
+                    "status": "ready",
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                    "remaining_shared_quote_dates": 0,
+                },
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {"error": None, "total_trades": 12},
+                "fresh_scan_iteration_decision": {
+                    "status": "fresh_scan_zero_candidates_structural_review",
+                    "top_drop_counts": [{"drop_key": "option_liquidity", "count": 7}],
+                },
+            }
+        )
+        first_sweep = dict(backlog["deferred_variant_execution_plan"]["ordered_sweeps"][0])
+        duplicate_sweep = {
+            **first_sweep,
+            "sequence": 2,
+            "variant_id": "duplicate_sweep",
+        }
+        backlog["deferred_variant_execution_plan"]["ordered_sweeps"] = [first_sweep, duplicate_sweep]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            run_dir = Path(tmp) / "research_runs" / f"20260521_{first_sweep['run_slug']}"
+            run_dir.mkdir(parents=True)
+            (run_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "truth_lane": "historical_imported_daily",
+                        "playbooks": ["ai_commodity_infra_observation"],
+                        "require_quote_coverage": 95.0,
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "variant_config.json").write_text(
+                json.dumps(
+                    {
+                        "provider": "alpaca:sip:opra",
+                        "proof_source_label": "alpaca_opra_daily_snapshot",
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "primary_report.json").write_text(
+                json.dumps(
+                    {
+                        "variant_live_scan": {
+                            "candidate_count": 1,
+                            "candidate_symbols": ["FCX"],
+                            "live_scan_candidate_inside_exact_proof_universe": True,
+                        },
+                        "result": {
+                            "total_trades": 14,
+                            "profit_factor": 1.22,
+                            "total_return_pct": 4.8,
+                        },
+                    }
+                ),
+                encoding="utf8",
+            )
+
+            report = {
+                "verification_gate": {
+                    "replay_total_trades": 12,
+                    "replay_profit_factor": 1.08,
+                    "replay_total_return_pct": 2.3,
+                    "gates": {
+                        "alpaca_sip_opra_provider": True,
+                        "alpaca_opra_source_filtered": True,
+                        "exact_replay_completed": True,
+                        "exact_replay_has_trades": True,
+                    },
+                },
+                "post_fresh_scan_research_backlog": backlog,
+            }
+            result = collect_deferred_variant_results(report, root=Path(tmp))
+            promotion = build_deferred_variant_promotion_review(
+                {**report, "post_fresh_scan_research_backlog": {**backlog, "deferred_variant_result_collection": result}},
+                root=Path(tmp),
+            )
+
+        self.assertEqual(result["status"], "variant_results_collected_with_duplicate_evidence")
+        self.assertEqual(result["result_count"], 1)
+        self.assertEqual(result["missing_result_count"], 1)
+        self.assertEqual(result["duplicate_result_count"], 1)
+        self.assertIsNone(result["best_candidate"])
+        self.assertIn("unique_run_slug", result["ranked_results"][1]["failed_checks"])
+        self.assertIn("unique_research_run_dir", result["ranked_results"][1]["failed_checks"])
+        self.assertFalse(promotion["promotion_allowed"])
+        self.assertIn("deferred_variant_results_are_unique", promotion["blockers"])
+
+    def test_collect_deferred_variant_results_blocks_duplicate_run_dirs_for_slug(self):
+        backlog = build_post_fresh_scan_research_backlog(
+            {
+                "exact_history_acquisition_plan": {
+                    "status": "ready",
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                    "remaining_shared_quote_dates": 0,
+                },
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {"error": None, "total_trades": 12},
+                "fresh_scan_iteration_decision": {
+                    "status": "fresh_scan_zero_candidates_structural_review",
+                    "top_drop_counts": [{"drop_key": "option_liquidity", "count": 7}],
+                },
+            }
+        )
+        first_sweep = backlog["deferred_variant_execution_plan"]["ordered_sweeps"][0]
+
+        def _write_run(root: Path, prefix: str) -> None:
+            run_dir = root / "research_runs" / f"{prefix}_{first_sweep['run_slug']}"
+            run_dir.mkdir(parents=True)
+            (run_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "truth_lane": "historical_imported_daily",
+                        "playbooks": ["ai_commodity_infra_observation"],
+                        "require_quote_coverage": 95.0,
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "variant_config.json").write_text(
+                json.dumps(
+                    {
+                        "provider": "alpaca:sip:opra",
+                        "proof_source_label": "alpaca_opra_daily_snapshot",
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "primary_report.json").write_text(
+                json.dumps(
+                    {
+                        "variant_live_scan": {
+                            "candidate_count": 1,
+                            "candidate_symbols": ["FCX"],
+                            "live_scan_candidate_inside_exact_proof_universe": True,
+                        },
+                        "result": {
+                            "total_trades": 14,
+                            "profit_factor": 1.22,
+                            "total_return_pct": 4.8,
+                        },
+                    }
+                ),
+                encoding="utf8",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_run(root, "20260521")
+            _write_run(root, "20260522")
+            result = collect_deferred_variant_results(
+                {
+                    "verification_gate": {
+                        "replay_total_trades": 12,
+                        "replay_profit_factor": 1.08,
+                        "replay_total_return_pct": 2.3,
+                        "gates": {
+                            "alpaca_sip_opra_provider": True,
+                            "alpaca_opra_source_filtered": True,
+                            "exact_replay_completed": True,
+                            "exact_replay_has_trades": True,
+                        },
+                    },
+                    "post_fresh_scan_research_backlog": backlog,
+                },
+                root=root,
+            )
+
+        self.assertEqual(result["status"], "variant_results_collected_with_duplicate_evidence")
+        self.assertEqual(result["result_count"], 0)
+        self.assertEqual(result["duplicate_result_count"], 1)
+        self.assertIn("unique_research_run_dir", result["ranked_results"][0]["failed_checks"])
+
+    def test_collect_deferred_variant_results_blocks_collapsed_duplicate_evidence(self):
+        backlog = build_post_fresh_scan_research_backlog(
+            {
+                "exact_history_acquisition_plan": {
+                    "status": "ready",
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                    "remaining_shared_quote_dates": 0,
+                },
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {"error": None, "total_trades": 12},
+                "fresh_scan_iteration_decision": {
+                    "status": "fresh_scan_zero_candidates_structural_review",
+                    "top_drop_counts": [{"drop_key": "option_liquidity", "count": 7}],
+                },
+            }
+        )
+        sweeps = backlog["deferred_variant_execution_plan"]["ordered_sweeps"][:2]
+
+        def _write_run(root: Path, run_slug: str, run_at: str) -> None:
+            run_dir = root / "research_runs" / f"20260521_{run_slug}"
+            run_dir.mkdir(parents=True)
+            (run_dir / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "status": "completed",
+                        "truth_lane": "historical_imported_daily",
+                        "playbooks": ["ai_commodity_infra_observation"],
+                        "require_quote_coverage": 95.0,
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "variant_config.json").write_text(
+                json.dumps(
+                    {
+                        "provider": "alpaca:sip:opra",
+                        "proof_source_label": "alpaca_opra_daily_snapshot",
+                    }
+                ),
+                encoding="utf8",
+            )
+            (run_dir / "primary_report.json").write_text(
+                json.dumps(
+                    {
+                        "variant_live_scan": {
+                            "candidate_count": 1,
+                            "candidate_symbols": ["FCX"],
+                            "live_scan_candidate_inside_exact_proof_universe": True,
+                        },
+                        "result": {
+                            "run_at": run_at,
+                            "run_at_utc": run_at,
+                            "observed_at_utc": run_at,
+                            "total_trades": 14,
+                            "profit_factor": 1.22,
+                            "total_return_pct": 4.8,
+                        },
+                    }
+                ),
+                encoding="utf8",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_run(root, sweeps[0]["run_slug"], "2026-05-21T10:00:00Z")
+            _write_run(root, sweeps[1]["run_slug"], "2026-05-21T10:05:00Z")
+            report = {
+                "verification_gate": {
+                    "replay_total_trades": 12,
+                    "replay_profit_factor": 1.08,
+                    "replay_total_return_pct": 2.3,
+                    "gates": {
+                        "alpaca_sip_opra_provider": True,
+                        "alpaca_opra_source_filtered": True,
+                        "exact_replay_completed": True,
+                        "exact_replay_has_trades": True,
+                    },
+                },
+                "post_fresh_scan_research_backlog": backlog,
+            }
+            result = collect_deferred_variant_results(report, root=root)
+            promotion = build_deferred_variant_promotion_review(
+                {**report, "post_fresh_scan_research_backlog": {**backlog, "deferred_variant_result_collection": result}},
+                root=root,
+            )
+
+        self.assertEqual(result["status"], "variant_results_collected_with_duplicate_evidence")
+        self.assertEqual(result["result_count"], 1)
+        self.assertEqual(result["missing_result_count"], 1)
+        self.assertEqual(result["duplicate_result_count"], 1)
+        self.assertIsNone(result["best_candidate"])
+        self.assertIn("unique_variant_evidence", result["ranked_results"][1]["failed_checks"])
+        self.assertFalse(promotion["promotion_allowed"])
+        self.assertIn("deferred_variant_results_are_unique", promotion["blockers"])
+
     def test_collect_deferred_variant_results_blocks_missing_and_non_opra_results(self):
         backlog = build_post_fresh_scan_research_backlog(
             {
@@ -12647,6 +13329,43 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             {"FCX": 1, "SLV": 1},
         )
 
+    def test_build_proof_source_audit_ignores_unrelated_global_alpaca_like_sources(self):
+        symbols = ["FCX", "SLV"]
+        store = _ScopedInventoryFakeStore(
+            {
+                "FCX": ["2026-05-20"],
+                "SLV": ["2026-05-20"],
+            },
+            source_labels=["alpaca_opra_daily_snapshot", "alpaca_latest_snapshot"],
+            source_dates_by_symbol={
+                "alpaca_opra_daily_snapshot": {
+                    "FCX": ["2026-05-20"],
+                    "SLV": ["2026-05-20"],
+                },
+                "alpaca_latest_snapshot": {
+                    "SPY": ["2026-05-20"],
+                },
+            },
+        )
+
+        audit = build_proof_source_audit(store, symbols)
+        contract = build_proof_source_isolation_contract(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "shared_quote_dates_after": {"count": 1, "first": "2026-05-20", "last": "2026-05-20"},
+                "proof_source_audit": audit,
+            }
+        )
+
+        self.assertEqual(audit["store_inventory"]["source_labels_seen"], ["alpaca_opra_daily_snapshot", "alpaca_latest_snapshot"])
+        self.assertEqual(audit["store_inventory"]["source_labels_with_quotes_in_scope"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(audit["source_labels_seen"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(audit["alpaca_like_source_labels_seen"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(audit["non_proof_alpaca_like_source_labels"], [])
+        self.assertEqual(contract["status"], "isolated_to_alpaca_opra_proof_source")
+        self.assertNotIn("no_non_proof_alpaca_like_source_labels", contract["blockers"])
+
     def test_build_proof_source_audit_records_non_proof_partial_coverage(self):
         symbols = ["FCX", "CCJ"]
         store = _FakeStore(
@@ -12835,6 +13554,27 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(diagnostic_replay_required_shared_quote_dates(100), 88)
         self.assertEqual(diagnostic_replay_required_shared_quote_dates(50, max_dte=21), 50)
 
+    def test_diagnostic_replay_max_dte_uses_ai_commodity_playbook_target(self):
+        fake_wfo = SimpleNamespace(
+            DTE_MIN=1,
+            DTE_MAX=60,
+            STRATEGY_PROFILE={"targets": {"dte_optimal": 25}},
+            STRATEGY_PROFILES={
+                "equity": {"targets": {"dte_optimal": 25}},
+                "index": {"targets": {"dte_optimal": 21}},
+            },
+            REPLAY_PLAYBOOKS={
+                "ai_commodity_infra_observation": {
+                    "id": "ai_commodity_infra_observation",
+                }
+            },
+        )
+
+        max_dte = diagnostic_replay_max_dte_from_wfo(fake_wfo)
+
+        self.assertEqual(max_dte, 35)
+        self.assertEqual(replay_simulation_min_shared_quote_dates(max_dte=max_dte), 98)
+
     def test_build_verified_profitability_gate_reports_current_blockers(self):
         gate = build_verified_profitability_gate(
             {
@@ -12920,6 +13660,56 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertEqual(gate["status"], "verified_profitable")
         self.assertEqual(gate["blockers"], [])
 
+    def test_build_verified_profitability_gate_uses_proof_eligible_candidates(self):
+        gate = build_verified_profitability_gate(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "automation_health": {"healthy": True},
+                "proof_window": {
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                },
+                "source_quality": {"status": "source_quality_ready"},
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {
+                    "error": None,
+                    "total_trades": 12,
+                    "profit_factor": 1.25,
+                    "total_return_pct": 8.4,
+                },
+                "scan": {
+                    "candidate_count": 1,
+                    "candidate_symbols": ["FCX"],
+                    "raw_candidate_count": 1,
+                    "proof_eligible_candidate_count": 0,
+                    "proof_eligible_candidate_symbols": [],
+                },
+                "capture": {
+                    "scope": "ai_commodity_scan_universe",
+                    "symbol_count": 24,
+                    "target_capture_complete": True,
+                    "missing_target_date_symbols_after": [],
+                },
+                "scan_proof_universe_alignment": {
+                    "status": "scan_universe_aligned_with_exact_proof_universe",
+                    "proof_universe_count": 24,
+                    "scan_universe_count": 24,
+                    "candidate_symbols": ["FCX"],
+                    "proof_eligible_candidate_count": 0,
+                    "proof_eligible_candidate_symbols": [],
+                    "candidate_symbols_outside_exact_proof": [],
+                    "live_scan_candidates_all_inside_exact_proof": False,
+                },
+            }
+        )
+
+        self.assertFalse(gate["verified"])
+        self.assertFalse(gate["gates"]["live_scan_has_candidate"])
+        self.assertEqual(gate["live_scan_candidate_count"], 0)
+        self.assertEqual(gate["raw_live_scan_candidate_count"], 1)
+        self.assertIn("live_scan_candidates:0", gate["blockers"])
+
     def test_build_verified_profitability_gate_rejects_live_candidate_outside_exact_proof_universe(self):
         gate = build_verified_profitability_gate(
             {
@@ -12959,6 +13749,41 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertFalse(gate["verified"])
         self.assertFalse(gate["gates"]["live_scan_candidate_inside_exact_proof_universe"])
         self.assertIn("live_scan_candidate_outside_exact_proof_universe:['ALB']", gate["blockers"])
+
+    def test_build_verified_profitability_gate_rejects_missing_scan_proof_alignment(self):
+        gate = build_verified_profitability_gate(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "automation_health": {"healthy": True},
+                "proof_window": {
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                },
+                "source_quality": {"status": "source_quality_ready"},
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {
+                    "error": None,
+                    "total_trades": 12,
+                    "profit_factor": 1.25,
+                    "total_return_pct": 8.4,
+                },
+                "scan": {"candidate_count": 1, "candidate_symbols": ["FCX"]},
+                "capture": {
+                    "scope": "ai_commodity_scan_universe",
+                    "symbol_count": 24,
+                    "target_capture_complete": True,
+                    "missing_target_date_symbols_after": [],
+                },
+            }
+        )
+
+        self.assertFalse(gate["verified"])
+        self.assertFalse(gate["gates"]["live_scan_candidate_inside_exact_proof_universe"])
+        self.assertIn(
+            "live_scan_candidate_inside_exact_proof_universe_missing_scan_proof_universe_alignment",
+            gate["blockers"],
+        )
 
     def test_build_verified_profitability_gate_rejects_core_only_capture_scope(self):
         gate = build_verified_profitability_gate(
@@ -16514,6 +17339,106 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
             momentum_examples[0]["momentum_distance_basis"],
             "nearest_call_or_put_ret5_and_sma20_signal_gap",
         )
+
+    def test_scan_summary_splits_raw_and_proof_eligible_candidates(self):
+        summary = _scan_summary(
+            {
+                "candidate_count": 4,
+                "returned_count": 4,
+                "picks": [
+                    {"ticker": "FCX", "guardrail_decision": "blocked", "proof_eligible": True},
+                    {"ticker": "CCJ", "status": "research_only", "proof_eligible": True},
+                    {
+                        "ticker": "PWR",
+                        "guardrail_decision": "clear",
+                        "candidate_execution_label": "executable_opra_paper_candidate",
+                    },
+                    {
+                        "ticker": "NUE",
+                        "guardrail_decision": "clear",
+                        "proof_eligible": True,
+                        "source_label": "alpaca_opra_daily_snapshot",
+                    },
+                ],
+                "ranked_picks": [
+                    {"ticker": "FCX", "guardrail_decision": "blocked", "proof_eligible": True},
+                    {"ticker": "CCJ", "status": "research_only", "proof_eligible": True},
+                    {
+                        "ticker": "PWR",
+                        "guardrail_decision": "clear",
+                        "candidate_execution_label": "executable_opra_paper_candidate",
+                    },
+                    {
+                        "ticker": "NUE",
+                        "guardrail_decision": "clear",
+                        "proof_eligible": True,
+                        "source_label": "alpaca_opra_daily_snapshot",
+                    },
+                ],
+                "candidate_audit_picks": [
+                    {"ticker": "FCX", "guardrail_decision": "blocked", "proof_eligible": True},
+                    {"ticker": "CCJ", "status": "research_only", "proof_eligible": True},
+                    {
+                        "ticker": "PWR",
+                        "guardrail_decision": "clear",
+                        "candidate_execution_label": "executable_opra_paper_candidate",
+                    },
+                    {
+                        "ticker": "NUE",
+                        "guardrail_decision": "clear",
+                        "proof_eligible": True,
+                        "source_label": "alpaca_opra_daily_snapshot",
+                    },
+                ],
+                "playbook": {},
+            }
+        )
+
+        self.assertEqual(summary["candidate_count"], 4)
+        self.assertEqual(summary["raw_candidate_count"], 4)
+        self.assertEqual(summary["candidate_symbols"], ["CCJ", "FCX", "NUE", "PWR"])
+        self.assertEqual(summary["proof_eligible_candidate_count"], 2)
+        self.assertEqual(summary["proof_eligible_candidate_symbols"], ["NUE", "PWR"])
+
+    def test_scan_summary_requires_proof_grade_label_or_source_for_clear_candidates(self):
+        summary = _scan_summary(
+            {
+                "candidate_count": 1,
+                "returned_count": 1,
+                "picks": [{"ticker": "FCX", "guardrail_decision": "clear"}],
+                "playbook": {},
+            }
+        )
+        self.assertEqual(summary["candidate_count"], 1)
+        self.assertEqual(summary["proof_eligible_candidate_count"], 0)
+        self.assertEqual(summary["proof_eligible_candidate_symbols"], [])
+
+        gate = build_verified_profitability_gate(
+            {
+                "provider": "alpaca:sip:opra",
+                "proof_source_label": "alpaca_opra_daily_snapshot",
+                "proof_window": {
+                    "current_shared_quote_dates": 100,
+                    "required_shared_quote_dates": 100,
+                },
+                "automation_health": {"healthy": True},
+                "capture": {
+                    "scope": "ai_commodity_scan_universe",
+                    "target_capture_complete": True,
+                    "missing_target_date_symbols_after": [],
+                },
+                "source_quality": {"status": "usable_quotes_ready"},
+                "readiness": {"status": "ready_for_exact_replay"},
+                "replay": {"error": None, "total_trades": 12, "profit_factor": 1.2, "total_return_pct": 3.0},
+                "scan": summary,
+                "scan_proof_universe_alignment": {
+                    "status": "scan_universe_aligned_with_exact_proof_universe",
+                    "candidate_symbols_outside_exact_proof": [],
+                },
+            }
+        )
+        self.assertFalse(gate["verified"])
+        self.assertIn("live_scan_candidates:0", gate["blockers"])
 
     def test_scan_summary_ranks_nearest_zero_candidate_examples_without_changing_filters(self):
         summary = _scan_summary(

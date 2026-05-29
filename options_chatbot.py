@@ -352,10 +352,11 @@ def _cached_history(
 
 
 def _cached_history_batch(symbols: list[str], *, period: str) -> pd.DataFrame:
+    ticker_factory = make_alpaca_ticker_factory(fallback_factory=None) if alpaca_provider_requested() else None
     return _md_download_history_batch(
         symbols,
         period=period,
-        ticker_factory=_market_ticker_factory(),
+        ticker_factory=ticker_factory,
     )
 
 
@@ -4707,6 +4708,7 @@ def _select_liquidity_first_spread(
     max_debit_pct_of_width: float,
     chain_context: dict[str, Any] | None,
     alternative_count: int,
+    sp: dict | None = None,
 ) -> dict[str, Any] | None:
     if not chain_context:
         return None
@@ -4808,7 +4810,12 @@ def _select_liquidity_first_spread(
                 if entry_debit / spread_width * 100.0 > max_debit_pct_of_width:
                     continue
 
-                liquidity = _spread_liquidity_metrics(long_leg, short_leg, entry_execution=entry_execution)
+                liquidity = _spread_liquidity_metrics(
+                    long_leg,
+                    short_leg,
+                    entry_execution=entry_execution,
+                    sp=sp,
+                )
                 delta_miss = round(
                     abs(float(long_leg.get("delta") or 0.0) - float(long_delta_target))
                     + abs(float(short_leg.get("delta") or 0.0) - float(short_delta_target)),
@@ -4875,6 +4882,7 @@ def _fetch_best_spread(
     return_context: bool = False,
     liquidity_first: bool = True,
     alternative_count: int = 3,
+    sp: dict | None = None,
 ) -> dict | None:
     """
     Fetch two legs from the real options chain for a vertical debit spread.
@@ -4928,6 +4936,7 @@ def _fetch_best_spread(
             max_debit_pct_of_width=max_debit_pct_of_width,
             chain_context=long_opt.get("chain_context") or short_opt.get("chain_context"),
             alternative_count=alternative_count,
+            sp=sp,
         )
         if liquidity_selected is not None:
             long_opt = liquidity_selected["long_leg"]
@@ -4999,7 +5008,12 @@ def _fetch_best_spread(
         slippage_pct=0.0,
         quote_freshness_status=spread_quote_status,
     )
-    spread_liquidity = _spread_liquidity_metrics(long_opt, short_opt, entry_execution=entry_execution)
+    spread_liquidity = _spread_liquidity_metrics(
+        long_opt,
+        short_opt,
+        entry_execution=entry_execution,
+        sp=sp,
+    )
 
     result = {
         "ticker": ticker,
@@ -5821,6 +5835,7 @@ def scan_daily_top_trades(
                         min_net_debit=float(_spread_cfg.get("min_net_debit", 0.30)),
                         max_debit_pct_of_width=float(_spread_cfg.get("max_debit_pct_of_width", 65.0)),
                         return_context=True,
+                        sp=sp,
                     )
                 except Exception:
                     _spread_result = None

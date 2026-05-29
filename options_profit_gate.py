@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import sys
 from datetime import UTC, date, datetime
@@ -57,6 +58,11 @@ DEFAULT_MIN_CLOSED_TRACKED_POSITIONS = 1
 DEFAULT_MIN_REALIZED_PROFIT_FACTOR = 1.0
 DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT = 0.0
 DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS = 3
+PROOF_OPTIONS_SOURCE_LABELS = {
+    "alpaca_opra",
+    "alpaca_opra_daily_snapshot",
+    "alpaca:sip:opra",
+}
 
 # Loop-health thresholds (existing defaults above)
 LOOP_HEALTH_MIN_ELIGIBLE_FORWARD_EVENTS = 10
@@ -80,9 +86,10 @@ def _safe_float(value: Any) -> Optional[float]:
     try:
         if isinstance(value, bool) or value in (None, ""):
             return None
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _position_fee_sides_from_total(position: dict[str, Any]) -> tuple[float, float]:
@@ -288,6 +295,8 @@ def _normalize_evidence_class(value: Any, *, source_label: str = "") -> str:
     if normalized in {LIVE_EVIDENCE_CLASS, *NON_PRODUCTION_EVIDENCE_CLASSES}:
         return normalized
     source = str(source_label or "").strip().lower()
+    if source in {LIVE_EVIDENCE_CLASS, "live", "production"}:
+        return LIVE_EVIDENCE_CLASS
     if any(token in source for token in ("manual", "observation")):
         return "manual_observation"
     if any(token in source for token in ("fixture", "smoke")):
@@ -296,7 +305,9 @@ def _normalize_evidence_class(value: Any, *, source_label: str = "") -> str:
         return "e2e_test"
     if "test" in source:
         return "unit_test"
-    if any(token in source for token in ("research", "backfill")):
+    if any(token in source for token in ("research", "backfill", "eod", "thetadata", "onclickmedia", "fallback")):
+        return "research_backfill"
+    if source:
         return "research_backfill"
     return LIVE_EVIDENCE_CLASS
 
@@ -358,7 +369,11 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
     net_realized_pnl_usd = 0.0
     gross_realized_pnl_usd = 0.0
     exact_contract_count = 0
+    excluded_non_proof_count = 0
     for position in positions:
+        if not _position_proof_eligible(position):
+            excluded_non_proof_count += 1
+            continue
         net_pnl_pct = _safe_float(position.get("net_pnl_pct"))
         gross_pnl_pct = _safe_float(position.get("gross_pnl_pct"))
         snapshot = None
@@ -401,7 +416,37 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
         "negative_sum_pct": round(negative, 3),
         "net_realized_pnl_usd": round(net_realized_pnl_usd, 2),
         "gross_realized_pnl_usd": round(gross_realized_pnl_usd, 2),
+        "non_proof_closed_position_count": excluded_non_proof_count,
     }
+
+
+def _position_proof_eligible(position: dict[str, Any]) -> bool:
+    if position.get("proof_eligible") is not True:
+        return False
+    source = position.get("source_pick_snapshot")
+    source_pick = dict(source) if isinstance(source, dict) else {}
+    explicit_sources = [
+        position.get("source_label"),
+        position.get("proof_source_label"),
+        position.get("market_data_source"),
+        position.get("options_market_data_source"),
+        position.get("options_data_source"),
+        position.get("quote_source"),
+        position.get("data_source"),
+        source_pick.get("source_label"),
+        source_pick.get("proof_source_label"),
+        source_pick.get("market_data_source"),
+        source_pick.get("options_market_data_source"),
+        source_pick.get("options_data_source"),
+        source_pick.get("quote_source"),
+        source_pick.get("data_source"),
+    ]
+    normalized_sources = {
+        str(value or "").strip().lower()
+        for value in explicit_sources
+        if str(value or "").strip()
+    }
+    return bool(PROOF_OPTIONS_SOURCE_LABELS.intersection(normalized_sources))
 
 
 def _forward_ledger_runtime_diagnostics(
@@ -975,7 +1020,7 @@ def evaluate_claim_readiness(
     per_symbol_closed: dict[str, int] = {}
     for position in closed_positions:
         symbol = str(position.get("ticker") or "").strip().upper()
-        if symbol and str(position.get("contract_symbol") or "").strip():
+        if symbol and _position_proof_eligible(position) and str(position.get("contract_symbol") or "").strip():
             per_symbol_closed[symbol] = per_symbol_closed.get(symbol, 0) + 1
     for symbol in TARGET_SYMBOLS:
         symbol_count = per_symbol_closed.get(symbol, 0)

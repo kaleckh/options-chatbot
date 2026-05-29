@@ -21,6 +21,18 @@ class ImportMarketDataOptionsEodTests(unittest.TestCase):
             [date(2026, 5, 15), date(2026, 5, 18)],
         )
 
+    def test_business_dates_skips_exchange_holidays(self):
+        self.assertEqual(
+            _business_dates(date(2026, 5, 22), date(2026, 5, 26)),
+            [date(2026, 5, 22), date(2026, 5, 26)],
+        )
+
+    def test_business_dates_skips_ad_hoc_full_market_closures(self):
+        self.assertEqual(
+            _business_dates(date(2025, 1, 8), date(2025, 1, 10)),
+            [date(2025, 1, 8), date(2025, 1, 10)],
+        )
+
     def test_date_from_marketdata_expiration_reads_epoch_seconds(self):
         self.assertEqual(
             _date_from_marketdata_expiration(1781812800),

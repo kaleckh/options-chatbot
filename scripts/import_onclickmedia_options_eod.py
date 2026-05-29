@@ -24,6 +24,7 @@ from historical_options_store import (  # noqa: E402
     HistoricalOptionsStore,
     import_historical_option_snapshots,
 )
+from us_equity_market_calendar import is_us_equity_market_day  # noqa: E402
 
 
 SOURCE_LABEL = "onclickmedia_research_grade_eod_bidask"
@@ -294,6 +295,7 @@ def select_recent_shared_dates(
         shared = {item for item in shared if item >= start_date}
     if end_date is not None:
         shared = {item for item in shared if item <= end_date}
+    shared = {item for item in shared if is_us_equity_market_day(item)}
     selected = sorted(shared)
     if target_count > 0:
         selected = selected[-target_count:]

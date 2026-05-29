@@ -1,6 +1,6 @@
 # Day Trading Current State
 
-Last updated: 2026-04-15
+Last updated: 2026-05-25
 
 ## Critical Rule: Read Code First
 
@@ -13,204 +13,71 @@ Last updated: 2026-04-15
 
 ## Snapshot Warning
 
-In this worktree, the old app-facing Next day-trading route files and the `DayTradingLab` component are not present. `src/app/api/day-trading/*` still exists as empty scaffolding folders only.
+In this worktree, there is no active day-trading Next route or mounted day-trading React surface. `src/app/api/day-trading/*` contains empty scaffolding folders only.
 
-Use this document as background on the legacy or CLI-oriented day-trading lane, not as a description of the current browser surface.
+Use this file as a status note for legacy and sidecar code, not as a current browser route map.
 
-## Goal
+## What Exists
 
-The active day-trading goal is now:
-- prove a repeatable BTC-first edge net of fees and slippage
-- keep the user in control of execution
-- block low-quality or untrusted live signals instead of forcing trades
-- treat research honesty as more important than trade frequency
-
-This is still a research and supervision system, not an autonomous execution stack.
-
-## Active Market Split
-
-The day-trading system has two lanes:
-
-### `crypto`
-
-This is the default active research track.
-
-- universe: `BTCUSDT`, `ETHUSDT`, `SOLUSDT`
-- market type: spot
-- exchange/data adapter: `binance_us` first, then global Binance fallback when available
-- raw bars: `1m`
-- strategy bars: derived `5m`
-- active session:
-  - `Denver Core` = `07:00-11:00 America/Denver` = `09:00-13:00 ET`
-- trading days for the profitability pilot:
-  - Monday through Friday only
-
-Main code:
-- `crypto_options/signals.py`
-- `crypto_options/execution.py`
-- `crypto_options/deribit.py`
-
-Current managed crypto slate:
-- `BTCUSDT 5m Bottom Reclaim`
-  - paper-candidate reversal challenger
-- `BTCUSDT 5m Failed Breakdown Reclaim`
-  - paper-candidate stop-run reversal challenger
-- `BTCUSDT 5m Range Mean Reversion`
-  - active phase-1 BTC setup
-- `BTCUSDT 5m Opening Range Breakout 15m Close`
-  - paper-candidate Denver Core breakout challenger
-- `BTCUSDT 5m Opening Range Breakout 30m Retest`
-  - paper-candidate Denver Core breakout-retest challenger
-- `BTCUSDT 5m Trend Continuation`
-  - locked until the BTC advance gate passes
-- `ETHUSDT 5m Trend Continuation`
-  - locked until BTC clears the advance gate
-- `SOLUSDT 5m Event Watch`
-  - paper-only and disabled for live unlocks until BTC and ETH prove out
-
-### `equities_legacy`
-
-This is the older ETF morning lab kept for comparison.
-
-- symbols: `SPY`, `QQQ`
-- data source: Yahoo intraday bars
-- logic is still morning-session specific
+### Legacy equity day-trading engine
 
 Main code:
 - `src/lib/day-trading/engine.js`
 
-## Current Worktree Surface
+Coverage:
+- `tests/day-trading/engine.test.js`
+- `tests/day-trading/fixtures.js`
 
-There is no active day-trading Next route or mounted day-trading React surface in this checkout.
+Package command:
 
-What is actually present:
-- legacy equity research code under `src/lib/day-trading/engine.js`
-- crypto sidecar code under `crypto_options/*`
-- deterministic Node coverage under `tests/day-trading/*`
-- the package script `npm run daytrading:test`
+```bash
+npm run daytrading:test
+```
 
-What is not present in this worktree:
+This lane is deterministic test and research code. It is not exposed through the current App Router shell.
+
+### Crypto options sidecar
+
+Main code:
+- `crypto_options/config.py`
+- `crypto_options/signals.py`
+- `crypto_options/deribit.py`
+- `crypto_options/execution.py`
+
+Coverage:
+- `tests/test_crypto_options_execution.py`
+
+Package commands:
+
+```bash
+npm run crypto:signals
+npm run crypto:backtest
+npm run crypto:chain
+npm run crypto:spread
+npm run crypto:scan
+npm run crypto:monitor
+```
+
+Current configured crypto symbols are `ETHUSDT` and `BTCUSDT` in `crypto_options/config.py`. This is a crypto options sidecar that scans local normalized `1m` data, builds `5m` signals, and can route paper or live spread execution through Deribit helpers. It is not the same thing as a mounted day-trading browser product.
+
+## What Does Not Exist In This Worktree
+
 - `src/app/api/day-trading/*` route files
 - `src/components/strategy/DayTradingLab.tsx`
+- `src/lib/day-trading/crypto-engine.js`
+- `tests/day-trading/crypto-engine.test.js`
 - package scripts such as `daytrading:watch`, `daytrading:pilot`, or `daytrading:journal:add`
 
-Use the dated day-trading roadmap docs as historical planning context, not as a current route or command map.
+Older day-trading roadmap docs that mention those files or scripts are historical planning records, not the current state.
 
-## BTC Profitability Guardrails
+## Storage Notes
 
-The active BTC pilot is enforced in the engine and CLI, not just described in docs.
-
-Current defaults:
-- `2` approved BTC entries per `America/Denver` trading day
-- unused approvals expire at `11:00 America/Denver`
-- every eligible BTC entry needs a same-day ticket plus all three manual confirmations:
-  - `setup_match_confirmed`
-  - `headline_lockout_checked`
-  - `maker_limit_plan_confirmed`
-- only ticket-linked BTC entries count toward the pilot sample
-- `<30` eligible BTC trades = sample building
-- `30-49` eligible BTC trades = review checkpoint
-- `50+` eligible BTC trades with all gates passing = ETH unlock candidate
-
-Explicit no-trade blockers for BTC range mean reversion:
-- `mid_range`
-- `expansion`
-- `event_shock_lockout`
-
-Watchlist alerts are also suppressed when:
-- data is stale or untrusted
-- the fixed session is closed
-- the daily approval cap is exhausted
-
-## Data Stack
-
-### Crypto
-
-The crypto lane uses a free-data-first stack:
-
-- public exchange klines for backfill
-- local normalized `1m` store
-- derived local `5m` bars
-- optional live poll merge for watchlist freshness
-
-Storage lives under:
-- `data/day-trading/crypto/raw-downloads`
+The crypto options sidecar uses:
 - `data/day-trading/crypto/normalized-1m`
-- `data/day-trading/crypto/derived-5m`
-- `data/day-trading/crypto/backtests`
-- `data/day-trading/crypto/experiments`
-- `data/day-trading/crypto/profitability_journal.json`
-- `data/day-trading/crypto/profitability_preflight_tickets.json`
+- `data/forward-tracking/crypto_options_picks.jsonl`
 
-Implementation detail that matters on this machine:
-- `api.binance.com` has returned `HTTP 451` in this environment
-- the active adapter prefers `api.binance.us`, which works for `BTCUSDT`, `ETHUSDT`, and `SOLUSDT`
-
-### Equities Legacy
-
-The legacy lane still uses:
-- Yahoo chart data
-- synthetic fallback only for tests and exploration
-
-## Deterministic Coverage
-
-There is deterministic Node coverage for both lanes.
-
-Legacy equity coverage:
-- `tests/day-trading/engine.test.js`
-
-Crypto coverage:
-- `tests/day-trading/crypto-engine.test.js`
-
-Crypto tests cover:
-- `1m -> 5m` aggregation
-- CSV/import path
-- validation with trusted fixtures
-- watchlist blocking on untrusted data
-- BTC preflight ticket cap and expiry behavior
-- pilot disqualification accounting
-- explicit `mid_range`, `expansion`, and `event_shock_lockout` blockers
-- `30`-trade review vs `50`-trade advance milestones
-- router defaulting to crypto while keeping equities legacy reachable
-
-## Current Surface Notes
-
-The crypto lane logic still exists in code and tests, but it is not exposed through the current Next.js app shell.
-
-Any older references to:
-- a default market selector
-- watchlist panels
-- journal APIs
-- ticket desk routes
-- in-app preflight consoles
-
-should be read as planned or historical rather than live browser behavior in this worktree.
-
-## Historical Context That Led Here
-
-The current BTC-first guardrails were a response to earlier broad crypto validation, not a random pivot.
-
-What the earlier control-first work established:
-- a broad 90-day crypto replay loop was feasible with trusted spot data
-- the broad family/window sweep remained negative overall
-- more data did not reveal a hidden winner
-- the right next move was to narrow the live lane, not widen it
-
-What changed after that work:
-- the live workflow standardized on `scheduled_windows`, `denver_core`, and `all_hours`
-- the active pilot stopped pretending every family was ready for live comparison
-- BTC range mean reversion became the only live phase-1 setup
-- ETH and SOL stayed locked behind explicit evidence gates
+The old broader BTC-first day-trading pilot artifacts described in dated roadmap files are not present as active browser surfaces here.
 
 ## Current Recommendation
 
-Keep the crypto lane narrow and honest.
-
-That means:
-1. keep BTC spot as the only live pilot lane
-2. use the fixed Denver session and the approval ticket flow
-3. log execution quality, not just outcome PnL
-4. treat the `30`-trade checkpoint as review only
-5. only consider ETH after the `50`-trade gate passes cleanly
-
-The older equities lab still has value as a reference surface, but it is no longer the repository's main day-trading research path.
+Keep day-trading work paused unless the user explicitly asks to reopen, archive, or repair it. For current product work, focus on the supervised options browser lane and the AI commodity exact OPRA proof lane.

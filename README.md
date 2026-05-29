@@ -13,13 +13,17 @@
 
 This repo is a mixed Next.js plus FastAPI system for supervised options research and trade review.
 
-The currently active app-facing product surface is the options lane:
+The mounted browser product is the regular supervised options lane:
 - live scan
 - replay and truth diagnostics
 - tracked positions
 - suggested trades
 
+The active non-browser proof lane is the AI commodity / commodity-infrastructure options lane. It lives under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`, and is currently gated on exact Alpaca SIP/OPRA bid/ask snapshot history rather than profitability claims.
+
 The default supervised options scanner playbook is `bullish_pullback_observation`, shown in the UI as Bullish Pullback Primary. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior; eligible scheduled picks are allowed to auto-track. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
+
+Current bullish-pullback profitability work uses trusted ThetaData intraday OPRA/NBBO exact-contract evidence. The latest per-ticker audit keeps `10` symbols in the current queue, routes `10` to separate scout lanes, removes `9` from the current queue, and leaves `30` research/data-needed. See `docs/bullish-pullback-ticker-audit-2026-05-29.md`.
 
 Important snapshot caveats:
 - the App Router shell is the real browser entrypoint; `src/app/page.tsx` is intentionally a stub
@@ -68,6 +72,12 @@ The repo uses multiple stores on purpose:
   - profit-cycle and truth-gate artifacts
 - `data/forward-tracking/*`
   - forward scan evidence
+- `data/options-validation/*`
+  - imported options truth stores, Alpaca OPRA captures, and replay run artifacts
+- `data/ai-commodity-infra/*`
+  - AI commodity universe, progress readbacks, and proof-lane acquisition artifacts
+- `data/alpaca-options-strategy-lab/*`
+  - research-only exact bid/ask lab artifacts; not final promotion proof by itself
 - `market_data.db`
   - market data cache and research support data
 
@@ -111,6 +121,7 @@ Core checks:
 
 ```bash
 npm run build
+npm run verify:docs
 npm run verify
 npm run verify:python:full
 ```
@@ -125,6 +136,14 @@ npm run profit-loop:health
 npm run profit-loop:holdout
 npm run profit-loop:validate
 npm run profit-loop:canary
+npm run accuracy:report
+npm run verify:accuracy:no-write
+```
+
+AI commodity proof-lane readback:
+
+```bash
+python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest
 ```
 
 The repo still contains legacy day-trading tests and engine code, but the corresponding app-facing routes and UI are absent in this worktree. Treat that lane as separate from the current browser product unless and until it is restored deliberately.
@@ -145,11 +164,25 @@ The repo still contains legacy day-trading tests and engine code, but the corres
   - current options product status
 - `docs/day-trading-current-state.md`
   - current status of the day-trading research lane with a snapshot warning
+- `docs/PROJECT_CONTEXT.md`
+  - active work scope and lane boundaries
+- `docs/NEXT_STEPS.md`
+  - current time-gated lane actions
+- `docs/lane-lab-lanes.md`
+  - lane registry and promotion bars
+- `docs/bullish-pullback-ticker-audit-2026-05-29.md`
+  - current per-ticker keep/move/research/remove decisions for the 59-symbol bullish-pullback universe
+- `docs/WORKLOG.md`
+  - recent local evidence and doc changes
+- `docs/weekly-bug-audit-loop.md`
+  - recurring six-agent bug audit runbook and automation prompt
+- `docs/agent-worktree-hygiene.md`
+  - agent branch, push, untracked-file, and clean-worktree rules
 
 Treat the files above as the living docs for this worktree.
 
 Historical planning and audit docs:
-- dated roadmap or audit files under `docs/`
+- dated roadmap or audit files under `docs/archive/`
 - `docs/autoresearch/*`
 - `research_runs/*`
 

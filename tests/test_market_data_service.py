@@ -181,6 +181,60 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(period_hist["Close"].tolist(), range_hist["Close"].tolist())
         self.assertEqual(len(self.ticker.history_calls), 1)
 
+    def test_daily_history_refreshes_cache_with_interior_business_day_gap(self):
+        service = self._service()
+        full_dates = pd.to_datetime(["2026-04-01", "2026-04-02", "2026-04-03", "2026-04-06", "2026-04-07"])
+        full = pd.DataFrame(
+            {
+                "Open": [100, 101, 102, 103, 104],
+                "High": [101, 102, 103, 104, 105],
+                "Low": [99, 100, 101, 102, 103],
+                "Close": [100, 101, 102, 103, 104],
+                "Volume": [1_000_000] * 5,
+            },
+            index=full_dates,
+        )
+        gapped = full.drop(pd.Timestamp("2026-04-02"))
+        ticker = _RecordingTicker("AAA", history_df=full)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service.yf, "Ticker", return_value=ticker), \
+             patch.object(service, "datetime", FrozenDateTime), \
+             patch.object(service, "_recent_refresh_start", return_value=FrozenDateTime.now().date() + timedelta(days=365)):
+            service._store_daily_history("AAA", gapped, adjustment_mode="adjusted")
+            result = service.get_history("AAA", start="2026-04-01", end="2026-04-08", interval="1d")
+
+        self.assertFalse(result.empty)
+        self.assertEqual(len(ticker.history_calls), 1)
+        history_stats = service.get_cache_stats()["stats"]["history"]
+        self.assertEqual(history_stats["persistent_partial_hits"], 1)
+        self.assertEqual(history_stats["full_refreshes"], 1)
+
+    def test_daily_history_cache_coverage_ignores_holiday_end_boundary(self):
+        service = self._service()
+        cached = pd.DataFrame(
+            {
+                "Open": [100],
+                "High": [101],
+                "Low": [99],
+                "Close": [100],
+                "Volume": [1_000_000],
+            },
+            index=pd.to_datetime(["2025-12-24"]),
+        )
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", FrozenDateTime), \
+             patch.object(service, "_recent_refresh_start", return_value=FrozenDateTime.now().date() + timedelta(days=365)), \
+             patch.object(service, "_fetch_history_direct", side_effect=AssertionError("holiday boundary should not refresh")):
+            service._store_daily_history("AAA", cached, adjustment_mode="adjusted")
+            result = service.get_history("AAA", start="2025-12-24", end="2025-12-26", interval="1d")
+
+        self.assertEqual(result.index.map(lambda ts: ts.date().isoformat()).tolist(), ["2025-12-24"])
+        history_stats = service.get_cache_stats()["stats"]["history"]
+        self.assertEqual(history_stats["persistent_hits"], 1)
+        self.assertEqual(history_stats.get("network_fetches", 0), 0)
+
     def test_recent_window_daily_requests_refresh_trailing_buffer(self):
         service = self._service()
         with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
@@ -524,6 +578,74 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(self.ticker.history_calls[0][1]["interval"], "1d")
         self.assertEqual(ticker_b.history_calls[0][1]["start"], "2025-12-31")
 
+    def test_download_history_batch_refreshes_symbol_with_interior_business_day_gap(self):
+        service = self._service()
+        full_dates = pd.to_datetime(
+            ["2026-03-23", "2026-03-24", "2026-03-25", "2026-03-26", "2026-03-27", "2026-03-30", "2026-03-31"]
+        )
+        full = pd.DataFrame(
+            {
+                "Open": [100, 101, 102, 103, 104, 105, 106],
+                "High": [101, 102, 103, 104, 105, 106, 107],
+                "Low": [99, 100, 101, 102, 103, 104, 105],
+                "Close": [100, 101, 102, 103, 104, 105, 106],
+                "Volume": [1_000_000] * 7,
+            },
+            index=full_dates,
+        )
+        gapped = full.drop(pd.Timestamp("2026-03-24"))
+        batch_calls = []
+
+        def _batch_download(*args, **kwargs):
+            batch_calls.append({"args": args, "kwargs": kwargs})
+            return pd.concat({"AAA": full}, axis=1)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", FrozenDateTime), \
+            patch.object(service, "_recent_refresh_start", return_value=FrozenDateTime.now().date() + timedelta(days=365)):
+            service._store_daily_history("AAA", gapped, adjustment_mode="adjusted")
+            result = service.download_history_batch(["AAA"], period="10d", download_fn=_batch_download)
+
+        self.assertFalse(result.empty)
+        self.assertEqual(len(batch_calls), 1)
+        stats = service.get_cache_stats()["stats"]
+        self.assertEqual(stats["history"]["persistent_partial_hits"], 1)
+        self.assertEqual(stats["download_history_batch"]["batch_network_fetches"], 1)
+
+    def test_download_history_batch_cache_coverage_ignores_holiday_end_boundary(self):
+        service = self._service()
+
+        class ChristmasDateTime(FrozenDateTime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2025, 12, 25, 12, 0, 0)
+
+        cached = pd.DataFrame(
+            {
+                "Open": [100],
+                "High": [101],
+                "Low": [99],
+                "Close": [100],
+                "Volume": [1_000_000],
+            },
+            index=pd.to_datetime(["2025-12-24"]),
+        )
+
+        def _unexpected_download(*args, **kwargs):
+            raise AssertionError("holiday boundary should not refresh")
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", ChristmasDateTime), \
+             patch.object(service, "_recent_refresh_start", return_value=ChristmasDateTime.now().date() + timedelta(days=365)):
+            service._store_daily_history("AAA", cached, adjustment_mode="adjusted")
+            result = service.download_history_batch(["AAA"], period="1d", download_fn=_unexpected_download)
+
+        self.assertFalse(result.empty)
+        self.assertEqual(result["Close"]["AAA"].tolist(), [100])
+        stats = service.get_cache_stats()["stats"]
+        self.assertEqual(stats["history"]["persistent_hits"], 1)
+        self.assertEqual(stats.get("download_history_batch", {}).get("batch_network_fetches", 0), 0)
+
     def test_download_history_batch_uses_single_batch_fetch_for_cold_symbols(self):
         service = self._service()
         batch_calls: list[dict] = []
@@ -549,6 +671,62 @@ class MarketDataServiceTests(unittest.TestCase):
         self.assertEqual(stats["history"]["persistent_misses"], 2)
         self.assertEqual(stats["history"]["full_refreshes"], 2)
         self.assertEqual(stats["history"]["network_fetches"], 2)
+
+    def test_download_history_batch_skips_yahoo_batch_when_alpaca_is_requested(self):
+        service = self._service()
+        calls: list[str] = []
+        frames = {
+            "AAA": make_history(length=120, start=100.0, step=0.5, volume=8_000_000),
+            "BBB": make_history(length=120, start=80.0, step=0.3, volume=7_000_000),
+        }
+
+        def _unexpected_download(*args, **kwargs):
+            raise AssertionError("yf.download should not run when Alpaca is the requested provider")
+
+        def _history(symbol, **_kwargs):
+            calls.append(symbol)
+            return frames[symbol]
+
+        with patch.dict(
+            os.environ,
+            {
+                "OPTIONS_MARKET_DATA_PROVIDER": "alpaca",
+                "ALPACA_ENABLE_DURING_TESTS": "1",
+                "OPTIONS_RUN_MODE": "paper",
+                "MARKET_DATA_DB_PATH": self.db_path,
+            },
+            clear=False,
+        ), patch.object(service, "datetime", FrozenDateTime), patch.object(service, "get_history", side_effect=_history):
+            result = service.download_history_batch(["AAA", "BBB"], period="90d", download_fn=_unexpected_download)
+
+        self.assertFalse(result.empty)
+        self.assertEqual(calls, ["AAA", "BBB"])
+        stats = service.get_cache_stats()["stats"]
+        self.assertEqual(stats.get("download_history_batch", {}).get("batch_network_fetches", 0), 0)
+
+    def test_download_history_batch_refreshes_complete_recent_cache(self):
+        service = self._service()
+        initial = make_history(length=120, start=100.0, step=0.5, volume=8_000_000)
+        updated = initial.copy()
+        updated.loc[updated.index[-1], "Close"] = 999.0
+        calls: list[str] = []
+
+        def _initial_download(*args, **kwargs):
+            calls.append("initial")
+            return pd.concat({"AAA": initial}, axis=1)
+
+        def _updated_download(*args, **kwargs):
+            calls.append("updated")
+            return pd.concat({"AAA": updated}, axis=1)
+
+        with patch.dict(os.environ, {"MARKET_DATA_DB_PATH": self.db_path}, clear=False), \
+             patch.object(service, "datetime", FrozenDateTime):
+            first = service.download_history_batch(["AAA"], period="90d", download_fn=_initial_download)
+            second = service.download_history_batch(["AAA"], period="90d", download_fn=_updated_download)
+
+        self.assertEqual(calls, ["initial", "updated"])
+        self.assertNotEqual(first["Close"]["AAA"].iloc[-1], second["Close"]["AAA"].iloc[-1])
+        self.assertEqual(second["Close"]["AAA"].iloc[-1], 999.0)
 
     def test_download_history_batch_keeps_adjusted_and_raw_daily_cache_separate(self):
         service = self._service()

@@ -255,9 +255,21 @@ async def call_tool_endpoint(tool_name: str, body: dict[str, Any] | None = None)
         raise HTTPException(404, f"Unknown tool: {tool_name}")
     try:
         result = await _run_in_worker(fn, **body)
-        return {"result": result}
+        return {"result": _coerce_tool_result(result)}
     except Exception as e:
-        return {"result": json.dumps({"error": type(e).__name__, "message": str(e)})}
+        raise HTTPException(500, {"error": type(e).__name__, "message": str(e)})
+
+
+def _coerce_tool_result(result: Any) -> Any:
+    if not isinstance(result, str):
+        return result
+    text = result.strip()
+    if not text or text[0] not in "[{":
+        return result
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return result
 
 
 # ── Profile endpoints ────────────────────────────────────────────────────────
@@ -286,6 +298,8 @@ async def update_profile(body: dict[str, Any]):
 
     if profile_type not in STRATEGY_PROFILES:
         raise HTTPException(400, f"Unknown profile type: {profile_type}")
+    if not isinstance(updates, dict):
+        raise HTTPException(400, "updates must be an object")
 
     sp = STRATEGY_PROFILES[profile_type]
     for section_key, section_val in updates.items():
@@ -2079,12 +2093,13 @@ async def reset_market_data_cache_stats():
 
 
 @app.post("/api/backtest")
-async def run_backtest_endpoint(body: dict[str, Any]):
+async def run_backtest_endpoint(body: dict[str, Any] | None = None):
     """Run historical backtest."""
+    body = body or {}
     try:
-        lookback_years = body.get("lookback_years", 5)
-        iv_adj = body.get("iv_adj", 1.20)
-        n_picks = body.get("n_picks", DEFAULT_SCAN_PICKS)
+        lookback_years = _parse_positive_int_or_default(body.get("lookback_years"), "lookback_years", 5)
+        iv_adj = _parse_positive_price_or_default(body.get("iv_adj"), "iv_adj", 1.20)
+        n_picks = _parse_positive_int_or_default(body.get("n_picks"), "n_picks", DEFAULT_SCAN_PICKS)
         pricing_lane = body.get("pricing_lane", "pessimistic")
         truth_lane = body.get("truth_lane")
         playbook = body.get("playbook")

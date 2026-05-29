@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-04-15
+Last updated: 2026-05-29
 
 ## Critical Rule: Read Code First
 
@@ -22,6 +22,8 @@ The active browser product is still the supervised options lane:
 This remains supervised decision support, not autonomous trading.
 The default supervised options scanner playbook is `bullish_pullback_observation`, surfaced as Bullish Pullback Primary. That legacy `_observation` cohort ID is not watch-only; eligible scheduled picks can auto-track under the current guardrails. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
 
+There is also an active non-browser proof lane for AI commodity / commodity-infrastructure options. That lane is proof-first and is not claim-ready; it waits on exact Alpaca SIP/OPRA bid/ask snapshot history before any production filter changes or profitability claims.
+
 ## Snapshot
 
 - The mounted browser surface is still the options lane in `AppShell`, with `PredictionsView` and `StrategyView`.
@@ -30,6 +32,7 @@ The default supervised options scanner playbook is `bullish_pullback_observation
 - Tracked positions are the real supervised lane and live in Postgres via `DATABASE_URL`.
 - Suggested trades are the hypothetical lane and live in `chat_history.db`.
 - FastAPI exposes support endpoints such as `/api/proof-summary` and `/api/positions/{position_id}/close-prefill`, but those are backend-only right now and are not mirrored through the Next proxy layer.
+- FastAPI also exposes `DELETE /api/predictions/{pred_id}` without a matching Next route.
 
 ## Primary Workflow
 
@@ -85,19 +88,51 @@ The latest saved `wfo_results.json` artifact in this worktree was generated on `
 - `profit_factor`: `0.57`
 - `avg_pnl_pct`: `-14.27`
 
-That means the current saved replay artifact is still useful for supervision and diagnostics, but it does not justify a profitability claim.
+That saved broad replay artifact is still useful for supervision and diagnostics, but it does not justify a profitability claim by itself.
 
-### Profit-cycle state
+### Bullish pullback ThetaData state
 
-The bounded options profit cycle is currently blocked.
+The regular `bullish_pullback_observation` lane now has newer exact trusted ThetaData intraday OPRA/NBBO research artifacts that supersede `wfo_results.json` for current profitability work:
 
-As of `2026-04-15`, `evaluate_measurement_gate()` reports:
-- imported-daily quote coverage below the current gate floor
-- trusted truth inputs are stale
+- active universe: `59` symbols, with `CMCSA` excluded
+- trusted coverage: `252` shared dates from `2025-05-22` through `2026-05-22`
+- high-confidence S/A/B evidence: `108` exact quoted trades, PF `4.86`, avg `+53.22%`
+- count-expanded all-59 branch: `130` exact quoted trades, PF `2.04`, avg `+24.56%`, `97.7%` quote coverage
+- per-ticker audit: `docs/bullish-pullback-ticker-audit-2026-05-29.md`
+
+This is paper-shadow research evidence, not strict proof-complete or live-capital approval. The current issue is trade count: the honest target is `200+` exact trades/year, and the best current branches are still `70` to `92` exact trades short.
+
+### Regular options profit-cycle state
+
+The bounded regular options profit cycle is currently blocked.
+
+The latest saved `data/options-profit/status.json` artifact was generated on `2026-04-03T22:44:56.929432Z`. It reports:
+- mandatory imported-daily truth refresh failed because source truth is stale
 - zero matured eligible forward events
 - zero closed tracked positions for profitability supervision
 
 `data/options-profit/live_profile.json` still shows the incumbent managed candidates as `baseline_broad_control` for `SPY` and `QQQ` on both the call and put sides.
+
+### AI commodity exact OPRA proof lane
+
+The latest generated AI commodity progress readback is `data/ai-commodity-infra/progress/latest.md`, generated on `2026-05-27T14:17:01Z`.
+
+Current state:
+- lane: `ai_commodity_infra_observation`
+- proof provider: `alpaca:sip:opra`
+- proof source label: `alpaca_opra_daily_snapshot`
+- scan/proof universe: `24` symbols from `data/ai-commodity-infra/universe.json`
+- exact proof window: `3` of `100` shared quote dates, `2026-05-20` through `2026-05-22`
+- verification gate: `not_verified`
+- live scan candidates in the latest readback: `0`
+- next guarded capture target: `2026-05-26`, due now if Alpaca credentials and market-data access are available
+
+The current blocker is history depth, not a failed profitability result. Exact replay is blocked until enough shared OPRA bid/ask dates exist. Production filter changes and variant promotion remain locked until exact OPRA replay can measure the changes.
+
+The generated runbook's current selected step is:
+1. guarded capture with `python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-26`
+2. readback with `python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest`
+3. repair capture gaps before any replay or filter work if shared quote dates do not advance from `3` to `4`
 
 ### Proof-lane state
 
@@ -120,12 +155,14 @@ The canonical proof summary exists in FastAPI at `/api/proof-summary`, but the b
 - suggested-trade storage and review
 - replay and truth diagnostics in the strategy surface
 - options profit-cycle state artifacts under `data/options-profit/*`
+- AI commodity OPRA proof-lane tracking with full scan/proof universe alignment
 
 ### Not ready
 
 - trust-by-default options deployment
 - profitability claims from the current replay artifacts
 - claim-ready forward evidence for `SPY` and `QQQ`
+- AI commodity profitability claims or filter tuning before exact OPRA replay unlocks
 - a mounted day-trading browser surface in this worktree
 
 ## Current Recommendation
@@ -140,3 +177,5 @@ That means:
 5. treat policy output as conservative until the truth inputs are fresh again and the proof lane accumulates real exact-contract evidence
 
 For the separate day-trading research lane, read `docs/day-trading-current-state.md`, but treat it as code and research context rather than the current browser product.
+
+For the AI commodity proof lane, follow `docs/NEXT_STEPS.md` and the generated `data/ai-commodity-infra/progress/latest.md` runbook. Keep the lane locked to exact Alpaca OPRA proof until the shared-date gate and replay gates pass.

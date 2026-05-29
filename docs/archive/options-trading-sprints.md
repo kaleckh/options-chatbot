@@ -1,12 +1,14 @@
 # Options Trading Sprints
 
+Archive note: this is a historical sprint record. It predates the current scope decision in `../DECISIONS.md`; treat references to active crypto or day-trading work as archived context unless the user explicitly reopens that lane.
+
 Goal: simple, supervised options maintenance and controlled trade evaluation.
 
 Last updated: 2026-04-03
 
 This document is options-only.
 
-For the active crypto research lane, read:
+For the then-active crypto research lane, this record pointed to:
 - `docs/day-trading-current-state.md`
 
 The product loop stays intentionally narrow:
@@ -16,7 +18,7 @@ The product loop stays intentionally narrow:
 4. Track the position and return HOLD or SELL.
 5. Compare real tracked outcomes against replay expectations.
 
-The active crypto profitability pilot now lives separately in the day-trading docs and scripts. This file stays focused on the options maintenance lane.
+At the time, the crypto profitability pilot lived separately in the day-trading docs and scripts. This file stayed focused on the options maintenance lane.
 
 ## Sprint 1: Replay-Backed Trade Policy
 

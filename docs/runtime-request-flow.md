@@ -39,6 +39,12 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `GET /api/backtest/comparison`
   - Next: `src/app/api/backtest/comparison/route.ts`
   - FastAPI: `/api/backtest/comparison`
+- `GET /api/backtest/forward-evidence`
+  - Next: `src/app/api/backtest/forward-evidence/route.ts`
+  - FastAPI: `/api/backtest/forward-evidence`
+- `GET /api/backtest/exit-audit`
+  - Next: `src/app/api/backtest/exit-audit/route.ts`
+  - FastAPI: `/api/backtest/exit-audit`
 - `POST /api/backtest`
   - Next: `src/app/api/backtest/route.ts`
   - FastAPI: `/api/backtest`
@@ -111,6 +117,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 These FastAPI routes exist today but do not have matching Next route handlers in this worktree:
 
 - `GET /api/profiles`
+- `DELETE /api/predictions/{pred_id}`
 - `GET /api/positions/{position_id}/close-prefill`
 - `POST /api/scan/recommendations`
 - `POST /api/scan/roll`

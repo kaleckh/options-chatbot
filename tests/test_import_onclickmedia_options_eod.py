@@ -123,6 +123,17 @@ class ImportOnclickMediaOptionsEodTests(unittest.TestCase):
 
         self.assertEqual(selected, [date(2026, 5, 22)])
 
+    def test_select_recent_shared_dates_excludes_market_holidays(self):
+        selected = select_recent_shared_dates(
+            {
+                "FCX": [date(2026, 5, 22), date(2026, 5, 25), date(2026, 5, 26)],
+                "SLV": [date(2026, 5, 22), date(2026, 5, 25), date(2026, 5, 26)],
+            },
+            target_count=2,
+        )
+
+        self.assertEqual(selected, [date(2026, 5, 22), date(2026, 5, 26)])
+
     def test_import_writes_resumable_chain_files_and_summary(self):
         client = _FakeOnclickClient()
 

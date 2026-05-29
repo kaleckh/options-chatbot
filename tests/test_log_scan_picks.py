@@ -23,6 +23,12 @@ class _WeekdayDateTime(datetime):
         return cls(2026, 4, 14, 11, 0, 0)
 
 
+class _HolidayDateTime(datetime):
+    @classmethod
+    def now(cls):
+        return cls(2026, 5, 25, 11, 0, 0)
+
+
 class _UnavailableRepository:
     is_available = False
 
@@ -162,6 +168,21 @@ class LogScanPicksTests(unittest.TestCase):
             load_local_env.assert_not_called()
             self.assertFalse(log_file.exists())
 
+    def test_main_skips_exchange_holiday_before_logging(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            log_file = log_dir / "scan_picks.jsonl"
+            with (
+                patch.object(log_scan_picks, "LOG_DIR", log_dir),
+                patch.object(log_scan_picks, "LOG_FILE", log_file),
+                patch.object(log_scan_picks, "datetime", _HolidayDateTime),
+                patch.object(log_scan_picks, "load_local_env") as load_local_env,
+            ):
+                log_scan_picks.main()
+
+            load_local_env.assert_not_called()
+            self.assertFalse(log_file.exists())
+
     def test_pick_fill_price_prefers_executable_spread_entry_over_net_debit(self):
         pick = _make_pick("AMZN", debit=7.625)
         pick["entry_execution_price"] = 11.34
@@ -219,6 +240,7 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["fill_degradation_vs_mid"], 0.2)
         self.assertEqual(record["selected_spread"]["long_contract_symbol"], "SPY260626C00650000")
         self.assertEqual(len(record["top_alternatives"]), 3)
+        self.assertEqual(record["top_spread_alternatives"], record["top_alternatives"])
         self.assertEqual(record["top_alternatives"][0]["short_strike"], 680.0)
         self.assertEqual(record["top_alternatives"][-1]["rank"], 3)
         self.assertEqual(record["candidate_execution_label"], "executable_opra_paper_candidate")
@@ -270,6 +292,10 @@ class LogScanPicksTests(unittest.TestCase):
                         "drop_key": "option_liquidity",
                         "details": {
                             "reason": "illiquid_quote",
+                            "no_fill_reason": "spread_ask_bid_not_fillable_inside_filters",
+                            "ask_bid": {"ask": 3.2, "bid": 0.8},
+                            "intended_ask_bid_debit": 2.4,
+                            "executable_debit": 2.45,
                             "candidate_execution_label": "rejected_liquidity",
                             "signal_variant": "momentum",
                             "liquidity": {
@@ -302,6 +328,17 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["distance_to_current_filters"], 14.75)
         self.assertEqual(record["selected_spread"]["long_leg"]["contract_symbol"], "RIO260619C00070000")
         self.assertEqual(record["top_alternatives"][0]["short_strike"], 75.0)
+        self.assertEqual(record["top_spread_alternatives"], record["top_alternatives"])
+        self.assertEqual(record["ask_bid"], {"ask": 3.2, "bid": 0.8})
+        self.assertEqual(record["intended_ask_bid_debit"], 2.4)
+        self.assertEqual(record["intended_limit_debit"], 2.4)
+        self.assertEqual(record["executable_debit"], 2.45)
+        self.assertEqual(record["max_quote_age_hours"], 18.25)
+        self.assertEqual(record["quote_age_excess_hours"], 10.25)
+        self.assertEqual(record["no_fill_reason"], "spread_ask_bid_not_fillable_inside_filters")
+        self.assertEqual(record["liquidity_reason"], "illiquid_quote")
+        self.assertTrue(record["research_only"])
+        self.assertTrue(record["non_promotable"])
         self.assertEqual(record["production_filter_action"], "preserve_filters_until_exact_replay_unlock")
 
     def test_scan_allows_auto_track_ignores_legacy_observation_only_playbooks(self):

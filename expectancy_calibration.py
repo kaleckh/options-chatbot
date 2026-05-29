@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import copy
 from collections import defaultdict
@@ -51,9 +52,10 @@ _SURFACE_PROVENANCE_KEYS = (
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return default
+    return parsed if math.isfinite(parsed) else default
 
 
 def _surface_source_metadata(source_metadata: Optional[dict[str, Any]]) -> dict[str, Any]:
@@ -246,7 +248,7 @@ def _summarize_group(
     field_values: dict[str, Any],
     level_id: str,
 ) -> dict[str, Any]:
-    pnl_values = [float(trade.get("pnl_pct", 0.0) or 0.0) for trade in trades]
+    pnl_values = [_safe_float(trade.get("pnl_pct"), 0.0) for trade in trades]
     win_rate = sum(1 for value in pnl_values if value > 0) / max(len(pnl_values), 1) * 100.0
     directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
     quality_values = [_safe_float(trade.get("quality_score"), 0.0) for trade in trades]
@@ -504,7 +506,7 @@ class CalibrationAccumulator:
                 stats = _empty_group_stats(field_values)
                 level_nodes[key] = stats
             stats["trades"] += 1
-            pnl = float(normalized.get("pnl_pct", 0.0) or 0.0)
+            pnl = _safe_float(normalized.get("pnl_pct"), 0.0)
             stats["pnl_sum"] += pnl
             stats["pnl_sq_sum"] = stats.get("pnl_sq_sum", 0.0) + pnl * pnl
             if pnl > 0:
@@ -632,6 +634,7 @@ def _normalize_trade_for_surface(
         "direction_score": direction_score,
         "quality_score": quality_score,
         "tech_score": tech_score,
+        "pnl_pct": _safe_float(trade.get("pnl_pct"), 0.0),
     }
 
 

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from scripts.imported_daily_walk_forward import (
     _metrics,
+    _window_dates,
     build_imported_daily_walk_forward_validation,
     run_imported_daily_walk_forward_validation,
 )
@@ -114,6 +115,12 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
 
         self.assertEqual(metrics["directional_accuracy_pct"], 50.0)
         self.assertEqual(metrics["profit_factor"], 999.0)
+
+    def test_window_dates_rejects_non_positive_steps(self):
+        with self.assertRaises(ValueError):
+            _window_dates(["2026-05-01"], train_days=1, test_days=0)
+        with self.assertRaises(ValueError):
+            _window_dates(["2026-05-01"], train_days=0, test_days=1)
 
     def test_runner_invokes_imported_daily_replay_without_saving_result(self):
         replay = {

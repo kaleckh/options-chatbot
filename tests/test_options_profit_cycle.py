@@ -49,11 +49,15 @@ class OptionsProfitCycleTests(unittest.TestCase):
                     "ticker": "SPY",
                     "direction": "call",
                     "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
                     "entry_execution_price": 1.0,
                     "exit_execution_price": 1.01,
                     "contracts": 1,
                     "fee_total_usd": 2.60,
-                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                    "source_pick_snapshot": {
+                        "profit_candidate_id": "candidate-1",
+                        "options_data_source": "alpaca_opra",
+                    },
                 }
             ],
         )
@@ -62,6 +66,122 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertEqual(metrics["exact_outcome_count"], 1)
         self.assertEqual(metrics["avg_net_pnl_pct"], -1.6)
         self.assertEqual(metrics["profit_factor"], 0.0)
+
+    def test_candidate_position_metrics_excludes_missing_proof_eligible_rows(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "candidate-1",
+            [
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "net_pnl_pct": -99.0,
+                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                },
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "net_pnl_pct": 15.0,
+                    "source_pick_snapshot": {
+                        "profit_candidate_id": "candidate-1",
+                        "options_data_source": "alpaca_opra",
+                    },
+                },
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_outcome_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], 15.0)
+
+    def test_candidate_position_metrics_excludes_non_proof_rows_and_scores_all_winners(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "candidate-1",
+            [
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": False,
+                    "net_pnl_pct": -99.0,
+                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                },
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "net_pnl_pct": 15.0,
+                    "source_pick_snapshot": {
+                        "profit_candidate_id": "candidate-1",
+                        "options_data_source": "alpaca_opra",
+                    },
+                },
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_outcome_count"], 1)
+        self.assertEqual(metrics["profit_factor"], 999.0)
+
+    def test_candidate_position_metrics_excludes_non_opra_proof_flag_rows(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "candidate-1",
+            [
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "source_label": "non_opra_vendor",
+                    "net_pnl_pct": 99.0,
+                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                },
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "net_pnl_pct": -5.0,
+                    "source_pick_snapshot": {
+                        "profit_candidate_id": "candidate-1",
+                        "options_data_source": "alpaca_opra",
+                    },
+                },
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_outcome_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -5.0)
+
+    def test_candidate_position_metrics_requires_explicit_opra_provenance(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "candidate-1",
+            [
+                {
+                    "ticker": "SPY",
+                    "direction": "call",
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "net_pnl_pct": 99.0,
+                    "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
+                }
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 0)
+        self.assertEqual(metrics["exact_outcome_count"], 0)
 
     def test_live_profile_overlay_applies_only_to_target_symbol(self):
         ensure_options_profit_state()
@@ -278,12 +398,14 @@ class OptionsProfitCycleTests(unittest.TestCase):
                 "ticker": "SPY",
                 "direction": "call",
                 "contract_symbol": "SPY260417C00500000",
+                "proof_eligible": True,
                 "net_pnl_pct": 15.0,
                 "source_pick_snapshot": {
                     "ticker": "SPY",
                     "direction": "call",
                     "profit_candidate_id": candidate_id,
                     "contract_symbol": "SPY260417C00500000",
+                    "options_data_source": "alpaca_opra",
                 },
             }
         ]

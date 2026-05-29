@@ -1,6 +1,6 @@
 # Lane Lab Lanes
 
-Last updated: 2026-05-21
+Last updated: 2026-05-29
 
 ## Purpose
 
@@ -34,6 +34,24 @@ This registry defines the next paper-trading lanes to test without overstating t
 | 4 | `gld_macro_breakout` | GLD can create a non-equity beta lane distinct from tech/index calls. | PF >= 1.20, positive avg net P&L, median loser below 45% debit. |
 | 5 | `relative_strength_pullback` | Strong names after controlled pullbacks beat momentum chasing. | 40 trades, underlying win rate >= 55%, avg underlying return >= 0.8%, option expectancy > 8%. |
 
+## Active Bullish Pullback Extensions
+
+The current `bullish_pullback_observation` proof work uses exact trusted ThetaData intraday OPRA/NBBO evidence, not midpoint or nearest-listed fills. The per-ticker audit at `docs/bullish-pullback-ticker-audit-2026-05-29.md` sets the current queue:
+
+- keep in current lane: `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`
+- move to separate lanes: `QQQ`, `DIA`, `XLK`, `NVDA`, `AMZN`, `TSLA`, `WMT`, `PM`, `CAT`, `PLD`
+- remove from current queue: `JPM`, `BAC`, `C`, `ABBV`, `SLB`, `RTX`, `FCX`, `COIN`, `PLTR`
+
+The next profitability layer should test these as separate frozen hypotheses rather than forcing weak current-lane picks:
+
+| Priority | Lane | Starting Symbols | Pass Bar |
+| ---: | --- | --- | --- |
+| 33 | `etf_index_pullback_control` | `QQQ`, `DIA`, `XLK` | Adds clean exact trades while preserving PF >= 1.75, stress PF >= 1.50, and no unpriced OOS candidates. |
+| 34 | `high_beta_momentum_volatility` | `NVDA`, `AMZN`, `TSLA` first; `META`, `AMD`, `NFLX`, `ARM`, `SMCI` only after exact evidence improves | Proves the high-beta names under a new frozen hypothesis instead of reusing failed current-lane evidence. |
+| 35 | `defensive_refill_income` | `WMT`, `PM`; optionally `KO` and `T` after exact sample expansion | Adds trade count without relying on thin one- or two-trade PF artifacts. |
+| 36 | `reit_rate_sensitive` | `PLD` first | Keeps REIT/rate-sensitive proof separate from the current bullish-pullback queue. |
+| 37 | `industrial_scout` | `CAT` first | Requires a larger exact sample before promotion because the current evidence is profitable but sparse. |
+
 ## Tier 2 Lane Specs
 
 | Priority | Lane | Hypothesis | Pass Bar |
@@ -47,6 +65,14 @@ This registry defines the next paper-trading lanes to test without overstating t
 | 32 | `ai_commodity_infra_observation` | AI data-centre growth may create tradable stress in power, grid, copper, silver, lithium, and uranium proxies, but the shortage narrative needs liquidity-first proof. | 40 tagged trades, PF >= 1.15, positive avg net P&L, and no single sub-theme providing more than 50% of net profit. |
 
 `ai_commodity_infra_observation` now gets its scan universe from `data/ai-commodity-infra/universe.json`. The exact proof loop requires the full scan-eligible universe to have Alpaca SIP/OPRA daily snapshots; core/conditional buckets remain thematic metadata and do not narrow the profitability gate.
+
+Current proof readback from `data/ai-commodity-infra/progress/latest.md`:
+- `3` / `100` exact shared Alpaca OPRA dates are captured.
+- The proof and scan universes are aligned at `24` symbols.
+- The latest live scan has `0` candidates and raw drop reasons are recorded.
+- The latest generated readback is `2026-05-27T14:17:01Z`.
+- The current guarded command is `python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-26`; it is due now if credentials and data access are available.
+- Filter tuning and variant promotion are locked until exact OPRA replay has enough history to measure changes.
 
 ## Tier 3 Lane Specs
 

@@ -68,19 +68,48 @@ def _strategy_type(scan_pick: dict[str, Any]) -> str:
     explicit = str(scan_pick.get("strategy_type") or "").strip().lower()
     if explicit:
         return explicit
-    if scan_pick.get("short_strike") is not None or scan_pick.get("short_contract_symbol"):
+    if scan_pick.get("short_strike") is not None or _snapshot_short_contract_symbol(scan_pick):
         return "vertical_spread"
     return "single_leg"
+
+
+def _snapshot_contract_symbol(source_pick: dict[str, Any]) -> str:
+    return str(
+        source_pick.get("contract_symbol")
+        or source_pick.get("contractSymbol")
+        or source_pick.get("option_contract_symbol")
+        or ""
+    ).strip()
+
+
+def _snapshot_short_contract_symbol(source_pick: dict[str, Any]) -> str:
+    return str(
+        source_pick.get("short_contract_symbol")
+        or source_pick.get("shortContractSymbol")
+        or source_pick.get("short_option_contract_symbol")
+        or ""
+    ).strip()
+
+
+def _has_complete_exact_snapshot_contracts(source_pick: dict[str, Any]) -> bool:
+    if source_pick.get("approximation_only"):
+        return False
+    if not _snapshot_contract_symbol(source_pick):
+        return False
+    if source_pick.get("short_strike") is not None or _snapshot_short_contract_symbol(source_pick):
+        return bool(_snapshot_short_contract_symbol(source_pick))
+    return True
 
 
 def _needs_backfill(row: Any, source_pick: dict[str, Any]) -> bool:
     if str(row["status"] or "").strip().lower() != "open":
         return False
+    row_contract_symbol = row.get("contract_symbol") if isinstance(row, dict) else row["contract_symbol"]
+    if not str(row_contract_symbol or "").strip():
+        return True
     if source_pick.get("approximation_only"):
         return True
-    if source_pick.get("short_strike") is not None and not str(source_pick.get("short_contract_symbol") or "").strip():
-        return True
-    if not str(row.get("contract_symbol") if isinstance(row, dict) else row["contract_symbol"] or "").strip() and not str(source_pick.get("contract_symbol") or "").strip():
+    if source_pick.get("short_strike") is not None and not _snapshot_short_contract_symbol(source_pick):
         return True
     return False
 
@@ -93,11 +122,19 @@ def migrate_tracked_positions(repository) -> dict[str, Any]:
         source_pick = _load_json(row.get("source_pick_snapshot"))
         if not _needs_backfill(row, source_pick):
             continue
-        resolved_pick, resolved_fill_price, resolution = resolve_comparable_contract_pick(
-            source_pick,
-            fill_price=float(row.get("entry_option_price") or 0.0),
-            filled_at=row.get("filled_at"),
-        )
+        if _has_complete_exact_snapshot_contracts(source_pick):
+            resolved_pick = dict(source_pick)
+            resolved_pick["contract_symbol"] = _snapshot_contract_symbol(source_pick)
+            if _snapshot_short_contract_symbol(source_pick):
+                resolved_pick["short_contract_symbol"] = _snapshot_short_contract_symbol(source_pick)
+            resolved_fill_price = float(row.get("entry_option_price") or 0.0)
+            resolution = {"source": "source_pick_snapshot_contract_symbol"}
+        else:
+            resolved_pick, resolved_fill_price, resolution = resolve_comparable_contract_pick(
+                source_pick,
+                fill_price=float(row.get("entry_option_price") or 0.0),
+                filled_at=row.get("filled_at"),
+            )
         if resolution is None or not str(resolved_pick.get("contract_symbol") or "").strip():
             skipped.append({"id": int(row["id"]), "ticker": source_pick.get("ticker"), "reason": "no_comparable_contract"})
             continue
@@ -132,7 +169,7 @@ def migrate_suggested_trades() -> dict[str, Any]:
     cur = conn.cursor()
     rows = cur.execute(
         """
-        SELECT id, status, contracts, strike, expiry, entry_option_price, entry_underlying_price,
+        SELECT id, status, contracts, contract_symbol, strike, expiry, entry_option_price, entry_underlying_price,
                source_pick_snapshot, filled_at
         FROM suggested_trades
         ORDER BY id
@@ -144,20 +181,29 @@ def migrate_suggested_trades() -> dict[str, Any]:
         source_pick = _load_json(row["source_pick_snapshot"])
         if str(row["status"] or "").strip().lower() != "open":
             continue
-        if not source_pick.get("approximation_only") and str(source_pick.get("contract_symbol") or "").strip():
+        if not _needs_backfill(dict(row), source_pick):
             continue
-        resolved_pick, resolved_fill_price, resolution = resolve_comparable_contract_pick(
-            source_pick,
-            fill_price=float(row["entry_option_price"] or 0.0),
-            filled_at=row["filled_at"],
-        )
+        if _has_complete_exact_snapshot_contracts(source_pick):
+            resolved_pick = dict(source_pick)
+            resolved_pick["contract_symbol"] = _snapshot_contract_symbol(source_pick)
+            if _snapshot_short_contract_symbol(source_pick):
+                resolved_pick["short_contract_symbol"] = _snapshot_short_contract_symbol(source_pick)
+            resolved_fill_price = float(row["entry_option_price"] or 0.0)
+            resolution = {"source": "source_pick_snapshot_contract_symbol"}
+        else:
+            resolved_pick, resolved_fill_price, resolution = resolve_comparable_contract_pick(
+                source_pick,
+                fill_price=float(row["entry_option_price"] or 0.0),
+                filled_at=row["filled_at"],
+            )
         if resolution is None or not str(resolved_pick.get("contract_symbol") or "").strip():
             skipped.append({"id": int(row["id"]), "ticker": source_pick.get("ticker"), "reason": "no_comparable_contract"})
             continue
         cur.execute(
             """
             UPDATE suggested_trades
-            SET strike = ?,
+            SET contract_symbol = ?,
+                strike = ?,
                 expiry = ?,
                 entry_option_price = ?,
                 entry_underlying_price = ?,
@@ -166,6 +212,7 @@ def migrate_suggested_trades() -> dict[str, Any]:
             WHERE id = ?
             """,
             (
+                str(resolved_pick.get("contract_symbol")),
                 float(resolved_pick.get("strike")),
                 str(resolved_pick.get("expiry")),
                 float(resolved_fill_price),

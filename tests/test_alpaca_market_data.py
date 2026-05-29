@@ -466,6 +466,7 @@ class AlpacaMarketDataTests(unittest.TestCase):
                     "quote_basis": "mid",
                     "quote_freshness_status": "fresh",
                     "selection_source": "live_chain_exact_contract",
+                    "candidate_execution_label": "executable_opra_paper_candidate",
                     "promotion_class": "promotable_exact_contract",
                     "market_data_source": amd.ALPACA_OPTIONS_SOURCE,
                     "options_data_source": amd.ALPACA_OPTIONS_SOURCE,

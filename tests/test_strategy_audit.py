@@ -908,6 +908,104 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertFalse(commodity_metrics["is_illiquid"])
         self.assertEqual(commodity_metrics["reasons"], [])
 
+    def test_fetch_best_spread_uses_ai_commodity_profile_for_liquidity_first_ranking(self):
+        expiry = "2025-04-18"
+        calls = pd.DataFrame(
+            [
+                {
+                    "contractSymbol": "CMD250418C00095000",
+                    "strike": 95.0,
+                    "bid": 3.99,
+                    "ask": 4.01,
+                    "lastPrice": 4.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 10,
+                    "openInterest": 100,
+                    "delta": 0.25,
+                },
+                {
+                    "contractSymbol": "CMD250418C00100000",
+                    "strike": 100.0,
+                    "bid": 4.8,
+                    "ask": 5.2,
+                    "lastPrice": 5.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 10,
+                    "openInterest": 100,
+                    "delta": 0.50,
+                },
+                {
+                    "contractSymbol": "CMD250418C00105000",
+                    "strike": 105.0,
+                    "bid": 1.92,
+                    "ask": 2.08,
+                    "lastPrice": 2.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 10,
+                    "openInterest": 100,
+                    "delta": 0.20,
+                },
+                {
+                    "contractSymbol": "CMD250418C00110000",
+                    "strike": 110.0,
+                    "bid": 0.99,
+                    "ask": 1.01,
+                    "lastPrice": 1.0,
+                    "impliedVolatility": 0.25,
+                    "volume": 10,
+                    "openInterest": 100,
+                    "delta": 0.05,
+                },
+            ]
+        )
+        chain = SimpleNamespace(calls=calls, puts=pd.DataFrame())
+        commodity = oc._profile_with_filter_overrides(
+            copy.deepcopy(oc.STRATEGY_PROFILES["equity"]),
+            oc.AI_COMMODITY_OPTION_FILTERS,
+        )
+
+        with patch.object(oc, "datetime", _StrategyAuditDateTime), \
+             patch.object(oc, "_cached_options_metadata", return_value=SimpleNamespace(status="fresh", value=[expiry])), \
+             patch.object(
+                 oc,
+                 "_cached_option_chain_metadata",
+                 return_value=SimpleNamespace(status="fresh", value=chain),
+             ):
+            broad_result = oc._fetch_best_spread(
+                "CMD",
+                "call",
+                long_delta_target=0.50,
+                short_delta_target=0.20,
+                target_dte=25,
+                stock_price=100.0,
+                hv30_fallback=0.25,
+                max_width_pct=20.0,
+                min_net_debit=0.30,
+                max_debit_pct_of_width=90.0,
+            )
+            commodity_result = oc._fetch_best_spread(
+                "CMD",
+                "call",
+                long_delta_target=0.50,
+                short_delta_target=0.20,
+                target_dte=25,
+                stock_price=100.0,
+                hv30_fallback=0.25,
+                max_width_pct=20.0,
+                min_net_debit=0.30,
+                max_debit_pct_of_width=90.0,
+                sp=commodity,
+            )
+
+        self.assertIsNotNone(broad_result)
+        self.assertIsNotNone(commodity_result)
+        self.assertTrue(broad_result["spread_alternatives"][0]["is_illiquid"])
+        self.assertIn("wide_leg_spread", broad_result["spread_alternatives"][0]["liquidity_reasons"])
+        self.assertFalse(commodity_result["spread_alternatives"][0]["is_illiquid"])
+        self.assertEqual(commodity_result["spread_alternatives"][0]["liquidity_reasons"], [])
+        self.assertFalse(commodity_result["spread_liquidity"]["is_illiquid"])
+        self.assertEqual(commodity_result["spread_liquidity"]["reasons"], [])
+
     def test_bootstrap_expectancy_exposes_ev_shortfall_without_passing_floor(self):
         ev_pct = oc._bootstrap_heuristic_ev_pct(
             direction_score=68.9,
@@ -2205,6 +2303,14 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(wfo._trade_promotion_class(sparse), "research_sparse_calibration")
         self.assertEqual(wfo._trade_promotion_class(bootstrap), "research_bootstrap")
 
+    def test_trade_non_promotable_reason_preserves_unpriced_reason(self):
+        unpriced = {
+            "entry_contract_resolution": "nearest_listed_contract",
+            "unpriced_reason": "missing_exit_quote_for_leg",
+        }
+
+        self.assertEqual(wfo._trade_non_promotable_reason(unpriced), "missing_exit_quote_for_leg")
+
     def test_trade_calibration_density_does_not_promote_legacy_missing_density_rows(self):
         legacy = {
             "entry_contract_resolution": "exact_target_contract",
@@ -3305,6 +3411,127 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(playbook["lane_role"], "proof_control_yardstick")
         self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
 
+    def test_quality90_debit55_canary_uses_executable_debit_before_midpoint_debit(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        pick = {
+            "ticker": "QQQ",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 430.0,
+            "short_strike": 440.0,
+            "net_debit": 5.49,
+            "entry_execution_price": 5.6,
+            "spread_width": 10.0,
+            "quality_score": 91.0,
+            "direction_score": 80.0,
+            "tech_score": 80.0,
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
+        playbook = ss.get_scan_playbook("quality90_debit55_canary")
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "blocked")
+        self.assertEqual(ranked["debit_pct_of_width"], 56.0)
+        self.assertEqual(ranked["debit_pct_of_width_source"], "entry_execution_price")
+        self.assertFalse(ranked["debit_pct_of_width_source_is_ask_bid_style"])
+        self.assertTrue(ranked["debit_pct_of_width_source_is_opra_executable"])
+        self.assertTrue(ranked["debit_pct_of_width_source_is_executable"])
+        self.assertIn("Spread debit", " ".join(ranked["guardrail_reasons"]))
+
+    def test_guardrail_debit_provenance_separates_ask_bid_from_research_values(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        base = {
+            "asset_class": "index",
+            "sector": "Index ETF",
+            "direction": "call",
+            "type": "call",
+            "strategy_type": "vertical_spread",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 500.0,
+            "short_strike": 510.0,
+            "spread_width": 10.0,
+            "quality_score": 80.0,
+            "direction_score": 80.0,
+            "tech_score": 80.0,
+        }
+        spread_ask_bid = {
+            **base,
+            "ticker": "SPY",
+            "entry_execution_price": 3.9,
+            "entry_execution_basis": "spread_ask_bid",
+        }
+        midpoint = {
+            **base,
+            "ticker": "QQQ",
+            "asset_class": "index",
+            "entry_execution_price": 3.9,
+            "entry_execution_basis": "spread_mid",
+        }
+        research = {
+            **base,
+            "ticker": "DIA",
+            "net_debit": 3.9,
+        }
+        opra_executable = {
+            **base,
+            "ticker": "XLK",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "entry_execution_price": 3.9,
+            "entry_execution_basis": "spread_ask_bid",
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
+        playbook = {
+            **ss.get_scan_playbook("tracked_winner_observation"),
+            "block_same_ticker": False,
+            "max_scan_picks_per_ticker": 5,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [spread_ask_bid, midpoint, research, opra_executable],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        by_ticker = {pick["ticker"]: pick for pick in result["ranked_picks"]}
+        self.assertTrue(by_ticker["SPY"]["debit_pct_of_width_source_is_ask_bid_style"])
+        self.assertFalse(by_ticker["SPY"]["debit_pct_of_width_source_is_opra_executable"])
+        self.assertFalse(by_ticker["SPY"]["debit_pct_of_width_source_is_executable"])
+        self.assertEqual(by_ticker["SPY"]["debit_pct_of_width_source_execution_basis"], "spread_ask_bid")
+        self.assertFalse(by_ticker["QQQ"]["debit_pct_of_width_source_is_ask_bid_style"])
+        self.assertFalse(by_ticker["QQQ"]["debit_pct_of_width_source_is_opra_executable"])
+        self.assertEqual(by_ticker["QQQ"]["debit_pct_of_width_source_execution_basis"], "spread_mid")
+        self.assertFalse(by_ticker["DIA"]["debit_pct_of_width_source_is_ask_bid_style"])
+        self.assertFalse(by_ticker["DIA"]["debit_pct_of_width_source_is_opra_executable"])
+        self.assertEqual(by_ticker["DIA"]["debit_pct_of_width_source"], "net_debit")
+        self.assertTrue(by_ticker["XLK"]["debit_pct_of_width_source_is_ask_bid_style"])
+        self.assertTrue(by_ticker["XLK"]["debit_pct_of_width_source_is_opra_executable"])
+        self.assertTrue(by_ticker["XLK"]["debit_pct_of_width_source_is_executable"])
+
     def test_tracked_winner_observation_tags_broad_winner_shape(self):
         class _AvailablePositionsRepo:
             is_available = True
@@ -3396,6 +3623,16 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(playbook["proof_yardstick_playbook"], "quality90_debit55_canary")
         self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
         self.assertFalse(playbook.get("observation_only", False))
+
+    def test_scan_symbols_fall_back_to_allowed_tickers(self):
+        symbols = ss._scan_symbols_for_playbook(
+            {
+                "id": "allowed_only",
+                "allowed_tickers": ["SPY", "QQQ", "SPY"],
+            }
+        )
+
+        self.assertEqual(symbols, ["SPY", "QQQ"])
 
     def test_bullish_pullback_observation_requires_executable_opra_candidate(self):
         class _AvailablePositionsRepo:
@@ -3561,6 +3798,8 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(playbook["max_debit_pct_of_width"], 55.0)
         self.assertEqual(playbook["core_tickers"], list(ss.AI_COMMODITY_INFRA_CORE_TICKERS))
         self.assertEqual(playbook["conditional_tickers"], list(ss.AI_COMMODITY_INFRA_CONDITIONAL_TICKERS))
+        self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
+        self.assertEqual(playbook["conditional_required_candidate_execution_label"], "executable_opra_paper_candidate")
         self.assertIn("historical_data_ready_tickers", playbook)
         self.assertIn("FCX", playbook["allowed_tickers"])
         self.assertIn("SLV", playbook["allowed_tickers"])
@@ -3569,6 +3808,10 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertIn("PWR", playbook["scan_tickers"])
         self.assertNotIn("CPER", playbook["scan_tickers"])
         self.assertNotIn("LIT", playbook["scan_tickers"])
+
+    def test_unknown_scan_playbook_id_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unknown scan playbook"):
+            ss.get_scan_playbook("ai_commmodity_infra_observation")
 
     def test_ai_commodity_replay_playbook_matches_scan_universe(self):
         playbook = wfo.REPLAY_PLAYBOOKS["ai_commodity_infra_observation"]
@@ -3587,7 +3830,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
 
         playbook = {
             **ss.get_scan_playbook("ai_commodity_infra_observation"),
-            "historical_data_ready_tickers": ["FCX"],
+            "historical_data_ready_tickers": ["FCX", "SCCO"],
         }
         clear = {
             "ticker": "FCX",
@@ -3603,13 +3846,20 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             "quality_score": 74.0,
             "direction_score": 80.0,
             "tech_score": 76.0,
+            "candidate_execution_label": "executable_opra_paper_candidate",
         }
         wrong_ticker = {**clear, "ticker": "NVDA"}
         expensive = {**clear, "ticker": "SLV", "asset_class": "index", "net_debit": 3.0}
-        missing_history = {**clear, "ticker": "ALB", "asset_class": "equity"}
+        missing_label = {**clear, "ticker": "SCCO", "asset_class": "equity", "candidate_execution_label": ""}
+        missing_history = {
+            **clear,
+            "ticker": "ALB",
+            "asset_class": "equity",
+            "candidate_execution_label": "executable_opra_paper_candidate",
+        }
 
         result = ss.apply_playbook_guardrails(
-            [clear, wrong_ticker, expensive, missing_history],
+            [clear, wrong_ticker, expensive, missing_label, missing_history],
             playbook=playbook,
             positions_repository=_AvailablePositionsRepo(),
             include_blocked=True,
@@ -3623,14 +3873,74 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(by_ticker["FCX"]["suggested_size_tier"], "starter")
         self.assertTrue(by_ticker["FCX"]["historical_data_ready"])
         self.assertEqual(by_ticker["FCX"]["ai_commodity_bucket"], "core_options")
-        self.assertEqual(by_ticker["ALB"]["guardrail_decision"], "caution")
+        self.assertEqual(by_ticker["SCCO"]["guardrail_decision"], "blocked")
+        self.assertTrue(by_ticker["SCCO"]["historical_data_ready"])
+        self.assertEqual(by_ticker["SCCO"]["ai_commodity_bucket"], "conditional_options")
+        self.assertEqual(by_ticker["ALB"]["guardrail_decision"], "blocked")
         self.assertFalse(by_ticker["ALB"]["historical_data_ready"])
         self.assertEqual(by_ticker["ALB"]["ai_commodity_bucket"], "conditional_options")
+        self.assertEqual(by_ticker["ALB"]["ai_commodity_diagnostics"]["bucket"], "conditional_options")
+        self.assertEqual(
+            by_ticker["FCX"]["ai_commodity_diagnostics"]["required_candidate_execution_label"],
+            "executable_opra_paper_candidate",
+        )
 
         reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])
         self.assertIn("only runs on tickers", reasons)
         self.assertIn("Spread debit", reasons)
         self.assertIn("no trusted daily EOD option history", reasons)
+        self.assertIn("conditional tickers require executable_opra_paper_candidate", reasons)
+
+    def test_ai_commodity_core_missing_executable_label_is_blocked_not_clear(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                return []
+
+        playbook = {
+            **ss.get_scan_playbook("ai_commodity_infra_observation"),
+            "historical_data_ready_tickers": ["FCX"],
+        }
+        pick = {
+            "ticker": "FCX",
+            "asset_class": "equity",
+            "sector": "Basic Materials",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 55.0,
+            "short_strike": 60.0,
+            "spread_width": 5.0,
+            "net_debit": 2.25,
+            "market_regime": "neutral",
+            "quality_score": 74.0,
+            "direction_score": 80.0,
+            "tech_score": 76.0,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "blocked")
+        self.assertNotEqual(ranked["guardrail_decision"], "clear")
+        self.assertEqual(ranked["suggested_size_tier"], "blocked")
+        self.assertTrue(ranked["historical_data_ready"])
+        self.assertEqual(ranked["ai_commodity_bucket"], "core_options")
+        self.assertEqual(ranked["ai_commodity_diagnostics"]["bucket"], "core_options")
+        self.assertIsNone(ranked["ai_commodity_diagnostics"]["candidate_execution_label"])
+        self.assertEqual(
+            ranked["ai_commodity_diagnostics"]["required_candidate_execution_label"],
+            "executable_opra_paper_candidate",
+        )
+        self.assertIn(
+            "requires executable_opra_paper_candidate",
+            " ".join(ranked["guardrail_reasons"]),
+        )
 
     def test_supervised_scan_passes_playbook_symbols_to_scan_func(self):
         class _AvailablePositionsRepo:

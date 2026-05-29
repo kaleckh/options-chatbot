@@ -10,7 +10,7 @@ import pandas as pd
 import yfinance as yf
 
 from alpaca_market_data import alpaca_provider_requested, make_alpaca_ticker_factory
-from historical_options_store import HistoricalOptionsStore
+from historical_options_store import DAILY_QUOTE_MINUTE_ET, DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
 from market_data_service import (
     get_history as _md_get_history,
     get_option_chain as _md_get_option_chain,
@@ -236,7 +236,7 @@ def _pick_strategy_type(scan_pick: dict[str, Any]) -> str:
     explicit = str(scan_pick.get("strategy_type") or "").strip().lower()
     if explicit:
         return explicit
-    if scan_pick.get("short_strike") is not None or scan_pick.get("short_contract_symbol"):
+    if scan_pick.get("short_strike") is not None or _short_contract_symbol_from_mapping(scan_pick):
         return "vertical_spread"
     return "single_leg"
 
@@ -272,14 +272,26 @@ def _pick_context_fields(scan_pick: dict[str, Any]) -> dict[str, Any]:
         ),
         "short_strike": _safe_float(scan_pick.get("short_strike")),
         "expiry": str(scan_pick.get("expiry") or "")[:10] or None,
-        "contract_symbol": _normalize_contract_symbol(
-            scan_pick.get("contract_symbol")
-            or scan_pick.get("contractSymbol")
-            or scan_pick.get("option_contract_symbol")
-        ),
-        "short_contract_symbol": _normalize_contract_symbol(scan_pick.get("short_contract_symbol")),
+        "contract_symbol": _contract_symbol_from_mapping(scan_pick),
+        "short_contract_symbol": _short_contract_symbol_from_mapping(scan_pick),
         "strategy_type": _pick_strategy_type(scan_pick),
     }
+
+
+def _contract_symbol_from_mapping(source: dict[str, Any]) -> Optional[str]:
+    return _normalize_contract_symbol(
+        source.get("contract_symbol")
+        or source.get("contractSymbol")
+        or source.get("option_contract_symbol")
+    )
+
+
+def _short_contract_symbol_from_mapping(source: dict[str, Any]) -> Optional[str]:
+    return _normalize_contract_symbol(
+        source.get("short_contract_symbol")
+        or source.get("shortContractSymbol")
+        or source.get("short_option_contract_symbol")
+    )
 
 
 def _spread_entry_execution_basis(
@@ -511,11 +523,7 @@ def _entry_quote_snapshot(scan_pick: dict[str, Any]) -> dict[str, Any]:
             snapshot["legs"] = [
                 {
                     "role": "long",
-                    "contract_symbol": _normalize_contract_symbol(
-                        scan_pick.get("contract_symbol")
-                        or scan_pick.get("contractSymbol")
-                        or scan_pick.get("option_contract_symbol")
-                    ),
+                    "contract_symbol": _contract_symbol_from_mapping(scan_pick),
                     "strike": _safe_float(scan_pick.get("strike") or scan_pick.get("long_strike") or scan_pick.get("strike_est")),
                     "premium": _safe_float(scan_pick.get("premium") or scan_pick.get("est_premium")),
                     "bid": _safe_float(scan_pick.get("bid")),
@@ -610,6 +618,9 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
             option_type=direction,
             target_expiry=target_expiry,
             target_strike=float(strike),
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
             allow_last_price=False,
             source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
         )
@@ -621,6 +632,9 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
             option_type=direction,
             target_expiry=long_quote.expiry,
             target_strike=float(fields["short_strike"]),
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
             allow_last_price=False,
             source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
         )
@@ -661,6 +675,9 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
         option_type=direction,
         target_expiry=target_expiry,
         target_strike=float(strike),
+        earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+        window_minutes=0,
+        snapshot_kind=DAILY_SNAPSHOT_KIND,
         allow_last_price=False,
         source_labels=ALPACA_HISTORICAL_OPTION_SOURCE_LABELS,
     )
@@ -923,11 +940,7 @@ def build_position_payload(
     direction = str(scan_pick.get("direction") or scan_pick.get("type") or "").lower()
     strike = scan_pick.get("strike") if scan_pick.get("strike") is not None else scan_pick.get("strike_est")
     expiry = scan_pick.get("expiry")
-    contract_symbol = _normalize_contract_symbol(
-        scan_pick.get("contract_symbol")
-        or scan_pick.get("contractSymbol")
-        or scan_pick.get("option_contract_symbol")
-    )
+    contract_symbol = _contract_symbol_from_mapping(scan_pick)
 
     if not ticker or direction not in {"call", "put"} or strike is None or not expiry:
         raise ValueError("scan_pick is missing required option fields: ticker, direction/type, strike, or expiry.")
@@ -1187,10 +1200,9 @@ def _position_contract_fields(position: dict[str, Any]) -> dict[str, Any]:
         "expiry": str(position.get("expiry") or source_pick.get("expiry") or "")[:10],
         "contract_symbol": _normalize_contract_symbol(
             position.get("contract_symbol")
-            or source_pick.get("contract_symbol")
-            or source_pick.get("contractSymbol")
+            or _contract_symbol_from_mapping(source_pick)
         ),
-        "short_contract_symbol": _normalize_contract_symbol(source_pick.get("short_contract_symbol")),
+        "short_contract_symbol": _short_contract_symbol_from_mapping(source_pick),
         "strategy_type": _pick_strategy_type(source_pick),
     }
 
@@ -1754,8 +1766,7 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         "days_held": days_held,
         "contract_symbol": _normalize_contract_symbol(
             position.get("contract_symbol")
-            or source_pick.get("contract_symbol")
-            or source_pick.get("contractSymbol")
+            or _contract_symbol_from_mapping(source_pick)
         ),
         "stop_option_price": stop_option_price,
         "target_option_price": target_option_price,

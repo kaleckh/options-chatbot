@@ -1,6 +1,6 @@
 # Architecture Audit
 
-Last updated: 2026-04-15
+Last updated: 2026-05-29
 
 ## Purpose
 
@@ -19,6 +19,16 @@ The mounted browser product is the supervised options lane:
 - tracked positions
 - suggested trades
 - replay and truth diagnostics
+
+The active non-browser proof lane is the AI commodity / commodity-infrastructure lane:
+
+- `scripts/run_ai_commodity_opra_progress.py`
+- `data/ai-commodity-infra/universe.json`
+- `data/ai-commodity-infra/progress/latest.md`
+
+It is gated on exact Alpaca SIP/OPRA bid/ask snapshot history and is not claim-ready.
+
+The active regular-options proof work is the `bullish_pullback_observation` ThetaData intraday OPRA/NBBO branch. Its route/product shape is unchanged, but current performance state now lives in `docs/bullish-pullback-ticker-audit-2026-05-29.md`, `data/profitability-lab/bullish-pullback-observation/confidence/latest.json`, and `data/profitability-lab/bullish-pullback-observation/ticker-audit/latest.json`.
 
 The real browser entrypoint is:
 
@@ -49,6 +59,8 @@ These exist in the repo, but they are not the mounted browser product:
   - crypto research and execution sidecar
 - `src/lib/polymarket/*`
   - adjacent market tooling, not wired into the main app shell
+- `scripts/run_ai_commodity_opra_progress.py`
+  - active research/proof sidecar, not a browser route
 
 ## Dead Or Misleading Surfaces
 
@@ -77,6 +89,8 @@ These are still the main architecture risks:
 
 - `wfo_optimizer.py`
   - oversized replay and optimization engine
+- `scripts/run_ai_commodity_opra_progress.py`
+  - very large AI commodity proof-lane orchestration script
 - `options_chatbot.py`
   - oversized scanner and domain logic surface
 - `profit_loop_automation.py`
@@ -119,6 +133,12 @@ These are still the main architecture risks:
   - pricing lane logic
   - report building
   - calibration and truth helpers
+- reduce `scripts/run_ai_commodity_opra_progress.py` into:
+  - capture guard and calendar logic
+  - proof-source audit
+  - live scan recovery readback
+  - report rendering
+  - provider probe adapters
 
 ## What A Senior Engineer Should Read First
 
@@ -133,4 +153,4 @@ These are still the main architecture risks:
 
 ## Bottom Line
 
-The repo is now easier to orient than before, but it is still a mixed-product codebase with one active options surface plus multiple sidecar research lanes. The biggest remaining work is reducing the Python monoliths and finishing the split of `PredictionsView.tsx`.
+The repo is now easier to orient than before, but it is still a mixed-product codebase with one active browser options surface plus proof/research sidecars. The biggest remaining work is reducing the Python monoliths, splitting `PredictionsView.tsx`, and turning the AI commodity proof script into smaller testable modules.

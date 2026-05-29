@@ -17,7 +17,12 @@ for candidate in (ROOT, TESTS_DIR):
 from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from historical_options_fixtures import make_validation_history, write_daily_options_parquet
 from historical_options_store import HistoricalOptionsStore, import_daily_option_parquet
-from options_profit_gate import _daily_truth_source_freshness, _realized_position_metrics, evaluate_measurement_gate
+from options_profit_gate import (
+    _daily_truth_source_freshness,
+    _normalize_evidence_class,
+    _realized_position_metrics,
+    evaluate_measurement_gate,
+)
 from workspace_tempdir import WorkspaceTempDir
 
 
@@ -67,6 +72,8 @@ class OptionsProfitGateTests(unittest.TestCase):
             [
                 {
                     "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
                     "entry_execution_price": 1.0,
                     "exit_execution_price": 1.01,
                     "contracts": 1,
@@ -81,6 +88,134 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertEqual(metrics["net_profit_factor"], 0.0)
         self.assertAlmostEqual(metrics["gross_realized_pnl_usd"], 1.0, places=2)
         self.assertAlmostEqual(metrics["net_realized_pnl_usd"], -1.6, places=2)
+
+    def test_realized_position_metrics_excludes_missing_proof_eligible_rows(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "net_pnl_pct": 50.0,
+                    "gross_pnl_pct": 50.0,
+                },
+                {
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                    "net_pnl_pct": -10.0,
+                    "gross_pnl_pct": -10.0,
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_contract_closed_count"], 1)
+        self.assertEqual(metrics["non_proof_closed_position_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -10.0)
+
+    def test_realized_position_metrics_excludes_non_proof_rows(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": False,
+                    "net_pnl_pct": 50.0,
+                    "gross_pnl_pct": 50.0,
+                },
+                {
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                    "net_pnl_pct": -10.0,
+                    "gross_pnl_pct": -10.0,
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_contract_closed_count"], 1)
+        self.assertEqual(metrics["non_proof_closed_position_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -10.0)
+
+    def test_realized_position_metrics_excludes_non_opra_proof_flag_rows(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "source_label": "non_opra_vendor",
+                    "net_pnl_pct": 50.0,
+                    "gross_pnl_pct": 50.0,
+                },
+                {
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                    "net_pnl_pct": -10.0,
+                    "gross_pnl_pct": -10.0,
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_contract_closed_count"], 1)
+        self.assertEqual(metrics["non_proof_closed_position_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -10.0)
+
+    def test_realized_position_metrics_requires_explicit_opra_provenance(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "net_pnl_pct": 50.0,
+                    "gross_pnl_pct": 50.0,
+                }
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 0)
+        self.assertEqual(metrics["exact_contract_closed_count"], 0)
+        self.assertEqual(metrics["non_proof_closed_position_count"], 1)
+
+    def test_realized_position_metrics_excludes_non_finite_pnl_rows(self):
+        metrics = _realized_position_metrics(
+            [
+                {
+                    "contract_symbol": "SPY240101C00500000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                    "net_pnl_pct": float("inf"),
+                    "gross_pnl_pct": float("inf"),
+                },
+                {
+                    "contract_symbol": "SPY240101C00510000",
+                    "proof_eligible": True,
+                    "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                    "net_pnl_pct": -5.0,
+                    "gross_pnl_pct": -5.0,
+                },
+            ]
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["exact_contract_closed_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -5.0)
+        self.assertEqual(metrics["positive_sum_pct"], 0)
+        self.assertEqual(metrics["net_profit_factor"], 0.0)
+
+    def test_non_proof_source_labels_do_not_default_to_live_production(self):
+        self.assertEqual(
+            _normalize_evidence_class(None, source_label="thetadata_free_eod"),
+            "research_backfill",
+        )
+        self.assertEqual(
+            _normalize_evidence_class(None, source_label="onclickmedia_research_grade_eod_bidask"),
+            "research_backfill",
+        )
+        self.assertEqual(
+            _normalize_evidence_class(None, source_label="live_production"),
+            "live_production",
+        )
 
     def test_source_freshness_uses_manifest_date_to_for_csv_inputs(self):
         csv_path = self.tmpdir / "alpaca_daily.csv"
@@ -331,6 +466,8 @@ class OptionsProfitGateTests(unittest.TestCase):
         closed_positions = [
             {
                 "contract_symbol": "SPY240101C00500000",
+                "proof_eligible": True,
+                "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
                 "entry_execution_price": 2.0,
                 "exit_execution_price": 3.0,
                 "net_pnl_pct": 50.0,
@@ -383,8 +520,20 @@ class OptionsProfitGateTests(unittest.TestCase):
             },
         }
         closed_positions = [
-            {"contract_symbol": "SPY240101C00500000", "net_pnl_pct": 20.0, "gross_pnl_pct": 20.0},
-            {"contract_symbol": "SPY240101C00510000", "net_pnl_pct": -25.0, "gross_pnl_pct": -25.0},
+            {
+                "contract_symbol": "SPY240101C00500000",
+                "proof_eligible": True,
+                "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                "net_pnl_pct": 20.0,
+                "gross_pnl_pct": 20.0,
+            },
+            {
+                "contract_symbol": "SPY240101C00510000",
+                "proof_eligible": True,
+                "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                "net_pnl_pct": -25.0,
+                "gross_pnl_pct": -25.0,
+            },
         ]
 
         with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):
@@ -423,8 +572,20 @@ class OptionsProfitGateTests(unittest.TestCase):
             },
         }
         closed_positions = [
-            {"contract_symbol": "SPY240101C00500000", "net_pnl_pct": 10.0, "gross_pnl_pct": 10.0},
-            {"contract_symbol": "SPY240101C00510000", "net_pnl_pct": -10.0, "gross_pnl_pct": -10.0},
+            {
+                "contract_symbol": "SPY240101C00500000",
+                "proof_eligible": True,
+                "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                "net_pnl_pct": 10.0,
+                "gross_pnl_pct": 10.0,
+            },
+            {
+                "contract_symbol": "SPY240101C00510000",
+                "proof_eligible": True,
+                "source_pick_snapshot": {"options_data_source": "alpaca_opra"},
+                "net_pnl_pct": -10.0,
+                "gross_pnl_pct": -10.0,
+            },
         ]
 
         with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(self.db_path)}, clear=False):

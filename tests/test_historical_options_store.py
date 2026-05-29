@@ -90,6 +90,31 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertGreater(all_summary["quote_count"], 0)
         self.assertEqual(trusted_summary["quote_count"], 0)
 
+        trade_date = self.histories["SPY"].index[0].date()
+        all_entry = store.find_entry_contract(
+            underlying="SPY",
+            trade_date_et=trade_date,
+            option_type="call",
+            target_expiry=trade_date,
+            target_strike=501.0,
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+        )
+        trusted_entry = store.find_entry_contract(
+            underlying="SPY",
+            trade_date_et=trade_date,
+            option_type="call",
+            target_expiry=trade_date,
+            target_strike=501.0,
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+            trusted_only=True,
+        )
+        self.assertIsNotNone(all_entry)
+        self.assertIsNone(trusted_entry)
+
     def test_entry_window_and_exact_contract_resolution(self):
         import_historical_option_snapshots(self.csv_path, "lab_intraday", db_path=self.db_path)
         store = HistoricalOptionsStore(self.db_path)
@@ -186,6 +211,81 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         self.assertEqual(entry.snapshot_kind, DAILY_SNAPSHOT_KIND)
         self.assertEqual(entry.quote_minute_et, 15 * 60 + 55)
         self.assertIsNotNone(entry.underlying_price)
+
+    def test_import_daily_parquet_accepts_capital_date_column(self):
+        capital_date_path = Path(self._tmp.name) / "spy_options_capital_date.parquet"
+        frame = pd.read_parquet(self.daily_parquet_path)
+        frame = frame.rename(columns={"date": "Date"})
+        frame.to_parquet(capital_date_path, index=False)
+
+        result = import_daily_option_parquet(
+            capital_date_path,
+            "spy_daily_capital_date",
+            underlying="SPY",
+            underlying_input=self.underlying_parquet_path,
+            db_path=self.db_path,
+        )
+
+        self.assertGreater(result["imported_rows"], 0)
+        self.assertEqual(result["rejected_rows"], 0)
+
+    def test_import_daily_parquet_accepts_numeric_timestamp_columns(self):
+        timestamp_path = Path(self._tmp.name) / "spy_options_timestamp.parquet"
+        frame = pd.read_parquet(self.daily_parquet_path)
+        frame["timestamp"] = (pd.to_datetime(frame.pop("date"), utc=True).astype("int64") // 1_000_000_000)
+        frame.to_parquet(timestamp_path, index=False)
+
+        underlying_timestamp_path = Path(self._tmp.name) / "spy_underlying_timestamp.parquet"
+        underlying_frame = pd.read_parquet(self.underlying_parquet_path)
+        underlying_date_column = "date" if "date" in underlying_frame.columns else "Date"
+        underlying_frame["timestamp"] = (
+            pd.to_datetime(underlying_frame.pop(underlying_date_column), utc=True).astype("int64") // 1_000_000
+        )
+        underlying_frame.to_parquet(underlying_timestamp_path, index=False)
+
+        result = import_daily_option_parquet(
+            timestamp_path,
+            "spy_daily_timestamp",
+            underlying="SPY",
+            underlying_input=underlying_timestamp_path,
+            db_path=self.db_path,
+        )
+
+        self.assertGreater(result["imported_rows"], 0)
+        self.assertEqual(result["rejected_rows"], 0)
+        store = HistoricalOptionsStore(self.db_path)
+        trade_date = self.histories["SPY"].index[0].date()
+        entry = store.find_entry_contract(
+            underlying="SPY",
+            trade_date_et=trade_date,
+            option_type="call",
+            target_expiry=trade_date,
+            target_strike=501.0,
+            earliest_minute_et=DAILY_QUOTE_MINUTE_ET,
+            window_minutes=0,
+            snapshot_kind=DAILY_SNAPSHOT_KIND,
+        )
+        self.assertIsNotNone(entry)
+        self.assertIsNotNone(entry.underlying_price)
+
+    def test_import_daily_parquet_rejects_unrecognized_numeric_timestamps(self):
+        timestamp_path = Path(self._tmp.name) / "spy_options_bad_timestamp.parquet"
+        frame = pd.read_parquet(self.daily_parquet_path).head(3)
+        frame["timestamp"] = 1_774_915
+        frame = frame.drop(columns=["date"])
+        frame.to_parquet(timestamp_path, index=False)
+
+        result = import_daily_option_parquet(
+            timestamp_path,
+            "spy_daily_bad_timestamp",
+            underlying="SPY",
+            db_path=self.db_path,
+        )
+
+        self.assertEqual(result["imported_rows"], 0)
+        self.assertGreater(result["rejected_rows"], 0)
+        store = HistoricalOptionsStore(self.db_path)
+        self.assertEqual(store.snapshot_summary(DAILY_SNAPSHOT_KIND)["quote_count"], 0)
 
     def test_intraday_and_daily_rows_can_coexist_for_same_contract_and_time(self):
         intraday_result = import_historical_option_snapshots(self.csv_path, "lab_intraday", db_path=self.db_path)

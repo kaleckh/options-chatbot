@@ -4,6 +4,14 @@ from datetime import date, timedelta
 from functools import lru_cache
 
 
+AD_HOC_FULL_MARKET_CLOSURES = frozenset(
+    {
+        # National Day of Mourning for President Jimmy Carter.
+        date(2025, 1, 9),
+    }
+)
+
+
 def observed_fixed_market_holiday(year: int, month: int, day: int) -> date:
     actual = date(year, month, day)
     if actual.weekday() == 5:
@@ -60,6 +68,7 @@ def us_equity_market_holidays(year: int) -> frozenset[date]:
     }
     if year >= 2022:
         holidays.add(observed_fixed_market_holiday(year, 6, 19))
+    holidays.update(item for item in AD_HOC_FULL_MARKET_CLOSURES if item.year == year)
     return frozenset(holidays)
 
 

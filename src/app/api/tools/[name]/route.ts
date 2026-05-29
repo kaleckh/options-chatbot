@@ -7,7 +7,7 @@ export async function POST(
   { params }: { params: Promise<{ name: string }> }
 ) {
   const { name } = await params;
-  const body = await readJsonObject(req);
+  const body = await readJsonObject(req, { defaultValue: {} });
   if (!body) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }

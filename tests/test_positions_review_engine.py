@@ -2,7 +2,9 @@ import os
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -364,6 +366,63 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(snapshot["display_price"], scan_pick["net_debit"])
         self.assertTrue(payload["proof_eligible"])
         self.assertEqual(payload["proof_class"], "live_scan_exact_contract")
+
+    def test_historical_comparable_spread_uses_daily_snapshot_window(self):
+        calls: list[dict[str, object]] = []
+
+        class FakeStore:
+            def find_entry_contract(self, **kwargs):
+                calls.append(kwargs)
+                quote = SimpleNamespace(
+                    expiry=date(2026, 6, 19),
+                    price=5.0 if kwargs["target_strike"] == 100.0 else 2.0,
+                    strike=kwargs["target_strike"],
+                    contract_symbol=(
+                        "AAA260619C00100000"
+                        if kwargs["target_strike"] == 100.0
+                        else "AAA260619C00110000"
+                    ),
+                    underlying_price=101.0,
+                    quote_minute_et=svc.DAILY_QUOTE_MINUTE_ET,
+                )
+                return quote
+
+        scan_pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 100.0,
+            "short_strike": 110.0,
+            "expiry": "2026-06-19",
+        }
+
+        with patch.object(svc, "_historical_store", return_value=FakeStore()):
+            result = svc._resolve_historical_comparable_pick(scan_pick, trade_date=date(2026, 5, 22))
+
+        self.assertIsNotNone(result)
+        self.assertEqual(len(calls), 2)
+        for call in calls:
+            self.assertEqual(call["snapshot_kind"], svc.DAILY_SNAPSHOT_KIND)
+            self.assertEqual(call["earliest_minute_et"], svc.DAILY_QUOTE_MINUTE_ET)
+            self.assertEqual(call["window_minutes"], 0)
+
+    def test_spread_contract_aliases_count_as_resolved_identity(self):
+        scan_pick = {
+            "ticker": "SPY",
+            "direction": "call",
+            "strategy_type": "vertical_spread",
+            "strike": 500.0,
+            "short_strike": 520.0,
+            "expiry": "2026-06-19",
+            "contractSymbol": "SPY260619C00500000",
+            "shortContractSymbol": "SPY260619C00520000",
+        }
+
+        fields = svc._pick_context_fields(scan_pick)
+
+        self.assertEqual(fields["contract_symbol"], "SPY260619C00500000")
+        self.assertEqual(fields["short_contract_symbol"], "SPY260619C00520000")
+        self.assertTrue(svc._has_resolved_contract_identity(scan_pick))
 
     def test_manual_spread_fill_requires_short_leg_for_broker_exact_class(self):
         scan_pick = self._build_vertical_spread_scan_pick()

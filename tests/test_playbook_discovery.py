@@ -113,6 +113,45 @@ class PlaybookDiscoveryTests(unittest.TestCase):
         self.assertNotEqual(candidate["status"], "promote")
         self.assertTrue(any("need at least" in blocker.lower() for blocker in candidate["blockers"]))
 
+    def test_non_finite_metrics_do_not_promote_discovery_slice(self):
+        trades = [
+            {
+                "date": None,
+                "ticker": "SPY",
+                "type": "call",
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "directional_correct": True,
+                "entry_contract_resolution": "exact_target_contract",
+                "pnl_pct": float("inf"),
+            },
+            {
+                "date": None,
+                "ticker": "QQQ",
+                "type": "call",
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+                "directional_correct": True,
+                "entry_contract_resolution": "exact_target_contract",
+                "pnl_pct": float("inf"),
+            },
+        ]
+
+        report = wfo.build_playbook_discovery_report(
+            result=_make_result(trades, playbook="short_term"),
+            min_trades=1,
+        )
+        candidate = _find_candidate(
+            report,
+            {"direction": "call", "market_regime": "bullish", "sector": "Index ETF"},
+        )
+
+        self.assertEqual(candidate["status"], "block")
+        self.assertFalse(candidate["overall"]["metrics_finite"])
+        self.assertIn("profit_factor", candidate["overall"]["non_finite_metrics"])
+        self.assertIn("avg_pnl_pct", candidate["overall"]["non_finite_metrics"])
+        self.assertTrue(any("non-finite metrics" in blocker.lower() for blocker in candidate["blockers"]))
+
     def test_ticker_only_slice_is_not_promoted_by_default(self):
         start = date(2024, 1, 5)
         trades = [

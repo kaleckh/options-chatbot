@@ -131,6 +131,42 @@ class ExperimentScoreboardTests(unittest.TestCase):
         self.assertEqual(len(entries), 1)
         self.assertTrue(entries[0]["path"].endswith("variant.json"))
 
+    def test_load_cached_backtest_entries_sorts_mixed_timezone_run_at_values(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            naive_path = root / "naive.json"
+            aware_path = root / "aware.json"
+            naive_path.write_text(
+                json.dumps(_fake_result(playbook="broad", pricing_lane="mid", run_at="2026-03-30T14:00:00")),
+                encoding="utf8",
+            )
+            aware_path.write_text(
+                json.dumps(_fake_result(playbook="broad", pricing_lane="pessimistic", run_at="2026-03-30T14:01:00Z")),
+                encoding="utf8",
+            )
+
+            entries = scoreboard.load_cached_backtest_entries([root])
+
+        self.assertEqual([Path(entry["path"]).name for entry in entries], ["naive.json", "aware.json"])
+
+    def test_load_cached_backtest_entries_sorts_invalid_run_at_values(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            missing_path = root / "missing.json"
+            aware_path = root / "aware.json"
+            missing_path.write_text(
+                json.dumps(_fake_result(playbook="broad", pricing_lane="mid", run_at="not-a-date")),
+                encoding="utf8",
+            )
+            aware_path.write_text(
+                json.dumps(_fake_result(playbook="broad", pricing_lane="pessimistic", run_at="2026-03-30T14:01:00Z")),
+                encoding="utf8",
+            )
+
+            entries = scoreboard.load_cached_backtest_entries([root])
+
+        self.assertEqual([Path(entry["path"]).name for entry in entries], ["missing.json", "aware.json"])
+
     def test_discover_cached_result_paths_skips_tmp_directories_by_default(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             root = Path(tmp_dir)

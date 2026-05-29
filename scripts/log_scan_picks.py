@@ -30,6 +30,7 @@ from forward_options_ledger import build_forward_scan_snapshot, record_forward_s
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
 from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID, LIVE_SCAN_TRUTH_LANE, run_supervised_scan
+from us_equity_market_calendar import is_us_equity_market_day
 
 
 LOG_DIR = ROOT / "data" / "forward-tracking"
@@ -38,8 +39,8 @@ FILL_ATTEMPT_LOG_FILE = LOG_DIR / "fill_attempts.jsonl"
 LIQUIDITY_NEAR_MISS_LOG_FILE = LOG_DIR / "liquidity_near_misses.jsonl"
 
 
-def _is_weekend(run_at: datetime) -> bool:
-    return run_at.weekday() >= 5
+def _is_market_closed(run_at: datetime) -> bool:
+    return not is_us_equity_market_day(run_at.date())
 
 
 def _scan_date_value(row: dict[str, Any]) -> str:
@@ -139,6 +140,13 @@ def _top_spread_alternatives(pick: dict[str, Any], *, limit: int = 3) -> list[di
         if isinstance(item, dict)
     ]
     return copy.deepcopy(alternatives[: max(int(limit), 0)])
+
+
+def _first_present(*values: Any) -> Any:
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def _top_counts(value: Any, *, limit: int = 5) -> str:
@@ -527,6 +535,7 @@ def _build_fill_attempt_record(
     if intended_limit_price is not None and spread_mid is not None and spread_mid > 0:
         fill_degradation_vs_mid = round(float(intended_limit_price) - float(spread_mid), 4)
         fill_degradation_vs_mid_pct = round(fill_degradation_vs_mid / float(spread_mid) * 100.0, 4)
+    alternatives = _top_spread_alternatives(pick)
     return {
         "logged_at": run_at.isoformat(),
         "scan_date": run_at.strftime("%Y-%m-%d"),
@@ -544,7 +553,8 @@ def _build_fill_attempt_record(
         "signal_family": pick.get("signal_family"),
         "candidate_execution_label": pick.get("candidate_execution_label") or pick.get("execution_candidate_label"),
         "selected_spread": _spread_fill_snapshot(pick),
-        "top_alternatives": _top_spread_alternatives(pick),
+        "top_alternatives": alternatives,
+        "top_spread_alternatives": copy.deepcopy(alternatives),
         "intended_limit_price": intended_limit_price,
         "intended_limit_basis": pick.get("entry_execution_basis"),
         "attempted_limit_price": intended_limit_price,
@@ -710,7 +720,53 @@ def _build_liquidity_near_miss_records(
             continue
         details = _safe_dict(reason.get("details"))
         liquidity = _safe_dict(details.get("liquidity"))
+        selected_spread = _safe_dict(details.get("selected_spread"))
         distance = _liquidity_distance(details)
+        distance_components = distance["components"]
+        alternatives = copy.deepcopy(
+            details.get("top_spread_alternatives")
+            or details.get("top_alternatives")
+            or details.get("spread_alternatives")
+            or []
+        )
+        executable_debit = _first_present(
+            details.get("executable_debit"),
+            details.get("executable_cost"),
+            details.get("estimated_executable_debit"),
+            selected_spread.get("executable_debit"),
+            selected_spread.get("entry_debit"),
+            selected_spread.get("spread_entry_debit"),
+            liquidity.get("spread_entry_debit"),
+        )
+        intended_ask_bid_debit = _first_present(
+            details.get("intended_ask_bid_debit"),
+            details.get("intended_limit_debit"),
+            details.get("limit_debit"),
+            selected_spread.get("intended_ask_bid_debit"),
+            selected_spread.get("entry_debit"),
+            selected_spread.get("spread_entry_debit"),
+            liquidity.get("spread_entry_debit"),
+            executable_debit,
+        )
+        ask_bid = _first_present(
+            details.get("ask_bid"),
+            details.get("bid_ask"),
+            selected_spread.get("ask_bid"),
+            selected_spread.get("bid_ask"),
+        )
+        max_quote_age_hours = _first_present(
+            details.get("max_quote_age_hours"),
+            details.get("quote_age_hours"),
+            selected_spread.get("max_quote_age_hours"),
+            selected_spread.get("quote_age_hours"),
+            liquidity.get("max_quote_age_hours"),
+        )
+        no_fill_reason = _first_present(
+            details.get("no_fill_reason"),
+            details.get("fill_outcome_reason"),
+            details.get("reason"),
+            liquidity.get("reason"),
+        )
         records.append(
             {
                 "logged_at": run_at.isoformat(),
@@ -727,11 +783,28 @@ def _build_liquidity_near_miss_records(
                 "liquidity": copy.deepcopy(liquidity),
                 "liquidity_filters": copy.deepcopy(details.get("liquidity_filters") or {}),
                 "distance_to_current_filters": distance["distance_to_current_filters"],
-                "distance_components": distance["components"],
-                "selected_spread": copy.deepcopy(details.get("selected_spread") or {}),
-                "top_alternatives": copy.deepcopy(details.get("spread_alternatives") or []),
+                "distance_components": distance_components,
+                "worst_leg_spread_excess_pct": distance_components.get("worst_leg_spread_excess_pct"),
+                "spread_slippage_excess_pct": distance_components.get("spread_slippage_excess_pct"),
+                "quote_age_excess_hours": distance_components.get("quote_age_excess_hours"),
+                "min_leg_volume_shortfall": distance_components.get("min_leg_volume_shortfall"),
+                "min_leg_open_interest_shortfall": distance_components.get("min_leg_open_interest_shortfall"),
+                "max_quote_age_hours": max_quote_age_hours,
+                "quote_age_hours": max_quote_age_hours,
+                "ask_bid": copy.deepcopy(ask_bid),
+                "intended_ask_bid_debit": intended_ask_bid_debit,
+                "intended_limit_debit": intended_ask_bid_debit,
+                "executable_debit": executable_debit,
+                "no_fill_reason": no_fill_reason,
+                "liquidity_reason": details.get("reason"),
+                "selected_spread": copy.deepcopy(selected_spread),
+                "top_alternatives": copy.deepcopy(alternatives),
+                "top_spread_alternatives": copy.deepcopy(alternatives),
                 "candidate_execution_label": details.get("candidate_execution_label"),
                 "signal_variant": details.get("signal_variant"),
+                "research_only": True,
+                "non_promotable": True,
+                "diagnostic_label": "research_only_near_miss",
                 "raw_candidates": scan_funnel.get("raw_candidates", scan_result.get("candidate_count", 0)),
                 "returned_picks": scan_funnel.get("returned_picks", scan_result.get("returned_count", 0)),
                 "production_filter_action": "preserve_filters_until_exact_replay_unlock",
@@ -887,8 +960,8 @@ def _backfill_position_scan_provenance(
 def main() -> int:
     run_at = datetime.now()
     scan_date = run_at.strftime("%Y-%m-%d")
-    if _is_weekend(run_at):
-        print(f"Weekend run detected for {scan_date}; skipping scan logging.")
+    if _is_market_closed(run_at):
+        print(f"Market closed for {scan_date}; skipping scan logging.")
         return 0
 
     load_local_env(ROOT)

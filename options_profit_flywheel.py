@@ -44,6 +44,11 @@ from positions_repository import create_positions_repository  # type: ignore  # 
 TARGET_SYMBOL_SET = set(TARGET_SYMBOLS)
 CANARY_REQUIRED_OUTCOMES = 10
 SHADOW_ONLY_DIRECTIONS = {"put"}
+PROOF_OPTIONS_SOURCE_LABELS = {
+    "alpaca_opra",
+    "alpaca_opra_daily_snapshot",
+    "alpaca:sip:opra",
+}
 
 
 def _normalize_direction(direction: Any) -> Optional[str]:
@@ -276,6 +281,35 @@ def _load_closed_positions() -> list[dict[str, Any]]:
         return []
 
 
+def _position_proof_eligible(position: dict[str, Any]) -> bool:
+    if position.get("proof_eligible") is not True:
+        return False
+    source = position.get("source_pick_snapshot")
+    source_pick = dict(source) if isinstance(source, dict) else {}
+    explicit_sources = [
+        position.get("source_label"),
+        position.get("proof_source_label"),
+        position.get("market_data_source"),
+        position.get("options_market_data_source"),
+        position.get("options_data_source"),
+        position.get("quote_source"),
+        position.get("data_source"),
+        source_pick.get("source_label"),
+        source_pick.get("proof_source_label"),
+        source_pick.get("market_data_source"),
+        source_pick.get("options_market_data_source"),
+        source_pick.get("options_data_source"),
+        source_pick.get("quote_source"),
+        source_pick.get("data_source"),
+    ]
+    normalized_sources = {
+        str(value or "").strip().lower()
+        for value in explicit_sources
+        if str(value or "").strip()
+    }
+    return bool(PROOF_OPTIONS_SOURCE_LABELS.intersection(normalized_sources))
+
+
 def _blocked_daily_truth_refresh_gate(refresh_result: dict[str, Any]) -> dict[str, Any]:
     blocker = {
         "code": "daily_truth_refresh_failed",
@@ -338,6 +372,8 @@ def _candidate_position_metrics(
     exact_outcome_count = 0
     normalized_direction = _normalize_direction(direction)
     for position in positions:
+        if not _position_proof_eligible(position):
+            continue
         source = dict(position.get("source_pick_snapshot") or {})
         position_symbol = str(position.get("ticker") or source.get("ticker") or "").strip().upper()
         position_direction = _normalize_direction(
@@ -367,8 +403,8 @@ def _candidate_position_metrics(
         "exact_outcome_count": exact_outcome_count,
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
         "avg_net_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
-        "profit_factor": round(positive / negative, 4) if negative > 0 else None,
-        "net_profit_factor": round(positive / negative, 4) if negative > 0 else None,
+        "profit_factor": round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None),
+        "net_profit_factor": round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None),
     }
 
 

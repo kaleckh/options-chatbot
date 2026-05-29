@@ -58,6 +58,8 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 - `GET /api/predictions`
 - `POST /api/predictions/grade`
 
+FastAPI also exposes `DELETE /api/predictions/{pred_id}`, but there is no matching Next route handler in this worktree.
+
 ### Tracked Positions
 
 - `GET /api/positions`
@@ -86,6 +88,7 @@ The current worktree does not include active Next route handlers for `src/app/ap
 These routes exist in `python-backend/main.py` but are not currently mirrored through `src/app/api/*`:
 
 - `GET /api/profiles`
+- `DELETE /api/predictions/{pred_id}`
 - `GET /api/positions/{position_id}/close-prefill`
 - `POST /api/scan/recommendations`
 - `POST /api/scan/roll`
@@ -132,6 +135,8 @@ Artifact directories:
 - `data/options-validation/*`
 - `data/options-profit/*`
 - `data/forward-tracking/*`
+- `data/ai-commodity-infra/*`
+- `data/alpaca-options-strategy-lab/*`
 - `docs/autoresearch/*`
 
 Used for:
@@ -141,6 +146,8 @@ Used for:
 - policy artifacts
 - truth-gate state
 - forward evidence
+- AI commodity OPRA capture progress and lane proof-readiness evidence
+- research-only exact bid/ask lab output
 - research proposals and snapshots
 
 ### Market Data Cache
@@ -165,6 +172,8 @@ Used for:
   - options scan and profile-era domain logic
 - `wfo_optimizer.py`
   - replay and policy generation
+- `scripts/run_ai_commodity_opra_progress.py`
+  - AI commodity OPRA proof-lane orchestration and generated readbacks
 - repository modules
   - tracked positions and suggested-trade persistence
 

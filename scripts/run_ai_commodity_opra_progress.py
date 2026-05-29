@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -159,15 +160,60 @@ def _profile_dte_at_entry(profile: dict[str, Any] | None, *, dte_min: int, dte_m
     return max(int(dte_min), min(int(dte_max), requested))
 
 
-def diagnostic_replay_max_dte_from_wfo(wfo_module: Any) -> int:
+def _playbook_target_dte_from_module(
+    module: Any,
+    *,
+    playbook_id: str,
+    dte_min: int,
+    dte_max: int,
+) -> int | None:
+    for attr_name in ("REPLAY_PLAYBOOKS", "SCAN_PLAYBOOKS", "PLAYBOOKS"):
+        playbooks = getattr(module, attr_name, {}) or {}
+        if not isinstance(playbooks, dict):
+            continue
+        playbook = playbooks.get(playbook_id) or playbooks.get(str(playbook_id).lower())
+        if not isinstance(playbook, dict) or playbook.get("target_dte") is None:
+            continue
+        try:
+            return max(int(dte_min), min(int(dte_max), int(playbook["target_dte"])))
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def diagnostic_replay_max_dte_from_wfo(
+    wfo_module: Any,
+    *,
+    playbook_id: str = DEFERRED_VARIANT_PLAYBOOK,
+) -> int:
     profiles = getattr(wfo_module, "STRATEGY_PROFILES", {}) or {}
     default_profile = getattr(wfo_module, "STRATEGY_PROFILE", {}) or {}
     dte_min = int(getattr(wfo_module, "DTE_MIN", 1) or 1)
     dte_max = int(getattr(wfo_module, "DTE_MAX", DEFAULT_DIAGNOSTIC_REPLAY_MAX_DTE) or DEFAULT_DIAGNOSTIC_REPLAY_MAX_DTE)
+    playbook_target_dte = _playbook_target_dte_from_module(
+        wfo_module,
+        playbook_id=playbook_id,
+        dte_min=dte_min,
+        dte_max=dte_max,
+    )
+    if playbook_target_dte is None:
+        try:
+            import supervised_scan as ss
+
+            playbook_target_dte = _playbook_target_dte_from_module(
+                ss,
+                playbook_id=playbook_id,
+                dte_min=dte_min,
+                dte_max=dte_max,
+            )
+        except Exception:
+            playbook_target_dte = None
     dtes = [
         _profile_dte_at_entry(profiles.get("equity", default_profile), dte_min=dte_min, dte_max=dte_max),
         _profile_dte_at_entry(profiles.get("index", default_profile), dte_min=dte_min, dte_max=dte_max),
     ]
+    if playbook_target_dte is not None:
+        dtes.append(playbook_target_dte)
     return max(dtes or [DEFAULT_DIAGNOSTIC_REPLAY_MAX_DTE])
 
 
@@ -708,9 +754,10 @@ def _number_or_none(value: Any) -> float | None:
     try:
         if value in (None, ""):
             return None
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _ai_commodity_index_like_symbol_set() -> set[str]:
@@ -2493,6 +2540,22 @@ def build_goal_completion_audit(report: dict[str, Any]) -> dict[str, Any]:
         proof_source_isolation.get("status") == "isolated_to_alpaca_opra_proof_source"
         and not proof_source_isolation.get("blockers")
     )
+    current_shared_quote_dates = _int_or_zero(proof_window.get("current_shared_quote_dates"))
+    requested_shared_quote_dates = _int_or_zero(
+        proof_window.get("required_shared_quote_dates") or DEFAULT_MIN_SHARED_QUOTE_DATES
+    )
+    effective_goal_required_shared_quote_dates = max(
+        requested_shared_quote_dates,
+        DEFAULT_MIN_SHARED_QUOTE_DATES,
+    )
+    exact_history_depth_floor_satisfied = (
+        current_shared_quote_dates >= DEFAULT_MIN_SHARED_QUOTE_DATES
+    )
+    exact_history_depth_requirement_passed = (
+        gates.get("enough_exact_shared_quote_dates") is True
+        and gates.get("readiness_ready_for_exact_replay") is True
+        and exact_history_depth_floor_satisfied
+    )
     requirements = [
         _requirement(
             "uses_alpaca_sip_opra_live_source",
@@ -2517,14 +2580,21 @@ def build_goal_completion_audit(report: dict[str, Any]) -> dict[str, Any]:
         ),
         _requirement(
             "has_required_exact_alpaca_opra_history_depth",
-            gates.get("enough_exact_shared_quote_dates") is True
-            and gates.get("readiness_ready_for_exact_replay") is True,
+            exact_history_depth_requirement_passed,
             {
-                "current_shared_quote_dates": proof_window.get("current_shared_quote_dates"),
+                "current_shared_quote_dates": current_shared_quote_dates,
                 "required_shared_quote_dates": proof_window.get("required_shared_quote_dates"),
+                "requested_required_shared_quote_dates": requested_shared_quote_dates,
+                "default_required_shared_quote_dates_floor": DEFAULT_MIN_SHARED_QUOTE_DATES,
+                "effective_goal_required_shared_quote_dates": effective_goal_required_shared_quote_dates,
+                "exact_history_depth_floor_satisfied": exact_history_depth_floor_satisfied,
                 "readiness_status": (report.get("readiness") or {}).get("status"),
             },
-            "insufficient_exact_alpaca_opra_shared_quote_dates",
+            (
+                "insufficient_exact_alpaca_opra_shared_quote_dates"
+                if exact_history_depth_floor_satisfied
+                else "exact_history_depth_floor_not_satisfied"
+            ),
         ),
         _requirement(
             "exact_replay_is_profitable",
@@ -6521,13 +6591,23 @@ def build_proof_source_audit(
             "trusted_only": True,
             "underlyings_requested_count": len(normalized_symbols),
         }
-    source_labels = sorted(
+    global_source_labels = sorted(
         {
             str(label).strip()
             for label in (summary.get("source_labels") or [])
             if str(label).strip()
         }
     )
+    scoped_source_labels = None
+    if isinstance(store_inventory.get("source_labels_with_quotes_in_scope"), list):
+        scoped_source_labels = sorted(
+            {
+                str(label).strip()
+                for label in (store_inventory.get("source_labels_with_quotes_in_scope") or [])
+                if str(label).strip()
+            }
+        )
+    source_labels = scoped_source_labels if scoped_source_labels is not None else global_source_labels
     proof_source_dates = _shared_dates(
         store,
         normalized_symbols,
@@ -9250,9 +9330,28 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
         or DEFAULT_MIN_SHARED_QUOTE_DATES,
         1,
     )
-    candidate_count = _int_or_zero(scan.get("candidate_count"))
+    raw_candidate_count = _int_or_zero(scan.get("candidate_count"))
+    candidate_count = _int_or_zero(
+        scan.get("proof_eligible_candidate_count")
+        if scan.get("proof_eligible_candidate_count") is not None
+        else verification.get("proof_eligible_candidate_count")
+        if verification.get("proof_eligible_candidate_count") is not None
+        else verification.get("live_scan_candidate_count")
+        if verification.get("live_scan_candidate_count") is not None
+        else raw_candidate_count
+    )
     live_candidate_gate = gates.get("live_scan_has_candidate") is True
     live_candidate_inside_proof_gate = gates.get("live_scan_candidate_inside_exact_proof_universe") is True
+    full_scan_universe_scope_gate = bool(
+        gates.get("capture_scope_full_scan_universe") is True
+        and gates.get("proof_scan_universe_aligned") is True
+    )
+    capture = report.get("capture") if isinstance(report.get("capture"), dict) else {}
+    scan_alignment = (
+        report.get("scan_proof_universe_alignment")
+        if isinstance(report.get("scan_proof_universe_alignment"), dict)
+        else {}
+    )
     verifiable_live_candidate = bool(
         candidate_count > 0
         and live_candidate_gate
@@ -9355,7 +9454,15 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
             "requirement": "live_scan_candidate_or_raw_drop_reasons",
             "passed": verifiable_live_candidate or raw_drop_recorded,
             "actual": {
-                "candidate_count": candidate_count,
+                "proof_eligible_candidate_count": candidate_count,
+                "proof_eligible_candidate_symbols": (
+                    scan.get("proof_eligible_candidate_symbols")
+                    or verification.get("proof_eligible_candidate_symbols")
+                    or verification.get("live_scan_candidate_symbols")
+                    or []
+                ),
+                "raw_candidate_count": raw_candidate_count,
+                "raw_candidate_symbols": scan.get("raw_candidate_symbols") or scan.get("candidate_symbols") or [],
                 "live_scan_has_candidate_gate": live_candidate_gate,
                 "live_scan_candidate_inside_exact_proof_gate": live_candidate_inside_proof_gate,
                 "raw_drop_status": raw_drop_status,
@@ -9363,6 +9470,8 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
             },
             "expected": "verified live candidate inside exact proof universe or raw drop reasons recorded",
             "evidence_fields": [
+                "scan_proof_eligible_candidate_count",
+                "scan_proof_eligible_candidate_symbols",
                 "scan_candidate_count",
                 "verification_gate.gates.live_scan_has_candidate",
                 "verification_gate.gates.live_scan_candidate_inside_exact_proof_universe",
@@ -9370,6 +9479,36 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
                 "scan_drop_reason_count",
             ],
             "blocker": live_candidate_or_raw_drop_blocker,
+        },
+        {
+            "requirement": "full_scan_universe_proof_scope",
+            "passed": full_scan_universe_scope_gate,
+            "actual": {
+                "capture_scope_full_scan_universe_gate": gates.get("capture_scope_full_scan_universe"),
+                "proof_scan_universe_aligned_gate": gates.get("proof_scan_universe_aligned"),
+                "capture_scope": capture.get("scope") or verification.get("capture_scope"),
+                "capture_symbol_count": capture.get("symbol_count") or verification.get("capture_symbol_count"),
+                "proof_universe_count": (
+                    scan_alignment.get("proof_universe_count")
+                    or verification.get("proof_universe_count")
+                ),
+                "scan_universe_count": (
+                    scan_alignment.get("scan_universe_count")
+                    or verification.get("scan_universe_count")
+                ),
+                "alignment_status": scan_alignment.get("status"),
+            },
+            "expected": "capture scope covers the full scan universe and proof universe equals scan universe",
+            "evidence_fields": [
+                "verification_gate.gates.capture_scope_full_scan_universe",
+                "verification_gate.gates.proof_scan_universe_aligned",
+                "capture.scope",
+                "capture.symbol_count",
+                "scan_proof_universe_alignment.status",
+                "scan_proof_universe_alignment.proof_universe_count",
+                "scan_proof_universe_alignment.scan_universe_count",
+            ],
+            "blocker": None if full_scan_universe_scope_gate else "full_scan_universe_proof_scope_not_satisfied",
         },
         {
             "requirement": "full_exact_replay_profitability",
@@ -9468,11 +9607,13 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
             ],
             "blocked_if": [
                 "raw_drop_reason_evidence_requirement_satisfied_by is null",
-                "scan_candidate_count > 0 but live candidate proof-universe gates are not both true",
+                "scan_proof_eligible_candidate_count > 0 but live candidate proof-universe gates are not both true",
                 "scan_candidate_count == 0 and scan_drop_reason_count is null or <= 0",
             ],
             "fields_to_compare": [
                 "scan_candidate_count",
+                "scan_proof_eligible_candidate_count",
+                "scan_proof_eligible_candidate_symbols",
                 "raw_drop_reason_evidence_requirement_satisfied_by",
                 "raw_drop_reason_evidence_status",
                 "scan_drop_reason_count",
@@ -9528,6 +9669,8 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
         "alpaca_opra_data_usage_all_required_symbols_have_data",
         "scan_candidate_count",
         "scan_candidate_symbols",
+        "scan_proof_eligible_candidate_count",
+        "scan_proof_eligible_candidate_symbols",
         "raw_drop_reason_evidence_requirement_satisfied_by",
         "raw_drop_reason_evidence_status",
         "scan_drop_reason_count",
@@ -9537,6 +9680,9 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
         "profitability_evidence_scorecard_blockers",
         "profitability_evidence_scorecard_delta_status",
         "profitability_evidence_scorecard_delta_material_progress",
+        "profitability_evidence_scorecard_delta_evidence_progress",
+        "profitability_evidence_scorecard_delta_material_evidence_progress",
+        "profitability_evidence_scorecard_delta_profit_improved",
         "profitability_evidence_scorecard_delta_baseline_comparison_status",
         "profitability_evidence_scorecard_delta_baseline_comparison_material_progress",
         "profitability_evidence_scorecard_delta_baseline_comparison_assertion_results",
@@ -9577,8 +9723,15 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
         "alpaca_opra_data_usage_all_required_symbols_have_data": alpaca_usage.get(
             "all_required_symbols_have_alpaca_opra_data"
         ),
-        "scan_candidate_count": candidate_count,
+        "scan_candidate_count": raw_candidate_count,
         "scan_candidate_symbols": scan.get("candidate_symbols") or [],
+        "scan_proof_eligible_candidate_count": candidate_count,
+        "scan_proof_eligible_candidate_symbols": (
+            scan.get("proof_eligible_candidate_symbols")
+            or verification.get("proof_eligible_candidate_symbols")
+            or verification.get("live_scan_candidate_symbols")
+            or []
+        ),
         "raw_drop_reason_evidence_requirement_satisfied_by": raw_drop_contract.get(
             "requirement_satisfied_by"
         )
@@ -9628,7 +9781,7 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
         ]
         baseline_no_progress_conditions = [
             "raw_drop_reason_evidence_requirement_satisfied_by is null",
-            "scan_candidate_count > 0 but live candidate proof-universe gates are not both true",
+            "scan_proof_eligible_candidate_count > 0 but live candidate proof-universe gates are not both true",
             "scan_candidate_count <= baseline and scan_drop_reason_count is null_or_zero",
             "raw_drop_reason_evidence_status not in post_run_success_statuses",
         ]
@@ -9719,6 +9872,8 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
             "fresh_scan_or_drop_reasons": [
                 "scan_candidate_count",
                 "scan_candidate_symbols",
+                "scan_proof_eligible_candidate_count",
+                "scan_proof_eligible_candidate_symbols",
                 "raw_drop_reason_evidence_requirement_satisfied_by",
                 "raw_drop_reason_evidence_status",
                 "scan_drop_reason_count",
@@ -9729,6 +9884,9 @@ def build_profitability_evidence_scorecard(report: dict[str, Any]) -> dict[str, 
                 "profitability_evidence_scorecard_total_requirement_count",
                 "profitability_evidence_scorecard_delta_status",
                 "profitability_evidence_scorecard_delta_material_progress",
+                "profitability_evidence_scorecard_delta_evidence_progress",
+                "profitability_evidence_scorecard_delta_material_evidence_progress",
+                "profitability_evidence_scorecard_delta_profit_improved",
                 "profitability_evidence_scorecard_delta_baseline_comparison_status",
                 "profitability_evidence_scorecard_delta_baseline_comparison_material_progress",
                 "profitability_evidence_scorecard_delta_baseline_comparison_assertion_results",
@@ -9914,6 +10072,15 @@ def build_profitability_evidence_scorecard_delta(
     def _current_projection_value(field: str) -> Any:
         if field in current_report:
             return current_report.get(field)
+        if "." in field:
+            cursor: Any = current_report
+            for part in field.split("."):
+                if not isinstance(cursor, dict) or part not in cursor:
+                    cursor = None
+                    break
+                cursor = cursor.get(part)
+            if cursor is not None:
+                return cursor
         if field == "provider":
             return current_report.get("provider") or current_scorecard.get("provider")
         if field == "proof_source_label":
@@ -9948,11 +10115,37 @@ def build_profitability_evidence_scorecard_delta(
             return current_scorecard.get("total_requirement_count")
         if field == "profitability_evidence_scorecard_blockers":
             return current_scorecard.get("blockers")
+        if field in {
+            "verification_gate.replay_total_trades",
+            "verification_gate.replay_profit_factor",
+            "verification_gate.replay_total_return_pct",
+        }:
+            verification = (
+                current_report.get("verification_gate")
+                if isinstance(current_report.get("verification_gate"), dict)
+                else {}
+            )
+            replay = current_report.get("replay") if isinstance(current_report.get("replay"), dict) else {}
+            if field == "verification_gate.replay_total_trades":
+                return verification.get("replay_total_trades", replay.get("total_trades"))
+            if field == "verification_gate.replay_profit_factor":
+                return verification.get("replay_profit_factor", replay.get("profit_factor"))
+            return verification.get("replay_total_return_pct", replay.get("total_return_pct"))
         scan = current_report.get("scan") if isinstance(current_report.get("scan"), dict) else {}
         if field == "scan_candidate_count":
             return current_report.get("scan_candidate_count", scan.get("candidate_count"))
         if field == "scan_candidate_symbols":
             return current_report.get("scan_candidate_symbols", scan.get("candidate_symbols"))
+        if field == "scan_proof_eligible_candidate_count":
+            return current_report.get(
+                "scan_proof_eligible_candidate_count",
+                scan.get("proof_eligible_candidate_count"),
+            )
+        if field == "scan_proof_eligible_candidate_symbols":
+            return current_report.get(
+                "scan_proof_eligible_candidate_symbols",
+                scan.get("proof_eligible_candidate_symbols"),
+            )
         if field == "scan_drop_reason_count":
             return current_report.get("scan_drop_reason_count", scan.get("scan_drop_reason_count"))
         if field == "raw_drop_reason_evidence_status":
@@ -10002,6 +10195,10 @@ def build_profitability_evidence_scorecard_delta(
     def _no_progress_condition_result(condition: str) -> dict[str, Any]:
         candidate_count = _number_or_none(_current_projection_value("scan_candidate_count"))
         candidate_baseline = _number_or_none(previous_baseline.get("scan_candidate_count"))
+        proof_candidate_count = _number_or_none(_current_projection_value("scan_proof_eligible_candidate_count"))
+        proof_candidate_baseline = _number_or_none(
+            previous_baseline.get("scan_proof_eligible_candidate_count")
+        )
         drop_reason_count = _number_or_none(_current_projection_value("scan_drop_reason_count"))
         raw_status = _current_projection_value("raw_drop_reason_evidence_status")
         requirement_satisfied_by = _current_projection_value(
@@ -10042,6 +10239,21 @@ def build_profitability_evidence_scorecard_delta(
                     },
                 }
             )
+        elif condition == "scan_proof_eligible_candidate_count > 0 but live candidate proof-universe gates are not both true":
+            details.update(
+                {
+                    "matched": bool(
+                        proof_candidate_count is not None
+                        and proof_candidate_count > 0
+                        and not (live_candidate_gate and inside_proof_gate)
+                    ),
+                    "current": {
+                        "scan_proof_eligible_candidate_count": proof_candidate_count,
+                        "live_scan_has_candidate_gate": live_candidate_gate,
+                        "live_scan_candidate_inside_exact_proof_gate": inside_proof_gate,
+                    },
+                }
+            )
         elif condition == "scan_candidate_count <= baseline and scan_drop_reason_count is null_or_zero":
             matched = (
                 candidate_count is not None
@@ -10069,6 +10281,18 @@ def build_profitability_evidence_scorecard_delta(
                     ),
                     "baseline": candidate_baseline,
                     "current": candidate_count,
+                }
+            )
+        elif condition == "scan_proof_eligible_candidate_count <= baseline":
+            details.update(
+                {
+                    "matched": bool(
+                        proof_candidate_count is not None
+                        and proof_candidate_baseline is not None
+                        and proof_candidate_count <= proof_candidate_baseline
+                    ),
+                    "baseline": proof_candidate_baseline,
+                    "current": proof_candidate_count,
                 }
             )
         elif condition == "raw_drop_reason_evidence_status not in post_run_success_statuses":
@@ -10152,6 +10376,19 @@ def build_profitability_evidence_scorecard_delta(
     baseline_comparison_material_progress = any(
         bool(result.get("passed")) for result in baseline_assertion_results
     )
+    profit_metric_fields = {
+        "verification_gate.replay_profit_factor",
+        "verification_gate.replay_total_return_pct",
+        "replay_profit_factor",
+        "replay_total_return_pct",
+        "profit_factor",
+        "total_return_pct",
+    }
+    baseline_evidence_movement = any(
+        bool(result.get("passed"))
+        and str(result.get("field") or "") not in profit_metric_fields
+        for result in baseline_assertion_results
+    )
     baseline_no_progress_condition_results = [
         _no_progress_condition_result(str(condition))
         for condition in previous_no_progress_conditions
@@ -10214,6 +10451,98 @@ def build_profitability_evidence_scorecard_delta(
         regressions.append("alpaca_shared_quote_dates_decreased")
     if blockers_added and passed_delta <= 0 and shared_delta <= 0 and not blockers_removed:
         regressions.append("new_scorecard_blockers_added")
+
+    def _profitability_actual(scorecard: dict[str, Any], report: dict[str, Any] | None) -> dict[str, Any]:
+        rows = scorecard.get("rows") if isinstance(scorecard.get("rows"), list) else []
+        actual: dict[str, Any] = {}
+        for row in rows:
+            if not isinstance(row, dict) or row.get("requirement") != "full_exact_replay_profitability":
+                continue
+            row_actual = row.get("actual") if isinstance(row.get("actual"), dict) else {}
+            actual.update(row_actual)
+            break
+        payload = report if isinstance(report, dict) else {}
+        verification = (
+            payload.get("verification_gate") if isinstance(payload.get("verification_gate"), dict) else {}
+        )
+        replay = payload.get("replay") if isinstance(payload.get("replay"), dict) else {}
+        gates = verification.get("gates") if isinstance(verification.get("gates"), dict) else {}
+        return {
+            "completed": actual.get("completed", gates.get("exact_replay_completed")),
+            "total_trades": _number_or_none(
+                actual.get("total_trades", verification.get("replay_total_trades", replay.get("total_trades")))
+            ),
+            "profit_factor": _number_or_none(
+                actual.get("profit_factor", verification.get("replay_profit_factor", replay.get("profit_factor")))
+            ),
+            "total_return_pct": _number_or_none(
+                actual.get(
+                    "total_return_pct",
+                    verification.get("replay_total_return_pct", replay.get("total_return_pct")),
+                )
+            ),
+            "current_shared_quote_dates": _number_or_none(scorecard.get("current_shared_quote_dates")),
+            "required_shared_quote_dates": _number_or_none(scorecard.get("required_shared_quote_dates")),
+        }
+
+    previous_profitability = _profitability_actual(previous_scorecard, previous_report)
+    current_profitability = _profitability_actual(current_scorecard, current_report)
+    same_profitability_window = bool(
+        has_previous
+        and previous_profitability.get("current_shared_quote_dates") is not None
+        and current_profitability.get("current_shared_quote_dates") is not None
+        and previous_profitability.get("current_shared_quote_dates")
+        == current_profitability.get("current_shared_quote_dates")
+        and previous_profitability.get("required_shared_quote_dates")
+        == current_profitability.get("required_shared_quote_dates")
+    )
+    comparable_profit_metrics = [
+        key
+        for key in ("profit_factor", "total_return_pct")
+        if previous_profitability.get(key) is not None and current_profitability.get(key) is not None
+    ]
+    profit_metric_improvements = [
+        key
+        for key in comparable_profit_metrics
+        if current_profitability[key] > previous_profitability[key]
+    ]
+    profit_metric_regressions = [
+        key
+        for key in comparable_profit_metrics
+        if current_profitability[key] < previous_profitability[key]
+    ]
+    verified_profitable = bool(
+        current_scorecard.get("verified")
+        or current_scorecard.get("status") == "verified_profitable"
+        or (
+            isinstance(current_report.get("verification_gate"), dict)
+            and current_report["verification_gate"].get("verified") is True
+        )
+    )
+    profit_improved = bool(
+        verified_profitable
+        or (
+            same_profitability_window
+            and bool(profit_metric_improvements)
+            and not profit_metric_regressions
+        )
+    )
+    profit_improvement_reason = None
+    if verified_profitable:
+        profit_improvement_reason = "current_scorecard_verified_profitable"
+    elif profit_improved:
+        profit_improvement_reason = "exact_profitability_metrics_improved_on_same_window"
+    evidence_progress_reasons: list[str] = []
+    if has_previous and shared_delta > 0:
+        evidence_progress_reasons.append("alpaca_opra_shared_quote_dates_increased")
+    if blockers_removed:
+        evidence_progress_reasons.append("scorecard_blockers_removed")
+    if has_previous and passed_delta > 0:
+        evidence_progress_reasons.append("scorecard_requirements_passed")
+    if baseline_evidence_movement:
+        evidence_progress_reasons.append("baseline_evidence_movement")
+    evidence_progress = bool(evidence_progress_reasons)
+    material_evidence_progress = evidence_progress
     material_progress = bool(
         current_scorecard.get("verified")
         or passed_delta > 0
@@ -10243,6 +10572,16 @@ def build_profitability_evidence_scorecard_delta(
     return {
         "status": status,
         "material_progress": material_progress,
+        "evidence_progress": evidence_progress,
+        "material_evidence_progress": material_evidence_progress,
+        "evidence_progress_reasons": evidence_progress_reasons,
+        "profit_improved": profit_improved,
+        "profit_improvement_reason": profit_improvement_reason,
+        "profitability_metrics_before": previous_profitability if has_previous else None,
+        "profitability_metrics_after": current_profitability,
+        "profitability_metrics_same_window": same_profitability_window,
+        "profitability_metric_improvements": profit_metric_improvements,
+        "profitability_metric_regressions": profit_metric_regressions,
         "previous_scorecard_status": previous_scorecard.get("status"),
         "current_scorecard_status": current_scorecard.get("status"),
         "passed_requirement_count_before": previous_passed if has_previous else None,
@@ -14147,13 +14486,26 @@ def _latest_research_run_for_slug(root: Path, slug: str) -> Path | None:
     return matches[-1] if matches else None
 
 
+def _research_runs_for_slug(root: Path, slug: str) -> list[Path]:
+    if not slug:
+        return []
+    run_root = Path(root) / "research_runs"
+    if not run_root.exists():
+        return []
+    return sorted(
+        [path for path in run_root.glob(f"*_{slug}") if path.is_dir()],
+        key=lambda path: path.name,
+    )
+
+
 def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)
+        parsed = float(value)
     except (TypeError, ValueError):
         return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _int_or_zero(value: Any) -> int:
@@ -14200,6 +14552,62 @@ def _variant_live_scan_evidence(primary_report: dict[str, Any] | None, result: d
         "candidate_symbols": [],
         "live_scan_candidate_inside_exact_proof_universe": False,
     }
+
+
+def _variant_result_evidence_fingerprint(
+    primary_report: dict[str, Any] | None,
+    result: dict[str, Any],
+    live_scan_evidence: dict[str, Any],
+) -> str:
+    if not isinstance(primary_report, dict) or not isinstance(result, dict) or not result:
+        return ""
+    volatile_keys = {
+        "run_at",
+        "generated_at",
+        "timestamp",
+        "started_at",
+        "completed_at",
+        "created_at",
+        "updated_at",
+        "elapsed_seconds",
+        "duration_seconds",
+        "run_id",
+        "run_slug",
+        "run_dir",
+        "run_path",
+        "variant_id",
+        "variant_config_path",
+        "output_dir",
+        "artifact_path",
+        "manifest_path",
+        "command",
+        "stdout",
+        "stderr",
+    }
+
+    def _is_volatile_key(key: Any) -> bool:
+        normalized = str(key).strip().lower()
+        return normalized in volatile_keys or normalized.endswith("_utc")
+
+    def _canonical(value: Any) -> Any:
+        if isinstance(value, dict):
+            return {
+                str(key): _canonical(item)
+                for key, item in value.items()
+                if not _is_volatile_key(key)
+            }
+        if isinstance(value, list):
+            return [_canonical(item) for item in value]
+        return value
+
+    evidence = {
+        "result": _canonical(result),
+        "live_scan_evidence": _canonical(live_scan_evidence),
+        "variant_live_scan": _canonical(primary_report.get("variant_live_scan")),
+        "live_scan": _canonical(primary_report.get("live_scan")),
+        "scan": _canonical(primary_report.get("scan")),
+    }
+    return json.dumps(evidence, sort_keys=True, default=str, separators=(",", ":"))
 
 
 def _baseline_exact_opra_context(report: dict[str, Any]) -> dict[str, Any]:
@@ -14254,9 +14662,20 @@ def collect_deferred_variant_results(
     baseline_exact_ready = baseline_context.get("exact_ready") is True
     sweeps = [item for item in list(execution_plan.get("ordered_sweeps") or []) if isinstance(item, dict)]
     result_items: list[dict[str, Any]] = []
+    seen_run_slugs: set[str] = set()
+    seen_run_dirs: set[str] = set()
+    seen_evidence_fingerprints: set[str] = set()
     for sweep in sweeps:
         run_slug = str(sweep.get("run_slug") or "").strip()
-        run_dir = _latest_research_run_for_slug(Path(root), run_slug)
+        run_dirs = _research_runs_for_slug(Path(root), run_slug)
+        run_dir = run_dirs[-1] if run_dirs else None
+        duplicate_run_slug = bool(run_slug and run_slug in seen_run_slugs)
+        if run_slug:
+            seen_run_slugs.add(run_slug)
+        run_dir_key = str(run_dir.resolve()) if run_dir is not None else ""
+        duplicate_run_dir = bool(run_dir_key and run_dir_key in seen_run_dirs) or len(run_dirs) > 1
+        if run_dir_key:
+            seen_run_dirs.add(run_dir_key)
         manifest = _read_json_if_exists(run_dir / "manifest.json") if run_dir is not None else None
         variant_config = _read_json_if_exists(run_dir / "variant_config.json") if run_dir is not None else None
         primary_report = _read_json_if_exists(run_dir / "primary_report.json") if run_dir is not None else None
@@ -14276,12 +14695,36 @@ def collect_deferred_variant_results(
             manifest.get("require_quote_coverage") if isinstance(manifest, dict) else None
         )
         live_scan_evidence = _variant_live_scan_evidence(primary_report, result)
+        evidence_fingerprint = _variant_result_evidence_fingerprint(primary_report, result, live_scan_evidence)
+        duplicate_evidence_fingerprint = bool(
+            evidence_fingerprint and evidence_fingerprint in seen_evidence_fingerprints
+        )
+        if evidence_fingerprint:
+            seen_evidence_fingerprints.add(evidence_fingerprint)
         checks = [
             {
                 "name": "research_run_found",
                 "passed": run_dir is not None,
                 "actual": str(run_dir) if run_dir is not None else None,
                 "expected": f"research_runs/*_{run_slug}",
+            },
+            {
+                "name": "unique_run_slug",
+                "passed": bool(run_slug) and not duplicate_run_slug,
+                "actual": run_slug,
+                "expected": "non-empty unique run_slug per deferred sweep",
+            },
+            {
+                "name": "unique_research_run_dir",
+                "passed": run_dir is None or not duplicate_run_dir,
+                "actual": [str(path) for path in run_dirs] if run_dirs else None,
+                "expected": "each deferred sweep maps to a distinct research run directory",
+            },
+            {
+                "name": "unique_variant_evidence",
+                "passed": not evidence_fingerprint or not duplicate_evidence_fingerprint,
+                "actual": "duplicate" if duplicate_evidence_fingerprint else "unique",
+                "expected": "each deferred sweep produces distinct replay and live-scan evidence",
             },
             {
                 "name": "manifest_completed",
@@ -14395,6 +14838,7 @@ def collect_deferred_variant_results(
                 "total_return_pct": total_return_pct,
                 "baseline": baseline_context,
                 "live_scan_evidence": live_scan_evidence,
+                "evidence_fingerprint": evidence_fingerprint,
                 "checks": checks,
                 "failed_checks": [check["name"] for check in checks if check.get("passed") is not True],
             }
@@ -14409,10 +14853,27 @@ def collect_deferred_variant_results(
         ),
         reverse=True,
     )
-    result_count = sum(1 for item in result_items if item.get("run_dir"))
+    result_count = sum(
+        1
+        for item in result_items
+        if item.get("run_dir")
+        and "unique_run_slug" not in item.get("failed_checks", [])
+        and "unique_research_run_dir" not in item.get("failed_checks", [])
+        and "unique_variant_evidence" not in item.get("failed_checks", [])
+    )
+    duplicate_result_count = sum(
+        1
+        for item in result_items
+        if "unique_run_slug" in item.get("failed_checks", [])
+        or "unique_research_run_dir" in item.get("failed_checks", [])
+        or "unique_variant_evidence" in item.get("failed_checks", [])
+    )
     promotable_count = sum(1 for item in result_items if item.get("promotable") is True)
+    has_duplicate_evidence = duplicate_result_count > 0
     if not sweeps:
         status = "no_deferred_variant_sweeps_defined"
+    elif has_duplicate_evidence:
+        status = "variant_results_collected_with_duplicate_evidence"
     elif result_count == 0:
         status = "no_variant_results_collected"
     elif promotable_count:
@@ -14423,13 +14884,18 @@ def collect_deferred_variant_results(
         "status": status,
         "result_count": result_count,
         "missing_result_count": max(len(sweeps) - result_count, 0),
+        "duplicate_result_count": duplicate_result_count,
         "promotable_count": promotable_count,
-        "best_candidate": ranked[0] if ranked and ranked[0].get("promotable") else None,
+        "best_candidate": (
+            ranked[0]
+            if ranked and ranked[0].get("promotable") and not has_duplicate_evidence
+            else None
+        ),
         "ranked_results": ranked,
         "proof_source_policy": "alpaca_sip_opra_variant_config_and_historical_imported_daily_manifest_required",
         "next_action": (
             "review_best_candidate_against_goal_completion_audit"
-            if promotable_count
+            if promotable_count and not has_duplicate_evidence
             else "run_ordered_exact_opra_variant_sweeps_after_activation"
         ),
     }
@@ -14464,6 +14930,7 @@ def build_deferred_variant_promotion_review(
     )
     promotable_count = _int_or_zero(collection.get("promotable_count"))
     result_count = _int_or_zero(collection.get("result_count"))
+    duplicate_result_count = _int_or_zero(collection.get("duplicate_result_count"))
     failed_checks = list(best_candidate.get("failed_checks") or []) if best_candidate else []
     checks = [
         {
@@ -14489,6 +14956,12 @@ def build_deferred_variant_promotion_review(
             "passed": promotable_count > 0 and best_candidate is not None,
             "actual": promotable_count,
             "expected": ">0",
+        },
+        {
+            "name": "deferred_variant_results_are_unique",
+            "passed": duplicate_result_count == 0,
+            "actual": duplicate_result_count,
+            "expected": 0,
         },
         {
             "name": "best_candidate_all_exact_opra_checks_pass",
@@ -14932,6 +15405,73 @@ def attach_deferred_variant_result_collection(
     return enriched
 
 
+def _scan_pick_is_proof_eligible(pick: dict[str, Any]) -> bool:
+    def _normalized(value: Any) -> str:
+        return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+    explicit_proof_evidence = any(
+        pick.get(field) is True
+        for field in (
+            "proof_eligible",
+            "counts_for_exact_profitability_proof",
+            "counts_for_goal_verification",
+            "used_for_goal_verification",
+            "used_for_exact_profitability_proof",
+        )
+    )
+    if pick.get("proof_eligible") is False:
+        return False
+    if pick.get("research_only") is True or pick.get("diagnostic_only") is True:
+        return False
+    if pick.get("counts_for_exact_profitability_proof") is False:
+        return False
+    if pick.get("counts_for_goal_verification") is False:
+        return False
+    if pick.get("used_for_goal_verification") is False:
+        return False
+    if pick.get("promotion_allowed") is False:
+        return False
+    guardrail_decision = _normalized(pick.get("guardrail_decision") or "clear")
+    if guardrail_decision == "blocked":
+        return False
+    managed_decision = _normalized(pick.get("managed_lane_decision"))
+    if managed_decision in {"blocked", "watch", "research_only", "diagnostic"}:
+        return False
+    policy_decision = _normalized(pick.get("trade_policy_decision") or pick.get("policy_decision"))
+    if policy_decision and policy_decision not in {"approved", "clear"}:
+        return False
+    for field in (
+        "status",
+        "lane_status",
+        "candidate_status",
+        "evidence_role",
+        "purpose",
+        "usage",
+        "source_role",
+    ):
+        value = _normalized(pick.get(field))
+        if any(token in value for token in ("research_only", "diagnostic", "non_verifying")):
+            return False
+    source_values = [
+        pick.get("candidate_execution_label"),
+        pick.get("market_data_source"),
+        pick.get("options_market_data_source"),
+        pick.get("source_label"),
+        pick.get("proof_source_label"),
+        pick.get("data_source"),
+    ]
+    proof_grade_source_values = {
+        "executable_opra_paper_candidate",
+        "alpaca_opra",
+        ALPACA_OPRA_SOURCE_LABEL,
+    }
+    proof_grade_source = any(
+        _normalized(value) in proof_grade_source_values
+        for value in source_values
+    )
+    return proof_grade_source
+
+
 def _scan_summary(result: dict[str, Any]) -> dict[str, Any]:
     playbook = result.get("playbook") or {}
     scan_drop_reasons = result.get("scan_drop_reasons") or {}
@@ -14942,21 +15482,41 @@ def _scan_summary(result: dict[str, Any]) -> dict[str, Any]:
     gate_sensitivity = _scan_gate_sensitivity(blocker_examples)
     if quote_freshness_context.get("status") in {"stale_quote_sensitive", "stale_quote_blocked"}:
         gate_sensitivity["recommended_action"] = quote_freshness_context.get("recommended_action")
+    pick_sources = (
+        list(result.get("picks") or [])
+        + list(result.get("ranked_picks") or [])
+        + list(result.get("candidate_audit_picks") or [])
+    )
     candidate_symbols = sorted(
         {
             str(pick.get("ticker") or pick.get("symbol") or "").strip().upper()
-            for pick in (
-                list(result.get("picks") or [])
-                + list(result.get("ranked_picks") or [])
-                + list(result.get("candidate_audit_picks") or [])
-            )
+            for pick in pick_sources
             if isinstance(pick, dict) and str(pick.get("ticker") or pick.get("symbol") or "").strip()
+        }
+    )
+    proof_candidate_source = (
+        list(result.get("candidate_audit_picks") or [])
+        or list(result.get("ranked_picks") or [])
+        or list(result.get("picks") or [])
+    )
+    proof_eligible_picks = [
+        pick for pick in proof_candidate_source if isinstance(pick, dict) and _scan_pick_is_proof_eligible(pick)
+    ]
+    proof_eligible_candidate_symbols = sorted(
+        {
+            str(pick.get("ticker") or pick.get("symbol") or "").strip().upper()
+            for pick in proof_eligible_picks
+            if str(pick.get("ticker") or pick.get("symbol") or "").strip()
         }
     )
     return {
         "candidate_count": result.get("candidate_count"),
+        "raw_candidate_count": result.get("candidate_count"),
         "returned_count": result.get("returned_count"),
         "candidate_symbols": candidate_symbols,
+        "raw_candidate_symbols": candidate_symbols,
+        "proof_eligible_candidate_count": len(proof_eligible_picks),
+        "proof_eligible_candidate_symbols": proof_eligible_candidate_symbols,
         "scan_funnel": result.get("scan_funnel"),
         "guardrail_decision_counts": result.get("guardrail_decision_counts"),
         **drop_reason_audit,
@@ -15093,18 +15653,33 @@ def build_scan_proof_universe_alignment(
         for symbol in (scan_payload.get("candidate_symbols") or [])
         if str(symbol).strip()
     ]
+    proof_eligible_candidate_symbols = [
+        str(symbol).strip().upper()
+        for symbol in (
+            scan_payload.get("proof_eligible_candidate_symbols")
+            if scan_payload.get("proof_eligible_candidate_symbols") is not None
+            else candidate_symbols
+        )
+        if str(symbol).strip()
+    ]
     blocker_symbols = [
         str(symbol).strip().upper()
         for symbol in (scan_payload.get("blocker_symbols") or [])
         if str(symbol).strip()
     ]
     candidate_symbols = list(dict.fromkeys(candidate_symbols))
+    proof_eligible_candidate_symbols = list(dict.fromkeys(proof_eligible_candidate_symbols))
     blocker_symbols = list(dict.fromkeys(blocker_symbols))
-    candidate_outside = [symbol for symbol in candidate_symbols if symbol not in proof_set]
+    candidate_outside = [symbol for symbol in proof_eligible_candidate_symbols if symbol not in proof_set]
     blocker_outside = [symbol for symbol in blocker_symbols if symbol not in proof_set]
     scan_without_proof = [symbol for symbol in scan_list if symbol not in proof_set]
-    candidate_count = int(scan_payload.get("candidate_count") or 0)
-    candidate_symbols_available = bool(candidate_symbols) or candidate_count == 0
+    raw_candidate_count = int(scan_payload.get("candidate_count") or 0)
+    candidate_count = int(
+        scan_payload.get("proof_eligible_candidate_count")
+        if scan_payload.get("proof_eligible_candidate_count") is not None
+        else raw_candidate_count
+    )
+    candidate_symbols_available = bool(proof_eligible_candidate_symbols) or candidate_count == 0
     candidates_inside = candidate_count > 0 and candidate_symbols_available and not candidate_outside
     if not scan_payload:
         status = "scan_skipped"
@@ -15124,6 +15699,10 @@ def build_scan_proof_universe_alignment(
         "scan_symbols_without_exact_proof": scan_without_proof,
         "scan_symbols_without_exact_proof_count": len(scan_without_proof),
         "candidate_symbols": candidate_symbols,
+        "raw_candidate_count": raw_candidate_count,
+        "raw_candidate_symbols": scan_payload.get("raw_candidate_symbols") or candidate_symbols,
+        "proof_eligible_candidate_count": candidate_count,
+        "proof_eligible_candidate_symbols": proof_eligible_candidate_symbols,
         "candidate_symbols_outside_exact_proof": candidate_outside,
         "candidate_symbols_available": candidate_symbols_available,
         "live_scan_candidates_all_inside_exact_proof": candidates_inside,
@@ -15236,7 +15815,14 @@ def build_verified_profitability_gate(report: dict[str, Any]) -> dict[str, Any]:
     current_shared = int(proof_window.get("current_shared_quote_dates") or 0)
     required_shared = int(proof_window.get("required_shared_quote_dates") or 0)
     replay_error = replay.get("error")
-    candidate_count = int(scan.get("candidate_count") or 0)
+    raw_candidate_count = int(scan.get("candidate_count") or 0)
+    candidate_count = int(
+        scan.get("proof_eligible_candidate_count")
+        if scan.get("proof_eligible_candidate_count") is not None
+        else scan_alignment.get("proof_eligible_candidate_count")
+        if scan_alignment.get("proof_eligible_candidate_count") is not None
+        else raw_candidate_count
+    )
     scan_universe_count = int(scan_alignment.get("scan_universe_count") or 0)
     proof_universe_count = int(scan_alignment.get("proof_universe_count") or 0)
     capture_symbol_count = int(capture.get("symbol_count") or 0)
@@ -15254,7 +15840,7 @@ def build_verified_profitability_gate(report: dict[str, Any]) -> dict[str, Any]:
     if scan_alignment:
         live_candidate_inside_proof_universe = scan_alignment.get("live_scan_candidates_all_inside_exact_proof") is True
     else:
-        live_candidate_inside_proof_universe = candidate_count > 0
+        live_candidate_inside_proof_universe = False
     replay_profit_factor = _number_or_none(replay.get("profit_factor"))
     replay_total_trades = int(replay.get("total_trades") or 0)
     replay_total_return = _number_or_none(replay.get("total_return_pct"))
@@ -15315,8 +15901,11 @@ def build_verified_profitability_gate(report: dict[str, Any]) -> dict[str, Any]:
     if not gates["live_scan_has_candidate"]:
         blockers.append(f"live_scan_candidates:{candidate_count}")
     elif not gates["live_scan_candidate_inside_exact_proof_universe"]:
-        outside_symbols = scan_alignment.get("candidate_symbols_outside_exact_proof") or []
-        blockers.append(f"live_scan_candidate_outside_exact_proof_universe:{outside_symbols or 'unknown'}")
+        if not scan_alignment:
+            blockers.append("live_scan_candidate_inside_exact_proof_universe_missing_scan_proof_universe_alignment")
+        else:
+            outside_symbols = scan_alignment.get("candidate_symbols_outside_exact_proof") or []
+            blockers.append(f"live_scan_candidate_outside_exact_proof_universe:{outside_symbols or 'unknown'}")
 
     return {
         "status": "verified_profitable" if all(gates.values()) else "not_verified",
@@ -15329,7 +15918,20 @@ def build_verified_profitability_gate(report: dict[str, Any]) -> dict[str, Any]:
         "replay_total_return_pct": replay.get("total_return_pct"),
         "replay_total_trades": replay.get("total_trades"),
         "live_scan_candidate_count": candidate_count,
-        "live_scan_candidate_symbols": scan_alignment.get("candidate_symbols") or scan.get("candidate_symbols"),
+        "live_scan_candidate_symbols": (
+            scan_alignment.get("proof_eligible_candidate_symbols")
+            or scan.get("proof_eligible_candidate_symbols")
+            or scan_alignment.get("candidate_symbols")
+            or scan.get("candidate_symbols")
+        ),
+        "raw_live_scan_candidate_count": raw_candidate_count,
+        "raw_live_scan_candidate_symbols": scan.get("raw_candidate_symbols") or scan.get("candidate_symbols"),
+        "proof_eligible_candidate_count": candidate_count,
+        "proof_eligible_candidate_symbols": (
+            scan_alignment.get("proof_eligible_candidate_symbols")
+            or scan.get("proof_eligible_candidate_symbols")
+            or []
+        ),
         "source_quality_status": source_quality_status,
         "capture_scope": capture.get("scope"),
         "capture_symbol_count": capture_symbol_count,
@@ -17778,6 +18380,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## Profitability Evidence Scorecard Delta",
         f"- Status: `{profitability_evidence_scorecard_delta.get('status')}`",
         f"- Material progress: `{profitability_evidence_scorecard_delta.get('material_progress')}`",
+        f"- Evidence progress: `{profitability_evidence_scorecard_delta.get('evidence_progress')}`",
+        f"- Profit improved: `{profitability_evidence_scorecard_delta.get('profit_improved')}`",
         f"- Passed requirement count before/after/delta: `{profitability_evidence_scorecard_delta.get('passed_requirement_count_before')}` / `{profitability_evidence_scorecard_delta.get('passed_requirement_count_after')}` / `{profitability_evidence_scorecard_delta.get('passed_requirement_count_delta')}`",
         f"- Shared quote dates before/after/delta: `{profitability_evidence_scorecard_delta.get('current_shared_quote_dates_before')}` / `{profitability_evidence_scorecard_delta.get('current_shared_quote_dates_after')}` / `{profitability_evidence_scorecard_delta.get('current_shared_quote_dates_delta')}`",
         f"- Replay runway before/after: `{profitability_evidence_scorecard_delta.get('replay_runway_status_before')}` / `{profitability_evidence_scorecard_delta.get('replay_runway_status_after')}`",
@@ -20045,6 +20649,36 @@ def build_compact_progress_summary(report: dict[str, Any]) -> dict[str, Any]:
         "profitability_evidence_scorecard_delta_material_progress": profitability_evidence_scorecard_delta.get(
             "material_progress"
         ),
+        "profitability_evidence_scorecard_delta_evidence_progress": profitability_evidence_scorecard_delta.get(
+            "evidence_progress"
+        ),
+        "profitability_evidence_scorecard_delta_material_evidence_progress": profitability_evidence_scorecard_delta.get(
+            "material_evidence_progress"
+        ),
+        "profitability_evidence_scorecard_delta_evidence_progress_reasons": profitability_evidence_scorecard_delta.get(
+            "evidence_progress_reasons"
+        ),
+        "profitability_evidence_scorecard_delta_profit_improved": profitability_evidence_scorecard_delta.get(
+            "profit_improved"
+        ),
+        "profitability_evidence_scorecard_delta_profit_improvement_reason": profitability_evidence_scorecard_delta.get(
+            "profit_improvement_reason"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_before": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_before"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_after": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_after"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_same_window": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_same_window"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metric_improvements": profitability_evidence_scorecard_delta.get(
+            "profitability_metric_improvements"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metric_regressions": profitability_evidence_scorecard_delta.get(
+            "profitability_metric_regressions"
+        ),
         "profitability_evidence_scorecard_delta_passed_requirement_count_before": profitability_evidence_scorecard_delta.get(
             "passed_requirement_count_before"
         ),
@@ -20176,6 +20810,10 @@ def build_compact_progress_summary(report: dict[str, Any]) -> dict[str, Any]:
         ),
         "scan_candidate_count": scan.get("candidate_count"),
         "scan_candidate_symbols": scan.get("candidate_symbols"),
+        "scan_raw_candidate_count": scan.get("raw_candidate_count"),
+        "scan_raw_candidate_symbols": scan.get("raw_candidate_symbols"),
+        "scan_proof_eligible_candidate_count": scan.get("proof_eligible_candidate_count"),
+        "scan_proof_eligible_candidate_symbols": scan.get("proof_eligible_candidate_symbols"),
         "scan_quote_freshness_status": scan_quote_freshness.get("status"),
         "scan_drop_diagnostics": scan.get("drop_diagnostics"),
         "scan_drop_reason_audit_status": scan.get("scan_drop_reason_audit_status"),
@@ -21060,6 +21698,16 @@ def attach_progress_record_summary_fields(
         "profitability_evidence_scorecard_delta",
         "profitability_evidence_scorecard_delta_status",
         "profitability_evidence_scorecard_delta_material_progress",
+        "profitability_evidence_scorecard_delta_evidence_progress",
+        "profitability_evidence_scorecard_delta_material_evidence_progress",
+        "profitability_evidence_scorecard_delta_evidence_progress_reasons",
+        "profitability_evidence_scorecard_delta_profit_improved",
+        "profitability_evidence_scorecard_delta_profit_improvement_reason",
+        "profitability_evidence_scorecard_delta_profitability_metrics_before",
+        "profitability_evidence_scorecard_delta_profitability_metrics_after",
+        "profitability_evidence_scorecard_delta_profitability_metrics_same_window",
+        "profitability_evidence_scorecard_delta_profitability_metric_improvements",
+        "profitability_evidence_scorecard_delta_profitability_metric_regressions",
         "profitability_evidence_scorecard_delta_passed_requirement_count_before",
         "profitability_evidence_scorecard_delta_passed_requirement_count_after",
         "profitability_evidence_scorecard_delta_passed_requirement_count_delta",
@@ -21293,6 +21941,10 @@ def attach_progress_record_summary_fields(
         "fresh_scan_post_run_profitability_gate_effect",
         "scan_candidate_count",
         "scan_candidate_symbols",
+        "scan_raw_candidate_count",
+        "scan_raw_candidate_symbols",
+        "scan_proof_eligible_candidate_count",
+        "scan_proof_eligible_candidate_symbols",
         "scan_quote_freshness_status",
         "scan_drop_diagnostics",
         "scan_drop_reason_audit_status",
@@ -22362,6 +23014,36 @@ def build_next_execution_cli_payload(
         "profitability_evidence_scorecard_delta_material_progress": profitability_evidence_scorecard_delta.get(
             "material_progress"
         ),
+        "profitability_evidence_scorecard_delta_evidence_progress": profitability_evidence_scorecard_delta.get(
+            "evidence_progress"
+        ),
+        "profitability_evidence_scorecard_delta_material_evidence_progress": profitability_evidence_scorecard_delta.get(
+            "material_evidence_progress"
+        ),
+        "profitability_evidence_scorecard_delta_evidence_progress_reasons": profitability_evidence_scorecard_delta.get(
+            "evidence_progress_reasons"
+        ),
+        "profitability_evidence_scorecard_delta_profit_improved": profitability_evidence_scorecard_delta.get(
+            "profit_improved"
+        ),
+        "profitability_evidence_scorecard_delta_profit_improvement_reason": profitability_evidence_scorecard_delta.get(
+            "profit_improvement_reason"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_before": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_before"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_after": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_after"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metrics_same_window": profitability_evidence_scorecard_delta.get(
+            "profitability_metrics_same_window"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metric_improvements": profitability_evidence_scorecard_delta.get(
+            "profitability_metric_improvements"
+        ),
+        "profitability_evidence_scorecard_delta_profitability_metric_regressions": profitability_evidence_scorecard_delta.get(
+            "profitability_metric_regressions"
+        ),
         "profitability_evidence_scorecard_delta_passed_requirement_count_before": profitability_evidence_scorecard_delta.get(
             "passed_requirement_count_before"
         ),
@@ -22980,6 +23662,10 @@ def build_next_execution_cli_payload(
         ),
         "scan_candidate_count": scan.get("candidate_count"),
         "scan_candidate_symbols": scan.get("candidate_symbols"),
+        "scan_raw_candidate_count": scan.get("raw_candidate_count"),
+        "scan_raw_candidate_symbols": scan.get("raw_candidate_symbols"),
+        "scan_proof_eligible_candidate_count": scan.get("proof_eligible_candidate_count"),
+        "scan_proof_eligible_candidate_symbols": scan.get("proof_eligible_candidate_symbols"),
         "scan_quote_freshness_status": scan_quote_freshness.get("status"),
         "scan_drop_diagnostics": scan.get("drop_diagnostics"),
         "scan_drop_reason_audit_status": scan.get("scan_drop_reason_audit_status"),
@@ -23750,6 +24436,7 @@ def run_progress(
                 playbook="ai_commodity_infra_observation",
                 allowed_directions=["call", "put"],
                 min_imported_calendar_dates=int(min_shared_quote_dates),
+                save_result=bool(write),
             )
         )
         if 0 < len(shared_after) < int(min_shared_quote_dates):
@@ -23961,6 +24648,7 @@ def run_progress(
 
 def build_strict_accuracy_gate(report: dict[str, Any]) -> dict[str, Any]:
     verification = report.get("verification_gate") if isinstance(report.get("verification_gate"), dict) else {}
+    proof_window = report.get("proof_window") if isinstance(report.get("proof_window"), dict) else {}
     audit = report.get("goal_completion_audit") if isinstance(report.get("goal_completion_audit"), dict) else {}
     if not audit:
         audit = build_goal_completion_audit(report)
@@ -23971,12 +24659,44 @@ def build_strict_accuracy_gate(report: dict[str, Any]) -> dict[str, Any]:
     )
     if not contract:
         contract = build_goal_completion_verification_contract({**report, "goal_completion_audit": audit})
-    passed = contract.get("completion_claim_allowed") is True
+    current_shared_quote_dates = _int_or_zero(proof_window.get("current_shared_quote_dates"))
+    requested_shared_quote_dates = _int_or_zero(
+        proof_window.get("required_shared_quote_dates") or DEFAULT_MIN_SHARED_QUOTE_DATES
+    )
+    exact_history_depth_floor = {
+        "current_shared_quote_dates": current_shared_quote_dates,
+        "required_shared_quote_dates": proof_window.get("required_shared_quote_dates"),
+        "requested_required_shared_quote_dates": requested_shared_quote_dates,
+        "default_required_shared_quote_dates_floor": DEFAULT_MIN_SHARED_QUOTE_DATES,
+        "effective_goal_required_shared_quote_dates": max(
+            requested_shared_quote_dates,
+            DEFAULT_MIN_SHARED_QUOTE_DATES,
+        ),
+        "exact_history_depth_floor_satisfied": (
+            current_shared_quote_dates >= DEFAULT_MIN_SHARED_QUOTE_DATES
+        ),
+    }
+    floor_blockers = []
+    if exact_history_depth_floor.get("exact_history_depth_floor_satisfied") is not True:
+        floor_blockers.append("exact_history_depth_floor_not_satisfied")
+    unproven_requirements = _unique_strings(
+        [
+            contract.get("unproven_requirements"),
+            audit.get("failed_requirements"),
+            (
+                ["has_required_exact_alpaca_opra_history_depth"]
+                if floor_blockers
+                else []
+            ),
+        ]
+    )
+    passed = contract.get("completion_claim_allowed") is True and not floor_blockers
     blockers = _unique_strings(
         [
             verification.get("blockers"),
             audit.get("blockers"),
             contract.get("unproven_requirements"),
+            floor_blockers,
             report.get("next_blocker"),
         ]
     )
@@ -23986,9 +24706,10 @@ def build_strict_accuracy_gate(report: dict[str, Any]) -> dict[str, Any]:
         "verification_status": verification.get("status"),
         "verification_verified": verification.get("verified"),
         "goal_completion_status": audit.get("status"),
-        "completion_claim_allowed": contract.get("completion_claim_allowed") is True,
-        "unproven_requirements": contract.get("unproven_requirements") or audit.get("failed_requirements") or [],
+        "completion_claim_allowed": passed,
+        "unproven_requirements": unproven_requirements,
         "blockers": blockers,
+        "exact_history_depth_floor": exact_history_depth_floor,
         "next_evidence_action": contract.get("next_evidence_action") or audit.get("next_action"),
         "next_evidence_command": contract.get("next_evidence_command"),
     }

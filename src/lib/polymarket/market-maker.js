@@ -11,7 +11,7 @@
  * - Respects risk limits from RiskManager
  */
 
-const { placeLimitOrder } = require("./client");
+const { cancelOrder, placeLimitOrder } = require("./client");
 
 const DEFAULT_MM_CONFIG = {
   orderSizeUsd: 25,              // $ size per side per market
@@ -22,6 +22,7 @@ const DEFAULT_MM_CONFIG = {
   maxInventoryUsd: 100,          // Max inventory per side before stopping that side
   refreshIntervalMs: 30000,      // Quote refresh interval
   maxMarketsPerCycle: 5,         // Max markets to quote simultaneously
+  dryRun: false,                 // Simulate quotes without placing orders
 };
 
 class MarketMaker {
@@ -30,6 +31,7 @@ class MarketMaker {
     this.config = { ...DEFAULT_MM_CONFIG, ...config };
     this.activeMarkets = new Map(); // tokenId -> market config
     this.inventory = new Map();     // tokenId -> { yesShares, noShares }
+    this.openOrderIds = new Set();  // MM-owned quote order ids
     this.running = false;
     this.cycleCount = 0;
     this.stats = { ordersPlaced: 0, ordersFilled: 0, totalSpreadCaptured: 0 };
@@ -57,12 +59,20 @@ class MarketMaker {
 
     this.cycleCount++;
 
-    // Cancel stale orders before posting fresh quotes
-    try {
-      await client.cancelAll();
-      this.risk.openOrderCount = 0;
-    } catch (err) {
-      console.log("[MM] Cancel all failed: " + err.message.slice(0, 80));
+    // Cancel stale MM-owned quote orders before posting fresh quotes.
+    if (!this.config.dryRun) {
+      const cancelResult = await this._cancelOpenQuotes(client);
+      if (!cancelResult.ok) {
+        return {
+          cycle: this.cycleCount,
+          timestamp: new Date().toISOString(),
+          marketsQuoted: 0,
+          results: [],
+          status: "cancel_failed",
+          cancelResult,
+          riskStatus: this.risk.getStatus(),
+        };
+      }
     }
 
     const results = [];
@@ -83,6 +93,25 @@ class MarketMaker {
       results,
       riskStatus: this.risk.getStatus(),
     };
+  }
+
+  _requireOrderId(result) {
+    const status = Number(result?.status);
+    if (result?.success === false || result?.error || result?.errorMsg || (Number.isFinite(status) && status >= 400)) {
+      throw new Error(String(result?.error || result?.errorMsg || result?.message || "order_rejected"));
+    }
+    const orderId = result?.orderID || result?.id;
+    if (!orderId) {
+      throw new Error("missing_order_id");
+    }
+    return String(orderId);
+  }
+
+  _requireCancelAccepted(result) {
+    const status = Number(result?.status);
+    if (result?.success === false || result?.error || result?.errorMsg || (Number.isFinite(status) && status >= 400)) {
+      throw new Error(String(result?.error || result?.errorMsg || result?.message || "cancel_rejected"));
+    }
   }
 
   async _quoteMarket(client, tokenId, market) {
@@ -108,24 +137,33 @@ class MarketMaker {
     if (orderSize < 1) return { tokenId, status: "skip", reason: "order_size_too_small" };
 
     // Check risk for both sides
+    const askSize = Math.min(orderSize, inv.yesShares);
     const bidCheck = this.risk.checkOrder({ tokenId, side: "buy", size: orderSize, price: bidPrice });
-    const askCheck = this.risk.checkOrder({ tokenId, side: "sell", size: orderSize, price: askPrice });
+    const askCheck = askSize >= 1
+      ? this.risk.checkOrder({ tokenId, side: "sell", size: askSize, price: askPrice })
+      : { allowed: false, reason: "no_sell_inventory" };
 
     const actions = [];
 
     if (bidCheck.allowed && Math.abs(netInventoryUsd) < this.config.maxInventoryUsd) {
       try {
-        const result = await placeLimitOrder(client, {
-          tokenId,
-          side: "buy",
-          price: bidPrice,
-          size: orderSize,
-          negRisk: market.negRisk || false,
-          tickSize: market.tickSize || "0.01",
-        });
-        this.risk.recordOrderPlaced({ tokenId, side: "buy", price: bidPrice, size: orderSize, orderId: result?.orderID || result?.id });
-        this.stats.ordersPlaced++;
-        actions.push({ side: "bid", price: bidPrice, size: orderSize });
+        if (this.config.dryRun) {
+          actions.push({ side: "bid", price: bidPrice, size: orderSize, dryRun: true });
+        } else {
+          const result = await placeLimitOrder(client, {
+            tokenId,
+            side: "buy",
+            price: bidPrice,
+            size: orderSize,
+            negRisk: market.negRisk || false,
+            tickSize: market.tickSize || "0.01",
+          });
+          const orderId = this._requireOrderId(result);
+          this.risk.recordOrderPlaced({ tokenId, side: "buy", price: bidPrice, size: orderSize, orderId });
+          this.openOrderIds.add(orderId);
+          this.stats.ordersPlaced++;
+          actions.push({ side: "bid", price: bidPrice, size: orderSize, orderId });
+        }
       } catch (err) {
         actions.push({ side: "bid", error: err.message });
       }
@@ -133,18 +171,23 @@ class MarketMaker {
 
     if (askCheck.allowed && inv.yesShares > 0) {
       try {
-        const askSize = Math.min(orderSize, inv.yesShares);
-        const result = await placeLimitOrder(client, {
-          tokenId,
-          side: "sell",
-          price: askPrice,
-          size: askSize,
-          negRisk: market.negRisk || false,
-          tickSize: market.tickSize || "0.01",
-        });
-        this.risk.recordOrderPlaced({ tokenId, side: "sell", price: askPrice, size: askSize, orderId: result?.orderID || result?.id });
-        this.stats.ordersPlaced++;
-        actions.push({ side: "ask", price: askPrice, size: askSize });
+        if (this.config.dryRun) {
+          actions.push({ side: "ask", price: askPrice, size: askSize, dryRun: true });
+        } else {
+          const result = await placeLimitOrder(client, {
+            tokenId,
+            side: "sell",
+            price: askPrice,
+            size: askSize,
+            negRisk: market.negRisk || false,
+            tickSize: market.tickSize || "0.01",
+          });
+          const orderId = this._requireOrderId(result);
+          this.risk.recordOrderPlaced({ tokenId, side: "sell", price: askPrice, size: askSize, orderId });
+          this.openOrderIds.add(orderId);
+          this.stats.ordersPlaced++;
+          actions.push({ side: "ask", price: askPrice, size: askSize, orderId });
+        }
       } catch (err) {
         actions.push({ side: "ask", error: err.message });
       }
@@ -163,11 +206,42 @@ class MarketMaker {
     };
   }
 
+  async _cancelOpenQuotes(client) {
+    const orderIds = [...this.openOrderIds];
+    if (orderIds.length === 0) {
+      return { ok: true, canceled: [], failed: [] };
+    }
+
+    const canceled = [];
+    const failed = [];
+    for (const orderId of orderIds) {
+      try {
+        if (typeof client?.cancelOrder === "function") {
+          this._requireCancelAccepted(await client.cancelOrder({ orderID: orderId }));
+        } else {
+          this._requireCancelAccepted(await cancelOrder(client, orderId));
+        }
+        this.openOrderIds.delete(orderId);
+        this.risk.recordOrderClosed(orderId);
+        canceled.push(orderId);
+      } catch (err) {
+        failed.push({ orderId, error: err.message });
+      }
+    }
+
+    if (failed.length > 0) {
+      console.log("[MM] Quote cancel failed for " + failed.length + " order(s); skipping fresh quotes.");
+    }
+
+    return { ok: failed.length === 0, canceled, failed };
+  }
+
   getStats() {
     return {
       ...this.stats,
       activeMarkets: this.activeMarkets.size,
       cycleCount: this.cycleCount,
+      openQuoteOrders: this.openOrderIds.size,
       inventory: Object.fromEntries(this.inventory),
     };
   }

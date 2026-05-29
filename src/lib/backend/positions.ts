@@ -1,17 +1,21 @@
-import { fetchBackendJson, postBackendJson } from "@/lib/backend/transport";
+import { fetchBackendJson, postBackendJson, toSearchSuffix } from "@/lib/backend/transport";
 
 export async function getTrackedPositions(
   status: "open" | "closed" | "all" = "open"
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/positions?status=${status}`,
+    `/api/positions${toSearchSuffix({ status })}`,
     undefined,
     "Failed to fetch positions"
   );
 }
 
-export async function getGroupedTrackedPositions(): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>("/api/positions?status=all&grouped=1");
+export async function getGroupedTrackedPositions(
+  status: "open" | "closed" | "all" = "all"
+): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>(
+    `/api/positions${toSearchSuffix({ status, grouped: 1 })}`
+  );
 }
 
 export async function createTrackedPosition(
@@ -49,14 +53,18 @@ export async function getSuggestedTrades(
   status: "open" | "closed" | "all" = "open"
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/suggested-trades?status=${status}`,
+    `/api/suggested-trades${toSearchSuffix({ status })}`,
     undefined,
     "Failed to fetch suggested trades"
   );
 }
 
-export async function getGroupedSuggestedTrades(): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>("/api/suggested-trades?status=all&grouped=1");
+export async function getGroupedSuggestedTrades(
+  status: "open" | "closed" | "all" = "all"
+): Promise<Record<string, unknown>> {
+  return fetchBackendJson<Record<string, unknown>>(
+    `/api/suggested-trades${toSearchSuffix({ status, grouped: 1 })}`
+  );
 }
 
 export async function createSuggestedTrade(

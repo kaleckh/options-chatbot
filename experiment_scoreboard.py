@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import glob
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Callable, Sequence
 
@@ -38,15 +38,19 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _parse_run_at(value: Any) -> datetime:
+    fallback = datetime.min.replace(tzinfo=UTC)
     if not value:
-        return datetime.min
+        return fallback
     text = str(value).strip()
     if not text:
-        return datetime.min
+        return fallback
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
-        return datetime.min
+        return fallback
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _normalize_status(value: Any) -> str:

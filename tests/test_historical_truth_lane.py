@@ -286,12 +286,12 @@ class HistoricalTruthLaneTests(unittest.TestCase):
     def test_replay_ticker_factory_prefers_alpaca_when_enabled(self):
         sentinel_factory = object()
 
-        with patch.object(wfo, "alpaca_enabled", return_value=True):
+        with patch.object(wfo, "alpaca_provider_requested", return_value=True):
             with patch.object(wfo, "make_alpaca_ticker_factory", return_value=sentinel_factory) as factory:
                 resolved = wfo._replay_ticker_factory()
 
         self.assertIs(resolved, sentinel_factory)
-        factory.assert_called_once_with(fallback_factory=wfo.yf.Ticker)
+        factory.assert_called_once_with(fallback_factory=None)
 
     def test_fixture_imports_do_not_count_as_trusted_validation(self):
         fixture_db_path = os.path.join(self._tmp.name, "options_history_fixture.db")
