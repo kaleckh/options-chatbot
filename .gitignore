@@ -69,6 +69,7 @@ chat_history.db
 chat_history.backup-*.db
 market_data.db
 forward_tracking.db
+options_history.db
 *.db-shm
 *.db-wal
 *.pid

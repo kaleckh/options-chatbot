@@ -4,6 +4,8 @@
 
 These are the living docs for the current worktree:
 
+- `AGENTS.md`
+  - repo-specific agent startup, evidence rules, and documentation placement
 - `README.md`
   - top-level product and runtime summary
 - `docs/architecture-overview.md`
@@ -26,8 +28,8 @@ These are the living docs for the current worktree:
   - lane registry, pass bars, and AI commodity lane placement
 - `docs/bullish-pullback-ticker-audit-2026-05-29.md`
   - current per-ticker keep/move/research/remove decisions for the 59-symbol bullish-pullback universe
-- `docs/markdown-audit-2026-05-29.md`
-  - latest Markdown freshness audit, scope, and verification evidence
+- `docs/markdown-audit-2026-05-31.md`
+  - latest Markdown placement audit, scope, and verification evidence
 - `docs/WORKLOG.md`
   - recent local evidence and documentation changes
 - `docs/DECISIONS.md`

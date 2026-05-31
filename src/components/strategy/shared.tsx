@@ -4,8 +4,8 @@ import { Brain, Target } from "lucide-react";
 import { useId } from "react";
 
 export const SUB_TABS = [
-  { id: "brain", label: "Strategy Brain", icon: Brain },
-  { id: "optimizer", label: "Optimizer", icon: Target },
+  { id: "optimizer", label: "Replay Review", icon: Target },
+  { id: "brain", label: "Policy Editor", icon: Brain },
 ] as const;
 
 export function fmtTruthSource(value?: string | null): string {

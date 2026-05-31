@@ -17,7 +17,7 @@ The mounted browser product is the regular supervised options lane:
 - live scan
 - replay and truth diagnostics
 - tracked positions
-- suggested trades
+- paper ideas
 
 The active non-browser proof lane is the AI commodity / commodity-infrastructure options lane. It lives under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`, and is currently gated on exact Alpaca SIP/OPRA bid/ask snapshot history rather than profitability claims.
 
@@ -150,6 +150,8 @@ The repo still contains legacy day-trading tests and engine code, but the corres
 
 ## Docs
 
+- `AGENTS.md`
+  - repo-specific agent startup, evidence rules, and documentation placement
 - `docs/architecture-overview.md`
   - runtime map, request flow, subsystem ownership
 - `docs/index.md`
@@ -172,6 +174,8 @@ The repo still contains legacy day-trading tests and engine code, but the corres
   - lane registry and promotion bars
 - `docs/bullish-pullback-ticker-audit-2026-05-29.md`
   - current per-ticker keep/move/research/remove decisions for the 59-symbol bullish-pullback universe
+- `docs/markdown-audit-2026-05-31.md`
+  - latest Markdown placement audit for global and options-chatbot docs
 - `docs/WORKLOG.md`
   - recent local evidence and doc changes
 - `docs/weekly-bug-audit-loop.md`

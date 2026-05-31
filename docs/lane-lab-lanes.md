@@ -1,10 +1,21 @@
 # Lane Lab Lanes
 
-Last updated: 2026-05-29
+Last updated: 2026-05-31
 
 ## Purpose
 
 This registry defines the next paper-trading lanes to test without overstating the current evidence. Current listed trades can be profitable and still not be promotion-grade proof until the system records exact fills, exits, and lane-specific outcomes.
+
+Latest generated registry source: `data/lane-lab/latest.json`, generated `2026-05-30T21:29:39Z`.
+
+Current generated read:
+- lane count: `32`
+- status counts: `9` blocked by instrumentation, `6` blocked by missing data, `14` pending forward/paper logs, `1` partial current paper result, `1` scored, and `1` ready for paper backtest
+- current paper book in the generated lane-lab artifact has `0` current positions and `0` paper P&L points, so `fill_discipline` is partial rather than passed
+- `high_debit_control` is scored from `103` exact historical rows; cheap debit buckets beat high debit buckets in the current artifact
+- `iwm_small_cap_risk` is now `ready_for_paper_backtest`; the older thin-data blocker is stale
+
+For the regular stock-options `200` question, this registry is not the owning count artifact. Use `data/profitability-lab/regular-options-multilane/latest.json` for count feasibility, `data/profitability-lab/regular-options-autoresearch/latest.json` for the latest frozen-evaluator experiment, and `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/latest.json` for implemented/planned sleeve coverage.
 
 ## Three Tiers
 
@@ -18,11 +29,11 @@ This registry defines the next paper-trading lanes to test without overstating t
 
 | Priority | Lane | Current Result | Required Test |
 | ---: | --- | --- | --- |
-| 1 | `fill_discipline` | Current paper book is profitable, but only partial evidence. | Log timestamped two-leg quotes, spread mid, attempted limit, fill/no-fill, entry, review, and close. |
+| 1 | `fill_discipline` | Partial only: generated lane-lab read has no current position/P&L sample and no spread bid/ask fill attempts. | Log timestamped two-leg quotes, spread mid, attempted limit, fill/no-fill, entry, review, and close. |
 | 2 | `liquidity_first_spread` | Blocked by missing alternative-contract logging. | Persist top 3 spread alternatives per candidate and compare liquidity-first selection against current selection. |
-| 3 | `high_debit_control` | Historical exact sample is thin. Cheap exact rows currently look better, but high-debit exact control has zero rows. | Shadow-reject debit verticals above 55% width and compare to cheap debit buckets. |
+| 3 | `high_debit_control` | Scored from `103` exact historical rows; cheap debit buckets currently beat high-debit buckets. | Keep the shadow reject active and compare to every fresh exact/paper sample. |
 | 4 | `gld_macro_breakout` | Blocked by missing trusted GLD option history. | Import GLD option history, then paper 30-45 DTE debit spreads after daily breakout/breakdown signals. |
-| 5 | `relative_strength_pullback` | Pending tagged paper log. | Track RS vs SPY, SMA50, RSI14, 3-day pullback, option fill, and outcome. |
+| 5 | `relative_strength_pullback` | Lane-lab still needs tagged paper logs; the current all-planned replay shape was rejected at PF `0.34`. | Track RS vs SPY, SMA50, RSI14, 3-day pullback, option fill, and outcome before judging a new shape. |
 
 ## Tier 1 Lane Specs
 
@@ -51,6 +62,8 @@ The next profitability layer should test these as separate frozen hypotheses rat
 | 35 | `defensive_refill_income` | `WMT`, `PM`; optionally `KO` and `T` after exact sample expansion | Adds trade count without relying on thin one- or two-trade PF artifacts. |
 | 36 | `reit_rate_sensitive` | `PLD` first | Keeps REIT/rate-sensitive proof separate from the current bullish-pullback queue. |
 | 37 | `industrial_scout` | `CAT` first | Requires a larger exact sample before promotion because the current evidence is profitable but sparse. |
+
+This bullish-pullback extension section is narrower than the regular stock-options portfolio. Its `130`-trade ceiling does not contradict the broader multi-lane count artifact, which reaches `234` trusted intraday exact rows but remains quality-gated.
 
 ## Tier 2 Lane Specs
 

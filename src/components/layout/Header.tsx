@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useState, memo } from "react";
-import { Menu } from "lucide-react";
+import { Menu, ShieldCheck } from "lucide-react";
 
 interface HeaderProps {
   onMenuClick?: () => void;
+  activeTab: string;
 }
 
-function Header({ onMenuClick }: HeaderProps) {
+function Header({ onMenuClick, activeTab }: HeaderProps) {
   const [now, setNow] = useState("");
+  const title = activeTab === "strategy" ? "Strategy Lab" : "Trading Desk";
+  const subtitle = activeTab === "strategy"
+    ? "Replay validation and policy tuning"
+    : "Open positions, scan picks, and paper ideas";
 
   useEffect(() => {
     const update = () => {
@@ -30,7 +35,7 @@ function Header({ onMenuClick }: HeaderProps) {
   }, []);
 
   return (
-    <header className="flex items-center justify-between px-4 md:px-8 py-3 border-b border-border">
+    <header className="flex items-center justify-between gap-4 px-4 md:px-8 py-3 border-b border-border bg-bg-1/95">
       <div className="flex items-center gap-3 md:gap-4">
         {onMenuClick && (
           <button
@@ -43,26 +48,19 @@ function Header({ onMenuClick }: HeaderProps) {
           </button>
         )}
 
-        <div className="font-mono text-lg md:text-xl font-bold text-text-0 tracking-tight">
-          OPTIONS<span className="text-accent">AI</span>
-        </div>
-
-        <div className="hidden md:flex gap-2 items-center">
-          <span className="inline-block px-2 py-0.5 rounded bg-accent-dim text-accent text-2xs font-semibold tracking-wide uppercase font-mono">
-            Options Desk
-          </span>
-          <span className="inline-block px-2 py-0.5 rounded bg-bg-4 text-text-2 text-2xs font-medium tracking-wide uppercase font-mono">
-            Crypto Pilot
-          </span>
-          <span className="inline-block px-2 py-0.5 rounded bg-bg-4 text-text-2 text-2xs font-medium tracking-wide uppercase font-mono">
-            Guardrails On
-          </span>
+        <div className="min-w-0">
+          <div className="text-sm md:text-base font-semibold text-text-0">{title}</div>
+          <div className="hidden sm:block text-xs text-text-2">{subtitle}</div>
         </div>
       </div>
 
       <div className="flex items-center gap-3">
+        <span className="hidden md:inline-flex items-center gap-1.5 rounded border border-green/25 bg-green-dim px-2.5 py-1 text-xs font-medium text-green">
+          <ShieldCheck size={13} aria-hidden="true" />
+          Guardrails
+        </span>
         <div
-          className="font-mono text-xs text-text-3 bg-bg-3 px-2 md:px-3 py-1 rounded border border-border"
+          className="hidden sm:block font-mono text-xs text-text-2 bg-bg-3 px-2 md:px-3 py-1 rounded border border-border"
           aria-label="Current time in Eastern Time"
         >
           {now}

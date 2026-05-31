@@ -1,6 +1,6 @@
 "use client";
 
-import { isValidElement, memo } from "react";
+import { isValidElement, memo, type ReactNode } from "react";
 
 interface FinTableProps {
   data: Record<string, unknown>[];
@@ -12,6 +12,7 @@ interface FinTableProps {
   maxHeight?: string;
   label?: string;
   density?: "default" | "compact";
+  emptyMessage?: string;
 }
 
 function cellClass(
@@ -27,7 +28,7 @@ function cellClass(
   }
 
   if (pnlCols.has(col)) {
-    const raw = val.replace(/%/g, "").replace(/\+/g, "").replace(/\$/g, "").replace(/,/g, "").replace(/—/g, "").trim();
+    const raw = val.replace(/%/g, "").replace(/\+/g, "").replace(/\$/g, "").replace(/,/g, "").replace(/\u2014/g, "").trim();
     const n = parseFloat(raw);
     if (!isNaN(n)) {
       if (n > 0) classes.push("pos");
@@ -35,7 +36,7 @@ function cellClass(
       else classes.push("dim");
     }
   } else if (rateCols.has(col)) {
-    const raw = val.replace(/%/g, "").replace(/—/g, "").trim();
+    const raw = val.replace(/%/g, "").replace(/\u2014/g, "").trim();
     const n = parseFloat(raw);
     if (!isNaN(n)) {
       if (n >= 60) classes.push("pos");
@@ -44,6 +45,7 @@ function cellClass(
     }
   }
 
+  if (col === "Action") classes.push("ft-action-cell");
   return classes.join(" ");
 }
 
@@ -74,6 +76,41 @@ function isOutcomeColumn(col: string, outcomeCols: Set<string>): boolean {
   return normalized === "outcome" || normalized === "result" || normalized.endsWith(" outcome");
 }
 
+function renderCellValue(
+  col: string,
+  raw: unknown,
+  badgeCol: string | undefined,
+  outcomeSet: Set<string>
+): ReactNode {
+  if (isValidElement(raw)) return raw;
+
+  const val = raw == null ? "" : String(raw);
+
+  if (badgeCol && col === badgeCol) {
+    const v = val.toUpperCase();
+    if (v.includes("CALL")) {
+      return <span className="badge-call" aria-label="Call option">CALL</span>;
+    }
+    if (v.includes("PUT")) {
+      return <span className="badge-put" aria-label="Put option">PUT</span>;
+    }
+  }
+
+  const isOutcome = isOutcomeColumn(col, outcomeSet);
+  const lower = val.toLowerCase();
+  if (isOutcome && lower.includes("hit") && !lower.includes("miss")) {
+    return <span className="badge-hit" aria-label="Hit">{val}</span>;
+  }
+  if (isOutcome && lower.includes("miss")) {
+    return <span className="badge-miss" aria-label="Miss">{val}</span>;
+  }
+  if (isOutcome && (lower.includes("directional") || lower.includes("dir")) && !lower.includes("score")) {
+    return <span className="badge-dir" aria-label="Directional">{val}</span>;
+  }
+
+  return val;
+}
+
 function FinTable({
   data,
   pnlCols = [],
@@ -84,10 +121,11 @@ function FinTable({
   maxHeight = "460px",
   label = "Data table",
   density = "default",
+  emptyMessage = "No data",
 }: FinTableProps) {
   if (!data || data.length === 0) {
     return (
-      <div className="ft-wrap p-4 text-text-2 text-sm" role="status">No data</div>
+      <div className="ft-wrap p-4 text-text-2 text-sm" role="status">{emptyMessage}</div>
     );
   }
 
@@ -105,11 +143,56 @@ function FinTable({
       aria-label={label}
       tabIndex={0}
     >
+      <div className="ft-mobile-cards">
+        {data.map((row, i) => {
+          const key = rowKey(row, i);
+          const titleCol = columns[0];
+          const subtitleCol = columns.find((col) => col !== titleCol && col !== "Action");
+          return (
+            <article key={key} className="ft-mobile-card">
+              <div className="ft-mobile-card-head">
+                <div>
+                  <div className="ft-mobile-label">{titleCol}</div>
+                  <div className="ft-mobile-title">{renderCellValue(titleCol, row[titleCol], badgeCol, outcomeSet)}</div>
+                </div>
+                {subtitleCol ? (
+                  <div className="text-right">
+                    <div className="ft-mobile-label">{subtitleCol}</div>
+                    <div className="ft-mobile-subtitle">{renderCellValue(subtitleCol, row[subtitleCol], badgeCol, outcomeSet)}</div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="ft-mobile-grid">
+                {columns
+                  .filter((col) => col !== titleCol && col !== subtitleCol && col !== "Action")
+                  .map((col) => {
+                    const raw = row[col];
+                    const val = raw == null || isValidElement(raw) ? "" : String(raw);
+                    return (
+                      <div key={col} className="ft-mobile-field">
+                        <div className="ft-mobile-label">{col}</div>
+                        <div className={cellClass(col, val, pnlSet, rateSet, monoSet) || undefined}>
+                          {renderCellValue(col, raw, badgeCol, outcomeSet)}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+              {columns.includes("Action") ? (
+                <div className="ft-mobile-actions">
+                  {renderCellValue("Action", row.Action, badgeCol, outcomeSet)}
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+
       <table className={`ft-table ${density === "compact" ? "ft-table-compact" : ""}`.trim()} aria-label={label}>
         <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col} scope="col">{col}</th>
+              <th key={col} scope="col" className={col === "Action" ? "ft-action-cell" : undefined}>{col}</th>
             ))}
           </tr>
         </thead>
@@ -118,66 +201,11 @@ function FinTable({
             <tr key={rowKey(row, i)}>
               {columns.map((col) => {
                 const raw = row[col];
-
-                if (isValidElement(raw)) {
-                  return (
-                    <td key={col}>
-                      {raw}
-                    </td>
-                  );
-                }
-
-                const val = raw == null ? "" : String(raw);
-
-                // Badge rendering
-                if (badgeCol && col === badgeCol) {
-                  const v = val.toUpperCase();
-                  if (v.includes("CALL")) {
-                    return (
-                      <td key={col}>
-                        <span className="badge-call" aria-label="Call option">CALL</span>
-                      </td>
-                    );
-                  }
-                  if (v.includes("PUT")) {
-                    return (
-                      <td key={col}>
-                        <span className="badge-put" aria-label="Put option">PUT</span>
-                      </td>
-                    );
-                  }
-                }
-
-                // Outcome badges
-                const isOutcome = isOutcomeColumn(col, outcomeSet);
-                if (isOutcome && val.toLowerCase().includes("hit") && !val.toLowerCase().includes("miss")) {
-                  return (
-                    <td key={col}>
-                      <span className="badge-hit" aria-label="Hit">{val}</span>
-                    </td>
-                  );
-                }
-                if (isOutcome && val.toLowerCase().includes("miss")) {
-                  return (
-                    <td key={col}>
-                      <span className="badge-miss" aria-label="Miss">{val}</span>
-                    </td>
-                  );
-                }
-                if (isOutcome && (val.toLowerCase().includes("directional") || val.toLowerCase().includes("dir"))) {
-                  if (!val.toLowerCase().includes("score")) {
-                    return (
-                      <td key={col}>
-                        <span className="badge-dir" aria-label="Directional">{val}</span>
-                      </td>
-                    );
-                  }
-                }
-
+                const val = raw == null || isValidElement(raw) ? "" : String(raw);
                 const cls = cellClass(col, val, pnlSet, rateSet, monoSet);
                 return (
                   <td key={col} className={cls || undefined}>
-                    {val}
+                    {renderCellValue(col, raw, badgeCol, outcomeSet)}
                   </td>
                 );
               })}

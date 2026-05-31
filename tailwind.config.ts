@@ -6,26 +6,26 @@ const config: Config = {
     extend: {
       colors: {
         bg: {
-          0: "#080b10",
-          1: "#0c1017",
-          2: "#11161e",
-          3: "#151c26",
-          4: "#1a2332",
+          0: "#060708",
+          1: "#0b0d0f",
+          2: "#111417",
+          3: "#181c20",
+          4: "#20262b",
         },
         border: {
-          DEFAULT: "#1e2736",
-          subtle: "#151c26",
+          DEFAULT: "#2a3036",
+          subtle: "#20262b",
         },
         text: {
-          0: "#edf2f7",
-          1: "#b8c4d0",
-          2: "#6b7a8d",
-          3: "#5a6b80",
+          0: "#f2f5f7",
+          1: "#c5ced8",
+          2: "#9aa7b4",
+          3: "#8a96a3",
         },
         accent: {
-          DEFAULT: "#4a90f7",
-          dim: "rgba(74,144,247,0.12)",
-          glow: "rgba(74,144,247,0.06)",
+          DEFAULT: "#27c7d8",
+          dim: "rgba(39,199,216,0.12)",
+          glow: "rgba(39,199,216,0.08)",
         },
         green: {
           DEFAULT: "#34d399",
@@ -57,11 +57,11 @@ const config: Config = {
       },
       fontSize: {
         "2xs": "0.75rem",
-        xs: "0.72rem",
-        sm: "0.78rem",
-        base: "0.82rem",
-        lg: "1.0rem",
-        xl: "1.2rem",
+        xs: "0.78rem",
+        sm: "0.86rem",
+        base: "0.92rem",
+        lg: "1.05rem",
+        xl: "1.25rem",
       },
       keyframes: {
         "slide-in-left": {

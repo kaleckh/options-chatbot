@@ -115,6 +115,21 @@ def commission_total_usd(
     return round(total, 4)
 
 
+def _net_return_pct(
+    *,
+    gross_pnl_usd: float,
+    fee_total_usd: float,
+    capital_at_risk_usd: float,
+) -> Optional[float]:
+    if capital_at_risk_usd <= 0:
+        return None
+    total_cost_basis = capital_at_risk_usd + max(float(fee_total_usd), 0.0)
+    if total_cost_basis <= 0:
+        return None
+    net_pnl_pct = ((float(gross_pnl_usd) - float(fee_total_usd)) / total_cost_basis) * 100.0
+    return max(net_pnl_pct, -100.0)
+
+
 def resolve_execution_price(
     *,
     side: str,
@@ -237,7 +252,11 @@ def position_pnl_snapshot(
     net_pnl_usd = gross_pnl_usd - fee_total_usd
     capital_at_risk_usd = float(entry_price) * int(contract_multiplier) * contract_count
     gross_pnl_pct = (gross_pnl_usd / capital_at_risk_usd) * 100.0 if capital_at_risk_usd > 0 else None
-    net_pnl_pct = (net_pnl_usd / capital_at_risk_usd) * 100.0 if capital_at_risk_usd > 0 else None
+    net_pnl_pct = _net_return_pct(
+        gross_pnl_usd=gross_pnl_usd,
+        fee_total_usd=fee_total_usd,
+        capital_at_risk_usd=capital_at_risk_usd,
+    )
     return {
         "gross_pnl_usd": round(gross_pnl_usd, 4),
         "net_pnl_usd": round(net_pnl_usd, 4),
@@ -615,7 +634,11 @@ def vertical_spread_pnl(
     # Capital at risk = net debit paid
     capital_at_risk = abs(net_debit) * CONTRACT_MULTIPLIER * contract_count
     gross_pnl_pct = (gross_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else None
-    net_pnl_pct = (net_pnl_usd / capital_at_risk * 100.0) if capital_at_risk > 0 else None
+    net_pnl_pct = _net_return_pct(
+        gross_pnl_usd=gross_pnl_usd,
+        fee_total_usd=fee_total,
+        capital_at_risk_usd=capital_at_risk,
+    )
 
     width = safe_float(spread_width)
     max_profit = (float(width) - net_debit) if width is not None and width > 0 else None

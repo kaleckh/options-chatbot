@@ -285,7 +285,7 @@ def build_intraday_robustness_report(
 def write_report(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, str]:
     output_dir.mkdir(parents=True, exist_ok=True)
     playbook = str((report.get("source") or {}).get("playbook") or "run")
-    safe_playbook = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in playbook)[:80]
+    safe_playbook = "".join(ch if ch.isalnum() or ch in {"-", "_"} else "_" for ch in playbook)[:40]
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     output_path = output_dir / f"imported_intraday_robustness_{safe_playbook}_{stamp}.json"
     latest_path = output_dir / "latest.json"

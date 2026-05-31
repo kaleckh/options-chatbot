@@ -1873,6 +1873,292 @@ for _variant_id, _description, _capacity_tiers, _n_picks in [
     )
 
 
+_next_keep_cluster_tiers = [
+    _tier(
+        "next_keep_time60_energy_lly",
+        rank=1,
+        sleeve_id="next_keep_time60_energy_lly",
+        symbols=["COP", "CVX", "XOM", "LLY"],
+        overrides={"spread_time_exit_pct": 60.0},
+    ),
+    _tier(
+        "next_keep_time55_metals_index_jnj",
+        rank=2,
+        sleeve_id="next_keep_time55_metals_index_jnj",
+        symbols=["NEM", "IWM", "JNJ"],
+        overrides={"spread_time_exit_pct": 55.0},
+    ),
+    _tier(
+        "next_keep_time50_mega_health",
+        rank=3,
+        sleeve_id="next_keep_time50_mega_health",
+        symbols=["AAPL", "GOOGL", "UNH"],
+        overrides={"spread_time_exit_pct": 50.0},
+    ),
+]
+_next_refill_overrides = {
+    "chain_native_min_entry_short_bid": 0.10,
+    "chain_native_short_prior_quote_score_weight": 0.75,
+    "chain_native_prior_quote_score_cap": 10,
+    "execution_survivability_enabled": True,
+    "min_tradability_score": 80.0,
+}
+_next_mixedexit_overrides = {
+    "chain_native_min_entry_short_bid": 0.10,
+    "chain_native_min_prior_quote_days": 1,
+    "chain_native_prior_quote_lookback_days": 30,
+    "chain_native_short_prior_quote_score_weight": 0.75,
+    "chain_native_prior_quote_score_cap": 10,
+    "execution_survivability_enabled": True,
+    "min_tradability_score": 70.0,
+    "min_short_leg_prior_quote_days": 1,
+}
+_next_high_beta_survival_overrides = {
+    **_next_refill_overrides,
+    "chain_native_min_prior_quote_days": 1,
+    "chain_native_prior_quote_lookback_days": 30,
+    "min_short_leg_prior_quote_days": 3,
+    "min_long_leg_prior_quote_days": 1,
+    "pullback_ret20_min": 2.0,
+    "pullback_ret5_min": -2.0,
+    "pullback_ret5_max": 0.25,
+    "spread_exit_monitoring_mode": "time_only",
+    "spread_time_exit_pct": 40.0,
+    "max_signal_ret20": 25.0,
+}
+for _variant_id, _description, _capacity_tiers, _n_picks in [
+    (
+        "sleeve_next_index_refill_v1",
+        "Frozen next-layer keep cluster plus QQQ/DIA/XLK index refill with stronger quote-survival filters.",
+        _next_keep_cluster_tiers
+        + [
+            _tier(
+                "next_index_refill",
+                rank=4,
+                sleeve_id="next_index_refill",
+                symbols=["QQQ", "DIA", "XLK"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 50.0},
+            ),
+        ],
+        6,
+    ),
+    (
+        "sleeve_next_defensive_refill_v1",
+        "Frozen next-layer keep cluster plus WMT/PM defensive refill with stronger quote-survival filters.",
+        _next_keep_cluster_tiers
+        + [
+            _tier(
+                "next_defensive_refill",
+                rank=4,
+                sleeve_id="next_defensive_refill",
+                symbols=["WMT", "PM"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 55.0},
+            ),
+        ],
+        6,
+    ),
+    (
+        "sleeve_next_reit_industrial_refill_v1",
+        "Frozen next-layer keep cluster plus PLD/CAT scout refill with stronger quote-survival filters.",
+        _next_keep_cluster_tiers
+        + [
+            _tier(
+                "next_reit_industrial_refill",
+                rank=4,
+                sleeve_id="next_reit_industrial_refill",
+                symbols=["PLD", "CAT"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 55.0},
+            ),
+        ],
+        6,
+    ),
+    (
+        "sleeve_next_move_bucket_refill_v1",
+        "Frozen next-layer keep cluster plus the strongest move-bucket scouts, separated by causal lanes.",
+        _next_keep_cluster_tiers
+        + [
+            _tier(
+                "next_index_refill",
+                rank=4,
+                sleeve_id="next_index_refill",
+                symbols=["QQQ", "DIA", "XLK"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 50.0},
+            ),
+            _tier(
+                "next_defensive_refill",
+                rank=5,
+                sleeve_id="next_defensive_refill",
+                symbols=["WMT", "PM"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 55.0},
+            ),
+            _tier(
+                "next_reit_industrial_refill",
+                rank=6,
+                sleeve_id="next_reit_industrial_refill",
+                symbols=["PLD", "CAT"],
+                overrides={**_next_refill_overrides, "spread_time_exit_pct": 55.0},
+            ),
+        ],
+        7,
+    ),
+]:
+    _overrides = copy.deepcopy(_winner_timecombo_base)
+    _overrides.update(
+        {
+            "capacity_tiers": _capacity_tiers,
+            "max_per_allocation_group": 1,
+            "max_per_ticker": 1,
+            "max_total_index": 1,
+        }
+    )
+    VARIANTS.append(
+        {
+            "id": _variant_id,
+            "description": _description,
+            "n_picks": _n_picks,
+            "allowed": _active_universe_symbols(),
+            "overrides": _overrides,
+        }
+    )
+
+for _variant_id, _description, _symbols, _extra_overrides, _n_picks in [
+    (
+        "sleeve_next_index_move_bucket_baseline_v1",
+        "QQQ/DIA/XLK move-bucket scout using the mixed-exit winner settings without IWM masking.",
+        ["QQQ", "DIA", "XLK"],
+        {"sleeve_id": "next_index_move_bucket", "sleeve_group": "next_index_move_bucket"},
+        2,
+    ),
+    (
+        "sleeve_next_index_move_bucket_coverage_v1",
+        "QQQ/DIA/XLK move-bucket scout with only causal quote-survival filters added.",
+        ["QQQ", "DIA", "XLK"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_index_move_bucket_coverage",
+            "sleeve_group": "next_index_move_bucket",
+            "min_short_leg_prior_quote_days": 3,
+        },
+        2,
+    ),
+    (
+        "sleeve_next_index_with_iwm_spy_control_v1",
+        "SPY/IWM/QQQ/DIA/XLK control scout to separate IWM-driven index strength from move-bucket strength.",
+        ["SPY", "IWM", "QQQ", "DIA", "XLK"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_index_control",
+            "sleeve_group": "next_index_control",
+            "min_short_leg_prior_quote_days": 3,
+            "max_total_index": 2,
+        },
+        3,
+    ),
+    (
+        "sleeve_next_defensive_wmt_mixedexit_v1",
+        "WMT-only defensive scout using mixed exits instead of the weak time-only refill shape.",
+        ["WMT"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_defensive_wmt_mixedexit",
+            "sleeve_group": "next_defensive_refill",
+        },
+        1,
+    ),
+    (
+        "sleeve_next_defensive_pm_mixedexit_v1",
+        "PM-only defensive-income scout using mixed exits while missing exact exit quotes remain data-gated.",
+        ["PM"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_defensive_pm_mixedexit",
+            "sleeve_group": "next_defensive_refill",
+        },
+        1,
+    ),
+    (
+        "sleeve_next_reit_pld_mixedexit_v1",
+        "PLD-only REIT scout using mixed exits after fixed-time cluster evidence turned negative.",
+        ["PLD"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_reit_pld_mixedexit",
+            "sleeve_group": "next_reit_refill",
+        },
+        1,
+    ),
+    (
+        "sleeve_next_industrial_cat_mixedexit_v1",
+        "CAT-only industrial scout using mixed exits while lookup/backfill gaps remain data-gated.",
+        ["CAT"],
+        {
+            **_next_mixedexit_overrides,
+            "sleeve_id": "next_industrial_cat_mixedexit",
+            "sleeve_group": "next_industrial_refill",
+        },
+        1,
+    ),
+    (
+        "sleeve_next_high_beta_survival_v1",
+        "NVDA/AMZN/TSLA bullish-pullback scout with fast exits and strict quote-survival filters.",
+        ["NVDA", "AMZN", "TSLA"],
+        {
+            **_next_high_beta_survival_overrides,
+            "sleeve_id": "next_high_beta_survival",
+            "sleeve_group": "next_high_beta",
+        },
+        3,
+    ),
+    (
+        "sleeve_next_high_beta_momentum_fast_v1",
+        "NVDA/AMZN/TSLA bullish momentum scout with fast exits and strict quote-survival filters.",
+        ["NVDA", "AMZN", "TSLA"],
+        {
+            **_next_high_beta_survival_overrides,
+            "sleeve_id": "next_high_beta_momentum_fast",
+            "sleeve_group": "next_high_beta",
+            "entry_signal_id": "momentum",
+            "allowed_signal_families": ["momentum"],
+            "allowed_market_regimes": ["bullish"],
+            "allowed_directions": ["call"],
+            "min_quality_score": 65.0,
+            "min_signal_ret5": 0.5,
+            "max_signal_ret20": 35.0,
+        },
+        3,
+    ),
+    (
+        "sleeve_next_high_beta_put_riskoff_v1",
+        "NVDA/AMZN/TSLA bearish risk-off put scout with fast exits and strict quote-survival filters.",
+        ["NVDA", "AMZN", "TSLA"],
+        {
+            **_next_high_beta_survival_overrides,
+            "sleeve_id": "next_high_beta_put_riskoff",
+            "sleeve_group": "next_high_beta",
+            "entry_signal_id": "momentum",
+            "allowed_signal_families": ["momentum"],
+            "allowed_market_regimes": ["bearish"],
+            "allowed_directions": ["put"],
+            "min_quality_score": 65.0,
+            "max_signal_ret5": -0.5,
+            "max_signal_ret20": None,
+        },
+        3,
+    ),
+]:
+    _overrides = copy.deepcopy(_clean_base_overrides)
+    _overrides.update(_extra_overrides)
+    VARIANTS.append(
+        {
+            "id": _variant_id,
+            "description": _description,
+            "n_picks": _n_picks,
+            "allowed": _symbols,
+            "overrides": _overrides,
+        }
+    )
+
+
 def _theme_variants() -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for group_id, symbols in SLEEVE_GROUPS.items():

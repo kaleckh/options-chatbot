@@ -69,6 +69,8 @@ export function OptimizerTab({
   comparisonReport,
   artifactNotice,
 }: OptimizerTabProps) {
+  const yearsInputId = "backtest-years";
+  const ivAdjInputId = "iv-premium-adjustment";
   const summaryMetrics = useMemo(() => {
     if (!result) return null;
     return {
@@ -133,11 +135,11 @@ export function OptimizerTab({
   return (
     <div className="space-y-6">
       <div className="rounded-lg border border-border bg-bg-2 p-4">
-        <div className="section-header mt-0">Backtest Configuration</div>
-        <div className="mb-4 grid grid-cols-2 gap-4">
+        <div className="section-header mt-0">Replay Configuration</div>
+        <div className="mb-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div>
             <label className="mb-1 block text-xs text-text-2">Validation lane</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant={truthLane === "historical_imported_daily" ? "primary" : "secondary"} onClick={() => setTruthLane("historical_imported_daily")}>
                 Imported daily
               </Button>
@@ -157,8 +159,9 @@ export function OptimizerTab({
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-text-2">Years of history</label>
+            <label htmlFor={yearsInputId} className="mb-1 block text-xs text-text-2">Years of history</label>
             <input
+              id={yearsInputId}
               type="range"
               min={2}
               max={7}
@@ -174,7 +177,7 @@ export function OptimizerTab({
         <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label className="mb-1 block text-xs text-text-2">Synthetic pricing lane</label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant={pricingLane === "pessimistic" ? "primary" : "secondary"} onClick={() => setPricingLane("pessimistic")}>
                 Pessimistic
               </Button>
@@ -189,8 +192,9 @@ export function OptimizerTab({
             </div>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-text-2">IV premium adjustment</label>
+            <label htmlFor={ivAdjInputId} className="mb-1 block text-xs text-text-2">IV premium adjustment</label>
             <input
+              id={ivAdjInputId}
               type="range"
               min={1.0}
               max={1.5}
@@ -217,17 +221,10 @@ export function OptimizerTab({
 
       {summaryMetrics ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
             <MetricCard label="Total Trades" value={summaryMetrics.totalTrades} />
-            <MetricCard label="Win Rate" value={summaryMetrics.winRate} />
-            <MetricCard label="Full Hit Rate" value={summaryMetrics.fullHitRate} />
-            <MetricCard label="Directional Accuracy" value={summaryMetrics.directionalAccuracy} />
             <MetricCard label="Profit Factor" value={summaryMetrics.profitFactor} />
             <MetricCard label="Avg P&L/Trade" value={summaryMetrics.avgPnl} />
-            <MetricCard label="Avg Picks/Day" value={summaryMetrics.avgPicksPerDay} />
-            <MetricCard label="Sharpe" value={summaryMetrics.sharpe} />
-            <MetricCard label="Max Drawdown" value={summaryMetrics.maxDrawdown} />
-            <MetricCard label="Truth Source" value={summaryMetrics.truthSource} />
             <MetricCard label="Quote Coverage" value={summaryMetrics.quoteCoverage == null ? "\u2014" : `${summaryMetrics.quoteCoverage.toFixed(1)}%`} />
             <MetricCard label="Promotion" value={summaryMetrics.promotionStatus} />
             <MetricCard
@@ -235,10 +232,23 @@ export function OptimizerTab({
               value={
                 summaryMetrics.pricedTradeCount != null || summaryMetrics.unpricedTradeCount != null
                   ? `${summaryMetrics.pricedTradeCount ?? 0} / ${summaryMetrics.unpricedTradeCount ?? 0}`
-                  : "\u2014"
+                : "\u2014"
               }
             />
           </div>
+
+          <details className="rounded-lg border border-border bg-bg-2 px-4 py-3">
+            <summary className="cursor-pointer text-sm font-semibold text-text-0">Secondary replay metrics</summary>
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <MetricCard label="Win Rate" value={summaryMetrics.winRate} />
+              <MetricCard label="Full Hit Rate" value={summaryMetrics.fullHitRate} />
+              <MetricCard label="Directional Accuracy" value={summaryMetrics.directionalAccuracy} />
+              <MetricCard label="Avg Picks/Day" value={summaryMetrics.avgPicksPerDay} />
+              <MetricCard label="Sharpe" value={summaryMetrics.sharpe} />
+              <MetricCard label="Max Drawdown" value={summaryMetrics.maxDrawdown} />
+              <MetricCard label="Truth Source" value={summaryMetrics.truthSource} />
+            </div>
+          </details>
 
           <div className="space-y-2 rounded-lg border border-border bg-bg-2 p-4">
             <div className="section-header mt-0">Validation Lane</div>

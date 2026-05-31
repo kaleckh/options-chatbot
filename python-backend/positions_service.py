@@ -32,6 +32,7 @@ from options_chatbot import (
 
 _HISTORICAL_OPTIONS_STORE: HistoricalOptionsStore | None = None
 ALPACA_HISTORICAL_OPTION_SOURCE_LABELS = ("alpaca_opra_daily_snapshot",)
+MAX_LIVE_REVIEW_STOP_LOSS_PCT = 90.0
 
 
 def _market_ticker_factory():
@@ -182,6 +183,13 @@ def _positive_int_or_default(value: Any, default: int, field_name: str) -> int:
     if value in (None, ""):
         return default
     return _require_positive_int(value, field_name)
+
+
+def _effective_live_stop_loss_pct(position: dict[str, Any]) -> float:
+    configured = _safe_float(position.get("stop_loss_pct"))
+    if configured is None or not math.isfinite(configured) or configured <= 0:
+        return MAX_LIVE_REVIEW_STOP_LOSS_PCT
+    return min(float(configured), MAX_LIVE_REVIEW_STOP_LOSS_PCT)
 
 
 def _safe_dict(value: Any) -> dict[str, Any]:
@@ -945,7 +953,7 @@ def build_position_payload(
     if not ticker or direction not in {"call", "put"} or strike is None or not expiry:
         raise ValueError("scan_pick is missing required option fields: ticker, direction/type, strike, or expiry.")
     strike_value = _require_positive_float(strike, "strike")
-    stop_loss_pct = _positive_float_or_default(scan_pick.get("stop_loss_pct"), 50.0, "stop_loss_pct")
+    stop_loss_pct = _positive_float_or_default(scan_pick.get("stop_loss_pct"), 90.0, "stop_loss_pct")
     profit_target_pct = _positive_float_or_default(scan_pick.get("profit_target_pct"), 100.0, "profit_target_pct")
     time_exit_day = _positive_int_or_default(scan_pick.get("time_exit_day"), 1, "time_exit_day")
 
@@ -1170,7 +1178,11 @@ def _build_sell_auto_close(
     exit_price = _safe_float(review.get("exit_execution_price"))
     exit_basis = str(review.get("exit_execution_basis") or "").strip()
     price_source = "live executable exit quote"
-    if exit_price is None or exit_price <= 0:
+    metrics_snapshot = _safe_dict(review.get("metrics_snapshot"))
+    price_trigger_ok = bool(metrics_snapshot.get("price_trigger_ok"))
+    if exit_price is None or exit_price < 0:
+        return None
+    if exit_price == 0 and not price_trigger_ok:
         return None
 
     reviewed_at = review.get("reviewed_at")
@@ -1186,7 +1198,7 @@ def _build_sell_auto_close(
         "exit_execution_basis": exit_basis or "auto_sell_review",
         "exit_reason": "auto_sell_recommendation",
         "notes": f"Auto-closed because review recommended SELL: {reason} Closed using {price_source}.",
-        "allow_zero_exit_price": False,
+        "allow_zero_exit_price": exit_price == 0,
     }
 
 
@@ -1639,7 +1651,8 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         contract_fields["short_contract_symbol"] or contract_fields["short_strike"] is not None
     )
     entry_option_price = float(position["entry_option_price"])
-    stop_loss_pct = float(position["stop_loss_pct"])
+    configured_stop_loss_pct = float(position["stop_loss_pct"])
+    stop_loss_pct = _effective_live_stop_loss_pct(position)
     profit_target_pct = float(position["profit_target_pct"])
     time_exit_day = int(position["time_exit_day"])
     days_held = max((datetime.now().date() - filled_at.date()).days, 0)
@@ -1698,7 +1711,13 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         reason = "Contract expiry has passed, so the position should be closed."
     elif pricing.get("price_trigger_ok") and current_pnl_pct is not None and current_pnl_pct <= -stop_loss_pct:
         recommendation = "SELL"
-        reason = f"Live executable exit hit the stop loss at {current_pnl_pct:+.1f}%."
+        if configured_stop_loss_pct > stop_loss_pct:
+            reason = (
+                f"Live executable exit hit the risk stop at {current_pnl_pct:+.1f}% "
+                f"(configured {configured_stop_loss_pct:.1f}% stop capped at {stop_loss_pct:.1f}% for live review)."
+            )
+        else:
+            reason = f"Live executable exit hit the stop loss at {current_pnl_pct:+.1f}%."
     elif pricing.get("price_trigger_ok") and current_pnl_pct is not None and current_pnl_pct >= profit_target_pct:
         recommendation = "SELL"
         reason = f"Live executable exit hit the profit target at {current_pnl_pct:+.1f}%."
@@ -1768,6 +1787,8 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
             position.get("contract_symbol")
             or _contract_symbol_from_mapping(source_pick)
         ),
+        "configured_stop_loss_pct": configured_stop_loss_pct,
+        "effective_stop_loss_pct": stop_loss_pct,
         "stop_option_price": stop_option_price,
         "target_option_price": target_option_price,
         "entry_option_price": entry_option_price,

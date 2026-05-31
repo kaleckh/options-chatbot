@@ -58,7 +58,9 @@ html {
 }
 
 body {
-  background: var(--bg-1);
+  background:
+    linear-gradient(180deg, rgba(39, 199, 216, 0.04), transparent 18rem),
+    var(--bg-1);
   color: var(--text-1);
 }
 
@@ -83,12 +85,12 @@ body {
 .ft-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 
 .ft-table.ft-table-compact {
-  font-size: 0.74rem;
+  font-size: 0.78rem;
 }
 
 .ft-table thead {
@@ -107,6 +109,29 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: 2px solid var(--border-subtle);
+}
+
+.ft-table th:first-child,
+.ft-table td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.ft-table td:first-child {
+  background: var(--bg-2);
+}
+
+.ft-table tbody tr:nth-child(even) td:first-child {
+  background: #13171b;
+}
+
+.ft-action-cell {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--bg-2);
+  box-shadow: -10px 0 16px rgba(0,0,0,0.16);
 }
 
 .ft-table.ft-table-compact th {
@@ -128,6 +153,11 @@ body {
   background: rgba(255,255,255,0.02);
 }
 
+.ft-table tbody tr:hover td:first-child,
+.ft-table tbody tr:hover .ft-action-cell {
+  background: var(--bg-3);
+}
+
 .ft-table tbody tr:nth-child(even) td {
   background: rgba(255,255,255,0.01);
 }
@@ -137,6 +167,84 @@ body {
 .ft-table .pos { color: var(--green); }
 .ft-table .neg { color: var(--red); }
 .ft-table .warn { color: var(--amber); }
+
+.ft-mobile-cards {
+  display: none;
+}
+
+.ft-mobile-card {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.85rem;
+}
+
+.ft-mobile-card:last-child {
+  border-bottom: 0;
+}
+
+.ft-mobile-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.ft-mobile-label {
+  color: var(--text-3);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.ft-mobile-title {
+  color: var(--text-0);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.ft-mobile-subtitle {
+  color: var(--text-1);
+  font-family: var(--font-mono, 'JetBrains Mono'), monospace;
+  font-size: 0.88rem;
+}
+
+.ft-mobile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem 0.85rem;
+}
+
+.ft-mobile-field {
+  min-width: 0;
+}
+
+.ft-mobile-field > div:last-child {
+  color: var(--text-1);
+  overflow-wrap: anywhere;
+}
+
+.ft-mobile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 767px) {
+  .ft-wrap {
+    max-height: none !important;
+    overflow: visible;
+  }
+
+  .ft-table {
+    display: none;
+  }
+
+  .ft-mobile-cards {
+    display: block;
+  }
+}
 
 /* ── Badges ─────────────────────────────────────────────────── */
 .badge-call {
@@ -208,16 +316,10 @@ body {
 
 /* ── Metric cards ───────────────────────────────────────────── */
 .metric-card {
-  background: linear-gradient(135deg, var(--bg-2) 0%, var(--bg-3) 100%);
+  background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.85rem 1.1rem;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.metric-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 12px var(--accent-glow);
 }
 
 .metric-label {
@@ -233,7 +335,8 @@ body {
   font-size: 1.05rem;
   font-weight: 500;
   color: var(--text-0);
-  letter-spacing: -0.03em;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 /* ── Section headers ────────────────────────────────────────── */

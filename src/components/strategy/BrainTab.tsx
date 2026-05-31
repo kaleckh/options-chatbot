@@ -107,7 +107,7 @@ export function BrainTab({
 
             <div className="rounded-lg border border-border bg-bg-2 p-4">
               <div className="section-header mt-0">Exit Rules</div>
-              <Slider label="Stop-loss" value={getVal("risk", "stop_loss_pct", 50) as number} min={20} max={80} step={5} suffix="%" onChange={(v) => setVal("risk", "stop_loss_pct", v)} />
+              <Slider label="Stop-loss" value={getVal("risk", "stop_loss_pct", 90) as number} min={20} max={90} step={5} suffix="%" onChange={(v) => setVal("risk", "stop_loss_pct", v)} />
               <Slider label="Profit target" value={getVal("risk", "profit_target_pct", 100) as number} min={50} max={200} step={10} suffix="%" onChange={(v) => setVal("risk", "profit_target_pct", v)} />
               <Slider label="Time exit" value={getVal("risk", "time_exit_pct", 50) as number} min={25} max={90} step={5} suffix="% DTE" onChange={(v) => setVal("risk", "time_exit_pct", v)} />
               <Slider label="Max drawdown" value={getVal("risk", "max_drawdown_pct", 15) as number} min={5} max={30} step={1} suffix="%" onChange={(v) => setVal("risk", "max_drawdown_pct", v)} />

@@ -133,6 +133,26 @@ class LaneLabTests(unittest.TestCase):
         self.assertEqual(readiness["blocker"], "missing_required_symbols")
         self.assertEqual(readiness["missing_required_symbols"], ["GLD", "IWM", "TLT"])
 
+    def test_xlf_and_kre_are_separate_readiness_lanes(self):
+        report = run_lane_lab(
+            tracked_db=self.tmp / "missing-tracked.db",
+            historical_run=self.tmp / "missing-run.json",
+            readiness_path=self.tmp / "missing-readiness.json",
+            readiness_payload={
+                "status": "ready_for_exact_replay",
+                "available_underlyings": ["XLF"],
+                "shared_required_quote_dates": {"count": 252},
+            },
+            write=False,
+        )
+        lanes = {lane["id"]: lane for lane in report["lanes"]}
+
+        self.assertEqual(lanes["xlf_financials"]["status"], "ready_for_paper_backtest")
+        self.assertEqual(lanes["xlf_financials"]["metrics"]["required_symbols"], ["XLF"])
+        self.assertEqual(lanes["kre_regional_bank_observation"]["status"], "blocked_missing_data")
+        self.assertEqual(lanes["kre_regional_bank_observation"]["metrics"]["required_symbols"], ["KRE"])
+        self.assertEqual(lanes["kre_regional_bank_observation"]["metrics"]["missing_required_symbols"], ["KRE"])
+
     def test_ai_commodity_readiness_requires_full_scan_universe(self):
         readiness_path = self.tmp / "readiness.json"
         readiness_path.write_text(

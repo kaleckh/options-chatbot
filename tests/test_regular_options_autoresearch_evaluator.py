@@ -1,0 +1,154 @@
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from scripts.evaluate_regular_options_autoresearch import (
+    append_ledger,
+    build_scoreboard,
+    evaluator_config_hash,
+    format_score_line,
+)
+
+
+def _lane(
+    lane_id: str,
+    *,
+    candidates: int,
+    exact: int,
+    unpriced: int,
+    stress_pf: float = 1.5,
+    rolling_status: str = "passed",
+    include: bool = True,
+    status: str = "portfolio_candidate",
+):
+    return {
+        "lane_id": lane_id,
+        "include_in_proof_portfolio": include,
+        "status": status,
+        "metrics": {
+            "candidate_trade_count": candidates,
+            "exact_trade_count": exact,
+            "unpriced_trade_count": unpriced,
+        },
+        "robustness": {
+            "stress_5pct_per_side_profit_factor": stress_pf,
+            "rolling_status": rolling_status,
+        },
+    }
+
+
+def _report(*, with_lane_a: bool = True, side_aware_pf: float = 1.40, side_aware_unpriced: int = 0) -> dict:
+    lanes = [
+        _lane("core", candidates=100, exact=100, unpriced=0, stress_pf=1.6),
+    ]
+    if with_lane_a:
+        lanes.append(
+            _lane(
+                "lane_a_chain_native_ret20_4_stop200_time75",
+                candidates=110,
+                exact=100,
+                unpriced=10,
+                stress_pf=1.4,
+            )
+        )
+    return {
+        "scope": "regular_stock_options_only",
+        "combined_portfolio": {
+            "duplicate_group_count": 0,
+            "suppressed_duplicate_trade_count": 0,
+            "metrics": {
+                "exact_trade_count": 200,
+                "profit_factor": 1.75,
+                "avg_pnl_pct": 15.0,
+                "win_rate_pct": 58.0,
+            },
+        },
+        "quality_gate": {
+            "overall_status": "quality_pending",
+            "paper_shadow_status": "pending",
+        },
+        "lanes": lanes,
+        "side_aware_zero_bid_replay": {
+            "modes": {
+                "conservative": {
+                    "combined_lane_a_candidate_count": 110,
+                    "combined_lane_a_priced_count": 110 - side_aware_unpriced,
+                    "combined_lane_a_unpriced_count": side_aware_unpriced,
+                    "priced_count": 20,
+                    "zero_bid_priced_count": 0,
+                    "combined_with_existing_lane_a_metrics": {
+                        "profit_factor": side_aware_pf,
+                        "avg_pnl_pct": 4.0,
+                    },
+                }
+            }
+        },
+    }
+
+
+class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
+    def test_score_is_zero_when_lane_a_zero_bid_replay_fails(self):
+        scoreboard = build_scoreboard(
+            _report(side_aware_pf=0.85, side_aware_unpriced=11),
+            experiment_id="baseline",
+            hypothesis="current",
+            generated_at_utc="2026-05-31T00:00:00Z",
+        )
+
+        self.assertEqual(scoreboard["score"], 0.0)
+        self.assertEqual(scoreboard["status"], "scout_or_blocked")
+        self.assertIn("lane_a_conservative_pf_below_1_30", scoreboard["promotion_blockers"])
+        self.assertIn("effective_unresolved_candidates_remain", scoreboard["promotion_blockers"])
+        self.assertIn("score:", format_score_line(scoreboard))
+
+    def test_promotable_clean_can_pass_historical_gates_but_not_paper_shadow(self):
+        scoreboard = build_scoreboard(
+            _report(side_aware_pf=1.55, side_aware_unpriced=0),
+            experiment_id="clean",
+            hypothesis="clean lane a",
+            generated_at_utc="2026-05-31T00:00:00Z",
+        )
+
+        self.assertEqual(scoreboard["status"], "promotable_clean")
+        self.assertEqual(scoreboard["metrics"]["promotable_clean_count"], 200)
+        self.assertGreater(scoreboard["score"], 0)
+        self.assertEqual(scoreboard["production_status"], "not_production_ready")
+        self.assertIn("paper_shadow_status_not_passed", scoreboard["production_blockers"])
+
+    def test_side_aware_replay_is_required_when_lane_a_is_counted(self):
+        report = _report()
+        report.pop("side_aware_zero_bid_replay")
+
+        scoreboard = build_scoreboard(
+            report,
+            experiment_id="missing-side-aware",
+            hypothesis="missing side aware",
+            generated_at_utc="2026-05-31T00:00:00Z",
+        )
+
+        self.assertIn("side_aware_zero_bid_replay_missing_for_counted_lane_a", scoreboard["promotion_blockers"])
+
+    def test_ledger_row_is_compact_and_hash_is_stable(self):
+        scoreboard = build_scoreboard(
+            _report(side_aware_pf=1.55, side_aware_unpriced=0),
+            experiment_id="clean",
+            hypothesis="clean lane a",
+            generated_at_utc="2026-05-31T00:00:00Z",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "ledger.jsonl"
+            append_ledger(scoreboard, path=path)
+            row = json.loads(path.read_text(encoding="utf8").strip())
+
+        self.assertEqual(row["experiment_id"], "clean")
+        self.assertEqual(row["evaluator_config_hash"], evaluator_config_hash())
+        self.assertIn("score", row)
+        self.assertNotIn("metrics", row)
+
+
+if __name__ == "__main__":
+    unittest.main()

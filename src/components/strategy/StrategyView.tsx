@@ -25,7 +25,7 @@ export default function StrategyView() {
   const saveGuard = useSubmitGuard();
   const backtestGuard = useSubmitGuard();
 
-  const [activeSubTab, setActiveSubTab] = useState<SubTabId>("brain");
+  const [activeSubTab, setActiveSubTab] = useState<SubTabId>("optimizer");
   const [profileType, setProfileType] = useState<ProfileType>("equity");
   const [profiles, setProfiles] = useState<ProfilesByType | null>(null);
   const [changelog, setChangelog] = useState<Record<string, unknown>[]>([]);
@@ -265,24 +265,50 @@ export default function StrategyView() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 md:px-8">
-      <div className="mb-6 flex items-center gap-0 overflow-x-auto border-b border-border">
+    <div className="mx-auto max-w-7xl px-4 py-5 md:px-8">
+      <div className="mb-4">
+        <h1 className="text-xl font-semibold text-text-0">Strategy Lab</h1>
+        <p className="mt-1 text-sm text-text-2">
+          Start with replay evidence, then edit policy settings only when the proof layer supports it.
+        </p>
+      </div>
+
+      <div className="mb-6 flex items-center gap-1 overflow-x-auto rounded-lg border border-border bg-bg-2 p-1" role="tablist" aria-label="Strategy lab views">
         {SUB_TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeSubTab === tab.id;
           return (
             <button
               key={tab.id}
+              id={`${tab.id}-strategy-tab`}
               type="button"
+              role="tab"
+              aria-selected={active}
+              aria-controls={`${tab.id}-strategy-panel`}
+              tabIndex={active ? 0 : -1}
               onClick={() => setActiveSubTab(tab.id)}
-              className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
+              onKeyDown={(event) => {
+                const tabIds = SUB_TABS.map((item) => item.id);
+                const currentIndex = tabIds.indexOf(activeSubTab);
+                let nextIndex: number | null = null;
+                if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabIds.length;
+                if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabIds.length) % tabIds.length;
+                if (event.key === "Home") nextIndex = 0;
+                if (event.key === "End") nextIndex = tabIds.length - 1;
+                if (nextIndex == null) return;
+                event.preventDefault();
+                setActiveSubTab(tabIds[nextIndex]);
+                const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                buttons?.[nextIndex]?.focus();
+              }}
+              className={`rounded-md px-4 py-2 text-sm font-medium transition-all whitespace-nowrap ${
                 active
-                  ? "text-text-0 border-accent bg-bg-2/50"
-                  : "text-text-3 border-transparent hover:text-text-2 hover:bg-bg-2/30"
+                  ? "bg-accent-dim text-accent"
+                  : "text-text-2 hover:bg-bg-3 hover:text-text-0"
               }`}
             >
               <span className="inline-flex items-center gap-2">
-                <Icon size={16} />
+                <Icon size={16} aria-hidden="true" />
                 {tab.label}
               </span>
             </button>
@@ -290,39 +316,41 @@ export default function StrategyView() {
         })}
       </div>
 
-      {activeSubTab === "brain" ? (
-        <BrainTab
-          profile={profile}
-          profileType={profileType}
-          onProfileTypeChange={setProfileType}
-          getVal={getVal}
-          setVal={setVal}
-          edits={edits}
-          saving={saving}
-          saveNote={saveNote}
-          setSaveNote={setSaveNote}
-          onSave={handleSave}
-          changelog={changelog}
-        />
-      ) : (
-        <OptimizerTab
-          backtestYears={backtestYears}
-          setBacktestYears={setBacktestYears}
-          ivAdj={ivAdj}
-          setIvAdj={setIvAdj}
-          truthLane={truthLane}
-          setTruthLane={setTruthLane}
-          pricingLane={pricingLane}
-          setPricingLane={setPricingLane}
-          running={backtestRunning}
-          onRun={runBacktest}
-          result={backtestResult}
-          report={backtestReport}
-          metricTruthReport={metricTruthReport}
-          comparisonReport={comparisonReport}
-          artifactNotice={artifactNotice}
-        />
-      )}
+      <div id={`${activeSubTab}-strategy-panel`} role="tabpanel" aria-labelledby={`${activeSubTab}-strategy-tab`}>
+        {activeSubTab === "brain" ? (
+          <BrainTab
+            profile={profile}
+            profileType={profileType}
+            onProfileTypeChange={setProfileType}
+            getVal={getVal}
+            setVal={setVal}
+            edits={edits}
+            saving={saving}
+            saveNote={saveNote}
+            setSaveNote={setSaveNote}
+            onSave={handleSave}
+            changelog={changelog}
+          />
+        ) : (
+          <OptimizerTab
+            backtestYears={backtestYears}
+            setBacktestYears={setBacktestYears}
+            ivAdj={ivAdj}
+            setIvAdj={setIvAdj}
+            truthLane={truthLane}
+            setTruthLane={setTruthLane}
+            pricingLane={pricingLane}
+            setPricingLane={setPricingLane}
+            running={backtestRunning}
+            onRun={runBacktest}
+            result={backtestResult}
+            report={backtestReport}
+            metricTruthReport={metricTruthReport}
+            comparisonReport={comparisonReport}
+            artifactNotice={artifactNotice}
+          />
+        )}
+      </div>
     </div>
   );
 }

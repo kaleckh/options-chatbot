@@ -289,6 +289,30 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertIsNone(result["gross_pnl_pct"])
         self.assertEqual(result["net_debit"], -0.25)
 
+    def test_option_pnl_net_pct_cannot_exceed_full_loss_after_fees(self):
+        result = oe.option_pnl_snapshot(
+            entry_execution_price=2.597,
+            exit_execution_price=0.0,
+            contracts=1,
+            entry_fee_total_usd=1.30,
+            exit_fee_total_usd=1.30,
+        )
+
+        self.assertEqual(result["gross_pnl_pct"], -100.0)
+        self.assertEqual(result["net_pnl_pct"], -100.0)
+
+    def test_vertical_spread_net_pct_cannot_exceed_full_loss_after_fees(self):
+        result = oe.vertical_spread_pnl(
+            long_entry_price=3.0,
+            short_entry_price=0.5,
+            long_exit_price=0.0,
+            short_exit_price=0.0,
+            contracts=1,
+        )
+
+        self.assertEqual(result["gross_pnl_pct"], -100.0)
+        self.assertEqual(result["net_pnl_pct"], -100.0)
+
     def test_executable_option_price_requires_known_fresh_quote(self):
         result = oe.executable_option_price(
             side="entry",
@@ -709,6 +733,59 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(review["recommendation"], "HOLD")
         self.assertEqual(review["pricing_source"], "last_price")
 
+    def test_review_holds_loss_inside_configured_90_percent_stop(self):
+        position = self._build_position(fill_price=2.0)
+        position["stop_loss_pct"] = 90.0
+        position["time_exit_day"] = 999
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_fetch_option_quote", return_value={
+                 "expired": False,
+                 "current_option_price": 0.9,
+                 "pricing_source": "mid",
+                 "pricing_state": "priced_exact",
+                 "current_execution_price": 0.9,
+                 "current_execution_basis": "mid",
+                 "price_trigger_ok": True,
+                 "warnings": [],
+                 "underlying_price": 123.0,
+             }), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0):
+            review = svc.review_position(position)
+
+        self.assertEqual(review["recommendation"], "HOLD")
+        self.assertEqual(review["current_pnl_pct"], -55.0)
+        self.assertEqual(review["metrics_snapshot"]["configured_stop_loss_pct"], 90.0)
+        self.assertEqual(review["metrics_snapshot"]["effective_stop_loss_pct"], 90.0)
+        self.assertEqual(review["metrics_snapshot"]["stop_option_price"], 0.2)
+
+    def test_review_sells_when_live_executable_loss_hits_configured_90_percent_stop(self):
+        position = self._build_position(fill_price=2.0)
+        position["stop_loss_pct"] = 90.0
+        position["time_exit_day"] = 999
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_fetch_option_quote", return_value={
+                 "expired": False,
+                 "current_option_price": 0.18,
+                 "pricing_source": "mid",
+                 "pricing_state": "priced_exact",
+                 "current_execution_price": 0.18,
+                 "current_execution_basis": "mid",
+                 "price_trigger_ok": True,
+                 "warnings": [],
+                 "underlying_price": 123.0,
+             }), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0), \
+             patch.object(svc, "_check_early_exit", return_value=(False, "")):
+            review = svc.review_position(position)
+
+        self.assertEqual(review["recommendation"], "SELL")
+        self.assertEqual(review["current_pnl_pct"], -91.0)
+        self.assertIn("stop loss", review["reason"])
+        self.assertEqual(review["metrics_snapshot"]["configured_stop_loss_pct"], 90.0)
+        self.assertEqual(review["metrics_snapshot"]["effective_stop_loss_pct"], 90.0)
+
     def test_review_marks_expired_contracts_for_sell(self):
         position = self._build_position(fill_price=4.5, expiry="2026-03-28")
 
@@ -795,6 +872,39 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(closed["exit_reason"], "auto_sell_recommendation")
         self.assertEqual(closed["exit_execution_basis"], "mid")
         self.assertEqual(closed["exit_option_price"], 5.0)
+        self.assertEqual(repo.list_positions("open"), [])
+
+    def test_review_open_positions_auto_closes_executable_zero_exit(self):
+        repo = MemoryTrackedPositionsRepository()
+        payload = self._build_position(fill_price=2.0, filled_at="2026-03-30T10:00:00")
+        payload["stop_loss_pct"] = 90.0
+        payload["time_exit_day"] = 999
+        created = repo.create_position(payload)
+
+        with patch.object(svc, "datetime", FrozenDateTime), \
+             patch.object(svc, "_fetch_option_quote", return_value={
+                 "expired": False,
+                 "current_option_price": 0.0,
+                 "pricing_source": "bid",
+                 "pricing_state": "priced_exact",
+                 "current_execution_price": 0.0,
+                 "current_execution_basis": "bid",
+                 "price_trigger_ok": True,
+                 "warnings": [],
+                 "underlying_price": 126.0,
+             }), \
+             patch.object(svc, "_get_spy_ret5", return_value=0.0), \
+             patch.object(svc, "_check_early_exit", return_value=(False, "")):
+            reviewed = svc.review_open_positions(repo)
+
+        self.assertEqual(len(reviewed), 1)
+        closed = reviewed[0]
+        self.assertEqual(closed["id"], created["id"])
+        self.assertEqual(closed["status"], "closed")
+        self.assertEqual(closed["last_recommendation"], "SELL")
+        self.assertEqual(closed["exit_reason"], "auto_sell_recommendation")
+        self.assertEqual(closed["exit_execution_basis"], "bid")
+        self.assertEqual(closed["exit_option_price"], 0.0)
         self.assertEqual(repo.list_positions("open"), [])
 
     def test_review_open_positions_does_not_auto_close_on_display_only_sell_mark(self):

@@ -115,11 +115,6 @@ function fmtMoney(value?: number | null, digits: number = 2): string {
   return `$${value.toFixed(digits)}`;
 }
 
-function fmtSignedMoney(value?: number | null, digits: number = 2): string {
-  if (value == null || Number.isNaN(value)) return "\u2014";
-  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(digits)}`;
-}
-
 function fmtPct(value?: number | null, digits: number = 1): string {
   if (value == null || Number.isNaN(value)) return "\u2014";
   return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
@@ -491,7 +486,7 @@ function fmtRiskUpsideLabel(pick?: Partial<ScanPick> | null): string {
 
 function calcOptionPnlPct(entryPrice?: number | null, exitPrice?: number | null): number | null {
   if (entryPrice == null || exitPrice == null || entryPrice <= 0) return null;
-  return ((exitPrice / entryPrice) - 1) * 100;
+  return Math.max(((exitPrice / entryPrice) - 1) * 100, -100);
 }
 
 function calcNetOptionPnlPct(options: {
@@ -516,11 +511,12 @@ function calcNetOptionPnlPct(options: {
   }
 
   const capitalAtRiskUsd = entryPrice * contracts * 100;
-  if (capitalAtRiskUsd <= 0) return null;
+  const totalCostBasisUsd = capitalAtRiskUsd + Math.max(feeTotalUsd, 0);
+  if (capitalAtRiskUsd <= 0 || totalCostBasisUsd <= 0) return null;
 
   const grossPnlUsd = (exitPrice - entryPrice) * contracts * 100;
   const netPnlUsd = grossPnlUsd - feeTotalUsd;
-  return (netPnlUsd / capitalAtRiskUsd) * 100;
+  return Math.max((netPnlUsd / totalCostBasisUsd) * 100, -100);
 }
 
 function metricToneClass(value?: number | null): string {
@@ -559,28 +555,6 @@ function getMarkPnlPct(position: TrackedPosition | SuggestedTrade): number | nul
   return calcOptionPnlPct(getEntryExecutionPrice(position), getMarkPrice(position));
 }
 
-function calcOptionPnlUsd(position: TrackedPosition | SuggestedTrade, exitPrice?: number | null): number | null {
-  const entryPrice = getEntryExecutionPrice(position);
-  const resolvedExitPrice = exitPrice ?? getCloseNowPrice(position);
-  const contractCount = Number(position.contracts || 0);
-  if (
-    entryPrice == null ||
-    resolvedExitPrice == null ||
-    Number.isNaN(entryPrice) ||
-    Number.isNaN(resolvedExitPrice) ||
-    entryPrice <= 0 ||
-    contractCount <= 0
-  ) {
-    return null;
-  }
-  const grossPnlUsd = (resolvedExitPrice - entryPrice) * contractCount * 100;
-  const feeTotalUsd =
-    position.latest_review?.fee_total_usd ??
-    position.fee_total_usd ??
-    0;
-  return grossPnlUsd - feeTotalUsd;
-}
-
 function getCloseNowPnlPct(position: TrackedPosition | SuggestedTrade): number | null {
   const feeTotalUsd =
     position.latest_review?.fee_total_usd ??
@@ -603,28 +577,6 @@ function getCloseNowPnlPct(position: TrackedPosition | SuggestedTrade): number |
   );
 }
 
-function getCloseNowPnlUsd(position: TrackedPosition | SuggestedTrade): number | null {
-  return (
-    position.latest_review?.net_pnl_usd ??
-    position.net_pnl_usd ??
-    position.latest_review?.gross_pnl_usd ??
-    position.gross_pnl_usd ??
-    calcOptionPnlUsd(position) ??
-    null
-  );
-}
-
-function getRealizedPnlUsd(position: TrackedPosition | SuggestedTrade): number | null {
-  return (
-    position.net_pnl_usd ??
-    position.latest_review?.net_pnl_usd ??
-    calcOptionPnlUsd(position, getRealizedExitPrice(position)) ??
-    position.gross_pnl_usd ??
-    position.latest_review?.gross_pnl_usd ??
-    null
-  );
-}
-
 function getRealizedExitPrice(position: TrackedPosition | SuggestedTrade): number | null {
   return (
     position.exit_execution_price ??
@@ -633,37 +585,6 @@ function getRealizedExitPrice(position: TrackedPosition | SuggestedTrade): numbe
     position.latest_review?.current_option_price ??
     null
   );
-}
-
-function calcWeightedPositionPnlPct<T extends TrackedPosition | SuggestedTrade>(
-  positions: T[],
-  getPnlUsd: (position: T) => number | null
-): number | null {
-  const stats = positions.reduce(
-    (acc, position) => {
-      const pnlUsd = getPnlUsd(position);
-      const entryExecutionPrice = getEntryExecutionPrice(position);
-      const contractCount = Number(position.contracts || 0);
-      if (
-        pnlUsd == null ||
-        entryExecutionPrice == null ||
-        Number.isNaN(pnlUsd) ||
-        Number.isNaN(entryExecutionPrice) ||
-        entryExecutionPrice <= 0 ||
-        contractCount <= 0
-      ) {
-        return acc;
-      }
-      acc.pnlUsd += pnlUsd;
-      acc.entryCostUsd += entryExecutionPrice * contractCount * 100;
-      return acc;
-    },
-    { pnlUsd: 0, entryCostUsd: 0 }
-  );
-
-  return stats.entryCostUsd > 0
-    ? (stats.pnlUsd / stats.entryCostUsd) * 100
-    : null;
 }
 
 function calcAveragePositionPnlPct<T extends TrackedPosition | SuggestedTrade>(
@@ -678,60 +599,6 @@ function calcAveragePositionPnlPct<T extends TrackedPosition | SuggestedTrade>(
     : null;
 }
 
-function calcTotalPositionPnlUsd<T extends TrackedPosition | SuggestedTrade>(
-  positions: T[],
-  getPnlUsd: (position: T) => number | null
-): number | null {
-  const values = positions
-    .map((position) => getPnlUsd(position))
-    .filter((value): value is number => value != null && !Number.isNaN(value));
-  return values.length > 0
-    ? values.reduce((sum, value) => sum + value, 0)
-    : null;
-}
-
-function getPositionCostRiskUsd(position: TrackedPosition | SuggestedTrade): number | null {
-  const entryPrice = getEntryExecutionPrice(position);
-  const contractCount = Number(position.contracts || 0);
-  if (entryPrice == null || Number.isNaN(entryPrice) || entryPrice <= 0 || contractCount <= 0) return null;
-  return entryPrice * contractCount * 100;
-}
-
-function calcTotalPositionCostRiskUsd<T extends TrackedPosition | SuggestedTrade>(positions: T[]): number | null {
-  const values = positions
-    .map((position) => getPositionCostRiskUsd(position))
-    .filter((value): value is number => value != null && !Number.isNaN(value));
-  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) : null;
-}
-
-function countByLabel<T>(items: T[], getLabel: (item: T) => string | null | undefined): Record<string, number> {
-  return items.reduce<Record<string, number>>((acc, item) => {
-    const label = String(getLabel(item) || "").trim();
-    if (!label) return acc;
-    acc[label] = (acc[label] || 0) + 1;
-    return acc;
-  }, {});
-}
-
-function topCountSummary(counts: Record<string, number>, fallback = "None"): string {
-  const entries = Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  if (!entries.length) return fallback;
-  return `${entries[0][0]} x${entries[0][1]}`;
-}
-
-function getConcentrationWarning(positions: Array<TrackedPosition | SuggestedTrade>): string | null {
-  const tickerCounts = countByLabel(positions, (position) => position.ticker);
-  const sectorCounts = countByLabel(positions, (position) => position.source_pick_snapshot?.sector);
-  const spreadCounts = countByLabel(positions, (position) => buildContractSignature(position));
-  const topTicker = Object.entries(tickerCounts).sort((a, b) => b[1] - a[1])[0];
-  const topSector = Object.entries(sectorCounts).sort((a, b) => b[1] - a[1])[0];
-  const topSpread = Object.entries(spreadCounts).sort((a, b) => b[1] - a[1])[0];
-  if (topSpread?.[1] > 1) return `${topSpread[1]} open rows share one exact contract/spread signature.`;
-  if (topTicker?.[1] > 2) return `${topTicker[0]} has ${topTicker[1]} open tracked positions.`;
-  if (topSector?.[1] > 3) return `${topSector[0]} has ${topSector[1]} open tracked positions.`;
-  return null;
-}
-
 function getPnlExtremes<T extends TrackedPosition | SuggestedTrade>(
   positions: T[],
   getPnlPct: (position: T) => number | null
@@ -744,6 +611,18 @@ function getPnlExtremes<T extends TrackedPosition | SuggestedTrade>(
     best: Math.max(...values),
     worst: Math.min(...values),
   };
+}
+
+function calcWinRatePct<T extends TrackedPosition | SuggestedTrade>(
+  positions: T[],
+  getPnlPct: (position: T) => number | null
+): number | null {
+  const values = positions
+    .map((position) => getPnlPct(position))
+    .filter((value): value is number => value != null && !Number.isNaN(value));
+  if (values.length === 0) return null;
+  const wins = values.filter((value) => value > 0).length;
+  return (wins / values.length) * 100;
 }
 
 function getRealizedPnlPct(position: TrackedPosition | SuggestedTrade): number | null {
@@ -818,10 +697,10 @@ function renderDualMetricCell(options: {
 
 function renderOpenPriceCell(position: TrackedPosition | SuggestedTrade) {
   return renderDualMetricCell({
-    primaryLabel: "Paper value",
-    primaryValue: fmtMoney(getMarkPrice(position)),
-    secondaryLabel: "Est. exit",
-    secondaryValue: fmtMoney(getCloseNowPrice(position)),
+    primaryLabel: "Est. exit",
+    primaryValue: fmtMoney(getCloseNowPrice(position)),
+    secondaryLabel: "Mark value",
+    secondaryValue: fmtMoney(getMarkPrice(position)),
   });
 }
 
@@ -829,12 +708,12 @@ function renderOpenPnlCell(position: TrackedPosition | SuggestedTrade) {
   const markPnl = getMarkPnlPct(position);
   const closeNowPnl = getCloseNowPnlPct(position);
   return renderDualMetricCell({
-    primaryLabel: "Paper P&L",
-    primaryValue: fmtPct(markPnl),
-    secondaryLabel: "Exit P&L",
-    secondaryValue: fmtPct(closeNowPnl),
-    primaryToneClass: metricToneClass(markPnl),
-    secondaryToneClass: metricToneClass(closeNowPnl),
+    primaryLabel: "Exit P&L",
+    primaryValue: fmtPct(closeNowPnl),
+    secondaryLabel: "Mark P&L",
+    secondaryValue: fmtPct(markPnl),
+    primaryToneClass: metricToneClass(closeNowPnl),
+    secondaryToneClass: metricToneClass(markPnl),
   });
 }
 
@@ -882,15 +761,14 @@ function renderQuoteCell(position: TrackedPosition | SuggestedTrade) {
 function renderPositionStatusCell(position: TrackedPosition | SuggestedTrade) {
   const recommendation = getLatestRecommendation(position);
   const warning = position.latest_review?.warnings?.[0] || null;
-  const proofLabel = position.proof_eligible
-    ? "proof"
-    : fmtCompactLabel(position.proof_class || position.proof_ineligibility_reason);
+  const signalLabel = formatSignalLabel(recommendation);
+  const reviewedAt = getReviewedAt(position);
   return (
     <div className="space-y-1 leading-tight min-w-[150px]">
       <div className={recommendation === "SELL" ? "text-sm font-semibold text-red" : "text-sm font-semibold text-text-0"}>
-        {recommendation}
+        {signalLabel}
       </div>
-      <div className="text-xs text-text-3">{proofLabel}</div>
+      <div className="text-xs text-text-3">{reviewedAt ? `Checked ${fmtDateTime(reviewedAt)}` : "Waiting for review"}</div>
       {warning ? <div className="text-xs text-amber-300 truncate max-w-[220px]">{warning}</div> : null}
     </div>
   );
@@ -898,6 +776,14 @@ function renderPositionStatusCell(position: TrackedPosition | SuggestedTrade) {
 
 function getLatestRecommendation(position: TrackedPosition | SuggestedTrade): string {
   return position.last_recommendation || position.latest_review?.recommendation || "\u2014";
+}
+
+function formatSignalLabel(recommendation: string | null | undefined): string {
+  const normalized = String(recommendation || "").trim().toUpperCase();
+  if (normalized === "SELL") return "Close now";
+  if (normalized === "HOLD") return "Hold";
+  if (!normalized || normalized === "\u2014") return "Waiting";
+  return fmtCompactLabel(normalized);
 }
 
 function renderReviewedCell(position: TrackedPosition | SuggestedTrade) {
@@ -1236,11 +1122,13 @@ export default function PredictionsView() {
       setPositionsLoaded(true);
       setPositionsError(null);
       let reviewFailed = false;
-      const reviewIds = idsNeedingAutoReview(
-        nextOpenPositions,
-        positionsLastReviewedAtRef.current,
-        { force: showToast }
-      );
+      const reviewIds = showToast
+        ? idsNeedingAutoReview(
+            nextOpenPositions,
+            positionsLastReviewedAtRef.current,
+            { force: true }
+          )
+        : [];
       let reviewAttempted = false;
       if (reviewIds.length > 0 && !positionsReviewInFlightRef.current) {
         reviewAttempted = true;
@@ -1310,11 +1198,13 @@ export default function PredictionsView() {
       setSuggestedTradesLoaded(true);
       setSuggestedTradesError(null);
       let reviewFailed = false;
-      const reviewIds = idsNeedingAutoReview(
-        nextOpenTrades,
-        suggestedTradesLastReviewedAtRef.current,
-        { force: showToast }
-      );
+      const reviewIds = showToast
+        ? idsNeedingAutoReview(
+            nextOpenTrades,
+            suggestedTradesLastReviewedAtRef.current,
+            { force: true }
+          )
+        : [];
       let reviewAttempted = false;
       if (reviewIds.length > 0 && !suggestedTradesReviewInFlightRef.current) {
         reviewAttempted = true;
@@ -1731,19 +1621,23 @@ export default function PredictionsView() {
   }, [graded]);
 
   const PRIMARY_SUB_TABS = [
-    { id: "positions", label: `Tracked Positions (${openPositions.length})`, icon: BriefcaseBusiness, targetView: "open" as const },
-    { id: "closed-trades", label: `Closed Trades (${closedPositions.length})`, icon: CheckCircle, targetView: "closed" as const },
-    { id: "scanner", label: `Scanner (${scanPicks.length})`, icon: RefreshCw },
+    { id: "positions", label: `Open (${openPositions.length})`, icon: BriefcaseBusiness, targetView: "open" as const },
+    { id: "closed-trades", label: `Closed (${closedPositions.length})`, icon: CheckCircle, targetView: "closed" as const },
+    { id: "scanner", label: `Scan (${scanPicks.length})`, icon: RefreshCw },
   ] as const;
   const LEGACY_SUB_TABS = [
-    { id: "suggestions", label: `Suggested Trades (${openSuggestedTrades.length})`, icon: Clipboard },
-    { id: "pending", label: `Legacy Active (${pending.length})`, icon: Timer },
-    { id: "graded", label: `Legacy Graded (${graded.length})`, icon: CheckCircle },
-    { id: "breakdown", label: "Legacy Breakdown", icon: BarChart3 },
-    { id: "sim", label: "Legacy Portfolio Sim", icon: DollarSign },
-    { id: "sectors", label: "Legacy Sectors", icon: Map },
+    { id: "suggestions", label: `Paper (${openSuggestedTrades.length})`, icon: Clipboard },
+    { id: "pending", label: `Archive Active (${pending.length})`, icon: Timer },
+    { id: "graded", label: `Archive Graded (${graded.length})`, icon: CheckCircle },
+    { id: "breakdown", label: "Breakdown", icon: BarChart3 },
+    { id: "sim", label: "Portfolio Sim", icon: DollarSign },
+    { id: "sectors", label: "Sectors", icon: Map },
   ] as const;
   const SUB_TABS = showLegacyTabs ? [...PRIMARY_SUB_TABS, ...LEGACY_SUB_TABS] : PRIMARY_SUB_TABS;
+  const activeSubTabId =
+    activeSubTab === "positions" && positionsView === "closed"
+      ? "closed-trades"
+      : activeSubTab;
   const legacyDataError = LEGACY_PREDICTION_TABS.has(activeSubTab)
     ? predictionsError || (activeSubTab === "sectors" ? sectorsError : null)
     : null;
@@ -1831,7 +1725,62 @@ export default function PredictionsView() {
         </div>
       )}
 
-      <div className="flex items-center gap-0 border-b border-border mb-4 overflow-x-auto" role="tablist">
+      <div className="mb-4 flex flex-col gap-3 border-b border-border pb-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl font-semibold text-text-0">Trading Desk</h1>
+          <p className="mt-1 text-sm text-text-2">
+            Review open risk first, then scan for the next supervised setup.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowLegacyTabs((prev) => !prev)}
+          >
+            {showLegacyTabs ? "Hide Archive" : "Archive"}
+          </Button>
+          {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={grading}
+              icon={<RefreshCw size={12} />}
+              onClick={async () => {
+                await guard(async () => {
+                  setGrading(true);
+                  try {
+                    const response = await fetch("/api/predictions/grade", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({}),
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok || data.error) {
+                      throw new Error(data.error || "Failed to grade predictions");
+                    }
+                    await fetchPredictionsData({
+                      includePredictions: true,
+                      includeSectors: activeSubTab === "sectors" && !sectorsLoaded,
+                    });
+                    toast.success("Predictions graded successfully.");
+                  } catch (err) {
+                    console.error("Failed to grade predictions:", err);
+                    toast.error("Failed to grade predictions. Please try again.");
+                  } finally {
+                    setGrading(false);
+                  }
+                });
+              }}
+              aria-label="Grade all predictions"
+            >
+              {grading ? "Grading..." : "Grade All"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center gap-1 overflow-x-auto rounded-lg border border-border bg-bg-2 p-1" role="tablist" aria-label="Trading desk views">
         {SUB_TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive =
@@ -1843,9 +1792,12 @@ export default function PredictionsView() {
           return (
             <button
               key={tab.id}
+              id={`${tab.id}-tab`}
               type="button"
               role="tab"
               aria-selected={isActive}
+              aria-controls={`${tab.id}-panel`}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => {
                 if ("targetView" in tab) {
                   setPositionsView(tab.targetView);
@@ -1854,65 +1806,40 @@ export default function PredictionsView() {
                 }
                 setActiveSubTab(tab.id);
               }}
-              className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium uppercase tracking-wide transition-all border-b-2 whitespace-nowrap ${
+              onKeyDown={(event) => {
+                const tabIds = SUB_TABS.map((item) => item.id);
+                const currentIndex = tabIds.indexOf(activeSubTabId as (typeof tabIds)[number]);
+                let nextIndex: number | null = null;
+                if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabIds.length;
+                if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabIds.length) % tabIds.length;
+                if (event.key === "Home") nextIndex = 0;
+                if (event.key === "End") nextIndex = tabIds.length - 1;
+                if (nextIndex == null) return;
+                event.preventDefault();
+                const nextTab = SUB_TABS[nextIndex];
+                if ("targetView" in nextTab) {
+                  setPositionsView(nextTab.targetView);
+                  setActiveSubTab("positions");
+                } else {
+                  setActiveSubTab(nextTab.id);
+                }
+                const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+                buttons?.[nextIndex]?.focus();
+              }}
+              className={`flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-all whitespace-nowrap ${
                 isActive
-                  ? "text-text-0 border-accent"
-                  : "text-text-2 border-transparent hover:text-text-1"
+                  ? "bg-accent-dim text-accent"
+                  : "text-text-2 hover:bg-bg-3 hover:text-text-0"
               }`}
             >
-              <Icon size={14} />
+              <Icon size={14} aria-hidden="true" />
               {tab.label}
             </button>
           );
         })}
-        <div className="flex-1" />
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setShowLegacyTabs((prev) => !prev)}
-        >
-          {showLegacyTabs ? "Hide Legacy" : "Show Legacy Research"}
-        </Button>
-        {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
-          <Button
-            variant="secondary"
-            size="sm"
-            loading={grading}
-            icon={<RefreshCw size={12} />}
-            onClick={async () => {
-              await guard(async () => {
-                setGrading(true);
-                try {
-                  const response = await fetch("/api/predictions/grade", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({}),
-                  });
-                  const data = await response.json().catch(() => ({}));
-                  if (!response.ok || data.error) {
-                    throw new Error(data.error || "Failed to grade predictions");
-                  }
-                  await fetchPredictionsData({
-                    includePredictions: true,
-                    includeSectors: activeSubTab === "sectors" && !sectorsLoaded,
-                  });
-                  toast.success("Predictions graded successfully.");
-                } catch (err) {
-                  console.error("Failed to grade predictions:", err);
-                  toast.error("Failed to grade predictions. Please try again.");
-                } finally {
-                  setGrading(false);
-                }
-              });
-            }}
-            aria-label="Grade all predictions"
-          >
-            {grading ? "Grading..." : "Grade All"}
-          </Button>
-        )}
       </div>
 
-      <div role="tabpanel">
+      <div id={`${activeSubTabId}-panel`} role="tabpanel" aria-labelledby={`${activeSubTabId}-tab`}>
         {activeSubTab === "scanner" && (
           <ScannerTab
             picks={scanPicks}
@@ -1972,7 +1899,6 @@ export default function PredictionsView() {
             error={positionsError}
             view={positionsView}
             reviewingIds={reviewingIds}
-            onViewChange={setPositionsView}
             onRefresh={() => void fetchPositions(true)}
             onReviewPosition={(positionId) => void reviewSinglePosition(positionId)}
             onOpenClose={openCloseForm}
@@ -2187,45 +2113,51 @@ function ScannerTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="section-header mt-0">Live Options Scanner</div>
-          <p className="text-xs text-text-3">
-            Supervised decision support for live options ideas. Start from a current scan pick, then either save the trade you actually took or log a clearly hypothetical paper idea.
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div className="min-w-0">
+          <div className="text-lg font-semibold text-text-0">Live Scanner</div>
+          <p className="mt-1 text-sm text-text-2">
+            Current supervised setups, filtered by playbook and replay policy.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(playbooks.length ? playbooks : [
-            { id: "bullish_pullback_observation", label: "Bullish Pullback Primary" },
-            { id: "tracked_winner_primary", label: "Tracked Winner Primary" },
-            { id: "short_term", label: "Short-Term" },
-            { id: "swing", label: "Swing" },
-            { id: "speculative", label: "Speculative" },
-            { id: "bearish_defensive", label: "Bearish Defensive" },
-          ]).map((item) => (
-            <Button
-              key={item.id}
-              size="sm"
-              variant={playbook === item.id ? "secondary" : "ghost"}
-              onClick={() => onPlaybookChange(item.id)}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <label className="flex items-center gap-2 text-xs font-medium text-text-2">
+            <span>Playbook</span>
+            <select
+              value={playbook}
+              onChange={(event) => onPlaybookChange(event.target.value)}
+              className="min-w-[220px] rounded-md border border-border bg-bg-2 px-3 py-1.5 text-sm text-text-0"
             >
-              {item.label}
+              {(playbooks.length ? playbooks : [
+                { id: "bullish_pullback_observation", label: "Bullish Pullback Primary" },
+                { id: "tracked_winner_primary", label: "Tracked Winner Primary" },
+                { id: "short_term", label: "Short-Term" },
+                { id: "swing", label: "Swing" },
+                { id: "speculative", label: "Speculative" },
+                { id: "bearish_defensive", label: "Bearish Defensive" },
+              ]).map((item) => (
+                <option key={item.id} value={item.id}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+          <div className="inline-flex rounded-md border border-border bg-bg-2 p-1">
+            <Button
+              size="sm"
+              variant={useRecommendedPolicy ? "secondary" : "ghost"}
+              aria-pressed={useRecommendedPolicy}
+              onClick={() => onPolicyModeChange(true)}
+            >
+              Replay Focus
             </Button>
-          ))}
-          <Button
-            size="sm"
-            variant={useRecommendedPolicy ? "secondary" : "ghost"}
-            onClick={() => onPolicyModeChange(true)}
-          >
-            Replay-Backed Focus
-          </Button>
-          <Button
-            size="sm"
-            variant={!useRecommendedPolicy ? "secondary" : "ghost"}
-            onClick={() => onPolicyModeChange(false)}
-          >
-            All Qualifying
-          </Button>
+            <Button
+              size="sm"
+              variant={!useRecommendedPolicy ? "secondary" : "ghost"}
+              aria-pressed={!useRecommendedPolicy}
+              onClick={() => onPolicyModeChange(false)}
+            >
+              All Qualifying
+            </Button>
+          </div>
           <Button
             variant="secondary"
             size="sm"
@@ -2238,6 +2170,7 @@ function ScannerTab({
           <Button
             size="sm"
             variant={showBlockedIdeas ? "secondary" : "ghost"}
+            aria-pressed={showBlockedIdeas}
             onClick={() => onShowBlockedIdeasChange(!showBlockedIdeas)}
           >
             {showBlockedIdeas ? "Hide Blocked" : "Show Blocked"}
@@ -2245,6 +2178,15 @@ function ScannerTab({
         </div>
       </div>
 
+      {(activePlaybook || forwardEvidence || optionsProfitStatus || truthHealthError || policy || policyError) && (
+        <details className="rounded-lg border border-border bg-bg-1 px-4 py-3">
+          <summary className="cursor-pointer text-sm font-semibold text-text-0">
+            Evidence & guardrails
+            <span className="ml-2 font-mono text-xs font-normal text-text-2">
+              Gate {fmtUpperLabel(gateState)} | Policy {promotionStatus.toUpperCase()}
+            </span>
+          </summary>
+          <div className="mt-4 space-y-4">
       {activePlaybook && (
         <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
@@ -2498,6 +2440,9 @@ function ScannerTab({
           {policyError}
         </div>
       )}
+          </div>
+        </details>
+      )}
 
       {selectedPick && (
         <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">
@@ -2648,7 +2593,7 @@ function ScannerTab({
               disabled={takingTrade}
               onClick={onSubmitSuggested}
             >
-              Save Hypothetical Suggested Trade
+              Save Paper Idea
             </Button>
             <Button variant="ghost" size="sm" onClick={onCancel}>
               Cancel
@@ -2796,7 +2741,7 @@ function CloseTradeModal({
   const confirmLabel = mode === "tracked" ? "Confirm Close" : "Confirm Hypothetical Close";
   const exitLabel = mode === "tracked" ? "Actual exit price" : "Hypothetical exit price";
   const liveExitPrice = getCloseNowPrice(item);
-  const paperValue = getMarkPrice(item);
+  const markValue = getMarkPrice(item);
   const enteredExitPrice = parseNonnegativePriceInput(exitPrice);
   const exitPnl =
     enteredExitPrice != null
@@ -2838,8 +2783,8 @@ function CloseTradeModal({
               <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(item.entry_option_price)}</div>
             </div>
             <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Paper Value</div>
-              <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(paperValue)}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Mark Value</div>
+              <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(markValue)}</div>
             </div>
             <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
               <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Est. Exit</div>
@@ -2854,7 +2799,7 @@ function CloseTradeModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-text-2">
             <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
               <div>
-                Recommendation: <strong className="text-text-0">{item.last_recommendation || "\u2014"}</strong>
+                Signal: <strong className="text-text-0">{formatSignalLabel(item.last_recommendation)}</strong>
               </div>
               <div className="mt-1">
                 Pricing: <strong className="text-text-0">{fmtPricingSource(item.latest_review?.pricing_source)}</strong>
@@ -2905,7 +2850,7 @@ function CloseTradeModal({
           <Button variant="ghost" size="sm" onClick={onCancel} disabled={closingId === item.id}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" loading={closingId === item.id} onClick={onConfirm}>
+          <Button variant="danger" size="sm" loading={closingId === item.id} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>
@@ -2944,8 +2889,6 @@ function SuggestedTradesTab({
   const trades = view === "open"
     ? (openFilter === "share-safe" ? shareSafeOpenTrades : dedupedOpenTrades)
     : closedTrades;
-  const holdCount = dedupedOpenTrades.filter((trade) => trade.last_recommendation === "HOLD").length;
-  const sellCount = dedupedOpenTrades.filter((trade) => trade.last_recommendation === "SELL").length;
   const openPnlValues = dedupedOpenTrades
     .map((trade) => getCloseNowPnlPct(trade))
     .filter((value): value is number => value != null);
@@ -2958,6 +2901,7 @@ function SuggestedTradesTab({
   const avgClosedPnl = closedPnlValues.length > 0
     ? closedPnlValues.reduce((sum, value) => sum + value, 0) / closedPnlValues.length
     : null;
+  const closedWinRate = calcWinRatePct(closedTrades, getRealizedPnlPct);
 
   const rows = trades.map((trade) => {
     const displayPnl = view === "open"
@@ -2972,7 +2916,7 @@ function SuggestedTradesTab({
         Entry: fmtMoney(trade.entry_option_price),
         "Live Px": renderOpenPriceCell(trade),
         "Live P&L": renderOpenPnlCell(trade),
-        Recommendation: trade.last_recommendation || "\u2014",
+        Signal: formatSignalLabel(trade.last_recommendation),
         Action: (
           <div className="flex items-center gap-2">
             <Button
@@ -3008,7 +2952,7 @@ function SuggestedTradesTab({
       Entry: fmtMoney(trade.entry_option_price),
       "Exit Px": fmtMoney(getRealizedExitPrice(trade)),
       "Realized P&L %": renderRealizedPnlCell(displayPnl),
-      Recommendation: trade.last_recommendation || "\u2014",
+      Signal: formatSignalLabel(trade.last_recommendation),
       Action: <span className="text-xs text-text-3">{trade.exit_reason || "manual_hypothetical_close"}</span>,
       "Contract Q": contractQualityLabel(trade.source_pick_snapshot),
       Source: fmtCompactLabel(trade.source_pick_snapshot?.selection_source || trade.source_pick_snapshot?.promotion_class),
@@ -3025,8 +2969,8 @@ function SuggestedTradesTab({
     <div className="space-y-3">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
         <div className="max-w-3xl">
-          <div className="section-header mt-0">Suggested Trades (Hypothetical)</div>
-          <p className="text-xs text-text-3">
+          <div className="text-lg font-semibold text-text-0">Paper Ideas</div>
+          <p className="mt-1 text-sm text-text-2">
             Manual paper-tracked ideas from the scanner. Open trades reprice automatically here, and stay separate from positions you actually took.
           </p>
         </div>
@@ -3052,14 +2996,14 @@ function SuggestedTradesTab({
                 variant={openFilter === "share-safe" ? "secondary" : "ghost"}
                 onClick={() => setOpenFilter("share-safe")}
               >
-                Share-Safe
+                Fresh Prices
               </Button>
               <Button
                 size="sm"
                 variant={openFilter === "all" ? "secondary" : "ghost"}
                 onClick={() => setOpenFilter("all")}
               >
-                All Open
+                All Ideas
               </Button>
             </>
           ) : null}
@@ -3083,19 +3027,19 @@ function SuggestedTradesTab({
 
       {!error && (
         <div className="grid grid-cols-2 lg:grid-cols-5 gap-2">
-          <CompactStat label="Open Trades" value={String(openTrades.length)} />
-          <CompactStat label="Share-Safe" value={String(shareSafeOpenTrades.length)} help={`${hiddenOpenTradeCount} hidden from share-safe view`} />
-          <CompactStat label="Closed" value={String(closedTrades.length)} />
-          <CompactStat label="Avg Open P&L" value={fmtPct(avgOpenPnl)} />
-          <CompactStat label="Avg Closed P&L" value={fmtPct(avgClosedPnl)} help={`Last HOLD ${holdCount} / SELL ${sellCount}`} />
+          <CompactStat label="Open Ideas" value={String(openTrades.length)} />
+          <CompactStat label="Avg Live P&L" value={fmtPct(avgOpenPnl)} />
+          <CompactStat label="Closed Ideas" value={String(closedTrades.length)} />
+          <CompactStat label="Win Rate" value={fmtPct(closedWinRate)} />
+          <CompactStat label="Avg Closed P&L" value={fmtPct(avgClosedPnl)} />
         </div>
       )}
 
       {!error && view === "open" ? (
         <div className="bg-bg-2 border border-border rounded-lg px-3 py-2 text-xs text-text-2">
           {openFilter === "share-safe"
-            ? `Showing only exact or comparable-exact trades with fresh live option pricing from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenTradeCount} open trade(s) are hidden.`
-            : `Showing all open trades, including rows that are estimated, stale, or not exact-contract priced. ${shareSafeOpenTrades.length} open trade(s) are exact or comparable-exact live-priced right now.`}
+            ? `Showing only paper ideas with fresh live option prices from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenTradeCount} open idea(s) are hidden.`
+            : `Showing all open paper ideas. Live P&L is per trade and does not assume how many contracts anyone bought.`}
         </div>
       ) : null}
 
@@ -3103,9 +3047,9 @@ function SuggestedTradesTab({
         <div className="text-sm text-text-3 bg-bg-2 rounded-lg p-6 text-center border border-border">
           {view === "open"
             ? (openFilter === "share-safe" && dedupedOpenTrades.length > 0
-              ? "No share-safe suggested trades yet. Refresh to live-price exact or comparable-exact rows, or switch to All Open to see estimated entries."
-              : "No suggested trades yet.")
-            : "No closed suggested trades yet."}
+              ? "No fresh-priced paper ideas yet. Refresh prices or switch to All Ideas."
+              : "No paper ideas yet.")
+            : "No closed paper ideas yet."}
         </div>
       ) : (
         <FinTable
@@ -3113,53 +3057,11 @@ function SuggestedTradesTab({
           badgeCol="Trade"
           pnlCols={view === "open" ? [] : ["Realized P&L %"]}
           monoCols={view === "open" ? ["Contract Q", "Entry Basis", "Entry"] : ["Contract Q", "Entry Basis", "Entry", "Exit Px", "Reviewed", "Expiry"]}
-          label="Suggested trades"
+          label="Paper ideas"
           maxHeight={view === "open" ? "min(60vh, 760px)" : "min(64vh, 820px)"}
         />
       )}
     </div>
-  );
-}
-
-function LanePositionPanel({
-  title,
-  subtitle,
-  emptyMessage,
-  rows,
-  view,
-  tableMaxHeight,
-}: {
-  title: string;
-  subtitle: string;
-  emptyMessage: string;
-  rows: Record<string, unknown>[];
-  view: "open" | "closed";
-  tableMaxHeight: string;
-}) {
-  return (
-    <section className="min-w-0 space-y-2">
-      <div className="flex items-center justify-between gap-3 border-b border-border pb-2">
-        <div>
-          <div className="text-sm font-semibold text-text-0">{title}</div>
-          <div className="text-xs text-text-3">{subtitle}</div>
-        </div>
-      </div>
-      {rows.length === 0 ? (
-        <div className="text-sm text-text-3 bg-bg-2 rounded-lg p-6 text-center border border-border">
-          {emptyMessage}
-        </div>
-      ) : (
-        <FinTable
-          data={rows}
-          badgeCol="Trade"
-          pnlCols={[]}
-          monoCols={view === "open" ? ["Taken", "Entry", "Target", "Stop"] : ["Taken", "Entry", "Exit Px", "Reviewed", "Expiry", "Target", "Stop", "Closed"]}
-          label={`${title} tracked options positions`}
-          density="compact"
-          maxHeight={tableMaxHeight}
-        />
-      )}
-    </section>
   );
 }
 
@@ -3170,7 +3072,6 @@ function TrackedPositionsTab({
   error,
   view,
   reviewingIds,
-  onViewChange,
   onRefresh,
   onReviewPosition,
   onOpenClose,
@@ -3181,7 +3082,6 @@ function TrackedPositionsTab({
   error: string | null;
   view: "open" | "closed";
   reviewingIds: number[];
-  onViewChange: (value: "open" | "closed") => void;
   onRefresh: () => void;
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
@@ -3199,50 +3099,21 @@ function TrackedPositionsTab({
   const filteredClosedPositions = closedPositions.filter((position) =>
     matchesEntryDateFilter(getTradeDateFilterValue(position), entryDatePreset, entryDateValue)
   );
-  const proofOpenPositions = filteredOpenPositions.filter((position) => position.proof_eligible);
-  const proofClosedPositions = filteredClosedPositions.filter((position) => position.proof_eligible);
   const basePositions = view === "open" ? openBasePositions : closedPositions;
   const positions = view === "open" ? filteredOpenPositions : filteredClosedPositions;
-  const normalLanePositions = positions.filter((position) => !isCommodityLanePosition(position));
-  const commodityLanePositions = positions.filter(isCommodityLanePosition);
+  const commodityLaneCount = positions.filter(isCommodityLanePosition).length;
+  const normalLaneCount = positions.length - commodityLaneCount;
   const hiddenByEntryDateCount = Math.max(basePositions.length - positions.length, 0);
-  const holdCount = dedupedOpenPositions.filter((position) => getLatestRecommendation(position) === "HOLD").length;
-  const sellCount = filteredOpenPositions.filter((position) => getLatestRecommendation(position) === "SELL").length;
-  const unpricedCount = dedupedOpenPositions.filter((position) => {
-    const source = position.latest_review?.pricing_source || null;
-    return source === "unavailable" || source === "expired" || source == null;
-  }).length;
-  const avgOpenExitPnlPct = calcAveragePositionPnlPct(filteredOpenPositions, getCloseNowPnlPct);
-  const weightedOpenExitPnlPct = calcWeightedPositionPnlPct(filteredOpenPositions, getCloseNowPnlUsd);
-  const totalOpenExitPnlUsd = calcTotalPositionPnlUsd(filteredOpenPositions, getCloseNowPnlUsd);
-  const totalProofOpenExitPnlUsd = calcTotalPositionPnlUsd(proofOpenPositions, getCloseNowPnlUsd);
-  const totalOpenCostRiskUsd = calcTotalPositionCostRiskUsd(filteredOpenPositions);
-  const visibleSellPositions = filteredOpenPositions.filter((position) => getLatestRecommendation(position) === "SELL");
-  const sellOpenPnlUsd = calcTotalPositionPnlUsd(
-    visibleSellPositions,
-    getCloseNowPnlUsd
-  );
-  const concentrationWarning = getConcentrationWarning(dedupedOpenPositions);
-  const tickerConcentrationLabel = topCountSummary(countByLabel(dedupedOpenPositions, (position) => position.ticker));
+  const avgOpenPnlPct = calcAveragePositionPnlPct(filteredOpenPositions, getCloseNowPnlPct);
+  const closedWinRatePct = calcWinRatePct(closedPositions, getRealizedPnlPct);
+  const avgAllClosedPnlPct = calcAveragePositionPnlPct(closedPositions, getRealizedPnlPct);
   const avgRealizedExitPnlPct = calcAveragePositionPnlPct(filteredClosedPositions, getRealizedPnlPct);
-  const realizedExitPnlPct = calcWeightedPositionPnlPct(filteredClosedPositions, getRealizedPnlUsd);
-  const totalRealizedExitPnlUsd = calcTotalPositionPnlUsd(filteredClosedPositions, getRealizedPnlUsd);
-  const totalProofRealizedExitPnlUsd = calcTotalPositionPnlUsd(proofClosedPositions, getRealizedPnlUsd);
+  const closedWinRateForView = calcWinRatePct(filteredClosedPositions, getRealizedPnlPct);
   const realizedExtremes = getPnlExtremes(filteredClosedPositions, getRealizedPnlPct);
   const openReviewSummary = view === "open" ? getCollectionReviewSummary(positions) : null;
   const tableMaxHeight = view === "open"
     ? "min(calc(100vh - 18rem), 920px)"
     : "min(calc(100vh - 17rem), 940px)";
-  const lanePnlLabel = view === "open" ? "MTM" : "Realized";
-  const normalLanePnlUsd = calcTotalPositionPnlUsd(
-    normalLanePositions,
-    view === "open" ? getCloseNowPnlUsd : getRealizedPnlUsd
-  );
-  const commodityLanePnlUsd = calcTotalPositionPnlUsd(
-    commodityLanePositions,
-    view === "open" ? getCloseNowPnlUsd : getRealizedPnlUsd
-  );
-
   const buildRows = (items: TrackedPosition[]) =>
     items.map((position) => {
       const targetPct = position.profit_target_pct;
@@ -3252,12 +3123,13 @@ function TrackedPositionsTab({
         return {
           __rowKey: position.id,
           Ticker: position.ticker,
+          Lane: isCommodityLanePosition(position) ? "Commodity" : "Options",
           Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
           Taken: fmtTakenDate(position),
           Entry: fmtMoney(position.entry_option_price),
           "Live Px": renderOpenPriceCell(position),
           "Live P&L": renderOpenPnlCell(position),
-          Status: renderPositionStatusCell(position),
+          Signal: renderPositionStatusCell(position),
           Action: (
             <div className="flex items-center gap-2">
               <Button
@@ -3287,12 +3159,13 @@ function TrackedPositionsTab({
       return {
         __rowKey: position.id,
         Ticker: position.ticker,
+        Lane: isCommodityLanePosition(position) ? "Commodity" : "Options",
         Trade: position.direction === "call" ? "\u25B2 CALL" : "\u25BC PUT",
         Taken: fmtTakenDate(position),
         Entry: fmtMoney(position.entry_option_price),
         "Exit Px": fmtMoney(getRealizedExitPrice(position)),
         "Realized P&L %": renderRealizedPnlCell(realizedPnl),
-        Recommendation: position.last_recommendation || "\u2014",
+        Signal: formatSignalLabel(position.last_recommendation),
         Action: <span className="text-xs text-text-3">{position.exit_reason || "manual_close"}</span>,
         Target: fmtTargetLabel(position, position.entry_option_price, targetPct),
         Stop: fmtStopLabel(position.entry_option_price, stopPct),
@@ -3303,48 +3176,39 @@ function TrackedPositionsTab({
       };
     });
 
-  const normalRows = buildRows(normalLanePositions);
-  const commodityRows = buildRows(commodityLanePositions);
+  const rows = buildRows(positions);
 
   return (
     <div className="space-y-2">
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2">
         <div className="max-w-3xl">
-          <div className="section-header mt-0">Tracked Options Positions</div>
-          <p className="text-xs text-text-3">
-            These are the positions you actually took. Open positions refresh profit and HOLD/SELL guidance automatically while keeping exact contract identity when available.
+          <div className="text-lg font-semibold text-text-0">
+            {view === "open" ? "Open Trades" : "Closed Trades"}
+          </div>
+          <p className="mt-1 text-sm text-text-2">
+            {view === "open"
+              ? "Open algorithm trades with live P&L, current signal, and close actions."
+              : "Closed algorithm trades for judging accuracy and average outcome."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={view === "open" ? "secondary" : "ghost"}
-            onClick={() => onViewChange("open")}
-          >
-            Open
-          </Button>
-          <Button
-            size="sm"
-            variant={view === "closed" ? "secondary" : "ghost"}
-            onClick={() => onViewChange("closed")}
-          >
-            Closed
-          </Button>
           {view === "open" ? (
             <>
               <Button
                 size="sm"
                 variant={openFilter === "share-safe" ? "secondary" : "ghost"}
+                aria-pressed={openFilter === "share-safe"}
                 onClick={() => setOpenFilter("share-safe")}
               >
-                Share-Safe
+                Fresh Prices
               </Button>
               <Button
                 size="sm"
                 variant={openFilter === "all" ? "secondary" : "ghost"}
+                aria-pressed={openFilter === "all"}
                 onClick={() => setOpenFilter("all")}
               >
-                All Open
+                All Trades
               </Button>
             </>
           ) : null}
@@ -3376,27 +3240,19 @@ function TrackedPositionsTab({
       )}
 
       {!error && view === "open" ? (
-        <div className="grid grid-cols-2 lg:grid-cols-8 gap-1.5">
-          <CompactStat label="Open Positions" value={String(openPositions.length)} />
-          <CompactStat label="Visible Open" value={String(filteredOpenPositions.length)} help="Matches the rows currently included by the open filters" />
-          <CompactStat label="Cost Risk" value={fmtMoney(totalOpenCostRiskUsd)} help="Entry debit at risk for visible open positions before any open profit is harvested" />
-          <CompactStat label="Tracked MTM" value={fmtSignedMoney(totalOpenExitPnlUsd)} help="Executable mark-to-market P&L for every visible tracked open position, including non-proof comparable/manual rows" />
-          <CompactStat label="SELL P&L" value={`${fmtSignedMoney(sellOpenPnlUsd)} (${sellCount})`} help={`${sellCount} visible open position(s) currently carry SELL guidance`} />
-          <CompactStat label="Proof Rows" value={`${proofOpenPositions.length}/${filteredOpenPositions.length}`} help="Proof-eligible rows divided by visible tracked rows" />
-          <CompactStat label="Weighted Exit P&L" value={fmtPct(weightedOpenExitPnlPct)} help={`Average ${fmtPct(avgOpenExitPnlPct)}; entry-cost-weighted across visible rows`} />
-          <CompactStat label="Portfolio Conc." value={tickerConcentrationLabel} help={concentrationWarning || "Largest open ticker cluster before visible filters"} />
-          <CompactStat label="Share-Safe" value={String(shareSafeOpenPositions.length)} help={`${hiddenOpenPositionCount} hidden from share-safe view; last HOLD ${holdCount}; unpriced ${unpricedCount}; proof MTM ${fmtSignedMoney(totalProofOpenExitPnlUsd)}`} />
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+          <CompactStat label="Open Trades" value={String(filteredOpenPositions.length)} help="Open rows after the current filters" />
+          <CompactStat label="Avg Live P&L" value={fmtPct(avgOpenPnlPct)} help="Average per-trade live P&L; no contract count assumed" />
+          <CompactStat label="Win Rate" value={fmtPct(closedWinRatePct)} help="Percent of closed tracked trades with positive P&L" />
+          <CompactStat label="Avg Closed P&L" value={fmtPct(avgAllClosedPnlPct)} help="Average per-trade P&L across closed tracked trades" />
         </div>
       ) : !error ? (
-        <div className="grid grid-cols-2 lg:grid-cols-8 gap-1.5">
-          <CompactStat label="Closed Positions" value={String(closedPositions.length)} />
-          <CompactStat label="Visible Closed" value={String(filteredClosedPositions.length)} help="Matches the rows currently included by the closed filters" />
-          <CompactStat label="Tracked Realized" value={fmtSignedMoney(totalRealizedExitPnlUsd)} help="Realized P&L for every visible tracked closed position, including non-proof comparable/manual rows" />
-          <CompactStat label="Proof Realized" value={fmtSignedMoney(totalProofRealizedExitPnlUsd)} help="Realized P&L from visible positions that meet strict proof-lane eligibility" />
-          <CompactStat label="Proof Rows" value={`${proofClosedPositions.length}/${filteredClosedPositions.length}`} help="Proof-eligible rows divided by visible tracked closed rows" />
-          <CompactStat label="Avg Realized P&L" value={fmtPct(avgRealizedExitPnlPct)} help="Simple average of the visible closed-trade realized P&L percentages" />
-          <CompactStat label="Weighted Realized P&L" value={fmtPct(realizedExitPnlPct)} help="Entry-cost-weighted average of the visible closed-trade realized P&L values" />
-          <CompactStat label="Best Closed" value={fmtPct(realizedExtremes.best)} />
+        <div className="grid grid-cols-2 gap-2 xl:grid-cols-5">
+          <CompactStat label="Closed Trades" value={String(filteredClosedPositions.length)} help="Closed rows after the current filters" />
+          <CompactStat label="Win Rate" value={fmtPct(closedWinRateForView)} help="Percent of visible closed trades with positive P&L" />
+          <CompactStat label="Avg P&L" value={fmtPct(avgRealizedExitPnlPct)} help="Average per-trade closed P&L" />
+          <CompactStat label="Best Trade" value={fmtPct(realizedExtremes.best)} />
+          <CompactStat label="Worst Trade" value={fmtPct(realizedExtremes.worst)} />
         </div>
       ) : null}
 
@@ -3404,13 +3260,12 @@ function TrackedPositionsTab({
         <div className="bg-bg-2 border border-border rounded-lg px-3 py-1.5 text-xs text-text-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <span>
             {openFilter === "share-safe"
-              ? `Showing only exact or comparable-exact positions with fresh live option pricing from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenPositionCount} open position(s) are hidden.`
-              : `Showing all open positions, including rows that are estimated, stale, or not exact-contract priced. ${shareSafeOpenPositions.length} open position(s) are exact or comparable-exact live-priced right now.`}
+              ? `Showing only open trades with fresh live option prices from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenPositionCount} open trade(s) are hidden.`
+              : "Showing all open trades. Live P&L is per trade and does not assume how many contracts anyone bought."}
             {entryDatePreset !== "all"
               ? ` Entry-date filter is showing ${positions.length} of ${basePositions.length} position(s) from ${entryDateFilterLabel(entryDatePreset, entryDateValue)}.`
               : ""}
-            {` Tracked P&L includes every visible position; Proof P&L only includes strict proof-eligible rows.`}
-            {concentrationWarning ? ` Portfolio concentration: ${concentrationWarning}` : ""}
+            {` Lane mix: ${normalLaneCount} options / ${commodityLaneCount} commodity.`}
           </span>
           {openReviewSummary ? (
             <span className="text-text-1 whitespace-nowrap">{openReviewSummary}</span>
@@ -3426,33 +3281,24 @@ function TrackedPositionsTab({
         <div className="text-sm text-text-3 bg-bg-2 rounded-lg p-6 text-center border border-border">
           {view === "open"
             ? (openFilter === "share-safe" && dedupedOpenPositions.length > 0
-              ? "No share-safe tracked positions match that entry date yet. Refresh to live-price exact or comparable-exact rows, or switch to All Open to inspect estimated entries."
+              ? "No fresh-priced open trades match that entry date yet. Refresh prices or switch to All Trades."
               : hiddenByEntryDateCount > 0
-                ? "No tracked positions match that entry date filter."
-                : "No tracked positions yet.")
+                ? "No open trades match that entry date filter."
+                : "No open trades yet.")
             : hiddenByEntryDateCount > 0
-              ? "No closed tracked positions match that entry date filter."
-              : "No closed tracked positions yet."}
+              ? "No closed trades match that entry date filter."
+              : "No closed trades yet."}
         </div>
       ) : (
-        <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
-          <LanePositionPanel
-            title="Normal Options Lane"
-            subtitle={`${normalLanePositions.length} ${view} | ${lanePnlLabel} ${fmtSignedMoney(normalLanePnlUsd)}`}
-            emptyMessage={`No normal-lane ${view} positions match the current filters.`}
-            rows={normalRows}
-            view={view}
-            tableMaxHeight={tableMaxHeight}
-          />
-          <LanePositionPanel
-            title="Commodity Lane"
-            subtitle={`${commodityLanePositions.length} ${view} | ${lanePnlLabel} ${fmtSignedMoney(commodityLanePnlUsd)}`}
-            emptyMessage={`No commodity-lane ${view} positions match the current filters.`}
-            rows={commodityRows}
-            view={view}
-            tableMaxHeight={tableMaxHeight}
-          />
-        </div>
+        <FinTable
+          data={rows}
+          badgeCol="Trade"
+          pnlCols={view === "open" ? [] : ["Realized P&L %"]}
+          monoCols={view === "open" ? ["Taken", "Entry", "Target", "Stop"] : ["Taken", "Entry", "Exit Px", "Reviewed", "Expiry", "Target", "Stop", "Closed"]}
+          label="Tracked options positions"
+          density="compact"
+          maxHeight={tableMaxHeight}
+        />
       )}
     </div>
   );

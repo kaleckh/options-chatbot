@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: 2026-05-29
+Last updated: 2026-05-31
 
 ## Critical Rule: Read Code First
 
@@ -100,7 +100,23 @@ The regular `bullish_pullback_observation` lane now has newer exact trusted Thet
 - count-expanded all-59 branch: `130` exact quoted trades, PF `2.04`, avg `+24.56%`, `97.7%` quote coverage
 - per-ticker audit: `docs/bullish-pullback-ticker-audit-2026-05-29.md`
 
-This is paper-shadow research evidence, not strict proof-complete or live-capital approval. The current issue is trade count: the honest target is `200+` exact trades/year, and the best current branches are still `70` to `92` exact trades short.
+This is paper-shadow research evidence, not strict proof-complete or live-capital approval. Scoped to bullish-pullback-only artifacts, the count issue remains real: the count-expanded branch is `130` exact trades and still short of a clean `200+` annual cadence.
+
+### Regular multi-lane stock-options count state
+
+The broader regular stock-options count question is no longer answered by bullish-pullback-only artifacts. The current multi-lane runner is `scripts/run_regular_options_multilane_portfolio.py`, with latest artifacts under `data/profitability-lab/regular-options-multilane/`.
+
+Current read:
+- combined count stack: `234` trusted intraday exact trades after strict entry-date + ticker + direction dedupe
+- gap to `200`: `0`
+- count gate: `passed`
+- overall quality gate: `quality_pending`
+- counted stack: `130` bullish-pullback core rows plus `104` strict-new Lane A rows
+- important blocker: Lane A priced-only economics do not survive conservative side-aware zero-bid replay; combined Lane A falls to PF `0.85`, avg `-6.51%`, and `96.2%` coverage
+
+Therefore, `200` is achieved only as count feasibility. It is not achieved as `200 good trades`, promotable-clean proof, production readiness, or live-capital approval.
+
+The frozen autoresearch evaluator is the clean-promotion judge. Its baseline saw the `234` stack as scout evidence with `0` clean trades. Its latest experiment output currently falls back to the `130`-trade bullish-pullback core because the tested Lane A repair shrank Lane A below the portfolio-candidate threshold. The clean replacement baseline is `157` strict-deduped rows from core plus clean reference, leaving a `43`-trade clean gap to `200`.
 
 ### Regular options profit-cycle state
 
@@ -156,11 +172,12 @@ The canonical proof summary exists in FastAPI at `/api/proof-summary`, but the b
 - replay and truth diagnostics in the strategy surface
 - options profit-cycle state artifacts under `data/options-profit/*`
 - AI commodity OPRA proof-lane tracking with full scan/proof universe alignment
+- regular stock-options count feasibility: the current multi-lane stack clears `200` trusted intraday exact rows, but remains quality-gated
 
 ### Not ready
 
 - trust-by-default options deployment
-- profitability claims from the current replay artifacts
+- promotable-clean or production-ready regular stock-options profitability claims
 - claim-ready forward evidence for `SPY` and `QQQ`
 - AI commodity profitability claims or filter tuning before exact OPRA replay unlocks
 - a mounted day-trading browser surface in this worktree

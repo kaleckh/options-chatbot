@@ -73,19 +73,19 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
           onClose={() => setSidebarOpen(false)}
         />
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <Header onMenuClick={() => setSidebarOpen((o) => !o)} />
+        <div className="flex-1 flex min-w-0 flex-col overflow-hidden">
+          <Header activeTab={activeTab} onMenuClick={() => setSidebarOpen((o) => !o)} />
 
-          <main id="main-content" className="flex-1 overflow-hidden">
+          <main id="main-content" className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
             <ErrorBoundary>
               {activeTab === "predictions" && (
-                <div role="tabpanel" aria-label="Picks">
+                <div id="predictions-panel" role="tabpanel" aria-labelledby="predictions-tab">
                   <PredictionsView />
                 </div>
               )}
 
               {activeTab === "strategy" && (
-                <div role="tabpanel" aria-label="Strategy Lab">
+                <div id="strategy-panel" role="tabpanel" aria-labelledby="strategy-tab">
                   <StrategyView />
                 </div>
               )}

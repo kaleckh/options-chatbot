@@ -3838,6 +3838,39 @@ def _resolve_replay_entry_signal(
             "signal_sma50": sma50,
         }
 
+    if signal_id == "relative_strength_pullback":
+        ret5_min = float(playbook.get("relative_strength_pullback_ret5_min", -4.0) or -4.0)
+        ret5_max = float(playbook.get("relative_strength_pullback_ret5_max", -0.25) or -0.25)
+        ret20_min = float(playbook.get("relative_strength_pullback_ret20_min", 4.0) or 4.0)
+        rsi_min = float(playbook.get("relative_strength_pullback_rsi_min", 42.0) or 42.0)
+        rsi_max = float(playbook.get("relative_strength_pullback_rsi_max", 58.0) or 58.0)
+        trend_ok = S0 > sma50 and sma20 >= sma50
+        pullback_ok = ret5_min <= ret5 <= ret5_max and rsi_min <= rsi14 <= rsi_max
+        strength_ok = ret20 >= ret20_min
+        if not (trend_ok and pullback_ok and strength_ok):
+            return None
+
+        pullback_score = max(0.0, 100.0 - abs(ret5 + 1.5) * 25.0)
+        strength_score = min(100.0, max(0.0, (ret20 - ret20_min) / 6.0 * 100.0))
+        rsi_score = max(0.0, 100.0 - abs(rsi14 - 50.0) * 8.0)
+        direction_score_override = round(
+            pullback_score * 0.35
+            + strength_score * 0.40
+            + rsi_score * 0.25,
+            1,
+        )
+        return {
+            "trade_type": "call",
+            "signal_family": "relative_strength_pullback",
+            "signal_variant": "ret20_strength_controlled_pullback",
+            "direction_score_override": direction_score_override,
+            "signal_ret5": ret5,
+            "signal_ret20": ret20,
+            "signal_sma20": sma20,
+            "signal_sma50": sma50,
+            "signal_rsi14": rsi14,
+        }
+
     if signal_id == "bullish_mean_reversion":
         ret1 = 0.0
         if prior_close is not None and float(prior_close) > 0:
