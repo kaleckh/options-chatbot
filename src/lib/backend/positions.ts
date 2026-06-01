@@ -1,21 +1,62 @@
-import { fetchBackendJson, postBackendJson, toSearchSuffix } from "@/lib/backend/transport";
+import {
+  fetchBackendJson,
+  fetchBackendJsonWithHeaders,
+  postBackendJson,
+  pythonBackendTimingHeaders,
+  toSearchSuffix,
+} from "@/lib/backend/transport";
+
+type PositionListWindow = {
+  limit?: number | string | null;
+  offset?: number | string | null;
+  compact?: number | string | null;
+};
+
+type BackendBodyWithTimingHeaders<T = Record<string, unknown>> = {
+  body: T;
+  headers: Record<string, string>;
+};
 
 export async function getTrackedPositions(
-  status: "open" | "closed" | "all" = "open"
+  status: "open" | "closed" | "all" = "open",
+  window: PositionListWindow = {}
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/positions${toSearchSuffix({ status })}`,
+    `/api/positions${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch positions"
   );
 }
 
+export async function getTrackedPositionsWithBackendHeaders(
+  status: "open" | "closed" | "all" = "open",
+  window: PositionListWindow = {}
+): Promise<BackendBodyWithTimingHeaders> {
+  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+    `/api/positions${toSearchSuffix({ status, ...window })}`,
+    undefined,
+    "Failed to fetch positions"
+  );
+  return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
+}
+
 export async function getGroupedTrackedPositions(
-  status: "open" | "closed" | "all" = "all"
+  status: "open" | "closed" | "all" = "all",
+  window: PositionListWindow = {}
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/positions${toSearchSuffix({ status, grouped: 1 })}`
+    `/api/positions${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
+}
+
+export async function getGroupedTrackedPositionsWithBackendHeaders(
+  status: "open" | "closed" | "all" = "all",
+  window: PositionListWindow = {}
+): Promise<BackendBodyWithTimingHeaders> {
+  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+    `/api/positions${toSearchSuffix({ status, grouped: 1, ...window })}`
+  );
+  return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
 }
 
 export async function createTrackedPosition(
@@ -50,21 +91,45 @@ export async function closeTrackedPosition(
 }
 
 export async function getSuggestedTrades(
-  status: "open" | "closed" | "all" = "open"
+  status: "open" | "closed" | "all" = "open",
+  window: PositionListWindow = {}
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/suggested-trades${toSearchSuffix({ status })}`,
+    `/api/suggested-trades${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch suggested trades"
   );
 }
 
+export async function getSuggestedTradesWithBackendHeaders(
+  status: "open" | "closed" | "all" = "open",
+  window: PositionListWindow = {}
+): Promise<BackendBodyWithTimingHeaders> {
+  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+    `/api/suggested-trades${toSearchSuffix({ status, ...window })}`,
+    undefined,
+    "Failed to fetch suggested trades"
+  );
+  return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
+}
+
 export async function getGroupedSuggestedTrades(
-  status: "open" | "closed" | "all" = "all"
+  status: "open" | "closed" | "all" = "all",
+  window: PositionListWindow = {}
 ): Promise<Record<string, unknown>> {
   return fetchBackendJson<Record<string, unknown>>(
-    `/api/suggested-trades${toSearchSuffix({ status, grouped: 1 })}`
+    `/api/suggested-trades${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
+}
+
+export async function getGroupedSuggestedTradesWithBackendHeaders(
+  status: "open" | "closed" | "all" = "all",
+  window: PositionListWindow = {}
+): Promise<BackendBodyWithTimingHeaders> {
+  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+    `/api/suggested-trades${toSearchSuffix({ status, grouped: 1, ...window })}`
+  );
+  return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
 }
 
 export async function createSuggestedTrade(

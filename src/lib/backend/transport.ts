@@ -10,6 +10,7 @@ const PYTHON_BACKEND_TIMEOUT_MS = parseBackendTimeoutMs(
   process.env.PYTHON_BACKEND_TIMEOUT_MS
 );
 const JSON_REQUEST_HEADERS = { "Content-Type": "application/json" };
+export const PYTHON_BACKEND_DURATION_HEADER = "x-python-backend-duration-ms";
 
 export class BackendHttpError extends Error {
   status: number;
@@ -50,12 +51,10 @@ export async function fetchBackendResponse(
   }
 }
 
-export async function fetchBackendJson<T = Record<string, unknown>>(
-  path: string,
-  init?: RequestInit,
-  errorPrefix: string = "Python backend error"
+async function parseBackendJsonResponse<T = Record<string, unknown>>(
+  res: Response,
+  errorPrefix: string
 ): Promise<T> {
-  const res = await fetchBackendResponse(path, init);
   const text = await res.text();
   let data: unknown = {};
   if (text.trim()) {
@@ -81,6 +80,30 @@ export async function fetchBackendJson<T = Record<string, unknown>>(
     );
   }
   return data as T;
+}
+
+export async function fetchBackendJson<T = Record<string, unknown>>(
+  path: string,
+  init?: RequestInit,
+  errorPrefix: string = "Python backend error"
+): Promise<T> {
+  const res = await fetchBackendResponse(path, init);
+  return parseBackendJsonResponse<T>(res, errorPrefix);
+}
+
+export async function fetchBackendJsonWithHeaders<T = Record<string, unknown>>(
+  path: string,
+  init?: RequestInit,
+  errorPrefix: string = "Python backend error"
+): Promise<{ body: T; headers: Headers }> {
+  const res = await fetchBackendResponse(path, init);
+  const body = await parseBackendJsonResponse<T>(res, errorPrefix);
+  return { body, headers: res.headers };
+}
+
+export function pythonBackendTimingHeaders(headers: Headers): Record<string, string> {
+  const duration = headers.get(PYTHON_BACKEND_DURATION_HEADER);
+  return duration ? { [PYTHON_BACKEND_DURATION_HEADER]: duration } : {};
 }
 
 export function toJsonBody(value: Record<string, unknown>): string {

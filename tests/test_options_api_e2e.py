@@ -3,6 +3,7 @@ import sys
 import unittest
 import json
 from contextlib import ExitStack
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -35,6 +36,45 @@ from options_algorithm_fixtures import (
     make_history,
 )
 from workspace_tempdir import WorkspaceTempDir
+
+
+class _ProfitStatusSnapshotOnlyRepository:
+    is_available = True
+    error_message = None
+    database_url = "postgresql://example/test"
+
+    def profit_status_snapshot(self):
+        return {
+            "open_position_count": 2,
+            "total_closed_position_count": 2,
+            "closed_positions": [
+                {
+                    "contract_symbol": "SPY260619C00500000",
+                    "contracts": 1,
+                    "entry_execution_price": 2.0,
+                    "exit_execution_price": 4.0,
+                    "net_pnl_pct": 99.0,
+                    "gross_pnl_pct": 100.0,
+                    "net_pnl_usd": 198.0,
+                    "gross_pnl_usd": 200.0,
+                    "proof_eligible": True,
+                    "quote_source": "alpaca_opra",
+                },
+                {
+                    "contract_symbol": "QQQ260619C00400000",
+                    "contracts": 1,
+                    "entry_execution_price": 3.0,
+                    "exit_execution_price": 1.0,
+                    "net_pnl_pct": -67.0,
+                    "gross_pnl_pct": -66.7,
+                    "proof_eligible": False,
+                    "quote_source": "research_backfill",
+                },
+            ],
+        }
+
+    def list_positions(self, *args, **kwargs):
+        raise AssertionError("status overlay should use the narrow profit_status_snapshot")
 
 
 class OptionsAlgorithmApiE2ETests(unittest.TestCase):
@@ -124,6 +164,86 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["active_incumbents"]["SPY"]["call"]["candidate_id"].startswith("SPY__call__"))
         self.assertTrue(payload["active_incumbents"]["QQQ"]["put"]["candidate_id"].startswith("QQQ__put__"))
         self.assertFalse(Path(self.options_profit_state_dir).exists())
+
+    def test_options_profit_status_endpoint_overlays_current_tracked_positions_health(self):
+        state_dir = Path(self.options_profit_state_dir)
+        state_dir.mkdir(parents=True, exist_ok=True)
+        (state_dir / "status.json").write_text(
+            json.dumps(
+                {
+                    "generated_at": "2026-04-01T00:00:00Z",
+                    "measurement_gate": {
+                        "state": "blocked",
+                        "blockers": [{"code": "daily_truth_refresh_failed"}],
+                        "checks": {
+                            "tracked_positions": {
+                                "available": False,
+                                "closed_position_count": 0,
+                                "database_url_configured": True,
+                            }
+                        },
+                    },
+                    "blockers": [{"code": "daily_truth_refresh_failed"}],
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+
+        repo = self.backend.POSITIONS_REPOSITORY
+        open_pick = build_tracked_position_scan_pick(self.bundle)
+        repo.create_position(
+            build_position_payload(
+                scan_pick=open_pick,
+                fill_price=3.2,
+                contracts=1,
+                filled_at="2026-03-31T09:35:00",
+                notes="Open position",
+            )
+        )
+        closed_payload = build_position_payload(
+            scan_pick=open_pick,
+            fill_price=3.2,
+            contracts=1,
+            filled_at="2026-03-30T09:35:00",
+            notes="Closed proof position",
+        )
+        closed_payload["proof_eligible"] = True
+        closed_payload["source_pick_snapshot"]["options_data_source"] = "alpaca_opra"
+        closed_payload["source_pick_snapshot"]["quote_source"] = "alpaca_opra"
+        closed_position = repo.create_position(closed_payload)
+        repo.close_position(
+            closed_position["id"],
+            4.8,
+            datetime(2026, 4, 2, 20, 0, tzinfo=UTC),
+            "test_exit",
+        )
+
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        tracked_check = payload["measurement_gate"]["checks"]["tracked_positions"]
+
+        self.assertEqual(payload["measurement_gate"]["state"], "blocked")
+        self.assertTrue(tracked_check["available"])
+        self.assertIsNone(tracked_check["error_message"])
+        self.assertEqual(tracked_check["open_position_count"], 1)
+        self.assertEqual(tracked_check["total_closed_position_count"], 1)
+        self.assertEqual(tracked_check["closed_position_count"], 1)
+        self.assertEqual(tracked_check["runtime_source"], "positions_repository")
+
+    def test_options_profit_status_endpoint_uses_narrow_tracked_snapshot_when_available(self):
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", _ProfitStatusSnapshotOnlyRepository()):
+            response = self.client.get("/api/options-profit/status")
+
+        self.assertEqual(response.status_code, 200)
+        tracked_check = response.json()["measurement_gate"]["checks"]["tracked_positions"]
+        self.assertTrue(tracked_check["available"])
+        self.assertEqual(tracked_check["open_position_count"], 2)
+        self.assertEqual(tracked_check["total_closed_position_count"], 2)
+        self.assertEqual(tracked_check["closed_position_count"], 1)
+        self.assertEqual(tracked_check["non_proof_closed_position_count"], 1)
+        self.assertEqual(tracked_check["runtime_snapshot_source"], "positions_repository_profit_status_snapshot")
 
     def test_tool_endpoint_accepts_empty_body_and_decodes_json_string_results(self):
         with patch.object(

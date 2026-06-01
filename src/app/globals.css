@@ -187,6 +187,10 @@ body {
   display: none;
 }
 
+.ft-mobile-cards-rendered {
+  display: block;
+}
+
 .ft-mobile-card {
   border-bottom: 1px solid var(--border-subtle);
   padding: 0.85rem;

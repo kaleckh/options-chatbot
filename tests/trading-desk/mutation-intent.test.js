@@ -45,6 +45,15 @@ function loadMutationIntentModule() {
   return runCommonJsModule(path.join(ROOT, "src", "lib", "trading-desk", "mutationIntent.ts"));
 }
 
+function readTradingDeskClientSources() {
+  return [
+    path.join(ROOT, "src", "components", "predictions", "PredictionsView.tsx"),
+    path.join(ROOT, "src", "components", "predictions", "useTradingDeskRecords.ts"),
+  ]
+    .map((sourcePath) => fs.readFileSync(sourcePath, "utf8"))
+    .join("\n");
+}
+
 function loadStoreOwnershipModule() {
   return runCommonJsModule(path.join(ROOT, "src", "lib", "trading-desk", "storeOwnership.ts"));
 }
@@ -160,8 +169,8 @@ test("Trading Desk mutation routes require explicit mutation intent", () => {
 
 test("Trading Desk read routes declare read-only store ownership", async () => {
   const routeExpectations = [
-    ["src/app/api/positions/route.ts", "getGroupedTrackedPositions", "postgres_tracked_positions", "tracked_position"],
-    ["src/app/api/suggested-trades/route.ts", "getGroupedSuggestedTrades", "sqlite_suggested_trades", "suggested_trade"],
+    ["src/app/api/positions/route.ts", "getGroupedTrackedPositionsWithBackendHeaders", "postgres_tracked_positions", "tracked_position"],
+    ["src/app/api/suggested-trades/route.ts", "getGroupedSuggestedTradesWithBackendHeaders", "sqlite_suggested_trades", "suggested_trade"],
   ];
 
   for (const [relativePath, expectedBridgeName, expectedStore, expectedRecordClass] of routeExpectations) {
@@ -169,21 +178,29 @@ test("Trading Desk read routes declare read-only store ownership", async () => {
     const bridgeMocks = new Proxy({}, {
       get: (_target, property) => async (...args) => {
         calls.push({ name: String(property), args });
-        return { ok: true, bridge: String(property) };
+        return {
+          body: { ok: true, bridge: String(property) },
+          headers: { "x-python-backend-duration-ms": "12.3" },
+        };
       },
     });
     const route = loadRouteModule(relativePath, bridgeMocks);
     const response = await route.GET({
-      nextUrl: new URL("http://localhost/api/test?status=all&grouped=1"),
+      nextUrl: new URL("http://localhost/api/test?status=closed&grouped=1&limit=25&offset=50&compact=1"),
     });
 
     assert.equal(response.status, 200);
     assert.deepEqual(response.body, { ok: true, bridge: expectedBridgeName });
+    assert.equal(response.headers["x-python-backend-duration-ms"], "12.3");
     assert.equal(response.headers["x-trading-desk-store"], expectedStore);
     assert.equal(response.headers["x-trading-desk-lifecycle"], "read");
     assert.equal(response.headers["x-trading-desk-record-class"], expectedRecordClass);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, expectedBridgeName);
+    assert.equal(calls[0].args[0], "closed");
+    assert.equal(calls[0].args[1].limit, "25");
+    assert.equal(calls[0].args[1].offset, "50");
+    assert.equal(calls[0].args[1].compact, "1");
   }
 });
 
@@ -267,10 +284,7 @@ test("Trading Desk mutation routes reach the bridge only with matching intent", 
 });
 
 test("Trading Desk component POSTs use mutation intent headers", () => {
-  const source = fs.readFileSync(
-    path.join(ROOT, "src", "components", "predictions", "PredictionsView.tsx"),
-    "utf8"
-  );
+  const source = readTradingDeskClientSources();
   const expectedIntents = [
     "create_tracked_position",
     "review_tracked_positions",
@@ -283,4 +297,44 @@ test("Trading Desk component POSTs use mutation intent headers", () => {
   for (const expectedIntent of expectedIntents) {
     assert.match(source, new RegExp(`tradingDeskMutationHeaders\\("${expectedIntent}"\\)`));
   }
+});
+
+test("Trading Desk component lazy-loads closed rows through paged read routes", () => {
+  const source = readTradingDeskClientSources();
+
+  assert.ok(!source.includes("status=all&grouped=1"));
+  assert.ok(source.includes("/api/positions?status=open"));
+  assert.ok(source.includes("/api/suggested-trades?status=open"));
+  assert.ok(source.includes("status=closed&limit=${CLOSED_POSITION_PAGE_SIZE}&offset="));
+  assert.ok(source.includes("status=closed&limit=${CLOSED_SUGGESTED_TRADE_PAGE_SIZE}&offset="));
+  assert.ok(source.includes("compact=1"));
+  assert.ok(source.includes("fetchClosedPositionsPage"));
+  assert.ok(source.includes("fetchClosedSuggestedTradesPage"));
+});
+
+test("Tracked position policy views keep loading until policy history is complete", () => {
+  const source = fs.readFileSync(
+    path.join(ROOT, "src", "components", "predictions", "TrackedPositionsTab.tsx"),
+    "utf8"
+  );
+
+  assert.match(source, /needsCompletePolicyHistory/);
+  assert.match(source, /closedDataView === "current_policy"/);
+  assert.match(source, /closedDataView === "learned_away"/);
+  assert.match(source, /onLoadClosedRows\(\)/);
+  assert.match(source, /Loading remaining closed history/);
+});
+
+test("Tracked position current policy view shows cohort health rather than raw recent negativity alone", () => {
+  const source = fs.readFileSync(
+    path.join(ROOT, "src", "components", "predictions", "TrackedPositionsTab.tsx"),
+    "utf8"
+  );
+
+  assert.match(source, /buildCurrentPolicyCohortHealth/);
+  assert.match(source, /Showcase Month/);
+  assert.match(source, /Recent Month/);
+  assert.match(source, /Recent Median/);
+  assert.match(source, /Cohort State/);
+  assert.match(source, /policyCohortHealthStatusLabel/);
 });

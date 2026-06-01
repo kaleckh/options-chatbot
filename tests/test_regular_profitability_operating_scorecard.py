@@ -120,6 +120,246 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         """,
         encoding="utf8",
     )
+    starvation = tmp_path / "starvation.json"
+    starvation.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-01T00:00:00Z",
+          "overall": {
+            "status": "upstream_zero_candidate_scan_pressure",
+            "playbooks_requested": 13,
+            "playbooks_completed": 13,
+            "candidate_count_total": 0,
+            "returned_count_total": 0,
+            "candidate_decision_counts": {},
+            "starvation_playbooks": [],
+            "zero_candidate_playbooks": ["short_term", "swing"],
+            "top_drop_counts": [{"value": "option_liquidity", "count": 96}]
+          },
+          "errors": []
+        }
+        """,
+        encoding="utf8",
+    )
+    open_risk = tmp_path / "open-risk.json"
+    open_risk.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-01T00:05:00Z",
+          "summary": {
+            "rows": 48,
+            "priced_or_marked": 47,
+            "avg_pnl_pct": 10.04
+          },
+          "evidence_counts": {
+            "fresh_executable_review": 47,
+            "fresh_unpriced_review": 1
+          },
+          "action_counts": {
+            "hold_or_positive": 32,
+            "negative_mark_hold_or_unknown": 15,
+            "stored_non_executable_sell": 1
+          },
+          "actionable_position_ids": [104],
+          "actionable_positions": [
+            {
+              "id": 104,
+              "ticker": "SBUX",
+              "action_bucket": "stored_non_executable_sell",
+              "pricing_state": "priced_display_only_last",
+              "next_safe_action": "do_not_auto_close_from_display_only_mark_rerun_explicit_review_during_fresh_executable_quote_window"
+            }
+          ]
+        }
+        """,
+        encoding="utf8",
+    )
+    suggested_risk = tmp_path / "suggested-risk.json"
+    suggested_risk.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-01T00:10:00Z",
+          "storage_available": true,
+          "summary": {
+            "rows": 2,
+            "priced_or_marked": 1,
+            "avg_pnl_pct": -24.0
+          },
+          "closed_summary": {
+            "rows": 1,
+            "priced_or_marked": 1
+          },
+          "evidence_counts": {
+            "stale_mark_or_non_executable_review": 1,
+            "missing_review": 1
+          },
+          "action_counts": {
+            "stored_non_executable_sell": 1,
+            "no_stored_review": 1
+          },
+          "close_risk_trade_ids": [201],
+          "stale_or_missing_review_trade_ids": [201, 202],
+          "attention_trade_ids": [201, 202],
+          "attention_trades": [
+            {
+              "id": 201,
+              "ticker": "AAA",
+              "action_bucket": "stored_non_executable_sell",
+              "pricing_state": "priced_display_only_last",
+              "next_safe_action": "do_not_close_suggested_trade_from_non_executable_mark_rerun_explicit_review"
+            },
+            {
+              "id": 202,
+              "ticker": "BBB",
+              "action_bucket": "no_stored_review",
+              "pricing_state": null,
+              "next_safe_action": "refresh_explicit_suggested_trade_review_before_using_close_or_pnl_state"
+            }
+          ]
+        }
+        """,
+        encoding="utf8",
+    )
+    api_performance = tmp_path / "api-performance.json"
+    api_performance.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-01T00:15:00Z",
+          "summary": {
+            "status": "ok",
+            "endpoint_count": 6,
+            "ok_endpoint_count": 6,
+            "error_endpoint_count": 0,
+            "frontend_max_elapsed_ms": 121.4,
+            "frontend_total_payload_bytes": 45200,
+            "backend_max_duration_ms": 72.8,
+            "slowest_frontend_endpoint": {
+              "label": "next_tracked_positions_closed_page_100",
+              "target": "next_route",
+              "path": "/api/positions?status=closed&limit=100&offset=0",
+              "status_code": 200,
+              "elapsed_ms": 121.4,
+              "backend_duration_ms": 72.8,
+              "payload_bytes": 34000,
+              "row_count": 100,
+              "page": {"limit": 100, "offset": 0, "returned": 100}
+            },
+            "largest_payload_endpoint": {
+              "label": "next_tracked_positions_closed_page_100",
+              "target": "next_route",
+              "path": "/api/positions?status=closed&limit=100&offset=0",
+              "status_code": 200,
+              "elapsed_ms": 121.4,
+              "backend_duration_ms": 72.8,
+              "payload_bytes": 34000,
+              "row_count": 100,
+              "page": {"limit": 100, "offset": 0, "returned": 100}
+            },
+            "cache_stats": {
+              "status": "ok",
+              "memory_cache_entries": 12,
+              "totals": {"hit": 4, "miss": 2}
+            }
+          },
+          "endpoints": []
+        }
+        """,
+        encoding="utf8",
+    )
+    ai_commodity = tmp_path / "ai-commodity-progress.json"
+    ai_commodity.write_text(
+        """
+        {
+          "generated_at": "2026-05-31T09:10:46Z",
+          "provider": "alpaca:sip:opra",
+          "proof_source_label": "alpaca_opra_daily_snapshot",
+          "proof_window": {
+            "current_shared_quote_dates": 3,
+            "required_shared_quote_dates": 100,
+            "remaining_shared_quote_dates": 97,
+            "progress_pct": 3.0,
+            "diagnostic_ready": false,
+            "approx_completion_date_if_one_capture_per_weekday": "2026-10-12"
+          },
+          "verification_gate": {
+            "status": "not_verified",
+            "verified": false,
+            "blockers": ["shared_quote_dates:3/100", "live_scan_candidates:0"],
+            "current_shared_quote_dates": 3,
+            "required_shared_quote_dates": 100,
+            "replay_total_trades": null,
+            "replay_profit_factor": null,
+            "replay_total_return_pct": null,
+            "live_scan_candidate_count": 0,
+            "proof_eligible_candidate_count": 0,
+            "source_quality_status": "usable_quotes_waiting_for_history_depth"
+          },
+          "readiness": {
+            "status": "partial",
+            "blocker": "thin_required_history",
+            "thin_required_underlyings": ["AA", "FCX"],
+            "missing_required_underlyings": []
+          },
+          "scan": {
+            "candidate_count": 0,
+            "proof_eligible_candidate_count": 0,
+            "scan_drop_reason_count": 24,
+            "drop_diagnostics": [
+              {
+                "drop_key": "option_liquidity",
+                "count": 13,
+                "example_symbols": ["AA", "BHP", "FCX"],
+                "next_diagnostic_action": "after_fresh_quotes_recheck_quote_age_then_structural_spread_distance"
+              }
+            ]
+          },
+          "capture": {
+            "status": "no_rows_captured",
+            "target_date": "2026-05-26",
+            "target_capture_complete": false,
+            "missing_target_date_symbols_after": ["AA", "BHP", "FCX"]
+          },
+          "lane_next_step": {
+            "phase": "proof_universe_alignment",
+            "priority_action": "repair_full_scan_universe_capture_and_proof_alignment",
+            "primary_blocker": "capture_target_incomplete",
+            "blocked_gates": ["capture_target_complete", "enough_exact_shared_quote_dates"],
+            "safe_to_tune_filters": false,
+            "next_timed_event_kind": "fresh_opra_scan",
+            "next_timed_action": "rerun_live_scan_during_fresh_opra_window_before_filter_changes",
+            "next_timed_event_user_local": "2026-06-01T08:10:00-06:00"
+          },
+          "lane_next_step_plan": {
+            "status": "waiting_for_not_before",
+            "command": "python scripts/run_ai_commodity_opra_progress.py --skip-capture",
+            "run_next_execution_command": false
+          },
+          "guarded_command_decision": {
+            "status": "waiting_until_next_guarded_event",
+            "safe_to_execute_now": false,
+            "command": null,
+            "next_command_when_allowed": "python scripts/run_ai_commodity_opra_progress.py --skip-capture",
+            "reason": "waiting_until_not_before:2026-06-01T08:10:00-06:00",
+            "next_not_before_user_local": "2026-06-01T08:10:00-06:00"
+          },
+          "exact_capture_progress_outcome": {
+            "status": "exact_capture_progress_failed_or_not_observed",
+            "material_progress": false,
+            "next_action": "recapture_or_inspect_exact_alpaca_opra_import_failure",
+            "blockers": ["shared_quote_dates_increased_from_contract", "capture_target_complete_true"]
+          },
+          "profitability_evidence_scorecard_status": "recording_progress_waiting_for_exact_history_depth",
+          "profitability_evidence_scorecard_passed_requirement_count": 4,
+          "profitability_evidence_scorecard_total_requirement_count": 9,
+          "profitability_evidence_scorecard_blockers": ["alpaca_opra_daily_snapshot_shared_quote_dates:3/100"],
+          "goal_completion_failed_requirements": [
+            "has_required_exact_alpaca_opra_history_depth",
+            "exact_replay_is_profitable"
+          ]
+        }
+        """,
+        encoding="utf8",
+    )
 
     scorecard = build_scorecard(
         autoresearch_path=autoresearch,
@@ -127,8 +367,14 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         negative_audit_path=negative,
         exit_replay_path=exit_replay,
         legacy_missed_close_path=legacy,
+        guardrail_starvation_path=starvation,
+        open_position_risk_path=open_risk,
+        suggested_trade_close_risk_path=suggested_risk,
+        api_performance_path=api_performance,
+        ai_commodity_progress_path=ai_commodity,
     )
 
+    assert scorecard["scope"] == "active_options_operating_scorecard"
     assert scorecard["status"] == "visible_product_profitability_progress_but_proof_still_blocked"
     assert scorecard["product_profitability_progress_visible"] is True
     assert scorecard["proof_grade_profitability_progress_visible"] is False
@@ -136,4 +382,33 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
     assert scorecard["trading_desk_guardrails"]["promoted_guardrails"] == ["debit_gt_45_width"]
     assert scorecard["negative_decision_audit"]["legacy_missed_close_target_count"] == 1
     assert scorecard["legacy_missed_close_audit"]["current_action_required_count"] == 0
+    assert scorecard["guardrail_starvation_audit"]["status"] == "upstream_zero_candidate_scan_pressure"
+    assert scorecard["open_position_risk"]["open_rows"] == 48
+    assert scorecard["open_position_risk"]["review_required_count"] == 1
+    assert scorecard["open_position_risk"]["executable_close_ready_count"] == 0
+    assert scorecard["open_position_risk"]["actionable_position_ids"] == [104]
+    assert scorecard["suggested_trade_close_risk"]["open_rows"] == 2
+    assert scorecard["suggested_trade_close_risk"]["stored_non_executable_sell_count"] == 1
+    assert scorecard["suggested_trade_close_risk"]["stale_or_missing_review_count"] == 2
+    assert scorecard["suggested_trade_close_risk"]["review_required_count"] == 2
+    assert scorecard["api_performance"]["status"] == "ok"
+    assert scorecard["api_performance"]["frontend_max_elapsed_ms"] == 121.4
+    assert scorecard["api_performance"]["backend_max_duration_ms"] == 72.8
+    assert scorecard["api_performance"]["cache_stats"]["memory_cache_entries"] == 12
+    assert scorecard["api_performance"]["largest_payload_endpoint"]["row_count"] == 100
+    assert scorecard["ai_commodity_progress"]["status"] == "recording_progress_waiting_for_exact_history_depth"
+    assert scorecard["ai_commodity_progress"]["provider"] == "alpaca:sip:opra"
+    assert scorecard["ai_commodity_progress"]["current_shared_quote_dates"] == 3
+    assert scorecard["ai_commodity_progress"]["required_shared_quote_dates"] == 100
+    assert scorecard["ai_commodity_progress"]["capture_target_complete"] is False
+    assert scorecard["ai_commodity_progress"]["missing_target_symbol_count"] == 3
+    assert scorecard["ai_commodity_progress"]["guarded_command_safe_to_execute_now"] is False
+    assert scorecard["ai_commodity_progress"]["safe_to_tune_filters"] is False
+    assert scorecard["ai_commodity_progress"]["top_scan_drops"][0]["drop_key"] == "option_liquidity"
+    assert any("display-only marks" in action for action in scorecard["next_actions"])
+    assert any("suggested trades from stale/display-only marks" in action for action in scorecard["next_actions"])
+    assert any("stale or missing suggested-trade reviews" in action for action in scorecard["next_actions"])
     assert any("historical stale-policy diagnostics" in action for action in scorecard["next_actions"])
+    assert any("Do not loosen promoted Trading Desk entry guardrails" in action for action in scorecard["next_actions"])
+    assert any("AI commodity production filters locked" in action for action in scorecard["next_actions"])
+    assert any("AI commodity exact OPRA capture failure" in action for action in scorecard["next_actions"])

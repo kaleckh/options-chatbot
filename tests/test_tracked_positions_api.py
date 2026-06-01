@@ -33,6 +33,90 @@ from options_algorithm_fixtures import (
 from positions_repository import MemoryTrackedPositionsRepository, UnavailableTrackedPositionsRepository
 
 
+class _CompactClosedPositionsOnlyRepository:
+    is_available = True
+
+    def __init__(self):
+        self.compact_called = False
+        self.status = None
+        self.limit = None
+        self.offset = None
+
+    def list_positions(self, *args, **kwargs):
+        raise AssertionError("compact closed reads should not use the full position list")
+
+    def list_compact_positions(self, status="open", *, limit=None, offset=0):
+        self.compact_called = True
+        self.status = status
+        self.limit = limit
+        self.offset = offset
+        return [
+            {
+                "id": 999,
+                "status": "closed",
+                "ticker": "MSFT",
+                "direction": "call",
+                "contract_symbol": "MSFT260117C00400000",
+                "strike": 400.0,
+                "expiry": "2026-01-17",
+                "asset_class": "equity",
+                "contracts": 1,
+                "entry_option_price": 5.0,
+                "entry_execution_price": 5.0,
+                "entry_execution_basis": "ask",
+                "entry_fee_total_usd": 0.65,
+                "entry_underlying_price": 401.0,
+                "filled_at": "2026-01-02T15:00:00Z",
+                "stop_loss_pct": 90,
+                "profit_target_pct": 100,
+                "time_exit_day": 14,
+                "peak_pnl_pct": None,
+                "last_option_price": 6.5,
+                "last_pnl_pct": 30.0,
+                "last_recommendation": "SELL",
+                "last_recommendation_reason": "target",
+                "last_reviewed_at": "2026-01-03T15:00:00Z",
+                "source_pick_snapshot": {
+                    "playbook_id": "short_term",
+                    "playbook_label": "Short Term",
+                    "scan_date": "2026-01-02",
+                    "debit_pct_of_width": 50.0,
+                    "net_debit": 5.0,
+                    "spread_width": 10.0,
+                    "ret5": 0.4,
+                    "selection_source": "historical_chain_native_exact_contract",
+                    "promotion_class": "research_backfill_exact_contract",
+                    "backfill_audit_id": "audit-v1",
+                    "position_migration_id": "migration-v1",
+                    "research_only": True,
+                    "contract_symbol": "detail-only-source-contract",
+                },
+                "notes": "x" * 180,
+                "closed_at": "2026-01-03T15:00:00Z",
+                "exit_option_price": 6.5,
+                "exit_execution_price": 6.5,
+                "exit_execution_basis": "spread_bid_ask_exact",
+                "exit_reason": "target",
+                "gross_pnl_pct": 30.0,
+                "net_pnl_pct": 29.2,
+                "gross_pnl_usd": 150.0,
+                "net_pnl_usd": 148.7,
+                "fee_total_usd": 1.3,
+                "source_scan_session_id": None,
+                "source_scan_event_key": "detail-only-event",
+                "source_scan_run_id": "detail-only-run",
+                "source_scan_recorded_at_utc": "2026-01-02T15:00:00Z",
+                "proof_eligible": False,
+                "proof_ineligibility_reason": "research_backfill",
+                "proof_class": "ineligible",
+                "proof_class_reason": "research_backfill",
+                "created_at": "2026-01-02T15:00:00Z",
+                "updated_at": "2026-01-03T15:00:00Z",
+                "latest_review": {"id": 1, "recommendation": "SELL"},
+            }
+        ]
+
+
 class TrackedPositionsApiTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -108,6 +192,16 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(len(open_payload["positions"]), 1)
         self.assertEqual(open_payload["positions"][0]["status"], "open")
 
+        paged_open_response = self.client.get("/api/positions", params={"status": "open", "limit": 1})
+        self.assertEqual(paged_open_response.status_code, 200)
+        paged_open_payload = paged_open_response.json()
+        self.assertEqual(len(paged_open_payload["positions"]), 1)
+        self.assertEqual(paged_open_payload["page"], {"limit": 1, "offset": 0, "returned": 1})
+
+        invalid_window_response = self.client.get("/api/positions", params={"status": "open", "offset": 1})
+        self.assertEqual(invalid_window_response.status_code, 400)
+        self.assertEqual(invalid_window_response.json()["detail"], "offset requires limit.")
+
         grouped_open_response = self.client.get("/api/positions", params={"status": "all", "grouped": 1})
         self.assertEqual(grouped_open_response.status_code, 200)
         grouped_open_payload = grouped_open_response.json()
@@ -168,6 +262,30 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(grouped_closed_payload["summary"]["closed"]["tracked"]["count"], 1)
         self.assertEqual(grouped_closed_payload["summary"]["closed"]["tracked"]["priced_count"], 1)
         self.assertIn("proof", grouped_closed_payload["summary"]["closed"])
+
+    def test_compact_closed_positions_use_narrow_repository_path(self):
+        repository = _CompactClosedPositionsOnlyRepository()
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", repository):
+            response = self.client.get(
+                "/api/positions",
+                params={"status": "closed", "limit": 100, "offset": 0, "compact": 1},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        position = payload["positions"][0]
+        self.assertTrue(repository.compact_called)
+        self.assertEqual(repository.status, "closed")
+        self.assertEqual(repository.limit, 100)
+        self.assertEqual(repository.offset, 0)
+        self.assertEqual(payload["page"], {"limit": 100, "offset": 0, "returned": 1})
+        self.assertEqual(position["source_pick_snapshot"]["debit_pct_of_width"], 50.0)
+        self.assertEqual(position["compact_evidence"]["migrated_paper"], True)
+        self.assertEqual(position["compact_evidence"]["research_backfill"], True)
+        self.assertLessEqual(len(position["notes"]), 96)
+        self.assertNotIn("latest_review", position)
+        self.assertNotIn("contract_symbol", position["source_pick_snapshot"])
+        self.assertNotIn("backfill_audit_id", position["source_pick_snapshot"])
 
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -443,6 +561,14 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
         scan_pick["selection_source"] = "live_chain_exact_contract"
         scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["backfill_audit_id"] = "main_lane_zero_pick_current_algo_v1"
+        scan_pick["candidate_execution_label"] = "historical_selection"
+        scan_pick["position_migration_id"] = "migration-55"
+        scan_pick["pricing_evidence_class"] = "trusted_intraday"
+        scan_pick["production_filter_action"] = "research_backfill"
+        scan_pick["profitability_evidence_class"] = "research_backfill"
+        scan_pick["research_only"] = True
+        scan_pick["source_separation"] = "historical_replay"
         scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
         scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
         scan_pick["bid"] = 4.4
@@ -503,6 +629,105 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(listed_position["source_pick_snapshot"]["entry_execution_price"], 4.5)
         self.assertEqual(listed_position["source_pick_snapshot"]["legs"], scan_pick["legs"])
         self.assertEqual(listed_position["source_pick_snapshot"]["entry_quote_snapshot"]["captured_at_utc"], "2026-04-06T14:00:00Z")
+
+        compact_response = self.client.get("/api/positions", params={"status": "open", "compact": 1})
+        self.assertEqual(compact_response.status_code, 200)
+        compact_position = compact_response.json()["positions"][0]
+        compact_snapshot = compact_position["source_pick_snapshot"]
+        self.assertEqual(compact_snapshot["quote_time_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(compact_snapshot["entry_execution_price"], 4.5)
+        self.assertEqual(compact_snapshot["entry_quote_snapshot"]["captured_at_utc"], "2026-04-06T14:00:00Z")
+        self.assertNotIn("entry_execution_price", compact_snapshot["entry_quote_snapshot"])
+        self.assertNotIn("quote_basis", compact_snapshot["entry_quote_snapshot"])
+        self.assertNotIn("legs", compact_snapshot)
+        self.assertNotIn("backfill_audit_id", compact_snapshot)
+        self.assertNotIn("candidate_execution_label", compact_snapshot)
+        self.assertNotIn("position_migration_id", compact_snapshot)
+        self.assertNotIn("pricing_evidence_class", compact_snapshot)
+        self.assertNotIn("profitability_evidence_class", compact_snapshot)
+        self.assertNotIn("production_filter_action", compact_snapshot)
+        self.assertNotIn("source_separation", compact_snapshot)
+        self.assertEqual(compact_position["compact_evidence"], {"migrated_paper": True, "research_backfill": True})
+        self.assertNotIn("share_review_age_minutes", compact_position)
+        self.assertNotIn("share_reviewed_at", compact_position)
+
+    def test_compact_closed_positions_omit_detail_only_fields(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_event_key"] = "baseline_broad_control:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+        scan_pick["debit_pct_of_width"] = 45.0
+        scan_pick["net_debit"] = 4.5
+        scan_pick["spread_width"] = 10.0
+        scan_pick["ret5"] = -3.25
+        scan_pick["spread_liquidity"] = {
+            "spread_entry_debit": 4.5,
+            "spread_mid_debit": 4.0,
+            "long_bid": 4.8,
+            "long_ask": 5.2,
+            "short_bid": 1.0,
+            "short_ask": 1.4,
+        }
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        close_response = self.client.post(
+            f"/api/positions/{position_id}/close",
+            json={"exit_price": 2.45, "notes": "Closed from compact payload test. " + ("x" * 140)},
+        )
+        self.assertEqual(close_response.status_code, 200)
+        closed_position = close_response.json()["position"]
+
+        compact_response = self.client.get(
+            "/api/positions",
+            params={"status": "closed", "limit": 100, "offset": 0, "compact": 1},
+        )
+        self.assertEqual(compact_response.status_code, 200)
+        compact_position = compact_response.json()["positions"][0]
+        compact_snapshot = compact_position["source_pick_snapshot"]
+
+        self.assertEqual(compact_position["status"], "closed")
+        self.assertEqual(compact_position["exit_execution_price"], closed_position["exit_execution_price"])
+        self.assertEqual(compact_position["net_pnl_pct"], closed_position["net_pnl_pct"])
+        self.assertEqual(compact_position["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
+        self.assertEqual(compact_snapshot["debit_pct_of_width"], 45.0)
+        self.assertEqual(compact_snapshot["spread_width"], 10.0)
+        self.assertEqual(compact_snapshot["ret5"], -3.25)
+        self.assertAlmostEqual(compact_snapshot["fill_degradation_vs_mid_pct"], 12.5)
+        self.assertAlmostEqual(compact_snapshot["worst_leg_bid_ask_spread_pct"], 33.3333333333)
+        self.assertLessEqual(len(compact_position["notes"]), 96)
+        self.assertNotIn("latest_review", compact_position)
+        self.assertNotIn("entry_quote_snapshot", compact_snapshot)
+        self.assertNotIn("entry_execution_price", compact_snapshot)
+        self.assertNotIn("contract_symbol", compact_snapshot)
+        self.assertNotIn("selection_source", compact_snapshot)
+        self.assertNotIn("promotion_class", compact_snapshot)
+        self.assertNotIn("spread_liquidity", compact_snapshot)
+        self.assertNotIn("created_at", compact_position)
+        self.assertNotIn("updated_at", compact_position)
+        self.assertNotIn("source_scan_event_key", compact_position)
+        self.assertNotIn("source_scan_run_id", compact_position)
+        self.assertNotIn("source_scan_recorded_at_utc", compact_position)
+        self.assertNotIn("share_safe_reason", compact_position)
+        self.assertNotIn("share_safe_exact_live", compact_position)
+        self.assertNotIn("exact_contract_symbol", compact_position)
 
     def test_exact_looking_position_without_scan_provenance_is_not_live_scan_proof(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

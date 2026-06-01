@@ -582,12 +582,22 @@ class SQLiteSuggestedTradesRepository:
                 raise RuntimeError(f"Suggested trade {position_id} was not found after creation.")
             return position
 
-    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+    def list_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         where_sql = ""
-        params: tuple[Any, ...] = ()
+        params: list[Any] = []
         if status in {"open", "closed"}:
             where_sql = "WHERE p.status = ?"
-            params = (status,)
+            params.append(status)
+        window_sql = ""
+        if limit is not None:
+            window_sql = "LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
         query = f"""
         SELECT
             p.*,
@@ -620,9 +630,10 @@ class SQLiteSuggestedTradesRepository:
             )
         {where_sql}
         ORDER BY p.filled_at DESC, p.id DESC
+        {window_sql}
         """
         with self._connect() as conn:
-            rows = conn.execute(query, params).fetchall()
+            rows = conn.execute(query, tuple(params)).fetchall()
         return [_normalize_position_row(dict(row)) for row in rows]
 
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:

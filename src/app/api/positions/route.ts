@@ -6,17 +6,27 @@ import {
   readJsonObject,
   requireTradingDeskMutationIntent,
 } from "@/app/api/_utils";
-import { createTrackedPosition, getGroupedTrackedPositions, getTrackedPositions } from "@/lib/python-bridge";
+import {
+  createTrackedPosition,
+  getGroupedTrackedPositionsWithBackendHeaders,
+  getTrackedPositionsWithBackendHeaders,
+} from "@/lib/python-bridge";
 
 export async function GET(req: NextRequest) {
   try {
     const status = (req.nextUrl.searchParams.get("status") || "open") as "open" | "closed" | "all";
     const grouped = isTruthyQueryParam(req.nextUrl.searchParams.get("grouped"));
+    const window = {
+      limit: req.nextUrl.searchParams.get("limit"),
+      offset: req.nextUrl.searchParams.get("offset"),
+      compact: req.nextUrl.searchParams.get("compact"),
+    };
     if (grouped) {
-      return jsonWithTradingDeskStore(await getGroupedTrackedPositions(status), "tracked_positions_read");
+      const result = await getGroupedTrackedPositionsWithBackendHeaders(status, window);
+      return jsonWithTradingDeskStore(result.body, "tracked_positions_read", { headers: result.headers });
     }
-    const result = await getTrackedPositions(status);
-    return jsonWithTradingDeskStore(result, "tracked_positions_read");
+    const result = await getTrackedPositionsWithBackendHeaders(status, window);
+    return jsonWithTradingDeskStore(result.body, "tracked_positions_read", { headers: result.headers });
   } catch (err) {
     return jsonError(err, "Failed to fetch tracked positions");
   }

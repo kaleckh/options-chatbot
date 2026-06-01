@@ -561,6 +561,13 @@ export interface PositionReview {
   metrics_snapshot: Record<string, unknown>;
 }
 
+export interface CompactPositionEvidence {
+  migrated_paper?: boolean;
+  research_backfill?: boolean;
+  comparable_contract?: boolean;
+  approximation_only?: boolean;
+}
+
 export interface TrackedPosition {
   id: number;
   status: "open" | "closed";
@@ -611,6 +618,7 @@ export interface TrackedPosition {
   proof_ineligibility_reason?: string | null;
   proof_class?: string | null;
   proof_class_reason?: string | null;
+  compact_evidence?: CompactPositionEvidence | null;
 }
 
 export interface CreateTrackedPositionRequest {

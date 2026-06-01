@@ -36,6 +36,10 @@ These are the living docs for the current worktree:
   - repair backlog and guardrail taxonomy derived from the all-lanes negative-trade audit
 - `docs/trading-desk-profitability-guardrails-2026-05-31.md`
   - all-row replay of Trading Desk profitability guardrails promoted into scanner entry-quality rules
+- `docs/current-policy-historical-picks-audit.md`
+  - current-policy replay of historical closed Trading Desk rows, separating would-take-today rows from learned-away backfill
+- `docs/current-policy-cohort-health.md`
+  - current-policy cohort health report separating the April showcase edge from the broken recent paper-only cohort
 - `docs/trading-desk-negative-trade-decision-audit-2026-05-31.md`
   - reproducible negative-trade decision audit with entry rationale, guardrail coverage, evidence quality, and executable-exit separation
 - `docs/trading-desk-exit-policy-replay-2026-05-31.md`
@@ -43,7 +47,11 @@ These are the living docs for the current worktree:
 - `docs/trading-desk-legacy-missed-close-audit-2026-06-01.md`
   - focused read-only audit of legacy rows 26/39/44 and whether they imply a current auto-close bug
 - `docs/regular-options-operating-scorecard.md`
-  - current CEO-style scorecard separating visible Trading Desk profitability progress from proof-grade autoresearch readiness
+  - active options scorecard separating visible Trading Desk profitability progress, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
+- `docs/regular-options-symbol-sleeves.md`
+  - generated per-symbol sleeve matrix for regular supervised options, separating lane-symbol keep/watch/quarantine/rejected/needs-paper status from proof evidence class
+- `docs/regular-guardrail-starvation-audit.md`
+  - latest regular-lane live-scan guardrail starvation audit and upstream zero-candidate readback
 - `docs/markdown-audit-2026-05-31.md`
   - latest Markdown placement audit, scope, and verification evidence
 - `docs/WORKLOG.md`
@@ -58,6 +66,8 @@ These are the living docs for the current worktree:
   - recurring six-agent bug audit runbook and automation prompt
 - `docs/autoresearch/code-audit-remediation-goal.md`
   - reusable six-subagent goal prompt for code audit remediation and long-term fixes
+- `docs/autoresearch/active-options-performance-goal.md`
+  - reusable multi-lane goal prompt for improving Trading Desk runtime, profitability, live-scan, proof, AI commodity, and architecture performance
 - `docs/agent-worktree-hygiene.md`
   - agent branch, push, untracked-file, and clean-worktree rules
 
@@ -87,12 +97,20 @@ Read in this order:
 
 1. `src/components/layout/AppShell.tsx`
 2. `src/components/predictions/PredictionsView.tsx`
-3. `src/components/strategy/StrategyView.tsx`
-4. `src/lib/python-bridge.ts`
-5. `src/lib/backend/*`
-6. `python-backend/main.py`
-7. `options_chatbot.py`
-8. `wfo_optimizer.py`
+3. `src/components/predictions/TrackedPositionsTab.tsx`
+4. `src/components/predictions/TrackedStocksTab.tsx`
+5. `src/components/predictions/ScannerTab.tsx`
+6. `src/components/predictions/SuggestedTradesTab.tsx`
+7. `src/components/predictions/trackedPositionUtils.tsx`
+8. `src/components/predictions/tradingDeskCells.tsx`
+9. `src/components/predictions/tradingDeskFormat.ts`
+10. `src/components/strategy/StrategyView.tsx`
+11. `src/lib/client-json.ts`
+12. `src/lib/python-bridge.ts`
+13. `src/lib/backend/*`
+14. `python-backend/main.py`
+15. `options_chatbot.py`
+16. `wfo_optimizer.py`
 
 ## Snapshot Warnings
 

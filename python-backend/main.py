@@ -12,6 +12,7 @@ import math
 import sqlite3
 import contextlib
 import threading
+import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -93,7 +94,14 @@ from supervised_scan import (
     run_supervised_scan,
     scan_pick_market_regime,
 )
-from options_profit_gate import evaluate_claim_readiness, evaluate_measurement_gate
+from options_profit_gate import (
+    DEFAULT_MIN_CLOSED_TRACKED_POSITIONS,
+    DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT,
+    DEFAULT_MIN_REALIZED_PROFIT_FACTOR,
+    _realized_position_metrics,
+    evaluate_claim_readiness,
+    evaluate_measurement_gate,
+)
 from options_profit_state import build_read_only_profit_status_view, live_profile_entry_for_symbol
 
 app = FastAPI(title="Options Chatbot Backend")
@@ -105,6 +113,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_backend_timing_header(request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    response.headers["x-python-backend-duration-ms"] = f"{duration_ms:.1f}"
+    return response
 
 
 # ── SQLite session management (shared DB with existing Streamlit app) ──────────
@@ -230,12 +247,142 @@ def _read_only_options_profit_status() -> dict[str, Any]:
     live_profile = _read_json_artifact(state_dir / "live_profile.json") or {}
     incumbents_payload = _read_json_artifact(state_dir / "incumbents.json") or {}
     decision_payload = _read_latest_options_profit_decision(state_dir) or {}
-    return build_read_only_profit_status_view(
+    status_view = build_read_only_profit_status_view(
         status_payload=status_payload,
         incumbents_payload=incumbents_payload,
         live_profile_payload=live_profile,
         decision_payload=decision_payload,
     )
+    return _with_current_tracked_positions_health(status_view)
+
+
+def _runtime_database_url_configured(repository: Any) -> bool:
+    env_url = str(os.getenv("DATABASE_URL") or "").strip()
+    repository_url = str(getattr(repository, "database_url", "") or "").strip()
+    return bool(env_url or repository_url)
+
+
+def _safe_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _current_tracked_positions_health_check(base_check: dict[str, Any] | None = None) -> dict[str, Any]:
+    check = copy.deepcopy(dict(base_check or {}))
+    check["runtime_source"] = "positions_repository"
+    check["runtime_checked_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+    check["database_url_configured"] = _runtime_database_url_configured(POSITIONS_REPOSITORY)
+    required_closed = check.get("required_closed_position_count")
+    try:
+        required_closed_int = int(required_closed)
+    except (TypeError, ValueError):
+        required_closed_int = DEFAULT_MIN_CLOSED_TRACKED_POSITIONS
+    required_profit_factor = _safe_float(check.get("required_net_profit_factor"))
+    if required_profit_factor is None:
+        required_profit_factor = DEFAULT_MIN_REALIZED_PROFIT_FACTOR
+    required_avg_net_pnl = _safe_float(check.get("required_avg_net_pnl_pct_gt"))
+    if required_avg_net_pnl is None:
+        required_avg_net_pnl = DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT
+
+    if not bool(getattr(POSITIONS_REPOSITORY, "is_available", False)):
+        check.update(
+            {
+                "available": False,
+                "error_message": getattr(POSITIONS_REPOSITORY, "error_message", None)
+                or "Tracked positions storage is unavailable.",
+                "open_position_count": 0,
+                "total_closed_position_count": 0,
+                "closed_position_count": 0,
+                "required_closed_position_count": required_closed_int,
+                "tracking_required": required_closed_int > 0,
+                "realized_profitability_ready": None if required_closed_int <= 0 else False,
+            }
+        )
+        return check
+
+    try:
+        profit_status_snapshot = getattr(POSITIONS_REPOSITORY, "profit_status_snapshot", None)
+        if callable(profit_status_snapshot):
+            snapshot = profit_status_snapshot()
+            open_position_count = int(snapshot.get("open_position_count") or 0)
+            closed_positions = list(snapshot.get("closed_positions") or [])
+            total_closed_position_count = int(
+                snapshot.get("total_closed_position_count")
+                if snapshot.get("total_closed_position_count") is not None
+                else len(closed_positions)
+            )
+            snapshot_source = "positions_repository_profit_status_snapshot"
+        else:
+            open_positions = POSITIONS_REPOSITORY.list_positions("open")
+            closed_positions = POSITIONS_REPOSITORY.list_positions("closed")
+            open_position_count = len(open_positions)
+            total_closed_position_count = len(closed_positions)
+            snapshot_source = "positions_repository"
+    except Exception as exc:
+        check.update(
+            {
+                "available": False,
+                "error_message": str(exc),
+                "open_position_count": 0,
+                "total_closed_position_count": 0,
+                "closed_position_count": 0,
+                "required_closed_position_count": required_closed_int,
+                "tracking_required": required_closed_int > 0,
+                "realized_profitability_ready": None if required_closed_int <= 0 else False,
+            }
+        )
+        return check
+
+    realized_metrics = _realized_position_metrics(list(closed_positions))
+    closed_position_count = int(realized_metrics.get("closed_position_count") or 0)
+    realized_profit_factor = _safe_float(realized_metrics.get("net_profit_factor"))
+    realized_avg_net_pnl_pct = _safe_float(realized_metrics.get("avg_net_pnl_pct"))
+    realized_profitability_ready = (
+        realized_profit_factor is not None
+        and realized_profit_factor >= float(required_profit_factor)
+        and realized_avg_net_pnl_pct is not None
+        and realized_avg_net_pnl_pct > float(required_avg_net_pnl)
+    )
+    check.update(
+        {
+            "available": True,
+            "error_message": None,
+            "open_position_count": open_position_count,
+            "total_closed_position_count": total_closed_position_count,
+            "closed_position_count": closed_position_count,
+            "required_closed_position_count": required_closed_int,
+            "tracking_required": required_closed_int > 0,
+            "runtime_snapshot_source": snapshot_source,
+            "exact_contract_closed_count": realized_metrics.get("exact_contract_closed_count"),
+            "non_proof_closed_position_count": realized_metrics.get("non_proof_closed_position_count"),
+            "net_profit_factor": realized_profit_factor,
+            "required_net_profit_factor": float(required_profit_factor),
+            "avg_net_pnl_pct": realized_avg_net_pnl_pct,
+            "required_avg_net_pnl_pct_gt": float(required_avg_net_pnl),
+            "realized_profitability_ready": (
+                realized_profitability_ready if required_closed_int > 0 else None
+            ),
+        }
+    )
+    return check
+
+
+def _with_current_tracked_positions_health(status_view: dict[str, Any]) -> dict[str, Any]:
+    current = copy.deepcopy(dict(status_view or {}))
+    measurement_gate = copy.deepcopy(dict(current.get("measurement_gate") or {}))
+    checks = copy.deepcopy(dict(measurement_gate.get("checks") or {}))
+    base_tracked_check = checks.get("tracked_positions")
+    checks["tracked_positions"] = _current_tracked_positions_health_check(
+        base_tracked_check if isinstance(base_tracked_check, dict) else None
+    )
+    measurement_gate["checks"] = checks
+    current["measurement_gate"] = measurement_gate
+    return current
 
 
 @contextlib.contextmanager
@@ -773,6 +920,225 @@ def _annotate_share_safety(row: dict[str, Any]) -> dict[str, Any]:
 
 def _annotate_share_safety_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [_annotate_share_safety(dict(row)) for row in list(rows or [])]
+
+
+_SOURCE_PICK_LIST_KEYS = {
+    "ai_commodity_bucket",
+    "approximation_only",
+    "cohort_id",
+    "comparable_contract",
+    "contract_symbol",
+    "date",
+    "direction",
+    "entry_execution_basis",
+    "entry_execution_price",
+    "expiry",
+    "original_logged_expiry",
+    "playbook",
+    "playbook_id",
+    "playbook_label",
+    "promotion_class",
+    "quote_basis",
+    "quote_freshness_status",
+    "quote_time_et",
+    "quote_time_utc",
+    "research_only",
+    "resolved_listed_expiry",
+    "scan_date",
+    "selection_source",
+    "short_contract_symbol",
+    "short_strike",
+    "signal_date",
+    "strategy_comment",
+    "strategy_label",
+    "strategy_type",
+    "strike",
+    "strike_est",
+    "ticker",
+    "trade_date",
+}
+_CLOSED_SOURCE_PICK_LIST_KEYS = {
+    "ai_commodity_bucket",
+    "cohort_id",
+    "date",
+    "debit_pct_of_width",
+    "direction",
+    "fill_degradation_vs_mid_pct",
+    "net_debit",
+    "playbook",
+    "playbook_id",
+    "playbook_label",
+    "ret5",
+    "scan_date",
+    "signal_date",
+    "spread_width",
+    "strategy_comment",
+    "strategy_label",
+    "trade_date",
+    "quote_time_et",
+    "quote_time_utc",
+    "worst_leg_bid_ask_spread_pct",
+    "worst_leg_spread_pct",
+}
+_CLOSED_SOURCE_LIQUIDITY_DERIVED_KEYS = {
+    "fill_degradation_vs_mid_pct",
+    "worst_leg_bid_ask_spread_pct",
+}
+_ENTRY_QUOTE_LIST_KEYS = {
+    "captured_at_et",
+    "captured_at_utc",
+    "resolved_listed_expiry",
+}
+_LATEST_REVIEW_LIST_KEYS = {
+    "current_option_price",
+    "current_pnl_pct",
+    "exit_execution_basis",
+    "exit_execution_price",
+    "fee_total_usd",
+    "gross_pnl_pct",
+    "net_pnl_pct",
+    "pricing_source",
+    "recommendation",
+    "reviewed_at",
+    "warnings",
+}
+_COMPACT_LIST_NOTES_MAX_CHARS = 240
+_COMPACT_CLOSED_LIST_NOTES_MAX_CHARS = 96
+_COMPACT_LIST_DROP_KEYS = {
+    "created_at",
+    "share_review_age_minutes",
+    "share_reviewed_at",
+    "source_scan_event_key",
+    "source_scan_recorded_at_utc",
+    "source_scan_run_id",
+    "updated_at",
+}
+_COMPACT_CLOSED_LIST_DROP_KEYS = {
+    "exact_contract_symbol",
+    "last_recommendation_reason",
+    "share_review_age_minutes",
+    "share_reviewed_at",
+    "share_safe_exact_live",
+    "share_safe_reason",
+}
+
+
+def _compact_source_pick_snapshot(
+    source: dict[str, Any],
+    *,
+    include_entry_quote: bool = True,
+    closed_row: bool = False,
+) -> dict[str, Any]:
+    list_keys = _CLOSED_SOURCE_PICK_LIST_KEYS if closed_row else _SOURCE_PICK_LIST_KEYS
+    compact = {
+        key: copy.deepcopy(value)
+        for key, value in source.items()
+        if key in list_keys
+    }
+    if closed_row:
+        liquidity = source.get("spread_liquidity")
+        if isinstance(liquidity, dict):
+            for key in _CLOSED_SOURCE_LIQUIDITY_DERIVED_KEYS:
+                if compact.get(key) is None and liquidity.get(key) is not None:
+                    compact[key] = copy.deepcopy(liquidity.get(key))
+            if compact.get("fill_degradation_vs_mid_pct") is None:
+                entry_debit = _safe_float(liquidity.get("spread_entry_debit"))
+                mid_debit = _safe_float(liquidity.get("spread_mid_debit"))
+                if entry_debit is not None and mid_debit is not None and mid_debit > 0:
+                    compact["fill_degradation_vs_mid_pct"] = max((entry_debit / mid_debit - 1) * 100, 0)
+            if compact.get("worst_leg_bid_ask_spread_pct") is None:
+                values: list[float] = []
+                for prefix in ("long", "short"):
+                    bid = _safe_float(liquidity.get(f"{prefix}_bid"))
+                    ask = _safe_float(liquidity.get(f"{prefix}_ask"))
+                    if bid is None or ask is None:
+                        continue
+                    mid = (bid + ask) / 2
+                    if mid > 0:
+                        values.append(max(((ask - bid) / mid) * 100, 0))
+                if values:
+                    compact["worst_leg_bid_ask_spread_pct"] = max(values)
+    entry_quote = source.get("entry_quote_snapshot")
+    if include_entry_quote and isinstance(entry_quote, dict):
+        compact["entry_quote_snapshot"] = {
+            key: copy.deepcopy(value)
+            for key, value in entry_quote.items()
+            if key in _ENTRY_QUOTE_LIST_KEYS
+        }
+    return compact
+
+
+def _compact_position_evidence(row: dict[str, Any], source: dict[str, Any]) -> dict[str, bool]:
+    raw_values = [
+        row.get("proof_class"),
+        row.get("proof_class_reason"),
+        row.get("proof_ineligibility_reason"),
+        row.get("notes"),
+        source.get("pricing_evidence_class"),
+        source.get("profitability_evidence_class"),
+        source.get("production_filter_action"),
+        source.get("source_separation"),
+        source.get("promotion_class"),
+        source.get("selection_source"),
+        source.get("event_type"),
+        source.get("candidate_execution_label"),
+        source.get("backfill_audit_id"),
+        source.get("position_migration_id"),
+        source.get("market_data_source"),
+        source.get("status"),
+    ]
+    evidence_values = [str(value).strip().lower() for value in raw_values if str(value or "").strip()]
+    compact = {
+        "migrated_paper": bool(source.get("position_migration_id") or source.get("position_migrated_at_utc")),
+        "research_backfill": bool(source.get("research_only")) or any(
+            any(token in value for token in ("backfill", "research", "historical_replay", "historical_selection"))
+            for value in evidence_values
+        ),
+        "comparable_contract": bool(source.get("comparable_contract")),
+        "approximation_only": bool(source.get("approximation_only")),
+    }
+    return {key: value for key, value in compact.items() if value}
+
+
+def _compact_latest_review(review: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: copy.deepcopy(value)
+        for key, value in review.items()
+        if key in _LATEST_REVIEW_LIST_KEYS
+    }
+
+
+def _compact_position_list_row(row: dict[str, Any]) -> dict[str, Any]:
+    compact = dict(row)
+    is_closed = str(compact.get("status") or "").strip().lower() == "closed"
+    for key in _COMPACT_LIST_DROP_KEYS:
+        compact.pop(key, None)
+    if is_closed:
+        for key in _COMPACT_CLOSED_LIST_DROP_KEYS:
+            compact.pop(key, None)
+        compact.pop("latest_review", None)
+    notes = compact.get("notes")
+    max_notes = _COMPACT_CLOSED_LIST_NOTES_MAX_CHARS if is_closed else _COMPACT_LIST_NOTES_MAX_CHARS
+    if isinstance(notes, str) and len(notes) > max_notes:
+        compact["notes"] = notes[:max_notes]
+    source = compact.get("source_pick_snapshot")
+    if isinstance(source, dict):
+        compact_evidence = _compact_position_evidence(compact, source)
+        if compact_evidence:
+            compact["compact_evidence"] = compact_evidence
+        compact["source_pick_snapshot"] = _compact_source_pick_snapshot(
+            source,
+            include_entry_quote=not is_closed,
+            closed_row=is_closed,
+        )
+    review = compact.get("latest_review")
+    if isinstance(review, dict):
+        compact["latest_review"] = _compact_latest_review(review)
+    return compact
+
+
+def _compact_position_list_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [_compact_position_list_row(row) for row in list(rows or [])]
 
 
 def _scan_run_id() -> str:
@@ -1502,6 +1868,26 @@ def _parse_position_ids(raw_ids: Any) -> list[int] | None:
     return parsed
 
 
+def _parse_result_window(limit: int | None, offset: int) -> tuple[int | None, int]:
+    if isinstance(limit, bool) or isinstance(offset, bool):
+        raise ValueError("limit and offset must be integers.")
+    if limit is None:
+        if offset:
+            raise ValueError("offset requires limit.")
+        return None, 0
+    if limit <= 0 or limit > 1000:
+        raise ValueError("limit must be between 1 and 1000.")
+    if offset < 0:
+        raise ValueError("offset must be greater than or equal to 0.")
+    return limit, offset
+
+
+def _page_metadata(rows: list[dict[str, Any]], limit: int | None, offset: int) -> dict[str, int] | None:
+    if limit is None:
+        return None
+    return {"limit": limit, "offset": offset, "returned": len(rows)}
+
+
 def _summary_float(value: Any) -> float | None:
     try:
         if value is None:
@@ -1872,7 +2258,13 @@ async def create_position_endpoint(body: dict[str, Any]):
 
 
 @app.get("/api/positions")
-async def list_positions_endpoint(status: str = "open", grouped: bool = False):
+async def list_positions_endpoint(
+    status: str = "open",
+    grouped: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
+    compact: bool = False,
+):
     """Return tracked options positions from local Postgres."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -1881,11 +2273,29 @@ async def list_positions_endpoint(status: str = "open", grouped: bool = False):
         raise HTTPException(400, "status must be one of: open, closed, all")
 
     try:
+        limit, offset = _parse_result_window(limit, offset)
         query_status = None if status == "all" else status
-        positions = _annotate_share_safety_rows(POSITIONS_REPOSITORY.list_positions(query_status))
+        compact_closed_list = compact and not grouped and query_status == "closed"
+        if compact_closed_list and callable(getattr(POSITIONS_REPOSITORY, "list_compact_positions", None)):
+            positions = POSITIONS_REPOSITORY.list_compact_positions(query_status, limit=limit, offset=offset)
+        else:
+            positions = _annotate_share_safety_rows(
+                POSITIONS_REPOSITORY.list_positions(query_status, limit=limit, offset=offset)
+            )
+        if compact:
+            positions = _compact_position_list_rows(positions)
+        page = _page_metadata(positions, limit, offset)
         if grouped:
-            return _group_rows_by_status(positions)
-        return {"positions": positions}
+            payload = _group_rows_by_status(positions)
+            if page is not None:
+                payload["page"] = page
+            return payload
+        payload = {"positions": positions}
+        if page is not None:
+            payload["page"] = page
+        return payload
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -2030,7 +2440,13 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
 
 
 @app.get("/api/suggested-trades")
-async def list_suggested_trades_endpoint(status: str = "open", grouped: bool = False):
+async def list_suggested_trades_endpoint(
+    status: str = "open",
+    grouped: bool = False,
+    limit: int | None = None,
+    offset: int = 0,
+    compact: bool = False,
+):
     """Return hypothetical scanner trades tracked in local SQLite."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -2039,11 +2455,25 @@ async def list_suggested_trades_endpoint(status: str = "open", grouped: bool = F
         raise HTTPException(400, "status must be one of: open, closed, all")
 
     try:
+        limit, offset = _parse_result_window(limit, offset)
         query_status = None if status == "all" else status
-        trades = _annotate_share_safety_rows(SUGGESTED_TRADES_REPOSITORY.list_positions(query_status))
+        trades = _annotate_share_safety_rows(
+            SUGGESTED_TRADES_REPOSITORY.list_positions(query_status, limit=limit, offset=offset)
+        )
+        if compact:
+            trades = _compact_position_list_rows(trades)
+        page = _page_metadata(trades, limit, offset)
         if grouped:
-            return _group_rows_by_status(trades)
-        return {"trades": trades}
+            payload = _group_rows_by_status(trades)
+            if page is not None:
+                payload["page"] = page
+            return payload
+        payload = {"trades": trades}
+        if page is not None:
+            payload["page"] = page
+        return payload
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     except Exception as exc:
         raise HTTPException(500, str(exc))
 

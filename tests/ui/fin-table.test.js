@@ -55,13 +55,39 @@ test("FinTable mobile cards use explicit title, subtitle, priority, and hidden c
       mobileSubtitleCol: "Live P&L",
       mobilePriorityCols: ["Trade", "Entry"],
       mobileHiddenCols: ["Source"],
+      renderMode: "mobile",
     })
   );
-  const mobileHtml = html.slice(0, html.indexOf("<table"));
+  const mobileHtml = html;
 
   assert.match(mobileHtml, /ft-mobile-title[^>]*>AAPL/);
   assert.match(mobileHtml, /ft-mobile-subtitle[^>]*>\+12\.0%/);
   assert.ok(mobileHtml.indexOf(">Trade<") < mobileHtml.indexOf(">Entry<"));
   assert.doesNotMatch(mobileHtml, /desktop-only source detail/);
   assert.match(mobileHtml, /<button>Review<\/button>/);
+});
+
+test("FinTable renders only one responsive surface at a time", () => {
+  const FinTable = loadFinTable();
+  const data = [
+    {
+      Ticker: "AAPL",
+      Trade: "CALL",
+      Action: React.createElement("button", null, "Review"),
+    },
+  ];
+
+  const desktopHtml = ReactDOMServer.renderToStaticMarkup(
+    React.createElement(FinTable, { data, renderMode: "desktop" })
+  );
+  assert.match(desktopHtml, /<table class="ft-table"/);
+  assert.doesNotMatch(desktopHtml, /ft-mobile-card/);
+  assert.equal((desktopHtml.match(/<button>Review<\/button>/g) || []).length, 1);
+
+  const mobileHtml = ReactDOMServer.renderToStaticMarkup(
+    React.createElement(FinTable, { data, renderMode: "mobile" })
+  );
+  assert.match(mobileHtml, /ft-mobile-card/);
+  assert.doesNotMatch(mobileHtml, /<table class="ft-table"/);
+  assert.equal((mobileHtml.match(/<button>Review<\/button>/g) || []).length, 1);
 });

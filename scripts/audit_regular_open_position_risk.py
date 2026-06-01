@@ -21,6 +21,7 @@ from scripts.analyze_trading_desk_profitability_guardrails import canonical_lane
 from scripts.audit_trading_desk_negative_trade_decisions import _record_class, _review_is_executable, _review_pnl
 
 
+DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
 REGULAR_SUPERVISED_LANES = {
     "short_term",
     "swing",
@@ -107,6 +108,54 @@ def _action_bucket(row: dict[str, Any]) -> str:
     return "hold_or_positive"
 
 
+def _metric(review: dict[str, Any] | None, key: str) -> Any:
+    if not isinstance(review, dict):
+        return None
+    metrics = review.get("metrics_snapshot")
+    if isinstance(metrics, dict) and key in metrics:
+        return metrics.get(key)
+    return review.get(key)
+
+
+def _actionable_next_step(action_bucket: str) -> str:
+    if action_bucket == "stored_executable_sell":
+        return "state_changing_review_should_auto_close_or_manual_close_with_executable_quote"
+    if action_bucket == "stored_non_executable_sell":
+        return "do_not_auto_close_from_display_only_mark_rerun_explicit_review_during_fresh_executable_quote_window"
+    if action_bucket == "below_configured_stop_mark":
+        return "do_not_close_from_mark_alone_get_executable_review_quote_before_exit"
+    return "monitor"
+
+
+def _actionable_position_detail(row: dict[str, Any], *, now: datetime, stale_hours: float) -> dict[str, Any]:
+    review = _latest_review(row)
+    action_bucket = _action_bucket(row)
+    warnings = list(review.get("warnings") or []) if isinstance(review, dict) else []
+    return {
+        "id": row.get("id"),
+        "ticker": row.get("ticker"),
+        "lane": canonical_lane(row),
+        "record_class": _record_class(row),
+        "status": row.get("status"),
+        "action_bucket": action_bucket,
+        "evidence_bucket": _evidence_bucket(row, now=now, stale_hours=stale_hours),
+        "last_reviewed_at": row.get("last_reviewed_at") or (review or {}).get("reviewed_at"),
+        "recommendation": (review or {}).get("recommendation") or row.get("last_recommendation"),
+        "reason": (review or {}).get("reason"),
+        "pricing_source": (review or {}).get("pricing_source"),
+        "pricing_state": (review or {}).get("pricing_state") or _metric(review, "pricing_state"),
+        "current_option_price": _safe_float((review or {}).get("current_option_price")),
+        "current_pnl_pct": _review_pnl(review or {}),
+        "mark_pnl_pct": pnl_pct(row),
+        "exit_execution_price": _safe_float((review or {}).get("exit_execution_price")),
+        "exit_execution_basis": (review or {}).get("exit_execution_basis"),
+        "price_trigger_ok": bool(_metric(review, "price_trigger_ok")),
+        "warning_count": len(warnings),
+        "first_warning": warnings[0] if warnings else None,
+        "next_safe_action": _actionable_next_step(action_bucket),
+    }
+
+
 def _summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
     values = [value for value in (pnl_pct(row) for row in rows) if value is not None]
     return {
@@ -154,6 +203,10 @@ def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> di
         "evidence_counts": dict(sorted(evidence_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "actionable_position_ids": [row.get("id") for row in actionable],
+        "actionable_positions": [
+            _actionable_position_detail(row, now=now, stale_hours=stale_hours)
+            for row in actionable
+        ],
         "top_negative_open_positions": [
             {
                 "id": row.get("id"),
@@ -171,16 +224,33 @@ def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> di
     }
 
 
+def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR) -> dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    json_path = output_dir / f"regular_open_position_risk_{stamp}.json"
+    latest_json = output_dir / "regular_open_position_risk_latest.json"
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    json_path.write_text(payload + "\n", encoding="utf8")
+    latest_json.write_text(payload + "\n", encoding="utf8")
+    return {"json": str(json_path), "latest_json": str(latest_json)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Read-only audit of open regular supervised tracked-position risk."
     )
     parser.add_argument("--stale-hours", type=float, default=24.0)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--json", action="store_true", help="Print the full report JSON.")
+    parser.add_argument("--no-write", action="store_true", help="Run without writing latest JSON artifacts.")
     args = parser.parse_args(argv)
     report = build_report(load_positions(), stale_hours=args.stale_hours)
+    artifacts = None if args.no_write else write_outputs(report, output_dir=args.output_dir)
     if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
+        payload: dict[str, Any] = {"report": report}
+        if artifacts:
+            payload["artifacts"] = artifacts
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         print(
             json.dumps(
@@ -189,7 +259,9 @@ def main(argv: list[str] | None = None) -> int:
                     "evidence_counts": report["evidence_counts"],
                     "action_counts": report["action_counts"],
                     "actionable_position_ids": report["actionable_position_ids"],
+                    "actionable_positions": report["actionable_positions"],
                     "top_negative_open_positions": report["top_negative_open_positions"][:10],
+                    "artifacts": artifacts,
                 },
                 indent=2,
                 sort_keys=True,

@@ -103,9 +103,20 @@ class SuggestedTradesApiTests(unittest.TestCase):
 
         list_open_response = self.client.get("/api/suggested-trades", params={"status": "open"})
         self.assertEqual(list_open_response.status_code, 200)
+        self.assertGreaterEqual(float(list_open_response.headers["x-python-backend-duration-ms"]), 0.0)
         open_payload = list_open_response.json()
         self.assertEqual(len(open_payload["trades"]), 1)
         self.assertEqual(open_payload["trades"][0]["status"], "open")
+
+        paged_open_response = self.client.get("/api/suggested-trades", params={"status": "open", "limit": 1})
+        self.assertEqual(paged_open_response.status_code, 200)
+        paged_open_payload = paged_open_response.json()
+        self.assertEqual(len(paged_open_payload["trades"]), 1)
+        self.assertEqual(paged_open_payload["page"], {"limit": 1, "offset": 0, "returned": 1})
+
+        invalid_window_response = self.client.get("/api/suggested-trades", params={"status": "open", "offset": 1})
+        self.assertEqual(invalid_window_response.status_code, 400)
+        self.assertEqual(invalid_window_response.json()["detail"], "offset requires limit.")
 
         grouped_open_response = self.client.get("/api/suggested-trades", params={"status": "all", "grouped": 1})
         self.assertEqual(grouped_open_response.status_code, 200)

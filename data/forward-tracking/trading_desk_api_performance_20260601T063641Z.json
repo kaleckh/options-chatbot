@@ -1,0 +1,620 @@
+{
+  "base_urls": {
+    "frontend": "http://127.0.0.1:3013",
+    "python_backend": "http://127.0.0.1:8113"
+  },
+  "endpoints": [
+    {
+      "backend_duration_ms": 26.0,
+      "elapsed_ms": 80.9,
+      "label": "next_tracked_positions_open",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": null,
+      "path": "/api/positions?status=open&compact=1",
+      "payload_bytes": 139105,
+      "payload_sha256": "a300fcb73c3fff3a66918318f7c0e3a25bca713aeda559fb904d96c0ff8893d6",
+      "read_only": true,
+      "record_class": "tracked_position",
+      "response_shape": {
+        "page": null,
+        "row_count": 48,
+        "top_level_keys": [
+          "positions"
+        ]
+      },
+      "row_count": 48,
+      "status_code": 200,
+      "target": "next_route",
+      "url": "http://127.0.0.1:3013/api/positions?status=open&compact=1",
+      "window": {
+        "compact": "1",
+        "status": "open"
+      }
+    },
+    {
+      "backend_duration_ms": 34.3,
+      "elapsed_ms": 54.3,
+      "label": "next_tracked_positions_closed_page_100",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 100
+      },
+      "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 170715,
+      "payload_sha256": "baa1fc84f4f0177ab0ffd63f37e54bbca0683fbdabce54fda08b39e1efc1cc0d",
+      "read_only": true,
+      "record_class": "tracked_position",
+      "response_shape": {
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 100
+        },
+        "row_count": 100,
+        "top_level_keys": [
+          "page",
+          "positions"
+        ]
+      },
+      "row_count": 100,
+      "status_code": 200,
+      "target": "next_route",
+      "url": "http://127.0.0.1:3013/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "window": {
+        "compact": "1",
+        "limit": "100",
+        "offset": "0",
+        "status": "closed"
+      }
+    },
+    {
+      "backend_duration_ms": 2.0,
+      "elapsed_ms": 230.6,
+      "label": "next_suggested_trades_open",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": null,
+      "path": "/api/suggested-trades?status=open&compact=1",
+      "payload_bytes": 1368,
+      "payload_sha256": "d4bfcbbc8cde42cf2801c6205ce42321426ecbf6f9c86396b118e15174662fc7",
+      "read_only": true,
+      "record_class": "suggested_trade",
+      "response_shape": {
+        "page": null,
+        "row_count": 1,
+        "top_level_keys": [
+          "trades"
+        ]
+      },
+      "row_count": 1,
+      "status_code": 200,
+      "target": "next_route",
+      "url": "http://127.0.0.1:3013/api/suggested-trades?status=open&compact=1",
+      "window": {
+        "compact": "1",
+        "status": "open"
+      }
+    },
+    {
+      "backend_duration_ms": 1.6,
+      "elapsed_ms": 30.1,
+      "label": "next_suggested_trades_closed_page_100",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 1
+      },
+      "path": "/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 1087,
+      "payload_sha256": "c7187f9c932927095276103d0ff5412fe9b955693ae54588f7fbfd464a9bebec",
+      "read_only": true,
+      "record_class": "suggested_trade",
+      "response_shape": {
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 1
+        },
+        "row_count": 1,
+        "top_level_keys": [
+          "page",
+          "trades"
+        ]
+      },
+      "row_count": 1,
+      "status_code": 200,
+      "target": "next_route",
+      "url": "http://127.0.0.1:3013/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+      "window": {
+        "compact": "1",
+        "limit": "100",
+        "offset": "0",
+        "status": "closed"
+      }
+    },
+    {
+      "backend_duration_ms": 38.3,
+      "elapsed_ms": 215.7,
+      "label": "next_options_profit_status",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "proof_status",
+      "ok": true,
+      "page": null,
+      "path": "/api/options-profit/status",
+      "payload_bytes": 9508,
+      "payload_sha256": "ead989c9870c1750667aabced4f2416a768848bd317ca3c54fb833a1d15ed45d",
+      "read_only": true,
+      "record_class": "proof_status",
+      "response_shape": {
+        "page": null,
+        "row_count": null,
+        "top_level_keys": [
+          "active_incumbents",
+          "blockers",
+          "candidate_rankings",
+          "current_canary",
+          "daily_truth_refresh",
+          "generated_at",
+          "last_decision",
+          "measurement_gate"
+        ]
+      },
+      "row_count": null,
+      "status_code": 200,
+      "target": "next_route",
+      "url": "http://127.0.0.1:3013/api/options-profit/status",
+      "window": {}
+    },
+    {
+      "backend_duration_ms": 24.7,
+      "elapsed_ms": 26.4,
+      "label": "backend_tracked_positions_open",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": null,
+      "path": "/api/positions?status=open&compact=1",
+      "payload_bytes": 139603,
+      "payload_sha256": "808a9f0f0794c83c792cdd5349fce07207f79aa1dbb6bc4ee233ee0223e765d0",
+      "read_only": true,
+      "record_class": "tracked_position",
+      "response_shape": {
+        "page": null,
+        "row_count": 48,
+        "top_level_keys": [
+          "positions"
+        ]
+      },
+      "row_count": 48,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/positions?status=open&compact=1",
+      "window": {
+        "compact": "1",
+        "status": "open"
+      }
+    },
+    {
+      "backend_duration_ms": 34.6,
+      "elapsed_ms": 57.9,
+      "label": "backend_tracked_positions_closed_page_100",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 100
+      },
+      "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 171667,
+      "payload_sha256": "bcef1c6d78562ba178dbbbbc4bf5d1a15ed34582a4e6dede9c4f735bf1ae44d1",
+      "read_only": true,
+      "record_class": "tracked_position",
+      "response_shape": {
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 100
+        },
+        "row_count": 100,
+        "top_level_keys": [
+          "page",
+          "positions"
+        ]
+      },
+      "row_count": 100,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "window": {
+        "compact": "1",
+        "limit": "100",
+        "offset": "0",
+        "status": "closed"
+      }
+    },
+    {
+      "backend_duration_ms": 1.8,
+      "elapsed_ms": 3.2,
+      "label": "backend_suggested_trades_open",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": null,
+      "path": "/api/suggested-trades?status=open&compact=1",
+      "payload_bytes": 1372,
+      "payload_sha256": "771157a0098fcc967527b8e852220ab26b1f2c7b81f206847be24cf747f840d2",
+      "read_only": true,
+      "record_class": "suggested_trade",
+      "response_shape": {
+        "page": null,
+        "row_count": 1,
+        "top_level_keys": [
+          "trades"
+        ]
+      },
+      "row_count": 1,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/suggested-trades?status=open&compact=1",
+      "window": {
+        "compact": "1",
+        "status": "open"
+      }
+    },
+    {
+      "backend_duration_ms": 1.5,
+      "elapsed_ms": 2.7,
+      "label": "backend_suggested_trades_closed_page_100",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "trading_desk_rows",
+      "ok": true,
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 1
+      },
+      "path": "/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 1095,
+      "payload_sha256": "6d2aa0931ef8f4c049ddfd01ee2be7ae880a5bb23243c011f7c4494bf57a3ec3",
+      "read_only": true,
+      "record_class": "suggested_trade",
+      "response_shape": {
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 1
+        },
+        "row_count": 1,
+        "top_level_keys": [
+          "page",
+          "trades"
+        ]
+      },
+      "row_count": 1,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+      "window": {
+        "compact": "1",
+        "limit": "100",
+        "offset": "0",
+        "status": "closed"
+      }
+    },
+    {
+      "backend_duration_ms": 49.1,
+      "elapsed_ms": 51.0,
+      "label": "backend_options_profit_status",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "proof_status",
+      "ok": true,
+      "page": null,
+      "path": "/api/options-profit/status",
+      "payload_bytes": 9514,
+      "payload_sha256": "b748fbf7d0c3bd5f21333289a7a32060e522ed905c311017243c08b3366cc599",
+      "read_only": true,
+      "record_class": "proof_status",
+      "response_shape": {
+        "page": null,
+        "row_count": null,
+        "top_level_keys": [
+          "active_incumbents",
+          "blockers",
+          "candidate_rankings",
+          "current_canary",
+          "daily_truth_refresh",
+          "generated_at",
+          "last_decision",
+          "measurement_gate"
+        ]
+      },
+      "row_count": null,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/options-profit/status",
+      "window": {}
+    },
+    {
+      "backend_duration_ms": 0.9,
+      "cache_stats": {
+        "memory_cache_entries": 0,
+        "memory_cache_families": {},
+        "request_scope_active": false,
+        "request_scope_entries": 0,
+        "schema_initialized": false,
+        "status": "ok",
+        "totals": {}
+      },
+      "elapsed_ms": 2.4,
+      "label": "backend_market_data_cache_stats",
+      "lane": "regular_supervised_options",
+      "method": "GET",
+      "metric_type": "market_data_cache_stats",
+      "ok": true,
+      "page": null,
+      "path": "/api/market-data/cache-stats",
+      "payload_bytes": 504,
+      "payload_sha256": "1915e458a5a3d8e69a60722e1dde3783b8718461105c5e966693fa1c10cb1e71",
+      "read_only": true,
+      "record_class": "market_data_cache",
+      "response_shape": {
+        "page": null,
+        "row_count": null,
+        "top_level_keys": [
+          "db_exists",
+          "db_path",
+          "generated_at",
+          "memory_cache_entries",
+          "memory_cache_families",
+          "policy",
+          "request_scope_active",
+          "request_scope_entries",
+          "schema_initialized",
+          "stats",
+          "status",
+          "totals"
+        ]
+      },
+      "row_count": null,
+      "status_code": 200,
+      "target": "python_backend",
+      "url": "http://127.0.0.1:8113/api/market-data/cache-stats",
+      "window": {}
+    }
+  ],
+  "generated_at_utc": "2026-06-01T06:36:41Z",
+  "read_only": true,
+  "scope": "trading_desk_api_performance_audit",
+  "summary": {
+    "backend_max_duration_ms": 49.1,
+    "backend_max_elapsed_ms": 57.9,
+    "cache_stats": {
+      "memory_cache_entries": 0,
+      "memory_cache_families": {},
+      "request_scope_active": false,
+      "request_scope_entries": 0,
+      "schema_initialized": false,
+      "status": "ok",
+      "totals": {}
+    },
+    "endpoint_count": 11,
+    "error_endpoint_count": 0,
+    "frontend_max_elapsed_ms": 230.6,
+    "frontend_total_payload_bytes": 321783,
+    "largest_payload_endpoint": {
+      "backend_duration_ms": 34.6,
+      "elapsed_ms": 57.9,
+      "label": "backend_tracked_positions_closed_page_100",
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 100
+      },
+      "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 171667,
+      "row_count": 100,
+      "status_code": 200,
+      "target": "python_backend"
+    },
+    "ok_endpoint_count": 11,
+    "routes": [
+      {
+        "backend_duration_ms": 26.0,
+        "elapsed_ms": 80.9,
+        "label": "next_tracked_positions_open",
+        "page": null,
+        "path": "/api/positions?status=open&compact=1",
+        "payload_bytes": 139105,
+        "row_count": 48,
+        "status_code": 200,
+        "target": "next_route"
+      },
+      {
+        "backend_duration_ms": 34.3,
+        "elapsed_ms": 54.3,
+        "label": "next_tracked_positions_closed_page_100",
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 100
+        },
+        "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+        "payload_bytes": 170715,
+        "row_count": 100,
+        "status_code": 200,
+        "target": "next_route"
+      },
+      {
+        "backend_duration_ms": 2.0,
+        "elapsed_ms": 230.6,
+        "label": "next_suggested_trades_open",
+        "page": null,
+        "path": "/api/suggested-trades?status=open&compact=1",
+        "payload_bytes": 1368,
+        "row_count": 1,
+        "status_code": 200,
+        "target": "next_route"
+      },
+      {
+        "backend_duration_ms": 1.6,
+        "elapsed_ms": 30.1,
+        "label": "next_suggested_trades_closed_page_100",
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 1
+        },
+        "path": "/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+        "payload_bytes": 1087,
+        "row_count": 1,
+        "status_code": 200,
+        "target": "next_route"
+      },
+      {
+        "backend_duration_ms": 38.3,
+        "elapsed_ms": 215.7,
+        "label": "next_options_profit_status",
+        "page": null,
+        "path": "/api/options-profit/status",
+        "payload_bytes": 9508,
+        "row_count": null,
+        "status_code": 200,
+        "target": "next_route"
+      },
+      {
+        "backend_duration_ms": 24.7,
+        "elapsed_ms": 26.4,
+        "label": "backend_tracked_positions_open",
+        "page": null,
+        "path": "/api/positions?status=open&compact=1",
+        "payload_bytes": 139603,
+        "row_count": 48,
+        "status_code": 200,
+        "target": "python_backend"
+      },
+      {
+        "backend_duration_ms": 34.6,
+        "elapsed_ms": 57.9,
+        "label": "backend_tracked_positions_closed_page_100",
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 100
+        },
+        "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+        "payload_bytes": 171667,
+        "row_count": 100,
+        "status_code": 200,
+        "target": "python_backend"
+      },
+      {
+        "backend_duration_ms": 1.8,
+        "elapsed_ms": 3.2,
+        "label": "backend_suggested_trades_open",
+        "page": null,
+        "path": "/api/suggested-trades?status=open&compact=1",
+        "payload_bytes": 1372,
+        "row_count": 1,
+        "status_code": 200,
+        "target": "python_backend"
+      },
+      {
+        "backend_duration_ms": 1.5,
+        "elapsed_ms": 2.7,
+        "label": "backend_suggested_trades_closed_page_100",
+        "page": {
+          "limit": 100,
+          "offset": 0,
+          "returned": 1
+        },
+        "path": "/api/suggested-trades?status=closed&limit=100&offset=0&compact=1",
+        "payload_bytes": 1095,
+        "row_count": 1,
+        "status_code": 200,
+        "target": "python_backend"
+      },
+      {
+        "backend_duration_ms": 49.1,
+        "elapsed_ms": 51.0,
+        "label": "backend_options_profit_status",
+        "page": null,
+        "path": "/api/options-profit/status",
+        "payload_bytes": 9514,
+        "row_count": null,
+        "status_code": 200,
+        "target": "python_backend"
+      },
+      {
+        "backend_duration_ms": 0.9,
+        "elapsed_ms": 2.4,
+        "label": "backend_market_data_cache_stats",
+        "page": null,
+        "path": "/api/market-data/cache-stats",
+        "payload_bytes": 504,
+        "row_count": null,
+        "status_code": 200,
+        "target": "python_backend"
+      }
+    ],
+    "slowest_backend_duration_endpoint": {
+      "backend_duration_ms": 49.1,
+      "elapsed_ms": 51.0,
+      "label": "backend_options_profit_status",
+      "page": null,
+      "path": "/api/options-profit/status",
+      "payload_bytes": 9514,
+      "row_count": null,
+      "status_code": 200,
+      "target": "python_backend"
+    },
+    "slowest_backend_endpoint": {
+      "backend_duration_ms": 34.6,
+      "elapsed_ms": 57.9,
+      "label": "backend_tracked_positions_closed_page_100",
+      "page": {
+        "limit": 100,
+        "offset": 0,
+        "returned": 100
+      },
+      "path": "/api/positions?status=closed&limit=100&offset=0&compact=1",
+      "payload_bytes": 171667,
+      "row_count": 100,
+      "status_code": 200,
+      "target": "python_backend"
+    },
+    "slowest_frontend_endpoint": {
+      "backend_duration_ms": 2.0,
+      "elapsed_ms": 230.6,
+      "label": "next_suggested_trades_open",
+      "page": null,
+      "path": "/api/suggested-trades?status=open&compact=1",
+      "payload_bytes": 1368,
+      "row_count": 1,
+      "status_code": 200,
+      "target": "next_route"
+    },
+    "status": "ok"
+  }
+}

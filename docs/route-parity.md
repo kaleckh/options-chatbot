@@ -133,22 +133,24 @@ These exist in the FastAPI backend but are not mirrored through active Next rout
 Active client components fetch these mounted browser API routes through Next, not FastAPI directly:
 
 - `/api/backtest` from `src/components/strategy/StrategyView.tsx`
-- `/api/backtest/forward-evidence` from `src/components/predictions/PredictionsView.tsx`
+- `/api/backtest/forward-evidence` from `src/components/predictions/useScannerSurface.ts`
 - `/api/backtest/summary` from `src/components/strategy/StrategyView.tsx`
 - `/api/changelog` from `src/components/strategy/StrategyView.tsx`
-- `/api/options-profit/status` from `src/components/predictions/PredictionsView.tsx`
+- `/api/options-profit/status` from `src/components/predictions/useScannerSurface.ts`
 - `/api/positions` from `src/components/predictions/PredictionsView.tsx`
+- `/api/positions` from `src/components/predictions/useTradingDeskRecords.ts`
 - `/api/positions/[param]/close` from `src/components/predictions/PredictionsView.tsx`
-- `/api/positions/review` from `src/components/predictions/PredictionsView.tsx`
+- `/api/positions/review` from `src/components/predictions/useTradingDeskRecords.ts`
 - `/api/predictions` from `src/components/predictions/PredictionsView.tsx`
 - `/api/predictions/grade` from `src/components/predictions/PredictionsView.tsx`
 - `/api/profile` from `src/components/strategy/StrategyView.tsx`
 - `/api/risk-settings` from `src/components/layout/AppShell.tsx`
-- `/api/scan` from `src/components/predictions/PredictionsView.tsx`
+- `/api/scan` from `src/components/predictions/useScannerSurface.ts`
 - `/api/sectors` from `src/components/predictions/PredictionsView.tsx`
 - `/api/suggested-trades` from `src/components/predictions/PredictionsView.tsx`
+- `/api/suggested-trades` from `src/components/predictions/useTradingDeskRecords.ts`
 - `/api/suggested-trades/[param]/close` from `src/components/predictions/PredictionsView.tsx`
-- `/api/suggested-trades/review` from `src/components/predictions/PredictionsView.tsx`
+- `/api/suggested-trades/review` from `src/components/predictions/useTradingDeskRecords.ts`
 
 ## Known Snapshot Caveats
 

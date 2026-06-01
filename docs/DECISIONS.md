@@ -1,5 +1,33 @@
 # Decisions
 
+## 2026-06-01: Use Recent Cohort Health As The Current-Policy Paper-Only Kill Switch
+
+Current-policy replay can be positive in aggregate while the newest cohort is not showable. The Trading Desk should therefore separate `showcase_month` from `recent_month` / `recent_week` before presenting current-policy historical P&L as an active algorithm state.
+
+`scripts/build_current_policy_cohort_health.py` and `docs/current-policy-cohort-health.md` now own that readback. Latest cohort health keeps the April edge visible: `2026-04` has `70` priced current-policy rows at avg `+81.17%`, median `+71.82%`, and `8.6%` negative rate. It also blocks the current claim: `2026-05` has `42` priced rows at avg `+7.49%`, median `-4.6%`, and `54.8%` negative rate, while `2026-W21` has `3` priced rows at avg `-82.06%`, median `-83.61%`, and `100.0%` negative rate. The current overall state is `paper_only_recent_week_break`.
+
+Durable decision: the April cohort can be used as historical evidence of a discovered edge, but current-policy picks should remain paper-only until a fresh recent recovery cohort revalidates them. The UI may show current-policy aggregate P&L, but it must also show showcase month, recent month, recent median, and cohort state so a negative recent regime cannot be hidden by older winners.
+
+## 2026-06-01: Default Closed Trades To Current-Policy Replay, Not Raw Historical P&L
+
+The Trading Desk Closed Trades default is now `Current policy`: rows in the promoted regular repair lanes (`short_term`, `swing`, `bullish_momentum`, and Bullish Pullback) that clear today's promoted entry guardrails and have trusted executable realized P&L. This is the operator-facing answer to "what would the current algorithm still take?" rather than a raw archive of every historical paper/backfill result.
+
+`Realized P&L` remains available as the raw historical-learning view, and `Truth-grade` remains the stricter production-proof view. Historical paper/research rows must not be deleted or rewritten to make the algorithm look better; they are relabeled through `would_take_today`, `blocked_by_current_policy`, `unknown_missing_evidence`, or `out_of_scope_lane` in `scripts/build_current_policy_historical_picks_audit.py` and `docs/current-policy-historical-picks-audit.md`.
+
+The latest replay audited `488` closed rows and `400` current-policy scope rows. The raw realized scope averaged `+4.87%` with `51.8%` negative rate, while the current-policy slice had `112` priced rows at avg `+53.54%`, median `+50.6%`, and `25.9%` negative rate. The learned-away bucket had `274` rows / `243` priced at avg `-17.56%` and `63.8%` negative rate. Treat those numbers as product-side policy replay over historical paper, not live-production proof.
+
+## 2026-06-01: Treat Per-Symbol Sleeves As Evidence Cards, Not Ticker-Specific Strategies
+
+Every tracked regular stock/ETF can have a per-symbol sleeve card under relevant existing lane logic, but those cards are an audit and queue-decision layer rather than permission to data-mine a separate strategy per ticker. The durable hierarchy is lane family -> shared strategy logic -> per-symbol sleeve -> status (`keep`, `watch`, `quarantine`, `rejected`, `needs-paper`, or `not_applicable`).
+
+Use `scripts/build_regular_options_symbol_sleeves.py` before making ticker-specific claims. Its generated JSON under `data/profitability-lab/regular-options-symbol-sleeves/` and report `docs/regular-options-symbol-sleeves.md` must keep `status` separate from `evidence_class`, distinguish exact trusted intraday OPRA/NBBO proof from daily/research/backfill/display-mark evidence, and keep executable exit P&L separate from paper/mark P&L. Queue removals or quarantines from the matrix are recommendations unless scanner/playbook config is explicitly changed in a separate scoped task.
+
+## 2026-06-01: Superseded - Default Closed Trades To Realized P&L, Keep Truth-Grade As Strict Proof
+
+This decision is superseded by the current-policy replay default above. `Realized P&L` remains a first-class filter and still means a closed row with executable entry, trusted executable exit, and calculable realized P&L. It may include historical paper and research/backfill rows when their exits are backed by trusted exact-contract spread evidence.
+
+`Truth-grade` remains available as a stricter production-proof filter. It still excludes historical paper, research/backfill, lifecycle-only, proof-ineligible, and legacy-unclassified rows, even when those rows have trusted realized P&L. Use Truth-grade for live-production accuracy claims; use Realized P&L for operator review and historical learning.
+
 ## 2026-05-31: Realize Historical Backfill P&L At The First Executable Suggested Close
 
 Historical research/backfill tracked positions must use the first executable historical suggested-close point for realized P&L, not a later lifecycle placeholder close. The close must be backed by trusted exact-contract OPRA/NBBO spread evidence for the selected legs. Stop, target, profit-harvest/giveback, and time-exit checks may close a row during historical repair only when the pessimistic executable spread price can be computed from exact bid/ask rows.

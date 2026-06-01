@@ -5,11 +5,57 @@ import contextlib
 import json
 import math
 import sqlite3
+import threading
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from options_execution import commission_total_usd, option_pnl_snapshot
+
+
+class _PostgresConnectionPool:
+    def __init__(self, connect_fn, *, max_size: int = 4):
+        self._connect_fn = connect_fn
+        self._max_size = max(max_size, 1)
+        self._lock = threading.Lock()
+        self._idle = []
+
+    def _acquire(self):
+        with self._lock:
+            while self._idle:
+                conn = self._idle.pop()
+                if not bool(getattr(conn, "closed", False)):
+                    return conn
+        return self._connect_fn()
+
+    def _release(self, conn) -> None:
+        if bool(getattr(conn, "closed", False)):
+            return
+        with self._lock:
+            if len(self._idle) < self._max_size:
+                self._idle.append(conn)
+                return
+        conn.close()
+
+    @contextmanager
+    def connection(self):
+        conn = self._acquire()
+        reusable = True
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            reusable = False
+            with contextlib.suppress(Exception):
+                conn.rollback()
+            raise
+        finally:
+            if reusable:
+                self._release(conn)
+            else:
+                with contextlib.suppress(Exception):
+                    conn.close()
 
 
 def _to_iso(value: Any) -> Any:
@@ -323,7 +369,13 @@ class UnavailableTrackedPositionsRepository:
     def create_position(self, payload: dict[str, Any]) -> dict[str, Any]:
         raise RuntimeError(self.error_message)
 
-    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+    def list_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         raise RuntimeError(self.error_message)
 
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
@@ -352,6 +404,43 @@ class UnavailableTrackedPositionsRepository:
         return 0.0
 
 
+_PROFIT_STATUS_SOURCE_KEYS = (
+    "source_label",
+    "proof_source_label",
+    "market_data_source",
+    "options_market_data_source",
+    "options_data_source",
+    "quote_source",
+    "data_source",
+)
+
+
+_PROFIT_STATUS_POSITION_COLUMNS = """
+    p.contract_symbol,
+    p.contracts,
+    p.entry_option_price,
+    p.entry_execution_price,
+    p.entry_fee_total_usd,
+    p.exit_option_price,
+    p.exit_execution_price,
+    p.gross_pnl_pct,
+    p.net_pnl_pct,
+    p.gross_pnl_usd,
+    p.net_pnl_usd,
+    p.fee_total_usd,
+    p.proof_eligible
+"""
+
+
+def _profit_status_row_from_source_aliases(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    for key in _PROFIT_STATUS_SOURCE_KEYS:
+        value = normalized.get(key)
+        if value is not None:
+            normalized[key] = str(value)
+    return normalized
+
+
 class PostgresTrackedPositionsRepository:
     def __init__(self, database_url: str):
         self.database_url = database_url
@@ -359,12 +448,14 @@ class PostgresTrackedPositionsRepository:
         self.error_message: Optional[str] = None
         self._psycopg = None
         self._dict_row = None
+        self._pool: _PostgresConnectionPool | None = None
         try:
             import psycopg  # type: ignore
             from psycopg.rows import dict_row  # type: ignore
 
             self._psycopg = psycopg
             self._dict_row = dict_row
+            self._pool = _PostgresConnectionPool(self._new_connection)
         except Exception as exc:
             self.is_available = False
             self.error_message = (
@@ -372,10 +463,15 @@ class PostgresTrackedPositionsRepository:
                 f"Import failed: {exc}"
             )
 
-    def _connect(self):
-        if not self.is_available or self._psycopg is None or self._dict_row is None:
+    def _new_connection(self):
+        if self._psycopg is None or self._dict_row is None:
             raise RuntimeError(self.error_message or "Tracked positions storage is unavailable.")
         return self._psycopg.connect(self.database_url, row_factory=self._dict_row)
+
+    def _connect(self):
+        if not self.is_available or self._psycopg is None or self._dict_row is None or self._pool is None:
+            raise RuntimeError(self.error_message or "Tracked positions storage is unavailable.")
+        return self._pool.connection()
 
     def init_schema(self) -> bool:
         if not self.is_available:
@@ -767,12 +863,22 @@ class PostgresTrackedPositionsRepository:
             raise RuntimeError(f"Tracked position {int(row['id'])} was not found after creation.")
         return position
 
-    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+    def list_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         where_sql = ""
-        params: tuple[Any, ...] = ()
+        params: list[Any] = []
         if status in {"open", "closed"}:
             where_sql = "WHERE p.status = %s"
-            params = (status,)
+            params.append(status)
+        window_sql = ""
+        if limit is not None:
+            window_sql = "LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
         query = f"""
         SELECT
             p.*,
@@ -804,12 +910,76 @@ class PostgresTrackedPositionsRepository:
         ) r ON TRUE
         {where_sql}
         ORDER BY p.filled_at DESC, p.id DESC
+        {window_sql}
         """
         with self._connect() as conn:
             with conn.cursor() as cur:
-                cur.execute(query, params)
+                cur.execute(query, tuple(params))
                 rows = cur.fetchall()
         return [_normalize_position_row(row) for row in rows]
+
+    def list_compact_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where_sql = ""
+        params: list[Any] = []
+        if status in {"open", "closed"}:
+            where_sql = "WHERE p.status = %s"
+            params.append(status)
+        window_sql = ""
+        if limit is not None:
+            window_sql = "LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+        query = f"""
+        SELECT p.*
+        FROM tracked_positions p
+        {where_sql}
+        ORDER BY p.filled_at DESC, p.id DESC
+        {window_sql}
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, tuple(params))
+                rows = cur.fetchall()
+        return [_normalize_position_row(row) for row in rows]
+
+    def profit_status_snapshot(self) -> dict[str, Any]:
+        """Return the narrow tracked-position fields needed by the profit status gate."""
+        query = f"""
+        SELECT
+            {_PROFIT_STATUS_POSITION_COLUMNS},
+            p.source_pick_snapshot ->> 'source_label' AS source_label,
+            p.source_pick_snapshot ->> 'proof_source_label' AS proof_source_label,
+            p.source_pick_snapshot ->> 'market_data_source' AS market_data_source,
+            p.source_pick_snapshot ->> 'options_market_data_source' AS options_market_data_source,
+            p.source_pick_snapshot ->> 'options_data_source' AS options_data_source,
+            p.source_pick_snapshot ->> 'quote_source' AS quote_source,
+            p.source_pick_snapshot ->> 'data_source' AS data_source
+        FROM tracked_positions p
+        WHERE p.status = 'closed'
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        COUNT(*) FILTER (WHERE status = 'open') AS open_position_count,
+                        COUNT(*) FILTER (WHERE status = 'closed') AS total_closed_position_count
+                    FROM tracked_positions
+                    """
+                )
+                counts = cur.fetchone() or {}
+                cur.execute(query)
+                rows = cur.fetchall()
+        return {
+            "open_position_count": int(counts.get("open_position_count") or 0),
+            "total_closed_position_count": int(counts.get("total_closed_position_count") or 0),
+            "closed_positions": [_profit_status_row_from_source_aliases(row) for row in rows],
+        }
 
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
         return self._fetch_one_position("WHERE p.id = %s", (position_id,))
@@ -1422,21 +1592,94 @@ class SqliteTrackedPositionsRepository:
             raise RuntimeError(f"Tracked position {position_id} was not found after creation.")
         return position
 
-    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+    def list_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         where_sql = ""
-        params: tuple[Any, ...] = ()
+        params: list[Any] = []
         if status in {"open", "closed"}:
             where_sql = "WHERE p.status = ?"
-            params = (status,)
+            params.append(status)
+        window_sql = ""
+        if limit is not None:
+            window_sql = "LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
         query = f"""
         {self._POSITION_WITH_LATEST_REVIEW_SQL}
         {where_sql}
         ORDER BY p.filled_at DESC, p.id DESC
+        {window_sql}
         """
         with self._connect() as conn:
-            cur = conn.execute(query, params)
+            cur = conn.execute(query, tuple(params))
             rows = cur.fetchall()
         return [_normalize_position_row(self._row_to_dict(row)) for row in rows]
+
+    def list_compact_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        where_sql = ""
+        params: list[Any] = []
+        if status in {"open", "closed"}:
+            where_sql = "WHERE p.status = ?"
+            params.append(status)
+        window_sql = ""
+        if limit is not None:
+            window_sql = "LIMIT ? OFFSET ?"
+            params.extend([limit, offset])
+        query = f"""
+        SELECT p.*
+        FROM tracked_positions p
+        {where_sql}
+        ORDER BY p.filled_at DESC, p.id DESC
+        {window_sql}
+        """
+        with self._connect() as conn:
+            cur = conn.execute(query, tuple(params))
+            rows = cur.fetchall()
+        return [_normalize_position_row(self._row_to_dict(row)) for row in rows]
+
+    def profit_status_snapshot(self) -> dict[str, Any]:
+        query = f"""
+        SELECT
+            {_PROFIT_STATUS_POSITION_COLUMNS},
+            json_extract(p.source_pick_snapshot, '$.source_label') AS source_label,
+            json_extract(p.source_pick_snapshot, '$.proof_source_label') AS proof_source_label,
+            json_extract(p.source_pick_snapshot, '$.market_data_source') AS market_data_source,
+            json_extract(p.source_pick_snapshot, '$.options_market_data_source') AS options_market_data_source,
+            json_extract(p.source_pick_snapshot, '$.options_data_source') AS options_data_source,
+            json_extract(p.source_pick_snapshot, '$.quote_source') AS quote_source,
+            json_extract(p.source_pick_snapshot, '$.data_source') AS data_source
+        FROM tracked_positions p
+        WHERE p.status = 'closed'
+        """
+        with self._connect() as conn:
+            counts = conn.execute(
+                """
+                SELECT
+                    SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) AS open_position_count,
+                    SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) AS total_closed_position_count
+                FROM tracked_positions
+                """
+            ).fetchone()
+            rows = conn.execute(query).fetchall()
+        count_row = self._row_to_dict(counts) if counts is not None else {}
+        return {
+            "open_position_count": int(count_row.get("open_position_count") or 0),
+            "total_closed_position_count": int(count_row.get("total_closed_position_count") or 0),
+            "closed_positions": [
+                _profit_status_row_from_source_aliases(self._row_to_dict(row))
+                for row in rows
+            ],
+        }
 
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
         return self._fetch_one_position("WHERE p.id = ?", (position_id,))
@@ -1742,14 +1985,47 @@ class MemoryTrackedPositionsRepository:
         self._positions.append(position)
         return self.get_position(position["id"])  # type: ignore[arg-type]
 
-    def list_positions(self, status: Optional[str] = "open") -> list[dict[str, Any]]:
+    def list_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
         items = self._positions
         if status in {"open", "closed"}:
             items = [position for position in items if position["status"] == status]
         normalized = [self.get_position(position["id"]) for position in items]
         normalized = [position for position in normalized if position is not None]
         normalized.sort(key=lambda position: (position["filled_at"], position["id"]), reverse=True)
+        if limit is not None:
+            normalized = normalized[offset:offset + limit]
         return normalized
+
+    def list_compact_positions(
+        self,
+        status: Optional[str] = "open",
+        *,
+        limit: Optional[int] = None,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        return self.list_positions(status, limit=limit, offset=offset)
+
+    def profit_status_snapshot(self) -> dict[str, Any]:
+        open_count = sum(
+            1 for position in self._positions
+            if str(position.get("status") or "").strip().lower() == "open"
+        )
+        closed_positions = [
+            position
+            for position in (self.get_position(item["id"]) for item in self._positions)
+            if position is not None and str(position.get("status") or "").strip().lower() == "closed"
+        ]
+        return {
+            "open_position_count": open_count,
+            "total_closed_position_count": len(closed_positions),
+            "closed_positions": closed_positions,
+        }
 
     def get_position(self, position_id: int) -> Optional[dict[str, Any]]:
         position = self._find_position(position_id)

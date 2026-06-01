@@ -25,6 +25,8 @@ import options_chatbot as oc
 
 
 COMMODITY_PLAYBOOK_IDS = {"ai_commodity_infra_observation"}
+DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
+DEFAULT_DOC = ROOT / "docs" / "regular-guardrail-starvation-audit.md"
 
 
 def _utc_now_iso() -> str:
@@ -65,6 +67,22 @@ def _top_drop_detail_counts(counter: Counter[tuple[str, str]], limit: int) -> li
         {"drop_key": key, "detail": detail, "count": count}
         for (key, detail), count in counter.most_common(limit)
     ]
+
+
+def _status_from_overall(overall: dict[str, Any], errors: list[dict[str, str]] | None = None) -> str:
+    if errors:
+        return "audit_errors"
+    starvation_playbooks = list(overall.get("starvation_playbooks") or [])
+    if starvation_playbooks:
+        return "guardrail_starvation_detected"
+    candidate_total = int(overall.get("candidate_count_total") or 0)
+    completed = int(overall.get("playbooks_completed") or 0)
+    zero_candidate_count = len(list(overall.get("zero_candidate_playbooks") or []))
+    if completed and zero_candidate_count == completed and candidate_total == 0:
+        return "upstream_zero_candidate_scan_pressure"
+    if candidate_total > 0:
+        return "candidates_present_not_guardrail_starved"
+    return "no_guardrail_starvation_detected"
 
 
 _NUMBER_RE = re.compile(r"(?<![A-Za-z])[-+]?\$?\d+(?:\.\d+)?%?")
@@ -301,7 +319,11 @@ def build_report(
     top_drop_details: Counter[tuple[str, str]] = Counter()
     top_drop_detail_tickers: dict[tuple[str, str], list[str]] = defaultdict(list)
     zero_candidate_playbooks: list[str] = []
+    candidate_count_total = 0
+    returned_count_total = 0
     for report in playbook_reports:
+        candidate_count_total += int(report.get("candidate_count") or 0)
+        returned_count_total += int(report.get("returned_count") or 0)
         for key, value in dict(report.get("candidate_decision_counts") or {}).items():
             totals[str(key)] += int(value or 0)
         if report.get("starvation_flag"):
@@ -318,6 +340,25 @@ def build_report(
             for ticker in list(item.get("tickers") or []):
                 if len(top_drop_detail_tickers[detail_key]) < top_limit and ticker not in top_drop_detail_tickers[detail_key]:
                     top_drop_detail_tickers[detail_key].append(str(ticker))
+    overall = {
+        "playbooks_requested": len(playbook_ids),
+        "playbooks_completed": len(playbook_reports),
+        "candidate_count_total": candidate_count_total,
+        "returned_count_total": returned_count_total,
+        "candidate_decision_counts": dict(sorted(totals.items())),
+        "starvation_playbooks": starvation_playbooks,
+        "zero_candidate_playbooks": zero_candidate_playbooks,
+        "top_block_reasons": _top_counts(top_reasons, top_limit),
+        "top_drop_counts": _top_counts(top_drops, top_limit),
+        "top_upstream_drop_details": [
+            {
+                **item,
+                "tickers": top_drop_detail_tickers.get((item["drop_key"], item["detail"]), []),
+            }
+            for item in _top_drop_detail_counts(top_drop_details, top_limit)
+        ],
+    }
+    overall["status"] = _status_from_overall(overall, errors)
     return {
         "generated_at_utc": _utc_now_iso(),
         "scope": "regular_supervised_guardrail_starvation",
@@ -325,22 +366,7 @@ def build_report(
         "commodity_playbooks_excluded": sorted(COMMODITY_PLAYBOOK_IDS),
         "playbooks": playbook_reports,
         "errors": errors,
-        "overall": {
-            "playbooks_requested": len(playbook_ids),
-            "playbooks_completed": len(playbook_reports),
-            "candidate_decision_counts": dict(sorted(totals.items())),
-            "starvation_playbooks": starvation_playbooks,
-            "zero_candidate_playbooks": zero_candidate_playbooks,
-            "top_block_reasons": _top_counts(top_reasons, top_limit),
-            "top_drop_counts": _top_counts(top_drops, top_limit),
-            "top_upstream_drop_details": [
-                {
-                    **item,
-                    "tickers": top_drop_detail_tickers.get((item["drop_key"], item["detail"]), []),
-                }
-                for item in _top_drop_detail_counts(top_drop_details, top_limit)
-            ],
-        },
+        "overall": overall,
         "settings": {
             "n_picks": n_picks,
             "watchlist_size": watchlist_size,
@@ -351,6 +377,59 @@ def build_report(
             "market_open_at_run": market_open_at_run,
         },
     }
+
+
+def markdown_report(report: dict[str, Any]) -> str:
+    overall = report.get("overall") if isinstance(report.get("overall"), dict) else {}
+    settings = report.get("settings") if isinstance(report.get("settings"), dict) else {}
+    lines = [
+        "# Regular Guardrail Starvation Audit",
+        "",
+        f"- Generated: `{report.get('generated_at_utc')}`",
+        f"- Status: `{overall.get('status')}`",
+        f"- Playbooks completed/requested: `{overall.get('playbooks_completed')}` / `{overall.get('playbooks_requested')}`",
+        f"- Candidate/returned totals: `{overall.get('candidate_count_total')}` / `{overall.get('returned_count_total')}`",
+        f"- Candidate guardrail decisions: `{overall.get('candidate_decision_counts')}`",
+        f"- Starvation playbooks: `{overall.get('starvation_playbooks')}`",
+        f"- Zero-candidate playbooks: `{len(list(overall.get('zero_candidate_playbooks') or []))}`",
+        f"- Market open at run: `{settings.get('market_open_at_run')}`",
+        "",
+        "## Leading Upstream Drops",
+        "",
+    ]
+    for item in list(overall.get("top_drop_counts") or []):
+        lines.append(f"- `{item.get('value')}`: `{item.get('count')}`")
+    lines.extend(["", "## Leading Drop Details", ""])
+    for item in list(overall.get("top_upstream_drop_details") or []):
+        tickers = ", ".join(str(ticker) for ticker in list(item.get("tickers") or []))
+        lines.append(
+            f"- `{item.get('drop_key')}`: `{item.get('count')}` - {item.get('detail')} (`{tickers}`)"
+        )
+    lines.extend(["", "## Interpretation", ""])
+    status = str(overall.get("status") or "")
+    if status == "upstream_zero_candidate_scan_pressure":
+        lines.append(
+            "- Current no-pick state is upstream scanner/data/liquidity pressure, not promoted guardrail starvation."
+        )
+    elif status == "guardrail_starvation_detected":
+        lines.append("- Inspect blocked candidate rows before loosening promoted profitability guardrails.")
+    elif status == "candidates_present_not_guardrail_starved":
+        lines.append("- Candidates are present and guardrails are not filtering all viable rows.")
+    else:
+        lines.append("- No guardrail starvation signal was detected.")
+    return "\n".join(lines) + "\n"
+
+
+def write_outputs(report: dict[str, Any], *, output_dir: Path = DEFAULT_OUTPUT_DIR, doc_path: Path = DEFAULT_DOC) -> dict[str, str]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    json_path = output_dir / f"regular_guardrail_starvation_{stamp}.json"
+    latest_json = output_dir / "regular_guardrail_starvation_latest.json"
+    payload = json.dumps(report, indent=2, sort_keys=True)
+    json_path.write_text(payload + "\n", encoding="utf8")
+    latest_json.write_text(payload + "\n", encoding="utf8")
+    doc_path.write_text(markdown_report(report), encoding="utf8")
+    return {"json": str(json_path), "latest_json": str(latest_json), "markdown": str(doc_path)}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -364,8 +443,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--enforce-portfolio-caps", action="store_true")
     parser.add_argument("--truth-lane", default=LIVE_SCAN_TRUTH_LANE)
     parser.add_argument("--top-limit", type=int, default=8)
+    parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
+    parser.add_argument("--doc-path", type=Path, default=DEFAULT_DOC)
     parser.add_argument("--json", action="store_true", help="Print the full report JSON.")
-    parser.add_argument("--no-write", action="store_true", help="Accepted for workflow symmetry; this script never writes.")
+    parser.add_argument("--include-playbooks", action="store_true", help="Include compact per-playbook details in non-JSON console output.")
+    parser.add_argument("--no-write", action="store_true", help="Run without writing latest JSON/Markdown artifacts.")
     args = parser.parse_args(argv)
 
     report = build_report(
@@ -377,33 +459,42 @@ def main(argv: list[str] | None = None) -> int:
         truth_lane=str(args.truth_lane or LIVE_SCAN_TRUTH_LANE),
         top_limit=max(int(args.top_limit), 1),
     )
+    artifacts: dict[str, str] | None = None
+    if not args.no_write:
+        artifacts = write_outputs(report, output_dir=args.output_dir, doc_path=args.doc_path)
     if args.json:
-        print(json.dumps(report, indent=2, sort_keys=True))
+        payload: dict[str, Any] = {"report": report}
+        if artifacts:
+            payload["artifacts"] = artifacts
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
+        console_payload: dict[str, Any] = {
+            "overall": report["overall"],
+            "settings": report["settings"],
+            "errors": report["errors"],
+            "artifacts": artifacts,
+        }
+        if args.include_playbooks:
+            console_payload["playbooks"] = [
+                {
+                    "playbook_id": item["playbook_id"],
+                    "candidate_count": item["candidate_count"],
+                    "returned_count": item["returned_count"],
+                    "candidate_decision_counts": item["candidate_decision_counts"],
+                    "block_rate_pct": item["block_rate_pct"],
+                    "clear_rate_pct": item["clear_rate_pct"],
+                    "starvation_flag": item["starvation_flag"],
+                    "top_block_reasons": item["top_block_reasons"],
+                    "top_drop_counts": _top_counts(Counter(dict(item.get("drop_counts") or {})), args.top_limit),
+                    "top_upstream_drop_details": item["top_upstream_drop_details"],
+                    "top_blocked_tickers": item["top_blocked_tickers"],
+                    "top_clear_tickers": item["top_clear_tickers"],
+                }
+                for item in report["playbooks"]
+            ]
         print(
             json.dumps(
-                {
-                    "overall": report["overall"],
-                    "settings": report["settings"],
-                    "errors": report["errors"],
-                    "playbooks": [
-                        {
-                            "playbook_id": item["playbook_id"],
-                            "candidate_count": item["candidate_count"],
-                            "returned_count": item["returned_count"],
-                            "candidate_decision_counts": item["candidate_decision_counts"],
-                            "block_rate_pct": item["block_rate_pct"],
-                            "clear_rate_pct": item["clear_rate_pct"],
-                            "starvation_flag": item["starvation_flag"],
-                            "top_block_reasons": item["top_block_reasons"],
-                            "top_drop_counts": _top_counts(Counter(dict(item.get("drop_counts") or {})), args.top_limit),
-                            "top_upstream_drop_details": item["top_upstream_drop_details"],
-                            "top_blocked_tickers": item["top_blocked_tickers"],
-                            "top_clear_tickers": item["top_clear_tickers"],
-                        }
-                        for item in report["playbooks"]
-                    ],
-                },
+                console_payload,
                 indent=2,
                 sort_keys=True,
             )

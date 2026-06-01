@@ -1,6 +1,10 @@
 "use client";
 
-import { isValidElement, memo, type ReactNode } from "react";
+import { isValidElement, memo, useEffect, useMemo, useState, type ReactNode } from "react";
+
+type FinTableRenderMode = "auto" | "desktop" | "mobile";
+const EMPTY_STRING_ARRAY: string[] = [];
+const DEFAULT_OUTCOME_COLS = ["Outcome", "Result"];
 
 interface FinTableProps {
   data: Record<string, unknown>[];
@@ -18,6 +22,7 @@ interface FinTableProps {
   mobilePriorityCols?: string[];
   mobileHiddenCols?: string[];
   mobileActionCol?: string;
+  renderMode?: FinTableRenderMode;
 }
 
 function cellClass(
@@ -116,47 +121,69 @@ function renderCellValue(
   return val;
 }
 
+function useMobileTableMode(renderMode: FinTableRenderMode): boolean {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (renderMode !== "auto") return;
+    const query = window.matchMedia("(max-width: 767px)");
+    const update = () => setIsMobile(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, [renderMode]);
+
+  if (renderMode === "mobile") return true;
+  if (renderMode === "desktop") return false;
+  return isMobile;
+}
+
 function FinTable({
   data,
-  pnlCols = [],
-  rateCols = [],
-  monoCols = [],
+  pnlCols = EMPTY_STRING_ARRAY,
+  rateCols = EMPTY_STRING_ARRAY,
+  monoCols = EMPTY_STRING_ARRAY,
   badgeCol,
-  outcomeCols = ["Outcome", "Result"],
+  outcomeCols = DEFAULT_OUTCOME_COLS,
   maxHeight = "460px",
   label = "Data table",
   density = "default",
   emptyMessage = "No data",
   mobileTitleCol,
   mobileSubtitleCol,
-  mobilePriorityCols = [],
-  mobileHiddenCols = [],
+  mobilePriorityCols = EMPTY_STRING_ARRAY,
+  mobileHiddenCols = EMPTY_STRING_ARRAY,
   mobileActionCol = "Action",
+  renderMode = "auto",
 }: FinTableProps) {
-  if (!data || data.length === 0) {
-    return (
-      <div className="ft-wrap p-4 text-text-2 text-sm" role="status">{emptyMessage}</div>
+  const showMobileCards = useMobileTableMode(renderMode);
+  const pnlSet = useMemo(() => new Set(pnlCols), [pnlCols]);
+  const rateSet = useMemo(() => new Set(rateCols), [rateCols]);
+  const monoSet = useMemo(() => new Set(monoCols), [monoCols]);
+  const outcomeSet = useMemo(() => new Set(outcomeCols), [outcomeCols]);
+  const columns = useMemo(
+    () => data?.[0] ? Object.keys(data[0]).filter((col) => !col.startsWith("__")) : [],
+    [data]
+  );
+  const mobileHiddenSet = useMemo(() => new Set(mobileHiddenCols), [mobileHiddenCols]);
+
+  const mobileLayout = useMemo(() => {
+    const pickMobileColumn = (
+      preferred: string | undefined,
+      fallback: string | undefined,
+      excluded: Set<string>
+    ): string | undefined => {
+      if (preferred && columns.includes(preferred) && !mobileHiddenSet.has(preferred)) return preferred;
+      if (fallback && columns.includes(fallback) && !mobileHiddenSet.has(fallback)) return fallback;
+      return columns.find((col) => col !== mobileActionCol && !mobileHiddenSet.has(col) && !excluded.has(col));
+    };
+
+    const titleCol = pickMobileColumn(mobileTitleCol, columns[0], new Set());
+    const subtitleCol = pickMobileColumn(
+      mobileSubtitleCol,
+      columns.find((col) => col !== titleCol && col !== mobileActionCol),
+      new Set(titleCol ? [titleCol] : [])
     );
-  }
-
-  const pnlSet = new Set(pnlCols);
-  const rateSet = new Set(rateCols);
-  const monoSet = new Set(monoCols);
-  const outcomeSet = new Set(outcomeCols);
-  const columns = Object.keys(data[0]).filter((col) => !col.startsWith("__"));
-  const mobileHiddenSet = new Set(mobileHiddenCols);
-
-  const pickMobileColumn = (
-    preferred: string | undefined,
-    fallback: string | undefined,
-    excluded: Set<string>
-  ): string | undefined => {
-    if (preferred && columns.includes(preferred) && !mobileHiddenSet.has(preferred)) return preferred;
-    if (fallback && columns.includes(fallback) && !mobileHiddenSet.has(fallback)) return fallback;
-    return columns.find((col) => col !== mobileActionCol && !mobileHiddenSet.has(col) && !excluded.has(col));
-  };
-
-  const mobileFieldColumns = (titleCol: string | undefined, subtitleCol: string | undefined): string[] => {
     const excluded = new Set([titleCol, subtitleCol, mobileActionCol].filter(Boolean) as string[]);
     const priority = mobilePriorityCols.filter(
       (col) => columns.includes(col) && !mobileHiddenSet.has(col) && !excluded.has(col)
@@ -164,8 +191,14 @@ function FinTable({
     const rest = columns.filter(
       (col) => col !== mobileActionCol && !mobileHiddenSet.has(col) && !excluded.has(col) && !priority.includes(col)
     );
-    return [...priority, ...rest];
-  };
+    return { titleCol, subtitleCol, fields: [...priority, ...rest] };
+  }, [columns, mobileActionCol, mobileHiddenSet, mobilePriorityCols, mobileSubtitleCol, mobileTitleCol]);
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="ft-wrap p-4 text-text-2 text-sm" role="status">{emptyMessage}</div>
+    );
+  }
 
   return (
     <div
@@ -175,81 +208,77 @@ function FinTable({
       aria-label={label}
       tabIndex={0}
     >
-      <div className="ft-mobile-cards">
-        {data.map((row, i) => {
-          const key = rowKey(row, i);
-          const titleCol = pickMobileColumn(mobileTitleCol, columns[0], new Set());
-          const subtitleCol = pickMobileColumn(
-            mobileSubtitleCol,
-            columns.find((col) => col !== titleCol && col !== mobileActionCol),
-            new Set(titleCol ? [titleCol] : [])
-          );
-          const fields = mobileFieldColumns(titleCol, subtitleCol);
-          return (
-            <article key={key} className="ft-mobile-card">
-              <div className="ft-mobile-card-head">
-                {titleCol ? (
-                  <div>
-                    <div className="ft-mobile-label">{titleCol}</div>
-                    <div className="ft-mobile-title">{renderCellValue(titleCol, row[titleCol], badgeCol, outcomeSet)}</div>
-                  </div>
-                ) : null}
-                {subtitleCol ? (
-                  <div className="text-right">
-                    <div className="ft-mobile-label">{subtitleCol}</div>
-                    <div className="ft-mobile-subtitle">{renderCellValue(subtitleCol, row[subtitleCol], badgeCol, outcomeSet)}</div>
-                  </div>
-                ) : null}
-              </div>
-              <div className="ft-mobile-grid">
-                {fields.map((col) => {
-                    const raw = row[col];
-                    const val = raw == null || isValidElement(raw) ? "" : String(raw);
-                    return (
-                      <div key={col} className="ft-mobile-field">
-                        <div className="ft-mobile-label">{col}</div>
-                        <div className={cellClass(col, val, pnlSet, rateSet, monoSet) || undefined}>
-                          {renderCellValue(col, raw, badgeCol, outcomeSet)}
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-              {columns.includes(mobileActionCol) ? (
-                <div className="ft-mobile-actions">
-                  {renderCellValue(mobileActionCol, row[mobileActionCol], badgeCol, outcomeSet)}
+      {showMobileCards ? (
+        <div className="ft-mobile-cards ft-mobile-cards-rendered">
+          {data.map((row, i) => {
+            const key = rowKey(row, i);
+            const { titleCol, subtitleCol, fields } = mobileLayout;
+            return (
+              <article key={key} className="ft-mobile-card">
+                <div className="ft-mobile-card-head">
+                  {titleCol ? (
+                    <div>
+                      <div className="ft-mobile-label">{titleCol}</div>
+                      <div className="ft-mobile-title">{renderCellValue(titleCol, row[titleCol], badgeCol, outcomeSet)}</div>
+                    </div>
+                  ) : null}
+                  {subtitleCol ? (
+                    <div className="text-right">
+                      <div className="ft-mobile-label">{subtitleCol}</div>
+                      <div className="ft-mobile-subtitle">{renderCellValue(subtitleCol, row[subtitleCol], badgeCol, outcomeSet)}</div>
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </article>
-          );
-        })}
-      </div>
-
-      <table className={`ft-table ${density === "compact" ? "ft-table-compact" : ""}`.trim()} aria-label={label}>
-        <thead>
-          <tr>
-            {columns.map((col) => (
-              <th key={col} scope="col" className={col === "Action" ? "ft-action-cell" : undefined}>{col}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row, i) => (
-            <tr key={rowKey(row, i)}>
+                <div className="ft-mobile-grid">
+                  {fields.map((col) => {
+                      const raw = row[col];
+                      const val = raw == null || isValidElement(raw) ? "" : String(raw);
+                      return (
+                        <div key={col} className="ft-mobile-field">
+                          <div className="ft-mobile-label">{col}</div>
+                          <div className={cellClass(col, val, pnlSet, rateSet, monoSet) || undefined}>
+                            {renderCellValue(col, raw, badgeCol, outcomeSet)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+                {columns.includes(mobileActionCol) ? (
+                  <div className="ft-mobile-actions">
+                    {renderCellValue(mobileActionCol, row[mobileActionCol], badgeCol, outcomeSet)}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <table className={`ft-table ${density === "compact" ? "ft-table-compact" : ""}`.trim()} aria-label={label}>
+          <thead>
+            <tr>
               {columns.map((col) => {
-                const raw = row[col];
-                const val = raw == null || isValidElement(raw) ? "" : String(raw);
-                const cls = cellClass(col, val, pnlSet, rateSet, monoSet);
-                return (
-                  <td key={col} className={cls || undefined}>
-                    {renderCellValue(col, raw, badgeCol, outcomeSet)}
-                  </td>
-                );
+                return <th key={col} scope="col" className={col === "Action" ? "ft-action-cell" : undefined}>{col}</th>;
               })}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.map((row, i) => (
+              <tr key={rowKey(row, i)}>
+                {columns.map((col) => {
+                  const raw = row[col];
+                  const val = raw == null || isValidElement(raw) ? "" : String(raw);
+                  const cls = cellClass(col, val, pnlSet, rateSet, monoSet);
+                  return (
+                    <td key={col} className={cls || undefined}>
+                      {renderCellValue(col, raw, badgeCol, outcomeSet)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

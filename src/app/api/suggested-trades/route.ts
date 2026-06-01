@@ -6,17 +6,27 @@ import {
   readJsonObject,
   requireTradingDeskMutationIntent,
 } from "@/app/api/_utils";
-import { createSuggestedTrade, getGroupedSuggestedTrades, getSuggestedTrades } from "@/lib/python-bridge";
+import {
+  createSuggestedTrade,
+  getGroupedSuggestedTradesWithBackendHeaders,
+  getSuggestedTradesWithBackendHeaders,
+} from "@/lib/python-bridge";
 
 export async function GET(req: NextRequest) {
   try {
     const status = (req.nextUrl.searchParams.get("status") || "open") as "open" | "closed" | "all";
     const grouped = isTruthyQueryParam(req.nextUrl.searchParams.get("grouped"));
+    const window = {
+      limit: req.nextUrl.searchParams.get("limit"),
+      offset: req.nextUrl.searchParams.get("offset"),
+      compact: req.nextUrl.searchParams.get("compact"),
+    };
     if (grouped) {
-      return jsonWithTradingDeskStore(await getGroupedSuggestedTrades(status), "suggested_trades_read");
+      const result = await getGroupedSuggestedTradesWithBackendHeaders(status, window);
+      return jsonWithTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
     }
-    const result = await getSuggestedTrades(status);
-    return jsonWithTradingDeskStore(result, "suggested_trades_read");
+    const result = await getSuggestedTradesWithBackendHeaders(status, window);
+    return jsonWithTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
   } catch (err) {
     return jsonError(err, "Failed to fetch suggested trades");
   }

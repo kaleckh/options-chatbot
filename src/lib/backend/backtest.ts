@@ -10,7 +10,9 @@ import type {
 } from "@/lib/types";
 import {
   fetchBackendJson,
+  fetchBackendJsonWithHeaders,
   postBackendJson,
+  pythonBackendTimingHeaders,
   toSearchSuffix,
 } from "@/lib/backend/transport";
 
@@ -75,6 +77,14 @@ export async function getForwardEvidenceReport(
 
 export async function getOptionsProfitStatus(): Promise<OptionsProfitStatus> {
   return fetchBackendJson<OptionsProfitStatus>("/api/options-profit/status");
+}
+
+export async function getOptionsProfitStatusWithBackendHeaders(): Promise<{
+  body: OptionsProfitStatus;
+  headers: Record<string, string>;
+}> {
+  const result = await fetchBackendJsonWithHeaders<OptionsProfitStatus>("/api/options-profit/status");
+  return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
 }
 
 export async function runBacktest(

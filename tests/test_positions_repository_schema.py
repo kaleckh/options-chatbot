@@ -16,6 +16,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from positions_repository import (
+    _PostgresConnectionPool,
     PostgresTrackedPositionsRepository,
     SqliteTrackedPositionsRepository,
     UnavailableTrackedPositionsRepository,
@@ -51,6 +52,24 @@ class _FakeConnection:
 
     def cursor(self):
         return _FakeCursor(self.executed_sql)
+
+
+class _PoolConnection:
+    def __init__(self):
+        self.closed = False
+        self.commits = 0
+        self.rollbacks = 0
+        self.close_count = 0
+
+    def commit(self):
+        self.commits += 1
+
+    def rollback(self):
+        self.rollbacks += 1
+
+    def close(self):
+        self.closed = True
+        self.close_count += 1
 
 
 class _FailingPostgresRepository:
@@ -189,6 +208,46 @@ class PositionsRepositorySchemaTests(unittest.TestCase):
         self.assertIn("ALTER TABLE position_reviews\n        ADD COLUMN IF NOT EXISTS exit_execution_basis TEXT;", schema_sql)
         self.assertIn("ALTER TABLE position_reviews\n        ADD COLUMN IF NOT EXISTS fee_total_usd DOUBLE PRECISION;", schema_sql)
         self.assertIn("ALTER TABLE position_reviews\n        ADD COLUMN IF NOT EXISTS metrics_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;", schema_sql)
+
+    def test_postgres_connection_pool_reuses_successful_connections(self):
+        created: list[_PoolConnection] = []
+
+        def connect():
+            conn = _PoolConnection()
+            created.append(conn)
+            return conn
+
+        pool = _PostgresConnectionPool(connect, max_size=1)
+
+        with pool.connection() as first:
+            self.assertIs(first, created[0])
+        with pool.connection() as second:
+            self.assertIs(second, first)
+
+        self.assertEqual(len(created), 1)
+        self.assertEqual(first.commits, 2)
+        self.assertEqual(first.rollbacks, 0)
+        self.assertFalse(first.closed)
+
+    def test_postgres_connection_pool_discards_failed_connections(self):
+        created: list[_PoolConnection] = []
+
+        def connect():
+            conn = _PoolConnection()
+            created.append(conn)
+            return conn
+
+        pool = _PostgresConnectionPool(connect, max_size=1)
+
+        with self.assertRaises(RuntimeError):
+            with pool.connection():
+                raise RuntimeError("boom")
+        with pool.connection() as next_conn:
+            self.assertIs(next_conn, created[1])
+
+        self.assertEqual(len(created), 2)
+        self.assertEqual(created[0].rollbacks, 1)
+        self.assertTrue(created[0].closed)
 
     def test_configured_postgres_failure_does_not_silently_fallback_to_sqlite(self):
         with patch("positions_repository.PostgresTrackedPositionsRepository", _FailingPostgresRepository):
