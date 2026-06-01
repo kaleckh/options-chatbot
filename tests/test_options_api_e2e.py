@@ -249,7 +249,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
     def test_scan_endpoint_defaults_to_bullish_pullback_primary(self):
         captured: dict[str, object] = {}
         scan_pick = {
-            "ticker": "SPY",
+            "ticker": "IWM",
             "type": "daily_scan",
             "prediction_type": "daily_scan",
             "option_type": "call",
@@ -261,11 +261,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "ev_pct": 18.5,
             "dte": 34,
             "target_move_pct": 2.5,
-            "stock_price": 650.0,
-            "current_spot": 650.0,
-            "underlying_price_at_selection": 650.0,
-            "strike": 650.0,
-            "short_strike": 680.0,
+            "stock_price": 210.0,
+            "current_spot": 210.0,
+            "underlying_price_at_selection": 210.0,
+            "strike": 210.0,
+            "short_strike": 240.0,
             "spread_width": 30.0,
             "net_debit": 12.0,
             "premium": 12.0,
@@ -273,11 +273,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "entry_execution_price": 12.0,
             "entry_execution_basis": "spread_ask_bid",
             "entry_fee_total_usd": 1.3,
-            "contract_symbol": "SPY260626C00650000",
-            "short_contract_symbol": "SPY260626C00680000",
+            "contract_symbol": "IWM260626C00210000",
+            "short_contract_symbol": "IWM260626C00240000",
             "expiry": "2026-06-26",
-            "asset_class": "index",
-            "sector": "Index ETF",
+            "asset_class": "equity",
+            "sector": "Small Cap ETF",
             "market_regime": "neutral",
             "strategy_type": "vertical_spread",
             "candidate_execution_label": "executable_opra_paper_candidate",
@@ -400,6 +400,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "entry_quote_snapshot",
             "profitability_eligibility",
             "profitability_blockers",
+            "source_scan_session_id",
+            "source_scan_event_key",
+            "source_scan_run_id",
+            "source_scan_recorded_at_utc",
         }
         for pick in picks:
             self.assertTrue(required.issubset(pick.keys()))
@@ -413,6 +417,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             self.assertIsInstance(pick["entry_quote_snapshot"], dict)
             self.assertEqual(pick["entry_quote_snapshot"].get("captured_at_et"), pick["quote_time_et"])
             self.assertEqual(pick["entry_quote_snapshot"].get("captured_at_utc"), pick["quote_time_utc"])
+            self.assertIsInstance(pick["source_scan_session_id"], int)
+            self.assertTrue(str(pick["source_scan_event_key"]).endswith(f"rank_{pick['candidate_rank']}"))
+            self.assertTrue(str(pick["source_scan_run_id"]).startswith("api_scan_"))
+            self.assertTrue(str(pick["source_scan_recorded_at_utc"]).endswith("Z"))
 
         self.assertEqual(
             picks,
@@ -424,9 +432,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertNotIn("FAIL", returned_tickers)
         self.assertTrue(payload["forward_truth_recorded"])
         self.assertIsInstance(payload["forward_truth_session_id"], int)
+        self.assertTrue(payload["forward_truth_run_id"].startswith("api_scan_"))
+        self.assertTrue(payload["forward_truth_recorded_at_utc"].endswith("Z"))
         self.assertIsNone(payload["forward_truth_error"])
         self.assertEqual(payload["forward_truth_evidence_class"], "live_production")
         self.assertTrue(payload["forward_truth_authoritative"])
+        self.assertTrue(all(pick["source_scan_session_id"] == payload["forward_truth_session_id"] for pick in picks))
+        self.assertTrue(all(pick["source_scan_run_id"] == payload["forward_truth_run_id"] for pick in picks))
+        self.assertTrue(all(pick["source_scan_recorded_at_utc"] == payload["forward_truth_recorded_at_utc"] for pick in picks))
 
         evidence_response = self.client.get("/api/backtest/forward-evidence")
         self.assertEqual(evidence_response.status_code, 200)
@@ -448,6 +461,78 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         proof_counts = proof_response.json()["evidence_counts"]
         self.assertGreaterEqual(proof_counts["forward_event_count"], len(picks))
         self.assertGreaterEqual(proof_counts["scan_pick_event_count"], len(picks))
+
+    def test_position_created_from_scan_pick_preserves_live_scan_provenance(self):
+        scan_response = self.client.post(
+            "/api/scan",
+            json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
+        )
+        self.assertEqual(scan_response.status_code, 200)
+        scan_payload = scan_response.json()
+        scan_pick = scan_payload["picks"][0]
+        self.assertIsNotNone(scan_pick["source_scan_session_id"])
+        self.assertIsNotNone(scan_pick["source_scan_event_key"])
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": scan_pick["entry_execution_price"],
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 200)
+        position = create_response.json()["position"]
+        self.assertEqual(position["source_scan_session_id"], scan_payload["forward_truth_session_id"])
+        self.assertEqual(position["source_scan_event_key"], scan_pick["source_scan_event_key"])
+        self.assertEqual(position["source_scan_run_id"], scan_payload["forward_truth_run_id"])
+        self.assertEqual(position["source_scan_recorded_at_utc"], scan_payload["forward_truth_recorded_at_utc"])
+        self.assertEqual(
+            position["source_pick_snapshot"]["source_scan_session_id"],
+            scan_payload["forward_truth_session_id"],
+        )
+        self.assertEqual(
+            position["source_pick_snapshot"]["source_scan_event_key"],
+            scan_pick["source_scan_event_key"],
+        )
+        self.assertEqual(
+            position["source_pick_snapshot"]["source_scan_run_id"],
+            scan_payload["forward_truth_run_id"],
+        )
+        self.assertEqual(
+            position["source_pick_snapshot"]["source_scan_recorded_at_utc"],
+            scan_payload["forward_truth_recorded_at_utc"],
+        )
+        self.assertTrue(position["source_pick_snapshot"]["source_scan_lineage_verified"])
+        self.assertNotIn("source_scan_lineage_unverified", position["proof_ineligibility_reason"] or "")
+
+    def test_mutated_scan_pick_entry_price_does_not_verify_live_scan_lineage(self):
+        scan_response = self.client.post(
+            "/api/scan",
+            json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
+        )
+        self.assertEqual(scan_response.status_code, 200)
+        scan_pick = dict(scan_response.json()["picks"][0])
+        self.assertIsNotNone(scan_pick["source_scan_session_id"])
+        original_price = float(scan_pick["entry_execution_price"])
+        scan_pick["entry_execution_price"] = round(original_price + 0.25, 4)
+
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": scan_pick["entry_execution_price"],
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(create_response.status_code, 200)
+        position = create_response.json()["position"]
+        self.assertFalse(position["source_pick_snapshot"]["source_scan_lineage_verified"])
+        self.assertFalse(position["proof_eligible"])
+        self.assertEqual(position["proof_class"], "ineligible")
+        self.assertIn("source_scan_lineage_unverified", position["proof_ineligibility_reason"] or "")
 
     def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
         def _lookup(_surface, *, direction_score, **_kwargs):
@@ -1223,12 +1308,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         replacement_pick = dict(open_pick)
         replacement_pick.update(
             {
-                "ticker": "SPY",
+                "ticker": "BBB",
                 "direction": "call",
-                "asset_class": "index",
-                "sector": "Index ETF",
+                "asset_class": "equity",
+                "sector": "Healthcare",
                 "direction_score": 68.0,
                 "quality_score": 74.0,
+                "contract_symbol": "BBB260408C00462590",
+                "short_contract_symbol": "BBB260408C00467590",
             }
         )
 
@@ -1247,7 +1334,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["returned_count"], 1)
-        self.assertEqual(payload["picks"][0]["ticker"], "SPY")
+        self.assertEqual(payload["scan_funnel"]["guardrail_filtered_out"], 1)
+        self.assertEqual(payload["picks"][0]["ticker"], "BBB")
         self.assertEqual(payload["picks"][0]["guardrail_decision"], "caution")
 
     def test_scan_pick_carries_active_profit_candidate_context(self):
@@ -1744,13 +1832,34 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(backtest["selection_source_counts"], {"bootstrap_heuristic": 137})
         self.assertEqual(round(backtest["profit_factor"], 2), 0.70)
         self.assertEqual(policy["scan_policy"]["promotion_status"], "block")
-        self.assertEqual(len(scan["picks"]), 2)
+        self.assertEqual(len(scan["picks"]), 1)
+        self.assertEqual(scan["returned_count"], 1)
+        self.assertEqual(scan["candidate_count"], 2)
+        self.assertEqual(
+            {
+                "raw_candidates": scan["scan_funnel"]["raw_candidates"],
+                "post_policy_visible": scan["scan_funnel"]["post_policy_visible"],
+                "post_guardrails_visible": scan["scan_funnel"]["post_guardrails_visible"],
+                "returned_picks": scan["scan_funnel"]["returned_picks"],
+                "guardrail_filtered_out": scan["scan_funnel"]["guardrail_filtered_out"],
+                "include_blocked_guardrail_picks": scan["scan_funnel"]["include_blocked_guardrail_picks"],
+            },
+            {
+                "raw_candidates": 2,
+                "post_policy_visible": 2,
+                "post_guardrails_visible": 1,
+                "returned_picks": 1,
+                "guardrail_filtered_out": 1,
+                "include_blocked_guardrail_picks": False,
+            },
+        )
+        self.assertEqual(scan["guardrail_decision_counts"], {"clear": 1, "caution": 0, "blocked": 1})
 
         top_pick = scan["picks"][0]
-        self.assertEqual(top_pick["ticker"], "SPY")
+        self.assertEqual(top_pick["ticker"], "AAA")
         self.assertEqual(top_pick["type"], "call")
-        self.assertEqual(top_pick["direction_score"], 76.5)
-        self.assertEqual(top_pick["quality_score"], 86.3)
+        self.assertEqual(top_pick["direction_score"], 61.6)
+        self.assertEqual(top_pick["quality_score"], 79.2)
         self.assertIsNone(top_pick["calibrated_expectancy_pct"])
         self.assertEqual(top_pick["promotion_class"], "research_bootstrap")
         self.assertEqual(top_pick["selection_source"], "live_chain_exact_contract")

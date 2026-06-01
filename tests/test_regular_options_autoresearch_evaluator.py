@@ -22,7 +22,7 @@ def _lane(
     stress_pf: float = 1.5,
     rolling_status: str = "passed",
     include: bool = True,
-    status: str = "portfolio_candidate",
+    status: str = "count_candidate",
 ):
     return {
         "lane_id": lane_id,
@@ -130,6 +130,19 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         )
 
         self.assertIn("side_aware_zero_bid_replay_missing_for_counted_lane_a", scoreboard["promotion_blockers"])
+
+    def test_legacy_portfolio_candidate_status_still_reads_old_artifacts(self):
+        report = _report(with_lane_a=False)
+        report["lanes"][0]["status"] = "portfolio_candidate"
+
+        scoreboard = build_scoreboard(
+            report,
+            experiment_id="legacy-status",
+            hypothesis="old artifact",
+            generated_at_utc="2026-05-31T00:00:00Z",
+        )
+
+        self.assertEqual(scoreboard["metrics"]["included_lane_ids"], ["core"])
 
     def test_ledger_row_is_compact_and_hash_is_stable(self):
         scoreboard = build_scoreboard(

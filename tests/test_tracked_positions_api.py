@@ -477,16 +477,17 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(position["source_scan_session_id"], 55)
         self.assertEqual(position["source_scan_event_key"], "baseline_broad_control:rank_1")
         self.assertEqual(position["source_scan_run_id"], "api_scan_20260406T100000Z")
-        self.assertTrue(position["proof_eligible"])
-        self.assertIsNone(position["proof_ineligibility_reason"])
-        self.assertEqual(position["proof_class"], "live_scan_exact_contract")
-        self.assertIsNone(position["proof_class_reason"])
+        self.assertFalse(position["proof_eligible"])
+        self.assertIn("source_scan_lineage_unverified", position["proof_ineligibility_reason"])
+        self.assertEqual(position["proof_class"], "ineligible")
+        self.assertIsNotNone(position["proof_class_reason"])
         self.assertEqual(position["source_pick_snapshot"]["quote_time_et"], "2026-04-06T10:00:00-04:00")
         self.assertEqual(position["source_pick_snapshot"]["bid"], 4.4)
         self.assertEqual(position["source_pick_snapshot"]["ask"], 4.6)
         self.assertEqual(position["source_pick_snapshot"]["mid"], 4.5)
         self.assertEqual(position["source_pick_snapshot"]["entry_execution_price"], 4.5)
         self.assertEqual(position["source_pick_snapshot"]["entry_execution_basis"], "ask")
+        self.assertFalse(position["source_pick_snapshot"]["source_scan_lineage_verified"])
         self.assertEqual(position["source_pick_snapshot"]["entry_underlying_price"], scan_pick["stock_price"])
         self.assertEqual(position["source_pick_snapshot"]["underlying_price_at_selection"], scan_pick["stock_price"])
         self.assertEqual(position["source_pick_snapshot"]["current_spot"], scan_pick["stock_price"])
@@ -502,6 +503,132 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(listed_position["source_pick_snapshot"]["entry_execution_price"], 4.5)
         self.assertEqual(listed_position["source_pick_snapshot"]["legs"], scan_pick["legs"])
         self.assertEqual(listed_position["source_pick_snapshot"]["entry_quote_snapshot"]["captured_at_utc"], "2026-04-06T14:00:00Z")
+
+    def test_exact_looking_position_without_scan_provenance_is_not_live_scan_proof(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+            require_resolved_contract=True,
+            preserve_fill_price=True,
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertEqual(payload["proof_class"], "ineligible")
+        self.assertIn("source_scan_session_id", payload["proof_ineligibility_reason"])
+        self.assertIn("source_scan_event_key", payload["proof_ineligibility_reason"])
+        self.assertIn("source_scan_run_id", payload["proof_ineligibility_reason"])
+        self.assertIn("source_scan_recorded_at_utc", payload["proof_ineligibility_reason"])
+        self.assertIn("source_scan_lineage_unverified", payload["proof_ineligibility_reason"])
+
+    def test_verified_scan_lineage_is_required_for_live_scan_proof(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "baseline_broad_control:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+            require_resolved_contract=True,
+            preserve_fill_price=True,
+            source_scan_lineage_verified=True,
+        )
+
+        self.assertTrue(payload["proof_eligible"])
+        self.assertIsNone(payload["proof_ineligibility_reason"])
+        self.assertEqual(payload["proof_class"], "live_scan_exact_contract")
+        self.assertTrue(payload["source_pick_snapshot"]["source_scan_lineage_verified"])
+
+    def test_research_backfill_marker_blocks_live_proof_even_with_exact_contract(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+        scan_pick["backfill_audit_id"] = "main_lane_zero_pick_current_algo_v1"
+        scan_pick["pricing_evidence_class"] = "research_backfill"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.50,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertEqual(payload["proof_class"], "ineligible")
+        self.assertIn("research_backfill_not_live_proof", payload["proof_ineligibility_reason"])
+        self.assertEqual(payload["source_pick_snapshot"]["proof_class"], "ineligible")
+        self.assertIn("research_backfill_not_live_proof", payload["source_pick_snapshot"]["proof_class_reason"])
+
+    def test_research_backfill_marker_takes_precedence_over_manual_exact(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+        scan_pick["backfill_audit_id"] = "all_lanes_zero_pick_current_algo_v1"
+        scan_pick["pricing_evidence_class"] = "research_backfill"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.75,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertEqual(payload["proof_class"], "ineligible")
+        self.assertIn("research_backfill_not_live_proof", payload["proof_ineligibility_reason"])
+        self.assertNotEqual(payload["proof_class"], "manual_broker_exact_contract")
+
+    def test_grouped_summary_excludes_stale_research_backfill_proof_flags(self):
+        row = {
+            "id": 99,
+            "status": "closed",
+            "proof_eligible": True,
+            "proof_class": "live_scan_exact_contract",
+            "net_pnl_pct": 25.0,
+            "source_pick_snapshot": {
+                "backfill_audit_id": "all_lanes_zero_pick_current_algo_v1",
+                "pricing_evidence_class": "research_backfill",
+            },
+        }
+
+        grouped = self.backend._group_rows_by_status([row])
+
+        self.assertEqual(grouped["summary"]["closed"]["tracked"]["count"], 1)
+        self.assertEqual(grouped["summary"]["closed"]["proof"]["count"], 0)
 
     def test_create_position_without_provenance_marks_not_proof_eligible(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

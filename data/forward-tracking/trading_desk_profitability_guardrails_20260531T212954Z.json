@@ -1,0 +1,606 @@
+{
+  "baseline": {
+    "avg_pnl_pct": 5.21,
+    "median_pnl_pct": -1.58,
+    "negative": 193,
+    "negative_rate_priced_pct": 50.4,
+    "positive_or_flat": 190,
+    "priced": 383,
+    "rows": 429,
+    "unknown": 46
+  },
+  "baseline_by_lane": {
+    "bullish_momentum": {
+      "avg_pnl_pct": 19.97,
+      "median_pnl_pct": 6.41,
+      "negative": 23,
+      "negative_rate_priced_pct": 46.0,
+      "positive_or_flat": 27,
+      "priced": 50,
+      "rows": 51,
+      "unknown": 1
+    },
+    "bullish_pullback_observation": {
+      "avg_pnl_pct": -11.13,
+      "median_pnl_pct": 4.46,
+      "negative": 26,
+      "negative_rate_priced_pct": 48.1,
+      "positive_or_flat": 28,
+      "priced": 54,
+      "rows": 62,
+      "unknown": 8
+    },
+    "short_term": {
+      "avg_pnl_pct": 3.39,
+      "median_pnl_pct": -18.36,
+      "negative": 84,
+      "negative_rate_priced_pct": 57.5,
+      "positive_or_flat": 62,
+      "priced": 146,
+      "rows": 159,
+      "unknown": 13
+    },
+    "swing": {
+      "avg_pnl_pct": 8.29,
+      "median_pnl_pct": 8.85,
+      "negative": 60,
+      "negative_rate_priced_pct": 45.1,
+      "positive_or_flat": 73,
+      "priced": 133,
+      "rows": 157,
+      "unknown": 24
+    }
+  },
+  "bullish_pullback_keep_tickers": [
+    "AAPL",
+    "COP",
+    "CVX",
+    "GOOGL",
+    "IWM",
+    "JNJ",
+    "LLY",
+    "NEM",
+    "UNH",
+    "XOM"
+  ],
+  "combined_promoted_guardrails": {
+    "blocked": {
+      "avg_pnl_pct": -15.59,
+      "median_pnl_pct": -25.08,
+      "negative": 164,
+      "negative_rate_priced_pct": 61.4,
+      "positive_or_flat": 103,
+      "priced": 267,
+      "rows": 299,
+      "unknown": 32
+    },
+    "blocked_by_lane": {
+      "bullish_momentum": {
+        "avg_pnl_pct": -46.38,
+        "median_pnl_pct": -71.24,
+        "negative": 21,
+        "negative_rate_priced_pct": 75.0,
+        "positive_or_flat": 7,
+        "priced": 28,
+        "rows": 29,
+        "unknown": 1
+      },
+      "bullish_pullback_observation": {
+        "avg_pnl_pct": -12.75,
+        "median_pnl_pct": -3.15,
+        "negative": 24,
+        "negative_rate_priced_pct": 52.2,
+        "positive_or_flat": 22,
+        "priced": 46,
+        "rows": 54,
+        "unknown": 8
+      },
+      "short_term": {
+        "avg_pnl_pct": -9.53,
+        "median_pnl_pct": -30.62,
+        "negative": 67,
+        "negative_rate_priced_pct": 65.0,
+        "positive_or_flat": 36,
+        "priced": 103,
+        "rows": 113,
+        "unknown": 10
+      },
+      "swing": {
+        "avg_pnl_pct": -14.39,
+        "median_pnl_pct": -22.39,
+        "negative": 52,
+        "negative_rate_priced_pct": 57.8,
+        "positive_or_flat": 38,
+        "priced": 90,
+        "rows": 103,
+        "unknown": 13
+      }
+    },
+    "kept": {
+      "avg_pnl_pct": 53.08,
+      "median_pnl_pct": 46.4,
+      "negative": 29,
+      "negative_rate_priced_pct": 25.0,
+      "positive_or_flat": 87,
+      "priced": 116,
+      "rows": 130,
+      "unknown": 14
+    },
+    "top_negative_tickers_blocked": {
+      "DIA": 18,
+      "IWM": 20,
+      "NFLX": 8,
+      "NVDA": 12,
+      "QQQ": 7,
+      "SLB": 16,
+      "SPY": 8,
+      "XLK": 22
+    }
+  },
+  "generated_at_utc": "2026-05-31T21:29:54Z",
+  "probes": [
+    {
+      "blocked": {
+        "avg_pnl_pct": -25.97,
+        "median_pnl_pct": -14.92,
+        "negative": 45,
+        "negative_rate_priced_pct": 63.4,
+        "positive_or_flat": 26,
+        "priced": 71,
+        "rows": 76,
+        "unknown": 5
+      },
+      "blocked_by_lane": {
+        "bullish_momentum": {
+          "avg_pnl_pct": -33.11,
+          "median_pnl_pct": -29.84,
+          "negative": 4,
+          "negative_rate_priced_pct": 57.1,
+          "positive_or_flat": 3,
+          "priced": 7,
+          "rows": 7,
+          "unknown": 0
+        },
+        "bullish_pullback_observation": {
+          "avg_pnl_pct": 5.16,
+          "median_pnl_pct": 12.52,
+          "negative": 4,
+          "negative_rate_priced_pct": 40.0,
+          "positive_or_flat": 6,
+          "priced": 10,
+          "rows": 10,
+          "unknown": 0
+        },
+        "short_term": {
+          "avg_pnl_pct": -36.05,
+          "median_pnl_pct": -35.27,
+          "negative": 25,
+          "negative_rate_priced_pct": 73.5,
+          "positive_or_flat": 9,
+          "priced": 34,
+          "rows": 36,
+          "unknown": 2
+        },
+        "swing": {
+          "avg_pnl_pct": -21.9,
+          "median_pnl_pct": -22.27,
+          "negative": 12,
+          "negative_rate_priced_pct": 60.0,
+          "positive_or_flat": 8,
+          "priced": 20,
+          "rows": 23,
+          "unknown": 3
+        }
+      },
+      "id": "debit_gt_45_width",
+      "kept": {
+        "avg_pnl_pct": 12.3,
+        "median_pnl_pct": 6.53,
+        "negative": 148,
+        "negative_rate_priced_pct": 47.4,
+        "positive_or_flat": 164,
+        "priced": 312,
+        "rows": 353,
+        "unknown": 41
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "AA": 2,
+        "DIA": 2,
+        "NFLX": 4,
+        "NVDA": 2,
+        "QQQ": 7,
+        "SLB": 4,
+        "WMT": 2,
+        "XLK": 17
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": -25.31,
+        "median_pnl_pct": -30.89,
+        "negative": 78,
+        "negative_rate_priced_pct": 64.5,
+        "positive_or_flat": 43,
+        "priced": 121,
+        "rows": 140,
+        "unknown": 19
+      },
+      "blocked_by_lane": {
+        "bullish_momentum": {
+          "avg_pnl_pct": -41.66,
+          "median_pnl_pct": -60.15,
+          "negative": 11,
+          "negative_rate_priced_pct": 68.8,
+          "positive_or_flat": 5,
+          "priced": 16,
+          "rows": 16,
+          "unknown": 0
+        },
+        "bullish_pullback_observation": {
+          "avg_pnl_pct": -21.67,
+          "median_pnl_pct": -6.48,
+          "negative": 11,
+          "negative_rate_priced_pct": 55.0,
+          "positive_or_flat": 9,
+          "priced": 20,
+          "rows": 25,
+          "unknown": 5
+        },
+        "short_term": {
+          "avg_pnl_pct": -26.82,
+          "median_pnl_pct": -30.96,
+          "negative": 29,
+          "negative_rate_priced_pct": 70.7,
+          "positive_or_flat": 12,
+          "priced": 41,
+          "rows": 48,
+          "unknown": 7
+        },
+        "swing": {
+          "avg_pnl_pct": -19.61,
+          "median_pnl_pct": -32.24,
+          "negative": 27,
+          "negative_rate_priced_pct": 61.4,
+          "positive_or_flat": 17,
+          "priced": 44,
+          "rows": 51,
+          "unknown": 7
+        }
+      },
+      "id": "fill_degradation_ge_20",
+      "kept": {
+        "avg_pnl_pct": 19.31,
+        "median_pnl_pct": 12.02,
+        "negative": 115,
+        "negative_rate_priced_pct": 43.9,
+        "positive_or_flat": 147,
+        "priced": 262,
+        "rows": 289,
+        "unknown": 27
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "AMD": 3,
+        "AMT": 2,
+        "COIN": 6,
+        "MSTR": 4,
+        "SLB": 15,
+        "V": 4,
+        "WMT": 4,
+        "XLK": 21
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": -20.46,
+        "median_pnl_pct": -25.08,
+        "negative": 71,
+        "negative_rate_priced_pct": 59.7,
+        "positive_or_flat": 48,
+        "priced": 119,
+        "rows": 137,
+        "unknown": 18
+      },
+      "blocked_by_lane": {
+        "bullish_momentum": {
+          "avg_pnl_pct": -22.7,
+          "median_pnl_pct": -49.24,
+          "negative": 6,
+          "negative_rate_priced_pct": 54.5,
+          "positive_or_flat": 5,
+          "priced": 11,
+          "rows": 11,
+          "unknown": 0
+        },
+        "bullish_pullback_observation": {
+          "avg_pnl_pct": -27.41,
+          "median_pnl_pct": -13.77,
+          "negative": 11,
+          "negative_rate_priced_pct": 55.0,
+          "positive_or_flat": 9,
+          "priced": 20,
+          "rows": 25,
+          "unknown": 5
+        },
+        "short_term": {
+          "avg_pnl_pct": -18.17,
+          "median_pnl_pct": -27.83,
+          "negative": 28,
+          "negative_rate_priced_pct": 65.1,
+          "positive_or_flat": 15,
+          "priced": 43,
+          "rows": 51,
+          "unknown": 8
+        },
+        "swing": {
+          "avg_pnl_pct": -19.01,
+          "median_pnl_pct": -25.61,
+          "negative": 26,
+          "negative_rate_priced_pct": 57.8,
+          "positive_or_flat": 19,
+          "priced": 45,
+          "rows": 50,
+          "unknown": 5
+        }
+      },
+      "id": "worst_leg_spread_ge_20",
+      "kept": {
+        "avg_pnl_pct": 16.78,
+        "median_pnl_pct": 8.93,
+        "negative": 122,
+        "negative_rate_priced_pct": 46.2,
+        "positive_or_flat": 142,
+        "priced": 264,
+        "rows": 292,
+        "unknown": 28
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "AMT": 2,
+        "BA": 3,
+        "DIA": 4,
+        "SBUX": 2,
+        "SLB": 12,
+        "V": 5,
+        "WMT": 3,
+        "XLK": 22
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": 19.83,
+        "median_pnl_pct": 3.42,
+        "negative": 56,
+        "negative_rate_priced_pct": 47.1,
+        "positive_or_flat": 63,
+        "priced": 119,
+        "rows": 129,
+        "unknown": 10
+      },
+      "blocked_by_lane": {
+        "bullish_momentum": {
+          "avg_pnl_pct": 44.0,
+          "median_pnl_pct": 53.63,
+          "negative": 10,
+          "negative_rate_priced_pct": 33.3,
+          "positive_or_flat": 20,
+          "priced": 30,
+          "rows": 31,
+          "unknown": 1
+        },
+        "short_term": {
+          "avg_pnl_pct": 16.55,
+          "median_pnl_pct": -4.66,
+          "negative": 24,
+          "negative_rate_priced_pct": 51.1,
+          "positive_or_flat": 23,
+          "priced": 47,
+          "rows": 49,
+          "unknown": 2
+        },
+        "swing": {
+          "avg_pnl_pct": 6.22,
+          "median_pnl_pct": -5.72,
+          "negative": 22,
+          "negative_rate_priced_pct": 52.4,
+          "positive_or_flat": 20,
+          "priced": 42,
+          "rows": 49,
+          "unknown": 7
+        }
+      },
+      "id": "momentum_chase",
+      "kept": {
+        "avg_pnl_pct": -1.38,
+        "median_pnl_pct": -4.81,
+        "negative": 137,
+        "negative_rate_priced_pct": 51.9,
+        "positive_or_flat": 127,
+        "priced": 264,
+        "rows": 300,
+        "unknown": 36
+      },
+      "promote_to_guardrail": false,
+      "top_negative_tickers_blocked": {
+        "AMD": 3,
+        "COIN": 6,
+        "IWM": 4,
+        "NFLX": 4,
+        "NVDA": 7,
+        "SLB": 5,
+        "TSLA": 6,
+        "XLK": 10
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": -13.44,
+        "median_pnl_pct": -30.09,
+        "negative": 101,
+        "negative_rate_priced_pct": 62.0,
+        "positive_or_flat": 62,
+        "priced": 163,
+        "rows": 172,
+        "unknown": 9
+      },
+      "blocked_by_lane": {
+        "bullish_momentum": {
+          "avg_pnl_pct": -69.72,
+          "median_pnl_pct": -82.82,
+          "negative": 12,
+          "negative_rate_priced_pct": 92.3,
+          "positive_or_flat": 1,
+          "priced": 13,
+          "rows": 14,
+          "unknown": 1
+        },
+        "short_term": {
+          "avg_pnl_pct": -6.84,
+          "median_pnl_pct": -28.42,
+          "negative": 55,
+          "negative_rate_priced_pct": 64.7,
+          "positive_or_flat": 30,
+          "priced": 85,
+          "rows": 89,
+          "unknown": 4
+        },
+        "swing": {
+          "avg_pnl_pct": -10.82,
+          "median_pnl_pct": -4.74,
+          "negative": 34,
+          "negative_rate_priced_pct": 52.3,
+          "positive_or_flat": 31,
+          "priced": 65,
+          "rows": 69,
+          "unknown": 4
+        }
+      },
+      "id": "lane_ticker_quarantine",
+      "kept": {
+        "avg_pnl_pct": 19.03,
+        "median_pnl_pct": 11.84,
+        "negative": 92,
+        "negative_rate_priced_pct": 41.8,
+        "positive_or_flat": 128,
+        "priced": 220,
+        "rows": 257,
+        "unknown": 37
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "COIN": 3,
+        "DIA": 14,
+        "IWM": 20,
+        "NFLX": 5,
+        "NVDA": 12,
+        "SLB": 14,
+        "SPY": 8,
+        "XLK": 22
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": -14.84,
+        "median_pnl_pct": -6.48,
+        "negative": 23,
+        "negative_rate_priced_pct": 54.8,
+        "positive_or_flat": 19,
+        "priced": 42,
+        "rows": 50,
+        "unknown": 8
+      },
+      "blocked_by_lane": {
+        "bullish_pullback_observation": {
+          "avg_pnl_pct": -14.84,
+          "median_pnl_pct": -6.48,
+          "negative": 23,
+          "negative_rate_priced_pct": 54.8,
+          "positive_or_flat": 19,
+          "priced": 42,
+          "rows": 50,
+          "unknown": 8
+        }
+      },
+      "id": "bullish_pullback_not_keep_bucket",
+      "kept": {
+        "avg_pnl_pct": 7.68,
+        "median_pnl_pct": 1.09,
+        "negative": 170,
+        "negative_rate_priced_pct": 49.9,
+        "positive_or_flat": 171,
+        "priced": 341,
+        "rows": 379,
+        "unknown": 38
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "AMD": 1,
+        "AMZN": 2,
+        "BA": 2,
+        "COIN": 2,
+        "DIA": 4,
+        "MSFT": 4,
+        "MSTR": 2,
+        "QQQ": 2
+      }
+    },
+    {
+      "blocked": {
+        "avg_pnl_pct": -59.7,
+        "median_pnl_pct": -66.03,
+        "negative": 6,
+        "negative_rate_priced_pct": 100.0,
+        "positive_or_flat": 0,
+        "priced": 6,
+        "rows": 6,
+        "unknown": 0
+      },
+      "blocked_by_lane": {
+        "bullish_pullback_observation": {
+          "avg_pnl_pct": -59.7,
+          "median_pnl_pct": -66.03,
+          "negative": 6,
+          "negative_rate_priced_pct": 100.0,
+          "positive_or_flat": 0,
+          "priced": 6,
+          "rows": 6,
+          "unknown": 0
+        }
+      },
+      "id": "bullish_pullback_ret5_lt_minus_2",
+      "kept": {
+        "avg_pnl_pct": 6.24,
+        "median_pnl_pct": 1.38,
+        "negative": 187,
+        "negative_rate_priced_pct": 49.6,
+        "positive_or_flat": 190,
+        "priced": 377,
+        "rows": 423,
+        "unknown": 46
+      },
+      "promote_to_guardrail": true,
+      "top_negative_tickers_blocked": {
+        "BA": 2,
+        "C": 1,
+        "GOOGL": 1,
+        "MSFT": 2
+      }
+    }
+  ],
+  "promoted_guardrails": [
+    "debit_gt_45_width",
+    "fill_degradation_ge_20",
+    "worst_leg_spread_ge_20",
+    "lane_ticker_quarantine",
+    "bullish_pullback_not_keep_bucket",
+    "bullish_pullback_ret5_lt_minus_2"
+  ],
+  "repair_lanes": [
+    "bullish_momentum",
+    "bullish_pullback_observation",
+    "short_term",
+    "swing"
+  ],
+  "scope": "regular_supervised_trading_desk_repair_lanes"
+}

@@ -21,6 +21,7 @@ LEDGER_PATH = OUTPUT_DIR / "ledger.jsonl"
 
 EVALUATOR_VERSION = "regular-options-autoresearch-v1"
 TARGET_CLEAN_TRADES = 200
+COUNT_CANDIDATE_STATUSES = {"count_candidate", "portfolio_candidate"}
 
 PROMOTION_GATES: dict[str, Any] = {
     "clean_trade_count_min": TARGET_CLEAN_TRADES,
@@ -99,7 +100,7 @@ def _included_lanes(report: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         lane
         for lane in report.get("lanes") or []
-        if lane.get("include_in_proof_portfolio") and lane.get("status") == "portfolio_candidate"
+        if lane.get("include_in_proof_portfolio") and str(lane.get("status") or "") in COUNT_CANDIDATE_STATUSES
     ]
 
 

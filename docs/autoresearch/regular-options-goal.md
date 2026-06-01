@@ -4,11 +4,37 @@ Use this prompt when running a Karpathy-style `/goal` loop for the regular stock
 
 ## Objective
 
-Repair the regular stock-options stack so it increases promotable clean trade count under a frozen conservative evaluator. The first target is Lane A zero-bid survivability, not a raw `300`-trade count.
+Improve proof-grade closed profitability across the active regular supervised options product. This has two measured surfaces:
+
+- product closed-profitability progress in the Trading Desk, using executable/truth-grade closed rows and read-only replay audits
+- historical proof-grade progress under the frozen regular-options autoresearch evaluator, using trusted intraday OPRA/NBBO exact-contract evidence only
+
+The goal is not to produce more rows, more experiments, or a raw `300`-trade count. Every loop must show a measured delta in the operating scorecard, or it must retire the failed branch and name the next higher-leverage branch.
+
+## Operating Scorecard
+
+Run the operating scorecard before and after each meaningful loop:
+
+```powershell
+python scripts/build_regular_profitability_operating_scorecard.py --json
+```
+
+The scorecard writes:
+
+- `data/profitability-lab/regular-options-operating-scorecard/latest.json`
+- `docs/regular-options-operating-scorecard.md`
+
+Interpret the status literally:
+
+- `proof_grade_profitability_ready`: the frozen proof judge has real clean-profitability progress.
+- `visible_product_profitability_progress_but_proof_still_blocked`: Trading Desk profitability improved, but the exact-contract proof stack is still blocked.
+- `no_material_profitability_progress_visible`: stop the branch and pick a sharper hypothesis.
+
+The operator-facing answer to "are we seeing results?" comes from this scorecard, not from vibes, trade count, or isolated PF on a rejected scout.
 
 ## Frozen Judge
 
-Run the judge before and after every experiment:
+Run the judge before and after every historical proof experiment:
 
 ```powershell
 python scripts/evaluate_regular_options_autoresearch.py --refresh-multilane --experiment-id <slug> --hypothesis "<one hypothesis>" --append-ledger --score-line
@@ -43,18 +69,18 @@ Production readiness additionally requires paper-shadow status `passed`.
 
 ## Loop Rules
 
-1. Run the judge and record the baseline ledger row.
-2. Pick exactly one hypothesis.
-3. Change only the strategy/replay surface needed for that hypothesis.
-4. Regenerate the relevant replay and multi-lane artifacts.
-5. Run focused tests plus the judge.
-6. Keep the change only if it improves `status` to `promotable_clean` or materially reduces blockers without weakening the frozen gates.
-7. If the experiment fails, revert only the experiment edits. Do not delete the ledger row.
+1. Run the operating scorecard and identify the weakest measured surface.
+2. Pick exactly one hypothesis with a measurable expected delta.
+3. For Trading Desk closed-profitability work, use executable/truth-grade closed rows, read-only replay/audit first, and never synthesize exits from midpoint, last trade, stale, daily/EOD, or lifecycle-only rows.
+4. For historical proof work, change only the strategy/replay surface needed for the hypothesis, then regenerate the relevant replay and multi-lane artifacts.
+5. Run focused tests plus the scorecard. Run the frozen judge when the hypothesis touches the historical proof stack.
+6. Keep the change only if it improves `status` to `promotable_clean`, materially improves the Trading Desk closed-profitability surface without weakening proof rules, or retires a branch with evidence that prevents wasted future loops.
+7. If the experiment fails, revert only disposable experiment edits. Keep audit artifacts and docs that prevent repeating the same failed branch.
 
-## First Hypotheses
+## Current High-Leverage Hypotheses
 
-1. Add causal pre-entry bid/ask continuity filters for both legs, especially short-leg survivability.
-2. Test more liquid strike or width alternatives at entry using only pre-entry information.
-3. Identify Lane A ticker, DTE, moneyness, and spread-width subsets that survive conservative side-aware replay.
-4. Compare conservative side-aware exits against midpoint-only behavior. If the lane only works at midpoint, reject it.
-5. After Lane A is clean, pursue separate non-overlapping lanes toward `300`.
+1. Audit legacy rows `26`, `39`, and `44` to explain why stored executable time-exit-style SELL evidence did not realize before final negative closure. Fix only if the cause applies to current state-changing review behavior, not merely historical migration.
+2. Keep promoted Trading Desk entry guardrails active and monitor scan starvation before loosening them.
+3. Stop tuning Lane A entry, memory, or broad bad-zero-ticker variants unless a genuinely new causal exit/liquidity rule changes the zero-bid economics.
+4. Pursue non-overlapping regular stock-options sleeves or materially different exit/liquidity rules that can add at least `43` strict-new clean trades over the `157` clean baseline.
+5. Reject any branch that only improves midpoint, stale, daily/EOD, or research/backfill paper evidence.

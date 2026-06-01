@@ -111,9 +111,8 @@ The mounted browser app is owned by:
 
 ## Backend-Only Endpoints
 
-These exist in `python-backend/main.py` but are not mirrored through active Next routes in this worktree:
+These exist in the FastAPI backend but are not mirrored through active Next routes in this worktree:
 
-- `GET /api/profiles`
 - `DELETE /api/predictions/{pred_id}`
 - `GET /api/positions/{position_id}/close-prefill`
 - `POST /api/scan/recommendations`
@@ -127,6 +126,29 @@ These exist in `python-backend/main.py` but are not mirrored through active Next
 - `GET /api/daily-performance`
 - `GET /api/health`
 - `GET /api/proof-summary`
+- `GET /api/profiles`
+
+## Client Fetch Surface
+
+Active client components fetch these mounted browser API routes through Next, not FastAPI directly:
+
+- `/api/backtest` from `src/components/strategy/StrategyView.tsx`
+- `/api/backtest/forward-evidence` from `src/components/predictions/PredictionsView.tsx`
+- `/api/backtest/summary` from `src/components/strategy/StrategyView.tsx`
+- `/api/changelog` from `src/components/strategy/StrategyView.tsx`
+- `/api/options-profit/status` from `src/components/predictions/PredictionsView.tsx`
+- `/api/positions` from `src/components/predictions/PredictionsView.tsx`
+- `/api/positions/[param]/close` from `src/components/predictions/PredictionsView.tsx`
+- `/api/positions/review` from `src/components/predictions/PredictionsView.tsx`
+- `/api/predictions` from `src/components/predictions/PredictionsView.tsx`
+- `/api/predictions/grade` from `src/components/predictions/PredictionsView.tsx`
+- `/api/profile` from `src/components/strategy/StrategyView.tsx`
+- `/api/risk-settings` from `src/components/layout/AppShell.tsx`
+- `/api/scan` from `src/components/predictions/PredictionsView.tsx`
+- `/api/sectors` from `src/components/predictions/PredictionsView.tsx`
+- `/api/suggested-trades` from `src/components/predictions/PredictionsView.tsx`
+- `/api/suggested-trades/[param]/close` from `src/components/predictions/PredictionsView.tsx`
+- `/api/suggested-trades/review` from `src/components/predictions/PredictionsView.tsx`
 
 ## Known Snapshot Caveats
 

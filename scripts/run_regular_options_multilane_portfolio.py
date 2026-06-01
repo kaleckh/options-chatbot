@@ -29,6 +29,9 @@ SIDE_AWARE_ZERO_BID_LATEST = (
 )
 
 TARGET_EXACT_TRADES = 200
+COUNT_CANDIDATE_STATUS = "count_candidate"
+LEGACY_COUNT_CANDIDATE_STATUS = "portfolio_candidate"
+COUNT_CANDIDATE_STATUSES = {COUNT_CANDIDATE_STATUS, LEGACY_COUNT_CANDIDATE_STATUS}
 
 
 LANE_SOURCES: list[dict[str, Any]] = [
@@ -287,6 +290,11 @@ def _round(value: Any, digits: int = 2) -> float:
     return round(_safe_float(value), digits)
 
 
+def _metric_value(metrics: dict[str, Any], run: dict[str, Any], key: str) -> Any:
+    value = metrics.get(key) if metrics else None
+    return run.get(key) if value is None else value
+
+
 def _metrics_from_run(run: dict[str, Any]) -> dict[str, Any]:
     metrics = run.get("authoritative_profitability_metrics") or run.get("exact_contract_metrics") or {}
     return {
@@ -295,12 +303,16 @@ def _metrics_from_run(run: dict[str, Any]) -> dict[str, Any]:
         "exact_trade_count": _safe_int(metrics.get("trade_count") or run.get("exact_contract_match_count")),
         "unpriced_trade_count": _safe_int(run.get("unpriced_trade_count")),
         "quote_coverage_pct": _round(run.get("quote_coverage_pct")),
-        "profit_factor": _round(metrics.get("profit_factor") if metrics else run.get("profit_factor")),
-        "avg_pnl_pct": _round(metrics.get("avg_pnl_pct") if metrics else run.get("avg_pnl_pct")),
-        "win_rate_pct": _round(metrics.get("win_rate_pct") if metrics else run.get("win_rate_pct")),
-        "gross_win": _round(metrics.get("gross_win") if metrics else run.get("gross_win")),
-        "gross_loss": _round(metrics.get("gross_loss") if metrics else run.get("gross_loss")),
+        "profit_factor": _round(_metric_value(metrics, run, "profit_factor")),
+        "avg_pnl_pct": _round(_metric_value(metrics, run, "avg_pnl_pct")),
+        "win_rate_pct": _round(_metric_value(metrics, run, "win_rate_pct")),
+        "gross_win": _round(_metric_value(metrics, run, "gross_win")),
+        "gross_loss": _round(_metric_value(metrics, run, "gross_loss")),
     }
+
+
+def _is_count_candidate_status(status: Any) -> bool:
+    return str(status or "") in COUNT_CANDIDATE_STATUSES
 
 
 def _robustness_summary(path: Path | None) -> dict[str, Any]:
@@ -479,7 +491,7 @@ def classify_lane(run_metrics: dict[str, Any], robustness: dict[str, Any], proof
         blockers.append("rolling_oos_not_clean")
 
     if include_in_proof and proof_grade == "trusted_intraday_opra_nbbo" and exact >= 100 and pf >= 1.75:
-        status = "portfolio_candidate"
+        status = COUNT_CANDIDATE_STATUS
     elif proof_grade == "trusted_intraday_opra_nbbo" and exact > 0:
         status = "intraday_scout"
     elif proof_grade == "exact_daily_research":
@@ -502,7 +514,7 @@ def build_quality_gate(lane_reports: list[dict[str, Any]], combined_metrics: dic
     included_lanes = [
         lane
         for lane in lane_reports
-        if lane.get("include_in_proof_portfolio") and lane.get("status") == "portfolio_candidate"
+        if lane.get("include_in_proof_portfolio") and _is_count_candidate_status(lane.get("status"))
     ]
     for lane in included_lanes:
         lane_id = str(lane.get("lane_id"))
@@ -626,7 +638,7 @@ def build_report() -> dict[str, Any]:
         rows = normalize_trades(lane, run)
         lane_portfolio_eligible = (
             bool(lane.get("include_in_proof_portfolio"))
-            and classification["status"] == "portfolio_candidate"
+            and _is_count_candidate_status(classification["status"])
         )
         for row in rows:
             row["portfolio_eligible"] = bool(row.get("exact_priced")) and lane_portfolio_eligible

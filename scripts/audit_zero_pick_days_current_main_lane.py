@@ -225,6 +225,87 @@ def _discover_audit_dates(
     return selected, {day.isoformat(): reasons_by_date[day.isoformat()] for day in selected}, discovery
 
 
+def _copy_playbook_value(value: Any) -> Any:
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+
+def _build_replay_playbook_for_audit(playbook_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    playbook_id = str(playbook_id or "").strip().lower()
+    scan_playbook = get_scan_playbook(playbook_id)
+    calibration_playbook_id = str(scan_playbook.get("calibration_playbook") or "").strip().lower()
+    if playbook_id in wfo.REPLAY_PLAYBOOKS:
+        base_playbook_id = playbook_id
+        adapter_source = "direct_replay_playbook"
+    elif calibration_playbook_id and calibration_playbook_id in wfo.REPLAY_PLAYBOOKS:
+        base_playbook_id = calibration_playbook_id
+        adapter_source = "calibration_playbook"
+    else:
+        raise RuntimeError(
+            f"Scan playbook '{playbook_id}' has no historical replay adapter. "
+            "Add a matching wfo.REPLAY_PLAYBOOKS entry or a calibration_playbook before auditing it."
+        )
+
+    replay_playbook = copy.deepcopy(wfo.REPLAY_PLAYBOOKS[base_playbook_id])
+    replay_playbook["id"] = playbook_id
+    replay_playbook["label"] = scan_playbook.get("label") or replay_playbook.get("label") or playbook_id
+    replay_playbook["target_dte"] = scan_playbook.get("target_dte", replay_playbook.get("target_dte", 35))
+
+    scan_tickers = (
+        scan_playbook.get("scan_tickers")
+        or scan_playbook.get("allowed_tickers")
+        or replay_playbook.get("allowed_tickers")
+        or replay_playbook.get("historical_required_underlyings")
+        or getattr(wfo, "REGULAR_OPTIONS_REPLAY_UNIVERSE", [])
+        or getattr(wfo, "IMPORTED_VALIDATION_UNIVERSE", [])
+        or []
+    )
+    replay_playbook["allowed_tickers"] = [str(symbol).strip().upper() for symbol in scan_tickers if str(symbol).strip()]
+
+    scan_directions = (
+        scan_playbook.get("scan_allowed_directions")
+        or scan_playbook.get("allowed_directions")
+        or replay_playbook.get("allowed_directions")
+        or ["call"]
+    )
+    replay_playbook["allowed_directions"] = [str(direction).strip().lower() for direction in scan_directions if str(direction).strip()]
+
+    for key in (
+        "allowed_asset_classes",
+        "allowed_market_regimes",
+        "allowed_sectors",
+        "allowed_strategy_types",
+        "min_quality_score",
+        "max_debit_pct_of_width",
+        "max_scan_picks_per_ticker",
+    ):
+        if scan_playbook.get(key) is not None:
+            replay_playbook[key] = _copy_playbook_value(scan_playbook[key])
+
+    if scan_playbook.get("signal_variant") and not replay_playbook.get("entry_signal_id"):
+        replay_playbook["entry_signal_id"] = str(scan_playbook["signal_variant"]).strip()
+
+    if str(replay_playbook.get("entry_signal_id") or "").strip().lower() == "pullback_uptrend":
+        replay_playbook.setdefault("allowed_signal_families", ["bullish_pullback"])
+        replay_playbook.setdefault("pullback_ret5_min", -4.0)
+        replay_playbook.setdefault("pullback_ret5_max", 0.25)
+        replay_playbook.setdefault("pullback_ret20_min", 2.0)
+
+    adapter = {
+        "source": adapter_source,
+        "base_playbook_id": base_playbook_id,
+        "scan_playbook_id": playbook_id,
+        "calibration_playbook_id": calibration_playbook_id or None,
+        "entry_signal_id": replay_playbook.get("entry_signal_id") or "momentum_default",
+        "allowed_signal_families": replay_playbook.get("allowed_signal_families") or [],
+        "uses_default_momentum_entry": not bool(replay_playbook.get("entry_signal_id")),
+    }
+    return scan_playbook, replay_playbook, adapter
+
+
 def _entry_dt(entry_date: date, minute_et: int) -> datetime:
     return datetime.combine(entry_date, time(hour=minute_et // 60, minute=minute_et % 60), tzinfo=ET)
 
@@ -268,8 +349,10 @@ class CurrentMainLaneReplay:
         source_labels: list[str],
         trusted_only: bool,
         lookback_years: int,
+        audit_id: str = AUDIT_ID,
     ) -> None:
         self.playbook_id = playbook_id
+        self.audit_id = audit_id
         self.truth_lane = truth_lane
         self.pricing_lane = pricing_lane
         self.source_labels = source_labels
@@ -280,33 +363,9 @@ class CurrentMainLaneReplay:
         self.entry_window_minutes = 0 if truth_lane == wfo.IMPORTED_DAILY_TRUTH_SOURCE else ENTRY_QUOTE_WINDOW_MINUTES
         self.store = HistoricalOptionsStore()
 
-        scan_playbook = get_scan_playbook(playbook_id)
-        replay_playbook = copy.deepcopy(wfo.REPLAY_PLAYBOOKS.get(playbook_id, {"id": playbook_id}))
-        replay_playbook["id"] = playbook_id
-        replay_playbook["label"] = scan_playbook.get("label") or replay_playbook.get("label") or playbook_id
-        replay_playbook["target_dte"] = scan_playbook.get("target_dte", replay_playbook.get("target_dte", 35))
-        replay_playbook["allowed_tickers"] = list(
-            scan_playbook.get("scan_tickers")
-            or scan_playbook.get("allowed_tickers")
-            or replay_playbook.get("allowed_tickers")
-            or []
-        )
-        replay_playbook["allowed_directions"] = list(
-            scan_playbook.get("scan_allowed_directions")
-            or scan_playbook.get("allowed_directions")
-            or replay_playbook.get("allowed_directions")
-            or ["call"]
-        )
-        replay_playbook["max_debit_pct_of_width"] = scan_playbook.get(
-            "max_debit_pct_of_width",
-            replay_playbook.get("max_debit_pct_of_width", 55.0),
-        )
-        replay_playbook.setdefault("entry_signal_id", "pullback_uptrend")
-        replay_playbook.setdefault("allowed_signal_families", ["bullish_pullback"])
-        replay_playbook.setdefault("pullback_ret5_min", -4.0)
-        replay_playbook.setdefault("pullback_ret5_max", 0.25)
-        replay_playbook.setdefault("pullback_ret20_min", 2.0)
+        scan_playbook, replay_playbook, replay_adapter_info = _build_replay_playbook_for_audit(playbook_id)
         self.replay_playbook = replay_playbook
+        self.replay_adapter_info = replay_adapter_info
         self.scan_playbook = scan_playbook
         self.symbols = [str(symbol).strip().upper() for symbol in replay_playbook.get("allowed_tickers") or [] if str(symbol).strip()]
 
@@ -713,7 +772,7 @@ class CurrentMainLaneReplay:
             "long_leg": _leg_snapshot(long_quote, "long"),
             "short_leg": _leg_snapshot(short_quote, "short"),
             "legs": [_leg_snapshot(long_quote, "long"), _leg_snapshot(short_quote, "short")],
-            "backfill_audit_id": AUDIT_ID,
+            "backfill_audit_id": self.audit_id,
         }
         pick["backfill_signature"] = _pick_signature(pick)
         return pick, None
@@ -744,7 +803,7 @@ def _existing_backfill_signatures() -> set[str]:
     return signatures
 
 
-def _existing_ledger_run_ids() -> set[str]:
+def _existing_ledger_run_ids(playbook_id: str) -> set[str]:
     if not FORWARD_LEDGER_DB.exists():
         return set()
     with sqlite3.connect(FORWARD_LEDGER_DB) as conn:
@@ -755,9 +814,15 @@ def _existing_ledger_run_ids() -> set[str]:
             WHERE COALESCE(source_label, '') = 'research_backfill'
               AND COALESCE(playbook, '') = ?
             """,
-            (DEFAULT_SCAN_PLAYBOOK_ID,),
+            (playbook_id,),
         ).fetchall()
     return {str(row[0]) for row in rows if row and row[0]}
+
+
+def _research_backfill_run_id(*, audit_id: str, playbook_id: str, scan_date: date) -> str:
+    if audit_id == AUDIT_ID and playbook_id == DEFAULT_SCAN_PLAYBOOK_ID:
+        return f"{audit_id}:{scan_date.isoformat()}"
+    return f"{audit_id}:{playbook_id}:{scan_date.isoformat()}"
 
 
 def _log_records_for_pick(
@@ -767,6 +832,7 @@ def _log_records_for_pick(
     scan_result: dict[str, Any],
     rank: int,
     reasons: list[str],
+    audit_id: str,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     scan_record = log_scan_picks._build_log_record(pick, run_at=run_at, scan_result=scan_result)
     scan_record.update(
@@ -775,7 +841,7 @@ def _log_records_for_pick(
             "status": "backfilled",
             "scan_date": run_at.strftime("%Y-%m-%d"),
             "candidate_rank": rank,
-            "backfill_audit_id": AUDIT_ID,
+            "backfill_audit_id": audit_id,
             "backfill_signature": _pick_signature(pick),
             "backfill_scope_reasons": list(reasons),
             "research_only": True,
@@ -801,7 +867,7 @@ def _log_records_for_pick(
             "filled_at": run_at.isoformat(),
             "auto_track_position_id": None,
             "review_status": "research_backfill",
-            "backfill_audit_id": AUDIT_ID,
+            "backfill_audit_id": audit_id,
             "backfill_signature": _pick_signature(pick),
             "backfill_scope_reasons": list(reasons),
             "research_only": True,
@@ -818,11 +884,13 @@ def _record_research_ledger_session(
     scan_result: dict[str, Any],
     reasons: list[str],
     dry_run: bool,
+    audit_id: str,
+    playbook_id: str,
 ) -> dict[str, Any] | None:
-    run_id = f"{AUDIT_ID}:{scan_date.isoformat()}"
+    run_id = _research_backfill_run_id(audit_id=audit_id, playbook_id=playbook_id, scan_date=scan_date)
     if dry_run:
         return {"run_id": run_id, "status": "dry_run"}
-    if run_id in _existing_ledger_run_ids():
+    if run_id in _existing_ledger_run_ids(playbook_id):
         return {"run_id": run_id, "status": "duplicate_skipped"}
     snapshot = build_forward_scan_snapshot(
         picks=picks,
@@ -835,14 +903,14 @@ def _record_research_ledger_session(
         candidate_count=scan_result.get("candidate_count"),
         returned_count=len(picks),
         cohort_funnels={
-            str((scan_result.get("playbook") or {}).get("forced_cohort_id") or DEFAULT_SCAN_PLAYBOOK_ID): scan_result.get("scan_funnel")
+            str((scan_result.get("playbook") or {}).get("forced_cohort_id") or playbook_id): scan_result.get("scan_funnel")
         },
-        cohort_ids=[str((scan_result.get("playbook") or {}).get("forced_cohort_id") or DEFAULT_SCAN_PLAYBOOK_ID)],
+        cohort_ids=[str((scan_result.get("playbook") or {}).get("forced_cohort_id") or playbook_id)],
         run_id=run_id,
         run_mode="zero_pick_current_algorithm_backfill",
         evidence_class="research_backfill",
         is_fixture=False,
-        policy_artifact_id=AUDIT_ID,
+        policy_artifact_id=audit_id,
         quote_freshness_status="observed",
         symbol_diagnostics={"backfill_scope_reasons": reasons},
     )
@@ -869,6 +937,8 @@ def _record_research_ledger_session(
 
 def build_audit(args: argparse.Namespace) -> dict[str, Any]:
     load_local_env(ROOT)
+    playbook_id = str(args.playbook or "").strip().lower()
+    audit_id = str(getattr(args, "audit_id", None) or AUDIT_ID)
     historical_options_db = Path(str(args.historical_options_db)).expanduser()
     if historical_options_db:
         os.environ["HISTORICAL_OPTIONS_DB_PATH"] = str(historical_options_db)
@@ -878,18 +948,19 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
         if item.strip()
     ]
     audit_dates, reasons_by_date, discovery = _discover_audit_dates(
-        playbook_id=args.playbook,
+        playbook_id=playbook_id,
         date_from=_parse_date(args.date_from) if args.date_from else None,
         date_to=_parse_date(args.date_to) if args.date_to else None,
         scope=args.scope,
     )
     engine = CurrentMainLaneReplay(
-        playbook_id=args.playbook,
+        playbook_id=playbook_id,
         truth_lane=args.truth_lane,
         pricing_lane=args.pricing_lane,
         source_labels=source_labels,
         trusted_only=not bool(args.allow_research_data),
         lookback_years=int(args.lookback_years),
+        audit_id=audit_id,
     )
     engine.load()
 
@@ -963,6 +1034,7 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
                 scan_result=scan_result,
                 rank=rank,
                 reasons=reasons,
+                audit_id=audit_id,
             )
             scan_rows_to_append.append(scan_row)
             fill_rows_to_append.append(fill_row)
@@ -977,6 +1049,8 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
                 scan_result=scan_result,
                 reasons=reasons,
                 dry_run=not bool(args.apply),
+                audit_id=audit_id,
+                playbook_id=playbook_id,
             )
             if ledger_result:
                 ledger_results.append(ledger_result)
@@ -1014,7 +1088,8 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
         _append_jsonl(FILL_ATTEMPT_LOG, fill_rows_to_append)
 
     summary = {
-        "audit_id": AUDIT_ID,
+        "audit_id": audit_id,
+        "playbook": playbook_id,
         "apply": bool(args.apply),
         "date_count": len(audit_dates),
         "signal_candidate_count": signal_total,
@@ -1032,7 +1107,7 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
         "generated_at_utc": _utc_now_iso(),
         "summary": summary,
         "parameters": {
-            "playbook": args.playbook,
+            "playbook": playbook_id,
             "scope": args.scope,
             "truth_lane": args.truth_lane,
             "pricing_lane": args.pricing_lane,
@@ -1041,6 +1116,7 @@ def build_audit(args: argparse.Namespace) -> dict[str, Any]:
             "n_picks": int(args.n_picks),
             "lookback_years": int(args.lookback_years),
             "historical_options_db": str(historical_options_db),
+            "replay_adapter": engine.replay_adapter_info,
         },
         "discovery": discovery,
         "ledger_results": ledger_results,
@@ -1060,7 +1136,7 @@ def write_report(audit: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Audit zero-pick days against the current main stock-lane algorithm.")
+    parser = argparse.ArgumentParser(description="Audit zero-pick days against one explicitly selected scan lane.")
     parser.add_argument("--playbook", default=DEFAULT_SCAN_PLAYBOOK_ID)
     parser.add_argument("--scope", choices=["zero_any", "main_zero", "zero_any_or_main_zero"], default="zero_any_or_main_zero")
     parser.add_argument("--date-from")
@@ -1072,6 +1148,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--allow-research-data", action="store_true")
     parser.add_argument("--lookback-years", type=int, default=2)
     parser.add_argument("--n-picks", type=int, default=10)
+    parser.add_argument("--audit-id", default=AUDIT_ID)
     parser.add_argument("--apply", action="store_true", help="Append backfilled tracking rows and research-backfill ledger sessions.")
     parser.add_argument("--no-write-report", action="store_true")
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))

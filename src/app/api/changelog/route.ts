@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getChangelog } from "@/lib/python-bridge";
-import { jsonError } from "../_utils";
+import { jsonError, jsonWithStrategyLabContract } from "../_utils";
 
 export async function GET(req: NextRequest) {
   try {
     const profile = req.nextUrl.searchParams.get("profile") || "equity";
     const result = await getChangelog(profile);
-    return NextResponse.json(result);
+    return jsonWithStrategyLabContract(result, "profile_changelog_read");
   } catch (err) {
     return jsonError(err, "Failed to fetch changelog");
   }

@@ -13,6 +13,11 @@ interface FinTableProps {
   label?: string;
   density?: "default" | "compact";
   emptyMessage?: string;
+  mobileTitleCol?: string;
+  mobileSubtitleCol?: string;
+  mobilePriorityCols?: string[];
+  mobileHiddenCols?: string[];
+  mobileActionCol?: string;
 }
 
 function cellClass(
@@ -122,6 +127,11 @@ function FinTable({
   label = "Data table",
   density = "default",
   emptyMessage = "No data",
+  mobileTitleCol,
+  mobileSubtitleCol,
+  mobilePriorityCols = [],
+  mobileHiddenCols = [],
+  mobileActionCol = "Action",
 }: FinTableProps) {
   if (!data || data.length === 0) {
     return (
@@ -134,6 +144,28 @@ function FinTable({
   const monoSet = new Set(monoCols);
   const outcomeSet = new Set(outcomeCols);
   const columns = Object.keys(data[0]).filter((col) => !col.startsWith("__"));
+  const mobileHiddenSet = new Set(mobileHiddenCols);
+
+  const pickMobileColumn = (
+    preferred: string | undefined,
+    fallback: string | undefined,
+    excluded: Set<string>
+  ): string | undefined => {
+    if (preferred && columns.includes(preferred) && !mobileHiddenSet.has(preferred)) return preferred;
+    if (fallback && columns.includes(fallback) && !mobileHiddenSet.has(fallback)) return fallback;
+    return columns.find((col) => col !== mobileActionCol && !mobileHiddenSet.has(col) && !excluded.has(col));
+  };
+
+  const mobileFieldColumns = (titleCol: string | undefined, subtitleCol: string | undefined): string[] => {
+    const excluded = new Set([titleCol, subtitleCol, mobileActionCol].filter(Boolean) as string[]);
+    const priority = mobilePriorityCols.filter(
+      (col) => columns.includes(col) && !mobileHiddenSet.has(col) && !excluded.has(col)
+    );
+    const rest = columns.filter(
+      (col) => col !== mobileActionCol && !mobileHiddenSet.has(col) && !excluded.has(col) && !priority.includes(col)
+    );
+    return [...priority, ...rest];
+  };
 
   return (
     <div
@@ -146,15 +178,22 @@ function FinTable({
       <div className="ft-mobile-cards">
         {data.map((row, i) => {
           const key = rowKey(row, i);
-          const titleCol = columns[0];
-          const subtitleCol = columns.find((col) => col !== titleCol && col !== "Action");
+          const titleCol = pickMobileColumn(mobileTitleCol, columns[0], new Set());
+          const subtitleCol = pickMobileColumn(
+            mobileSubtitleCol,
+            columns.find((col) => col !== titleCol && col !== mobileActionCol),
+            new Set(titleCol ? [titleCol] : [])
+          );
+          const fields = mobileFieldColumns(titleCol, subtitleCol);
           return (
             <article key={key} className="ft-mobile-card">
               <div className="ft-mobile-card-head">
-                <div>
-                  <div className="ft-mobile-label">{titleCol}</div>
-                  <div className="ft-mobile-title">{renderCellValue(titleCol, row[titleCol], badgeCol, outcomeSet)}</div>
-                </div>
+                {titleCol ? (
+                  <div>
+                    <div className="ft-mobile-label">{titleCol}</div>
+                    <div className="ft-mobile-title">{renderCellValue(titleCol, row[titleCol], badgeCol, outcomeSet)}</div>
+                  </div>
+                ) : null}
                 {subtitleCol ? (
                   <div className="text-right">
                     <div className="ft-mobile-label">{subtitleCol}</div>
@@ -163,9 +202,7 @@ function FinTable({
                 ) : null}
               </div>
               <div className="ft-mobile-grid">
-                {columns
-                  .filter((col) => col !== titleCol && col !== subtitleCol && col !== "Action")
-                  .map((col) => {
+                {fields.map((col) => {
                     const raw = row[col];
                     const val = raw == null || isValidElement(raw) ? "" : String(raw);
                     return (
@@ -178,9 +215,9 @@ function FinTable({
                     );
                   })}
               </div>
-              {columns.includes("Action") ? (
+              {columns.includes(mobileActionCol) ? (
                 <div className="ft-mobile-actions">
-                  {renderCellValue("Action", row.Action, badgeCol, outcomeSet)}
+                  {renderCellValue(mobileActionCol, row[mobileActionCol], badgeCol, outcomeSet)}
                 </div>
               ) : null}
             </article>

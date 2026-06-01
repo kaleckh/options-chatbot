@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { useSubmitGuard } from "@/lib/hooks";
+import { strategyLabMutationHeaders } from "@/lib/strategy-lab/replayIntent";
 import type {
   BacktestPricingLane,
   BacktestReplayReport,
@@ -195,7 +196,7 @@ export default function StrategyView() {
       try {
         const response = await fetch("/api/profile", {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: strategyLabMutationHeaders("save_strategy_profile"),
           body: JSON.stringify({
             type: profileType,
             updates: edits,
@@ -230,7 +231,7 @@ export default function StrategyView() {
       try {
         const response = await fetch("/api/backtest", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: strategyLabMutationHeaders("run_replay_backtest"),
           body: JSON.stringify({
             lookback_years: backtestYears,
             iv_adj: ivAdj,

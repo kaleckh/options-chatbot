@@ -51,14 +51,91 @@ def _first_present(*values: Any) -> Any:
     return None
 
 
+def _safe_number(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _closed_position_pnl_snapshot(row: dict[str, Any]) -> Optional[dict[str, Any]]:
+    is_closed = str(row.get("status") or "").strip().lower() == "closed" or row.get("closed_at") is not None
+    if not is_closed:
+        return None
+
+    entry_execution_price = _safe_number(
+        _first_present(row.get("entry_execution_price"), row.get("entry_option_price"))
+    )
+    exit_execution_price = _safe_number(
+        _first_present(row.get("exit_execution_price"), row.get("exit_option_price"))
+    )
+    if entry_execution_price is None or entry_execution_price <= 0 or exit_execution_price is None:
+        return None
+
+    contracts = row.get("contracts") or 1
+    fee_total_usd = _safe_number(row.get("fee_total_usd"))
+    if fee_total_usd is None:
+        fee_sides = _source_snapshot_fee_sides(row.get("source_pick_snapshot"))
+        entry_fee_total_usd = _safe_number(row.get("entry_fee_total_usd"))
+        if entry_fee_total_usd is None:
+            entry_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+        exit_fee_total_usd = commission_total_usd(contracts=contracts, sides=fee_sides)
+    else:
+        entry_fee_total_usd = fee_total_usd
+        exit_fee_total_usd = 0.0
+
+    pnl = option_pnl_snapshot(
+        entry_execution_price=entry_execution_price,
+        exit_execution_price=exit_execution_price,
+        contracts=contracts,
+        entry_fee_total_usd=entry_fee_total_usd,
+        exit_fee_total_usd=exit_fee_total_usd,
+    )
+    if pnl.get("gross_pnl_pct") is None and pnl.get("net_pnl_pct") is None:
+        return None
+    return {
+        **pnl,
+        "entry_execution_price": entry_execution_price,
+        "exit_execution_price": exit_execution_price,
+    }
+
+
 def _closed_position_review(row: dict[str, Any], existing: Optional[dict[str, Any]]) -> dict[str, Any]:
     existing = existing or {}
     metrics_snapshot = copy.deepcopy(existing.get("metrics_snapshot") or {})
+    computed_pnl = _closed_position_pnl_snapshot(row) or {}
+    gross_pnl_pct = _first_present(computed_pnl.get("gross_pnl_pct"), row.get("gross_pnl_pct"), existing.get("gross_pnl_pct"))
+    net_pnl_pct = _first_present(computed_pnl.get("net_pnl_pct"), row.get("net_pnl_pct"), existing.get("net_pnl_pct"))
+    gross_pnl_usd = _first_present(computed_pnl.get("gross_pnl_usd"), row.get("gross_pnl_usd"), existing.get("gross_pnl_usd"))
+    net_pnl_usd = _first_present(computed_pnl.get("net_pnl_usd"), row.get("net_pnl_usd"), existing.get("net_pnl_usd"))
+    fee_total_usd = _first_present(computed_pnl.get("fee_total_usd"), row.get("fee_total_usd"), existing.get("fee_total_usd"))
+    entry_execution_price = _first_present(
+        row.get("entry_execution_price"),
+        computed_pnl.get("entry_execution_price"),
+        existing.get("entry_execution_price"),
+    )
+    exit_execution_price = _first_present(
+        row.get("exit_execution_price"),
+        computed_pnl.get("exit_execution_price"),
+        existing.get("exit_execution_price"),
+    )
     metrics_snapshot.update(
         {
             "pricing_state": "closed",
             "exit_reason": row.get("exit_reason"),
             "closed_at": _to_iso(row.get("closed_at")),
+            "entry_execution_price": entry_execution_price,
+            "exit_execution_price": exit_execution_price,
+            "gross_pnl_pct": gross_pnl_pct,
+            "net_pnl_pct": net_pnl_pct,
+            "gross_pnl_usd": gross_pnl_usd,
+            "net_pnl_usd": net_pnl_usd,
+            "fee_total_usd": fee_total_usd,
         }
     )
     return {
@@ -68,16 +145,16 @@ def _closed_position_review(row: dict[str, Any], existing: Optional[dict[str, An
         ),
         "pricing_source": _first_present(row.get("exit_execution_basis"), row.get("exit_reason"), existing.get("pricing_source")),
         "current_option_price": _first_present(row.get("exit_option_price"), row.get("last_option_price"), existing.get("current_option_price")),
-        "current_pnl_pct": _first_present(row.get("gross_pnl_pct"), row.get("last_pnl_pct"), existing.get("current_pnl_pct")),
-        "gross_pnl_pct": _first_present(row.get("gross_pnl_pct"), existing.get("gross_pnl_pct")),
-        "net_pnl_pct": _first_present(row.get("net_pnl_pct"), existing.get("net_pnl_pct")),
-        "gross_pnl_usd": _first_present(row.get("gross_pnl_usd"), existing.get("gross_pnl_usd")),
-        "net_pnl_usd": _first_present(row.get("net_pnl_usd"), existing.get("net_pnl_usd")),
-        "entry_execution_price": _first_present(row.get("entry_execution_price"), existing.get("entry_execution_price")),
-        "exit_execution_price": _first_present(row.get("exit_execution_price"), existing.get("exit_execution_price")),
+        "current_pnl_pct": _first_present(gross_pnl_pct, row.get("last_pnl_pct"), existing.get("current_pnl_pct")),
+        "gross_pnl_pct": gross_pnl_pct,
+        "net_pnl_pct": net_pnl_pct,
+        "gross_pnl_usd": gross_pnl_usd,
+        "net_pnl_usd": net_pnl_usd,
+        "entry_execution_price": entry_execution_price,
+        "exit_execution_price": exit_execution_price,
         "entry_execution_basis": _first_present(row.get("entry_execution_basis"), existing.get("entry_execution_basis")),
         "exit_execution_basis": _first_present(row.get("exit_execution_basis"), existing.get("exit_execution_basis")),
-        "fee_total_usd": _first_present(row.get("fee_total_usd"), existing.get("fee_total_usd")),
+        "fee_total_usd": fee_total_usd,
         "recommendation": "SELL",
         "reason": _first_present(row.get("exit_reason"), row.get("last_recommendation_reason"), existing.get("reason"), "Position closed."),
         "warnings": [],
@@ -89,6 +166,7 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     latest_review = _normalize_latest_review(row)
     if str(row.get("status") or "").strip().lower() == "closed" and row.get("closed_at") is not None:
         latest_review = _closed_position_review(row, latest_review)
+    computed_pnl = _closed_position_pnl_snapshot(row)
     gross_pnl_pct = row.get("gross_pnl_pct")
     net_pnl_pct = row.get("net_pnl_pct")
     gross_pnl_usd = row.get("gross_pnl_usd")
@@ -96,6 +174,14 @@ def _normalize_position_row(row: dict[str, Any]) -> dict[str, Any]:
     fee_total_usd = row.get("fee_total_usd")
     exit_execution_price = row.get("exit_execution_price")
     exit_execution_basis = row.get("exit_execution_basis")
+    if computed_pnl is not None:
+        gross_pnl_pct = computed_pnl.get("gross_pnl_pct")
+        net_pnl_pct = computed_pnl.get("net_pnl_pct")
+        gross_pnl_usd = computed_pnl.get("gross_pnl_usd")
+        net_pnl_usd = computed_pnl.get("net_pnl_usd")
+        fee_total_usd = computed_pnl.get("fee_total_usd")
+        if exit_execution_price is None:
+            exit_execution_price = computed_pnl.get("exit_execution_price")
     if latest_review is not None:
         if gross_pnl_pct is None:
             gross_pnl_pct = latest_review.get("gross_pnl_pct")
@@ -187,6 +273,7 @@ def _position_fee_sides(position: dict[str, Any]) -> int:
 
 
 _POSITION_UPDATE_FIELDS = (
+    "status",
     "contract_symbol",
     "strike",
     "expiry",
@@ -196,6 +283,22 @@ _POSITION_UPDATE_FIELDS = (
     "entry_execution_basis",
     "entry_fee_total_usd",
     "entry_underlying_price",
+    "closed_at",
+    "exit_option_price",
+    "exit_execution_price",
+    "exit_execution_basis",
+    "exit_reason",
+    "gross_pnl_pct",
+    "net_pnl_pct",
+    "gross_pnl_usd",
+    "net_pnl_usd",
+    "fee_total_usd",
+    "peak_pnl_pct",
+    "last_option_price",
+    "last_pnl_pct",
+    "last_recommendation",
+    "last_recommendation_reason",
+    "last_reviewed_at",
     "source_pick_snapshot",
     "notes",
     "source_scan_session_id",
@@ -550,6 +653,10 @@ class PostgresTrackedPositionsRepository:
                         exit_execution_price,
                         exit_execution_basis,
                         exit_reason,
+                        gross_pnl_pct,
+                        net_pnl_pct,
+                        gross_pnl_usd,
+                        net_pnl_usd,
                         fee_total_usd,
                         source_scan_session_id,
                         source_scan_event_key,
@@ -584,6 +691,10 @@ class PostgresTrackedPositionsRepository:
                         %s,
                         %s,
                         %s::jsonb,
+                        %s,
+                        %s,
+                        %s,
+                        %s,
                         %s,
                         %s,
                         %s,
@@ -633,6 +744,10 @@ class PostgresTrackedPositionsRepository:
                         payload.get("exit_execution_price"),
                         payload.get("exit_execution_basis"),
                         payload.get("exit_reason"),
+                        payload.get("gross_pnl_pct"),
+                        payload.get("net_pnl_pct"),
+                        payload.get("gross_pnl_usd"),
+                        payload.get("net_pnl_usd"),
                         payload.get("fee_total_usd"),
                         payload.get("source_scan_session_id"),
                         payload.get("source_scan_event_key"),
@@ -1235,6 +1350,7 @@ class SqliteTrackedPositionsRepository:
                     last_recommendation, last_recommendation_reason, last_reviewed_at,
                     source_pick_snapshot, notes, closed_at, exit_option_price,
                     exit_execution_price, exit_execution_basis, exit_reason,
+                    gross_pnl_pct, net_pnl_pct, gross_pnl_usd, net_pnl_usd,
                     fee_total_usd, source_scan_session_id, source_scan_event_key,
                     source_scan_run_id, source_scan_recorded_at_utc,
                     proof_eligible, proof_ineligibility_reason, proof_class, proof_class_reason
@@ -1247,6 +1363,7 @@ class SqliteTrackedPositionsRepository:
                     ?, ?, ?,
                     ?, ?, ?, ?,
                     ?, ?, ?,
+                    ?, ?, ?, ?,
                     ?, ?, ?,
                     ?, ?,
                     ?, ?,
@@ -1284,6 +1401,10 @@ class SqliteTrackedPositionsRepository:
                     payload.get("exit_execution_price"),
                     payload.get("exit_execution_basis"),
                     payload.get("exit_reason"),
+                    payload.get("gross_pnl_pct"),
+                    payload.get("net_pnl_pct"),
+                    payload.get("gross_pnl_usd"),
+                    payload.get("net_pnl_usd"),
                     payload.get("fee_total_usd"),
                     payload.get("source_scan_session_id"),
                     payload.get("source_scan_event_key"),
@@ -1774,7 +1895,7 @@ def create_positions_repository(database_url: Optional[str]):
             repo.error_message
             or "Tracked positions database is unavailable. Check DATABASE_URL and local Postgres."
         )
-    # Fall back to SQLite
-    repo = SqliteTrackedPositionsRepository()
-    repo.init_schema()
-    return repo
+    return UnavailableTrackedPositionsRepository(
+        "DATABASE_URL is not configured for tracked positions. "
+        "Tracked positions are owned by Postgres; SQLite is reserved for suggested trades and explicit tests."
+    )

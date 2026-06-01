@@ -94,6 +94,10 @@ The backend also exposes support endpoints that are not mirrored through `src/ap
 - `/api/backtest/stability`
 - `/api/market-data/cache-stats`
 
+Trading Desk position and suggestion routes use an executable lifecycle contract in `src/lib/trading-desk/storeOwnership.ts`.
+Tracked-position responses identify the Postgres-backed `tracked_position` store, suggested-trade responses identify the SQLite-backed `suggested_trade` store, and both expose the lifecycle through `x-trading-desk-lifecycle`.
+State-changing routes additionally require the explicit mutation intent header defined in `src/lib/trading-desk/mutationIntent.ts`.
+
 ### 4. Python Control Plane
 
 Primary file:
@@ -101,12 +105,12 @@ Primary file:
 
 Responsibilities:
 - FastAPI app wiring
-- endpoint grouping for scan, replay, positions, suggestions, status, and tools
+- router mounting and endpoint grouping for scan, replay, positions, suggestions, status, and tools
 - report caching
 - composition across the core research and storage modules
 
 Current smell:
-- `main.py` is doing too much at once and is the first candidate for router or service extraction if the backend keeps growing
+- `main.py` still does too much at once, but profile/changelog/risk routes have started the router extraction pattern in `python-backend/profile_routes.py`
 
 ### 5. Domain Engines
 
@@ -141,18 +145,26 @@ Storage split:
 ## Request Flow Example
 
 Tracked position create flow:
-1. `PredictionsView.tsx` submits to `POST /api/positions`
-2. `src/app/api/positions/route.ts` validates JSON and forwards the request
-3. `src/lib/python-bridge.ts` sends the request to FastAPI
-4. `python-backend/main.py` handles `/api/positions`
-5. the backend uses the positions repository or service layer to persist and normalize the position
-6. the response comes back through the same chain to the client
+1. `PredictionsView.tsx` runs `POST /api/scan` and receives picks annotated with forward-evidence source fields when the scan is recorded
+2. `PredictionsView.tsx` submits a selected pick to `POST /api/positions`
+3. `src/app/api/positions/route.ts` validates the mutation intent and forwards the request
+4. `src/lib/python-bridge.ts` sends the request to FastAPI
+5. `python-backend/main.py` handles `/api/positions`
+6. `python-backend/main.py` verifies the pick's scan lineage against the forward-evidence ledger, including contract identity and recorded execution fields, then `python-backend/positions_service.py` persists the source pick snapshot and only marks the row as live-scan proof when exact execution evidence and verified scan lineage are both present
+7. the response comes back through the same chain to the client
 
 Replay summary flow:
 1. `StrategyView.tsx` calls `GET /api/backtest/summary`
-2. the Next route proxies through the bridge
+2. the Next route returns passive Strategy Lab lifecycle headers from `src/lib/strategy-lab/replayIntent.ts`
 3. `python-backend/main.py` uses cached report builders around `wfo_optimizer.py` and `metric_truth_audit.py`
 4. the aggregated artifact bundle is returned to the UI
+
+Replay/profile mutation flow:
+1. `StrategyView.tsx` calls `POST /api/backtest` with `x-strategy-lab-mutation: run_replay_backtest` when the user explicitly runs replay
+2. `src/app/api/backtest/route.ts` rejects missing or mismatched Strategy Lab mutation intent before reading the request body
+3. the backend runs `wfo_optimizer.run_historical_backtest(save_result=True)`, which writes the latest replay artifact set (`wfo_results.json` for synthetic or `data/options-validation/*` for imported lanes)
+4. `StrategyView.tsx` calls `PUT /api/profile` with `x-strategy-lab-mutation: save_strategy_profile` only when the user explicitly saves Policy Editor edits
+5. `src/app/api/profile/route.ts` rejects missing or mismatched Strategy Lab mutation intent before forwarding to the backend profile save path
 
 ## Storage And Artifact Ownership
 
@@ -163,7 +175,9 @@ Replay summary flow:
 - `predictions.json`
   - legacy prediction storage
 - `wfo_results.json`
-  - replay output
+  - latest synthetic replay output written by explicit Strategy Lab replay runs
+- `data/options-validation/*`
+  - imported options truth store and latest imported replay artifacts written by explicit replay/research runs
 - `data/options-validation/options_history.db`
   - imported options truth store
 - `data/options-validation/forward_tracking_authoritative.db`

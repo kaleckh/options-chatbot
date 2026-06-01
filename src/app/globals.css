@@ -134,6 +134,17 @@ body {
   box-shadow: -10px 0 16px rgba(0,0,0,0.16);
 }
 
+.ft-table th.ft-action-cell,
+.ft-table td.ft-action-cell {
+  width: 1%;
+  min-width: 7.5rem;
+  text-align: right;
+}
+
+.ft-table td.ft-action-cell > div {
+  justify-content: flex-end;
+}
+
 .ft-table.ft-table-compact th {
   padding: 0.4rem 0.6rem;
   font-size: 0.7rem;
@@ -160,6 +171,10 @@ body {
 
 .ft-table tbody tr:nth-child(even) td {
   background: rgba(255,255,255,0.01);
+}
+
+.ft-table tbody tr:nth-child(even) .ft-action-cell {
+  background: #13171b;
 }
 
 .ft-table .mono { font-family: var(--font-mono, 'JetBrains Mono'), monospace; }
@@ -189,6 +204,10 @@ body {
   margin-bottom: 0.7rem;
 }
 
+.ft-mobile-card-head > div {
+  min-width: 0;
+}
+
 .ft-mobile-label {
   color: var(--text-3);
   font-size: 0.68rem;
@@ -201,12 +220,14 @@ body {
   color: var(--text-0);
   font-size: 1rem;
   font-weight: 700;
+  overflow-wrap: anywhere;
 }
 
 .ft-mobile-subtitle {
   color: var(--text-1);
   font-family: var(--font-mono, 'JetBrains Mono'), monospace;
   font-size: 0.88rem;
+  overflow-wrap: anywhere;
 }
 
 .ft-mobile-grid {
@@ -229,6 +250,10 @@ body {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.85rem;
+}
+
+.ft-mobile-actions > * {
+  flex: 1 1 8.5rem;
 }
 
 @media (max-width: 767px) {

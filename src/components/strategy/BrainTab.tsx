@@ -154,7 +154,13 @@ export function BrainTab({
         {changelog.length === 0 ? (
           <p className="text-xs text-text-3">No changes recorded yet.</p>
         ) : (
-          <FinTable data={reversedChangelog} maxHeight="200px" />
+          <FinTable
+            data={reversedChangelog}
+            maxHeight="200px"
+            mobileTitleCol="note"
+            mobileSubtitleCol="ts"
+            mobilePriorityCols={["profile", "source"]}
+          />
         )}
       </div>
     </div>

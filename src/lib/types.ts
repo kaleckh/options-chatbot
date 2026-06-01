@@ -41,6 +41,7 @@ export interface ScanPick {
   type: "call" | "put";
   prediction_type?: string;
   direction: "call" | "put";
+  status?: string | null;
   strategy_type?: string | null;
   contract_symbol?: string | null;
   short_contract_symbol?: string | null;
@@ -53,6 +54,8 @@ export interface ScanPick {
   iv_percentile?: number | null;
   iv_pct?: number | null;
   target_move_pct?: number | null;
+  ret5?: number | null;
+  signal_ret5?: number | null;
   stock_price?: number;
   strike?: number;
   strike_est?: number;
@@ -76,6 +79,7 @@ export interface ScanPick {
   policy_fit_score?: number | null;
   policy_fit_reasons?: string[];
   playbook?: "short_term" | "swing" | string;
+  playbook_id?: string | null;
   playbook_label?: string | null;
   guardrail_decision?: "clear" | "caution" | "blocked" | null;
   guardrail_reasons?: string[];
@@ -94,6 +98,14 @@ export interface ScanPick {
   quote_time_utc?: string | null;
   quote_basis?: string | null;
   quote_freshness_status?: string | null;
+  proof_eligible?: boolean | null;
+  proof_class?: string | null;
+  proof_class_reason?: string | null;
+  pricing_evidence_class?: string | null;
+  profitability_evidence_class?: string | null;
+  production_filter_action?: string | null;
+  source_separation?: string | null;
+  research_only?: boolean | null;
   original_logged_expiry?: string | null;
   resolved_listed_expiry?: string | null;
   underlying_price_at_selection?: number | null;
@@ -117,10 +129,25 @@ export interface ScanPick {
   profitability_eligibility?: string | null;
   profitability_blockers?: string[];
   candidate_rank?: number | null;
+  event_type?: string | null;
+  candidate_execution_label?: string | null;
+  source_scan_session_id?: number | null;
+  source_scan_event_key?: string | null;
+  source_scan_run_id?: string | null;
+  source_scan_recorded_at_utc?: string | null;
+  source_scan_lineage_verified?: boolean | null;
+  backfill_audit_id?: string | null;
+  position_migration_id?: string | null;
+  position_migrated_at_utc?: string | null;
+  market_data_source?: string | null;
   profit_candidate_id?: string | null;
   policy_artifact_id?: string | null;
   cohort_id?: string | null;
   cohort_role?: string | null;
+  debit_pct_of_width?: number | null;
+  fill_degradation_vs_mid_pct?: number | null;
+  worst_leg_bid_ask_spread_pct?: number | null;
+  worst_leg_spread_pct?: number | null;
   entry_quote_snapshot?: EntryQuoteSnapshot | null;
 }
 
@@ -162,6 +189,10 @@ export interface EntryQuoteSnapshot {
   display_price?: number | null;
   spread_width?: number | null;
   net_debit?: number | null;
+  debit_pct_of_width?: number | null;
+  fill_degradation_vs_mid_pct?: number | null;
+  worst_leg_bid_ask_spread_pct?: number | null;
+  worst_leg_spread_pct?: number | null;
   max_profit?: number | null;
   max_loss?: number | null;
   net_delta?: number | null;
@@ -559,6 +590,10 @@ export interface TrackedPosition {
   last_recommendation?: "HOLD" | "SELL" | null;
   last_recommendation_reason?: string | null;
   last_reviewed_at?: string | null;
+  source_scan_session_id?: number | null;
+  source_scan_event_key?: string | null;
+  source_scan_run_id?: string | null;
+  source_scan_recorded_at_utc?: string | null;
   source_pick_snapshot: ScanPick;
   notes?: string | null;
   closed_at?: string | null;

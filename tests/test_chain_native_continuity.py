@@ -463,6 +463,198 @@ class ChainNativeContinuityTests(unittest.TestCase):
         self.assertIsNotNone(selected)
         self.assertEqual(selected[1].contract_symbol, "AAA260220C00105000")
 
+    def test_chain_native_selection_can_return_diagnostic_alternatives(self):
+        entry_date = date(2026, 1, 15)
+        quotes = [
+            SimpleNamespace(
+                contract_symbol="AAA260220C00100000",
+                expiry="2026-02-20",
+                strike=100.0,
+                bid=4.8,
+                ask=5.2,
+                last=5.0,
+                volume=12,
+                open_interest=120,
+            ),
+            SimpleNamespace(
+                contract_symbol="AAA260220C00105000",
+                expiry="2026-02-20",
+                strike=105.0,
+                bid=2.0,
+                ask=2.2,
+                last=2.1,
+                volume=8,
+                open_interest=90,
+            ),
+            SimpleNamespace(
+                contract_symbol="AAA260220C00110000",
+                expiry="2026-02-20",
+                strike=110.0,
+                bid=0.9,
+                ask=1.1,
+                last=1.0,
+                volume=5,
+                open_interest=60,
+            ),
+        ]
+
+        class _Store:
+            def list_entry_contracts(self, **kwargs):
+                return quotes
+
+            def contract_quote_continuity_metrics(self, *, contract_symbol, **kwargs):
+                return {"contract_symbol": contract_symbol, "quote_date_count": 4}
+
+        def _delta(quote, **kwargs):
+            return {
+                "AAA260220C00100000": 0.50,
+                "AAA260220C00105000": 0.32,
+                "AAA260220C00110000": 0.20,
+            }[quote.contract_symbol]
+
+        with patch.object(wfo, "_option_delta_for_quote", side_effect=_delta):
+            diagnostic = wfo._select_chain_native_spread(
+                store=_Store(),
+                ticker="AAA",
+                entry_date=entry_date,
+                trade_type="call",
+                S0=100.0,
+                hv30=0.25,
+                long_delta_target=0.50,
+                short_delta_target=0.20,
+                target_dte=35,
+                min_dte=28,
+                max_dte=45,
+                max_width_pct=20.0,
+                max_debit_pct_of_width=90.0,
+                iv_adj=1.0,
+                requested_pricing_lane="pessimistic",
+                entry_slippage_pct=0.0,
+                snapshot_kind=hos.INTRADAY_SNAPSHOT_KIND,
+                entry_quote_minute_et=hos.ENTRY_QUOTE_MINUTE_ET,
+                entry_window_minutes=15,
+                source_labels=["thetadata_opra_nbbo_1m"],
+                min_prior_quote_days=1,
+                prior_quote_lookback_days=14,
+                include_diagnostics=True,
+            )
+
+        self.assertIsInstance(diagnostic, dict)
+        self.assertEqual(diagnostic["selected"][0].contract_symbol, "AAA260220C00100000")
+        self.assertEqual(diagnostic["diagnostics"]["spread_diagnostics_proof_role"], "diagnostic_only")
+        self.assertEqual(
+            diagnostic["diagnostics"]["selected_spread"]["short_contract_symbol"],
+            "AAA260220C00110000",
+        )
+        self.assertEqual(len(diagnostic["diagnostics"]["top_spread_alternatives"]), 3)
+        self.assertAlmostEqual(diagnostic["diagnostics"]["entry_spread_mid_debit"], 4.0)
+        self.assertAlmostEqual(diagnostic["diagnostics"]["entry_spread_ask_bid_debit"], 4.3)
+        self.assertAlmostEqual(diagnostic["diagnostics"]["fill_degradation_vs_mid"], 0.3)
+
+    def test_simulated_chain_native_spread_persists_diagnostics(self):
+        entry_quote = SimpleNamespace(
+            contract_symbol="AAA260108C00100000",
+            expiry="2026-01-08",
+            strike=100.0,
+            bid=4.8,
+            ask=5.0,
+            last=4.9,
+            price_basis="bid_ask",
+        )
+        short_quote = SimpleNamespace(
+            contract_symbol="AAA260108C00110000",
+            expiry="2026-01-08",
+            strike=110.0,
+            bid=1.0,
+            ask=1.2,
+            last=1.1,
+            price_basis="bid_ask",
+        )
+        exit_quotes = {
+            entry_quote.contract_symbol: SimpleNamespace(
+                contract_symbol=entry_quote.contract_symbol,
+                bid=8.0,
+                ask=8.2,
+                last=8.1,
+            ),
+            short_quote.contract_symbol: SimpleNamespace(
+                contract_symbol=short_quote.contract_symbol,
+                bid=0.8,
+                ask=1.0,
+                last=0.9,
+            ),
+        }
+
+        class _Store:
+            def get_closing_quote(self, *, contract_symbol, quote_date_et, **kwargs):
+                if quote_date_et == date(2026, 1, 8):
+                    return exit_quotes[contract_symbol]
+                return None
+
+        diagnostic_payload = {
+            "spread_diagnostics_proof_role": "diagnostic_only",
+            "selected_spread": {
+                "long_contract_symbol": entry_quote.contract_symbol,
+                "short_contract_symbol": short_quote.contract_symbol,
+                "mid_debit": 3.9,
+                "ask_bid_debit": 4.0,
+                "fill_degradation_vs_mid": 0.1,
+                "fill_degradation_vs_mid_pct": 2.56,
+            },
+            "top_spread_alternatives": [{"short_contract_symbol": short_quote.contract_symbol}],
+            "fill_degradation_vs_mid": 0.1,
+            "fill_degradation_vs_mid_pct": 2.56,
+            "entry_spread_mid_debit": 3.9,
+            "entry_spread_ask_bid_debit": 4.0,
+        }
+        dates = [
+            date(2026, 1, 1),
+            date(2026, 1, 2),
+            date(2026, 1, 5),
+            date(2026, 1, 6),
+            date(2026, 1, 7),
+            date(2026, 1, 8),
+        ]
+        prices = [100.0, 101.0, 102.0, 103.0, 104.0, 109.0]
+
+        with patch.object(
+            wfo,
+            "_select_chain_native_spread",
+            return_value={
+                "selected": (entry_quote, short_quote, 3.8, 10.0, 0.5, 0.2),
+                "diagnostics": diagnostic_payload,
+            },
+        ):
+            result = wfo._simulate_spread_outcome_imported(
+                prices=prices,
+                dates=dates,
+                i=0,
+                store=_Store(),
+                ticker="AAA",
+                trade_type="call",
+                hv30=0.25,
+                long_delta_target=0.50,
+                short_delta_target=0.20,
+                dte_at_entry=7,
+                stop_loss_pct=90.0,
+                profit_target_pct=300.0,
+                time_exit_pct=90.0,
+                trailing_profit_pct=999.0,
+                trailing_giveback_pct=0.0,
+                max_width_pct=20.0,
+                exit_monitoring_mode="time_only",
+                entry_S0=100.0,
+                chain_native_spread_selection=True,
+            )
+
+        self.assertTrue(result["priced"])
+        self.assertEqual(result["spread_diagnostics_proof_role"], "diagnostic_only")
+        self.assertEqual(result["selected_spread"]["short_contract_symbol"], short_quote.contract_symbol)
+        self.assertEqual(result["top_spread_alternatives"], [{"short_contract_symbol": short_quote.contract_symbol}])
+        self.assertEqual(result["entry_spread_mid_debit"], 3.9)
+        self.assertEqual(result["entry_spread_ask_bid_debit"], 4.0)
+        self.assertEqual(result["fill_degradation_vs_mid"], 0.1)
+
     def test_time_only_spread_exit_checks_expiry_date_quote_before_settlement(self):
         entry_quote = SimpleNamespace(
             contract_symbol="AAA260108C00100000",

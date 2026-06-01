@@ -78,8 +78,12 @@ These exist in the repo, but they are not the mounted browser product:
   - `src/components/strategy/BrainTab.tsx`
   - `src/components/strategy/OptimizerTab.tsx`
   - `src/components/strategy/shared.tsx`
+- `src/components/ui/FinTable.tsx` now has an explicit mobile-card contract for title, subtitle, priority fields, hidden desktop-only fields, and action fields, so dense tables do not depend on object key order for mobile UX
 - legacy analytics tabs were extracted from `src/components/predictions/PredictionsView.tsx` into:
   - `src/components/predictions/legacy-tabs.tsx`
+- FastAPI profile, profile changelog, `/api/profiles`, and risk routes were extracted from `python-backend/main.py` into:
+  - `python-backend/profile_routes.py`
+- `scripts/generate_route_parity.py` now validates the browser request-flow contract from both sides: mirrored Next routes must have FastAPI decorators, and active client-component `/api/*` fetches must resolve to mounted Next routes.
 - the stale duplicate Next route `src/app/api/predictions/history/route.ts` was removed
 - `run_scan.bat` no longer points at an old machine-specific path
 
@@ -96,7 +100,7 @@ These are still the main architecture risks:
 - `profit_loop_automation.py`
   - oversized automation and policy orchestration surface
 - `python-backend/main.py`
-  - oversized FastAPI composition layer
+  - oversized FastAPI composition layer, with profile routes now split out as the first router extraction
 - `src/components/predictions/PredictionsView.tsx`
   - still the heaviest active client component
 - `src/lib/day-trading/engine.js`
@@ -119,7 +123,7 @@ These are still the main architecture risks:
   - backtest and truth
   - positions
   - suggested trades
-  - profile and status
+  - status and remaining support routes
 
 ### Core Python Domain
 

@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { BackendHttpError } from "@/lib/backend/transport";
+import {
+  TRADING_DESK_MUTATION_HEADER,
+  type TradingDeskMutationIntent,
+} from "@/lib/trading-desk/mutationIntent";
+import {
+  tradingDeskStoreHeaders,
+  type TradingDeskRouteContractId,
+} from "@/lib/trading-desk/storeOwnership";
+import {
+  STRATEGY_LAB_MUTATION_HEADER,
+  strategyLabRouteHeaders,
+  type StrategyLabMutationIntent,
+  type StrategyLabRouteContractId,
+} from "@/lib/strategy-lab/replayIntent";
 
 export async function readJsonObject(
   req: NextRequest,
@@ -41,4 +55,66 @@ export function jsonError(
 export function isTruthyQueryParam(value: string | null): boolean {
   const normalized = String(value || "").trim().toLowerCase();
   return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+export function requireTradingDeskMutationIntent(
+  req: NextRequest,
+  expectedIntent: TradingDeskMutationIntent
+) {
+  const actualIntent = String(req.headers.get(TRADING_DESK_MUTATION_HEADER) || "").trim();
+  if (actualIntent === expectedIntent) return null;
+  return NextResponse.json(
+    {
+      error: `Trading Desk mutation requires ${TRADING_DESK_MUTATION_HEADER}: ${expectedIntent}`,
+    },
+    { status: 428 }
+  );
+}
+
+export function jsonWithTradingDeskStore(
+  body: unknown,
+  contractId: TradingDeskRouteContractId,
+  init: ResponseInit = {}
+) {
+  return NextResponse.json(
+    body,
+    {
+      ...init,
+      headers: {
+        ...tradingDeskStoreHeaders(contractId),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    }
+  );
+}
+
+export function requireStrategyLabMutationIntent(
+  req: NextRequest,
+  expectedIntent: StrategyLabMutationIntent
+) {
+  const actualIntent = String(req.headers.get(STRATEGY_LAB_MUTATION_HEADER) || "").trim();
+  if (actualIntent === expectedIntent) return null;
+  return NextResponse.json(
+    {
+      error: `Strategy Lab mutation requires ${STRATEGY_LAB_MUTATION_HEADER}: ${expectedIntent}`,
+    },
+    { status: 428 }
+  );
+}
+
+export function jsonWithStrategyLabContract(
+  body: unknown,
+  contractId: StrategyLabRouteContractId,
+  init: ResponseInit = {}
+) {
+  return NextResponse.json(
+    body,
+    {
+      ...init,
+      headers: {
+        ...strategyLabRouteHeaders(contractId),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    }
+  );
 }

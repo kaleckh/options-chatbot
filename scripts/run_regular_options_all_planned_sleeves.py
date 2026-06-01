@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -73,6 +74,7 @@ RELATIVE_STRENGTH_TEST_UNIVERSE = [
     "ARM",
     "SMCI",
 ]
+REGULAR_SECTOR_ETF_UNIVERSE = ["XLE", "XLF", "KRE", "SMH"]
 
 SLEEVE_VARIANTS: list[dict[str, Any]] = [
     {
@@ -98,6 +100,13 @@ SLEEVE_VARIANTS: list[dict[str, Any]] = [
         "runner": "bullish_sleeve",
         "variant_id": "sleeve_next_index_with_iwm_spy_control_v1",
         "description": "SPY/IWM/QQQ/DIA/XLK control for index-bucket overlap.",
+    },
+    {
+        "lane_id": "iwm_small_cap_risk",
+        "runner": "bullish_sleeve",
+        "variant_id": "sleeve_ticker_iwm",
+        "description": "IWM per-symbol bullish-pullback small-cap risk component.",
+        "include_tickers": True,
     },
     {
         "lane_id": "defensive_refill_income",
@@ -253,6 +262,204 @@ WFO_VARIANTS: list[dict[str, Any]] = [
         "overrides": {**GENERIC_TIME_EXIT, "allowed_directions": ["put"], "max_debit_pct_of_width": 60.0},
     },
     {
+        "lane_id": "iwm_small_cap_risk",
+        "runner": "wfo_playbook",
+        "variant_id": "iwm_small_cap_risk_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "bullish_pullback_observation",
+        "n_picks": 1,
+        "description": "IWM-only small-cap risk-on call debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["IWM"],
+            "historical_required_underlyings": ["IWM"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 35,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "iwm_small_cap_risk",
+        "runner": "wfo_playbook",
+        "variant_id": "iwm_small_cap_risk_put_chain_native_timeexit_all_sleeves",
+        "base_playbook": "bearish_index_put_observation",
+        "n_picks": 1,
+        "description": "IWM-only small-cap risk-off put debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["IWM"],
+            "historical_required_underlyings": ["IWM"],
+            "allowed_directions": ["put"],
+            "chain_native_max_dte": 35,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "tlt_duration_shock",
+        "runner": "wfo_playbook",
+        "variant_id": "tlt_duration_shock_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "TLT-only duration-shock call debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["TLT"],
+            "historical_required_underlyings": ["TLT"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "tlt_duration_shock",
+        "runner": "wfo_playbook",
+        "variant_id": "tlt_duration_shock_put_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "TLT-only duration-shock put debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["TLT"],
+            "historical_required_underlyings": ["TLT"],
+            "allowed_directions": ["put"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "xle_energy_inflation",
+        "runner": "wfo_playbook",
+        "variant_id": "xle_energy_inflation_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "XLE-only energy inflation-beta call debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["XLE"],
+            "historical_required_underlyings": ["XLE"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 35,
+            "max_debit_pct_of_width": 42.0,
+        },
+    },
+    {
+        "lane_id": "xle_energy_inflation",
+        "runner": "wfo_playbook",
+        "variant_id": "xle_energy_inflation_put_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "XLE-only energy inflation-beta put debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["XLE"],
+            "historical_required_underlyings": ["XLE"],
+            "allowed_directions": ["put"],
+            "chain_native_max_dte": 35,
+            "max_debit_pct_of_width": 42.0,
+        },
+    },
+    {
+        "lane_id": "xlf_financials",
+        "runner": "wfo_playbook",
+        "variant_id": "xlf_financials_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "XLF-only financials call debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["XLF"],
+            "historical_required_underlyings": ["XLF"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "xlf_financials",
+        "runner": "wfo_playbook",
+        "variant_id": "xlf_financials_put_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "XLF-only financials put debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["XLF"],
+            "historical_required_underlyings": ["XLF"],
+            "allowed_directions": ["put"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "kre_regional_bank_observation",
+        "runner": "wfo_playbook",
+        "variant_id": "kre_regional_bank_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "KRE-only regional-bank call debit-spread observation replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["KRE"],
+            "historical_required_underlyings": ["KRE"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "kre_regional_bank_observation",
+        "runner": "wfo_playbook",
+        "variant_id": "kre_regional_bank_put_chain_native_timeexit_all_sleeves",
+        "base_playbook": "volatility_expansion_observation",
+        "n_picks": 1,
+        "description": "KRE-only regional-bank put debit-spread observation replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["KRE"],
+            "historical_required_underlyings": ["KRE"],
+            "allowed_directions": ["put"],
+            "chain_native_max_dte": 45,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "smh_semiconductor",
+        "runner": "wfo_playbook",
+        "variant_id": "smh_semiconductor_call_chain_native_timeexit_all_sleeves",
+        "base_playbook": "bullish_pullback_observation",
+        "n_picks": 1,
+        "description": "SMH-only semiconductor momentum call debit-spread replay.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "allowed_tickers": ["SMH"],
+            "historical_required_underlyings": ["SMH"],
+            "allowed_directions": ["call"],
+            "chain_native_max_dte": 35,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
+        "lane_id": "sector_rotation_confirmation",
+        "runner": "wfo_playbook",
+        "variant_id": "sector_rotation_regular_etf_call_stack_v1",
+        "base_playbook": "bullish_pullback_observation",
+        "n_picks": 2,
+        "description": "Regular sector ETF relative-strength call stack excluding GLD/commodity lane exposure.",
+        "overrides": {
+            **GENERIC_TIME_EXIT,
+            "entry_signal_id": "relative_strength_pullback",
+            "allowed_tickers": REGULAR_SECTOR_ETF_UNIVERSE,
+            "historical_required_underlyings": REGULAR_SECTOR_ETF_UNIVERSE,
+            "allowed_directions": ["call"],
+            "allowed_signal_families": ["relative_strength_pullback"],
+            "relative_strength_pullback_ret20_min": 2.0,
+            "relative_strength_pullback_ret5_min": -4.0,
+            "relative_strength_pullback_ret5_max": -0.25,
+            "relative_strength_pullback_rsi_min": 42.0,
+            "relative_strength_pullback_rsi_max": 60.0,
+            "max_debit_pct_of_width": 45.0,
+        },
+    },
+    {
         "lane_id": "tracked_winner_primary",
         "runner": "wfo_playbook",
         "variant_id": "tracked_winner_chain_native_qqq_time65_all_sleeves",
@@ -312,6 +519,35 @@ WFO_VARIANTS: list[dict[str, Any]] = [
             "chain_native_prior_quote_lookback_days": 30,
             "min_short_leg_prior_quote_days": 1,
             "spread_time_exit_pct": 65.0,
+        },
+    },
+    {
+        "lane_id": "liquidity_first_spread",
+        "runner": "wfo_playbook",
+        "variant_id": "tracked_winner_liquidity_first_contract_hygiene_v1",
+        "base_playbook": "tracked_winner_chain_native_qqq_time65_research",
+        "n_picks": 5,
+        "description": "Tracked-winner liquidity-first causal contract hygiene probe using entry-time quote continuity and spread quality.",
+        "overrides": {
+            "allowed_tickers": TRACKED_WINNER_UNIVERSE,
+            "historical_required_underlyings": TRACKED_WINNER_UNIVERSE,
+            "max_debit_pct_of_width": 45.0,
+            "spread_max_width_pct": 12.0,
+            "spread_time_exit_pct": 65.0,
+            "chain_native_max_entry_leg_bid_ask_pct": 30.0,
+            "chain_native_min_entry_short_bid": 0.15,
+            "chain_native_min_prior_quote_days": 2,
+            "chain_native_min_short_prior_quote_days": 3,
+            "chain_native_prior_quote_lookback_days": 30,
+            "chain_native_prior_quote_score_weight": 0.5,
+            "chain_native_short_prior_quote_score_weight": 1.5,
+            "chain_native_prior_quote_score_cap": 8,
+            "chain_native_short_inside_steps": 1,
+            "execution_survivability_enabled": True,
+            "tradability_lookback_days": 30,
+            "min_tradability_score": 70.0,
+            "min_long_leg_prior_quote_days": 1,
+            "min_short_leg_prior_quote_days": 3,
         },
     },
     {
@@ -397,7 +633,12 @@ def _variant_row(report: dict[str, Any], variant_id: str) -> dict[str, Any]:
 
 
 def _run_bullish_sleeve_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
-    report = sleeve_runner.run_variants(lookback_years=lookback_years, only={str(spec["variant_id"])})
+    report = sleeve_runner.run_variants(
+        lookback_years=lookback_years,
+        only={str(spec["variant_id"])},
+        include_themes=bool(spec.get("include_themes")),
+        include_tickers=bool(spec.get("include_tickers")),
+    )
     row = _variant_row(report, str(spec["variant_id"]))
     result_path = row.get("result_path")
     if not result_path:
@@ -764,23 +1005,32 @@ def blocked_lane_lab_rows(implemented_lane_ids: set[str]) -> list[dict[str, Any]
     payload = lane_lab.build_lane_lab_report(
         readiness_payload=_trusted_intraday_readiness_payload(_lane_lab_required_symbols())
     )
+    implemented_variants_by_lane_id: dict[str, list[str]] = defaultdict(list)
+    for spec in IMPLEMENTED_PLANNED_VARIANTS:
+        lane_id = str(spec["lane_id"])
+        if lane_id in implemented_lane_ids:
+            implemented_variants_by_lane_id[lane_id].append(str(spec["variant_id"]))
     rows = []
     for row in payload.get("lanes") or []:
         lane_id = str(row.get("id") or "")
         if lane_id == "ai_commodity_infra_observation":
             continue
-        if lane_id in implemented_lane_ids:
-            continue
-        rows.append(
-            {
-                "lane_id": lane_id,
-                "status": row.get("status"),
-                "blockers": row.get("blockers") or [],
-                "next_test": row.get("next_test"),
-                "pass_fail": row.get("pass_fail"),
-                "result": row.get("result"),
-            }
-        )
+        implemented_variant_ids = sorted(implemented_variants_by_lane_id.get(lane_id, []))
+        blocked_row = {
+            "lane_id": lane_id,
+            "status": row.get("status"),
+            "blockers": row.get("blockers") or [],
+            "next_test": row.get("next_test"),
+            "pass_fail": row.get("pass_fail"),
+            "result": row.get("result"),
+        }
+        if implemented_variant_ids:
+            blocked_row["implemented_variant_ids"] = implemented_variant_ids
+            blocked_row["implementation_note"] = (
+                "same_lane_id_replay_tested_but_lane_lab_spec_still_requires_"
+                f"{row.get('status') or 'lane_lab_evidence'}"
+            )
+        rows.append(blocked_row)
     return rows
 
 

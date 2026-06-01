@@ -28,6 +28,22 @@ These are the living docs for the current worktree:
   - lane registry, pass bars, and AI commodity lane placement
 - `docs/bullish-pullback-ticker-audit-2026-05-29.md`
   - current per-ticker keep/move/research/remove decisions for the 59-symbol bullish-pullback universe
+- `docs/main-lane-negative-trade-audit-2026-05-31.md`
+  - current audit of negative Bullish Pullback tracked rows, with research/backfill versus live-exact separation and guardrail recommendations
+- `docs/main-product-lane-negative-trade-audit-2026-05-31.md`
+  - broader Trading Desk tracked-position negative audit across all regular supervised product-lane playbooks
+- `docs/main-product-lane-quality-system-2026-05-31.md`
+  - repair backlog and guardrail taxonomy derived from the all-lanes negative-trade audit
+- `docs/trading-desk-profitability-guardrails-2026-05-31.md`
+  - all-row replay of Trading Desk profitability guardrails promoted into scanner entry-quality rules
+- `docs/trading-desk-negative-trade-decision-audit-2026-05-31.md`
+  - reproducible negative-trade decision audit with entry rationale, guardrail coverage, evidence quality, and executable-exit separation
+- `docs/trading-desk-exit-policy-replay-2026-05-31.md`
+  - read-only executable-review replay of Trading Desk exit policy variants and legacy missed-close cases
+- `docs/trading-desk-legacy-missed-close-audit-2026-06-01.md`
+  - focused read-only audit of legacy rows 26/39/44 and whether they imply a current auto-close bug
+- `docs/regular-options-operating-scorecard.md`
+  - current CEO-style scorecard separating visible Trading Desk profitability progress from proof-grade autoresearch readiness
 - `docs/markdown-audit-2026-05-31.md`
   - latest Markdown placement audit, scope, and verification evidence
 - `docs/WORKLOG.md`
@@ -40,6 +56,8 @@ These are the living docs for the current worktree:
   - current paid-data import and proof-source checklist
 - `docs/weekly-bug-audit-loop.md`
   - recurring six-agent bug audit runbook and automation prompt
+- `docs/autoresearch/code-audit-remediation-goal.md`
+  - reusable six-subagent goal prompt for code audit remediation and long-term fixes
 - `docs/agent-worktree-hygiene.md`
   - agent branch, push, untracked-file, and clean-worktree rules
 

@@ -41,8 +41,8 @@ Only trusted intraday OPRA/NBBO exact rows are counted in the proof portfolio. C
 
 | Lane | Status | Proof grade | Exact | Candidates | Coverage | PF | Avg % | Portfolio exact | Main blockers |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| bullish_pullback_core | portfolio_candidate | trusted_intraday_opra_nbbo | 130 | 133 | 97.7 | 2.04 | 24.54 | 130 | unpriced_candidates_remain |
-| lane_a_chain_native_ret20_4_stop200_time75 | portfolio_candidate | trusted_intraday_opra_nbbo | 155 | 292 | 53.1 | 3.59 | 42.34 | 155 | quote_coverage_below_97_5, unpriced_candidates_remain, rolling_oos_not_clean |
+| bullish_pullback_core | count_candidate | trusted_intraday_opra_nbbo | 130 | 133 | 97.7 | 2.04 | 24.54 | 130 | unpriced_candidates_remain |
+| lane_a_chain_native_ret20_4_stop200_time75 | count_candidate | trusted_intraday_opra_nbbo | 155 | 292 | 53.1 | 3.59 | 42.34 | 155 | quote_coverage_below_97_5, unpriced_candidates_remain, rolling_oos_not_clean |
 | bullish_pullback_clean_exact_reference | intraday_scout | trusted_intraday_opra_nbbo | 129 | 129 | 100.0 | 2.2 | 28.97 | 0 |  |
 | iwm_small_cap_risk | intraday_scout | trusted_intraday_opra_nbbo | 11 | 15 | 73.3 | 2.47 | 22.44 | 0 | thin_exact_sample, quote_coverage_below_97_5, unpriced_candidates_remain |
 | etf_index_pullback_control | intraday_scout | trusted_intraday_opra_nbbo | 4 | 4 | 100.0 | 1.7 | 8.16 | 0 | thin_exact_sample, pf_below_1_75 |
@@ -64,9 +64,9 @@ Only trusted intraday OPRA/NBBO exact rows are counted in the proof portfolio. C
 - `fill_discipline`: `partial_current_paper_result`; blockers: `no_spread_ask_bid_entry_fills_logged`.
 - `liquidity_first_spread`: `blocked_instrumentation`; blockers: `instrumentation_blocked`.
 - `high_debit_control`: `scored`; blockers: `none`.
-- `gld_macro_breakout`: `blocked_missing_data`; blockers: `missing_required_underlyings`.
+- `gld_macro_breakout`: `blocked_missing_data`; blockers: `missing_required_underlyings, thin_required_history`.
 - `relative_strength_pullback`: `pending_forward_paper_log`; blockers: `paper_log_pending`.
-- `tlt_duration_shock`: `blocked_missing_data`; blockers: `missing_required_underlyings`.
+- `tlt_duration_shock`: `blocked_missing_data`; blockers: `missing_required_underlyings, thin_required_history`.
 - `volatility_compression_breakout`: `pending_forward_paper_log`; blockers: `paper_log_pending`.
 - `bull_put_credit_spread`: `pending_forward_paper_log`; blockers: `structure_instrumentation_pending`.
 - `post_event_vol_crush`: `blocked_instrumentation`; blockers: `event_data_blocked`.
@@ -87,9 +87,9 @@ Only trusted intraday OPRA/NBBO exact rows are counted in the proof portfolio. C
 - `opex_pin_risk`: `blocked_instrumentation`; blockers: `intraday_data_blocked`.
 - `calendar_volatility`: `pending_forward_paper_log`; blockers: `structure_instrumentation_pending`.
 - `pmcc_diagonal`: `pending_forward_paper_log`; blockers: `structure_instrumentation_pending`.
-- `xle_energy_inflation`: `blocked_missing_data`; blockers: `missing_required_underlyings`.
-- `xlf_financials`: `blocked_missing_data`; blockers: `missing_required_underlyings`.
-- `smh_semiconductor`: `blocked_missing_data`; blockers: `missing_required_underlyings`.
+- `xle_energy_inflation`: `blocked_missing_data`; blockers: `missing_required_underlyings, thin_required_history`.
+- `xlf_financials`: `blocked_missing_data`; blockers: `missing_required_underlyings, thin_required_history`.
+- `smh_semiconductor`: `blocked_missing_data`; blockers: `missing_required_underlyings, thin_required_history`.
 
 ## Read
 

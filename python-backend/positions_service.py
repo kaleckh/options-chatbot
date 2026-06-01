@@ -33,6 +33,7 @@ from options_chatbot import (
 _HISTORICAL_OPTIONS_STORE: HistoricalOptionsStore | None = None
 ALPACA_HISTORICAL_OPTION_SOURCE_LABELS = ("alpaca_opra_daily_snapshot",)
 MAX_LIVE_REVIEW_STOP_LOSS_PCT = 90.0
+POSITION_REVIEW_POLICY_VERSION = "profit_first_stop90_v1"
 
 
 def _market_ticker_factory():
@@ -423,6 +424,36 @@ def _spread_has_executable_leg_quotes(scan_pick: dict[str, Any]) -> bool:
     return {"long", "short"}.issubset(quoted_roles) or quoted_count >= 2
 
 
+def _scan_pick_has_research_backfill_marker(scan_pick: dict[str, Any]) -> bool:
+    if bool(scan_pick.get("research_only")):
+        return True
+    if scan_pick.get("backfill_audit_id") or scan_pick.get("position_migration_id") or scan_pick.get("position_migrated_at_utc"):
+        return True
+    marker_fields = [
+        "pricing_evidence_class",
+        "profitability_evidence_class",
+        "source_separation",
+        "promotion_class",
+        "selection_source",
+        "event_type",
+        "candidate_execution_label",
+        "market_data_source",
+        "status",
+    ]
+    research_tokens = (
+        "backfill",
+        "research",
+        "historical_replay",
+        "historical_selection",
+        "historical_chain_native",
+    )
+    for field in marker_fields:
+        value = str(scan_pick.get(field) or "").strip().lower()
+        if value and any(token in value for token in research_tokens):
+            return True
+    return False
+
+
 def _classify_position_proof(
     scan_pick: dict[str, Any],
     *,
@@ -430,6 +461,7 @@ def _classify_position_proof(
     entry_execution_price: float,
     estimated_execution_price: Optional[float],
     normalized_entry_execution_basis: Optional[str],
+    source_scan_lineage_verified: bool = False,
 ) -> tuple[bool, Optional[str], str, Optional[str]]:
     selection_source = str(scan_pick.get("selection_source") or scan_pick.get("contract_selection_source") or "").strip()
     quote_time_et = scan_pick.get("quote_time_et")
@@ -440,6 +472,8 @@ def _classify_position_proof(
     proof_missing: list[str] = []
     if not contract_symbol or not _has_resolved_contract_identity(scan_pick):
         proof_missing.append("contract_symbol")
+    if _scan_pick_has_research_backfill_marker(scan_pick):
+        proof_missing.append("research_backfill_not_live_proof")
     if not quote_time_et:
         proof_missing.append("quote_time_et")
     if strategy_type == "vertical_spread":
@@ -463,6 +497,16 @@ def _classify_position_proof(
         proof_missing.append("spread_entry_not_bid_ask")
     if selection_source != "live_chain_exact_contract":
         proof_missing.append("selection_source_not_exact")
+    if scan_pick.get("source_scan_session_id") in (None, ""):
+        proof_missing.append("source_scan_session_id")
+    if not str(scan_pick.get("source_scan_event_key") or "").strip():
+        proof_missing.append("source_scan_event_key")
+    if not str(scan_pick.get("source_scan_run_id") or "").strip():
+        proof_missing.append("source_scan_run_id")
+    if not str(scan_pick.get("source_scan_recorded_at_utc") or "").strip():
+        proof_missing.append("source_scan_recorded_at_utc")
+    if not bool(source_scan_lineage_verified):
+        proof_missing.append("source_scan_lineage_unverified")
     options_source = str(
         scan_pick.get("options_data_source")
         or scan_pick.get("market_data_source")
@@ -479,6 +523,9 @@ def _classify_position_proof(
         return True, None, "live_scan_exact_contract", None
 
     proof_ineligibility_reason = ", ".join(proof_missing)
+    if "research_backfill_not_live_proof" in proof_missing:
+        return False, proof_ineligibility_reason, "ineligible", proof_ineligibility_reason
+
     normalized_basis = str(normalized_entry_execution_basis or "").strip().lower()
     if normalized_basis in {"manual_fill", "broker_fill"} and contract_symbol and _has_resolved_contract_identity(scan_pick):
         return (
@@ -923,6 +970,7 @@ def build_position_payload(
     require_proof_eligible: bool = False,
     require_resolved_contract: bool = False,
     preserve_fill_price: bool = False,
+    source_scan_lineage_verified: bool = False,
 ) -> dict[str, Any]:
     if scan_pick is None:
         scan_pick = {}
@@ -979,6 +1027,7 @@ def build_position_payload(
         or source_scan_recorded_at_utc
     )
     source_pick_snapshot["entry_quote_snapshot"] = _entry_quote_snapshot(source_pick_snapshot)
+    source_pick_snapshot["source_scan_lineage_verified"] = bool(source_scan_lineage_verified)
     if contract_symbol:
         source_pick_snapshot["contract_symbol"] = contract_symbol
     entry_execution_price = round(float(fill_price), 4)
@@ -1001,6 +1050,7 @@ def build_position_payload(
         entry_execution_price=entry_execution_price,
         estimated_execution_price=estimated_execution_price,
         normalized_entry_execution_basis=normalized_entry_execution_basis,
+        source_scan_lineage_verified=source_scan_lineage_verified,
     )
     source_pick_snapshot["proof_class"] = proof_class
     source_pick_snapshot["proof_class_reason"] = proof_class_reason
@@ -1009,7 +1059,7 @@ def build_position_payload(
         raise ValueError(
             f"Proof-lane position creation blocked: {proof_ineligibility_reason}. "
             "All proof-lane positions require exact-contract identity, executable entry quote, "
-            "and live_chain_exact_contract selection source."
+            "live_chain_exact_contract selection source, and verified forward scan lineage."
         )
     if require_resolved_contract and not _has_resolved_contract_identity(scan_pick):
         raise ValueError(
@@ -1782,6 +1832,8 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     )
 
     metrics_snapshot = {
+        "review_policy_version": POSITION_REVIEW_POLICY_VERSION,
+        "max_live_review_stop_loss_pct": MAX_LIVE_REVIEW_STOP_LOSS_PCT,
         "days_held": days_held,
         "contract_symbol": _normalize_contract_symbol(
             position.get("contract_symbol")

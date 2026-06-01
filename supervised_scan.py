@@ -103,6 +103,18 @@ BULLISH_PULLBACK_EXPANSION_TICKERS = tuple(
     ticker for ticker in BULLISH_PULLBACK_SCAN_TICKERS if ticker not in set(BULLISH_PULLBACK_HISTORICAL_READY_TICKERS)
 )
 BULLISH_PULLBACK_ALL_TICKERS = BULLISH_PULLBACK_SCAN_TICKERS
+BULLISH_PULLBACK_PROFIT_REPAIR_KEEP_TICKERS = (
+    "IWM",
+    "AAPL",
+    "GOOGL",
+    "UNH",
+    "LLY",
+    "JNJ",
+    "XOM",
+    "CVX",
+    "COP",
+    "NEM",
+)
 AI_COMMODITY_INFRA_TICKERS = tuple(ai_commodity_scan_tickers())
 AI_COMMODITY_INFRA_CORE_TICKERS = tuple(ai_commodity_core_options_tickers())
 AI_COMMODITY_INFRA_CONDITIONAL_TICKERS = tuple(ai_commodity_conditional_options_tickers())
@@ -127,6 +139,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "weekly_loss_limit_pct": 5.0,
         "max_position_cost_risk_pct": 10.0,
         "max_portfolio_cost_risk_pct": 25.0,
+        "profitability_repair_excluded_tickers": ["XLK", "IWM", "DIA", "SPY", "SLB", "NVDA"],
+        "profitability_repair_max_debit_pct_of_width": 45.0,
+        "max_fill_degradation_vs_mid_pct": 20.0,
+        "max_worst_leg_bid_ask_spread_pct": 20.0,
     },
     "swing": {
         "id": "swing",
@@ -144,6 +160,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "weekly_loss_limit_pct": 5.0,
         "max_position_cost_risk_pct": 12.0,
         "max_portfolio_cost_risk_pct": 30.0,
+        "profitability_repair_excluded_tickers": ["IWM", "XLK", "SLB", "DIA", "NFLX"],
+        "profitability_repair_max_debit_pct_of_width": 45.0,
+        "max_fill_degradation_vs_mid_pct": 20.0,
+        "max_worst_leg_bid_ask_spread_pct": 20.0,
     },
     "speculative": {
         "id": "speculative",
@@ -189,6 +209,10 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "weekly_loss_limit_pct": 5.0,
         "max_position_cost_risk_pct": 10.0,
         "max_portfolio_cost_risk_pct": 25.0,
+        "profitability_repair_excluded_tickers": ["NVDA", "TSLA", "COIN"],
+        "profitability_repair_max_debit_pct_of_width": 45.0,
+        "max_fill_degradation_vs_mid_pct": 20.0,
+        "max_worst_leg_bid_ask_spread_pct": 20.0,
     },
     "bearish_defensive": {
         "id": "bearish_defensive",
@@ -286,6 +310,11 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "scan_min_tech_score": 0.0,
         "min_quality_score": 0.0,
         "max_debit_pct_of_width": 55.0,
+        "profitability_repair_allowed_tickers": list(BULLISH_PULLBACK_PROFIT_REPAIR_KEEP_TICKERS),
+        "profitability_repair_min_ret5": -2.0,
+        "profitability_repair_max_debit_pct_of_width": 45.0,
+        "max_fill_degradation_vs_mid_pct": 20.0,
+        "max_worst_leg_bid_ask_spread_pct": 20.0,
         "calibration_playbook": "broad",
         "max_concurrent_positions": 2,
         "max_correlated_index_positions": 2,
@@ -1137,6 +1166,81 @@ def _debit_pct_of_width(record: dict[str, Any]) -> float | None:
     return round(debit / spread_width * 100.0, 2)
 
 
+def _fill_degradation_vs_mid_pct(record: dict[str, Any]) -> float | None:
+    source = _record_source(record)
+    record_liquidity = _nested_mapping(record, "spread_liquidity")
+    source_liquidity = _nested_mapping(source, "spread_liquidity")
+    explicit = _safe_float(
+        record.get("fill_degradation_vs_mid_pct")
+        if record.get("fill_degradation_vs_mid_pct") is not None
+        else source.get("fill_degradation_vs_mid_pct")
+    )
+    if explicit is not None:
+        return explicit
+    entry_debit = _safe_float(
+        record_liquidity.get("spread_entry_debit")
+        if record_liquidity.get("spread_entry_debit") is not None
+        else source_liquidity.get("spread_entry_debit")
+        if source_liquidity.get("spread_entry_debit") is not None
+        else record.get("spread_entry_debit")
+        if record.get("spread_entry_debit") is not None
+        else source.get("spread_entry_debit")
+    )
+    mid_debit = _safe_float(
+        record_liquidity.get("spread_mid_debit")
+        if record_liquidity.get("spread_mid_debit") is not None
+        else source_liquidity.get("spread_mid_debit")
+        if source_liquidity.get("spread_mid_debit") is not None
+        else record.get("spread_mid_debit")
+        if record.get("spread_mid_debit") is not None
+        else source.get("spread_mid_debit")
+    )
+    if entry_debit is None or mid_debit is None or mid_debit <= 0:
+        return None
+    return round(max((entry_debit / mid_debit - 1.0) * 100.0, 0.0), 2)
+
+
+def _worst_leg_bid_ask_spread_pct(record: dict[str, Any]) -> float | None:
+    source = _record_source(record)
+    record_liquidity = _nested_mapping(record, "spread_liquidity")
+    source_liquidity = _nested_mapping(source, "spread_liquidity")
+    explicit = _safe_float(
+        record.get("worst_leg_bid_ask_spread_pct")
+        if record.get("worst_leg_bid_ask_spread_pct") is not None
+        else source.get("worst_leg_bid_ask_spread_pct")
+        if source.get("worst_leg_bid_ask_spread_pct") is not None
+        else record_liquidity.get("worst_leg_bid_ask_spread_pct")
+        if record_liquidity.get("worst_leg_bid_ask_spread_pct") is not None
+        else source_liquidity.get("worst_leg_bid_ask_spread_pct")
+    )
+    if explicit is not None:
+        return explicit
+    values: list[float] = []
+    for liquidity in (record_liquidity, source_liquidity):
+        for prefix in ("long", "short"):
+            bid = _safe_float(liquidity.get(f"{prefix}_bid"))
+            ask = _safe_float(liquidity.get(f"{prefix}_ask"))
+            if bid is None or ask is None:
+                continue
+            mid = (bid + ask) / 2.0
+            if mid > 0:
+                values.append(max((ask - bid) / mid * 100.0, 0.0))
+    return round(max(values), 2) if values else None
+
+
+def _signal_ret5(record: dict[str, Any]) -> float | None:
+    source = _record_source(record)
+    return _safe_float(
+        record.get("signal_ret5")
+        if record.get("signal_ret5") is not None
+        else source.get("signal_ret5")
+        if source.get("signal_ret5") is not None
+        else record.get("ret5")
+        if record.get("ret5") is not None
+        else source.get("ret5")
+    )
+
+
 def _tracked_winner_fit(record: dict[str, Any], playbook: dict[str, Any]) -> tuple[float, list[str]]:
     profile = playbook.get("winner_profile")
     if not isinstance(profile, dict):
@@ -1540,6 +1644,63 @@ def annotate_pick_with_guardrails(
             blocked.append(
                 f"Spread debit is {debit_pct:.1f}% of width, above the {playbook['label']} cap of {float(max_debit_pct):.1f}%."
             )
+
+    repair_allowed_tickers = _normalized_label_set(playbook.get("profitability_repair_allowed_tickers") or [])
+    if repair_allowed_tickers and ticker.lower() not in repair_allowed_tickers:
+        blocked.append(
+            f"{playbook['label']} profitability repair currently allows only: "
+            f"{', '.join(sorted(playbook.get('profitability_repair_allowed_tickers') or []))}."
+        )
+
+    repair_excluded_tickers = _normalized_label_set(playbook.get("profitability_repair_excluded_tickers") or [])
+    if repair_excluded_tickers and ticker.lower() in repair_excluded_tickers:
+        blocked.append(f"{ticker} is quarantined for {playbook['label']} by the all-row profitability repair replay.")
+
+    repair_max_debit_pct = playbook.get("profitability_repair_max_debit_pct_of_width")
+    if repair_max_debit_pct is not None:
+        repair_debit_pct = annotated.get("debit_pct_of_width")
+        if repair_debit_pct is None:
+            repair_debit_pct = _debit_pct_of_width(annotated)
+            if repair_debit_pct is not None:
+                annotated["debit_pct_of_width"] = repair_debit_pct
+        if repair_debit_pct is not None and float(repair_debit_pct) > float(repair_max_debit_pct):
+            blocked.append(
+                f"Profitability repair blocks spread debit {float(repair_debit_pct):.1f}% of width "
+                f"above {float(repair_max_debit_pct):.1f}%."
+            )
+
+    max_fill_degradation_pct = playbook.get("max_fill_degradation_vs_mid_pct")
+    if max_fill_degradation_pct is not None:
+        fill_degradation_pct = _fill_degradation_vs_mid_pct(annotated)
+        if fill_degradation_pct is not None:
+            annotated["fill_degradation_vs_mid_pct"] = fill_degradation_pct
+            if fill_degradation_pct >= float(max_fill_degradation_pct):
+                blocked.append(
+                    f"Fill degradation versus midpoint is {fill_degradation_pct:.1f}%, "
+                    f"above the repair cap of {float(max_fill_degradation_pct):.1f}%."
+                )
+
+    max_worst_leg_spread_pct = playbook.get("max_worst_leg_bid_ask_spread_pct")
+    if max_worst_leg_spread_pct is not None:
+        worst_leg_spread_pct = _worst_leg_bid_ask_spread_pct(annotated)
+        if worst_leg_spread_pct is not None:
+            annotated["worst_leg_bid_ask_spread_pct"] = worst_leg_spread_pct
+            if worst_leg_spread_pct >= float(max_worst_leg_spread_pct):
+                blocked.append(
+                    f"Worst leg bid/ask spread is {worst_leg_spread_pct:.1f}%, "
+                    f"above the repair cap of {float(max_worst_leg_spread_pct):.1f}%."
+                )
+
+    repair_min_ret5 = playbook.get("profitability_repair_min_ret5")
+    if repair_min_ret5 is not None:
+        entry_ret5 = _signal_ret5(annotated)
+        if entry_ret5 is not None:
+            annotated["profitability_repair_ret5"] = entry_ret5
+            if entry_ret5 < float(repair_min_ret5):
+                blocked.append(
+                    f"Entry ret5 {entry_ret5:+.1f}% is below the {playbook['label']} repair floor "
+                    f"of {float(repair_min_ret5):+.1f}%."
+                )
 
     if playbook.get("require_speculative_flag") and not bool(annotated.get("speculative_flag")):
         blocked.append(f"{playbook['label']} only surfaces high-convexity setups rated speculative on the risk/upside scale.")

@@ -21,7 +21,7 @@ The mounted browser product is the regular supervised options lane:
 
 The active non-browser proof lane is the AI commodity / commodity-infrastructure options lane. It lives under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`, and is currently gated on exact Alpaca SIP/OPRA bid/ask snapshot history rather than profitability claims.
 
-The default supervised options scanner playbook is `bullish_pullback_observation`, shown in the UI as Bullish Pullback Primary. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior; eligible scheduled picks are allowed to auto-track. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
+The default supervised options scanner playbook is `bullish_pullback_observation`, shown in the UI as Bullish Pullback. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior; eligible scheduled picks are allowed to auto-track. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
 
 Current bullish-pullback profitability work uses trusted ThetaData intraday OPRA/NBBO exact-contract evidence. The latest per-ticker audit keeps `10` symbols in the current queue, routes `10` to separate scout lanes, removes `9` from the current queue, and leaves `30` research/data-needed. See `docs/bullish-pullback-ticker-audit-2026-05-29.md`.
 

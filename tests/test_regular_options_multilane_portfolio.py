@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from scripts.run_regular_options_multilane_portfolio import (
+    _metrics_from_run,
     build_quality_gate,
     classify_lane,
     compact_side_aware_zero_bid_report,
@@ -108,6 +109,23 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
         self.assertEqual(metrics["avg_pnl_pct"], 16.67)
         self.assertEqual(metrics["gap_to_200"], 197)
 
+    def test_metrics_from_run_falls_back_for_sparse_authoritative_metrics(self):
+        metrics = _metrics_from_run(
+            {
+                "candidate_trade_count": 10,
+                "exact_contract_match_count": 8,
+                "win_rate_pct": 62.5,
+                "authoritative_profitability_metrics": {
+                    "trade_count": 8,
+                    "profit_factor": 2.0,
+                    "avg_pnl_pct": 15.0,
+                },
+            }
+        )
+
+        self.assertEqual(metrics["profit_factor"], 2.0)
+        self.assertEqual(metrics["win_rate_pct"], 62.5)
+
     def test_classify_lane_blocks_weak_intraday_scout(self):
         status = classify_lane(
             {
@@ -126,13 +144,30 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
         self.assertIn("pf_below_1_75", status["blockers"])
         self.assertIn("unpriced_candidates_remain", status["blockers"])
 
+    def test_classify_lane_marks_proof_count_candidate_not_clean_portfolio(self):
+        status = classify_lane(
+            {
+                "exact_trade_count": 110,
+                "unpriced_trade_count": 9,
+                "quote_coverage_pct": 92.4,
+                "profit_factor": 2.0,
+                "avg_pnl_pct": 10.0,
+            },
+            {},
+            "trusted_intraday_opra_nbbo",
+            True,
+        )
+
+        self.assertEqual(status["status"], "count_candidate")
+        self.assertIn("unpriced_candidates_remain", status["blockers"])
+
     def test_quality_gate_separates_count_success_from_production_readiness(self):
         gate = build_quality_gate(
             [
                 {
                     "lane_id": "core",
                     "include_in_proof_portfolio": True,
-                    "status": "portfolio_candidate",
+                    "status": "count_candidate",
                     "metrics": {"quote_coverage_pct": 97.7, "unpriced_trade_count": 3},
                     "robustness": {
                         "rolling_status": "passed",
@@ -142,7 +177,7 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
                 {
                     "lane_id": "lane_a",
                     "include_in_proof_portfolio": True,
-                    "status": "portfolio_candidate",
+                    "status": "count_candidate",
                     "metrics": {"quote_coverage_pct": 53.1, "unpriced_trade_count": 137},
                     "robustness": {
                         "rolling_status": "watch",

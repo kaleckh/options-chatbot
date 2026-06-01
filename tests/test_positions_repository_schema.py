@@ -17,9 +17,11 @@ if str(BACKEND_DIR) not in sys.path:
 
 from positions_repository import (
     PostgresTrackedPositionsRepository,
+    SqliteTrackedPositionsRepository,
     UnavailableTrackedPositionsRepository,
     create_positions_repository,
 )
+from options_execution import commission_total_usd, option_pnl_snapshot
 from suggested_trades_repository import SQLiteSuggestedTradesRepository
 
 
@@ -65,6 +67,109 @@ class _FailingPostgresRepository:
 
 
 class PositionsRepositorySchemaTests(unittest.TestCase):
+    def _preclosed_payload(self) -> dict:
+        entry_fee = commission_total_usd(contracts=2, sides=1)
+        exit_fee = commission_total_usd(contracts=2, sides=1)
+        pnl = option_pnl_snapshot(
+            entry_execution_price=4.0,
+            exit_execution_price=5.0,
+            contracts=2,
+            entry_fee_total_usd=entry_fee,
+            exit_fee_total_usd=exit_fee,
+        )
+        return {
+            "status": "closed",
+            "ticker": "SPY",
+            "direction": "call",
+            "contract_symbol": "SPY260619C00500000",
+            "strike": 500.0,
+            "expiry": "2026-06-19",
+            "asset_class": "equity",
+            "contracts": 2,
+            "entry_option_price": 4.0,
+            "entry_execution_price": 4.0,
+            "entry_execution_basis": "ask",
+            "entry_fee_total_usd": entry_fee,
+            "entry_underlying_price": 500.0,
+            "filled_at": "2026-06-01T10:00:00",
+            "stop_loss_pct": 90.0,
+            "profit_target_pct": 150.0,
+            "time_exit_day": 14,
+            "peak_pnl_pct": pnl["gross_pnl_pct"],
+            "last_option_price": 5.0,
+            "last_pnl_pct": pnl["gross_pnl_pct"],
+            "last_recommendation": "SELL",
+            "last_recommendation_reason": "historical_time_exit",
+            "last_reviewed_at": "2026-06-10T15:55:00",
+            "source_pick_snapshot": {"ticker": "SPY", "strategy_type": "single_leg"},
+            "notes": "preclosed fixture",
+            "closed_at": "2026-06-10T15:55:00",
+            "exit_option_price": 5.0,
+            "exit_execution_price": 5.0,
+            "exit_execution_basis": "bid",
+            "exit_reason": "historical_time_exit",
+            "gross_pnl_pct": pnl["gross_pnl_pct"],
+            "net_pnl_pct": pnl["net_pnl_pct"],
+            "gross_pnl_usd": pnl["gross_pnl_usd"],
+            "net_pnl_usd": pnl["net_pnl_usd"],
+            "fee_total_usd": pnl["fee_total_usd"],
+            "proof_eligible": False,
+            "proof_ineligibility_reason": None,
+            "proof_class": "ineligible",
+            "proof_class_reason": "test",
+        }
+
+    def test_sqlite_tracked_positions_preserves_preclosed_realized_pnl_on_create(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "tracked.db")
+            repo = SqliteTrackedPositionsRepository(db_path)
+            self.assertTrue(repo.init_schema())
+
+            payload = self._preclosed_payload()
+            created = repo.create_position(payload)
+
+            self.assertEqual(created["gross_pnl_pct"], payload["gross_pnl_pct"])
+            self.assertEqual(created["net_pnl_pct"], payload["net_pnl_pct"])
+            self.assertEqual(created["gross_pnl_usd"], payload["gross_pnl_usd"])
+            self.assertEqual(created["net_pnl_usd"], payload["net_pnl_usd"])
+            self.assertEqual(created["latest_review"]["net_pnl_pct"], payload["net_pnl_pct"])
+            self.assertEqual(created["latest_review"]["metrics_snapshot"]["net_pnl_pct"], payload["net_pnl_pct"])
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                raw = conn.execute(
+                    """
+                    SELECT gross_pnl_pct, net_pnl_pct, gross_pnl_usd, net_pnl_usd, fee_total_usd
+                    FROM tracked_positions
+                    WHERE id = ?
+                    """,
+                    (created["id"],),
+                ).fetchone()
+
+            self.assertEqual(raw, (
+                payload["gross_pnl_pct"],
+                payload["net_pnl_pct"],
+                payload["gross_pnl_usd"],
+                payload["net_pnl_usd"],
+                payload["fee_total_usd"],
+            ))
+
+    def test_sqlite_tracked_positions_calculates_closed_pnl_from_exit_price_when_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "tracked.db")
+            repo = SqliteTrackedPositionsRepository(db_path)
+            self.assertTrue(repo.init_schema())
+
+            payload = self._preclosed_payload()
+            expected_net = payload["net_pnl_pct"]
+            for key in ("gross_pnl_pct", "net_pnl_pct", "gross_pnl_usd", "net_pnl_usd"):
+                payload.pop(key)
+
+            created = repo.create_position(payload)
+
+            self.assertEqual(created["net_pnl_pct"], expected_net)
+            self.assertEqual(created["latest_review"]["net_pnl_pct"], expected_net)
+            self.assertEqual(created["latest_review"]["metrics_snapshot"]["pricing_state"], "closed")
+
     def test_init_schema_adds_missing_review_columns_for_existing_tables(self):
         executed_sql: list[str] = []
         repo = PostgresTrackedPositionsRepository("postgresql://example/test")
@@ -93,6 +198,14 @@ class PositionsRepositorySchemaTests(unittest.TestCase):
         self.assertFalse(repo.is_available)
         self.assertIn("DATABASE_URL", repo.error_message)
         self.assertIn("connection refused", repo.error_message)
+
+    def test_missing_database_url_does_not_silently_fallback_to_sqlite(self):
+        repo = create_positions_repository(None)
+
+        self.assertIsInstance(repo, UnavailableTrackedPositionsRepository)
+        self.assertFalse(repo.is_available)
+        self.assertIn("DATABASE_URL", repo.error_message)
+        self.assertIn("Postgres", repo.error_message)
 
     def test_suggested_trades_schema_upgrades_legacy_entry_underlying_price(self):
         with tempfile.TemporaryDirectory() as tmpdir:

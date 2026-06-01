@@ -6435,6 +6435,95 @@ def _quote_liquidity_score(quote: Any) -> float:
     return math.log1p(max(vol_f, 0.0)) + 0.25 * math.log1p(max(oi_f, 0.0))
 
 
+def _quote_float(quote: Any, field: str) -> float | None:
+    try:
+        value = getattr(quote, field, None)
+        if value is None:
+            return None
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _quote_midpoint_value(quote: Any) -> float | None:
+    midpoint = quote_midpoint(bid=getattr(quote, "bid", None), ask=getattr(quote, "ask", None))
+    return float(midpoint) if midpoint is not None and midpoint > 0 else None
+
+
+def _compact_chain_native_spread_diagnostic(
+    *,
+    long_quote: Any,
+    short_quote: Any,
+    net_debit: float,
+    spread_width: float,
+    long_delta: float,
+    short_delta: float,
+    long_delta_target: float,
+    short_delta_target: float,
+    score: float | None,
+    entry_date: date,
+    dte: int,
+    long_prior_quote_days: int | None = None,
+    short_prior_quote_days: int | None = None,
+) -> dict[str, Any]:
+    long_mid = _quote_midpoint_value(long_quote)
+    short_mid = _quote_midpoint_value(short_quote)
+    long_ask = _quote_float(long_quote, "ask")
+    short_bid = _quote_float(short_quote, "bid")
+    mid_debit = long_mid - short_mid if long_mid is not None and short_mid is not None else None
+    ask_bid_debit = long_ask - short_bid if long_ask is not None and short_bid is not None else None
+    fill_degradation = (
+        ask_bid_debit - mid_debit
+        if ask_bid_debit is not None and mid_debit is not None
+        else None
+    )
+    fill_degradation_pct = (
+        fill_degradation / mid_debit * 100.0
+        if fill_degradation is not None and mid_debit is not None and mid_debit > 0
+        else None
+    )
+    long_spread_pct = _quote_spread_pct(long_quote)
+    short_spread_pct = _quote_spread_pct(short_quote)
+    leg_spreads = [value for value in (long_spread_pct, short_spread_pct) if value < 999.0]
+    expiry = str(getattr(long_quote, "expiry", ""))[:10]
+    long_volume = _quote_float(long_quote, "volume") or 0.0
+    short_volume = _quote_float(short_quote, "volume") or 0.0
+    long_open_interest = _quote_float(long_quote, "open_interest") or 0.0
+    short_open_interest = _quote_float(short_quote, "open_interest") or 0.0
+    return {
+        "long_contract_symbol": getattr(long_quote, "contract_symbol", None),
+        "short_contract_symbol": getattr(short_quote, "contract_symbol", None),
+        "expiry": expiry or None,
+        "entry_date": entry_date.isoformat(),
+        "dte": int(dte),
+        "long_strike": round(float(getattr(long_quote, "strike")), 4),
+        "short_strike": round(float(getattr(short_quote, "strike")), 4),
+        "spread_width": round(float(spread_width), 4),
+        "net_debit": round(float(net_debit), 4),
+        "mid_debit": round(float(mid_debit), 4) if mid_debit is not None else None,
+        "ask_bid_debit": round(float(ask_bid_debit), 4) if ask_bid_debit is not None else None,
+        "debit_pct_of_width": round(float(net_debit) / float(spread_width) * 100.0, 2) if spread_width > 0 else None,
+        "bid_ask_pct": round(sum(leg_spreads) / len(leg_spreads), 2) if leg_spreads else None,
+        "long_bid_ask_pct": round(long_spread_pct, 2) if long_spread_pct < 999.0 else None,
+        "short_bid_ask_pct": round(short_spread_pct, 2) if short_spread_pct < 999.0 else None,
+        "long_volume": int(max(long_volume, 0.0)),
+        "short_volume": int(max(short_volume, 0.0)),
+        "long_open_interest": int(max(long_open_interest, 0.0)),
+        "short_open_interest": int(max(short_open_interest, 0.0)),
+        "long_prior_quote_days": long_prior_quote_days,
+        "short_prior_quote_days": short_prior_quote_days,
+        "long_delta": round(float(long_delta), 4),
+        "short_delta": round(float(short_delta), 4),
+        "long_delta_miss": round(abs(float(long_delta) - float(long_delta_target)), 4),
+        "short_delta_miss": round(abs(float(short_delta) - float(short_delta_target)), 4),
+        "selection_score": round(float(score), 4) if score is not None else None,
+        "fill_degradation_vs_mid": round(float(fill_degradation), 4) if fill_degradation is not None else None,
+        "fill_degradation_vs_mid_pct": (
+            round(float(fill_degradation_pct), 2) if fill_degradation_pct is not None else None
+        ),
+    }
+
+
 def _contract_prior_quote_continuity_metrics(
     store: Any,
     quote: Any,
@@ -6522,7 +6611,8 @@ def _select_chain_native_spread(
     min_entry_short_bid: float | None = None,
     short_inside_steps: int = 0,
     short_inside_require_debit_cap: bool = True,
-) -> tuple[Any, Any, float, float, float, float] | None:
+    include_diagnostics: bool = False,
+) -> tuple[Any, Any, float, float, float, float] | dict[str, Any] | None:
     min_expiry = entry_date + timedelta(days=max(int(min_dte), 1))
     max_expiry = entry_date + timedelta(days=max(int(max_dte), max(int(min_dte), 1)))
     quotes = store.list_entry_contracts(
@@ -6555,6 +6645,7 @@ def _select_chain_native_spread(
         quotes_by_expiry[str(quote.expiry)[:10]].append(quote)
 
     best: tuple[float, Any, Any, float, float, float, float] | None = None
+    alternatives: list[tuple[float, Any, Any, float, float, float, float, int, int | None, int | None]] = []
     continuity_cache: dict[str, dict[str, Any]] = {}
     base_min_prior_days = max(int(min_prior_quote_days or 0), 0)
     long_min_prior_days = (
@@ -6624,6 +6715,11 @@ def _select_chain_native_spread(
             if not _has_prior_continuity(long_quote, long_min_prior_days):
                 continue
             long_prior_days = _prior_quote_days(long_quote) if long_prior_weight > 0.0 and prior_score_cap_days > 0 else 0
+            long_prior_days_for_diag = (
+                int(continuity_cache[str(long_quote.contract_symbol)]["quote_date_count"])
+                if str(long_quote.contract_symbol) in continuity_cache
+                else None
+            )
             for short_quote in short_candidates:
                 if long_quote.contract_symbol == short_quote.contract_symbol:
                     continue
@@ -6636,6 +6732,11 @@ def _select_chain_native_spread(
                 if not _has_prior_continuity(short_quote, short_min_prior_days):
                     continue
                 short_prior_days = _prior_quote_days(short_quote) if short_prior_weight > 0.0 and prior_score_cap_days > 0 else 0
+                short_prior_days_for_diag = (
+                    int(continuity_cache[str(short_quote.contract_symbol)]["quote_date_count"])
+                    if str(short_quote.contract_symbol) in continuity_cache
+                    else None
+                )
                 spread_width = abs(float(short_quote.strike) - float(long_quote.strike))
                 if spread_width <= 0 or (spread_width / float(S0) * 100.0) > float(max_width_pct):
                     continue
@@ -6680,11 +6781,26 @@ def _select_chain_native_spread(
                     - (_quote_liquidity_score(long_quote) + _quote_liquidity_score(short_quote)) * 0.05
                     - prior_quote_credit
                 )
+                if include_diagnostics:
+                    alternatives.append(
+                        (
+                            score,
+                            long_quote,
+                            short_quote,
+                            net_debit,
+                            spread_width,
+                            long_delta,
+                            short_delta,
+                            dte,
+                            long_prior_days_for_diag,
+                            short_prior_days_for_diag,
+                        )
+                    )
                 if best is None or score < best[0]:
                     best = (score, long_quote, short_quote, net_debit, spread_width, long_delta, short_delta)
     if best is None:
         return None
-    _, long_quote, short_quote, net_debit, spread_width, long_delta, short_delta = best
+    best_score, long_quote, short_quote, net_debit, spread_width, long_delta, short_delta = best
     inside_steps = max(int(short_inside_steps or 0), 0)
     if inside_steps > 0:
         expiry_quotes = sorted(
@@ -6758,7 +6874,74 @@ def _select_chain_native_spread(
             spread_width = inside_width
             short_delta = deltas.get(inside_quote.contract_symbol, 0.0)
             break
-    return long_quote, short_quote, net_debit, spread_width, long_delta, short_delta
+    selected = (long_quote, short_quote, net_debit, spread_width, long_delta, short_delta)
+    if not include_diagnostics:
+        return selected
+
+    def _prior_days_for_selected(quote: Any) -> int:
+        symbol = str(quote.contract_symbol)
+        if symbol in continuity_cache:
+            return int(continuity_cache[symbol].get("quote_date_count") or 0)
+        return _prior_quote_days(quote)
+
+    selected_expiry = date.fromisoformat(str(long_quote.expiry)[:10])
+    selected_dte = max((selected_expiry - entry_date).days, 1)
+    selected_spread = _compact_chain_native_spread_diagnostic(
+        long_quote=long_quote,
+        short_quote=short_quote,
+        net_debit=net_debit,
+        spread_width=spread_width,
+        long_delta=long_delta,
+        short_delta=short_delta,
+        long_delta_target=long_delta_target,
+        short_delta_target=short_delta_target,
+        score=best_score,
+        entry_date=entry_date,
+        dte=selected_dte,
+        long_prior_quote_days=_prior_days_for_selected(long_quote),
+        short_prior_quote_days=_prior_days_for_selected(short_quote),
+    )
+    top_spread_alternatives = [
+        _compact_chain_native_spread_diagnostic(
+            long_quote=alt_long_quote,
+            short_quote=alt_short_quote,
+            net_debit=alt_net_debit,
+            spread_width=alt_spread_width,
+            long_delta=alt_long_delta,
+            short_delta=alt_short_delta,
+            long_delta_target=long_delta_target,
+            short_delta_target=short_delta_target,
+            score=alt_score,
+            entry_date=entry_date,
+            dte=alt_dte,
+            long_prior_quote_days=alt_long_prior_days,
+            short_prior_quote_days=alt_short_prior_days,
+        )
+        for (
+            alt_score,
+            alt_long_quote,
+            alt_short_quote,
+            alt_net_debit,
+            alt_spread_width,
+            alt_long_delta,
+            alt_short_delta,
+            alt_dte,
+            alt_long_prior_days,
+            alt_short_prior_days,
+        ) in sorted(alternatives, key=lambda item: item[0])[:3]
+    ]
+    return {
+        "selected": selected,
+        "diagnostics": {
+            "spread_diagnostics_proof_role": "diagnostic_only",
+            "selected_spread": selected_spread,
+            "top_spread_alternatives": top_spread_alternatives,
+            "fill_degradation_vs_mid": selected_spread.get("fill_degradation_vs_mid"),
+            "fill_degradation_vs_mid_pct": selected_spread.get("fill_degradation_vs_mid_pct"),
+            "entry_spread_mid_debit": selected_spread.get("mid_debit"),
+            "entry_spread_ask_bid_debit": selected_spread.get("ask_bid_debit"),
+        },
+    }
 
 
 def _spread_tradability_score(
@@ -6911,6 +7094,7 @@ def _simulate_spread_outcome_imported(
     contract_selection_source = "model_target_spread"
     selected_long_delta: float | None = None
     selected_short_delta: float | None = None
+    spread_diagnostics: dict[str, Any] = {}
     if chain_native_spread_selection:
         selected = _select_chain_native_spread(
             store=store,
@@ -6946,7 +7130,13 @@ def _simulate_spread_outcome_imported(
             min_entry_short_bid=chain_native_min_entry_short_bid,
             short_inside_steps=int(chain_native_short_inside_steps or 0),
             short_inside_require_debit_cap=bool(chain_native_short_inside_require_debit_cap),
+            include_diagnostics=True,
         )
+        if selected is None:
+            return _not_priced("no_chain_native_spread")
+        if isinstance(selected, dict):
+            spread_diagnostics = dict(selected.get("diagnostics") or {})
+            selected = selected.get("selected")
         if selected is None:
             return _not_priced("no_chain_native_spread")
         long_entry_quote, short_entry_quote, selected_net_debit, selected_spread_width, selected_long_delta, selected_short_delta = selected
@@ -7025,6 +7215,13 @@ def _simulate_spread_outcome_imported(
     net_debit = long_entry_px - short_entry_px
     if net_debit <= 0.01:
         return _not_priced("zero_or_negative_net_debit")
+    spread_diagnostic_fields = dict(spread_diagnostics)
+    if spread_diagnostic_fields:
+        selected_spread = dict(spread_diagnostic_fields.get("selected_spread") or {})
+        if selected_spread:
+            selected_spread["net_debit"] = round(float(net_debit), 4)
+            selected_spread["debit_pct_of_width"] = round(float(net_debit) / float(spread_width) * 100.0, 2)
+            spread_diagnostic_fields["selected_spread"] = selected_spread
 
     # Exit thresholds
     actual_dte = max((expiry_date - entry_date).days, 1)
@@ -7120,6 +7317,7 @@ def _simulate_spread_outcome_imported(
                 short_entry_expiry=short_entry_quote.expiry,
                 long_entry_strike=float(long_entry_quote.strike),
                 short_entry_strike=float(short_entry_quote.strike),
+                **spread_diagnostic_fields,
             )
 
         # Mark-to-market both legs
@@ -7252,6 +7450,7 @@ def _simulate_spread_outcome_imported(
         "target_short_strike": round(float(short_strike), 2),
         "long_entry_quote_basis": long_entry_quote.price_basis,
         "short_entry_quote_basis": short_entry_quote.price_basis,
+        **spread_diagnostic_fields,
     }
 
 

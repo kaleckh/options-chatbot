@@ -321,6 +321,9 @@ export function OptimizerTab({
                       pnlCols={["Avg P&L"]}
                       monoCols={["Trades", "Win Rate", "Dir Accuracy", "Profit Factor", "Avg P&L", "Cal Gap"]}
                       maxHeight="320px"
+                      mobileTitleCol="Band"
+                      mobileSubtitleCol="Avg P&L"
+                      mobilePriorityCols={["Trades", "Win Rate", "Dir Accuracy", "Profit Factor", "Cal Gap"]}
                     />
                   </div>
                 ) : null}
@@ -460,6 +463,10 @@ export function OptimizerTab({
                 badgeCol="Type"
                 monoCols={["Dir Score", "Quality", "Tech", "Target Move", "Strike", "Entry $", "Exit $"]}
                 maxHeight="600px"
+                mobileTitleCol="Ticker"
+                mobileSubtitleCol="P&L %"
+                mobilePriorityCols={["Type", "Date", "Entry $", "Exit $", "Dir Score", "Quality", "Strike"]}
+                mobileHiddenCols={["Target Move", "Tech"]}
               />
             </div>
           ) : null}

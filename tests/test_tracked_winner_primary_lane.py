@@ -36,7 +36,7 @@ def _tracked_winner_pick(**overrides):
 
 def _bullish_pullback_pick(**overrides):
     pick = {
-        "ticker": "SPY",
+        "ticker": "IWM",
         "asset_class": "index",
         "sector": "Index ETF",
         "direction": "call",

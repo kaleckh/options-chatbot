@@ -15,7 +15,7 @@ There are three runtime layers in the active browser app:
 
 1. client components under `src/components/*`
 2. same-origin Next route handlers under `src/app/api/*`
-3. FastAPI handlers in `python-backend/main.py`
+3. FastAPI app composition in `python-backend/main.py`, with extracted routers such as `python-backend/profile_routes.py`
 
 `src/lib/python-bridge.ts` is the contract layer between the Next route handlers and FastAPI.
 The actual request helpers now live under `src/lib/backend/*`, while `src/lib/python-bridge.ts` stays as a compatibility barrel.
@@ -26,10 +26,14 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 
 - `POST /api/scan`
   - live options scan; defaults to `bullish_pullback_observation` / Bullish Pullback Primary when no playbook is supplied
+  - when forward evidence recording succeeds, returned picks carry `source_scan_session_id`, `source_scan_event_key`, `source_scan_run_id`, and `source_scan_recorded_at_utc` so a browser-created tracked position can preserve its scan lineage
 - `POST /api/backtest`
   - run replay
+  - state-changing Strategy Lab replay run; requires `x-strategy-lab-mutation: run_replay_backtest`
+  - response lifecycle headers identify the write as `latest_replay_artifacts` / `replay_run` / `backtest_result`
 - `GET /api/backtest/summary`
   - combined replay artifact bundle
+  - passive read; response lifecycle headers identify `latest_replay_artifacts` / `read` / `backtest_artifact_bundle`
 - `GET /api/backtest/last`
   - most recent saved replay result
 - `GET /api/backtest/live-policy`
@@ -48,8 +52,12 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 ### Profile And Status
 
 - `GET /api/profile`
+  - passive Strategy Lab profile read; response lifecycle headers identify `strategy_profile_files` / `read` / `strategy_profile`
 - `PUT /api/profile`
+  - state-changing Strategy Lab profile save; requires `x-strategy-lab-mutation: save_strategy_profile`
+  - response lifecycle headers identify `strategy_profile_files` / `profile_save` / `strategy_profile`
 - `GET /api/changelog`
+  - passive Strategy Lab profile changelog read; response lifecycle headers identify `strategy_profile_files` / `read` / `strategy_profile`
 - `GET /api/risk-settings`
 - `GET /api/options-profit/status`
 
@@ -67,12 +75,27 @@ FastAPI also exposes `DELETE /api/predictions/{pred_id}`, but there is no matchi
 - `POST /api/positions/review`
 - `POST /api/positions/{id}/close`
 
+Store ownership:
+- route contracts live in `src/lib/trading-desk/storeOwnership.ts`
+- responses carry `x-trading-desk-store: postgres_tracked_positions`
+- responses carry `x-trading-desk-record-class: tracked_position`
+- lifecycle is exposed through `x-trading-desk-lifecycle`
+- mutation routes also require the matching `x-trading-desk-mutation` intent header
+- live-scan proof classification requires exact contract identity, executable scan entry evidence, and source scan lineage verified against the forward-evidence ledger; verification checks the recorded event's contract identity and execution fields, and exact-looking payloads with missing, fabricated, or price-mutated scan provenance remain proof-ineligible
+
 ### Suggested Trades
 
 - `GET /api/suggested-trades`
 - `POST /api/suggested-trades`
 - `POST /api/suggested-trades/review`
 - `POST /api/suggested-trades/{id}/close`
+
+Store ownership:
+- route contracts live in `src/lib/trading-desk/storeOwnership.ts`
+- responses carry `x-trading-desk-store: sqlite_suggested_trades`
+- responses carry `x-trading-desk-record-class: suggested_trade`
+- lifecycle is exposed through `x-trading-desk-lifecycle`
+- mutation routes also require the matching `x-trading-desk-mutation` intent header
 
 ### Support
 
@@ -85,7 +108,7 @@ The current worktree does not include active Next route handlers for `src/app/ap
 
 ## Backend-Only FastAPI Endpoints
 
-These routes exist in `python-backend/main.py` but are not currently mirrored through `src/app/api/*`:
+These FastAPI routes are not currently mirrored through `src/app/api/*`:
 
 - `GET /api/profiles`
 - `DELETE /api/predictions/{pred_id}`
@@ -101,6 +124,8 @@ These routes exist in `python-backend/main.py` but are not currently mirrored th
 - `GET /api/daily-performance`
 - `GET /api/health`
 - `GET /api/proof-summary`
+
+The browser Strategy Lab route contract lives in `src/lib/strategy-lab/replayIntent.ts`. It intentionally covers the mounted Next routes only: replay artifact reads, explicit replay runs, and explicit strategy profile saves. Backend-only backtest support endpoints remain direct FastAPI research/support surfaces and should not be treated as browser UX entrypoints until a matching Next route and Strategy Lab contract are added.
 
 ## Storage Layers
 
@@ -162,12 +187,16 @@ Used for:
 
 - Next route handlers
   - request validation and same-origin proxying only
+- `src/lib/trading-desk/storeOwnership.ts`
+  - executable Trading Desk route-to-store lifecycle contract for tracked positions and suggested trades
 - `src/lib/python-bridge.ts`
   - compatibility barrel for the backend client modules
 - `src/lib/backend/*`
   - backend HTTP transport plus domain-specific request helpers
 - `python-backend/main.py`
-  - endpoint composition and cache orchestration
+  - FastAPI app composition, router mounting, and cache orchestration
+- `python-backend/profile_routes.py`
+  - profile, profile changelog, `/api/profiles`, and risk settings routes
 - `options_chatbot.py`
   - options scan and profile-era domain logic
 - `wfo_optimizer.py`
@@ -184,7 +213,8 @@ Used for:
 3. `src/lib/backend/*`
 4. `src/app/api/scan/route.ts`
 5. `python-backend/main.py`
-6. `python-backend/positions_service.py`
-7. `python-backend/positions_repository.py`
-8. `options_chatbot.py`
-9. `wfo_optimizer.py`
+6. `python-backend/profile_routes.py`
+7. `python-backend/positions_service.py`
+8. `python-backend/positions_repository.py`
+9. `options_chatbot.py`
+10. `wfo_optimizer.py`

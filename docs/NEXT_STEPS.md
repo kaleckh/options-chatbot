@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-05-31
+Last updated: 2026-06-01
 
 ## Documentation Hygiene
 
@@ -15,31 +15,75 @@ Current read:
 
 Current read:
 - the main UI now uses `Trading Desk` / `Strategy Lab` naming
-- `Trading Desk` prioritizes open/closed tracked positions and scanner picks, while paper ideas and legacy prediction analytics are de-emphasized
-- scanner evidence, proof state, and guardrails are collapsed rather than removed
+- `Trading Desk` prioritizes open/closed tracked positions and the all-tracked-stock rollup, while live scan picks, paper ideas, and legacy prediction analytics are de-emphasized behind the archive toggle
+- tracked trades now expose clickable lane-family filters near the top of the view, and `bullish_pullback_observation` is displayed as `Bullish Pullback` rather than split by source/provenance variants
+- tracked-trade evidence mix, lane-quality, and guardrail-readback card decks were removed from the primary Open/Closed surface; row-level evidence badges and scanner/archive diagnostics remain available
 - `FinTable` now renders mobile cards below tablet width, while desktop tables retain horizontal density
-- the in-app browser automation backend was unavailable during the makeover, so verification used lint, typecheck, production build, and a local HTTP 200 load check
+- shared `FinTable` mobile cards now use explicit per-table mobile title, subtitle, priority-field, and hidden-field contracts instead of relying on object key order
 
 1. Do a visual browser QA pass on desktop and mobile with the app plus backend running together (`npm run dev`) before treating the makeover as final polish.
 
-2. Continue reducing the large `src/components/predictions/PredictionsView.tsx` surface by extracting hooks, formatting helpers, scanner view, tracked positions view, and paper ideas view before attempting deeper row expansion or drawer work.
+2. Continue reducing the large `src/components/predictions/PredictionsView.tsx` surface by extracting hooks, formatting helpers, tracked positions view, tracked stocks view, scanner view, and paper ideas view before attempting deeper row expansion or drawer work.
 
-3. Add a focused responsive pass for trade row details: keep ticker, side, live P&L, status, and action first, then move target/stop/quote/expiry/provenance into row details instead of making every table expose every column.
+3. Continue responsive polish around trade row details and drawers, but keep the shared table mobile hierarchy explicit through `mobileTitleCol`, `mobileSubtitleCol`, `mobilePriorityCols`, and `mobileHiddenCols` when adding new dense tables.
 
 ## Tracked Position Profit Controls
 
 Current read:
 - the UI-backed tracked-position store contains historical paper rows with raw `stop_loss_pct=90`
+- Closed Trades now defaults to a truth-grade executable data view: executable entry, trusted executable exit, realized P&L, and no lifecycle-only / proof-ineligible / legacy-unclassified rows
+- Closed Trades keeps separate filters for all closed rows, historical paper, lifecycle-only, unpriced, and legacy rows so research/backfill remains visible without contaminating default accuracy metrics
+- closed-position summary cards now foreground truth-grade row count, truth-grade win rate, truth-grade average P&L, shown-row average P&L, and research average P&L
 - live review intentionally honors `90%` configured stops for profit-first paper/live-shadow behavior
 - configured stops wider than `90%` are capped to `90%`, while retaining both `configured_stop_loss_pct` and `effective_stop_loss_pct` in review metrics
 - verified executable zero exits can now auto-close paper positions at `0.0` instead of leaving total-loss options open
 - display-only last-price marks still suppress stop/target triggers and do not auto-close positions
 - passive positions/suggestions polling in the UI is now read-only; explicit refresh/review actions are required before the UI POSTs review requests
 - `POST /api/positions/review` is still state-changing: it saves reviews and can auto-close executable `SELL` recommendations
+- closed-position realized P&L is now canonicalized from entry/exit execution prices when an exit price exists, and create-time pre-closed rows preserve gross/net P&L columns
+- local tracked-position audit after the repair: `87` closed rows, `75` priced rows with canonical realized P&L, and `12` historical lifecycle-only closed rows with no trusted exit quote and therefore no assigned P&L; backup: `data/tracked_positions.pre-realized-pnl-repair-20260531T184725Z.json`
 
-1. Audit the currently open historical paper positions before running the state-changing review endpoint, then decide whether to let executable `SELL` recommendations auto-close or close selected rows manually.
+1. Use the default truth-grade Closed Trades view for product iteration. Switch to historical paper, lifecycle-only, unpriced, or legacy filters only when intentionally auditing research/backfill data quality.
 
-2. Keep investigating the app truth-health mismatch seen during the local server check: `/api/options-profit/status` reported `TRACKED DB DOWN` while `/api/positions` and `/api/proof-summary` still returned tracked-position data.
+2. Audit the currently open historical paper positions before running the state-changing review endpoint, then decide whether to let executable `SELL` recommendations auto-close or close selected rows manually.
+
+3. Keep investigating the app truth-health mismatch seen during the local server check: `/api/options-profit/status` reported `TRACKED DB DOWN` while `/api/positions` and `/api/proof-summary` still returned tracked-position data.
+
+## Trading Desk Profitability Repair
+
+Current artifacts:
+- all-row guardrail replay script: `scripts/analyze_trading_desk_profitability_guardrails.py`
+- latest JSON: `data/forward-tracking/trading_desk_profitability_guardrails_latest.json`
+- report: `docs/trading-desk-profitability-guardrails-2026-05-31.md`
+- negative decision audit script: `scripts/audit_trading_desk_negative_trade_decisions.py`
+- negative decision latest JSON: `data/forward-tracking/trading_desk_negative_trade_decision_audit_latest.json`
+- negative decision latest CSV: `data/forward-tracking/trading_desk_negative_trade_decision_audit_latest.csv`
+- negative decision report: `docs/trading-desk-negative-trade-decision-audit-2026-05-31.md`
+- exit-policy replay script: `scripts/replay_trading_desk_exit_policies.py`
+- exit-policy latest JSON: `data/forward-tracking/trading_desk_exit_policy_replay_latest.json`
+- exit-policy latest CSV: `data/forward-tracking/trading_desk_exit_policy_replay_latest.csv`
+- exit-policy report: `docs/trading-desk-exit-policy-replay-2026-05-31.md`
+- legacy missed-close audit script: `scripts/audit_trading_desk_legacy_missed_closes.py`
+- legacy missed-close latest JSON: `data/forward-tracking/trading_desk_legacy_missed_close_audit_latest.json`
+- legacy missed-close report: `docs/trading-desk-legacy-missed-close-audit-2026-06-01.md`
+
+Current read:
+- repair scope is the regular supervised Trading Desk lanes: `short_term`, `swing`, `bullish_momentum`, and Bullish Pullback
+- baseline replay: `429` rows, `383` priced, `193` negative, `190` positive/flat, `46` unknown, average P&L `5.21%`, median P&L `-1.58%`
+- promoted combined kept subset: `130` rows, `116` priced, `29` negative, `87` positive/flat, average P&L `53.08%`, median P&L `46.4%`
+- scanner guardrails now block debit over `45%` of width, fill degradation `>=20%`, worst-leg bid/ask spread `>=20%`, lane-specific ticker quarantines, Bullish Pullback non-keep tickers, and Bullish Pullback `ret5 < -2`
+- momentum-chase blocking is rejected for now because it removed too many winners in the all-row replay
+- negative decision audit: `213` negative tracked rows, with `208` limited research/backfill rows and `5` limited legacy exact-like rows
+- current promoted entry guardrails hit `167` negative rows; the biggest guardrail hits are lane ticker quarantine (`101`), fill degradation (`79`), worst-leg spread (`73`), and debit over `45%` width (`46`)
+- executable-exit audit: `1` negative row had non-negative executable evidence before the first negative review; legacy rows `26`, `39`, and `44` had positive executable `SELL` reviews before the final negative outcome and need a separate legacy missed-auto-close audit before any current policy change
+- `186` negative rows have no stored intra-life review timeline, so missed-close claims are explicitly unavailable for those rows
+- exit-policy replay found `107` regular Trading Desk rows with stored executable review timelines; baseline on that replayable subset is already positive at avg `+37.28%`, median `+35.79%`, and `25` negatives
+- no tested broad exit rule is promotable: `stop_70` and `current_policy_replay` have positive average deltas but increase negatives to `26` and flip `2` stored winners to losses; global profit harvest, global trailing giveback, shorter time exits, and stored-SELL following reduce average executable P&L
+- legacy rows `26`, `39`, and `44` were audited directly. All three diagnose as `stale_or_non_autoclosing_review_path`, and `current_action_required_count=0`; preserve them as historical stale-policy diagnostics, not a current auto-close bug or global exit-policy change.
+
+1. Watch the next forward/live-shadow picks for starvation after these entry guards; if a lane goes to zero, inspect the blocked audit rows before loosening.
+
+2. Do not change the broad exit policy based on legacy rows `26`, `39`, and `44`. The focused audit found no current action required; future exit work should require a still-open row with executable `SELL` evidence that fails to auto-close.
 
 ## Regular Options Multi-Lane Portfolio
 
@@ -50,16 +94,26 @@ Current artifact:
 - report: `docs/regular-options-multilane-2026-05-30.md`
 - frozen autoresearch evaluator: `scripts/evaluate_regular_options_autoresearch.py`
 - autoresearch goal prompt: `docs/autoresearch/regular-options-goal.md`
+- operating scorecard: `scripts/build_regular_profitability_operating_scorecard.py`
+- operating scorecard latest JSON: `data/profitability-lab/regular-options-operating-scorecard/latest.json`
+- operating scorecard latest Markdown: `docs/regular-options-operating-scorecard.md`
 - autoresearch latest JSON: `data/profitability-lab/regular-options-autoresearch/latest.json`
 - autoresearch latest Markdown: `data/profitability-lab/regular-options-autoresearch/latest.md`
 - autoresearch ledger: `data/profitability-lab/regular-options-autoresearch/ledger.jsonl`
 - autoresearch goal experiment harness: `scripts/run_regular_options_goal_experiment.py`
 - autoresearch goal experiment latest JSON: `data/profitability-lab/regular-options-autoresearch/experiments/latest.json`
+- latest Lane A memory experiment batch: `data/profitability-lab/regular-options-autoresearch/experiments/20260601T020317Z/summary.json`
 - all-planned sleeves runner: `scripts/run_regular_options_all_planned_sleeves.py`
 - all-planned latest JSON: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/latest.json`
-- all-planned latest batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T053337Z_merged_all_planned_plus_repairs/summary.json`
+- all-planned latest full batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T080215Z/summary.json`
+- targeted tracked-winner zero-bid batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T074502Z/summary.json`
+- latest IWM all-planned partial batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T185035Z/summary.json`
+- latest liquidity-first all-planned partial batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T185933Z/summary.json`
+- sector ETF import planner: `scripts/plan_regular_sector_etf_imports.py`
 
 Current read:
+- operating scorecard status: `visible_product_profitability_progress_but_proof_still_blocked`. Trading Desk product progress is visible, but proof-grade readiness remains blocked.
+- Trading Desk promoted guardrails kept subset: `130` rows, `116` priced, avg `+53.08%`, median `+46.4%`, negative rate `25.0%`, versus baseline `429` rows, `383` priced, avg `+5.21%`, median `-1.58%`, negative rate `50.4%`. This is product-side progress, not historical proof-grade promotion.
 - operator read: `200 good trades` is misframed. The multi-lane count gate is passed, but the frozen clean-promotion gate is still blocked.
 - combined proof-grade regular stock-options portfolio: `234` trusted intraday exact trades after strict entry-date + ticker + direction dedupe
 - PF: `2.16`
@@ -80,24 +134,44 @@ Current read:
 - latest tracked-winner classifier read: `77` missing exact leg/date items classify as provider no-match exact contracts with same-expiry chain rows present
 - clean/high-coverage existing artifacts do not solve the `300` target: clean coverage>=97.5 and unpriced=0 artifacts union to only `134` strict keys, and the clean bullish-pullback reference adds only `17` strict-new rows over the current stack
 - frozen autoresearch baseline, from the ledger rather than current `latest.json`: `score: 0.00`, `research_score: 177.74`, status `scout_or_blocked`, clean count `0`, scout count `234`, PF `2.16`, avg `+26.76%`, effective side-aware coverage `96.71%`, unresolved `14`, stress PF `1.53`, zero-bid exit rate `41.99%`, Lane A conservative PF `0.85`
-- current autoresearch `latest.json`: latest Lane A repair experiment, not the baseline. It reports `score: 0.00`, clean count `0`, scout count `130`, and `lane_a_is_counted=false` because the repaired Lane A variant had only `81` exact trades.
+- current autoresearch `latest.json`: latest global evaluator result, not the immutable baseline. The goal experiment harness now writes evaluator outputs experiment-scoped by default, and only overwrites global latest when run with explicit `--write-global-latest`; use the ledger or `python scripts/evaluate_regular_options_autoresearch.py --no-write --score-line` for baseline/current-stack truth.
 - first Lane A goal-loop result: simple entry survivability filters were not enough. The best entry-filter variant, `lane_a_goal_stop200_time75_shortprior3_shortbid10_backfill`, improved effective coverage to `99.09%` and unresolved candidates to `3`, but left Lane A conservative PF at `0.88` and zero-bid exit rate above `42%`.
 - second Lane A goal-loop result: the bad-zero-ticker/debit repair proved the economics can be improved but not at enough count. `lane_a_goal_bad_zero_ticker_exclusion_debit45_npicks8` reached `research_score: 236.19` and Lane A conservative PF `1.30`, but only `81` exact Lane A trades, so Lane A was not counted and the stack fell back to the `130`-trade core.
+- third Lane A goal-loop result: causal exit-failure and symbol-health memory improved coverage but not clean profitability. The latest experiment-scoped batch `20260601T020317Z` kept evaluator outputs local with `--no-append-ledger`; the best branch, `lane_a_goal_stop200_time75_symbol_health90_backfill`, had effective coverage `99.06%`, unresolved `3`, PF `2.13`, avg `+27.22%`, scout count `191`, zero-bid exit rate `43.24%`, and Lane A conservative PF `0.92`. It is better than the raw baseline but still below the Lane A conservative PF gate and below the `200` clean count requirement.
 - replacement-sleeve check: core plus the clean exact reference reaches only `157` strict-deduped trades; core plus clean reference plus all high-PF/coverage cluster artifacts reaches only `158` because of overlap. Current trusted-intraday tracked-winner replacements failed profitability (`tracked_winner_chain_native_qqq_time65_research` reran at `109` exact trades but PF `1.04`).
-- all-planned sleeve audit: `30` currently implemented planned regular stock-options variants have now run end-to-end with `0` run failures. The audit still does not show a clean gap-closer. The best new candidate is `tracked_winner_chain_native_googl_nvda_time65_all_sleeves` (`49` strict-new exact, PF `1.98`, avg `+18.27%`, stress PF `1.39`), which could close the `43`-trade clean gap only if its `68.1%` quote coverage and `23` unpriced candidates are repaired. The broader no-SPY tracked-winner repair adds `67` strict-new rows at PF `1.85`, but has only `62.0%` coverage and stress PF `1.24`. Cheap-debit continuity adds `98` strict-new rows but misses quality at PF `1.43`, `50.8%` coverage, and stress PF `0.97`. Fast volatility expansion, current relative-strength pullback, high-beta momentum, and range-breakout shapes remain rejected.
-- planned-but-not-tested ledger: `29` lane-lab specs remain explicitly blocked or not yet testable rather than skipped. Statuses are `12` pending forward/paper logs, `9` blocked by instrumentation, `5` blocked by missing data, `1` partial fill-discipline paper result, `1` scored high-debit control, and `1` now ready for paper backtest. `IWM` was a stale blocker; the all-planned runner now derives readiness from the current trusted ThetaData store and marks `iwm_small_cap_risk` as `ready_for_paper_backtest`.
+- all-planned sleeve audit: the latest full batch tested `30` implemented planned regular stock-options variants with `0` run failures, and the current code now exposes `44` implemented variants after adding IWM, liquidity-first tracked-winner, and regular sector ETF probes. The audit still does not show a clean gap-closer. The previous near-gap tracked-winner candidates are rejected by side-aware zero-bid economics: the targeted batch priced the missing exits and marked no-SPY `not_worth_after_zero_bid_replay` at conservative combined PF `0.62`, and GOOGL/NVDA `not_worth_after_zero_bid_replay` at conservative combined PF `0.67`. The first regular sector ETF partial batch `20260601T015109Z` rejected the simple sector shapes: SMH PF `0.49`, regular sector stack PF `0.27`, and TLT/XLE/XLF/KRE no current candidates.
+- IWM conversion result: `iwm_small_cap_risk` is no longer just a stale readiness row. The current partial run tested `sleeve_ticker_iwm`, `iwm_small_cap_risk_call_chain_native_timeexit_all_sleeves`, and `iwm_small_cap_risk_put_chain_native_timeexit_all_sleeves`. The per-ticker sleeve has PF `2.47` but only `11` exact trades, `73.3%` coverage, and `0` strict-new trades over the `157` stack; the WFO call probe has `18` exact trades, PF `1.25`, `100.0%` coverage, `7` strict-new rows, and stress PF `0.87`; the put probe is unprofitable at PF `0.0` with `20.0%` coverage. Do not promote IWM's current shapes.
+- planned-but-not-tested ledger: the runner now keeps same-`lane_id` lane-lab rows visible when an implemented replay variant exists but the lane-lab spec still needs paper/forward evidence. Current code reports `32` non-AI lane-lab rows needing follow-up: `14` pending forward/paper logs, `9` blocked by instrumentation, `6` blocked by missing data, `1` partial fill-discipline paper result, `1` scored high-debit control, and `1` ready/paper-backtest row now represented by runnable IWM diagnostics.
+- replay-side fill diagnostics: historical WFO chain-native spread rows now persist `selected_spread`, `top_spread_alternatives`, `fill_degradation_vs_mid`, `entry_spread_mid_debit`, and `entry_spread_ask_bid_debit` as `diagnostic_only`. The first causal liquidity-first tracked-winner contract-hygiene probe failed and should not be promoted: `tracked_winner_liquidity_first_contract_hygiene_v1` had `102` strict-new exact trades and closed the count gap on paper, but standalone PF was `0.81`, avg `-5.22%`, coverage `58.0%`, stress PF `0.53`, and worth status `not_worth_current_shape`.
+- sector ETF data blocker: cleared. Current trusted intraday `options_history.db` readiness is `IWM=252` quote dates, and `GLD`, `TLT`, `XLE`, `XLF`, `SMH`, and `KRE` each have `252` trusted shared quote dates from `2025-05-22` through `2026-05-22`. Bounded 2026-05-31/2026-06-01 imports created batches `1832` through `1920`, totaling `2,651,299` trusted intraday sector ETF rows with `0` rejects. The latest planner readback returned `ready_for_sector_replay`; there are no remaining sector data-depth blockers. GLD data is ready, but no GLD/commodity-lane sleeve was added in the regular-lane-only pass.
 
-1. Use the multi-lane runner before arguing trade count. It separates portfolio-candidate lanes, intraday scouts, daily/EOD research, and blocked lane specs.
+1. Use the operating scorecard before answering whether we are seeing results:
 
-2. Use the frozen autoresearch evaluator before running `/goal` loops or accepting strategy changes. The evaluator's hard `promotable_clean` gates are: `>=200` clean trades, PF `>=1.50`, avg PnL `>0`, effective coverage `>=97.5%`, unresolved candidates `0`, 5%/side stress PF `>=1.25`, rolling/OOS pass, side-aware conservative Lane A replay if Lane A is counted, Lane A conservative PF `>=1.30`, and zero-bid exit rate `<=2%`. Paper-shadow pass is still required for production readiness.
+```powershell
+python scripts/build_regular_profitability_operating_scorecard.py --json
+```
 
-3. Keep the explicit tracked-winner intraday scout in the multi-lane runner before saying the existing artifact set cannot reach `300`. It has enough strict-new rows to matter for raw count, but the current rerun fails PF and coverage gates, so it should stay behind the quality gate unless a redesigned causal/contract-selection version clears them.
+It separates product-side Trading Desk profitability progress from proof-grade historical readiness.
 
-4. Stop treating simple Lane A filter tuning as the primary path to `200` clean trades. Entry short-bid, prior-quote, liquidity-score, tradability, early-exit, debit/width, and broad bad-zero-ticker probes either leave Lane A conservative PF below gate or reduce the lane below the `100` exact-trade portfolio-candidate threshold. The next `/goal` implementation target should repair tracked-winner GOOGL/NVDA contract survivability first, then convert blocked lane-lab specs into runnable end-to-end tests with the same frozen evaluator.
+2. Use the multi-lane runner before arguing trade count. It separates portfolio-candidate lanes, intraday scouts, daily/EOD research, and blocked lane specs.
 
-5. Do not promote the newly tested bearish put, range-breakout, or volatility-expansion probes. Put-chain data was imported and exact exits were filled where possible; the bearish time-exit lane priced `73` exact trades at PF `0.21`, and range/volatility probes remained negative or below breakeven.
+3. Use the frozen autoresearch evaluator before running `/goal` loops or accepting strategy changes. The evaluator's hard `promotable_clean` gates are: `>=200` clean trades, PF `>=1.50`, avg PnL `>0`, effective coverage `>=97.5%`, unresolved candidates `0`, 5%/side stress PF `>=1.25`, rolling/OOS pass, side-aware conservative Lane A replay if Lane A is counted, Lane A conservative PF `>=1.30`, and zero-bid exit rate `<=2%`. Paper-shadow pass is still required for production readiness.
 
-6. It is now fair to say every currently implemented planned sleeve in the all-planned runner has been tested end-to-end. It is not fair to say every planned lane-lab spec is fully tested: `29` specs still need data imports, paper logs, or structure/instrumentation support before they can produce replay metrics. Keep those specs visible and burn them down systematically rather than ranking them away.
+4. Keep the explicit tracked-winner intraday scout in the multi-lane runner before saying the existing artifact set cannot reach `300`. It has enough strict-new rows to matter for raw count, but the current rerun fails PF and coverage gates, so it should stay behind the quality gate unless a redesigned causal/contract-selection version clears them.
+
+5. Stop treating simple Lane A filter tuning, Lane A causal memory tuning, tracked-winner GOOGL/NVDA survivability, or the first regular sector ETF shapes as the primary path to `200` clean trades. Lane A entry short-bid, prior-quote, liquidity-score, tradability, early-exit, debit/width, broad bad-zero-ticker, selected-contract exit-failure memory, and symbol-health memory probes either leave conservative PF below gate or reduce the lane below the `100` exact-trade portfolio-candidate threshold. GOOGL/NVDA/no-SPY tracked-winner misses have now failed side-aware zero-bid economics. IWM is runnable but not promotable in the current shapes. The first liquidity-first tracked-winner contract-hygiene rule also failed PF, coverage, and stress gates. Sector ETF data is now ready, but the first XLE/XLF/KRE/SMH/TLT/sector-rotation probes were rejected or starved; the next implementation target should be a materially different causal liquidity/exit rule or non-overlapping sleeve construction rather than tuning these failed simple shapes.
+
+6. Do not promote the newly tested bearish put, range-breakout, or volatility-expansion probes. Put-chain data was imported and exact exits were filled where possible; the bearish time-exit lane priced `73` exact trades at PF `0.21`, and range/volatility probes remained negative or below breakeven.
+
+7. It is now fair to say every currently implemented planned sleeve in the all-planned runner has either full-batch coverage or a focused partial artifact, including IWM. It is not fair to say every planned lane-lab spec is fully tested: `32` non-AI lane-lab rows still need data imports, paper logs, or structure/instrumentation support before they can produce promotion-grade replay metrics. Keep those specs visible and burn them down systematically rather than ranking them away.
+
+8. Sector ETF replay status: the import plan is complete. Rerun the planner before any future sector work and require `ready_for_sector_replay`:
+
+```powershell
+.venv\Scripts\python.exe scripts/plan_regular_sector_etf_imports.py --json
+```
+
+The first implemented regular-sector variants live in `scripts/run_regular_options_all_planned_sleeves.py` and can be rerun with `--only tlt_duration_shock_call_chain_native_timeexit_all_sleeves tlt_duration_shock_put_chain_native_timeexit_all_sleeves xle_energy_inflation_call_chain_native_timeexit_all_sleeves xle_energy_inflation_put_chain_native_timeexit_all_sleeves xlf_financials_call_chain_native_timeexit_all_sleeves xlf_financials_put_chain_native_timeexit_all_sleeves kre_regional_bank_call_chain_native_timeexit_all_sleeves kre_regional_bank_put_chain_native_timeexit_all_sleeves smh_semiconductor_call_chain_native_timeexit_all_sleeves sector_rotation_regular_etf_call_stack_v1`. Current partial batch `20260601T015109Z` rejected the simple shapes: SMH PF `0.49`, sector stack PF `0.27`, and TLT/XLE/XLF/KRE no current candidates. Do not promote them or count them toward the clean gap.
 
 ## Bullish Pullback Observation Lane
 
@@ -128,11 +202,18 @@ Current full active-universe exact-contract status:
 - best 130-trade PF branch: `data/options-validation/runs/20260528_013904_sleeve_winner_cluster_exit_balanced_quoted_v1_intraday.json`
 - latest defensive refill scout rerun: `data/options-validation/runs/20260529_180218_sleeve_next_defensive_refill_v1_intraday.json`
 - latest defensive refill exact-fill attempt: `data/options-validation/thetadata-nbbo/thetadata_exact_missing_intraday_20260530T000025Z.json`
-- zero-pick current-algorithm audit script: `scripts/audit_zero_pick_days_current_main_lane.py`
-- zero-pick current-algorithm audit report: `data/forward-tracking/main_lane_zero_pick_current_algo_audit_latest.json`
+- zero-pick all-lanes current-algorithm audit script: `scripts/audit_zero_pick_days_all_lanes.py`
+- zero-pick all-lanes current-algorithm audit report: `data/forward-tracking/all_lanes_zero_pick_current_algo_audit_latest.json`
+- zero-pick all-lanes latest applied status: `14` / `14` supervised scan lanes completed with `425` exact historical research/backfill picks appended to the forward scan/fill logs.
+- zero-pick all-lanes paper-position migration report: `data/forward-tracking/all_lanes_zero_pick_position_migration_v1_latest.json`
+- zero-pick all-lanes paper-position migration status: `425` historical paper positions created; after suggested-close P&L repair, `400` are closed and `25` are open as of `2026-05-31`; all `425` scan rows and fill-attempt rows are linked to tracked position IDs. Lane counts are `short_term=159`, `swing=157`, `bullish_momentum=51`, `tracked_winner_observation=35`, `tracked_winner_primary=12`, `volatility_expansion_observation=10`, and `range_breakout_observation=1`.
+- historical suggested-close P&L repair report: `data/forward-tracking/historical_suggested_close_realized_pnl_repair_v1_latest.json`
+- historical suggested-close P&L repair status: `98` tracked rows updated across two passes to first executable historical suggested close, final dry-run idempotence reported `369` already-correct executable suggested closes, and `61` closed backfill rows remain missing realized P&L because no trusted exact exit-leg quote was available (`54` all-lanes rows and `7` main-lane rows). Do not synthesize these unresolved exits from midpoint, last trade, daily/EOD, or stale marks.
+- zero-pick explicit single-lane diagnostic script: `scripts/audit_zero_pick_days_current_main_lane.py`
+- zero-pick explicit single-lane diagnostic report: `data/forward-tracking/main_lane_zero_pick_current_algo_audit_latest.json`
 - zero-pick paper-position migration script: `scripts/migrate_main_lane_backfills_to_positions.py`
 - zero-pick paper-position migration report: `data/forward-tracking/main_lane_zero_pick_position_migration_latest.json`
-- zero-pick audit tracking status: `60` exact historical main-lane picks appended as `research_backfill` / `backfilled_historical_track` and explicitly migrated into UI-backed Postgres paper tracked positions; final audit-position state is `27` open and `33` closed by historical time-exit. These are historical paper positions, not live-production proof.
+- zero-pick audit tracking status: `60` exact historical main-lane picks appended as `research_backfill` / `backfilled_historical_track` and explicitly migrated into UI-backed Postgres paper tracked positions; after suggested-close P&L repair, final audit-position state is `23` open and `37` closed. These are historical paper positions, not live-production proof.
 
 1. Use `sleeve_winner_cluster_exit_50_55_60_no_pld_xlk_v1` as the high-PF profitability-first paper/live-shadow branch: `120` candidates, `113` exact quoted trades, `7` unresolved candidates, `94.2%` quote coverage, PF `4.34`, avg `+49.78%`, median `+54.20%`, win rate `72.6%`, and all priced exits are bid/ask `time_exit` fills. It excludes `CAT`, `PM`, `PLD`, and `XLK`, uses 60% DTE exits for energy/GOOGL/JNJ/LLY, 55% for NEM/IWM, and 50% for AAPL/UNH.
 
@@ -163,31 +244,39 @@ Latest 2026-05-29 next-layer stop state:
 
 ## AI Commodity / Commodity-Infrastructure Lane
 
-Current readback source: `data/ai-commodity-infra/progress/latest.md`, generated `2026-05-27T14:17:01Z`.
+Current readback source: `data/ai-commodity-infra/progress/latest.md`, generated `2026-05-31T09:10:46Z`.
 
 Current state:
 - proof source: `alpaca:sip:opra` / `alpaca_opra_daily_snapshot`
 - exact shared quote dates: `3` / `100`, from `2026-05-20` through `2026-05-22`
 - scan/proof universe: `24` aligned symbols
 - latest live scan candidates: `0`
-- next guarded capture target: `2026-05-26`, due now if Alpaca credentials and market-data access are available
+- latest guarded capture target: `2026-05-26`, attempted again on `2026-05-31`
+- latest capture result: failed/no material progress; shared quote dates stayed `3`, all `24` target-date symbols remained missing, and the previous proof event reports `capture_status_after=no_rows_captured`
+- next guarded event: fresh scan/read-only evidence command `python scripts/run_ai_commodity_opra_progress.py --skip-capture`, not before `2026-06-01T08:10:00-06:00`
 - full replay unlock projection: `2026-10-12` if one shared OPRA date is captured per market day
 
-1. Run the guarded post-close capture selected by the latest runbook:
-
-```powershell
-python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-26
-```
-
-Expected success state: shared quote dates advance from `3` to `4`, `capture.target_capture_complete` becomes true, and the full scan/proof universe remains aligned.
-
-2. Immediately after the capture command, run the readback:
+1. Wait until the next guarded event and rerun the generated runbook readback before using any stale command:
 
 ```powershell
 python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest
 ```
 
-3. If the readback does not advance to `4` shared dates, repair the capture failure before replay or filter work. The latest blocker lists the full 24-symbol capture target for `2026-05-26`.
+Current guard state after the failed capture: `run_next_execution_command=false`, `guarded_command_decision_status=waiting_until_next_guarded_event`, and `guarded_command_decision_safe_to_execute_now=false`.
+
+2. If that readback opens the fresh-scan guard, run exactly the allowed command:
+
+```powershell
+python scripts/run_ai_commodity_opra_progress.py --skip-capture
+```
+
+Then immediately run the readback again:
+
+```powershell
+python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest
+```
+
+3. Repair the `2026-05-26` full-universe capture failure before replay or filter work. The latest blocker lists the full 24-symbol capture target as missing: `FCX`, `SLV`, `VRT`, `VST`, `ETN`, `GEV`, `PWR`, `CCJ`, `CEG`, `SCCO`, `COPX`, `URA`, `ALB`, `SQM`, `MP`, `RIO`, `BHP`, `TECK`, `AA`, `XME`, `NRG`, `NVT`, `CARR`, and `TT`.
 
 4. If the local store changed and the readback says derived evidence is stale, refresh deterministic readiness without recapturing or rescanning:
 

@@ -371,6 +371,10 @@ class PositionsReviewEngineTests(unittest.TestCase):
         scan_pick["entry_display_basis"] = "spread_mid"
         scan_pick["entry_quote_snapshot"]["entry_execution_price"] = 2.75
         scan_pick["entry_quote_snapshot"]["entry_execution_basis"] = "spread_ask_bid"
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "bullish_pullback_observation:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
 
         payload = svc.build_position_payload(
             scan_pick=scan_pick,
@@ -378,6 +382,7 @@ class PositionsReviewEngineTests(unittest.TestCase):
             contracts=1,
             filled_at="2026-04-06T10:00:00-04:00",
             notes="spread payload",
+            source_scan_lineage_verified=True,
         )
 
         self.assertEqual(payload["entry_execution_price"], 2.75)
@@ -755,6 +760,8 @@ class PositionsReviewEngineTests(unittest.TestCase):
 
         self.assertEqual(review["recommendation"], "HOLD")
         self.assertEqual(review["current_pnl_pct"], -55.0)
+        self.assertEqual(review["metrics_snapshot"]["review_policy_version"], svc.POSITION_REVIEW_POLICY_VERSION)
+        self.assertEqual(review["metrics_snapshot"]["max_live_review_stop_loss_pct"], 90.0)
         self.assertEqual(review["metrics_snapshot"]["configured_stop_loss_pct"], 90.0)
         self.assertEqual(review["metrics_snapshot"]["effective_stop_loss_pct"], 90.0)
         self.assertEqual(review["metrics_snapshot"]["stop_option_price"], 0.2)

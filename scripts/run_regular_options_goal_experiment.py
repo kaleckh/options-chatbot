@@ -29,6 +29,9 @@ DEFAULT_VARIANTS = [
     "lane_a_goal_stop200_time75_shortprior3_shortbid10_backfill",
     "lane_a_goal_stop200_time75_liquidity_score_replacement",
     "lane_a_goal_stop200_time75_tradability80",
+    "lane_a_goal_stop200_time75_shortbucket_memory45_backfill",
+    "lane_a_goal_stop200_time75_symbol_health90_backfill",
+    "lane_a_goal_stop200_time75_memory_combo_backfill",
 ]
 
 
@@ -152,6 +155,7 @@ def run_goal_experiments(
     lookback_years: int,
     output_dir: Path = OUTPUT_DIR,
     append_ledger: bool = True,
+    write_global_latest: bool = False,
 ) -> dict[str, Any]:
     stamp = _utc_stamp()
     root = output_dir / stamp
@@ -179,7 +183,12 @@ def run_goal_experiments(
         )
         if append_ledger:
             evaluator.append_ledger(scoreboard)
-        artifacts = evaluator.write_outputs(scoreboard)
+        artifacts = evaluator.write_outputs(scoreboard, output_dir=variant_dir / "autoresearch-scoreboard")
+        if write_global_latest:
+            artifacts = {
+                **artifacts,
+                "global": evaluator.write_outputs(scoreboard),
+            }
         scoreboard["artifacts"] = artifacts
         _write_json(variant_dir / "scoreboard.json", scoreboard)
 
@@ -216,6 +225,7 @@ def run_goal_experiments(
         "goal": "Repair Lane A zero-bid survivability under the frozen regular-options autoresearch evaluator.",
         "lookback_years": int(lookback_years),
         "append_ledger": bool(append_ledger),
+        "write_global_latest": bool(write_global_latest),
         "variants": rows,
         "ranked": ranked,
         "best": ranked[0] if ranked else None,
@@ -231,6 +241,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--variant", action="append", help="Variant id to run. Repeat for multiple variants.")
     parser.add_argument("--lookback-years", type=int, default=1)
     parser.add_argument("--no-append-ledger", action="store_true")
+    parser.add_argument(
+        "--write-global-latest",
+        action="store_true",
+        help="Also write the frozen evaluator's global latest.json/latest.md. Default keeps evaluator outputs experiment-scoped.",
+    )
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -241,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
         lookback_years=int(args.lookback_years),
         output_dir=args.output_dir,
         append_ledger=not args.no_append_ledger,
+        write_global_latest=bool(args.write_global_latest),
     )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 NEXT_API_ROOT = ROOT / "src" / "app" / "api"
 FASTAPI_MAIN = ROOT / "python-backend" / "main.py"
+FASTAPI_ROUTE_FILES = tuple(sorted((ROOT / "python-backend").glob("*.py")))
 OUTPUT_PATH = ROOT / "docs" / "route-parity.md"
 
 HTTP_METHODS = ("GET", "POST", "PUT", "DELETE", "PATCH")
@@ -77,6 +78,13 @@ class FastApiRoute:
     path: str
 
 
+@dataclass(frozen=True)
+class ClientFetch:
+    source_path: str
+    browser_path: str
+    absolute_url: bool = False
+
+
 def _to_browser_path(route_file: Path) -> str:
     parts = route_file.relative_to(NEXT_API_ROOT).parent.parts
     return "/api" + ("/" + "/".join(parts) if parts else "")
@@ -119,12 +127,77 @@ def load_next_routes() -> list[NextRoute]:
 
 def load_fastapi_routes() -> list[FastApiRoute]:
     routes: list[FastApiRoute] = []
-    pattern = re.compile(r'@app\.(get|post|put|delete|patch)\("([^"]+)"')
-    for line in FASTAPI_MAIN.read_text(encoding="utf-8").splitlines():
-        match = pattern.search(line)
-        if match:
-            routes.append(FastApiRoute(method=match.group(1).upper(), path=match.group(2)))
+    pattern = re.compile(r'@(app|router)\.(get|post|put|delete|patch)\("([^"]+)"')
+    for route_file in FASTAPI_ROUTE_FILES:
+        for line in route_file.read_text(encoding="utf-8").splitlines():
+            match = pattern.search(line)
+            if match:
+                routes.append(FastApiRoute(method=match.group(2).upper(), path=match.group(3)))
     return routes
+
+
+def _normalize_client_fetch(raw_path: str) -> tuple[str, bool] | None:
+    path = raw_path.strip()
+    absolute_url = bool(re.match(r"https?://", path))
+    if absolute_url:
+        api_index = path.find("/api/")
+        if api_index < 0:
+            return None
+        path = path[api_index:]
+    if not path.startswith("/api/"):
+        return None
+    path = re.sub(r"\$\{[^}]+\}", "[param]", path)
+    path = path.split("?", 1)[0].split("#", 1)[0]
+    return path.rstrip("/") or "/api", absolute_url
+
+
+def _client_fetch_path(raw_path: str) -> str | None:
+    normalized = _normalize_client_fetch(raw_path)
+    if not normalized:
+        return None
+    return normalized[0]
+
+
+def extract_client_fetch_paths(text: str) -> list[str]:
+    pattern = re.compile(r"\b(?:fetch|fetchWithTimeout)\s*\(\s*([\"'`])([^\"'`]+)\1")
+    paths: list[str] = []
+    for match in pattern.finditer(text):
+        path = _client_fetch_path(match.group(2))
+        if path:
+            paths.append(path)
+    return paths
+
+
+def load_client_fetches() -> list[ClientFetch]:
+    fetches: list[ClientFetch] = []
+    source_roots = (ROOT / "src" / "components",)
+    for source_root in source_roots:
+        for source_file in sorted(source_root.rglob("*")):
+            if source_file.suffix not in {".ts", ".tsx", ".js", ".jsx"}:
+                continue
+            text = source_file.read_text(encoding="utf-8")
+            pattern = re.compile(r"\b(?:fetch|fetchWithTimeout)\s*\(\s*([\"'`])([^\"'`]+)\1")
+            for match in pattern.finditer(text):
+                normalized = _normalize_client_fetch(match.group(2))
+                if normalized:
+                    path, absolute_url = normalized
+                    fetches.append(ClientFetch(source_file.relative_to(ROOT).as_posix(), path, absolute_url))
+    return sorted(fetches, key=lambda fetch: (fetch.browser_path, fetch.source_path))
+
+
+def _route_pattern_matches(pattern_path: str, concrete_path: str) -> bool:
+    pattern_parts = pattern_path.strip("/").split("/")
+    concrete_parts = concrete_path.strip("/").split("/")
+    if len(pattern_parts) != len(concrete_parts):
+        return False
+    for pattern_part, concrete_part in zip(pattern_parts, concrete_parts):
+        pattern_is_dynamic = pattern_part.startswith("[") and pattern_part.endswith("]")
+        concrete_is_dynamic = concrete_part.startswith("[") and concrete_part.endswith("]")
+        if pattern_is_dynamic or concrete_is_dynamic:
+            continue
+        if pattern_part != concrete_part:
+            return False
+    return True
 
 
 def _group_for(route: NextRoute) -> str:
@@ -134,11 +207,41 @@ def _group_for(route: NextRoute) -> str:
     return "Other"
 
 
-def render(routes: list[NextRoute], backend_routes: list[FastApiRoute]) -> str:
+def _validation_errors(
+    routes: list[NextRoute],
+    backend_routes: list[FastApiRoute],
+    client_fetches: list[ClientFetch],
+) -> list[str]:
     backend_set = {(route.method, route.path) for route in backend_routes}
     mirrored_set = {(route.method, route.fastapi_path) for route in routes}
-    backend_only = [route for route in backend_routes if (route.method, route.path) not in mirrored_set]
     missing_backend = [route for route in routes if (route.method, route.fastapi_path) not in backend_set]
+    browser_paths = {route.browser_path for route in routes}
+    missing_client_fetches = [
+        fetch
+        for fetch in client_fetches
+        if not any(_route_pattern_matches(route_path, fetch.browser_path) for route_path in browser_paths)
+    ]
+    absolute_client_fetches = [fetch for fetch in client_fetches if fetch.absolute_url]
+
+    errors = [
+        f"Missing FastAPI decorator for mirrored route: {route.method} {route.fastapi_path} from {route.next_path}"
+        for route in missing_backend
+    ]
+    errors.extend(
+        f"Client fetch has no matching Next route: {fetch.browser_path} from {fetch.source_path}"
+        for fetch in missing_client_fetches
+    )
+    errors.extend(
+        f"Client fetch must use a relative Next route, not an absolute API URL: {fetch.browser_path} from {fetch.source_path}"
+        for fetch in absolute_client_fetches
+    )
+    return errors
+
+
+def render(routes: list[NextRoute], backend_routes: list[FastApiRoute], client_fetches: list[ClientFetch]) -> str:
+    mirrored_set = {(route.method, route.fastapi_path) for route in routes}
+    backend_only = [route for route in backend_routes if (route.method, route.path) not in mirrored_set]
+    validation_errors = _validation_errors(routes, backend_routes, client_fetches)
 
     lines = [
         "# Route Parity",
@@ -177,12 +280,25 @@ def render(routes: list[NextRoute], backend_routes: list[FastApiRoute]) -> str:
         [
             "## Backend-Only Endpoints",
             "",
-            "These exist in `python-backend/main.py` but are not mirrored through active Next routes in this worktree:",
+            "These exist in the FastAPI backend but are not mirrored through active Next routes in this worktree:",
             "",
         ]
     )
     for route in backend_only:
         lines.append(f"- `{route.method} {route.path}`")
+    lines.append("")
+
+    unique_client_fetches = sorted({(fetch.browser_path, fetch.source_path) for fetch in client_fetches})
+    lines.extend(
+        [
+            "## Client Fetch Surface",
+            "",
+            "Active client components fetch these mounted browser API routes through Next, not FastAPI directly:",
+            "",
+        ]
+    )
+    for browser_path, source_path in unique_client_fetches:
+        lines.append(f"- `{browser_path}` from `{source_path}`")
     lines.append("")
 
     lines.extend(
@@ -195,12 +311,10 @@ def render(routes: list[NextRoute], backend_routes: list[FastApiRoute]) -> str:
         ]
     )
 
-    if missing_backend:
+    if validation_errors:
         lines.extend(["", "## Generator Warnings", ""])
-        for route in missing_backend:
-            lines.append(
-                f"- Missing FastAPI decorator for mirrored route: `{route.method} {route.fastapi_path}` from `{route.next_path}`"
-            )
+        for error in validation_errors:
+            lines.append(f"- {error}")
 
     return "\n".join(lines) + "\n"
 
@@ -210,12 +324,21 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Fail if docs/route-parity.md is stale.")
     args = parser.parse_args()
 
-    content = render(load_next_routes(), load_fastapi_routes())
+    routes = load_next_routes()
+    backend_routes = load_fastapi_routes()
+    client_fetches = load_client_fetches()
+    content = render(routes, backend_routes, client_fetches)
+    errors = _validation_errors(routes, backend_routes, client_fetches)
 
     if args.check:
         existing = OUTPUT_PATH.read_text(encoding="utf-8") if OUTPUT_PATH.exists() else ""
         if existing != content:
             print(f"{OUTPUT_PATH.relative_to(ROOT)} is out of date. Run python scripts/generate_route_parity.py", file=sys.stderr)
+            return 1
+        if errors:
+            print("Route parity validation failed:", file=sys.stderr)
+            for error in errors:
+                print(f"- {error}", file=sys.stderr)
             return 1
         return 0
 

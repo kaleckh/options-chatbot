@@ -29,13 +29,36 @@ from wfo_optimizer import _resolve_imported_execution_price
 
 ET = ZoneInfo("America/New_York")
 AUDIT_ID = "main_lane_zero_pick_current_algo_v1"
+ALL_LANES_AUDIT_ID = "all_lanes_zero_pick_current_algo_v1"
 MIGRATION_ID = "main_lane_zero_pick_position_migration_v1"
+ALL_LANES_MIGRATION_ID = "all_lanes_zero_pick_position_migration_v1"
 PLAYBOOK_ID = "bullish_pullback_observation"
 DEFAULT_SOURCE_LABELS = ["thetadata_opra_nbbo_1m"]
 DEFAULT_HISTORICAL_OPTIONS_DB = ROOT / "data" / "options-validation" / "options_history.db"
 SCAN_LOG = ROOT / "data" / "forward-tracking" / "scan_picks.jsonl"
 FILL_ATTEMPT_LOG = ROOT / "data" / "forward-tracking" / "fill_attempts.jsonl"
 REPORT_LATEST = ROOT / "data" / "forward-tracking" / "main_lane_zero_pick_position_migration_latest.json"
+
+
+def _default_migration_id(audit_id: str) -> str:
+    if str(audit_id or "").strip() == ALL_LANES_AUDIT_ID:
+        return ALL_LANES_MIGRATION_ID
+    return MIGRATION_ID
+
+
+def _report_latest_path(migration_id: str) -> Path:
+    if str(migration_id or "").strip() == MIGRATION_ID:
+        return REPORT_LATEST
+    slug = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(migration_id or "migration")).strip("_")
+    return ROOT / "data" / "forward-tracking" / f"{slug}_latest.json"
+
+
+def _selected_playbooks(raw: str) -> set[str] | None:
+    text = str(raw or "").strip().lower()
+    if text in ("", "all", "*"):
+        return None
+    values = {item.strip().lower() for item in text.replace(";", ",").split(",") if item.strip()}
+    return values or None
 
 
 def _utc_now_iso() -> str:
@@ -333,13 +356,15 @@ def _update_log_links(
     signature_to_position: dict[str, dict[str, Any]],
     reviewed_positions: dict[int, dict[str, Any]],
     apply: bool,
+    audit_id: str,
+    migration_id: str,
 ) -> dict[str, int]:
     updated_counts: Counter[str] = Counter()
     for path, label in ((SCAN_LOG, "scan"), (FILL_ATTEMPT_LOG, "fill_attempt")):
         rows = _jsonl_rows(path)
         changed = False
         for row in rows:
-            if row.get("backfill_audit_id") != AUDIT_ID:
+            if row.get("backfill_audit_id") != audit_id:
                 continue
             signature = str(row.get("backfill_signature") or "").strip()
             position = signature_to_position.get(signature)
@@ -351,7 +376,7 @@ def _update_log_links(
             before = json.dumps(row, sort_keys=True, default=str)
             row["auto_track_position_id"] = position_id
             row["tracked_position_id"] = position_id
-            row["position_migration_id"] = MIGRATION_ID
+            row["position_migration_id"] = migration_id
             row["position_migrated_at_utc"] = row.get("position_migrated_at_utc") or _utc_now_iso()
             if label == "fill_attempt":
                 row["fill_status"] = "auto_tracked"
@@ -375,6 +400,8 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
     load_local_env(ROOT)
     os.environ["HISTORICAL_OPTIONS_DB_PATH"] = str(Path(args.historical_db_path))
     source_labels = [item.strip() for item in str(args.source_labels or "").split(",") if item.strip()]
+    migration_id = str(args.migration_id or _default_migration_id(args.audit_id)).strip()
+    selected_playbooks = _selected_playbooks(args.playbook_id)
 
     repository = create_positions_repository(os.getenv("DATABASE_URL"))
     if not getattr(repository, "is_available", False):
@@ -384,7 +411,7 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
         row
         for row in _jsonl_rows(SCAN_LOG)
         if row.get("backfill_audit_id") == args.audit_id
-        and str(row.get("playbook_id") or "").strip() == args.playbook_id
+        and (selected_playbooks is None or str(row.get("playbook_id") or "").strip().lower() in selected_playbooks)
     ]
     as_of = _parse_date(args.as_of_date) if args.as_of_date else datetime.now(ET).date()
     store = HistoricalOptionsStore(args.historical_db_path)
@@ -392,7 +419,7 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
 
     backup_path = None
     if args.apply:
-        backup_path = _backup_positions_snapshot(repository, label="pre-main-lane-zero-pick-migration")
+        backup_path = _backup_positions_snapshot(repository, label=f"pre-{migration_id}")
 
     created_open_ids: list[int] = []
     signature_to_position: dict[str, dict[str, Any]] = {}
@@ -421,7 +448,8 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
         lifecycle = _lifecycle_for_pick(pick, as_of=as_of)
         scan_date = str(pick.get("scan_date") or lifecycle["entry_date"])
         source_pick = copy.deepcopy(pick)
-        source_pick["source_scan_run_id"] = source_pick.get("source_scan_run_id") or f"{args.audit_id}:{scan_date}"
+        source_playbook = str(source_pick.get("playbook_id") or args.playbook_id or "").strip()
+        source_pick["source_scan_run_id"] = source_pick.get("source_scan_run_id") or f"{args.audit_id}:{source_playbook}:{scan_date}"
         source_pick["source_scan_event_key"] = source_pick.get("source_scan_event_key") or signature
         source_pick["source_scan_recorded_at_utc"] = (
             source_pick.get("source_scan_recorded_at_utc")
@@ -436,7 +464,7 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
             source_pick["type"] = source_pick.get("direction")
         if source_pick.get("stock_price") is None and source_pick.get("underlying_price") is not None:
             source_pick["stock_price"] = source_pick.get("underlying_price")
-        source_pick["position_migration_id"] = MIGRATION_ID
+        source_pick["position_migration_id"] = migration_id
         source_pick["historical_position_lifecycle"] = lifecycle
         source_pick["historical_position_migration_as_of"] = as_of.isoformat()
 
@@ -524,6 +552,8 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
         signature_to_position=signature_to_position,
         reviewed_positions=reviewed_positions,
         apply=bool(args.apply),
+        audit_id=args.audit_id,
+        migration_id=migration_id,
     )
     counters.update(log_update_counts)
 
@@ -539,8 +569,9 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
     )
 
     report = {
-        "migration_id": MIGRATION_ID,
+        "migration_id": migration_id,
         "audit_id": args.audit_id,
+        "playbook_filter": "all" if selected_playbooks is None else sorted(selected_playbooks),
         "apply": bool(args.apply),
         "as_of_date": as_of.isoformat(),
         "scan_rows_seen": len(scan_rows),
@@ -560,21 +591,23 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
     }
     if args.apply:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-        report_path = REPORT_LATEST.with_name(f"main_lane_zero_pick_position_migration_{stamp}.json")
+        report_latest = _report_latest_path(migration_id)
+        report_path = report_latest.with_name(f"{report_latest.stem.removesuffix('_latest')}_{stamp}.json")
         report_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
-        REPORT_LATEST.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        report_latest.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
         report["report_path"] = str(report_path)
-        REPORT_LATEST.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
+        report_latest.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     return report
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Migrate zero-pick main-lane audit rows into historical paper tracked positions."
+        description="Migrate zero-pick audit rows into historical paper tracked positions."
     )
     parser.add_argument("--apply", action="store_true", help="Create positions and update log links.")
     parser.add_argument("--audit-id", default=AUDIT_ID)
-    parser.add_argument("--playbook-id", default=PLAYBOOK_ID)
+    parser.add_argument("--playbook-id", default=PLAYBOOK_ID, help="Playbook ID, comma-separated IDs, or 'all'.")
+    parser.add_argument("--migration-id")
     parser.add_argument("--as-of-date", default=datetime.now(ET).date().isoformat())
     parser.add_argument("--contracts", type=int, default=1)
     parser.add_argument("--historical-db-path", default=str(DEFAULT_HISTORICAL_OPTIONS_DB))

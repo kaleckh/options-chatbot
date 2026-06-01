@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import run_regular_options_all_planned_sleeves as all_sleeves
 from workspace_tempdir import WorkspaceTempDir
@@ -21,6 +22,12 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
         self.assertIn("range_breakout_observation", lane_ids)
         self.assertIn("volatility_expansion_observation", lane_ids)
         self.assertIn("relative_strength_pullback", lane_ids)
+        self.assertIn("xle_energy_inflation", lane_ids)
+        self.assertIn("xlf_financials", lane_ids)
+        self.assertIn("kre_regional_bank_observation", lane_ids)
+        self.assertIn("smh_semiconductor", lane_ids)
+        self.assertIn("tlt_duration_shock", lane_ids)
+        self.assertIn("sector_rotation_confirmation", lane_ids)
 
     def test_repair_plan_contains_current_sleeve_and_new_signal_variants(self):
         variant_ids = {str(spec["variant_id"]) for spec in all_sleeves.IMPLEMENTED_PLANNED_VARIANTS}
@@ -218,6 +225,149 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
         self.assertIn("IWM", payload["available_underlyings"])
         self.assertNotIn("SMH", payload["available_underlyings"])
         self.assertEqual(payload["required_underlying_health"]["IWM"]["quote_date_count"], 3)
+
+    def test_same_lane_id_lane_lab_specs_remain_visible_until_evidence_exists(self):
+        implemented_lane_ids = {str(spec["lane_id"]) for spec in all_sleeves.IMPLEMENTED_PLANNED_VARIANTS}
+        with patch.object(
+            all_sleeves,
+            "_trusted_intraday_readiness_payload",
+            return_value={
+                "status": "ready_for_exact_replay",
+                "available_underlyings": [],
+                "shared_required_quote_dates": {"count": 0},
+            },
+        ):
+            rows = all_sleeves.blocked_lane_lab_rows(implemented_lane_ids)
+
+        by_lane_id = {str(row["lane_id"]): row for row in rows}
+        relative_strength = by_lane_id["relative_strength_pullback"]
+        bearish_put = by_lane_id["bearish_put_debit_spread"]
+
+        self.assertEqual(relative_strength["status"], "pending_forward_paper_log")
+        self.assertEqual(bearish_put["status"], "pending_forward_paper_log")
+        self.assertIn("relative_strength_pullback_ex_clean_universe_v1", relative_strength["implemented_variant_ids"])
+        self.assertIn("regular_bearish_put_primary_chain_native_timeexit_all_sleeves", bearish_put["implemented_variant_ids"])
+        self.assertIn("same_lane_id_replay_tested", relative_strength["implementation_note"])
+
+    def test_iwm_small_cap_risk_has_risk_on_and_risk_off_replay_variants(self):
+        specs = {
+            str(spec["variant_id"]): spec
+            for spec in all_sleeves.WFO_VARIANTS
+            if str(spec["lane_id"]) == "iwm_small_cap_risk"
+        }
+
+        self.assertEqual(
+            sorted(specs),
+            [
+                "iwm_small_cap_risk_call_chain_native_timeexit_all_sleeves",
+                "iwm_small_cap_risk_put_chain_native_timeexit_all_sleeves",
+            ],
+        )
+        call = specs["iwm_small_cap_risk_call_chain_native_timeexit_all_sleeves"]
+        put = specs["iwm_small_cap_risk_put_chain_native_timeexit_all_sleeves"]
+
+        self.assertEqual(call["base_playbook"], "bullish_pullback_observation")
+        self.assertEqual(put["base_playbook"], "bearish_index_put_observation")
+        for direction, spec in (("call", call), ("put", put)):
+            overrides = spec["overrides"]
+            self.assertEqual(spec["n_picks"], 1)
+            self.assertEqual(overrides["allowed_tickers"], ["IWM"])
+            self.assertEqual(overrides["historical_required_underlyings"], ["IWM"])
+            self.assertEqual(overrides["allowed_directions"], [direction])
+            self.assertTrue(overrides["chain_native_spread_selection"])
+            self.assertEqual(overrides["chain_native_min_dte"], 21)
+            self.assertEqual(overrides["chain_native_max_dte"], 35)
+            self.assertEqual(overrides["max_debit_pct_of_width"], 45.0)
+
+    def test_iwm_small_cap_risk_exposes_existing_per_ticker_sleeve(self):
+        specs = {
+            str(spec["variant_id"]): spec
+            for spec in all_sleeves.SLEEVE_VARIANTS
+            if str(spec["lane_id"]) == "iwm_small_cap_risk"
+        }
+
+        self.assertEqual(sorted(specs), ["sleeve_ticker_iwm"])
+        self.assertTrue(specs["sleeve_ticker_iwm"]["include_tickers"])
+
+    def test_regular_sector_etf_variants_exclude_gld_commodity_lane(self):
+        sector_specs = [
+            spec
+            for spec in all_sleeves.WFO_VARIANTS
+            if str(spec["lane_id"])
+            in {
+                "xle_energy_inflation",
+                "xlf_financials",
+                "kre_regional_bank_observation",
+                "smh_semiconductor",
+                "tlt_duration_shock",
+                "sector_rotation_confirmation",
+            }
+        ]
+        variant_ids = {str(spec["variant_id"]) for spec in sector_specs}
+
+        self.assertIn("xle_energy_inflation_call_chain_native_timeexit_all_sleeves", variant_ids)
+        self.assertIn("xlf_financials_call_chain_native_timeexit_all_sleeves", variant_ids)
+        self.assertIn("kre_regional_bank_call_chain_native_timeexit_all_sleeves", variant_ids)
+        self.assertIn("smh_semiconductor_call_chain_native_timeexit_all_sleeves", variant_ids)
+        self.assertIn("tlt_duration_shock_call_chain_native_timeexit_all_sleeves", variant_ids)
+        self.assertIn("sector_rotation_regular_etf_call_stack_v1", variant_ids)
+        self.assertNotIn("gld_macro_breakout", {str(spec["lane_id"]) for spec in sector_specs})
+
+        for spec in sector_specs:
+            overrides = spec["overrides"]
+            self.assertNotIn("GLD", overrides.get("allowed_tickers") or [])
+            self.assertNotIn("GLD", overrides.get("historical_required_underlyings") or [])
+            self.assertTrue(overrides["chain_native_spread_selection"])
+
+    def test_liquidity_first_contract_hygiene_variant_uses_entry_time_causal_knobs(self):
+        spec = next(
+            item
+            for item in all_sleeves.WFO_VARIANTS
+            if str(item["variant_id"]) == "tracked_winner_liquidity_first_contract_hygiene_v1"
+        )
+        overrides = spec["overrides"]
+
+        self.assertEqual(spec["lane_id"], "liquidity_first_spread")
+        self.assertEqual(spec["base_playbook"], "tracked_winner_chain_native_qqq_time65_research")
+        self.assertEqual(overrides["allowed_tickers"], all_sleeves.TRACKED_WINNER_UNIVERSE)
+        self.assertEqual(overrides["historical_required_underlyings"], all_sleeves.TRACKED_WINNER_UNIVERSE)
+        self.assertEqual(overrides["chain_native_max_entry_leg_bid_ask_pct"], 30.0)
+        self.assertEqual(overrides["chain_native_min_entry_short_bid"], 0.15)
+        self.assertEqual(overrides["chain_native_min_prior_quote_days"], 2)
+        self.assertEqual(overrides["chain_native_min_short_prior_quote_days"], 3)
+        self.assertEqual(overrides["chain_native_short_inside_steps"], 1)
+        self.assertTrue(overrides["execution_survivability_enabled"])
+        self.assertEqual(overrides["min_tradability_score"], 70.0)
+
+    def test_bullish_sleeve_variant_forwards_dynamic_variant_flags(self):
+        with WorkspaceTempDir(prefix="all-planned-iwm-sleeve") as tmp:
+            result_path = Path(tmp) / "iwm-result.json"
+            with patch.object(all_sleeves.sleeve_runner, "run_variants") as run_variants:
+                run_variants.return_value = {
+                    "rows": [
+                        {
+                            "variant_id": "sleeve_ticker_iwm",
+                            "result_path": str(result_path),
+                        }
+                    ]
+                }
+
+                result = all_sleeves._run_bullish_sleeve_variant(
+                    {
+                        "variant_id": "sleeve_ticker_iwm",
+                        "include_tickers": True,
+                        "include_themes": False,
+                    },
+                    lookback_years=1,
+                )
+
+        self.assertEqual(result, result_path.resolve())
+        run_variants.assert_called_once_with(
+            lookback_years=1,
+            only={"sleeve_ticker_iwm"},
+            include_themes=False,
+            include_tickers=True,
+        )
 
 
 if __name__ == "__main__":

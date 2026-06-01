@@ -85,6 +85,7 @@ from forward_options_ledger import (
 )
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
+from profile_routes import create_profile_router
 from suggested_trades_repository import create_suggested_trades_repository
 from supervised_scan import (
     DEFAULT_SCAN_PLAYBOOK_ID,
@@ -118,6 +119,14 @@ _FORWARD_EVIDENCE_REPORT_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 _READONLY_REPORT_OUTPUT_CACHE: dict[tuple[Any, ...], Any] = {}
 _OPTIONS_PROFIT_SYMBOLS = ("SPY", "QQQ")
 _SHARE_SAFE_REVIEW_MAX_AGE = timedelta(minutes=15)
+
+app.include_router(
+    create_profile_router(
+        strategy_profiles=STRATEGY_PROFILES,
+        save_profile=_save_profile,
+        changelog_files=CHANGELOG_FILES,
+    )
+)
 
 
 async def _run_in_worker(fn, /, *args, **kwargs):
@@ -275,41 +284,6 @@ def _coerce_tool_result(result: Any) -> Any:
 # ── Profile endpoints ────────────────────────────────────────────────────────
 
 
-@app.get("/api/profile")
-async def get_profile(type: str = "equity"):
-    """Return one strategy profile."""
-    if type not in STRATEGY_PROFILES:
-        raise HTTPException(400, f"Unknown profile type: {type}")
-    return STRATEGY_PROFILES[type]
-
-
-@app.get("/api/profiles")
-async def get_profiles():
-    """Return both strategy profiles."""
-    return STRATEGY_PROFILES
-
-
-@app.put("/api/profile")
-async def update_profile(body: dict[str, Any]):
-    """Update a strategy profile section."""
-    profile_type = body.get("type", "equity")
-    updates = body.get("updates", {})
-    note = body.get("note", "")
-
-    if profile_type not in STRATEGY_PROFILES:
-        raise HTTPException(400, f"Unknown profile type: {profile_type}")
-    if not isinstance(updates, dict):
-        raise HTTPException(400, "updates must be an object")
-
-    sp = STRATEGY_PROFILES[profile_type]
-    for section_key, section_val in updates.items():
-        if section_key in sp and isinstance(sp[section_key], dict) and isinstance(section_val, dict):
-            sp[section_key].update(section_val)
-
-    _save_profile(note=note or f"{profile_type} profile updated", profile=profile_type)
-    return {"ok": True}
-
-
 # ── Predictions endpoints ────────────────────────────────────────────────────
 
 
@@ -465,6 +439,162 @@ def _normalize_scan_picks(picks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized["candidate_rank"] = int(normalized.get("candidate_rank") or idx)
         normalized_picks.append(normalized)
     return normalized_picks
+
+
+def _scan_pick_event_key(pick: dict[str, Any], candidate_rank: int) -> str:
+    event_key = f"rank_{int(candidate_rank)}"
+    cohort_id = str(pick.get("cohort_id") or "").strip()
+    return f"{cohort_id}:{event_key}" if cohort_id else event_key
+
+
+def _annotate_scan_picks_with_forward_provenance(
+    picks: list[dict[str, Any]],
+    *,
+    forward_truth_meta: dict[str, Any],
+) -> list[dict[str, Any]]:
+    if not bool(forward_truth_meta.get("forward_truth_recorded")):
+        return picks
+    session_id = forward_truth_meta.get("forward_truth_session_id")
+    run_id = str(forward_truth_meta.get("forward_truth_run_id") or "").strip()
+    recorded_at_utc = str(forward_truth_meta.get("forward_truth_recorded_at_utc") or "").strip()
+    if session_id is None or not run_id or not recorded_at_utc:
+        return picks
+
+    annotated: list[dict[str, Any]] = []
+    for idx, pick in enumerate(list(picks or []), start=1):
+        next_pick = dict(pick)
+        next_pick["source_scan_session_id"] = int(session_id)
+        next_pick["source_scan_event_key"] = _scan_pick_event_key(next_pick, idx)
+        next_pick["source_scan_run_id"] = run_id
+        next_pick["source_scan_recorded_at_utc"] = recorded_at_utc
+        annotated.append(next_pick)
+    return annotated
+
+
+def _normalize_lineage_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def _same_lineage_text(left: Any, right: Any) -> bool:
+    left_text = _normalize_lineage_text(left)
+    right_text = _normalize_lineage_text(right)
+    return bool(left_text) and left_text == right_text
+
+
+def _same_lineage_int(left: Any, right: Any) -> bool:
+    try:
+        return int(left) == int(right)
+    except (TypeError, ValueError):
+        return False
+
+
+def _same_lineage_float(left: Any, right: Any, *, tolerance: float = 0.0001) -> bool:
+    try:
+        left_value = float(left)
+        right_value = float(right)
+    except (TypeError, ValueError):
+        return False
+    return math.isfinite(left_value) and math.isfinite(right_value) and abs(left_value - right_value) <= tolerance
+
+
+def _same_optional_lineage_text(scan_pick: dict[str, Any], event: dict[str, Any], *fields: str) -> bool:
+    for field in fields:
+        scan_value = scan_pick.get(field)
+        event_value = event.get(field)
+        if scan_value or event_value:
+            if not _same_lineage_text(scan_value, event_value):
+                return False
+    return True
+
+
+def _same_optional_lineage_float(scan_pick: dict[str, Any], event: dict[str, Any], *fields: str) -> bool:
+    for field in fields:
+        scan_value = scan_pick.get(field)
+        event_value = event.get(field)
+        if scan_value is not None or event_value is not None:
+            if not _same_lineage_float(scan_value, event_value):
+                return False
+    return True
+
+
+def _scan_pick_matches_forward_event(scan_pick: dict[str, Any], event: dict[str, Any]) -> bool:
+    if not _same_lineage_text(scan_pick.get("ticker"), event.get("ticker")):
+        return False
+
+    scan_direction = scan_pick.get("direction") or scan_pick.get("type") or scan_pick.get("option_type")
+    event_direction = event.get("direction") or event.get("type") or event.get("option_type")
+    if not _same_lineage_text(scan_direction, event_direction):
+        return False
+
+    scan_contract = scan_pick.get("contract_symbol") or scan_pick.get("contractSymbol")
+    event_contract = event.get("contract_symbol") or event.get("contractSymbol")
+    if scan_contract or event_contract:
+        if not _same_lineage_text(scan_contract, event_contract):
+            return False
+
+    scan_short_contract = scan_pick.get("short_contract_symbol") or scan_pick.get("shortContractSymbol")
+    event_short_contract = event.get("short_contract_symbol") or event.get("shortContractSymbol")
+    if scan_short_contract or event_short_contract:
+        if not _same_lineage_text(scan_short_contract, event_short_contract):
+            return False
+
+    scan_expiry = str(scan_pick.get("expiry") or "")[:10]
+    event_expiry = str(event.get("expiry") or "")[:10]
+    if scan_expiry or event_expiry:
+        if scan_expiry != event_expiry:
+            return False
+
+    if not _same_optional_lineage_text(
+        scan_pick,
+        event,
+        "strategy_type",
+        "entry_execution_basis",
+        "quote_time_et",
+    ):
+        return False
+    if not _same_optional_lineage_float(
+        scan_pick,
+        event,
+        "strike",
+        "short_strike",
+        "entry_execution_price",
+    ):
+        return False
+
+    return True
+
+
+def _verify_source_scan_lineage(scan_pick: dict[str, Any]) -> bool:
+    if not isinstance(scan_pick, dict):
+        return False
+    session_id = scan_pick.get("source_scan_session_id")
+    event_key = _normalize_lineage_text(scan_pick.get("source_scan_event_key"))
+    run_id = _normalize_lineage_text(scan_pick.get("source_scan_run_id"))
+    recorded_at_utc = _normalize_lineage_text(scan_pick.get("source_scan_recorded_at_utc"))
+    if session_id in (None, "") or not event_key or not run_id or not recorded_at_utc:
+        return False
+
+    try:
+        events = list_forward_scan_pick_events(
+            source_label=ARCHIVED_FORWARD_SOURCE_LABEL,
+            tickers=[str(scan_pick.get("ticker") or "").upper()],
+            db_path=authoritative_forward_ledger_db_path(),
+        )
+    except Exception:
+        return False
+
+    for event in events:
+        if not _same_lineage_int(event.get("session_id"), session_id):
+            continue
+        if not _same_lineage_text(event.get("event_key"), event_key):
+            continue
+        if not _same_lineage_text(event.get("run_id"), run_id):
+            continue
+        if not _same_lineage_text(event.get("recorded_at_utc"), recorded_at_utc):
+            continue
+        if _scan_pick_matches_forward_event(scan_pick, event):
+            return True
+    return False
 
 
 def _normalize_scan_pick_payload_fields(payload: dict[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
@@ -805,6 +935,8 @@ def _record_forward_truth_for_scan(
     return {
         "forward_truth_recorded": True,
         "forward_truth_session_id": recorded.get("session_id"),
+        "forward_truth_run_id": recorded.get("run_id"),
+        "forward_truth_recorded_at_utc": recorded.get("recorded_at_utc"),
         "forward_truth_error": None,
         "forward_truth_evidence_class": evidence_class,
         "forward_truth_authoritative": evidence_class == LIVE_PRODUCTION_EVIDENCE_CLASS,
@@ -1437,9 +1569,45 @@ def _pnl_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _row_has_research_backfill_marker(row: dict[str, Any]) -> bool:
+    source = row.get("source_pick_snapshot") if isinstance(row.get("source_pick_snapshot"), dict) else {}
+    if bool(source.get("research_only")):
+        return True
+    if source.get("backfill_audit_id") or source.get("position_migration_id") or source.get("position_migrated_at_utc"):
+        return True
+    values = [
+        row.get("proof_class"),
+        row.get("proof_class_reason"),
+        row.get("proof_ineligibility_reason"),
+        row.get("notes"),
+        source.get("pricing_evidence_class"),
+        source.get("profitability_evidence_class"),
+        source.get("source_separation"),
+        source.get("promotion_class"),
+        source.get("selection_source"),
+        source.get("event_type"),
+        source.get("candidate_execution_label"),
+        source.get("market_data_source"),
+        source.get("status"),
+    ]
+    tokens = ("backfill", "research", "historical_replay", "historical_selection", "historical_chain_native")
+    return any(
+        any(token in str(value or "").strip().lower() for token in tokens)
+        for value in values
+    )
+
+
+def _row_counts_as_production_proof(row: dict[str, Any]) -> bool:
+    if _row_has_research_backfill_marker(row):
+        return False
+    source = row.get("source_pick_snapshot") if isinstance(row.get("source_pick_snapshot"), dict) else {}
+    proof_class = str(row.get("proof_class") or source.get("proof_class") or "").strip().lower()
+    return proof_class in {"live_scan_exact_contract", "manual_broker_exact_contract"} and bool(row.get("proof_eligible"))
+
+
 def _tracked_vs_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
     all_rows = list(rows or [])
-    proof_rows = [row for row in all_rows if bool(row.get("proof_eligible"))]
+    proof_rows = [row for row in all_rows if _row_counts_as_production_proof(row)]
     return {
         "tracked": _pnl_summary(all_rows),
         "proof": _pnl_summary(proof_rows),
@@ -1611,6 +1779,8 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
         forward_truth_meta = {
             "forward_truth_recorded": False,
             "forward_truth_session_id": None,
+            "forward_truth_run_id": None,
+            "forward_truth_recorded_at_utc": None,
             "forward_truth_error": None,
             "forward_truth_evidence_class": _scan_evidence_class(),
             "forward_truth_authoritative": False,
@@ -1625,10 +1795,16 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
             forward_truth_meta = {
                 "forward_truth_recorded": False,
                 "forward_truth_session_id": None,
+                "forward_truth_run_id": None,
+                "forward_truth_recorded_at_utc": None,
                 "forward_truth_error": str(exc),
                 "forward_truth_evidence_class": _scan_evidence_class(),
                 "forward_truth_authoritative": False,
         }
+        normalized_picks = _annotate_scan_picks_with_forward_provenance(
+            normalized_picks,
+            forward_truth_meta=forward_truth_meta,
+        )
         try:
             await _run_in_worker(
                 _append_forward_evidence_event,
@@ -1659,14 +1835,16 @@ async def create_position_endpoint(body: dict[str, Any]):
         return _positions_unavailable_response()
 
     try:
+        scan_pick = body.get("scan_pick") or {}
         payload = build_position_payload(
-            scan_pick=body.get("scan_pick") or {},
+            scan_pick=scan_pick,
             fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
             contracts=_parse_positive_int(body.get("contracts"), "contracts"),
             filled_at=body.get("filled_at"),
             notes=_parse_optional_string(body.get("notes"), "notes"),
             require_resolved_contract=True,
             preserve_fill_price=True,
+            source_scan_lineage_verified=_verify_source_scan_lineage(scan_pick),
         )
         existing_position = _find_existing_open_contract(POSITIONS_REPOSITORY, payload)
         if existing_position is not None:
@@ -2273,19 +2451,6 @@ async def get_backtest_summary(
 # ── Changelog endpoint ────────────────────────────────────────────────────────
 
 
-@app.get("/api/changelog")
-async def get_changelog(profile: str = "equity"):
-    """Return brain changelog for a profile."""
-    cfile = CHANGELOG_FILES.get(profile)
-    if not cfile or not os.path.exists(cfile):
-        return []
-    try:
-        with open(cfile) as f:
-            return json.load(f)
-    except Exception:
-        return []
-
-
 # ── Daily performance endpoint ────────────────────────────────────────────────
 
 
@@ -2306,15 +2471,6 @@ async def get_daily_performance():
 
 
 # ── Risk settings shortcut ────────────────────────────────────────────────────
-
-
-@app.get("/api/risk")
-async def get_risk_settings():
-    """Return current risk settings for sidebar display."""
-    return {
-        "equity": STRATEGY_PROFILES["equity"]["risk"],
-        "index": STRATEGY_PROFILES["index"]["risk"],
-    }
 
 
 # ── Health check ───────────────────────────────────��──────────────────────────
