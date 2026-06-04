@@ -98,6 +98,8 @@ export interface ScanPick {
   historical_data_source?: string | null;
   historical_data_readiness_status?: string | null;
   ai_commodity_bucket?: "core_options" | "conditional_options" | string | null;
+  observation_only?: boolean;
+  observation_reason?: string | null;
   quote_time_et?: string | null;
   quote_time_utc?: string | null;
   quote_basis?: string | null;
@@ -316,6 +318,7 @@ export interface ScanPlaybook {
   position_tracking_mode?: string;
   proof_scope?: string;
   max_open_executable_drawdown_pct?: number;
+  observation_only?: boolean;
 }
 
 export interface ExposureSnapshot {

@@ -61,7 +61,7 @@ function Get-RepoTempRoot([string]$RepoRoot) {
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_HOME)) {
         return Join-Path $env:CODEX_HOME ".tmp\repo-python\$rootName"
     }
-    return Join-Path $RepoRoot ".tmp\repo-python\$rootName"
+    return Join-Path (Get-SystemTempBasePath) "codex-repo-python\$rootName"
 }
 
 function Get-SystemTempBasePath {
@@ -275,7 +275,7 @@ function Get-CanonicalVirtualEnvFallback(
 
 function Set-RepoTempEnvironment([string]$RepoRoot) {
     $preferredTempRoot = Get-RepoTempRoot -RepoRoot $RepoRoot
-    $fallbackTempRoot = Join-Path $RepoRoot (".tmp\repo-python\" + (Split-Path -Leaf $preferredTempRoot))
+    $fallbackTempRoot = Join-Path (Get-SystemTempBasePath) ("codex-repo-python\" + (Split-Path -Leaf $preferredTempRoot))
     $candidateRoots = @($preferredTempRoot)
     if ($fallbackTempRoot -ne $preferredTempRoot) {
         $candidateRoots += $fallbackTempRoot

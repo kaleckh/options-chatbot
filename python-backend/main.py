@@ -508,6 +508,8 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["historical_data_source"] = pick.get("historical_data_source")
     normalized["historical_data_readiness_status"] = pick.get("historical_data_readiness_status")
     normalized["ai_commodity_bucket"] = pick.get("ai_commodity_bucket")
+    normalized["observation_only"] = bool(pick.get("observation_only"))
+    normalized["observation_reason"] = pick.get("observation_reason")
     normalized["quote_time_et"] = pick.get("quote_time_et")
     normalized["quote_time_utc"] = pick.get("quote_time_utc")
     normalized["quote_basis"] = pick.get("quote_basis")
