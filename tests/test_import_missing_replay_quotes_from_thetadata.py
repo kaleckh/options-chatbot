@@ -116,6 +116,7 @@ class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
             self.assertEqual(payload["base_unique_items"], 2)
             self.assertEqual(payload["repair_manifest"]["base_target_count"], 2)
             self.assertEqual(payload["repair_manifest"]["source_occurrence_count"], 3)
+            self.assertEqual(payload["repair_attempt_summary"]["attempt_count"], 2)
             self.assertEqual(payload["normalized_rows"], 2)
             self.assertEqual(theta_rows.call_count, 2)
             import_snapshots.assert_not_called()
@@ -158,6 +159,7 @@ class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
             self.assertTrue(manifest["max_requests_applied"])
             self.assertEqual(manifest["request_target_count"], 1)
             self.assertEqual(manifest["base_targets"][0]["contract_symbol"], "UNH251128C00410000")
+            self.assertEqual(payload["repair_attempt_summary"]["outcome_counts"], {"planned_not_requested": 2})
             self.assertIsNone(payload["summary_path"])
             self.assertFalse(output_dir.exists())
             theta_rows.assert_not_called()
@@ -199,6 +201,58 @@ class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
                 [item["contract_symbol"] for item in manifest["request_targets"]],
                 ["WMT260402C00140000", "WMT260402C00140000", "WMT260402C00140000"],
             )
+
+    def test_dry_run_reports_lookahead_rows_as_not_exact_proof_repair(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_path = root / "run.json"
+            _write_mixed_run(run_path)
+            stdout = io.StringIO()
+
+            def fake_theta_rows(*_args, item, **_kwargs):
+                quote_date = item["quote_date"].isoformat()
+                if quote_date == "2026-03-26":
+                    return [
+                        {
+                            "as_of_utc": "2026-03-26T15:55:00Z",
+                            "contract_symbol": item["contract_symbol"],
+                        }
+                    ]
+                return []
+
+            argv = [
+                "import_missing_replay_quotes_from_thetadata.py",
+                str(run_path),
+                "--ticker",
+                "WMT",
+                "--contract-symbol",
+                "WMT260402C00140000",
+                "--quote-date",
+                "2026-03-25",
+                "--lookahead-calendar-days",
+                "1",
+                "--dry-run",
+                "--json",
+            ]
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(
+                importer, "_theta_rows_for_contract", side_effect=fake_theta_rows
+            ), redirect_stdout(stdout):
+                self.assertEqual(importer.main(), 0)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["base_unique_items"], 1)
+            self.assertEqual(payload["unique_items"], 2)
+            self.assertEqual(payload["request_count"], 2)
+            self.assertEqual(payload["normalized_rows"], 1)
+            attempt = payload["repair_attempts"][0]
+            self.assertEqual(attempt["missing_quote_date"], "2026-03-25")
+            self.assertEqual(attempt["exact_date_row_count"], 0)
+            self.assertEqual(attempt["lookahead_row_count"], 1)
+            self.assertEqual(attempt["available_quote_dates"], ["2026-03-26"])
+            self.assertEqual(attempt["first_available_after_missing_date"], "2026-03-26")
+            self.assertEqual(attempt["outcome"], "lookahead_only_rows_found")
+            self.assertEqual(attempt["proof_repair_status"], "lookahead_only_not_exact_proof")
+            self.assertTrue(attempt["current_source_exhausted_for_exact_date"])
 
 
 if __name__ == "__main__":

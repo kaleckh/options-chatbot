@@ -3,10 +3,9 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import re
 import sys
 from collections import Counter
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -26,151 +25,16 @@ from scripts.import_thetadata_options_nbbo import (  # noqa: E402
     _extract_rows,
     _normalize_theta_quote_row,
 )
-
-
-OCC_RE = re.compile(r"^(?P<root>[A-Z.]+)(?P<expiry>\d{6})(?P<right>[CP])(?P<strike>\d{8})$")
-
-
-def _filter_values(values: list[str] | None, *, upper: bool = False) -> set[str]:
-    parsed: set[str] = set()
-    for value in values or []:
-        for item in str(value).split(","):
-            text = item.strip()
-            if text:
-                parsed.add(text.upper() if upper else text)
-    return parsed
-
-
-def _parse_occ(symbol: str) -> dict[str, Any] | None:
-    match = OCC_RE.match(str(symbol or "").strip().upper())
-    if not match:
-        return None
-    expiry_raw = match.group("expiry")
-    expiry = date(2000 + int(expiry_raw[:2]), int(expiry_raw[2:4]), int(expiry_raw[4:6]))
-    right = match.group("right")
-    return {
-        "root": match.group("root"),
-        "expiry": expiry,
-        "right": right,
-        "option_type": "call" if right == "C" else "put",
-        "strike": int(match.group("strike")) / 1000.0,
-    }
-
-
-def _missing_items(
-    run_paths: list[Path],
-    *,
-    tickers: set[str] | None = None,
-    contract_symbols: set[str] | None = None,
-    quote_dates: set[str] | None = None,
-) -> list[dict[str, Any]]:
-    items: dict[tuple[str, str], dict[str, Any]] = {}
-    ticker_filter = tickers or set()
-    contract_filter = contract_symbols or set()
-    quote_date_filter = quote_dates or set()
-    for path in run_paths:
-        payload = json.loads(path.read_text(encoding="utf8"))
-        for trade in payload.get("unpriced_trades") or []:
-            ticker = str(trade.get("ticker") or "").strip().upper()
-            if ticker_filter and ticker not in ticker_filter:
-                continue
-            quote_date = str(trade.get("missing_quote_date") or "").strip()
-            if not quote_date:
-                continue
-            if quote_date_filter and quote_date[:10] not in quote_date_filter:
-                continue
-            for key in ("missing_long_contract_symbol", "missing_short_contract_symbol"):
-                contract = str(trade.get(key) or "").strip().upper()
-                if contract_filter and contract not in contract_filter:
-                    continue
-                parsed = _parse_occ(contract)
-                if not parsed:
-                    continue
-                item = items.setdefault(
-                    (quote_date, contract),
-                    {
-                        "quote_date": date.fromisoformat(quote_date[:10]),
-                        "contract_symbol": contract,
-                        **parsed,
-                        "source_occurrences": [],
-                    },
-                )
-                item["source_occurrences"].append(
-                    {
-                        "run_path": str(path),
-                        "ticker": trade.get("ticker"),
-                        "entry_date": trade.get("date"),
-                        "source_field": key,
-                        "unpriced_reason": trade.get("unpriced_reason"),
-                    }
-                )
-    return [items[key] for key in sorted(items)]
-
-
-def _expand_items(items: list[dict[str, Any]], *, lookahead_calendar_days: int) -> list[dict[str, Any]]:
-    if int(lookahead_calendar_days) <= 0:
-        return list(items)
-
-    expanded: dict[tuple[date, str], dict[str, Any]] = {}
-    for item in items:
-        start: date = item["quote_date"]
-        expiry: date = item["expiry"]
-        end = min(expiry, start + timedelta(days=int(lookahead_calendar_days)))
-        current = start
-        while current <= end:
-            if current.weekday() < 5:
-                expanded[(current, item["contract_symbol"])] = {
-                    **item,
-                    "quote_date": current,
-                    "original_missing_quote_date": start,
-                }
-            current += timedelta(days=1)
-    return [expanded[key] for key in sorted(expanded)]
-
-
-def _json_item(item: dict[str, Any]) -> dict[str, Any]:
-    quote_date_value = item.get("quote_date")
-    expiry_value = item.get("expiry")
-    original_value = item.get("original_missing_quote_date")
-    return {
-        "quote_date": quote_date_value.isoformat() if isinstance(quote_date_value, date) else str(quote_date_value),
-        "original_missing_quote_date": (
-            original_value.isoformat() if isinstance(original_value, date) else str(original_value)
-        )
-        if original_value
-        else None,
-        "contract_symbol": item.get("contract_symbol"),
-        "underlying": item.get("root"),
-        "expiry": expiry_value.isoformat() if isinstance(expiry_value, date) else str(expiry_value),
-        "option_type": item.get("option_type"),
-        "right": item.get("right"),
-        "strike": item.get("strike"),
-        "source_occurrences": sorted(
-            item.get("source_occurrences") or [],
-            key=lambda row: (
-                str(row.get("run_path") or ""),
-                str(row.get("entry_date") or ""),
-                str(row.get("source_field") or ""),
-            ),
-        ),
-    }
-
-
-def _repair_manifest(
-    *,
-    base_items: list[dict[str, Any]],
-    request_items: list[dict[str, Any]],
-    expanded_item_count: int,
-    max_requests: int,
-) -> dict[str, Any]:
-    return {
-        "base_targets": [_json_item(item) for item in base_items],
-        "request_targets": [_json_item(item) for item in request_items],
-        "base_target_count": len(base_items),
-        "request_target_count": len(request_items),
-        "source_occurrence_count": sum(len(item.get("source_occurrences") or []) for item in base_items),
-        "max_requests_applied": int(max_requests) > 0 and len(request_items) < int(expanded_item_count),
-    }
+from scripts.regular_options_repair_targets import (  # noqa: E402
+    base_target_key,
+    expand_items,
+    json_item,
+    missing_items_from_run_paths,
+    original_target_key,
+    repair_attempt_key,
+    repair_manifest,
+    target_filters,
+)
 
 
 def _theta_rows_for_contract(
@@ -214,6 +78,151 @@ def _write_csv(path: Path, rows: list[dict[str, str]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDNAMES)
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _rel(path: Path | str | None) -> str | None:
+    if not path:
+        return None
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = ROOT / candidate
+    try:
+        return str(candidate.resolve().relative_to(ROOT)).replace("\\", "/")
+    except ValueError:
+        return str(candidate).replace("\\", "/")
+
+
+def _source_artifacts_for_item(item: dict[str, Any]) -> list[str]:
+    artifacts = {
+        normalized
+        for row in item.get("source_occurrences") or []
+        if row.get("run_path")
+        for normalized in [_rel(row.get("run_path"))]
+        if normalized
+    }
+    return sorted(artifacts)
+
+
+def _tickers_for_item(item: dict[str, Any]) -> list[str]:
+    return sorted({str(row.get("ticker") or "").upper() for row in item.get("source_occurrences") or [] if row.get("ticker")})
+
+
+def _initial_attempts(base_items: list[dict[str, Any]], *, source_label: str) -> dict[tuple[str, str], dict[str, Any]]:
+    attempts: dict[tuple[str, str], dict[str, Any]] = {}
+    for item in base_items:
+        key = base_target_key(item)
+        missing_quote_date, contract_symbol = key
+        source_artifacts = _source_artifacts_for_item(item)
+        tickers = _tickers_for_item(item)
+        attempt_keys = [
+            repair_attempt_key(
+                source_artifact=artifact,
+                ticker=ticker if len(tickers) == 1 else "",
+                contract_symbol=contract_symbol,
+                missing_quote_date=missing_quote_date,
+            )
+            for artifact in source_artifacts
+            for ticker in (tickers or [""])
+        ]
+        if not attempt_keys:
+            attempt_keys = [
+                repair_attempt_key(
+                    source_artifact="",
+                    ticker=tickers[0] if len(tickers) == 1 else "",
+                    contract_symbol=contract_symbol,
+                    missing_quote_date=missing_quote_date,
+                )
+            ]
+        attempts[key] = {
+            "repair_attempt_key": attempt_keys[0],
+            "repair_attempt_keys": sorted(set(attempt_keys)),
+            "source_label": source_label,
+            "source_artifacts": source_artifacts,
+            "tickers": tickers,
+            "contract_symbol": contract_symbol,
+            "missing_quote_date": missing_quote_date,
+            "exact_date_row_count": 0,
+            "lookahead_row_count": 0,
+            "total_row_count": 0,
+            "request_dates_attempted": [],
+            "available_quote_dates": [],
+            "errors": [],
+            "source_occurrences": json_item(item).get("source_occurrences") or [],
+        }
+    return attempts
+
+
+def _record_request_date(attempt: dict[str, Any], request_date: str) -> None:
+    dates = set(attempt.get("request_dates_attempted") or [])
+    dates.add(request_date)
+    attempt["request_dates_attempted"] = sorted(dates)
+
+
+def _record_available_date(attempt: dict[str, Any], quote_date: str) -> None:
+    dates = set(attempt.get("available_quote_dates") or [])
+    dates.add(quote_date)
+    attempt["available_quote_dates"] = sorted(dates)
+
+
+def _finalize_attempt(attempt: dict[str, Any], *, plan_only: bool, import_performed: bool) -> dict[str, Any]:
+    exact_count = int(attempt.get("exact_date_row_count") or 0)
+    lookahead_count = int(attempt.get("lookahead_row_count") or 0)
+    available_dates = sorted(str(value) for value in attempt.get("available_quote_dates") or [])
+    missing_quote_date = str(attempt.get("missing_quote_date") or "")[:10]
+    first_after = next((value for value in available_dates if value > missing_quote_date), None)
+    if plan_only:
+        outcome = "planned_not_requested"
+        exact_status = "not_requested"
+        proof_status = "not_requested"
+    elif exact_count > 0 and import_performed:
+        outcome = "imported_pending_replay"
+        exact_status = "rows_found"
+        proof_status = "exact_date_imported_pending_replay"
+    elif exact_count > 0:
+        outcome = "exact_date_rows_found"
+        exact_status = "rows_found"
+        proof_status = "exact_date_repair_candidate"
+    elif lookahead_count > 0:
+        outcome = "lookahead_only_rows_found"
+        exact_status = "no_rows_found"
+        proof_status = "lookahead_only_not_exact_proof"
+    else:
+        outcome = "exact_date_no_match"
+        exact_status = "no_rows_found"
+        proof_status = "current_source_exhausted"
+    return {
+        **attempt,
+        "available_quote_dates": available_dates,
+        "first_available_after_missing_date": first_after,
+        "outcome": outcome,
+        "exact_missing_date_status": exact_status,
+        "proof_repair_status": proof_status,
+        "current_source_exhausted_for_exact_date": not plan_only and exact_count == 0,
+    }
+
+
+def _finalized_attempts(
+    attempts: dict[tuple[str, str], dict[str, Any]],
+    *,
+    plan_only: bool,
+    import_performed: bool,
+) -> list[dict[str, Any]]:
+    return [
+        _finalize_attempt(attempt, plan_only=plan_only, import_performed=import_performed)
+        for _, attempt in sorted(attempts.items(), key=lambda item: item[0])
+    ]
+
+
+def _attempt_summary(attempts: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "attempt_count": len(attempts),
+        "outcome_counts": dict(sorted(Counter(str(item.get("outcome")) for item in attempts).items())),
+        "proof_repair_status_counts": dict(
+            sorted(Counter(str(item.get("proof_repair_status")) for item in attempts).items())
+        ),
+        "exact_date_row_count": sum(int(item.get("exact_date_row_count") or 0) for item in attempts),
+        "lookahead_row_count": sum(int(item.get("lookahead_row_count") or 0) for item in attempts),
+    }
 
 
 def main() -> int:
@@ -263,18 +272,18 @@ def main() -> int:
     args = parser.parse_args()
 
     run_paths = [path.resolve() for path in args.run_paths]
-    target_filters = {
-        "tickers": sorted(_filter_values(args.ticker, upper=True)),
-        "contract_symbols": sorted(_filter_values(args.contract_symbol, upper=True)),
-        "quote_dates": sorted(_filter_values(args.quote_date)),
-    }
-    base_items = _missing_items(
-        run_paths,
-        tickers=set(target_filters["tickers"]),
-        contract_symbols=set(target_filters["contract_symbols"]),
-        quote_dates=set(target_filters["quote_dates"]),
+    filters = target_filters(
+        tickers=args.ticker,
+        contract_symbols=args.contract_symbol,
+        quote_dates=args.quote_date,
     )
-    items = _expand_items(base_items, lookahead_calendar_days=int(args.lookahead_calendar_days))
+    base_items = missing_items_from_run_paths(
+        run_paths,
+        tickers=set(filters["tickers"]),
+        contract_symbols=set(filters["contract_symbols"]),
+        quote_dates=set(filters["quote_dates"]),
+    )
+    items = expand_items(base_items, lookahead_calendar_days=int(args.lookahead_calendar_days))
     expanded_item_count = len(items)
     if int(args.max_requests) > 0:
         items = items[: int(args.max_requests)]
@@ -288,9 +297,14 @@ def main() -> int:
     rows_by_contract: Counter[str] = Counter()
     rows_by_date: Counter[str] = Counter()
     request_count = 0
+    attempts = _initial_attempts(base_items, source_label=args.source)
     if not args.plan_only:
         with requests.Session() as session:
             for item in items:
+                attempt = attempts.get(original_target_key(item))
+                request_date = str(item["quote_date"])
+                if attempt is not None:
+                    _record_request_date(attempt, request_date)
                 try:
                     matches = _theta_rows_for_contract(
                         session,
@@ -303,15 +317,29 @@ def main() -> int:
                     )
                     request_count += 1
                 except Exception as exc:
-                    errors.append(f"{item['quote_date']} {item['contract_symbol']}: {exc}")
+                    error = f"{item['quote_date']} {item['contract_symbol']}: {exc}"
+                    errors.append(error)
+                    if attempt is not None:
+                        attempt["errors"].append(error)
                     continue
                 if not matches:
-                    errors.append(f"{item['quote_date']} {item['contract_symbol']}: no matched rows")
+                    error = f"{item['quote_date']} {item['contract_symbol']}: no matched rows"
+                    errors.append(error)
+                    if attempt is not None:
+                        attempt["errors"].append(error)
                     continue
                 for row in matches:
                     rows.append(row)
                     rows_by_contract[row["contract_symbol"]] += 1
                     rows_by_date[row["as_of_utc"][:10]] += 1
+                    if attempt is not None:
+                        row_date = row["as_of_utc"][:10]
+                        _record_available_date(attempt, row_date)
+                        attempt["total_row_count"] += 1
+                        if row_date == attempt["missing_quote_date"]:
+                            attempt["exact_date_row_count"] += 1
+                        else:
+                            attempt["lookahead_row_count"] += 1
 
     import_result = None
     if rows and not no_write:
@@ -324,10 +352,15 @@ def main() -> int:
             db_path=args.db_path,
         )
 
+    repair_attempts = _finalized_attempts(
+        attempts,
+        plan_only=bool(args.plan_only),
+        import_performed=bool(import_result),
+    )
     payload = {
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "input_run_paths": [str(path) for path in run_paths],
-        "target_filters": target_filters,
+        "target_filters": filters,
         "dry_run": bool(args.dry_run),
         "plan_only": bool(args.plan_only),
         "write_artifacts": not no_write,
@@ -339,12 +372,14 @@ def main() -> int:
         "normalized_rows": len(rows),
         "csv_path": None if no_write or not rows else str(csv_path.resolve()),
         "summary_path": None if no_write else str(summary_path.resolve()),
-        "repair_manifest": _repair_manifest(
+        "repair_manifest": repair_manifest(
             base_items=base_items,
             request_items=items,
             expanded_item_count=expanded_item_count,
             max_requests=int(args.max_requests),
         ),
+        "repair_attempts": repair_attempts,
+        "repair_attempt_summary": _attempt_summary(repair_attempts),
         "rows_by_contract": dict(sorted(rows_by_contract.items())),
         "rows_by_date": dict(sorted(rows_by_date.items())),
         "errors": errors,

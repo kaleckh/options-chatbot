@@ -134,6 +134,8 @@ These are the living docs for the current worktree:
   - active options scorecard separating visible Trading Desk profitability progress, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
 - `docs/regular-options-profit-capture-queue.md`
   - generated research/paper capture queue that tiers profitable regular-options symbol/lane evidence, fresh scan signature matches, evidence-repair priorities, and quarantine/do-not-chase rows without changing scanner policy
+- `docs/regular-options-repair-attempts.md`
+  - generated exact-repair attempt memory/readback for regular-options replay gaps, including exact-date versus lookahead-only proof posture
 - `docs/regular-options-symbol-sleeves.md`
   - generated per-symbol sleeve matrix for regular supervised options, separating lane-symbol keep/watch/quarantine/rejected/needs-paper status from proof evidence class
 - `docs/regular-guardrail-starvation-audit.md`

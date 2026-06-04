@@ -15,12 +15,15 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from scripts.regular_options_repair_targets import repair_attempt_key  # noqa: E402
+
 
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-profit-capture-queue"
 DEFAULT_DOC = ROOT / "docs" / "regular-options-profit-capture-queue.md"
 DEFAULT_SYMBOL_SLEEVES = ROOT / "data" / "profitability-lab" / "regular-options-symbol-sleeves" / "latest.json"
 DEFAULT_CURRENT_POLICY = ROOT / "data" / "forward-tracking" / "current_policy_historical_picks_latest.json"
 DEFAULT_GUARDRAIL_STARVATION = ROOT / "data" / "forward-tracking" / "regular_guardrail_starvation_latest.json"
+DEFAULT_REPAIR_ATTEMPTS = ROOT / "data" / "profitability-lab" / "regular-options-repair-attempts" / "latest.json"
 
 TRUSTED_EXACT = "trusted_intraday_opra_nbbo_exact"
 TIER_A = "tier_a_clean_exact_capture"
@@ -37,6 +40,15 @@ READINESS_WATCH_REPAIR = "watch_repair_only"
 READINESS_FRESH_SIGNATURE = "historical_signature_only"
 READINESS_BLOCKED = "blocked_guardrail_only"
 READINESS_DO_NOT_CHASE = "do_not_chase"
+
+REPAIR_ACTION_NO_REPAIR_NEEDED = "no_repair_needed_clean_exact"
+REPAIR_ACTION_CAN_CLEAR_TIER_A = "can_clear_tier_a_with_exact_rows"
+REPAIR_ACTION_NEEDS_STATUS_OR_FORWARD = "needs_status_or_forward_validation_after_repair"
+REPAIR_ACTION_CURRENT_SOURCE_EXHAUSTED = "current_source_exhausted"
+REPAIR_ACTION_LOOKAHEAD_ONLY = "lookahead_only_not_exact_proof"
+REPAIR_ACTION_QUARANTINE = "quarantine_do_not_repair"
+REPAIR_ACTION_TARGET_UNKNOWN = "repair_target_unknown"
+REPAIR_ACTION_NOT_APPLICABLE = "not_applicable"
 
 DISQUALIFYING_CLEAN_REASONS = {
     "sample_status:thin",
@@ -107,6 +119,49 @@ def _load_json(path: Path) -> dict[str, Any]:
         payload.setdefault("path", str(path))
         return payload
     return {"missing": True, "path": str(path), "error": "json_root_not_object"}
+
+
+def _split_repair_attempt_key(value: str) -> dict[str, str]:
+    source_artifact, ticker, contract_symbol, missing_quote_date = (str(value).split("|", 3) + ["", "", "", ""])[
+        :4
+    ]
+    return {
+        "source_artifact": source_artifact,
+        "ticker": ticker.upper(),
+        "contract_symbol": contract_symbol.upper(),
+        "missing_quote_date": missing_quote_date[:10],
+    }
+
+
+def repair_attempt_indexes(payload: dict[str, Any]) -> dict[str, Any]:
+    rows = payload.get("latest_attempts") or payload.get("repair_attempts") or []
+    by_key: dict[str, dict[str, Any]] = {}
+    by_target: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        keys = row.get("repair_attempt_keys") or [row.get("repair_attempt_key")]
+        normalized_keys = [str(key) for key in keys if key]
+        if not normalized_keys:
+            normalized_keys = [
+                repair_attempt_key(
+                    source_artifact=row.get("source_artifact"),
+                    ticker=row.get("ticker"),
+                    contract_symbol=str(row.get("contract_symbol") or ""),
+                    missing_quote_date=str(row.get("missing_quote_date") or ""),
+                )
+            ]
+        for key in normalized_keys:
+            by_key[key] = row
+            parts = _split_repair_attempt_key(key)
+            by_target[
+                (
+                    parts["ticker"],
+                    parts["contract_symbol"],
+                    parts["missing_quote_date"],
+                )
+            ].append(row)
+    return {"by_key": by_key, "by_target": by_target}
 
 
 def _generated_at(payload: dict[str, Any]) -> str | None:
@@ -547,10 +602,80 @@ def _repair_target_key(target: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _compact_repair_attempt(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "repair_attempt_key": row.get("repair_attempt_key"),
+        "summary_path": row.get("summary_path"),
+        "summary_generated_at_utc": row.get("summary_generated_at_utc"),
+        "outcome": row.get("outcome"),
+        "proof_repair_status": row.get("proof_repair_status"),
+        "exact_missing_date_status": row.get("exact_missing_date_status"),
+        "exact_date_row_count": _safe_int(row.get("exact_date_row_count")),
+        "lookahead_row_count": _safe_int(row.get("lookahead_row_count")),
+        "total_row_count": _safe_int(row.get("total_row_count")),
+        "available_quote_dates": list(row.get("available_quote_dates") or []),
+        "first_available_after_missing_date": row.get("first_available_after_missing_date"),
+        "current_source_exhausted_for_exact_date": bool(row.get("current_source_exhausted_for_exact_date")),
+    }
+
+
+def _attempts_for_target(target: dict[str, Any], repair_attempt_index: dict[str, Any]) -> list[dict[str, Any]]:
+    by_key: dict[str, dict[str, Any]] = repair_attempt_index.get("by_key") or {}
+    by_target: dict[tuple[str, str, str], list[dict[str, Any]]] = repair_attempt_index.get("by_target") or {}
+    attempts: list[dict[str, Any]] = []
+    seen: set[int] = set()
+    source_artifact = target.get("source_artifact")
+    ticker = str(target.get("ticker") or "").upper()
+    missing_quote_date = str(target.get("missing_quote_date") or "")[:10]
+    for contract_symbol in target.get("contracts") or []:
+        contract = str(contract_symbol or "").upper()
+        key = repair_attempt_key(
+            source_artifact=str(source_artifact or ""),
+            ticker=ticker,
+            contract_symbol=contract,
+            missing_quote_date=missing_quote_date,
+        )
+        candidates = []
+        if key in by_key:
+            candidates.append(by_key[key])
+        candidates.extend(by_target.get((ticker, contract, missing_quote_date), []))
+        for attempt in candidates:
+            identity = id(attempt)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            attempts.append(_compact_repair_attempt(attempt))
+    attempts.sort(
+        key=lambda row: (
+            str(row.get("summary_generated_at_utc") or ""),
+            str(row.get("repair_attempt_key") or ""),
+        ),
+        reverse=True,
+    )
+    return attempts
+
+
+def _repair_attempt_summary(targets: list[dict[str, Any]]) -> dict[str, Any]:
+    attempts = [attempt for target in targets for attempt in target.get("latest_repair_attempts") or []]
+    outcomes = Counter(str(attempt.get("outcome") or "unknown") for attempt in attempts)
+    proof_statuses = Counter(str(attempt.get("proof_repair_status") or "unknown") for attempt in attempts)
+    return {
+        "attempt_count": len(attempts),
+        "outcome_counts": dict(sorted(outcomes.items())),
+        "proof_repair_status_counts": dict(sorted(proof_statuses.items())),
+        "exact_date_row_count": sum(_safe_int(attempt.get("exact_date_row_count")) for attempt in attempts),
+        "lookahead_row_count": sum(_safe_int(attempt.get("lookahead_row_count")) for attempt in attempts),
+        "current_source_exhausted_count": sum(
+            1 for attempt in attempts if attempt.get("current_source_exhausted_for_exact_date")
+        ),
+    }
+
+
 def repair_target_summary(
     row: dict[str, Any],
     *,
     artifact_cache: dict[str, dict[str, Any]],
+    repair_attempt_index: dict[str, Any] | None = None,
     limit: int = 8,
 ) -> dict[str, Any]:
     metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
@@ -604,6 +729,9 @@ def repair_target_summary(
             ",".join(target.get("contracts") or []),
         ),
     )
+    if repair_attempt_index:
+        for target in targets:
+            target["latest_repair_attempts"] = _attempts_for_target(target, repair_attempt_index)
     missing_leg_counts = Counter(str(target.get("missing_leg_role") or "unknown") for target in targets)
     missing_quote_dates = sorted({str(target.get("missing_quote_date")) for target in targets if target.get("missing_quote_date")})
     contracts = sorted({contract for target in targets for contract in target.get("contracts") or []})
@@ -621,12 +749,104 @@ def repair_target_summary(
         "missing_quote_dates": missing_quote_dates[:limit],
         "contracts": contracts[: limit * 2],
         "targets": targets[:limit],
+        "repair_attempt_summary": _repair_attempt_summary(targets),
         "next_repair_action": (
             "Repair or re-import trusted intraday OPRA/NBBO quotes for these missing quote dates and exact contracts, "
             "then rerun the source replay and rebuild this queue."
             if targets
             else "Open the source replay artifacts and classify why unpriced trade details are unavailable."
         ),
+    }
+
+
+def repair_actionability_for_row(
+    row: dict[str, Any],
+    *,
+    tier: str,
+    repair_summary: dict[str, Any] | None,
+    promotion_gap: dict[str, Any],
+) -> dict[str, Any]:
+    if tier == TIER_QUARANTINE:
+        return {
+            "status": REPAIR_ACTION_QUARANTINE,
+            "target_count": 0,
+            "attempt_count": 0,
+            "next_action": "Do not spend repair effort on quarantined or rejected evidence.",
+        }
+    if tier == TIER_A:
+        return {
+            "status": REPAIR_ACTION_NO_REPAIR_NEEDED,
+            "target_count": 0,
+            "attempt_count": 0,
+            "next_action": "No exact-date repair is needed for this clean Tier A paper-review row.",
+        }
+    if tier != TIER_B:
+        return {
+            "status": REPAIR_ACTION_NOT_APPLICABLE,
+            "target_count": 0,
+            "attempt_count": 0,
+            "next_action": "Repair actionability is only computed for Tier B watch/repair rows.",
+        }
+    if not repair_summary or repair_summary.get("detail_status") != "available":
+        return {
+            "status": REPAIR_ACTION_TARGET_UNKNOWN,
+            "target_count": 0,
+            "attempt_count": 0,
+            "detail_status": (repair_summary or {}).get("detail_status"),
+            "next_action": "Find readable source replay targets before attempting exact-date repair.",
+        }
+
+    targets = repair_summary.get("targets") or []
+    attempt_summary = repair_summary.get("repair_attempt_summary") or {}
+    attempts = [attempt for target in targets for attempt in target.get("latest_repair_attempts") or []]
+    outcomes = sorted({str(attempt.get("outcome") or "") for attempt in attempts if attempt.get("outcome")})
+    proof_statuses = sorted(
+        {str(attempt.get("proof_repair_status") or "") for attempt in attempts if attempt.get("proof_repair_status")}
+    )
+    exact_attempt_found = any(_safe_int(attempt.get("exact_date_row_count")) > 0 for attempt in attempts)
+    lookahead_only_found = any(str(attempt.get("outcome")) == "lookahead_only_rows_found" for attempt in attempts)
+    current_source_exhausted = bool(attempts) and all(
+        bool(attempt.get("current_source_exhausted_for_exact_date")) for attempt in attempts
+    )
+    blocker_gates = {
+        str(gate.get("gate"))
+        for gate in promotion_gap.get("blocking_gates") or []
+        if isinstance(gate, dict) and gate.get("gate")
+    }
+    non_repair_blockers = blocker_gates - {"zero_unresolved_rows", "quote_coverage"}
+
+    if exact_attempt_found and non_repair_blockers:
+        status = REPAIR_ACTION_NEEDS_STATUS_OR_FORWARD
+        next_action = (
+            "Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A."
+        )
+    elif exact_attempt_found:
+        status = REPAIR_ACTION_CAN_CLEAR_TIER_A
+        next_action = "Rerun the source replay; exact-date rows may clear unresolved/coverage Tier A blockers."
+    elif lookahead_only_found:
+        status = REPAIR_ACTION_LOOKAHEAD_ONLY
+        next_action = "Do not treat later-date rows as proof repair; use a new exact source or leave this target blocked."
+    elif current_source_exhausted:
+        status = REPAIR_ACTION_CURRENT_SOURCE_EXHAUSTED
+        next_action = "Current source has no exact-date rows for all attempted targets; do not loop without new evidence."
+    elif non_repair_blockers:
+        status = REPAIR_ACTION_NEEDS_STATUS_OR_FORWARD
+        next_action = (
+            "Exact repair can reduce unresolved rows, but status, sample, forward-validation, or clean-disqualifier gates remain."
+        )
+    else:
+        status = REPAIR_ACTION_CAN_CLEAR_TIER_A
+        next_action = "Attempt scoped exact-date repair for the listed missing contracts, then rerun the source replay."
+
+    return {
+        "status": status,
+        "target_count": len(targets),
+        "attempt_count": _safe_int(attempt_summary.get("attempt_count")),
+        "latest_attempt_outcomes": outcomes,
+        "latest_proof_repair_statuses": proof_statuses,
+        "current_source_exhausted_count": _safe_int(attempt_summary.get("current_source_exhausted_count")),
+        "blocking_gates": sorted(blocker_gates),
+        "next_action": next_action,
     }
 
 
@@ -637,6 +857,7 @@ def build_capture_row(
     current_policy: dict[tuple[str, str], dict[str, Any]],
     fresh_scan_status: dict[tuple[str, str], dict[str, Any]],
     artifact_cache: dict[str, dict[str, Any]],
+    repair_attempt_index: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     symbol = str(row.get("symbol") or "")
     lane_id = str(row.get("lane_id") or "")
@@ -648,8 +869,29 @@ def build_capture_row(
     metrics = _compact_metrics(row.get("metrics") if isinstance(row.get("metrics"), dict) else {})
     selection_gate = selection_gate_for_tier(tier)
     repair_summary = (
-        repair_target_summary(row, artifact_cache=artifact_cache) if repair in {"high", "medium"} else None
+        repair_target_summary(
+            row,
+            artifact_cache=artifact_cache,
+            repair_attempt_index=repair_attempt_index,
+        )
+        if repair in {"high", "medium"}
+        else None
     )
+    promotion_gap = tier_a_promotion_gap(row)
+    if tier == TIER_B and repair not in {"high", "medium"}:
+        repair_actionability = {
+            "status": REPAIR_ACTION_NOT_APPLICABLE,
+            "target_count": 0,
+            "attempt_count": 0,
+            "next_action": "This Tier B row is not in the current medium/high exact repair queue.",
+        }
+    else:
+        repair_actionability = repair_actionability_for_row(
+            row,
+            tier=tier,
+            repair_summary=repair_summary,
+            promotion_gap=promotion_gap,
+        )
     return {
         "capture_tier": tier,
         **selection_gate,
@@ -665,7 +907,8 @@ def build_capture_row(
         "status_reason": row.get("status_reason"),
         "next_step": row.get("next_step"),
         "evidence_repair_priority": repair,
-        "tier_a_promotion_gap": tier_a_promotion_gap(row),
+        "repair_actionability": repair_actionability,
+        "tier_a_promotion_gap": promotion_gap,
         "repair_target_summary": repair_summary,
         "quarantine_overlay": quarantine,
         "current_policy_overlay": policy,
@@ -785,6 +1028,9 @@ def _queue_summary(
 ) -> dict[str, Any]:
     tier_counts = Counter(str(row.get("capture_tier")) for row in rows)
     repair_counts = Counter(str(row.get("evidence_repair_priority")) for row in rows)
+    actionability_counts = Counter(
+        str((row.get("repair_actionability") or {}).get("status") or "unknown") for row in rows
+    )
     fresh_counts = Counter(str(row.get("guardrail_decision")) for row in fresh_rows)
     selection_counts = Counter(
         str(row.get("selection_readiness")) for row in [*rows, *fresh_rows, *quarantine_rows]
@@ -794,6 +1040,7 @@ def _queue_summary(
         "tier_counts": dict(sorted(tier_counts.items())),
         "selection_readiness_counts": dict(sorted(selection_counts.items())),
         "evidence_repair_priority_counts": dict(sorted(repair_counts.items())),
+        "repair_actionability_counts": dict(sorted(actionability_counts.items())),
         "fresh_scan_match_count": len(fresh_rows),
         "fresh_scan_guardrail_decision_counts": dict(sorted(fresh_counts.items())),
         "blocked_but_interesting_count": len(blocked_interesting_rows),
@@ -811,10 +1058,13 @@ def build_report(
     symbol_sleeves_path: Path = DEFAULT_SYMBOL_SLEEVES,
     current_policy_path: Path = DEFAULT_CURRENT_POLICY,
     guardrail_starvation_path: Path = DEFAULT_GUARDRAIL_STARVATION,
+    repair_attempts_path: Path = DEFAULT_REPAIR_ATTEMPTS,
 ) -> dict[str, Any]:
     symbol_sleeves = _load_json(symbol_sleeves_path)
     current_policy = _load_json(current_policy_path)
     guardrail_starvation = _load_json(guardrail_starvation_path)
+    repair_attempts = _load_json(repair_attempts_path)
+    repair_attempt_index = repair_attempt_indexes(repair_attempts)
 
     current_policy_index = current_policy_by_symbol_lane(current_policy)
     sleeve_rows = [row for row in symbol_sleeves.get("lane_symbol_rows") or [] if isinstance(row, dict)]
@@ -840,6 +1090,7 @@ def build_report(
             current_policy=current_policy_index,
             fresh_scan_status=fresh_status,
             artifact_cache=artifact_cache,
+            repair_attempt_index=repair_attempt_index,
         )
         if tier == TIER_QUARANTINE:
             quarantine_rows.append(capture_row)
@@ -910,12 +1161,15 @@ def build_report(
             input_manifest_entry(symbol_sleeves_path, "regular_options_symbol_sleeves"),
             input_manifest_entry(current_policy_path, "current_policy_historical_picks"),
             input_manifest_entry(guardrail_starvation_path, "regular_guardrail_starvation"),
+            input_manifest_entry(repair_attempts_path, "regular_options_repair_attempt_readback"),
         ],
         "source_readback": {
             "symbol_sleeve_rows": len(sleeve_rows),
             "current_policy_generated_capture_rows": len(current_policy_rows),
             "current_policy_symbol_lane_buckets": len(current_policy_index),
             "guardrail_starvation_status": (guardrail_starvation.get("overall") or {}).get("status"),
+            "repair_attempt_readback_status": repair_attempts.get("status"),
+            "repair_attempt_latest_count": (repair_attempts.get("summary") or {}).get("latest_attempt_count"),
         },
         "capture_queue": capture_rows,
         "fresh_scan_matches": fresh_rows,
@@ -993,8 +1247,8 @@ def _repair_summary_cells(row: dict[str, Any]) -> list[str]:
 
 def _repair_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
     lines = [
-        "| Repair | Symbol | Lane | Exact | Unres | Cov % | PF | Avg % | Missing legs | Missing dates | Contracts/detail | Source |",
-        "|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|",
+        "| Repair | Actionability | Symbol | Lane | Exact | Unres | Cov % | PF | Avg % | Missing legs | Missing dates | Contracts/detail | Source |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|",
     ]
     for row in rows[:limit]:
         metrics = row.get("metrics") or {}
@@ -1005,6 +1259,7 @@ def _repair_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
             + " | ".join(
                 [
                     _fmt(row.get("evidence_repair_priority")),
+                    _fmt((row.get("repair_actionability") or {}).get("status")),
                     _fmt(row.get("symbol")),
                     _fmt(row.get("lane_id")),
                     _fmt(metrics.get("exact_trusted_priced_trades", 0)),
@@ -1067,6 +1322,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Tier counts: `{json.dumps(summary.get('tier_counts') or {}, sort_keys=True)}`.",
         f"- Selection readiness: `{json.dumps(summary.get('selection_readiness_counts') or {}, sort_keys=True)}`.",
         f"- Evidence repair priorities: `{json.dumps(summary.get('evidence_repair_priority_counts') or {}, sort_keys=True)}`.",
+        f"- Repair actionability: `{json.dumps(summary.get('repair_actionability_counts') or {}, sort_keys=True)}`.",
         f"- Fresh scan matches: `{summary.get('fresh_scan_match_count')}` with decisions `{json.dumps(summary.get('fresh_scan_guardrail_decision_counts') or {}, sort_keys=True)}`.",
         f"- Blocked but interesting: `{summary.get('blocked_but_interesting_count')}`.",
         f"- Quarantine queue rows: `{summary.get('quarantine_queue_count')}`.",
@@ -1156,6 +1412,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--symbol-sleeves", type=Path, default=DEFAULT_SYMBOL_SLEEVES)
     parser.add_argument("--current-policy", type=Path, default=DEFAULT_CURRENT_POLICY)
     parser.add_argument("--guardrail-starvation", type=Path, default=DEFAULT_GUARDRAIL_STARVATION)
+    parser.add_argument("--repair-attempts", type=Path, default=DEFAULT_REPAIR_ATTEMPTS)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--doc-path", type=Path, default=DEFAULT_DOC)
     parser.add_argument("--no-write", action="store_true")
@@ -1166,6 +1423,7 @@ def main(argv: list[str] | None = None) -> int:
         symbol_sleeves_path=args.symbol_sleeves,
         current_policy_path=args.current_policy,
         guardrail_starvation_path=args.guardrail_starvation,
+        repair_attempts_path=args.repair_attempts,
     )
     if not args.no_write:
         report["artifacts"] = write_outputs(report, output_dir=args.output_dir, doc_path=args.doc_path)

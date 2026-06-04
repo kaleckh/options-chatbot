@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from scripts import build_regular_options_profit_capture_queue as capture_queue
+from scripts.regular_options_repair_targets import repair_attempt_key
 
 
 def _sleeve_row(
@@ -297,6 +298,10 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertEqual(report["blocked_but_interesting"][0]["symbol"], "QQQ")
         self.assertEqual(report["evidence_repair_queue"][0]["symbol"], "GOOGL")
         self.assertEqual(report["evidence_repair_queue"][0]["selection_readiness"], capture_queue.READINESS_WATCH_REPAIR)
+        self.assertEqual(
+            report["evidence_repair_queue"][0]["repair_actionability"]["status"],
+            capture_queue.REPAIR_ACTION_NEEDS_STATUS_OR_FORWARD,
+        )
         repair_summary = report["evidence_repair_queue"][0]["repair_target_summary"]
         self.assertEqual(repair_summary["detail_status"], "available")
         self.assertEqual(repair_summary["missing_leg_counts"], {"short": 1})
@@ -310,6 +315,104 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertEqual(nem["selection_readiness"], capture_queue.READINESS_PAPER_REVIEW)
         self.assertEqual(nem["current_policy_overlay"]["negative_count"], 1)
         self.assertEqual(nem["current_policy_overlay"]["decision_counts"]["would_take_today"], 2)
+
+    def test_repair_attempt_readback_marks_lookahead_only_as_not_exact_proof(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            sleeves = root / "sleeves.json"
+            current_policy = root / "current-policy.json"
+            starvation = root / "starvation.json"
+            repair_attempts = root / "repair-attempts.json"
+            googl_replay = root / "googl-replay.json"
+            googl_replay.write_text(
+                json.dumps(
+                    {
+                        "unpriced_trades": [
+                            {
+                                "ticker": "GOOGL",
+                                "date": "2025-12-03",
+                                "missing_quote_date": "2025-12-29",
+                                "unpriced_reason": "missing_exit_quote_for_leg",
+                                "missing_short_contract_symbol": "GOOGL260102C00350000",
+                                "short_contract_symbol": "GOOGL260102C00350000",
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf8",
+            )
+            attempt_key = repair_attempt_key(
+                source_artifact=str(googl_replay),
+                ticker="GOOGL",
+                contract_symbol="GOOGL260102C00350000",
+                missing_quote_date="2025-12-29",
+            )
+            repair_attempts.write_text(
+                json.dumps(
+                    {
+                        "status": "repair_attempt_readback",
+                        "summary": {"latest_attempt_count": 1},
+                        "latest_attempts": [
+                            {
+                                "repair_attempt_key": attempt_key,
+                                "outcome": "lookahead_only_rows_found",
+                                "proof_repair_status": "lookahead_only_not_exact_proof",
+                                "exact_missing_date_status": "no_rows_found",
+                                "exact_date_row_count": 0,
+                                "lookahead_row_count": 1,
+                                "total_row_count": 1,
+                                "available_quote_dates": ["2025-12-30"],
+                                "first_available_after_missing_date": "2025-12-30",
+                                "current_source_exhausted_for_exact_date": True,
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf8",
+            )
+            sleeves.write_text(
+                json.dumps(
+                    {
+                        "generated_at_utc": "2026-06-02T00:00:00Z",
+                        "lane_symbol_rows": [
+                            _sleeve_row(
+                                "GOOGL",
+                                "tracked_winner_primary",
+                                status="watch",
+                                exact=34,
+                                candidates=41,
+                                unresolved=7,
+                                coverage=82.93,
+                                profit_factor=7.14,
+                                avg_pnl=54.01,
+                                median_pnl=45.0,
+                                reason_codes=["quote_coverage_below_97_5", "unresolved_rows_remain"],
+                                source_artifacts=[str(googl_replay)],
+                            )
+                        ],
+                    }
+                ),
+                encoding="utf8",
+            )
+            current_policy.write_text(json.dumps({"generated_at_utc": "2026-06-02T00:01:00Z", "rows": []}), encoding="utf8")
+            starvation.write_text(
+                json.dumps({"generated_at_utc": "2026-06-02T00:02:00Z", "overall": {"status": "ok"}, "playbooks": []}),
+                encoding="utf8",
+            )
+
+            report = capture_queue.build_report(
+                symbol_sleeves_path=sleeves,
+                current_policy_path=current_policy,
+                guardrail_starvation_path=starvation,
+                repair_attempts_path=repair_attempts,
+            )
+
+        repair_row = report["evidence_repair_queue"][0]
+        self.assertEqual(repair_row["repair_actionability"]["status"], capture_queue.REPAIR_ACTION_LOOKAHEAD_ONLY)
+        self.assertEqual(report["summary"]["repair_actionability_counts"][capture_queue.REPAIR_ACTION_LOOKAHEAD_ONLY], 1)
+        target = repair_row["repair_target_summary"]["targets"][0]
+        self.assertEqual(target["latest_repair_attempts"][0]["outcome"], "lookahead_only_rows_found")
+        self.assertEqual(target["latest_repair_attempts"][0]["proof_repair_status"], "lookahead_only_not_exact_proof")
 
 
 if __name__ == "__main__":

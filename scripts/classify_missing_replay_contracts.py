@@ -15,42 +15,20 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from local_env import load_local_env
+from scripts.regular_options_repair_targets import (  # noqa: E402
+    contract_parts,
+    filter_values,
+    missing_items_from_run_paths,
+    target_filters,
+)
 
 load_local_env(ROOT)
 
 DEFAULT_DB = ROOT / "data" / "options-validation" / "options_history.db"
 
 
-def _filter_values(values: list[str] | None, *, upper: bool = False) -> set[str]:
-    parsed: set[str] = set()
-    for value in values or []:
-        for item in str(value).split(","):
-            text = item.strip()
-            if text:
-                parsed.add(text.upper() if upper else text)
-    return parsed
-
-
-def _contract_parts(symbol: str) -> dict[str, Any]:
-    text = str(symbol or "").strip().upper()
-    if len(text) < 15:
-        return {"contract_symbol": text}
-    root = text[:-15].strip()
-    expiry = "20" + text[-15:-9]
-    expiry = f"{expiry[:4]}-{expiry[4:6]}-{expiry[6:]}"
-    option_type = "call" if text[-9] == "C" else "put" if text[-9] == "P" else "unknown"
-    strike = int(text[-8:]) / 1000.0
-    return {
-        "contract_symbol": text,
-        "underlying": root,
-        "expiry": expiry,
-        "option_type": option_type,
-        "strike": strike,
-    }
-
-
 def _classify_contract(conn: sqlite3.Connection, *, contract_symbol: str, quote_date: str, source_labels: list[str]) -> dict[str, Any]:
-    parts = _contract_parts(contract_symbol)
+    parts = contract_parts(contract_symbol)
     params: list[Any] = [parts["contract_symbol"], quote_date]
     source_clause = ""
     if source_labels:
@@ -124,44 +102,27 @@ def classify_run(
     contract_symbols: set[str] | None = None,
     quote_dates: set[str] | None = None,
 ) -> dict[str, Any]:
-    result = json.loads(run_path.read_text(encoding="utf8"))
     labels = source_labels or ["thetadata_opra_nbbo_1m"]
     ticker_filter = tickers or set()
     contract_filter = contract_symbols or set()
     quote_date_filter = quote_dates or set()
     rows: list[dict[str, Any]] = []
-    seen: set[tuple[str, str]] = set()
-    for trade in result.get("unpriced_trades") or []:
-        ticker = str(trade.get("ticker") or "").strip().upper()
-        if ticker_filter and ticker not in ticker_filter:
-            continue
-        quote_date = str(trade.get("missing_quote_date") or "").strip()
-        if not quote_date:
-            continue
-        if quote_date_filter and quote_date[:10] not in quote_date_filter:
-            continue
-        keys = [
-            key
-            for key in ("missing_long_contract_symbol", "missing_short_contract_symbol")
-            if str(trade.get(key) or "").strip()
-        ]
-        if not keys:
-            keys = [
-                key
-                for key in ("long_contract_symbol", "short_contract_symbol")
-                if str(trade.get(key) or "").strip()
-            ]
-        for key in keys:
-            contract_symbol = str(trade.get(key) or "").strip().upper()
-            if not contract_symbol:
-                continue
-            if contract_filter and contract_symbol not in contract_filter:
-                continue
-            pair = (contract_symbol, quote_date)
-            if pair in seen:
-                continue
-            seen.add(pair)
-            rows.append({"ticker": trade.get("ticker"), "source_field": key, "contract_symbol": contract_symbol, "missing_quote_date": quote_date})
+    for item in missing_items_from_run_paths(
+        [run_path],
+        tickers=ticker_filter,
+        contract_symbols=contract_filter,
+        quote_dates=quote_date_filter,
+        include_fallback_contracts=True,
+    ):
+        occurrence = (item.get("source_occurrences") or [{}])[0]
+        rows.append(
+            {
+                "ticker": occurrence.get("ticker"),
+                "source_field": occurrence.get("source_field"),
+                "contract_symbol": item["contract_symbol"],
+                "missing_quote_date": item["quote_date"].isoformat(),
+            }
+        )
 
     classified: list[dict[str, Any]] = []
     with sqlite3.connect(db_path) as conn:
@@ -178,11 +139,11 @@ def classify_run(
         "run_path": str(run_path),
         "db_path": str(db_path),
         "source_labels": labels,
-        "target_filters": {
-            "tickers": sorted(ticker_filter),
-            "contract_symbols": sorted(contract_filter),
-            "quote_dates": sorted(quote_date_filter),
-        },
+        "target_filters": target_filters(
+            tickers=list(ticker_filter),
+            contract_symbols=list(contract_filter),
+            quote_dates=list(quote_date_filter),
+        ),
         "classified_count": len(classified),
         "classification_counts": dict(counts),
         "by_ticker": dict(by_ticker),
@@ -220,9 +181,9 @@ def main() -> int:
         args.run_path,
         db_path=args.db_path,
         source_labels=labels,
-        tickers=_filter_values(args.ticker, upper=True),
-        contract_symbols=_filter_values(args.contract_symbol, upper=True),
-        quote_dates=_filter_values(args.quote_date),
+        tickers=filter_values(args.ticker, upper=True),
+        contract_symbols=filter_values(args.contract_symbol, upper=True),
+        quote_dates=filter_values(args.quote_date),
     )
     if args.json:
         print(json.dumps(report, indent=2))
