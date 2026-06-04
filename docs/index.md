@@ -136,6 +136,8 @@ These are the living docs for the current worktree:
   - generated research/paper capture queue that tiers profitable regular-options symbol/lane evidence, fresh scan signature matches, evidence-repair priorities, and quarantine/do-not-chase rows without changing scanner policy
 - `docs/regular-options-paper-shortlist.md`
   - generated paper-shortlist release gate for fresh executable Tier A lane matches, with bridge blockers and live-prohibited states
+- `docs/regular-options-fresh-evidence-loop.md`
+  - generated pending-candidate to fill-attempt/tracked-link/exact-realized-P&L readback for the regular options paper gate
 - `docs/regular-options-repair-attempts.md`
   - generated exact-repair attempt memory/readback for regular-options replay gaps, including exact-date versus lookahead-only proof posture
 - `docs/regular-options-symbol-sleeves.md`

@@ -147,6 +147,9 @@ Current artifacts:
 - pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
 - pending candidate live validator command: `npm run options:validate:pending-candidates`
 - pending candidate validation disposition latest JSON: `data/forward-tracking/pending_scan_candidate_validation_latest.json`
+- regular options fresh evidence loop script: `scripts/build_regular_options_fresh_evidence_loop.py`
+- regular options fresh evidence loop latest JSON: `data/forward-tracking/regular_options_fresh_evidence_loop_latest.json`
+- regular options fresh evidence loop report: `docs/regular-options-fresh-evidence-loop.md`
 - open-position risk audit script: `scripts/audit_regular_open_position_risk.py`
 - open-position risk latest JSON: `data/forward-tracking/regular_open_position_risk_latest.json`
 - suggested-trade close-risk audit script: `scripts/audit_suggested_trade_close_risk.py`
@@ -201,7 +204,7 @@ Profitability Paper Gate Operator Workflow sprint backlog:
 
 1. Paper Gate Release Pack: done. Generated paper-shortlist readback, focused bridge tests, negative tests for non-eligible evidence classes, strict fail-closed source/invariant checks, and the dedicated `npm run verify:profitability-paper-gates` release command are implemented. Six-subagent done debate cleared with `6` / `6` no-blocker verdicts after the strict-gate blocker patch. Current readback is `eligible_count=0`, `invariant_violation_count=0`, `release_gate_status=no_paper_shortlist_candidates`, and `live_policy_change=false`.
 
-2. Fresh Exact Evidence Loop: connect pending scan validation, fill-attempt snapshots, paper/tracked linkage, exact OPRA/NBBO exit evidence, and realized P&L readbacks so point-in-time replay can distinguish missing P&L, no-longer-matched, proof-ineligible, stale, and non-executable states. Include the Sprint 1 review follow-ups here: run or freshness-check the profit-capture queue before shortlist release checks, add explicit `non_executable` / plain-midpoint vocabulary regressions, and add drift checks if the generated paper-shortlist report becomes hand-edited or stale.
+2. Fresh Exact Evidence Loop: done. `scripts/build_regular_options_fresh_evidence_loop.py` now reconciles pending validation candidates, fill-attempt snapshots, tracked-position linkage, exact exit P&L status, and readback counts for missing realized P&L, no-longer-matched, proof-ineligible, stale, and non-executable states without merging proof semantics. The proof-boundary patch removed permissive exit-basis matching, rejects contaminated `spread_bid_ask*` / `expired_auto_close` exit evidence, preserves `0.0` realized P&L, and clarifies that entry evidence is scanner quote/limit evidence, not a broker fill. Verification passed with `npm run verify:profitability-paper-gates`, `npm run verify:docs`, and `git diff --check`; the final six-subagent done debate cleared with `6` / `6` no-blocker verdicts. Current readback has `20` validation-attempted candidates, `15` no-longer-matched, `5` proof-ineligible, `0` linked positions, `0` exact realized P&L rows, `0` stale rows, `0` non-executable rows, and `0` promotion-discussion-ready rows.
 
 3. Recent-Cohort Circuit Breaker: keep `short_term` and `bullish_pullback_observation` paper-only while the current-policy cohort is `paper_only_recent_week_break`, with recovery gates rather than permanent lane deletion.
 
