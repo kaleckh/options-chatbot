@@ -89,8 +89,10 @@ from positions_service import build_position_payload, review_open_positions
 from profile_routes import create_profile_router
 from suggested_trades_repository import create_suggested_trades_repository
 from supervised_scan import (
-    DEFAULT_SCAN_PLAYBOOK_ID,
     LIVE_SCAN_TRUTH_LANE,
+    SCAN_PLAYBOOK_FALLBACK_ID,
+    apply_playbook_guardrails,
+    get_scan_playbook,
     run_supervised_scan,
     scan_pick_market_regime,
 )
@@ -498,6 +500,10 @@ def _normalize_scan_pick(pick: dict[str, Any]) -> dict[str, Any]:
     normalized["playbook_label"] = pick.get("playbook_label")
     normalized["guardrail_decision"] = pick.get("guardrail_decision")
     normalized["guardrail_reasons"] = pick.get("guardrail_reasons")
+    normalized["portfolio_caps_enforced"] = bool(pick.get("portfolio_caps_enforced")) if pick.get("portfolio_caps_enforced") is not None else None
+    normalized["creation_eligible"] = bool(pick.get("creation_eligible")) if pick.get("creation_eligible") is not None else None
+    normalized["creation_blockers"] = list(pick.get("creation_blockers") or []) if isinstance(pick.get("creation_blockers"), list) else []
+    normalized["position_tracking_mode"] = pick.get("position_tracking_mode")
     normalized["suggested_size_tier"] = pick.get("suggested_size_tier")
     normalized["suggested_size_reason"] = pick.get("suggested_size_reason")
     normalized["risk_tier"] = pick.get("risk_tier")
@@ -697,6 +703,20 @@ def _scan_pick_matches_forward_event(scan_pick: dict[str, Any], event: dict[str,
         "strategy_type",
         "entry_execution_basis",
         "quote_time_et",
+        "selection_source",
+        "contract_selection_source",
+        "promotion_class",
+        "candidate_execution_label",
+        "options_data_source",
+        "market_data_source",
+        "quote_source",
+        "quote_basis",
+        "playbook_id",
+        "cohort_id",
+        "guardrail_decision",
+        "portfolio_caps_enforced",
+        "creation_eligible",
+        "creation_blockers",
     ):
         return False
     if not _same_optional_lineage_float(
@@ -849,6 +869,99 @@ def _safe_dict_payload(value: Any) -> dict[str, Any]:
                 return {}
         return dict(parsed) if isinstance(parsed, dict) else {}
     return {}
+
+
+def _scan_pick_has_scanner_markers(scan_pick: dict[str, Any]) -> bool:
+    if not isinstance(scan_pick, dict):
+        return False
+    marker_fields = (
+        "source_scan_session_id",
+        "source_scan_event_key",
+        "source_scan_run_id",
+        "source_scan_recorded_at_utc",
+        "guardrail_decision",
+        "portfolio_caps_enforced",
+        "creation_eligible",
+        "candidate_execution_label",
+        "execution_candidate_label",
+    )
+    return any(scan_pick.get(field) not in (None, "") for field in marker_fields)
+
+
+def _creation_mode(body: dict[str, Any], scan_pick: dict[str, Any]) -> str:
+    raw = str(body.get("creation_mode") or "").strip().lower()
+    if not raw:
+        return "scanner" if _scan_pick_has_scanner_markers(scan_pick) else "manual_paper"
+    if raw not in {"scanner", "manual_paper", "manual_broker"}:
+        raise HTTPException(400, "creation_mode must be scanner, manual_paper, or manual_broker.")
+    return raw
+
+
+def _pick_playbook_id(scan_pick: dict[str, Any]) -> str:
+    return str(
+        scan_pick.get("playbook_id")
+        or scan_pick.get("playbook")
+        or SCAN_PLAYBOOK_FALLBACK_ID
+    ).strip().lower()
+
+
+def _blocked_create(detail: str, *, reasons: list[str] | None = None) -> None:
+    payload: dict[str, Any] = {"message": detail}
+    if reasons:
+        payload["reasons"] = reasons
+    raise HTTPException(409, payload)
+
+
+def _validate_scanner_origin_create(
+    scan_pick: dict[str, Any],
+    *,
+    positions_repository: Any,
+) -> tuple[dict[str, Any], bool]:
+    lineage_verified = _verify_source_scan_lineage(scan_pick)
+    if not lineage_verified:
+        _blocked_create(
+            "Scanner-origin position creation requires verified archived forward scan lineage.",
+            reasons=["source_scan_lineage_unverified"],
+        )
+    if scan_pick.get("portfolio_caps_enforced") is not True:
+        _blocked_create(
+            "Scanner-origin position creation requires a caps-enforced scan.",
+            reasons=["portfolio_caps_not_enforced"],
+        )
+    original_guardrail = str(scan_pick.get("guardrail_decision") or "clear").strip().lower()
+    if original_guardrail == "blocked":
+        _blocked_create(
+            "Scanner-origin position creation is blocked by the source scan guardrails.",
+            reasons=list(scan_pick.get("guardrail_reasons") or ["guardrail_blocked"]),
+        )
+    creation_blockers = [
+        str(item)
+        for item in list(scan_pick.get("creation_blockers") or [])
+        if str(item).strip()
+    ]
+    if creation_blockers:
+        _blocked_create(
+            "Scanner-origin position creation is not eligible from the source scan.",
+            reasons=creation_blockers,
+        )
+
+    playbook = get_scan_playbook(_pick_playbook_id(scan_pick))
+    guardrail_result = apply_playbook_guardrails(
+        [scan_pick],
+        playbook=playbook,
+        positions_repository=positions_repository,
+        include_blocked=True,
+        enforce_portfolio_caps=True,
+    )
+    rerun_picks = list(guardrail_result.get("ranked_picks") or guardrail_result.get("all_ranked_picks") or [])
+    rerun_pick = dict(rerun_picks[0]) if rerun_picks else dict(scan_pick)
+    if str(rerun_pick.get("guardrail_decision") or "clear").strip().lower() == "blocked":
+        _blocked_create(
+            "Current portfolio guardrails block this scanner-origin position.",
+            reasons=list(rerun_pick.get("guardrail_reasons") or ["guardrail_blocked"]),
+        )
+    rerun_pick["portfolio_caps_enforced"] = True
+    return rerun_pick, lineage_verified
 
 
 def _parse_iso_datetime(value: Any) -> datetime | None:
@@ -2121,12 +2234,23 @@ def _run_supervised_scan_request(
     n_picks: int,
     include_policy_flags: bool = False,
 ) -> dict[str, Any]:
-    return run_supervised_scan(
+    scan_mode = str(_parse_optional_string(body.get("scan_mode"), "scan_mode") or "production").strip().lower()
+    if scan_mode not in {"production", "diagnostic"}:
+        raise ValueError("scan_mode must be production or diagnostic.")
+    enforce_portfolio_caps = _parse_bool_param(
+        body.get("enforce_portfolio_caps"),
+        "enforce_portfolio_caps",
+        default=True,
+    )
+    allow_caps_off = _parse_bool_param(body.get("allow_caps_off"), "allow_caps_off", default=False)
+    if not enforce_portfolio_caps and scan_mode != "diagnostic" and not allow_caps_off:
+        raise ValueError("Caps-off scans require scan_mode='diagnostic' or allow_caps_off=true.")
+    result = run_supervised_scan(
         scan_func=scan_daily_top_trades,
         positions_repository=POSITIONS_REPOSITORY,
         n_picks=n_picks,
         watchlist_size=len(DEFAULT_WATCHLIST),
-        playbook_id=_parse_optional_string(body.get("playbook"), "playbook") or DEFAULT_SCAN_PLAYBOOK_ID,
+        playbook_id=_parse_optional_string(body.get("playbook"), "playbook") or SCAN_PLAYBOOK_FALLBACK_ID,
         use_recommended_policy=_parse_bool_param(body.get("use_recommended_policy"), "use_recommended_policy"),
         include_blocked_policy_picks=_parse_bool_param(body.get("include_blocked_policy_picks"), "include_blocked_policy_picks")
         if include_policy_flags
@@ -2134,7 +2258,7 @@ def _run_supervised_scan_request(
         include_blocked_guardrail_picks=_parse_bool_param(body.get("include_blocked_guardrail_picks"), "include_blocked_guardrail_picks")
         if include_policy_flags
         else False,
-        enforce_portfolio_caps=_parse_bool_param(body.get("enforce_portfolio_caps"), "enforce_portfolio_caps"),
+        enforce_portfolio_caps=enforce_portfolio_caps,
         truth_lane=_parse_optional_string(body.get("truth_lane"), "truth_lane") or LIVE_SCAN_TRUTH_LANE,
         min_trades=_parse_positive_int_or_default(body.get("min_trades"), "min_trades", 20),
         max_tickers=_parse_positive_int_or_default(body.get("max_tickers"), "max_tickers", 8),
@@ -2146,6 +2270,9 @@ def _run_supervised_scan_request(
             50.0,
         ),
     )
+    result["scan_mode"] = scan_mode
+    result["allow_caps_off"] = allow_caps_off
+    return result
 
 
 @app.post("/api/scan")
@@ -2222,15 +2349,23 @@ async def create_position_endpoint(body: dict[str, Any]):
 
     try:
         scan_pick = body.get("scan_pick") or {}
+        mode = _creation_mode(body, scan_pick)
+        source_scan_lineage_verified = _verify_source_scan_lineage(scan_pick)
+        if mode == "scanner":
+            scan_pick, source_scan_lineage_verified = _validate_scanner_origin_create(
+                scan_pick,
+                positions_repository=POSITIONS_REPOSITORY,
+            )
         payload = build_position_payload(
             scan_pick=scan_pick,
             fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
             contracts=_parse_positive_int(body.get("contracts"), "contracts"),
             filled_at=body.get("filled_at"),
             notes=_parse_optional_string(body.get("notes"), "notes"),
+            require_proof_eligible=mode == "scanner",
             require_resolved_contract=True,
             preserve_fill_price=True,
-            source_scan_lineage_verified=_verify_source_scan_lineage(scan_pick),
+            source_scan_lineage_verified=source_scan_lineage_verified,
         )
         existing_position = _find_existing_open_contract(POSITIONS_REPOSITORY, payload)
         if existing_position is not None:
@@ -2296,6 +2431,8 @@ async def list_positions_endpoint(
         return payload
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -2419,14 +2556,24 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
         return _suggested_trades_unavailable_response()
 
     try:
+        scan_pick = body.get("scan_pick") or {}
+        mode = _creation_mode(body, scan_pick)
+        source_scan_lineage_verified = _verify_source_scan_lineage(scan_pick)
+        if mode == "scanner":
+            scan_pick, source_scan_lineage_verified = _validate_scanner_origin_create(
+                scan_pick,
+                positions_repository=POSITIONS_REPOSITORY,
+            )
         payload = build_position_payload(
-            scan_pick=body.get("scan_pick") or {},
+            scan_pick=scan_pick,
             fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
             contracts=_parse_positive_int(body.get("contracts", 1), "contracts"),
             filled_at=body.get("filled_at"),
             notes=_parse_optional_string(body.get("notes"), "notes"),
+            require_proof_eligible=mode == "scanner",
             require_resolved_contract=True,
             preserve_fill_price=True,
+            source_scan_lineage_verified=source_scan_lineage_verified,
         )
         existing_trade = _find_existing_open_contract(SUGGESTED_TRADES_REPOSITORY, payload)
         if existing_trade is not None:
@@ -2435,6 +2582,8 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
         return {"trade": trade}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -2474,6 +2623,8 @@ async def list_suggested_trades_endpoint(
         return payload
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -2832,7 +2983,7 @@ async def get_live_trade_policy(
 
 @app.get("/api/backtest/exit-audit")
 async def get_playbook_exit_audit(
-    playbook: str = DEFAULT_SCAN_PLAYBOOK_ID,
+    playbook: str = SCAN_PLAYBOOK_FALLBACK_ID,
     min_trades: int = 20,
     max_tickers: int = 8,
     max_sectors: int = 8,

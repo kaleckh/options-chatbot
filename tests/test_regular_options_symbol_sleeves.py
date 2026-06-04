@@ -103,6 +103,21 @@ class RegularOptionsSymbolSleevesTests(unittest.TestCase):
             self.assertTrue(stale["stale"])
             self.assertEqual(len(stale["newer_siblings"]), 1)
 
+    def test_stale_all_planned_partial_is_ignored_after_full_refresh(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            latest = root / "latest.json"
+            partial = root / "latest_partial.json"
+            partial.write_text(json.dumps({"variants": [{"variant_id": "old"}]}), encoding="utf8")
+            latest.write_text(json.dumps({"variants": [{"variant_id": "new"}]}), encoding="utf8")
+            now = time.time()
+            os.utime(partial, (now, now))
+            os.utime(latest, (now + 10, now + 10))
+
+            payload = symbol_sleeves._load_fresh_partial_payload(latest, partial)
+
+            self.assertEqual(payload, {})
+
     def test_position_risk_keeps_executable_exit_pnl_separate_from_mark_pnl(self):
         cards = {
             "bullish_pullback_observation:SBUX": symbol_sleeves._new_card(

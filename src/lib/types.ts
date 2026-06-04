@@ -83,6 +83,10 @@ export interface ScanPick {
   playbook_label?: string | null;
   guardrail_decision?: "clear" | "caution" | "blocked" | null;
   guardrail_reasons?: string[];
+  portfolio_caps_enforced?: boolean | null;
+  creation_eligible?: boolean | null;
+  creation_blockers?: string[];
+  position_tracking_mode?: string | null;
   suggested_size_tier?: "starter" | "half" | "full" | "blocked" | string | null;
   suggested_size_reason?: string | null;
   risk_tier?: 1 | 2 | 3 | 4 | 5 | number | null;
@@ -308,6 +312,10 @@ export interface ScanPlaybook {
   allowed_directions?: string[];
   allowed_strategy_types?: string[];
   theme_tags?: string[];
+  fresh_live_validation_enabled?: boolean;
+  position_tracking_mode?: string;
+  proof_scope?: string;
+  max_open_executable_drawdown_pct?: number;
 }
 
 export interface ExposureSnapshot {
@@ -320,6 +328,12 @@ export interface ExposureSnapshot {
   sector_direction_counts?: Record<string, number>;
   vertical_spread_signature_counts?: Record<string, number>;
   open_cost_risk_usd?: number;
+  open_executable_pnl_usd?: number;
+  open_executable_loss_usd?: number;
+  open_executable_review_count?: number;
+  open_stale_or_unpriced_review_count?: number;
+  open_drawdown_gate_status?: string;
+  portfolio_caps_enforced?: boolean;
   warnings: string[];
 }
 

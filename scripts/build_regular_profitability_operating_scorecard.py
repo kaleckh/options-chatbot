@@ -21,6 +21,9 @@ DEFAULT_OPEN_POSITION_RISK = ROOT / "data" / "forward-tracking" / "regular_open_
 DEFAULT_SUGGESTED_TRADE_CLOSE_RISK = ROOT / "data" / "forward-tracking" / "suggested_trade_close_risk_latest.json"
 DEFAULT_API_PERFORMANCE = ROOT / "data" / "forward-tracking" / "trading_desk_api_performance_latest.json"
 DEFAULT_AI_COMMODITY_PROGRESS = ROOT / "data" / "ai-commodity-infra" / "progress" / "latest.json"
+DEFAULT_ENTRY_FILTER_MONITOR = ROOT / "data" / "forward-tracking" / "current_policy_entry_filter_paper_monitor_latest.json"
+DEFAULT_ENTRY_FILTER_WALKFORWARD = ROOT / "data" / "forward-tracking" / "current_policy_entry_filter_walkforward_latest.json"
+DEFAULT_PROFIT_CAPTURE_QUEUE = ROOT / "data" / "profitability-lab" / "regular-options-profit-capture-queue" / "latest.json"
 
 
 def _utc_now_iso() -> str:
@@ -140,6 +143,198 @@ def _summarize_guardrails(payload: dict[str, Any]) -> dict[str, Any]:
             and negative_rate_delta is not None
             and negative_rate_delta < 0
         ),
+    }
+
+
+def _summarize_entry_filter_monitor(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "champion_filter_id": None,
+            "fresh_rows": 0,
+            "champion_matched_rows": 0,
+            "gate_failures": ["missing"],
+            "live_policy_change": False,
+        }
+    gate = payload.get("gate") if isinstance(payload.get("gate"), dict) else {}
+    baseline = payload.get("baseline") if isinstance(payload.get("baseline"), dict) else {}
+    champion = payload.get("champion") if isinstance(payload.get("champion"), dict) else {}
+    champion_matched = champion.get("matched") if isinstance(champion.get("matched"), dict) else {}
+    champion_kept = champion.get("kept") if isinstance(champion.get("kept"), dict) else {}
+    inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": gate.get("status") or "unknown",
+        "gate_failures": list(gate.get("failures") or []),
+        "live_policy_change": bool(gate.get("live_policy_change")),
+        "champion_filter_id": inputs.get("champion_filter_id"),
+        "since_date": inputs.get("since_date"),
+        "fresh_rows": int(baseline.get("rows") or 0),
+        "fresh_closed_rows": int(baseline.get("closed_rows") or 0),
+        "fresh_priced_rows": int(baseline.get("priced_rows") or 0),
+        "fresh_avg_pnl_pct": safe_float(baseline.get("avg_pnl_pct")),
+        "fresh_median_pnl_pct": safe_float(baseline.get("median_pnl_pct")),
+        "champion_matched_rows": int(champion_matched.get("rows") or 0),
+        "champion_matched_closed_rows": int(champion_matched.get("closed_rows") or 0),
+        "champion_matched_avg_pnl_pct": safe_float(champion_matched.get("avg_pnl_pct")),
+        "champion_kept_avg_pnl_pct": safe_float(champion_kept.get("avg_pnl_pct")),
+        "champion_kept_median_pnl_pct": safe_float(champion_kept.get("median_pnl_pct")),
+    }
+
+
+def _summarize_entry_filter_walkforward(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "candidate_filter_id": None,
+            "live_policy_change": False,
+            "row_count": 0,
+            "latest_holdout_month": None,
+            "frozen_status": "missing",
+            "broad_all_lanes_status": "missing",
+            "latest_holdout_status": "missing",
+            "train_status": "missing",
+            "lane_statuses": {},
+        }
+    decision = payload.get("decision_summary") if isinstance(payload.get("decision_summary"), dict) else {}
+    inputs = payload.get("inputs") if isinstance(payload.get("inputs"), dict) else {}
+    portfolio = payload.get("portfolio") if isinstance(payload.get("portfolio"), dict) else {}
+    frozen = portfolio.get("frozen_champion") if isinstance(portfolio.get("frozen_champion"), dict) else {}
+    broad = (
+        portfolio.get("broad_all_lanes_fill_degradation_ge_15")
+        if isinstance(portfolio.get("broad_all_lanes_fill_degradation_ge_15"), dict)
+        else {}
+    )
+    holdout = (
+        payload.get("chronological_holdout")
+        if isinstance(payload.get("chronological_holdout"), dict)
+        else {}
+    )
+    holdout_eval = holdout.get("holdout") if isinstance(holdout.get("holdout"), dict) else {}
+    train_eval = holdout.get("train") if isinstance(holdout.get("train"), dict) else {}
+    concentration = payload.get("concentration") if isinstance(payload.get("concentration"), dict) else {}
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": decision.get("status") or "unknown",
+        "candidate_filter_id": decision.get("candidate_filter_id"),
+        "live_policy_change": bool(decision.get("live_policy_change")),
+        "recommended_next_action": decision.get("recommended_next_action"),
+        "row_count": int(inputs.get("row_count") or 0),
+        "months": list(inputs.get("months") or []),
+        "latest_holdout_month": inputs.get("latest_holdout_month"),
+        "frozen_status": frozen.get("status") or "unknown",
+        "frozen_matched_rows": int((frozen.get("matched") or {}).get("rows") or 0),
+        "frozen_avoided_deep_losses": int(frozen.get("avoided_deep_losses") or 0),
+        "frozen_avoided_near_total_losses": int(frozen.get("avoided_near_total_losses") or 0),
+        "frozen_lost_winners": int(frozen.get("lost_winners") or 0),
+        "frozen_kept_avg_pnl_pct": safe_float((frozen.get("kept") or {}).get("avg_pnl_pct")),
+        "frozen_kept_median_pnl_pct": safe_float((frozen.get("kept") or {}).get("median_pnl_pct")),
+        "broad_all_lanes_status": broad.get("status") or "unknown",
+        "broad_all_lanes_matched_rows": int((broad.get("matched") or {}).get("rows") or 0),
+        "broad_all_lanes_lost_winners": int(broad.get("lost_winners") or 0),
+        "latest_holdout_status": holdout_eval.get("status") or "unknown",
+        "latest_holdout_matched_rows": int((holdout_eval.get("matched") or {}).get("rows") or 0),
+        "latest_holdout_kept_avg_pnl_pct": safe_float((holdout_eval.get("kept") or {}).get("avg_pnl_pct")),
+        "train_status": train_eval.get("status") or "unknown",
+        "lane_statuses": dict(concentration.get("lane_statuses") or {}),
+        "passing_months": list(concentration.get("passing_months") or []),
+        "failing_months": list(concentration.get("failing_months") or []),
+    }
+
+
+def _compact_capture_row(row: Any) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+    return {
+        "symbol": row.get("symbol"),
+        "lane_id": row.get("lane_id"),
+        "capture_tier": row.get("capture_tier"),
+        "status": row.get("status"),
+        "exact": metrics.get("exact_trusted_priced_trades"),
+        "unresolved": metrics.get("unresolved_rows"),
+        "quote_coverage": safe_float(metrics.get("quote_coverage")),
+        "profit_factor": safe_float(metrics.get("profit_factor")),
+        "avg_pnl": safe_float(metrics.get("avg_pnl")),
+        "median_pnl": safe_float(metrics.get("median_pnl")),
+        "evidence_repair_priority": row.get("evidence_repair_priority"),
+        "reason_codes": list(row.get("reason_codes") or [])[:5],
+    }
+
+
+def _compact_fresh_match(row: Any) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    return {
+        "symbol": row.get("symbol"),
+        "playbook_id": row.get("playbook_id"),
+        "capture_tier": row.get("capture_tier"),
+        "guardrail_decision": row.get("guardrail_decision"),
+        "match_type": row.get("match_type"),
+        "debit_pct_of_width": safe_float(row.get("debit_pct_of_width")),
+        "quality_score": safe_float(row.get("quality_score")),
+        "guardrail_reasons": list(row.get("guardrail_reasons") or [])[:5],
+        "matched_sleeves": list(row.get("matched_sleeves") or [])[:3],
+    }
+
+
+def _summarize_profit_capture_queue(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "queue_rows": 0,
+            "tier_counts": {},
+            "evidence_repair_priority_counts": {},
+            "high_priority_evidence_repair_count": 0,
+            "fresh_scan_match_count": 0,
+            "fresh_scan_guardrail_decision_counts": {},
+            "blocked_but_interesting_count": 0,
+            "quarantine_queue_count": 0,
+            "quarantine_overlay_count": 0,
+            "top_clean_exact": [],
+            "top_watch_repair": [],
+            "evidence_repair_queue": [],
+            "fresh_scan_matches": [],
+            "blocked_but_interesting": [],
+            "live_policy_change": False,
+        }
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    final = payload.get("final_readback") if isinstance(payload.get("final_readback"), dict) else {}
+    compact_clean = [_compact_capture_row(row) for row in list(final.get("top_clean_exact") or [])[:8]]
+    compact_watch = [_compact_capture_row(row) for row in list(final.get("top_watch_repair") or [])[:10]]
+    compact_repair = [_compact_capture_row(row) for row in list(final.get("evidence_repair_queue") or [])[:10]]
+    compact_fresh = [_compact_fresh_match(row) for row in list(final.get("fresh_scan_matches") or [])[:10]]
+    compact_blocked = [_compact_fresh_match(row) for row in list(final.get("blocked_but_interesting") or [])[:10]]
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": payload.get("status") or "unknown",
+        "queue_rows": int(summary.get("queue_rows") or 0),
+        "tier_counts": dict(summary.get("tier_counts") or {}),
+        "evidence_repair_priority_counts": dict(summary.get("evidence_repair_priority_counts") or {}),
+        "high_priority_evidence_repair_count": int(summary.get("high_priority_evidence_repair_count") or 0),
+        "fresh_scan_match_count": int(summary.get("fresh_scan_match_count") or 0),
+        "fresh_scan_guardrail_decision_counts": dict(summary.get("fresh_scan_guardrail_decision_counts") or {}),
+        "blocked_but_interesting_count": int(summary.get("blocked_but_interesting_count") or 0),
+        "quarantine_queue_count": int(summary.get("quarantine_queue_count") or 0),
+        "quarantine_overlay_count": int(summary.get("quarantine_overlay_count") or 0),
+        "top_clean_exact": [row for row in compact_clean if row],
+        "top_watch_repair": [row for row in compact_watch if row],
+        "evidence_repair_queue": [row for row in compact_repair if row],
+        "fresh_scan_matches": [row for row in compact_fresh if row],
+        "blocked_but_interesting": [row for row in compact_blocked if row],
+        "live_policy_change": bool(payload.get("live_policy_change")),
     }
 
 
@@ -603,6 +798,9 @@ def _next_actions(
     exit_replay: dict[str, Any],
     legacy_missed_close: dict[str, Any],
     guardrail_starvation: dict[str, Any],
+    entry_filter_monitor: dict[str, Any],
+    entry_filter_walkforward: dict[str, Any],
+    profit_capture_queue: dict[str, Any],
     open_position_risk: dict[str, Any],
     suggested_trade_close_risk: dict[str, Any],
     api_performance: dict[str, Any],
@@ -660,6 +858,50 @@ def _next_actions(
         actions.append(
             "Keep promoted Trading Desk entry guardrails active; current starvation audit does not show guardrails filtering all viable rows."
         )
+    entry_filter_status = str(entry_filter_monitor.get("status") or "missing")
+    if entry_filter_status == "paper_pass_candidate":
+        actions.append(
+            "Review the current-policy entry-filter paper monitor before promoting scanner changes; the champion passed fresh paper gates but still needs operator approval."
+        )
+    elif entry_filter_status == "collecting":
+        actions.append(
+            "Keep the short-term fill-degradation entry filter paper-only; the forward monitor is still collecting fresh rows."
+        )
+    elif entry_filter_status == "paper_fail":
+        actions.append(
+            "Do not promote the short-term fill-degradation entry filter; the forward paper monitor failed its gate."
+        )
+    walkforward_status = str(entry_filter_walkforward.get("status") or "missing")
+    if walkforward_status == "mixed_walkforward_watch_not_promoted":
+        actions.append(
+            "Keep the fill-degradation entry filter lane-scoped and paper-only; all-lane walk-forward rejects the broad fill>=15 rule and the frozen short-term rule is still mixed on historical folds."
+        )
+    elif walkforward_status == "walkforward_pass_candidate":
+        actions.append(
+            "Review the entry-filter walk-forward candidate with the forward monitor before any scanner guardrail promotion."
+        )
+    elif walkforward_status == "walkforward_fail":
+        actions.append(
+            "Do not promote the entry-filter candidate; the all-regular-lanes walk-forward validation failed."
+        )
+    if not profit_capture_queue.get("available"):
+        actions.append(
+            "Build the regular options profit capture queue before lowering proof bars or chasing hidden profitable sleeves."
+        )
+    else:
+        if profit_capture_queue.get("high_priority_evidence_repair_count"):
+            actions.append(
+                "Use the profit capture queue to repair high-priority unresolved profitable watch sleeves before treating them as clean proof."
+            )
+        fresh_decisions = profit_capture_queue.get("fresh_scan_guardrail_decision_counts") or {}
+        if fresh_decisions.get("clear"):
+            actions.append(
+                "Review fresh profit-capture signature matches as paper/research candidates only; do not treat Tier C matches as proof-grade recommendations."
+            )
+        if profit_capture_queue.get("blocked_but_interesting_count"):
+            actions.append(
+                "Keep blocked profitable-looking candidates blocked; inspect their guardrail reasons rather than loosening scanner policy from queue visibility alone."
+            )
     if autoresearch.get("still_blocked"):
         actions.append(
             "Do not tune Lane A entry/memory again; test a non-overlapping sleeve or materially different exit/liquidity rule."
@@ -716,6 +958,9 @@ def build_scorecard(
     suggested_trade_close_risk_path: Path = DEFAULT_SUGGESTED_TRADE_CLOSE_RISK,
     api_performance_path: Path = DEFAULT_API_PERFORMANCE,
     ai_commodity_progress_path: Path = DEFAULT_AI_COMMODITY_PROGRESS,
+    entry_filter_monitor_path: Path = DEFAULT_ENTRY_FILTER_MONITOR,
+    entry_filter_walkforward_path: Path = DEFAULT_ENTRY_FILTER_WALKFORWARD,
+    profit_capture_queue_path: Path = DEFAULT_PROFIT_CAPTURE_QUEUE,
 ) -> dict[str, Any]:
     autoresearch = _summarize_autoresearch(_load_json(autoresearch_path))
     guardrails = _summarize_guardrails(_load_json(guardrails_path))
@@ -727,6 +972,9 @@ def build_scorecard(
     suggested_trade_close_risk = _summarize_suggested_trade_close_risk(_load_json(suggested_trade_close_risk_path))
     api_performance = _summarize_api_performance(_load_json(api_performance_path))
     ai_commodity_progress = _summarize_ai_commodity_progress(_load_json(ai_commodity_progress_path))
+    entry_filter_monitor = _summarize_entry_filter_monitor(_load_json(entry_filter_monitor_path))
+    entry_filter_walkforward = _summarize_entry_filter_walkforward(_load_json(entry_filter_walkforward_path))
+    profit_capture_queue = _summarize_profit_capture_queue(_load_json(profit_capture_queue_path))
     product_progress = bool(guardrails.get("visible_result") or negative_audit.get("visible_result"))
     proof_progress = bool(autoresearch.get("visible_result"))
     status = (
@@ -752,6 +1000,9 @@ def build_scorecard(
         "suggested_trade_close_risk": suggested_trade_close_risk,
         "api_performance": api_performance,
         "ai_commodity_progress": ai_commodity_progress,
+        "entry_filter_paper_monitor": entry_filter_monitor,
+        "entry_filter_walkforward": entry_filter_walkforward,
+        "profit_capture_queue": profit_capture_queue,
         "next_actions": _next_actions(
             autoresearch=autoresearch,
             guardrails=guardrails,
@@ -759,6 +1010,9 @@ def build_scorecard(
             exit_replay=exit_replay,
             legacy_missed_close=legacy_missed_close,
             guardrail_starvation=guardrail_starvation,
+            entry_filter_monitor=entry_filter_monitor,
+            entry_filter_walkforward=entry_filter_walkforward,
+            profit_capture_queue=profit_capture_queue,
             open_position_risk=open_position_risk,
             suggested_trade_close_risk=suggested_trade_close_risk,
             api_performance=api_performance,
@@ -778,6 +1032,9 @@ def markdown_report(scorecard: dict[str, Any]) -> str:
     suggested_risk = scorecard["suggested_trade_close_risk"]
     api_perf = scorecard["api_performance"]
     ai_commodity = scorecard["ai_commodity_progress"]
+    entry_filter = scorecard["entry_filter_paper_monitor"]
+    entry_walkforward = scorecard["entry_filter_walkforward"]
+    capture_queue = scorecard["profit_capture_queue"]
     lines = [
         "# Active Options Operating Scorecard",
         "",
@@ -797,6 +1054,42 @@ def markdown_report(scorecard: dict[str, Any]) -> str:
             f"`{guard['promoted_kept_subset']['negative_rate_priced_pct']}%`"
         ),
         f"- Deltas: `{guard['deltas_vs_baseline']}`",
+        "",
+        "## Current-Policy Entry Filter Monitor",
+        "",
+        f"- Status: `{entry_filter.get('status')}`",
+        f"- Champion: `{entry_filter.get('champion_filter_id')}`",
+        f"- Since date: `{entry_filter.get('since_date')}`",
+        f"- Fresh rows / closed / priced: `{entry_filter.get('fresh_rows')}` / `{entry_filter.get('fresh_closed_rows')}` / `{entry_filter.get('fresh_priced_rows')}`",
+        f"- Champion matched / closed: `{entry_filter.get('champion_matched_rows')}` / `{entry_filter.get('champion_matched_closed_rows')}`",
+        f"- Gate failures: `{entry_filter.get('gate_failures')}`",
+        f"- Live policy change: `{entry_filter.get('live_policy_change')}`",
+        "",
+        "## Current-Policy Entry Filter Walk-Forward",
+        "",
+        f"- Status: `{entry_walkforward.get('status')}`",
+        f"- Candidate: `{entry_walkforward.get('candidate_filter_id')}`",
+        f"- Rows / months: `{entry_walkforward.get('row_count')}` / `{entry_walkforward.get('months')}`",
+        f"- Frozen filter status / matched: `{entry_walkforward.get('frozen_status')}` / `{entry_walkforward.get('frozen_matched_rows')}`",
+        f"- Frozen avoided deep / near-total / lost winners: `{entry_walkforward.get('frozen_avoided_deep_losses')}` / `{entry_walkforward.get('frozen_avoided_near_total_losses')}` / `{entry_walkforward.get('frozen_lost_winners')}`",
+        f"- Latest holdout: `{entry_walkforward.get('latest_holdout_month')}` / `{entry_walkforward.get('latest_holdout_status')}`",
+        f"- Broad all-lane fill>=15 status: `{entry_walkforward.get('broad_all_lanes_status')}`",
+        f"- Lane statuses: `{entry_walkforward.get('lane_statuses')}`",
+        f"- Live policy change: `{entry_walkforward.get('live_policy_change')}`",
+        "",
+        "## Profit Capture Queue",
+        "",
+        f"- Status: `{capture_queue.get('status')}`",
+        f"- Queue rows / tiers: `{capture_queue.get('queue_rows')}` / `{capture_queue.get('tier_counts')}`",
+        f"- Evidence repair priorities: `{capture_queue.get('evidence_repair_priority_counts')}`",
+        f"- Fresh scan matches / decisions: `{capture_queue.get('fresh_scan_match_count')}` / `{capture_queue.get('fresh_scan_guardrail_decision_counts')}`",
+        f"- Blocked but interesting: `{capture_queue.get('blocked_but_interesting_count')}`",
+        f"- Quarantine queue / overlay rows: `{capture_queue.get('quarantine_queue_count')}` / `{capture_queue.get('quarantine_overlay_count')}`",
+        f"- Top clean exact: `{capture_queue.get('top_clean_exact')}`",
+        f"- Top watch/repair: `{capture_queue.get('top_watch_repair')}`",
+        f"- Evidence repair queue: `{capture_queue.get('evidence_repair_queue')}`",
+        f"- Blocked interesting examples: `{capture_queue.get('blocked_but_interesting')}`",
+        f"- Live policy change: `{capture_queue.get('live_policy_change')}`",
         "",
         "## Frozen Proof Judge",
         "",
@@ -910,6 +1203,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suggested-trade-close-risk", type=Path, default=DEFAULT_SUGGESTED_TRADE_CLOSE_RISK)
     parser.add_argument("--api-performance", type=Path, default=DEFAULT_API_PERFORMANCE)
     parser.add_argument("--ai-commodity-progress", type=Path, default=DEFAULT_AI_COMMODITY_PROGRESS)
+    parser.add_argument("--entry-filter-monitor", type=Path, default=DEFAULT_ENTRY_FILTER_MONITOR)
+    parser.add_argument("--entry-filter-walkforward", type=Path, default=DEFAULT_ENTRY_FILTER_WALKFORWARD)
+    parser.add_argument("--profit-capture-queue", type=Path, default=DEFAULT_PROFIT_CAPTURE_QUEUE)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--doc-path", type=Path, default=DEFAULT_DOC)
     parser.add_argument("--no-write", action="store_true")
@@ -926,6 +1222,9 @@ def main(argv: list[str] | None = None) -> int:
         suggested_trade_close_risk_path=args.suggested_trade_close_risk,
         api_performance_path=args.api_performance,
         ai_commodity_progress_path=args.ai_commodity_progress,
+        entry_filter_monitor_path=args.entry_filter_monitor,
+        entry_filter_walkforward_path=args.entry_filter_walkforward,
+        profit_capture_queue_path=args.profit_capture_queue,
     )
     payload: dict[str, Any] = {"scorecard": scorecard}
     if not args.no_write:

@@ -12056,7 +12056,7 @@ class AiCommodityOpraProgressTests(unittest.TestCase):
         self.assertTrue(summary["gate_capture_target_complete"])
         self.assertTrue(summary["gate_proof_scan_universe_aligned"])
         self.assertEqual(summary["lane_phase"], "capture_wait")
-        self.assertEqual(summary["lane_priority_action"], "wait_until_next_missing_date_is_capturable:2026-05-21")
+        self.assertEqual(summary["lane_next_action"], "wait_until_next_missing_date_is_capturable:2026-05-21")
         self.assertEqual(summary["lane_primary_blocker"], "shared_quote_dates:1/100")
         self.assertFalse(summary["lane_safe_to_tune_filters"])
         self.assertEqual(summary["lane_next_timed_event_timing_status"], "fresh_scan_future")

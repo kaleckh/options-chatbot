@@ -1,0 +1,5103 @@
+{
+  "report_id": "current_policy_entry_filter_lab",
+  "generated_at_utc": "2026-06-02T02:02:39Z",
+  "scope": "regular_supervised_trading_desk_current_policy_entry_filter_lab",
+  "evidence_boundary": {
+    "description": "Read-only historical-paper/current-policy entry-filter lab. It ranks candidate filters against realized current-policy rows and does not mutate scanner guardrails.",
+    "not_claimed": "This is not fresh paper validation or production proof."
+  },
+  "inputs": {
+    "source_report_id": "current_policy_historical_stop_grid",
+    "source_generated_at_utc": "2026-06-02T01:40:41Z",
+    "row_count": 112,
+    "repeat_deep_loss_tickers": [
+      "MSTR",
+      "QQQ",
+      "TSLA"
+    ],
+    "input": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_historical_stop_grid_latest.json"
+  },
+  "baseline": {
+    "rows": 112,
+    "priced": 112,
+    "avg_pnl_pct": 53.539,
+    "median_pnl_pct": 50.5965,
+    "sum_pnl_pct": 5996.3731,
+    "negative_count": 29,
+    "positive_count": 83,
+    "positive_or_flat_count": 83,
+    "negative_rate_pct": 25.8929,
+    "loss_bucket_counts": {
+      "loss_le_50_pct": 16,
+      "loss_le_70_pct": 12,
+      "loss_le_80_pct": 10,
+      "loss_le_90_pct": 8,
+      "loss_le_95_pct": 5,
+      "loss_le_99_pct": 2
+    }
+  },
+  "baseline_with_stop_80": {
+    "rows": 112,
+    "priced": 112,
+    "avg_pnl_pct": 53.688,
+    "median_pnl_pct": 50.5965,
+    "sum_pnl_pct": 6013.0602,
+    "negative_count": 29,
+    "positive_count": 83,
+    "positive_or_flat_count": 83,
+    "negative_rate_pct": 25.8929,
+    "loss_bucket_counts": {
+      "loss_le_50_pct": 16,
+      "loss_le_70_pct": 12,
+      "loss_le_80_pct": 10,
+      "loss_le_90_pct": 7,
+      "loss_le_95_pct": 4,
+      "loss_le_99_pct": 2
+    }
+  },
+  "filters": [
+    {
+      "filter_id": "short_term_fill_degradation_ge_15",
+      "description": "Block short_term rows with entry fill degradation >= 15%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "paper_research_candidate",
+      "blocked": {
+        "rows": 9,
+        "priced": 9,
+        "avg_pnl_pct": -31.936,
+        "median_pnl_pct": -71.4211,
+        "sum_pnl_pct": -287.4239,
+        "negative_count": 7,
+        "positive_count": 2,
+        "positive_or_flat_count": 2,
+        "negative_rate_pct": 77.7778,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 5,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 3,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 103,
+        "priced": 103,
+        "avg_pnl_pct": 61.0077,
+        "median_pnl_pct": 53.3263,
+        "sum_pnl_pct": 6283.797,
+        "negative_count": 22,
+        "positive_count": 81,
+        "positive_or_flat_count": 81,
+        "negative_rate_pct": 21.3592,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 11,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 103,
+        "priced": 103,
+        "avg_pnl_pct": 61.1697,
+        "median_pnl_pct": 53.3263,
+        "sum_pnl_pct": 6300.4841,
+        "negative_count": 22,
+        "positive_count": 81,
+        "positive_or_flat_count": 81,
+        "negative_rate_pct": 21.3592,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 11,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.162,
+      "avoided_losses": 7,
+      "avoided_deep_losses": 5,
+      "avoided_near_total_losses": 3,
+      "lost_winners": 2,
+      "lost_winner_sum_pnl_pct": 200.2877,
+      "blocked_sum_delta_if_skipped_pct": 287.4239,
+      "blocked_lane_counts": {
+        "short_term": 9
+      },
+      "blocked_ticker_counts": {
+        "AMD": 3,
+        "MSTR": 2,
+        "COIN": 1,
+        "DIS": 1,
+        "NFLX": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        197,
+        201,
+        226,
+        265,
+        228,
+        183,
+        214,
+        131,
+        275
+      ],
+      "lost_winner_position_ids": [
+        226,
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        265,
+        228,
+        183,
+        214,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        228,
+        214,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 36,
+        "priced": 36,
+        "avg_pnl_pct": 14.3695,
+        "median_pnl_pct": 2.7984,
+        "sum_pnl_pct": 517.3028,
+        "negative_count": 18,
+        "positive_count": 18,
+        "positive_or_flat_count": 18,
+        "negative_rate_pct": 50.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 3,
+          "priced": 3,
+          "avg_pnl_pct": -28.2671,
+          "median_pnl_pct": -30.5794,
+          "sum_pnl_pct": -84.8013,
+          "negative_count": 2,
+          "positive_count": 1,
+          "positive_or_flat_count": 1,
+          "negative_rate_pct": 66.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 6,
+          "priced": 6,
+          "avg_pnl_pct": -33.7704,
+          "median_pnl_pct": -81.8063,
+          "sum_pnl_pct": -202.6226,
+          "negative_count": 5,
+          "positive_count": 1,
+          "positive_or_flat_count": 1,
+          "negative_rate_pct": 83.3333,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 4,
+            "loss_le_70_pct": 4,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 2,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 67,
+          "priced": 67,
+          "avg_pnl_pct": 86.0671,
+          "median_pnl_pct": 75.3005,
+          "sum_pnl_pct": 5766.4942,
+          "negative_count": 4,
+          "positive_count": 63,
+          "positive_or_flat_count": 63,
+          "negative_rate_pct": 5.9701,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 36,
+          "priced": 36,
+          "avg_pnl_pct": 14.3695,
+          "median_pnl_pct": 2.7984,
+          "sum_pnl_pct": 517.3028,
+          "negative_count": 18,
+          "positive_count": 18,
+          "positive_or_flat_count": 18,
+          "negative_rate_pct": 50.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 9,
+            "loss_le_70_pct": 6,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 3,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 226,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 178.7139,
+          "fill_degradation_pct": 15.2637,
+          "quality_score": 53.5
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_16",
+      "description": "Block short_term rows with entry fill degradation >= 16%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "paper_research_candidate_recent_unproven",
+      "blocked": {
+        "rows": 6,
+        "priced": 6,
+        "avg_pnl_pct": -57.9782,
+        "median_pnl_pct": -73.6084,
+        "sum_pnl_pct": -347.869,
+        "negative_count": 5,
+        "positive_count": 1,
+        "positive_or_flat_count": 1,
+        "negative_rate_pct": 83.3333,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 4,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 2,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept": {
+        "rows": 106,
+        "priced": 106,
+        "avg_pnl_pct": 59.8513,
+        "median_pnl_pct": 52.2683,
+        "sum_pnl_pct": 6344.2421,
+        "negative_count": 24,
+        "positive_count": 82,
+        "positive_or_flat_count": 82,
+        "negative_rate_pct": 22.6415,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 12,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 8,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 106,
+        "priced": 106,
+        "avg_pnl_pct": 60.0088,
+        "median_pnl_pct": 52.2683,
+        "sum_pnl_pct": 6360.9292,
+        "negative_count": 24,
+        "positive_count": 82,
+        "positive_or_flat_count": 82,
+        "negative_rate_pct": 22.6415,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 12,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 8,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1575,
+      "avoided_losses": 5,
+      "avoided_deep_losses": 4,
+      "avoided_near_total_losses": 2,
+      "lost_winners": 1,
+      "lost_winner_sum_pnl_pct": 21.5738,
+      "blocked_sum_delta_if_skipped_pct": 347.869,
+      "blocked_lane_counts": {
+        "short_term": 6
+      },
+      "blocked_ticker_counts": {
+        "MSTR": 2,
+        "AMD": 1,
+        "COIN": 1,
+        "NFLX": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        197,
+        265,
+        183,
+        214,
+        131,
+        275
+      ],
+      "lost_winner_position_ids": [
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        265,
+        183,
+        214,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        214,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 39,
+        "priced": 39,
+        "avg_pnl_pct": 14.814,
+        "median_pnl_pct": -1.5817,
+        "sum_pnl_pct": 577.7479,
+        "negative_count": 20,
+        "positive_count": 19,
+        "positive_or_flat_count": 19,
+        "negative_rate_pct": 51.2821,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 1
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 3,
+          "priced": 3,
+          "avg_pnl_pct": -28.2671,
+          "median_pnl_pct": -30.5794,
+          "sum_pnl_pct": -84.8013,
+          "negative_count": 2,
+          "positive_count": 1,
+          "positive_or_flat_count": 1,
+          "negative_rate_pct": 66.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 3,
+          "priced": 3,
+          "avg_pnl_pct": -87.6892,
+          "median_pnl_pct": -92.1914,
+          "sum_pnl_pct": -263.0677,
+          "negative_count": 3,
+          "positive_count": 0,
+          "positive_or_flat_count": 0,
+          "negative_rate_pct": 100.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 3,
+            "loss_le_80_pct": 2,
+            "loss_le_90_pct": 2,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 1
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 67,
+          "priced": 67,
+          "avg_pnl_pct": 86.0671,
+          "median_pnl_pct": 75.3005,
+          "sum_pnl_pct": 5766.4942,
+          "negative_count": 4,
+          "positive_count": 63,
+          "positive_or_flat_count": 63,
+          "negative_rate_pct": 5.9701,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 39,
+          "priced": 39,
+          "avg_pnl_pct": 14.814,
+          "median_pnl_pct": -1.5817,
+          "sum_pnl_pct": 577.7479,
+          "negative_count": 20,
+          "positive_count": 19,
+          "positive_or_flat_count": 19,
+          "negative_rate_pct": 51.2821,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 10,
+            "loss_le_70_pct": 7,
+            "loss_le_80_pct": 7,
+            "loss_le_90_pct": 5,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 1
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_loss_cohort_combo_v1",
+      "description": "Block short_term rows with fill >= 15%, quality < 60, or repeat deep-loss ticker.",
+      "research_only_reason": "Data-mined compound filter; research-only unless it passes fresh paper validation.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 32,
+        "priced": 32,
+        "avg_pnl_pct": 12.5834,
+        "median_pnl_pct": 8.4557,
+        "sum_pnl_pct": 402.6674,
+        "negative_count": 16,
+        "positive_count": 16,
+        "positive_or_flat_count": 16,
+        "negative_rate_pct": 50.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 80,
+        "priced": 80,
+        "avg_pnl_pct": 69.9213,
+        "median_pnl_pct": 64.5275,
+        "sum_pnl_pct": 5593.7057,
+        "negative_count": 13,
+        "positive_count": 67,
+        "positive_or_flat_count": 67,
+        "negative_rate_pct": 16.25,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 80,
+        "priced": 80,
+        "avg_pnl_pct": 69.9213,
+        "median_pnl_pct": 64.5275,
+        "sum_pnl_pct": 5593.7057,
+        "negative_count": 13,
+        "positive_count": 67,
+        "positive_or_flat_count": 67,
+        "negative_rate_pct": 16.25,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.0,
+      "avoided_losses": 16,
+      "avoided_deep_losses": 10,
+      "avoided_near_total_losses": 6,
+      "lost_winners": 16,
+      "lost_winner_sum_pnl_pct": 1357.3142,
+      "blocked_sum_delta_if_skipped_pct": -402.6674,
+      "blocked_lane_counts": {
+        "short_term": 32
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 16,
+        "AMD": 4,
+        "NFLX": 3,
+        "MSTR": 2,
+        "TSLA": 2,
+        "AMZN": 1,
+        "BA": 1,
+        "COIN": 1
+      },
+      "blocked_position_ids": [
+        197,
+        201,
+        219,
+        226,
+        149,
+        241,
+        265,
+        228,
+        183,
+        214,
+        125,
+        127,
+        131,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244,
+        251,
+        257,
+        266,
+        245,
+        258,
+        275
+      ],
+      "lost_winner_position_ids": [
+        219,
+        226,
+        125,
+        127,
+        131,
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229
+      ],
+      "avoided_deep_loss_position_ids": [
+        241,
+        265,
+        228,
+        183,
+        214,
+        244,
+        257,
+        245,
+        258,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        228,
+        214,
+        245,
+        258,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 25,
+        "priced": 25,
+        "avg_pnl_pct": 20.9529,
+        "median_pnl_pct": 7.5202,
+        "sum_pnl_pct": 523.823,
+        "negative_count": 11,
+        "positive_count": 14,
+        "positive_or_flat_count": 14,
+        "negative_rate_pct": 44.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 4,
+          "loss_le_70_pct": 3,
+          "loss_le_80_pct": 3,
+          "loss_le_90_pct": 1,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 15,
+          "priced": 15,
+          "avg_pnl_pct": 40.7873,
+          "median_pnl_pct": 34.7443,
+          "sum_pnl_pct": 611.8102,
+          "negative_count": 4,
+          "positive_count": 11,
+          "positive_or_flat_count": 11,
+          "negative_rate_pct": 26.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 17,
+          "priced": 17,
+          "avg_pnl_pct": -12.3025,
+          "median_pnl_pct": -55.4118,
+          "sum_pnl_pct": -209.1428,
+          "negative_count": 12,
+          "positive_count": 5,
+          "positive_or_flat_count": 5,
+          "negative_rate_pct": 70.5882,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 9,
+            "loss_le_70_pct": 7,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 6,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 55,
+          "priced": 55,
+          "avg_pnl_pct": 92.1797,
+          "median_pnl_pct": 78.427,
+          "sum_pnl_pct": 5069.8827,
+          "negative_count": 2,
+          "positive_count": 53,
+          "positive_or_flat_count": 53,
+          "negative_rate_pct": 3.6364,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 25,
+          "priced": 25,
+          "avg_pnl_pct": 20.9529,
+          "median_pnl_pct": 7.5202,
+          "sum_pnl_pct": 523.823,
+          "negative_count": 11,
+          "positive_count": 14,
+          "positive_or_flat_count": 14,
+          "negative_rate_pct": 44.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 4,
+            "loss_le_70_pct": 3,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 258,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-14",
+          "pnl_pct": -98.3586,
+          "fill_degradation_pct": 12.5097,
+          "quality_score": 72.6
+        },
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 245,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -91.9284,
+          "fill_degradation_pct": 11.8113,
+          "quality_score": 71.6
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 257,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-13",
+          "pnl_pct": -55.4118,
+          "fill_degradation_pct": 9.0613,
+          "quality_score": 63.4
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 251,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -26.4962,
+          "fill_degradation_pct": 8.2652,
+          "quality_score": 63.7
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 266,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -13.2134,
+          "fill_degradation_pct": 11.0549,
+          "quality_score": 69.3
+        },
+        {
+          "position_id": 149,
+          "ticker": "AMZN",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": -4.6623,
+          "fill_degradation_pct": 9.261,
+          "quality_score": 58.6
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 127,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-09",
+          "pnl_pct": 26.183,
+          "fill_degradation_pct": 12.0536,
+          "quality_score": 59.4
+        },
+        {
+          "position_id": 125,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-08",
+          "pnl_pct": 34.6645,
+          "fill_degradation_pct": 10.8073,
+          "quality_score": 58.8
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_10",
+      "description": "Block short_term rows with entry fill degradation >= 10%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 26,
+        "priced": 26,
+        "avg_pnl_pct": 13.7663,
+        "median_pnl_pct": 15.2954,
+        "sum_pnl_pct": 357.9235,
+        "negative_count": 12,
+        "positive_count": 14,
+        "positive_or_flat_count": 14,
+        "negative_rate_pct": 46.1538,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 86,
+        "priced": 86,
+        "avg_pnl_pct": 65.5634,
+        "median_pnl_pct": 67.3745,
+        "sum_pnl_pct": 5638.4496,
+        "negative_count": 17,
+        "positive_count": 69,
+        "positive_or_flat_count": 69,
+        "negative_rate_pct": 19.7674,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 86,
+        "priced": 86,
+        "avg_pnl_pct": 65.5634,
+        "median_pnl_pct": 67.3745,
+        "sum_pnl_pct": 5638.4496,
+        "negative_count": 17,
+        "positive_count": 69,
+        "positive_or_flat_count": 69,
+        "negative_rate_pct": 19.7674,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.0,
+      "avoided_losses": 12,
+      "avoided_deep_losses": 9,
+      "avoided_near_total_losses": 6,
+      "lost_winners": 14,
+      "lost_winner_sum_pnl_pct": 1210.3764,
+      "blocked_sum_delta_if_skipped_pct": -357.9235,
+      "blocked_lane_counts": {
+        "short_term": 26
+      },
+      "blocked_ticker_counts": {
+        "AMD": 12,
+        "NFLX": 4,
+        "MSTR": 2,
+        "TSLA": 2,
+        "AMZN": 1,
+        "BA": 1,
+        "COIN": 1,
+        "DIS": 1
+      },
+      "blocked_position_ids": [
+        136,
+        150,
+        156,
+        163,
+        169,
+        174,
+        178,
+        194,
+        197,
+        201,
+        219,
+        226,
+        155,
+        241,
+        265,
+        228,
+        183,
+        214,
+        125,
+        127,
+        128,
+        131,
+        266,
+        245,
+        258,
+        275
+      ],
+      "lost_winner_position_ids": [
+        136,
+        150,
+        156,
+        163,
+        169,
+        174,
+        178,
+        194,
+        219,
+        226,
+        125,
+        127,
+        128,
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        155,
+        241,
+        265,
+        228,
+        183,
+        214,
+        245,
+        258,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        228,
+        214,
+        245,
+        258,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 31,
+        "priced": 31,
+        "avg_pnl_pct": 23.4595,
+        "median_pnl_pct": 7.5202,
+        "sum_pnl_pct": 727.2443,
+        "negative_count": 14,
+        "positive_count": 17,
+        "positive_or_flat_count": 17,
+        "negative_rate_pct": 45.1613,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 3,
+          "loss_le_80_pct": 3,
+          "loss_le_90_pct": 1,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 15,
+          "priced": 15,
+          "avg_pnl_pct": 51.3658,
+          "median_pnl_pct": 38.0825,
+          "sum_pnl_pct": 770.4876,
+          "negative_count": 3,
+          "positive_count": 12,
+          "positive_or_flat_count": 12,
+          "negative_rate_pct": 20.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 11,
+          "priced": 11,
+          "avg_pnl_pct": -37.5058,
+          "median_pnl_pct": -91.9284,
+          "sum_pnl_pct": -412.5641,
+          "negative_count": 9,
+          "positive_count": 2,
+          "positive_or_flat_count": 2,
+          "negative_rate_pct": 81.8182,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 7,
+            "loss_le_70_pct": 7,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 6,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 55,
+          "priced": 55,
+          "avg_pnl_pct": 89.2946,
+          "median_pnl_pct": 78.427,
+          "sum_pnl_pct": 4911.2053,
+          "negative_count": 3,
+          "positive_count": 52,
+          "positive_or_flat_count": 52,
+          "negative_rate_pct": 5.4545,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 31,
+          "priced": 31,
+          "avg_pnl_pct": 23.4595,
+          "median_pnl_pct": 7.5202,
+          "sum_pnl_pct": 727.2443,
+          "negative_count": 14,
+          "positive_count": 17,
+          "positive_or_flat_count": 17,
+          "negative_rate_pct": 45.1613,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 6,
+            "loss_le_70_pct": 3,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 258,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-14",
+          "pnl_pct": -98.3586,
+          "fill_degradation_pct": 12.5097,
+          "quality_score": 72.6
+        },
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 245,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -91.9284,
+          "fill_degradation_pct": 11.8113,
+          "quality_score": 71.6
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 155,
+          "ticker": "AMZN",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -65.0746,
+          "fill_degradation_pct": 10.0662,
+          "quality_score": 61.0
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 266,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -13.2134,
+          "fill_degradation_pct": 11.0549,
+          "quality_score": 69.3
+        },
+        {
+          "position_id": 156,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": 9.017,
+          "fill_degradation_pct": 10.9372,
+          "quality_score": 67.6
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 127,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-09",
+          "pnl_pct": 26.183,
+          "fill_degradation_pct": 12.0536,
+          "quality_score": 59.4
+        },
+        {
+          "position_id": 125,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-08",
+          "pnl_pct": 34.6645,
+          "fill_degradation_pct": 10.8073,
+          "quality_score": 58.8
+        },
+        {
+          "position_id": 150,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 38.0825,
+          "fill_degradation_pct": 14.8687,
+          "quality_score": 68.1
+        },
+        {
+          "position_id": 128,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-10",
+          "pnl_pct": 38.3285,
+          "fill_degradation_pct": 12.0436,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 194,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-29",
+          "pnl_pct": 42.7688,
+          "fill_degradation_pct": 14.8368,
+          "quality_score": 61.9
+        },
+        {
+          "position_id": 178,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 64.2198,
+          "fill_degradation_pct": 14.2857,
+          "quality_score": 67.5
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_12_5",
+      "description": "Block short_term rows with entry fill degradation >= 12.5%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 18,
+        "priced": 18,
+        "avg_pnl_pct": 11.3357,
+        "median_pnl_pct": 1.4239,
+        "sum_pnl_pct": 204.0428,
+        "negative_count": 9,
+        "positive_count": 9,
+        "positive_or_flat_count": 9,
+        "negative_rate_pct": 50.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 94,
+        "priced": 94,
+        "avg_pnl_pct": 61.6205,
+        "median_pnl_pct": 52.2683,
+        "sum_pnl_pct": 5792.3303,
+        "negative_count": 20,
+        "positive_count": 74,
+        "positive_or_flat_count": 74,
+        "negative_rate_pct": 21.2766,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 94,
+        "priced": 94,
+        "avg_pnl_pct": 61.6205,
+        "median_pnl_pct": 52.2683,
+        "sum_pnl_pct": 5792.3303,
+        "negative_count": 20,
+        "positive_count": 74,
+        "positive_or_flat_count": 74,
+        "negative_rate_pct": 21.2766,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.0,
+      "avoided_losses": 9,
+      "avoided_deep_losses": 7,
+      "avoided_near_total_losses": 5,
+      "lost_winners": 9,
+      "lost_winner_sum_pnl_pct": 886.2793,
+      "blocked_sum_delta_if_skipped_pct": -204.0428,
+      "blocked_lane_counts": {
+        "short_term": 18
+      },
+      "blocked_ticker_counts": {
+        "AMD": 10,
+        "MSTR": 2,
+        "BA": 1,
+        "COIN": 1,
+        "DIS": 1,
+        "NFLX": 1,
+        "TSLA": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        150,
+        163,
+        169,
+        174,
+        178,
+        194,
+        197,
+        201,
+        219,
+        226,
+        241,
+        265,
+        228,
+        183,
+        214,
+        131,
+        258,
+        275
+      ],
+      "lost_winner_position_ids": [
+        150,
+        163,
+        169,
+        174,
+        178,
+        194,
+        219,
+        226,
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        241,
+        265,
+        228,
+        183,
+        214,
+        258,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        228,
+        214,
+        258,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 33,
+        "priced": 33,
+        "avg_pnl_pct": 18.8516,
+        "median_pnl_pct": 7.1785,
+        "sum_pnl_pct": 622.1025,
+        "negative_count": 16,
+        "positive_count": 17,
+        "positive_or_flat_count": 17,
+        "negative_rate_pct": 48.4848,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 9,
+          "priced": 9,
+          "avg_pnl_pct": 56.8295,
+          "median_pnl_pct": 42.7688,
+          "sum_pnl_pct": 511.4651,
+          "negative_count": 2,
+          "positive_count": 7,
+          "positive_or_flat_count": 7,
+          "negative_rate_pct": 22.2222,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 9,
+          "priced": 9,
+          "avg_pnl_pct": -34.158,
+          "median_pnl_pct": -92.1914,
+          "sum_pnl_pct": -307.4223,
+          "negative_count": 7,
+          "positive_count": 2,
+          "positive_or_flat_count": 2,
+          "negative_rate_pct": 77.7778,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 6,
+            "loss_le_70_pct": 6,
+            "loss_le_80_pct": 5,
+            "loss_le_90_pct": 5,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 61,
+          "priced": 61,
+          "avg_pnl_pct": 84.7578,
+          "median_pnl_pct": 75.3005,
+          "sum_pnl_pct": 5170.2278,
+          "negative_count": 4,
+          "positive_count": 57,
+          "positive_or_flat_count": 57,
+          "negative_rate_pct": 6.5574,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 33,
+          "priced": 33,
+          "avg_pnl_pct": 18.8516,
+          "median_pnl_pct": 7.1785,
+          "sum_pnl_pct": 622.1025,
+          "negative_count": 16,
+          "positive_count": 17,
+          "positive_or_flat_count": 17,
+          "negative_rate_pct": 48.4848,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 7,
+            "loss_le_70_pct": 4,
+            "loss_le_80_pct": 4,
+            "loss_le_90_pct": 2,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 258,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-14",
+          "pnl_pct": -98.3586,
+          "fill_degradation_pct": 12.5097,
+          "quality_score": 72.6
+        },
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 150,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 38.0825,
+          "fill_degradation_pct": 14.8687,
+          "quality_score": 68.1
+        },
+        {
+          "position_id": 194,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-29",
+          "pnl_pct": 42.7688,
+          "fill_degradation_pct": 14.8368,
+          "quality_score": 61.9
+        },
+        {
+          "position_id": 178,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 64.2198,
+          "fill_degradation_pct": 14.2857,
+          "quality_score": 67.5
+        },
+        {
+          "position_id": 219,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 89.7252,
+          "fill_degradation_pct": 14.1339,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 169,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 100.0877,
+          "fill_degradation_pct": 12.9814,
+          "quality_score": 68.1
+        },
+        {
+          "position_id": 174,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-22",
+          "pnl_pct": 138.7444,
+          "fill_degradation_pct": 13.5227,
+          "quality_score": 68.3
+        },
+        {
+          "position_id": 226,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 178.7139,
+          "fill_degradation_pct": 15.2637,
+          "quality_score": 53.5
+        },
+        {
+          "position_id": 163,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-20",
+          "pnl_pct": 212.3632,
+          "fill_degradation_pct": 12.8099,
+          "quality_score": 67.8
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill15_or_quality60",
+      "description": "Block short_term rows with fill degradation >= 15% or quality score below 60.",
+      "research_only_reason": "Compound filter from the two strongest loss-cohort entry-quality signals.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 27,
+        "priced": 27,
+        "avg_pnl_pct": 25.4843,
+        "median_pnl_pct": 34.6645,
+        "sum_pnl_pct": 688.0758,
+        "negative_count": 11,
+        "positive_count": 16,
+        "positive_or_flat_count": 16,
+        "negative_rate_pct": 40.7407,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 85,
+        "priced": 85,
+        "avg_pnl_pct": 62.4506,
+        "median_pnl_pct": 51.2104,
+        "sum_pnl_pct": 5308.2973,
+        "negative_count": 18,
+        "positive_count": 67,
+        "positive_or_flat_count": 67,
+        "negative_rate_pct": 21.1765,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 85,
+        "priced": 85,
+        "avg_pnl_pct": 62.6469,
+        "median_pnl_pct": 51.2104,
+        "sum_pnl_pct": 5324.9844,
+        "negative_count": 18,
+        "positive_count": 67,
+        "positive_or_flat_count": 67,
+        "negative_rate_pct": 21.1765,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1963,
+      "avoided_losses": 11,
+      "avoided_deep_losses": 7,
+      "avoided_near_total_losses": 4,
+      "lost_winners": 16,
+      "lost_winner_sum_pnl_pct": 1357.3142,
+      "blocked_sum_delta_if_skipped_pct": -688.0758,
+      "blocked_lane_counts": {
+        "short_term": 27
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 13,
+        "AMD": 4,
+        "NFLX": 3,
+        "MSTR": 2,
+        "AMZN": 1,
+        "BA": 1,
+        "COIN": 1,
+        "DIS": 1
+      },
+      "blocked_position_ids": [
+        197,
+        201,
+        219,
+        226,
+        149,
+        241,
+        265,
+        228,
+        183,
+        214,
+        125,
+        127,
+        131,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244,
+        275
+      ],
+      "lost_winner_position_ids": [
+        219,
+        226,
+        125,
+        127,
+        131,
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229
+      ],
+      "avoided_deep_loss_position_ids": [
+        241,
+        265,
+        228,
+        183,
+        214,
+        244,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        228,
+        214,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 30,
+        "priced": 30,
+        "avg_pnl_pct": 7.9472,
+        "median_pnl_pct": -2.0483,
+        "sum_pnl_pct": 238.4146,
+        "negative_count": 16,
+        "positive_count": 14,
+        "positive_or_flat_count": 14,
+        "negative_rate_pct": 53.3333,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 15,
+          "priced": 15,
+          "avg_pnl_pct": 40.7873,
+          "median_pnl_pct": 34.7443,
+          "sum_pnl_pct": 611.8102,
+          "negative_count": 4,
+          "positive_count": 11,
+          "positive_or_flat_count": 11,
+          "negative_rate_pct": 26.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 12,
+          "priced": 12,
+          "avg_pnl_pct": 6.3555,
+          "median_pnl_pct": -39.7951,
+          "sum_pnl_pct": 76.2656,
+          "negative_count": 7,
+          "positive_count": 5,
+          "positive_or_flat_count": 5,
+          "negative_rate_pct": 58.3333,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 6,
+            "loss_le_70_pct": 5,
+            "loss_le_80_pct": 4,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 3,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 55,
+          "priced": 55,
+          "avg_pnl_pct": 92.1797,
+          "median_pnl_pct": 78.427,
+          "sum_pnl_pct": 5069.8827,
+          "negative_count": 2,
+          "positive_count": 53,
+          "positive_or_flat_count": 53,
+          "negative_rate_pct": 3.6364,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 30,
+          "priced": 30,
+          "avg_pnl_pct": 7.9472,
+          "median_pnl_pct": -2.0483,
+          "sum_pnl_pct": 238.4146,
+          "negative_count": 16,
+          "positive_count": 14,
+          "positive_or_flat_count": 14,
+          "negative_rate_pct": 53.3333,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 7,
+            "loss_le_70_pct": 5,
+            "loss_le_80_pct": 5,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 2,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 149,
+          "ticker": "AMZN",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": -4.6623,
+          "fill_degradation_pct": 9.261,
+          "quality_score": 58.6
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 127,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-09",
+          "pnl_pct": 26.183,
+          "fill_degradation_pct": 12.0536,
+          "quality_score": 59.4
+        },
+        {
+          "position_id": 125,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-08",
+          "pnl_pct": 34.6645,
+          "fill_degradation_pct": 10.8073,
+          "quality_score": 58.8
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        },
+        {
+          "position_id": 180,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 36.6416,
+          "fill_degradation_pct": 7.1429,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 153,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 66.6992,
+          "fill_degradation_pct": 6.4234,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 193,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-28",
+          "pnl_pct": 68.0877,
+          "fill_degradation_pct": 7.6134,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 229,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 74.0565,
+          "fill_degradation_pct": 7.56,
+          "quality_score": 53.7
+        },
+        {
+          "position_id": 219,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 89.7252,
+          "fill_degradation_pct": 14.1339,
+          "quality_score": 59.7
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_14",
+      "description": "Block short_term rows with entry fill degradation >= 14%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 14,
+        "priced": 14,
+        "avg_pnl_pct": -10.6281,
+        "median_pnl_pct": -24.6527,
+        "sum_pnl_pct": -148.7939,
+        "negative_count": 8,
+        "positive_count": 6,
+        "positive_or_flat_count": 6,
+        "negative_rate_pct": 57.1429,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 98,
+        "priced": 98,
+        "avg_pnl_pct": 62.7058,
+        "median_pnl_pct": 59.0808,
+        "sum_pnl_pct": 6145.167,
+        "negative_count": 21,
+        "positive_count": 77,
+        "positive_or_flat_count": 77,
+        "negative_rate_pct": 21.4286,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 98,
+        "priced": 98,
+        "avg_pnl_pct": 62.8761,
+        "median_pnl_pct": 59.0808,
+        "sum_pnl_pct": 6161.8541,
+        "negative_count": 21,
+        "positive_count": 77,
+        "positive_or_flat_count": 77,
+        "negative_rate_pct": 21.4286,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1703,
+      "avoided_losses": 8,
+      "avoided_deep_losses": 6,
+      "avoided_near_total_losses": 4,
+      "lost_winners": 6,
+      "lost_winner_sum_pnl_pct": 435.084,
+      "blocked_sum_delta_if_skipped_pct": 148.7939,
+      "blocked_lane_counts": {
+        "short_term": 14
+      },
+      "blocked_ticker_counts": {
+        "AMD": 7,
+        "MSTR": 2,
+        "BA": 1,
+        "COIN": 1,
+        "DIS": 1,
+        "NFLX": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        150,
+        178,
+        194,
+        197,
+        201,
+        219,
+        226,
+        241,
+        265,
+        228,
+        183,
+        214,
+        131,
+        275
+      ],
+      "lost_winner_position_ids": [
+        150,
+        178,
+        194,
+        219,
+        226,
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        241,
+        265,
+        228,
+        183,
+        214,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        228,
+        214,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 34,
+        "priced": 34,
+        "avg_pnl_pct": 15.4042,
+        "median_pnl_pct": 2.7984,
+        "sum_pnl_pct": 523.7439,
+        "negative_count": 17,
+        "positive_count": 17,
+        "positive_or_flat_count": 17,
+        "negative_rate_pct": 50.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 8,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 6,
+          "priced": 6,
+          "avg_pnl_pct": 10.045,
+          "median_pnl_pct": 29.8282,
+          "sum_pnl_pct": 60.2698,
+          "negative_count": 2,
+          "positive_count": 4,
+          "positive_or_flat_count": 4,
+          "negative_rate_pct": 33.3333,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 8,
+          "priced": 8,
+          "avg_pnl_pct": -26.133,
+          "median_pnl_pct": -81.8063,
+          "sum_pnl_pct": -209.0637,
+          "negative_count": 6,
+          "positive_count": 2,
+          "positive_or_flat_count": 2,
+          "negative_rate_pct": 75.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 5,
+            "loss_le_70_pct": 5,
+            "loss_le_80_pct": 4,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 3,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 64,
+          "priced": 64,
+          "avg_pnl_pct": 87.8347,
+          "median_pnl_pct": 76.9511,
+          "sum_pnl_pct": 5621.4231,
+          "negative_count": 4,
+          "positive_count": 60,
+          "positive_or_flat_count": 60,
+          "negative_rate_pct": 6.25,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 34,
+          "priced": 34,
+          "avg_pnl_pct": 15.4042,
+          "median_pnl_pct": 2.7984,
+          "sum_pnl_pct": 523.7439,
+          "negative_count": 17,
+          "positive_count": 17,
+          "positive_or_flat_count": 17,
+          "negative_rate_pct": 50.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 8,
+            "loss_le_70_pct": 5,
+            "loss_le_80_pct": 5,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 2,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 150,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 38.0825,
+          "fill_degradation_pct": 14.8687,
+          "quality_score": 68.1
+        },
+        {
+          "position_id": 194,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-29",
+          "pnl_pct": 42.7688,
+          "fill_degradation_pct": 14.8368,
+          "quality_score": 61.9
+        },
+        {
+          "position_id": 178,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 64.2198,
+          "fill_degradation_pct": 14.2857,
+          "quality_score": 67.5
+        },
+        {
+          "position_id": 219,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 89.7252,
+          "fill_degradation_pct": 14.1339,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 226,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 178.7139,
+          "fill_degradation_pct": 15.2637,
+          "quality_score": 53.5
+        }
+      ]
+    },
+    {
+      "filter_id": "fill_degradation_ge_15",
+      "description": "Block rows with entry fill degradation >= 15%.",
+      "research_only_reason": "Threshold was selected after observing the current-policy loss cohort.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 19,
+        "priced": 19,
+        "avg_pnl_pct": 24.6999,
+        "median_pnl_pct": 21.5738,
+        "sum_pnl_pct": 469.2974,
+        "negative_count": 9,
+        "positive_count": 10,
+        "positive_or_flat_count": 10,
+        "negative_rate_pct": 47.3684,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept": {
+        "rows": 93,
+        "priced": 93,
+        "avg_pnl_pct": 59.4309,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 5527.0757,
+        "negative_count": 20,
+        "positive_count": 73,
+        "positive_or_flat_count": 73,
+        "negative_rate_pct": 21.5054,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 93,
+        "priced": 93,
+        "avg_pnl_pct": 59.6104,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 5543.7628,
+        "negative_count": 20,
+        "positive_count": 73,
+        "positive_or_flat_count": 73,
+        "negative_rate_pct": 21.5054,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 2,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1795,
+      "avoided_losses": 9,
+      "avoided_deep_losses": 6,
+      "avoided_near_total_losses": 4,
+      "lost_winners": 10,
+      "lost_winner_sum_pnl_pct": 1064.5051,
+      "blocked_sum_delta_if_skipped_pct": -469.2974,
+      "blocked_lane_counts": {
+        "short_term": 9,
+        "swing": 6,
+        "bullish_momentum": 4
+      },
+      "blocked_ticker_counts": {
+        "AMD": 10,
+        "NFLX": 2,
+        "UNH": 2,
+        "MSTR": 2,
+        "COIN": 1,
+        "DIS": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        461,
+        449,
+        444,
+        452,
+        197,
+        201,
+        226,
+        265,
+        228,
+        183,
+        214,
+        131,
+        275,
+        293,
+        320,
+        326,
+        331,
+        335,
+        376
+      ],
+      "lost_winner_position_ids": [
+        461,
+        444,
+        452,
+        226,
+        131,
+        293,
+        320,
+        326,
+        331,
+        335
+      ],
+      "avoided_deep_loss_position_ids": [
+        449,
+        265,
+        228,
+        183,
+        214,
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        449,
+        228,
+        214,
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 35,
+        "priced": 35,
+        "avg_pnl_pct": 15.1636,
+        "median_pnl_pct": 7.1785,
+        "sum_pnl_pct": 530.727,
+        "negative_count": 17,
+        "positive_count": 18,
+        "positive_or_flat_count": 18,
+        "negative_rate_pct": 48.5714,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 0
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 12,
+          "priced": 12,
+          "avg_pnl_pct": 57.112,
+          "median_pnl_pct": 79.1314,
+          "sum_pnl_pct": 685.3442,
+          "negative_count": 3,
+          "positive_count": 9,
+          "positive_or_flat_count": 9,
+          "negative_rate_pct": 25.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 7,
+          "priced": 7,
+          "avg_pnl_pct": -30.8638,
+          "median_pnl_pct": -71.4211,
+          "sum_pnl_pct": -216.0468,
+          "negative_count": 6,
+          "positive_count": 1,
+          "positive_or_flat_count": 1,
+          "negative_rate_pct": 85.7143,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 4,
+            "loss_le_70_pct": 4,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 2,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 58,
+          "priced": 58,
+          "avg_pnl_pct": 86.1439,
+          "median_pnl_pct": 68.3449,
+          "sum_pnl_pct": 4996.3487,
+          "negative_count": 3,
+          "positive_count": 55,
+          "positive_or_flat_count": 55,
+          "negative_rate_pct": 5.1724,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 0,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 35,
+          "priced": 35,
+          "avg_pnl_pct": 15.1636,
+          "median_pnl_pct": 7.1785,
+          "sum_pnl_pct": 530.727,
+          "negative_count": 17,
+          "positive_count": 18,
+          "positive_or_flat_count": 18,
+          "negative_rate_pct": 48.5714,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 9,
+            "loss_le_70_pct": 6,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 3,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 228,
+          "ticker": "DIS",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": -99.5429,
+          "fill_degradation_pct": 15.5882,
+          "quality_score": 60.3
+        },
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 449,
+          "ticker": "NFLX",
+          "lane": "bullish_momentum",
+          "entry_date": "2026-04-15",
+          "pnl_pct": -94.0719,
+          "fill_degradation_pct": 16.4706,
+          "quality_score": 80.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 265,
+          "ticker": "COIN",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -71.4211,
+          "fill_degradation_pct": 16.7334,
+          "quality_score": 76.7
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 201,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-01",
+          "pnl_pct": -18.7259,
+          "fill_degradation_pct": 15.4869,
+          "quality_score": 61.3
+        },
+        {
+          "position_id": 376,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-05-06",
+          "pnl_pct": -13.4242,
+          "fill_degradation_pct": 18.7179,
+          "quality_score": 71.7
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        },
+        {
+          "position_id": 444,
+          "ticker": "UNH",
+          "lane": "bullish_momentum",
+          "entry_date": "2026-04-10",
+          "pnl_pct": 37.2245,
+          "fill_degradation_pct": 19.62,
+          "quality_score": 74.1
+        },
+        {
+          "position_id": 461,
+          "ticker": "AMD",
+          "lane": "bullish_momentum",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 79.1314,
+          "fill_degradation_pct": 17.8704,
+          "quality_score": 74.4
+        },
+        {
+          "position_id": 335,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 79.1314,
+          "fill_degradation_pct": 17.8704,
+          "quality_score": 79.4
+        },
+        {
+          "position_id": 326,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 100.4305,
+          "fill_degradation_pct": 18.3511,
+          "quality_score": 80.1
+        },
+        {
+          "position_id": 452,
+          "ticker": "UNH",
+          "lane": "bullish_momentum",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 117.5355,
+          "fill_degradation_pct": 15.852,
+          "quality_score": 74.7
+        },
+        {
+          "position_id": 331,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-04-22",
+          "pnl_pct": 136.9952,
+          "fill_degradation_pct": 16.8471,
+          "quality_score": 80.2
+        },
+        {
+          "position_id": 320,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-04-20",
+          "pnl_pct": 149.4997,
+          "fill_degradation_pct": 16.7766,
+          "quality_score": 79.8
+        },
+        {
+          "position_id": 293,
+          "ticker": "AMD",
+          "lane": "swing",
+          "entry_date": "2026-04-14",
+          "pnl_pct": 164.2692,
+          "fill_degradation_pct": 15.0157,
+          "quality_score": 79.9
+        },
+        {
+          "position_id": 226,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 178.7139,
+          "fill_degradation_pct": 15.2637,
+          "quality_score": 53.5
+        }
+      ]
+    },
+    {
+      "filter_id": "repeat_deep_loss_ticker",
+      "description": "Block tickers that appear at least twice in the <= -50% loss cohort.",
+      "research_only_reason": "Uses loss-cohort ticker clusters and must be validated out of sample.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 31,
+        "priced": 31,
+        "avg_pnl_pct": 28.2422,
+        "median_pnl_pct": 42.4119,
+        "sum_pnl_pct": 875.508,
+        "negative_count": 11,
+        "positive_count": 20,
+        "positive_or_flat_count": 20,
+        "negative_rate_pct": 35.4839,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 5,
+          "loss_le_80_pct": 4,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept": {
+        "rows": 81,
+        "priced": 81,
+        "avg_pnl_pct": 63.2206,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 5120.8651,
+        "negative_count": 18,
+        "positive_count": 63,
+        "positive_or_flat_count": 63,
+        "negative_rate_pct": 22.2222,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 81,
+        "priced": 81,
+        "avg_pnl_pct": 63.2206,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 5120.8651,
+        "negative_count": 18,
+        "positive_count": 63,
+        "positive_or_flat_count": 63,
+        "negative_rate_pct": 22.2222,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.0,
+      "avoided_losses": 11,
+      "avoided_deep_losses": 7,
+      "avoided_near_total_losses": 3,
+      "lost_winners": 20,
+      "lost_winner_sum_pnl_pct": 1497.7071,
+      "blocked_sum_delta_if_skipped_pct": -875.508,
+      "blocked_lane_counts": {
+        "short_term": 20,
+        "swing": 11
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 26,
+        "TSLA": 3,
+        "MSTR": 2
+      },
+      "blocked_position_ids": [
+        183,
+        214,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244,
+        251,
+        257,
+        266,
+        245,
+        258,
+        304,
+        310,
+        315,
+        323,
+        329,
+        337,
+        368,
+        386,
+        408,
+        414,
+        402
+      ],
+      "lost_winner_position_ids": [
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        304,
+        310,
+        315,
+        323,
+        329,
+        337,
+        368,
+        386,
+        414
+      ],
+      "avoided_deep_loss_position_ids": [
+        183,
+        214,
+        244,
+        257,
+        245,
+        258,
+        402
+      ],
+      "avoided_near_total_loss_position_ids": [
+        214,
+        245,
+        258
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 27,
+        "priced": 27,
+        "avg_pnl_pct": 14.6047,
+        "median_pnl_pct": -1.5817,
+        "sum_pnl_pct": 394.3265,
+        "negative_count": 14,
+        "positive_count": 13,
+        "positive_or_flat_count": 13,
+        "negative_rate_pct": 51.8519,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 7,
+          "loss_le_70_pct": 6,
+          "loss_le_80_pct": 5,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 16,
+          "priced": 16,
+          "avg_pnl_pct": 59.6971,
+          "median_pnl_pct": 67.3935,
+          "sum_pnl_pct": 955.1543,
+          "negative_count": 2,
+          "positive_count": 14,
+          "positive_or_flat_count": 14,
+          "negative_rate_pct": 12.5,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 15,
+          "priced": 15,
+          "avg_pnl_pct": -5.3098,
+          "median_pnl_pct": -13.2134,
+          "sum_pnl_pct": -79.6463,
+          "negative_count": 9,
+          "positive_count": 6,
+          "positive_or_flat_count": 6,
+          "negative_rate_pct": 60.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 6,
+            "loss_le_70_pct": 4,
+            "loss_le_80_pct": 4,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 54,
+          "priced": 54,
+          "avg_pnl_pct": 87.5285,
+          "median_pnl_pct": 75.3879,
+          "sum_pnl_pct": 4726.5386,
+          "negative_count": 4,
+          "positive_count": 50,
+          "positive_or_flat_count": 50,
+          "negative_rate_pct": 7.4074,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 27,
+          "priced": 27,
+          "avg_pnl_pct": 14.6047,
+          "median_pnl_pct": -1.5817,
+          "sum_pnl_pct": 394.3265,
+          "negative_count": 14,
+          "positive_count": 13,
+          "positive_or_flat_count": 13,
+          "negative_rate_pct": 51.8519,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 7,
+            "loss_le_70_pct": 6,
+            "loss_le_80_pct": 5,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 258,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-14",
+          "pnl_pct": -98.3586,
+          "fill_degradation_pct": 12.5097,
+          "quality_score": 72.6
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 245,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -91.9284,
+          "fill_degradation_pct": 11.8113,
+          "quality_score": 71.6
+        },
+        {
+          "position_id": 402,
+          "ticker": "TSLA",
+          "lane": "swing",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -81.4149,
+          "fill_degradation_pct": 11.2172,
+          "quality_score": 83.6
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 257,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-13",
+          "pnl_pct": -55.4118,
+          "fill_degradation_pct": 9.0613,
+          "quality_score": 63.4
+        },
+        {
+          "position_id": 251,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -26.4962,
+          "fill_degradation_pct": 8.2652,
+          "quality_score": 63.7
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 266,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -13.2134,
+          "fill_degradation_pct": 11.0549,
+          "quality_score": 69.3
+        },
+        {
+          "position_id": 408,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -6.6905,
+          "fill_degradation_pct": 10.2451,
+          "quality_score": 76.8
+        },
+        {
+          "position_id": 414,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-05-13",
+          "pnl_pct": 7.1785,
+          "fill_degradation_pct": 10.2206,
+          "quality_score": 76.5
+        },
+        {
+          "position_id": 386,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 17.3359,
+          "fill_degradation_pct": 10.111,
+          "quality_score": 66.8
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        },
+        {
+          "position_id": 180,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 36.6416,
+          "fill_degradation_pct": 7.1429,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 337,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 42.4119,
+          "fill_degradation_pct": 9.3871,
+          "quality_score": 64.4
+        },
+        {
+          "position_id": 315,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-04-17",
+          "pnl_pct": 51.1628,
+          "fill_degradation_pct": 7.7579,
+          "quality_score": 64.7
+        },
+        {
+          "position_id": 329,
+          "ticker": "QQQ",
+          "lane": "swing",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 53.3263,
+          "fill_degradation_pct": 9.1792,
+          "quality_score": 65.3
+        },
+        {
+          "position_id": 153,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 66.6992,
+          "fill_degradation_pct": 6.4234,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 193,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-28",
+          "pnl_pct": 68.0877,
+          "fill_degradation_pct": 7.6134,
+          "quality_score": 52.3
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_repeat_deep_loss_ticker",
+      "description": "Block short_term rows for tickers that appear at least twice in the <= -50% loss cohort.",
+      "research_only_reason": "Uses loss-cohort ticker clusters and must be validated out of sample.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 20,
+        "priced": 20,
+        "avg_pnl_pct": 23.618,
+        "median_pnl_pct": 35.6929,
+        "sum_pnl_pct": 472.3601,
+        "negative_count": 9,
+        "positive_count": 11,
+        "positive_or_flat_count": 11,
+        "negative_rate_pct": 45.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 6,
+          "loss_le_70_pct": 4,
+          "loss_le_80_pct": 3,
+          "loss_le_90_pct": 3,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept": {
+        "rows": 92,
+        "priced": 92,
+        "avg_pnl_pct": 60.0436,
+        "median_pnl_pct": 51.184,
+        "sum_pnl_pct": 5524.013,
+        "negative_count": 20,
+        "positive_count": 72,
+        "positive_or_flat_count": 72,
+        "negative_rate_pct": 21.7391,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 92,
+        "priced": 92,
+        "avg_pnl_pct": 60.0436,
+        "median_pnl_pct": 51.184,
+        "sum_pnl_pct": 5524.013,
+        "negative_count": 20,
+        "positive_count": 72,
+        "positive_or_flat_count": 72,
+        "negative_rate_pct": 21.7391,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.0,
+      "avoided_losses": 9,
+      "avoided_deep_losses": 6,
+      "avoided_near_total_losses": 3,
+      "lost_winners": 11,
+      "lost_winner_sum_pnl_pct": 1006.4538,
+      "blocked_sum_delta_if_skipped_pct": -472.3601,
+      "blocked_lane_counts": {
+        "short_term": 20
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 16,
+        "MSTR": 2,
+        "TSLA": 2
+      },
+      "blocked_position_ids": [
+        183,
+        214,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244,
+        251,
+        257,
+        266,
+        245,
+        258
+      ],
+      "lost_winner_position_ids": [
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229
+      ],
+      "avoided_deep_loss_position_ids": [
+        183,
+        214,
+        244,
+        257,
+        245,
+        258
+      ],
+      "avoided_near_total_loss_position_ids": [
+        214,
+        245,
+        258
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 32,
+        "priced": 32,
+        "avg_pnl_pct": 12.7172,
+        "median_pnl_pct": 2.7984,
+        "sum_pnl_pct": 406.9507,
+        "negative_count": 16,
+        "positive_count": 16,
+        "positive_or_flat_count": 16,
+        "negative_rate_pct": 50.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 8,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 4,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 10,
+          "priced": 10,
+          "avg_pnl_pct": 56.4631,
+          "median_pnl_pct": 67.3935,
+          "sum_pnl_pct": 564.6306,
+          "negative_count": 2,
+          "positive_count": 8,
+          "positive_or_flat_count": 8,
+          "negative_rate_pct": 20.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 10,
+          "priced": 10,
+          "avg_pnl_pct": -9.2271,
+          "median_pnl_pct": -40.954,
+          "sum_pnl_pct": -92.2705,
+          "negative_count": 7,
+          "positive_count": 3,
+          "positive_or_flat_count": 3,
+          "negative_rate_pct": 70.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 5,
+            "loss_le_70_pct": 3,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 3,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 60,
+          "priced": 60,
+          "avg_pnl_pct": 85.2844,
+          "median_pnl_pct": 75.1666,
+          "sum_pnl_pct": 5117.0623,
+          "negative_count": 4,
+          "positive_count": 56,
+          "positive_or_flat_count": 56,
+          "negative_rate_pct": 6.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 2,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 32,
+          "priced": 32,
+          "avg_pnl_pct": 12.7172,
+          "median_pnl_pct": 2.7984,
+          "sum_pnl_pct": 406.9507,
+          "negative_count": 16,
+          "positive_count": 16,
+          "positive_or_flat_count": 16,
+          "negative_rate_pct": 50.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 8,
+            "loss_le_70_pct": 7,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 4,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 258,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-14",
+          "pnl_pct": -98.3586,
+          "fill_degradation_pct": 12.5097,
+          "quality_score": 72.6
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 245,
+          "ticker": "TSLA",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -91.9284,
+          "fill_degradation_pct": 11.8113,
+          "quality_score": 71.6
+        },
+        {
+          "position_id": 183,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-04-24",
+          "pnl_pct": -75.7957,
+          "fill_degradation_pct": 16.4681,
+          "quality_score": 60.5
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 257,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-13",
+          "pnl_pct": -55.4118,
+          "fill_degradation_pct": 9.0613,
+          "quality_score": 63.4
+        },
+        {
+          "position_id": 251,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-12",
+          "pnl_pct": -26.4962,
+          "fill_degradation_pct": 8.2652,
+          "quality_score": 63.7
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 266,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-15",
+          "pnl_pct": -13.2134,
+          "fill_degradation_pct": 11.0549,
+          "quality_score": 69.3
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        },
+        {
+          "position_id": 180,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 36.6416,
+          "fill_degradation_pct": 7.1429,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 153,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 66.6992,
+          "fill_degradation_pct": 6.4234,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 193,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-28",
+          "pnl_pct": 68.0877,
+          "fill_degradation_pct": 7.6134,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 229,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 74.0565,
+          "fill_degradation_pct": 7.56,
+          "quality_score": 53.7
+        },
+        {
+          "position_id": 172,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 94.5611,
+          "fill_degradation_pct": 6.6544,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 199,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": 96.7066,
+          "fill_degradation_pct": 6.9277,
+          "quality_score": 51.0
+        },
+        {
+          "position_id": 223,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 104.8725,
+          "fill_degradation_pct": 7.0644,
+          "quality_score": 53.9
+        },
+        {
+          "position_id": 147,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-15",
+          "pnl_pct": 127.1605,
+          "fill_degradation_pct": 6.2277,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 166,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-20",
+          "pnl_pct": 135.6592,
+          "fill_degradation_pct": 6.4753,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 211,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-04",
+          "pnl_pct": 167.2646,
+          "fill_degradation_pct": 6.8504,
+          "quality_score": 52.4
+        }
+      ]
+    },
+    {
+      "filter_id": "quality_lt_60",
+      "description": "Block rows with quality score below 60.",
+      "research_only_reason": "Threshold was selected after observing the current-policy loss cohort.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 21,
+        "priced": 21,
+        "avg_pnl_pct": 46.5909,
+        "median_pnl_pct": 66.6992,
+        "sum_pnl_pct": 978.4091,
+        "negative_count": 6,
+        "positive_count": 15,
+        "positive_or_flat_count": 15,
+        "negative_rate_pct": 28.5714,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 4,
+          "loss_le_70_pct": 3,
+          "loss_le_80_pct": 3,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept": {
+        "rows": 91,
+        "priced": 91,
+        "avg_pnl_pct": 55.1425,
+        "median_pnl_pct": 50.0302,
+        "sum_pnl_pct": 5017.964,
+        "negative_count": 23,
+        "positive_count": 68,
+        "positive_or_flat_count": 68,
+        "negative_rate_pct": 25.2747,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 12,
+          "loss_le_70_pct": 9,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 91,
+        "priced": 91,
+        "avg_pnl_pct": 55.3258,
+        "median_pnl_pct": 50.0302,
+        "sum_pnl_pct": 5034.6511,
+        "negative_count": 23,
+        "positive_count": 68,
+        "positive_or_flat_count": 68,
+        "negative_rate_pct": 25.2747,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 12,
+          "loss_le_70_pct": 9,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1833,
+      "avoided_losses": 6,
+      "avoided_deep_losses": 4,
+      "avoided_near_total_losses": 2,
+      "lost_winners": 15,
+      "lost_winner_sum_pnl_pct": 1335.7404,
+      "blocked_sum_delta_if_skipped_pct": -978.4091,
+      "blocked_lane_counts": {
+        "short_term": 20,
+        "bullish_pullback_observation": 1
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 13,
+        "AMD": 2,
+        "NFLX": 2,
+        "GOOGL": 1,
+        "AMZN": 1,
+        "BA": 1,
+        "MSTR": 1
+      },
+      "blocked_position_ids": [
+        93,
+        219,
+        226,
+        149,
+        241,
+        214,
+        125,
+        127,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244
+      ],
+      "lost_winner_position_ids": [
+        219,
+        226,
+        125,
+        127,
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229
+      ],
+      "avoided_deep_loss_position_ids": [
+        93,
+        241,
+        214,
+        244
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        214
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 33,
+        "priced": 33,
+        "avg_pnl_pct": 0.9964,
+        "median_pnl_pct": -6.6905,
+        "sum_pnl_pct": 32.8826,
+        "negative_count": 19,
+        "positive_count": 14,
+        "positive_or_flat_count": 14,
+        "negative_rate_pct": 57.5758,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 9,
+          "loss_le_70_pct": 7,
+          "loss_le_80_pct": 6,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 12,
+          "priced": 12,
+          "avg_pnl_pct": 58.051,
+          "median_pnl_pct": 51.6704,
+          "sum_pnl_pct": 696.6115,
+          "negative_count": 2,
+          "positive_count": 10,
+          "positive_or_flat_count": 10,
+          "negative_rate_pct": 16.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 0,
+            "loss_le_70_pct": 0,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 9,
+          "priced": 9,
+          "avg_pnl_pct": 31.3108,
+          "median_pnl_pct": 74.0565,
+          "sum_pnl_pct": 281.7976,
+          "negative_count": 4,
+          "positive_count": 5,
+          "positive_or_flat_count": 5,
+          "negative_rate_pct": 44.4444,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 4,
+            "loss_le_70_pct": 3,
+            "loss_le_80_pct": 3,
+            "loss_le_90_pct": 2,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 58,
+          "priced": 58,
+          "avg_pnl_pct": 85.9497,
+          "median_pnl_pct": 75.3879,
+          "sum_pnl_pct": 4985.0814,
+          "negative_count": 4,
+          "positive_count": 54,
+          "positive_or_flat_count": 54,
+          "negative_rate_pct": 6.8966,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 33,
+          "priced": 33,
+          "avg_pnl_pct": 0.9964,
+          "median_pnl_pct": -6.6905,
+          "sum_pnl_pct": 32.8826,
+          "negative_count": 19,
+          "positive_count": 14,
+          "positive_or_flat_count": 14,
+          "negative_rate_pct": 57.5758,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 9,
+            "loss_le_70_pct": 7,
+            "loss_le_80_pct": 6,
+            "loss_le_90_pct": 5,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 93,
+          "ticker": "GOOGL",
+          "lane": "bullish_pullback_observation",
+          "entry_date": "2026-05-18",
+          "pnl_pct": -83.6131,
+          "fill_degradation_pct": 13.2847,
+          "quality_score": 58.4
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 149,
+          "ticker": "AMZN",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": -4.6623,
+          "fill_degradation_pct": 9.261,
+          "quality_score": 58.6
+        },
+        {
+          "position_id": 127,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-09",
+          "pnl_pct": 26.183,
+          "fill_degradation_pct": 12.0536,
+          "quality_score": 59.4
+        },
+        {
+          "position_id": 125,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-08",
+          "pnl_pct": 34.6645,
+          "fill_degradation_pct": 10.8073,
+          "quality_score": 58.8
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        },
+        {
+          "position_id": 180,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 36.6416,
+          "fill_degradation_pct": 7.1429,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 153,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 66.6992,
+          "fill_degradation_pct": 6.4234,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 193,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-28",
+          "pnl_pct": 68.0877,
+          "fill_degradation_pct": 7.6134,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 229,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 74.0565,
+          "fill_degradation_pct": 7.56,
+          "quality_score": 53.7
+        },
+        {
+          "position_id": 219,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 89.7252,
+          "fill_degradation_pct": 14.1339,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 172,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 94.5611,
+          "fill_degradation_pct": 6.6544,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 199,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": 96.7066,
+          "fill_degradation_pct": 6.9277,
+          "quality_score": 51.0
+        },
+        {
+          "position_id": 223,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 104.8725,
+          "fill_degradation_pct": 7.0644,
+          "quality_score": 53.9
+        },
+        {
+          "position_id": 147,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-15",
+          "pnl_pct": 127.1605,
+          "fill_degradation_pct": 6.2277,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 166,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-20",
+          "pnl_pct": 135.6592,
+          "fill_degradation_pct": 6.4753,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 211,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-04",
+          "pnl_pct": 167.2646,
+          "fill_degradation_pct": 6.8504,
+          "quality_score": 52.4
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_quality_lt_60",
+      "description": "Block short_term rows with quality score below 60.",
+      "research_only_reason": "Targets the loss cohort's short_term concentration.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 20,
+        "priced": 20,
+        "avg_pnl_pct": 53.1011,
+        "median_pnl_pct": 67.3935,
+        "sum_pnl_pct": 1062.0222,
+        "negative_count": 5,
+        "positive_count": 15,
+        "positive_or_flat_count": 15,
+        "negative_rate_pct": 25.0,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 3,
+          "loss_le_70_pct": 2,
+          "loss_le_80_pct": 2,
+          "loss_le_90_pct": 2,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept": {
+        "rows": 92,
+        "priced": 92,
+        "avg_pnl_pct": 53.6342,
+        "median_pnl_pct": 46.3995,
+        "sum_pnl_pct": 4934.3509,
+        "negative_count": 24,
+        "positive_count": 68,
+        "positive_or_flat_count": 68,
+        "negative_rate_pct": 26.087,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 13,
+          "loss_le_70_pct": 10,
+          "loss_le_80_pct": 8,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 92,
+        "priced": 92,
+        "avg_pnl_pct": 53.8156,
+        "median_pnl_pct": 46.3995,
+        "sum_pnl_pct": 4951.038,
+        "negative_count": 24,
+        "positive_count": 68,
+        "positive_or_flat_count": 68,
+        "negative_rate_pct": 26.087,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 13,
+          "loss_le_70_pct": 10,
+          "loss_le_80_pct": 8,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.1814,
+      "avoided_losses": 5,
+      "avoided_deep_losses": 3,
+      "avoided_near_total_losses": 2,
+      "lost_winners": 15,
+      "lost_winner_sum_pnl_pct": 1335.7404,
+      "blocked_sum_delta_if_skipped_pct": -1062.0222,
+      "blocked_lane_counts": {
+        "short_term": 20
+      },
+      "blocked_ticker_counts": {
+        "QQQ": 13,
+        "AMD": 2,
+        "NFLX": 2,
+        "AMZN": 1,
+        "BA": 1,
+        "MSTR": 1
+      },
+      "blocked_position_ids": [
+        219,
+        226,
+        149,
+        241,
+        214,
+        125,
+        127,
+        147,
+        153,
+        158,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229,
+        244
+      ],
+      "lost_winner_position_ids": [
+        219,
+        226,
+        125,
+        127,
+        147,
+        153,
+        166,
+        172,
+        180,
+        189,
+        193,
+        199,
+        211,
+        223,
+        229
+      ],
+      "avoided_deep_loss_position_ids": [
+        241,
+        214,
+        244
+      ],
+      "avoided_near_total_loss_position_ids": [
+        241,
+        214
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 34,
+        "priced": 34,
+        "avg_pnl_pct": -1.4921,
+        "median_pnl_pct": -9.952,
+        "sum_pnl_pct": -50.7305,
+        "negative_count": 20,
+        "positive_count": 14,
+        "positive_or_flat_count": 14,
+        "negative_rate_pct": 58.8235,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 10,
+          "loss_le_70_pct": 8,
+          "loss_le_80_pct": 7,
+          "loss_le_90_pct": 5,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 12,
+          "priced": 12,
+          "avg_pnl_pct": 58.051,
+          "median_pnl_pct": 51.6704,
+          "sum_pnl_pct": 696.6115,
+          "negative_count": 2,
+          "positive_count": 10,
+          "positive_or_flat_count": 10,
+          "negative_rate_pct": 16.6667,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 0,
+            "loss_le_70_pct": 0,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 8,
+          "priced": 8,
+          "avg_pnl_pct": 45.6763,
+          "median_pnl_pct": 81.8909,
+          "sum_pnl_pct": 365.4107,
+          "negative_count": 3,
+          "positive_count": 5,
+          "positive_or_flat_count": 5,
+          "negative_rate_pct": 37.5,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 2,
+            "loss_le_90_pct": 2,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 0
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 58,
+          "priced": 58,
+          "avg_pnl_pct": 85.9497,
+          "median_pnl_pct": 75.3879,
+          "sum_pnl_pct": 4985.0814,
+          "negative_count": 4,
+          "positive_count": 54,
+          "positive_or_flat_count": 54,
+          "negative_rate_pct": 6.8966,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 34,
+          "priced": 34,
+          "avg_pnl_pct": -1.4921,
+          "median_pnl_pct": -9.952,
+          "sum_pnl_pct": -50.7305,
+          "negative_count": 20,
+          "positive_count": 14,
+          "positive_or_flat_count": 14,
+          "negative_rate_pct": 58.8235,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 10,
+            "loss_le_70_pct": 8,
+            "loss_le_80_pct": 7,
+            "loss_le_90_pct": 5,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 241,
+          "ticker": "BA",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -96.1663,
+          "fill_degradation_pct": 14.2562,
+          "quality_score": 57.5
+        },
+        {
+          "position_id": 214,
+          "ticker": "MSTR",
+          "lane": "short_term",
+          "entry_date": "2026-05-05",
+          "pnl_pct": -92.1914,
+          "fill_degradation_pct": 17.2065,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 244,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-11",
+          "pnl_pct": -60.8643,
+          "fill_degradation_pct": 8.6657,
+          "quality_score": 56.4
+        },
+        {
+          "position_id": 158,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-17",
+          "pnl_pct": -19.8339,
+          "fill_degradation_pct": 6.3257,
+          "quality_score": 51.7
+        },
+        {
+          "position_id": 149,
+          "ticker": "AMZN",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": -4.6623,
+          "fill_degradation_pct": 9.261,
+          "quality_score": 58.6
+        },
+        {
+          "position_id": 127,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-09",
+          "pnl_pct": 26.183,
+          "fill_degradation_pct": 12.0536,
+          "quality_score": 59.4
+        },
+        {
+          "position_id": 125,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-08",
+          "pnl_pct": 34.6645,
+          "fill_degradation_pct": 10.8073,
+          "quality_score": 58.8
+        },
+        {
+          "position_id": 189,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-27",
+          "pnl_pct": 34.7443,
+          "fill_degradation_pct": 6.7498,
+          "quality_score": 51.8
+        },
+        {
+          "position_id": 180,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-23",
+          "pnl_pct": 36.6416,
+          "fill_degradation_pct": 7.1429,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 153,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-16",
+          "pnl_pct": 66.6992,
+          "fill_degradation_pct": 6.4234,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 193,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-28",
+          "pnl_pct": 68.0877,
+          "fill_degradation_pct": 7.6134,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 229,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 74.0565,
+          "fill_degradation_pct": 7.56,
+          "quality_score": 53.7
+        },
+        {
+          "position_id": 219,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 89.7252,
+          "fill_degradation_pct": 14.1339,
+          "quality_score": 59.7
+        },
+        {
+          "position_id": 172,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-21",
+          "pnl_pct": 94.5611,
+          "fill_degradation_pct": 6.6544,
+          "quality_score": 52.3
+        },
+        {
+          "position_id": 199,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": 96.7066,
+          "fill_degradation_pct": 6.9277,
+          "quality_score": 51.0
+        },
+        {
+          "position_id": 223,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-06",
+          "pnl_pct": 104.8725,
+          "fill_degradation_pct": 7.0644,
+          "quality_score": 53.9
+        },
+        {
+          "position_id": 147,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-15",
+          "pnl_pct": 127.1605,
+          "fill_degradation_pct": 6.2277,
+          "quality_score": 51.3
+        },
+        {
+          "position_id": 166,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-04-20",
+          "pnl_pct": 135.6592,
+          "fill_degradation_pct": 6.4753,
+          "quality_score": 51.2
+        },
+        {
+          "position_id": 211,
+          "ticker": "QQQ",
+          "lane": "short_term",
+          "entry_date": "2026-05-04",
+          "pnl_pct": 167.2646,
+          "fill_degradation_pct": 6.8504,
+          "quality_score": 52.4
+        },
+        {
+          "position_id": 226,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-05-07",
+          "pnl_pct": 178.7139,
+          "fill_degradation_pct": 15.2637,
+          "quality_score": 53.5
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_17_5",
+      "description": "Block short_term rows with entry fill degradation >= 17.5%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "winner_damage_too_high",
+      "blocked": {
+        "rows": 3,
+        "priced": 3,
+        "avg_pnl_pct": -36.1536,
+        "median_pnl_pct": -30.5794,
+        "sum_pnl_pct": -108.4608,
+        "negative_count": 2,
+        "positive_count": 1,
+        "positive_or_flat_count": 1,
+        "negative_rate_pct": 66.6667,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 1,
+          "loss_le_70_pct": 1,
+          "loss_le_80_pct": 1,
+          "loss_le_90_pct": 1,
+          "loss_le_95_pct": 1,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept": {
+        "rows": 109,
+        "priced": 109,
+        "avg_pnl_pct": 56.0077,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 6104.8339,
+        "negative_count": 27,
+        "positive_count": 82,
+        "positive_or_flat_count": 82,
+        "negative_rate_pct": 24.7706,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 15,
+          "loss_le_70_pct": 11,
+          "loss_le_80_pct": 9,
+          "loss_le_90_pct": 7,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 109,
+        "priced": 109,
+        "avg_pnl_pct": 56.1607,
+        "median_pnl_pct": 51.2052,
+        "sum_pnl_pct": 6121.521,
+        "negative_count": 27,
+        "positive_count": 82,
+        "positive_or_flat_count": 82,
+        "negative_rate_pct": 24.7706,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 15,
+          "loss_le_70_pct": 11,
+          "loss_le_80_pct": 9,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 3,
+          "loss_le_99_pct": 1
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.153,
+      "avoided_losses": 2,
+      "avoided_deep_losses": 1,
+      "avoided_near_total_losses": 1,
+      "lost_winners": 1,
+      "lost_winner_sum_pnl_pct": 21.5738,
+      "blocked_sum_delta_if_skipped_pct": 108.4608,
+      "blocked_lane_counts": {
+        "short_term": 3
+      },
+      "blocked_ticker_counts": {
+        "AMD": 1,
+        "NFLX": 1,
+        "WMT": 1
+      },
+      "blocked_position_ids": [
+        197,
+        131,
+        275
+      ],
+      "lost_winner_position_ids": [
+        131
+      ],
+      "avoided_deep_loss_position_ids": [
+        275
+      ],
+      "avoided_near_total_loss_position_ids": [
+        275
+      ],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 41,
+        "priced": 41,
+        "avg_pnl_pct": 10.1009,
+        "median_pnl_pct": -2.5149,
+        "sum_pnl_pct": 414.1354,
+        "negative_count": 22,
+        "positive_count": 19,
+        "positive_or_flat_count": 19,
+        "negative_rate_pct": 53.6585,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 12,
+          "loss_le_70_pct": 9,
+          "loss_le_80_pct": 8,
+          "loss_le_90_pct": 6,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 1
+        }
+      },
+      "blocked_by_entry_month": {
+        "2026-04": {
+          "rows": 2,
+          "priced": 2,
+          "avg_pnl_pct": -4.5028,
+          "median_pnl_pct": -4.5028,
+          "sum_pnl_pct": -9.0056,
+          "negative_count": 1,
+          "positive_count": 1,
+          "positive_or_flat_count": 1,
+          "negative_rate_pct": 50.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 0,
+            "loss_le_70_pct": 0,
+            "loss_le_80_pct": 0,
+            "loss_le_90_pct": 0,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 1,
+          "priced": 1,
+          "avg_pnl_pct": -99.4552,
+          "median_pnl_pct": -99.4552,
+          "sum_pnl_pct": -99.4552,
+          "negative_count": 1,
+          "positive_count": 0,
+          "positive_or_flat_count": 0,
+          "negative_rate_pct": 100.0,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 1,
+            "loss_le_70_pct": 1,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 1,
+            "loss_le_99_pct": 1
+          }
+        }
+      },
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 68,
+          "priced": 68,
+          "avg_pnl_pct": 83.6867,
+          "median_pnl_pct": 75.1666,
+          "sum_pnl_pct": 5690.6985,
+          "negative_count": 5,
+          "positive_count": 63,
+          "positive_or_flat_count": 63,
+          "negative_rate_pct": 7.3529,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 41,
+          "priced": 41,
+          "avg_pnl_pct": 10.1009,
+          "median_pnl_pct": -2.5149,
+          "sum_pnl_pct": 414.1354,
+          "negative_count": 22,
+          "positive_count": 19,
+          "positive_or_flat_count": 19,
+          "negative_rate_pct": 53.6585,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 12,
+            "loss_le_70_pct": 9,
+            "loss_le_80_pct": 8,
+            "loss_le_90_pct": 6,
+            "loss_le_95_pct": 4,
+            "loss_le_99_pct": 1
+          }
+        }
+      },
+      "blocked_examples": [
+        {
+          "position_id": 275,
+          "ticker": "WMT",
+          "lane": "short_term",
+          "entry_date": "2026-05-20",
+          "pnl_pct": -99.4552,
+          "fill_degradation_pct": 19.0461,
+          "quality_score": 63.8
+        },
+        {
+          "position_id": 197,
+          "ticker": "AMD",
+          "lane": "short_term",
+          "entry_date": "2026-04-30",
+          "pnl_pct": -30.5794,
+          "fill_degradation_pct": 17.5955,
+          "quality_score": 61.8
+        },
+        {
+          "position_id": 131,
+          "ticker": "NFLX",
+          "lane": "short_term",
+          "entry_date": "2026-04-13",
+          "pnl_pct": 21.5738,
+          "fill_degradation_pct": 19.5722,
+          "quality_score": 60.7
+        }
+      ]
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_20",
+      "description": "Block short_term rows with entry fill degradation >= 20%.",
+      "research_only_reason": "Threshold sweep for the loss cohort's short_term execution-quality signal.",
+      "status": "no_coverage",
+      "blocked": {
+        "rows": 0,
+        "priced": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "positive_or_flat_count": 0,
+        "negative_rate_pct": null,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 0,
+          "loss_le_70_pct": 0,
+          "loss_le_80_pct": 0,
+          "loss_le_90_pct": 0,
+          "loss_le_95_pct": 0,
+          "loss_le_99_pct": 0
+        }
+      },
+      "kept": {
+        "rows": 112,
+        "priced": 112,
+        "avg_pnl_pct": 53.539,
+        "median_pnl_pct": 50.5965,
+        "sum_pnl_pct": 5996.3731,
+        "negative_count": 29,
+        "positive_count": 83,
+        "positive_or_flat_count": 83,
+        "negative_rate_pct": 25.8929,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 16,
+          "loss_le_70_pct": 12,
+          "loss_le_80_pct": 10,
+          "loss_le_90_pct": 8,
+          "loss_le_95_pct": 5,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_with_stop_80": {
+        "rows": 112,
+        "priced": 112,
+        "avg_pnl_pct": 53.688,
+        "median_pnl_pct": 50.5965,
+        "sum_pnl_pct": 6013.0602,
+        "negative_count": 29,
+        "positive_count": 83,
+        "positive_or_flat_count": 83,
+        "negative_rate_pct": 25.8929,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 16,
+          "loss_le_70_pct": 12,
+          "loss_le_80_pct": 10,
+          "loss_le_90_pct": 7,
+          "loss_le_95_pct": 4,
+          "loss_le_99_pct": 2
+        }
+      },
+      "kept_stop_80_avg_delta_vs_kept_pct": 0.149,
+      "avoided_losses": 0,
+      "avoided_deep_losses": 0,
+      "avoided_near_total_losses": 0,
+      "lost_winners": 0,
+      "lost_winner_sum_pnl_pct": 0,
+      "blocked_sum_delta_if_skipped_pct": -0.0,
+      "blocked_lane_counts": {},
+      "blocked_ticker_counts": {},
+      "blocked_position_ids": [],
+      "lost_winner_position_ids": [],
+      "avoided_deep_loss_position_ids": [],
+      "avoided_near_total_loss_position_ids": [],
+      "latest_entry_month": "2026-05",
+      "latest_month_kept": {
+        "rows": 42,
+        "priced": 42,
+        "avg_pnl_pct": 7.4924,
+        "median_pnl_pct": -4.6027,
+        "sum_pnl_pct": 314.6802,
+        "negative_count": 23,
+        "positive_count": 19,
+        "positive_or_flat_count": 19,
+        "negative_rate_pct": 54.7619,
+        "loss_bucket_counts": {
+          "loss_le_50_pct": 13,
+          "loss_le_70_pct": 10,
+          "loss_le_80_pct": 9,
+          "loss_le_90_pct": 7,
+          "loss_le_95_pct": 5,
+          "loss_le_99_pct": 2
+        }
+      },
+      "blocked_by_entry_month": {},
+      "kept_by_entry_month": {
+        "2026-04": {
+          "rows": 70,
+          "priced": 70,
+          "avg_pnl_pct": 81.167,
+          "median_pnl_pct": 71.8174,
+          "sum_pnl_pct": 5681.6929,
+          "negative_count": 6,
+          "positive_count": 64,
+          "positive_or_flat_count": 64,
+          "negative_rate_pct": 8.5714,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 3,
+            "loss_le_70_pct": 2,
+            "loss_le_80_pct": 1,
+            "loss_le_90_pct": 1,
+            "loss_le_95_pct": 0,
+            "loss_le_99_pct": 0
+          }
+        },
+        "2026-05": {
+          "rows": 42,
+          "priced": 42,
+          "avg_pnl_pct": 7.4924,
+          "median_pnl_pct": -4.6027,
+          "sum_pnl_pct": 314.6802,
+          "negative_count": 23,
+          "positive_count": 19,
+          "positive_or_flat_count": 19,
+          "negative_rate_pct": 54.7619,
+          "loss_bucket_counts": {
+            "loss_le_50_pct": 13,
+            "loss_le_70_pct": 10,
+            "loss_le_80_pct": 9,
+            "loss_le_90_pct": 7,
+            "loss_le_95_pct": 5,
+            "loss_le_99_pct": 2
+          }
+        }
+      },
+      "blocked_examples": []
+    }
+  ],
+  "decision_summary": {
+    "status": "paper_research_candidates_found",
+    "best_filter_id": "short_term_fill_degradation_ge_15",
+    "research_candidate_count": 2,
+    "recommended_next_action": "Paper-test the best candidate filters on fresh scans before changing promoted scanner guardrails."
+  },
+  "paper_validation_plan": {
+    "candidate_filter_id": "short_term_fill_degradation_ge_15",
+    "candidate_status": "paper_research_candidate",
+    "live_policy_change": false,
+    "minimum_fresh_current_policy_rows": 20,
+    "minimum_fresh_blocked_candidate_rows": 5,
+    "pass_bar": [
+      "fresh kept-row median P&L above 0%",
+      "fresh kept-row negative rate below 40%",
+      "candidate-blocked rows must be net negative or include at least 2 losses <= -50%",
+      "lost fresh winners must not exceed fresh losses avoided"
+    ],
+    "fail_bar": [
+      "candidate only works on historical paper rows",
+      "fresh blocked rows include more winners than losers",
+      "fresh kept rows remain negative-median"
+    ],
+    "operator_action": "Tag matching paper candidates for review/monitoring; do not block live scanner output yet."
+  },
+  "artifacts": {
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_20260602T020239Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_latest.json",
+    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_20260602T020239Z.csv",
+    "latest_csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_latest.csv",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_20260602T020239Z.md",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_latest.md",
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-entry-filter-lab.md"
+  }
+}

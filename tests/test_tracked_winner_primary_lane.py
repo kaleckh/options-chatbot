@@ -58,7 +58,7 @@ def _bullish_pullback_pick(**overrides):
 
 
 class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
-    def test_default_supervised_options_lane_is_bullish_pullback_primary(self):
+    def test_omitted_playbook_uses_bullish_pullback_routing_fallback(self):
         captured: dict[str, object] = {}
 
         def _scan_func(**kwargs):
@@ -73,22 +73,22 @@ class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
             use_recommended_policy=False,
         )
 
-        self.assertEqual(ss.DEFAULT_SCAN_PLAYBOOK_ID, "bullish_pullback_observation")
+        self.assertEqual(ss.SCAN_PLAYBOOK_FALLBACK_ID, "bullish_pullback_observation")
         self.assertEqual(ss.get_scan_playbook()["id"], "bullish_pullback_observation")
         self.assertEqual(result["playbook"]["id"], "bullish_pullback_observation")
-        self.assertEqual(result["playbook"]["label"], "Bullish Pullback Primary")
-        self.assertEqual(result["playbook"]["lane_role"], "primary_profit_candidate")
+        self.assertEqual(result["playbook"]["label"], "Bullish Pullback")
+        self.assertEqual(result["playbook"]["lane_role"], "regular_peer_strategy")
         self.assertEqual(captured["symbols"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
         self.assertEqual(captured["allowed_directions"], ["call"])
         self.assertEqual(captured["signal_variant"], "pullback_uptrend")
-        self.assertEqual(result["picks"][0]["cohort_role"], "primary")
+        self.assertEqual(result["picks"][0]["cohort_role"], "candidate")
 
-    def test_primary_playbook_exposes_managed_tracked_winner_lane(self):
+    def test_tracked_winner_playbook_exposes_peer_lane(self):
         playbook = ss.get_scan_playbook("tracked_winner_primary")
 
         self.assertEqual(playbook["id"], "tracked_winner_primary")
         self.assertEqual(playbook["calibration_playbook"], "broad")
-        self.assertEqual(playbook["lane_role"], "secondary_shape_guidance")
+        self.assertEqual(playbook["lane_role"], "regular_peer_strategy")
         self.assertEqual(playbook["forced_cohort_role"], "candidate")
         self.assertFalse(playbook.get("observation_only", False))
         self.assertEqual(playbook["allowed_tickers"], ["SPY", "GOOGL", "XLK", "DIA"])
@@ -110,7 +110,7 @@ class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
         self.assertEqual(playbook["allowed_strategy_types"], ["vertical_spread"])
         self.assertFalse(playbook.get("observation_only", False))
 
-    def test_primary_playbook_applies_tracked_winner_shape_constraints(self):
+    def test_tracked_winner_playbook_applies_shape_constraints(self):
         playbook = ss.get_scan_playbook("tracked_winner_primary")
         clear = _tracked_winner_pick()
         expensive = _tracked_winner_pick(ticker="SPY", net_debit=10.0)
@@ -137,7 +137,7 @@ class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
         self.assertIn("only allows directions", reasons)
         self.assertIn("only allows strategies", reasons)
 
-    def test_primary_scan_lane_outranks_candidate_lanes_in_playbook_registry(self):
+    def test_tracked_winner_lane_preserves_registry_ordering(self):
         result = ss.run_supervised_scan(
             scan_func=lambda **_: [_tracked_winner_pick()],
             positions_repository=_AvailablePositionsRepo(),
@@ -155,8 +155,8 @@ class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
         self.assertFalse(playbooks["tracked_winner_observation"].get("observation_only", False))
         self.assertEqual(playbooks["tracked_winner_observation"].get("forced_cohort_role"), "candidate")
         self.assertGreater(
-            playbooks["tracked_winner_observation"].get("lane_priority", 100),
-            playbooks["tracked_winner_primary"]["lane_priority"],
+            playbooks["tracked_winner_observation"].get("lane_display_order", 100),
+            playbooks["tracked_winner_primary"]["lane_display_order"],
         )
 
 

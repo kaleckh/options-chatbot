@@ -198,6 +198,34 @@ class SuggestedTradesApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("position_ids must be a list of positive integers", response.json()["detail"])
 
+    def test_create_scanner_origin_suggested_trade_rejects_caps_off_source_scan(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "guardrail_decision": "clear",
+                "portfolio_caps_enforced": False,
+                "creation_blockers": ["portfolio_caps_not_enforced"],
+                "source_scan_session_id": 123,
+                "source_scan_event_key": "rank_1",
+                "source_scan_run_id": "scan:test",
+                "source_scan_recorded_at_utc": "2026-04-14T15:00:00Z",
+            }
+        )
+
+        with patch.object(self.backend, "_verify_source_scan_lineage", return_value=True):
+            response = self.client.post(
+                "/api/suggested-trades",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.10,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("portfolio_caps_not_enforced", str(response.json()["detail"]))
+
     def test_create_and_close_reject_json_booleans_as_numbers(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
 

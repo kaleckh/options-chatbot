@@ -48,6 +48,13 @@ SCAN_FUNNEL_DROP_KEYS = (
 
 SPECULATIVE_ALLOWED_TICKERS = ("SPY", "QQQ")
 EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL = "executable_opra_paper_candidate"
+POSITION_TRACKING_AUTO_TRACK = "auto_track"
+POSITION_TRACKING_PAPER_REVIEW_ONLY = "paper_review_only"
+POSITION_TRACKING_DIAGNOSTIC_ONLY = "diagnostic_only"
+POSITION_TRACKING_DISABLED = "disabled"
+REGULAR_PROOF_SCOPE = "regular_supervised_options"
+REGULAR_CONTROL_PROOF_SCOPE = "regular_supervised_control"
+COMMODITY_PROOF_SCOPE = "ai_commodity_separate"
 SPECULATIVE_COHORT_ID = "speculative_short_dte"
 SPECULATIVE_COHORT_ROLE = "candidate"
 TRACKED_WINNER_PRIMARY_COHORT_ID = "tracked_winner_primary"
@@ -65,7 +72,7 @@ VOLATILITY_EXPANSION_OBSERVATION_COHORT_ROLE = "candidate"
 AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID = "ai_commodity_infra_observation"
 AI_COMMODITY_INFRA_OBSERVATION_COHORT_ROLE = "candidate"
 BULLISH_PULLBACK_OBSERVATION_COHORT_ID = "bullish_pullback_observation"
-BULLISH_PULLBACK_OBSERVATION_COHORT_ROLE = "primary"
+BULLISH_PULLBACK_OBSERVATION_COHORT_ROLE = "candidate"
 REGULAR_BEARISH_PUT_PRIMARY_COHORT_ID = "regular_bearish_put_primary"
 REGULAR_BEARISH_PUT_PRIMARY_COHORT_ROLE = "candidate"
 INDEX_LANE_TICKERS = ("SPY", "QQQ", "IWM", "DIA")
@@ -119,7 +126,8 @@ AI_COMMODITY_INFRA_TICKERS = tuple(ai_commodity_scan_tickers())
 AI_COMMODITY_INFRA_CORE_TICKERS = tuple(ai_commodity_core_options_tickers())
 AI_COMMODITY_INFRA_CONDITIONAL_TICKERS = tuple(ai_commodity_conditional_options_tickers())
 AI_COMMODITY_INFRA_READINESS_PATH = ROOT / "data" / "profitability-lab" / "paid-data-readiness" / "latest.json"
-DEFAULT_SCAN_PLAYBOOK_ID = "bullish_pullback_observation"
+# Technical fallback when a caller omits a playbook; not a product-priority signal.
+SCAN_PLAYBOOK_FALLBACK_ID = "bullish_pullback_observation"
 
 
 SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
@@ -238,9 +246,9 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
     },
     "tracked_winner_primary": {
         "id": "tracked_winner_primary",
-        "label": "Tracked Winner Primary",
-        "description": "Secondary shape-guidance lane cloned from the current profitable tracked book: bullish call verticals on the winning symbol set with debit below 40% of spread width.",
-        "lane_role": "secondary_shape_guidance",
+        "label": "Tracked Winner",
+        "description": "Peer regular-options lane cloned from the current profitable tracked book: bullish call verticals on the winning symbol set with debit below 40% of spread width.",
+        "lane_role": "regular_peer_strategy",
         "promotion_basis": "closed_forward_alpaca_opra_required",
         "target_dte": 35,
         "max_new_positions_per_day": 2,
@@ -275,9 +283,9 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
     },
     "bullish_pullback_observation": {
         "id": "bullish_pullback_observation",
-        "label": "Bullish Pullback Primary",
-        "description": "Primary broad liquid-universe bullish call vertical lane for controlled pullbacks in established uptrends.",
-        "lane_role": "primary_profit_candidate",
+        "label": "Bullish Pullback",
+        "description": "Peer regular-options broad liquid-universe bullish call vertical lane for controlled pullbacks in established uptrends.",
+        "lane_role": "regular_peer_strategy",
         "proof_yardstick_playbook": "quality90_debit55_canary",
         "promotion_basis": "closed_forward_alpaca_opra_required",
         "target_dte": 35,
@@ -289,7 +297,7 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "allowed_asset_classes": ["index", "equity"],
         "allowed_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
         "scan_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
-        "primary_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
+        "peer_tickers": list(BULLISH_PULLBACK_SCAN_TICKERS),
         "expansion_tickers": list(BULLISH_PULLBACK_EXPANSION_TICKERS),
         "historical_data_ready_tickers": list(BULLISH_PULLBACK_HISTORICAL_READY_TICKERS),
         "historical_data_source": "data/alpaca-options-strategy-lab/alpaca_options_strategy_lab_20260521T042849Z.json",
@@ -357,7 +365,7 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
     },
     "regular_bearish_put_primary": {
         "id": "regular_bearish_put_primary",
-        "label": "Regular Bearish Put Primary",
+        "label": "Regular Bearish Put",
         "description": "Broad liquid-universe bear put vertical lane for confirmed weak market regimes.",
         "lane_role": "research_profit_candidate",
         "promotion_basis": "closed_forward_alpaca_opra_required",
@@ -539,7 +547,7 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
 }
 
 
-_LANE_PRIORITIES = {
+_LANE_DISPLAY_ORDER = {
     "bullish_pullback_observation": 10,
     "tracked_winner_primary": 20,
     "short_term": 30,
@@ -555,8 +563,49 @@ _LANE_PRIORITIES = {
     "ai_commodity_infra_observation": 108,
     "speculative": 110,
 }
+
+_AUTO_TRACK_PLAYBOOK_IDS = {
+    "short_term",
+    "swing",
+    "bullish_momentum",
+    "bullish_pullback_observation",
+}
+_DIAGNOSTIC_ONLY_PLAYBOOK_IDS = {
+    "quality90_debit55_canary",
+}
+_DISABLED_TRACKING_PLAYBOOK_IDS = {
+    AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID,
+}
+
+
+def _default_position_tracking_mode(playbook_id: str) -> str:
+    if playbook_id in _DISABLED_TRACKING_PLAYBOOK_IDS:
+        return POSITION_TRACKING_DISABLED
+    if playbook_id in _DIAGNOSTIC_ONLY_PLAYBOOK_IDS:
+        return POSITION_TRACKING_DIAGNOSTIC_ONLY
+    if playbook_id in _AUTO_TRACK_PLAYBOOK_IDS:
+        return POSITION_TRACKING_AUTO_TRACK
+    return POSITION_TRACKING_PAPER_REVIEW_ONLY
+
+
+def _default_proof_scope(playbook_id: str) -> str:
+    if playbook_id == AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID:
+        return COMMODITY_PROOF_SCOPE
+    if playbook_id in _DIAGNOSTIC_ONLY_PLAYBOOK_IDS:
+        return REGULAR_CONTROL_PROOF_SCOPE
+    return REGULAR_PROOF_SCOPE
+
+
 for _playbook_id, _playbook in SCAN_PLAYBOOKS.items():
-    _playbook.setdefault("lane_priority", _LANE_PRIORITIES.get(_playbook_id, 100))
+    _playbook.setdefault("lane_display_order", _LANE_DISPLAY_ORDER.get(_playbook_id, 100))
+    _playbook.setdefault("fresh_live_validation_enabled", _playbook_id != AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID)
+    _playbook.setdefault("position_tracking_mode", _default_position_tracking_mode(_playbook_id))
+    _playbook.setdefault("proof_scope", _default_proof_scope(_playbook_id))
+    if _playbook_id != AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID:
+        _playbook.setdefault(
+            "max_open_executable_drawdown_pct",
+            float(_playbook.get("daily_loss_limit_pct", 2.0) or 2.0),
+        )
 
 
 def _load_ai_commodity_readiness(path: Path = AI_COMMODITY_INFRA_READINESS_PATH) -> dict[str, Any]:
@@ -615,11 +664,25 @@ def _enrich_ai_commodity_playbook_with_readiness(playbook: dict[str, Any]) -> di
 
 
 def get_scan_playbook(playbook_id: Optional[str] = None) -> dict[str, Any]:
-    key = str(playbook_id or DEFAULT_SCAN_PLAYBOOK_ID).strip().lower()
+    key = str(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID).strip().lower()
     if key not in SCAN_PLAYBOOKS:
         available = ", ".join(sorted(SCAN_PLAYBOOKS))
         raise ValueError(f"Unknown scan playbook '{playbook_id}'. Available playbooks: {available}")
     return _enrich_ai_commodity_playbook_with_readiness(dict(SCAN_PLAYBOOKS[key]))
+
+
+def scan_playbook_fresh_live_validation_enabled(playbook_id: Optional[str]) -> bool:
+    playbook = get_scan_playbook(playbook_id)
+    return bool(playbook.get("fresh_live_validation_enabled"))
+
+
+def scan_playbook_position_tracking_mode(playbook_id: Optional[str]) -> str:
+    playbook = get_scan_playbook(playbook_id)
+    return str(playbook.get("position_tracking_mode") or POSITION_TRACKING_DISABLED).strip().lower()
+
+
+def scan_playbook_allows_auto_track(playbook_id: Optional[str]) -> bool:
+    return scan_playbook_position_tracking_mode(playbook_id) == POSITION_TRACKING_AUTO_TRACK
 
 
 def get_scan_playbooks() -> list[dict[str, Any]]:
@@ -627,7 +690,7 @@ def get_scan_playbooks() -> list[dict[str, Any]]:
     return sorted(
         playbooks,
         key=lambda playbook: (
-            int(playbook.get("lane_priority", 100) or 100),
+            int(playbook.get("lane_display_order", 100) or 100),
             str(playbook.get("label") or playbook.get("id") or ""),
         ),
     )
@@ -1120,6 +1183,71 @@ def _position_cost_risk_usd(record: dict[str, Any]) -> float | None:
     return round(price * contracts * 100.0, 2)
 
 
+def _mapping_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def _latest_review(record: dict[str, Any]) -> dict[str, Any] | None:
+    review = record.get("latest_review")
+    return review if isinstance(review, dict) else None
+
+
+def _review_price_is_executable(review: dict[str, Any]) -> bool:
+    exit_price = _safe_float(review.get("exit_execution_price"))
+    if exit_price is None:
+        return False
+    metrics = _mapping_value(review.get("metrics_snapshot"))
+    if bool(metrics.get("price_trigger_ok")):
+        return True
+    basis = str(review.get("exit_execution_basis") or review.get("pricing_source") or "").strip().lower()
+    return basis not in {"", "last", "last_price", "midpoint_mark", "mark", "display", "display_only"}
+
+
+def _review_pnl_usd(review: dict[str, Any], position: dict[str, Any]) -> float | None:
+    metrics = _mapping_value(review.get("metrics_snapshot"))
+    for key in ("net_pnl_usd", "gross_pnl_usd", "current_pnl_usd"):
+        value = _safe_float(review.get(key))
+        if value is not None:
+            return value
+        value = _safe_float(metrics.get(key))
+        if value is not None:
+            return value
+    pnl_pct = None
+    for key in ("net_pnl_pct", "gross_pnl_pct", "current_pnl_pct"):
+        pnl_pct = _safe_float(review.get(key))
+        if pnl_pct is not None:
+            break
+        pnl_pct = _safe_float(metrics.get(key))
+        if pnl_pct is not None:
+            break
+    cost_risk = _position_cost_risk_usd(position)
+    if pnl_pct is None or cost_risk is None:
+        return None
+    return round(cost_risk * float(pnl_pct) / 100.0, 2)
+
+
+def _review_age_hours(review: dict[str, Any], *, now_et: datetime) -> float | None:
+    raw = review.get("reviewed_at")
+    if raw in (None, ""):
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=_ET)
+    parsed_et = parsed.astimezone(_ET)
+    return max((now_et - parsed_et).total_seconds() / 3600.0, 0.0)
+
+
 def _debit_for_width(record: dict[str, Any]) -> tuple[float | None, str | None, bool, bool, str | None, str | None]:
     source = _record_source(record)
     record_liquidity = record.get("spread_liquidity") if isinstance(record.get("spread_liquidity"), dict) else {}
@@ -1308,6 +1436,11 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         "daily_realized_pnl_usd": 0.0,
         "weekly_realized_pnl_usd": 0.0,
         "correlated_index_count": 0,
+        "open_executable_pnl_usd": 0.0,
+        "open_executable_loss_usd": 0.0,
+        "open_executable_review_count": 0,
+        "open_stale_or_unpriced_review_count": 0,
+        "open_drawdown_gate_status": "unknown",
     }
     if not getattr(positions_repository, "is_available", False):
         context["available"] = False
@@ -1333,7 +1466,12 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
     opened_today = 0
     correlated_index_count = 0
     open_cost_risk_usd = 0.0
-    today_et = datetime.now(_ET).date()
+    now_et = datetime.now(_ET)
+    today_et = now_et.date()
+    open_executable_pnl_usd = 0.0
+    open_executable_loss_usd = 0.0
+    open_executable_review_count = 0
+    open_stale_or_unpriced_review_count = 0
 
     for position in list(all_positions or []):
         filled_at = _et_date(_parse_iso_datetime(position.get("filled_at")))
@@ -1365,6 +1503,23 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         cost_risk = _position_cost_risk_usd(dict(position))
         if cost_risk is not None:
             open_cost_risk_usd += cost_risk
+        review = _latest_review(position)
+        if review is None:
+            open_stale_or_unpriced_review_count += 1
+        else:
+            review_age_hours = _review_age_hours(review, now_et=now_et)
+            review_is_fresh = review_age_hours is None or review_age_hours <= 24.0
+            if not (_review_price_is_executable(review) and review_is_fresh):
+                open_stale_or_unpriced_review_count += 1
+                continue
+            review_pnl = _review_pnl_usd(review, dict(position))
+            if review_pnl is not None:
+                open_executable_review_count += 1
+                open_executable_pnl_usd += review_pnl
+                if review_pnl < 0:
+                    open_executable_loss_usd += abs(review_pnl)
+            else:
+                open_stale_or_unpriced_review_count += 1
 
     # Query realized P&L for daily/weekly loss limits
     daily_realized_pnl_usd = 0.0
@@ -1393,6 +1548,11 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
             "daily_realized_pnl_usd": daily_realized_pnl_usd,
             "weekly_realized_pnl_usd": weekly_realized_pnl_usd,
             "correlated_index_count": correlated_index_count,
+            "open_executable_pnl_usd": round(open_executable_pnl_usd, 2),
+            "open_executable_loss_usd": round(open_executable_loss_usd, 2),
+            "open_executable_review_count": open_executable_review_count,
+            "open_stale_or_unpriced_review_count": open_stale_or_unpriced_review_count,
+            "open_drawdown_gate_status": "ready" if open_executable_review_count > 0 else "no_executable_open_reviews",
         }
     )
     return context
@@ -1540,7 +1700,7 @@ def annotate_pick_with_guardrails(
         annotated["winner_profile_fit_reasons"] = winner_fit_reasons
 
     if enforce_portfolio_caps and not bool(exposure.get("available", True)):
-        blocked.append("Portfolio guardrails failed closed because tracked-position storage is unavailable.")
+        cautions.append("Portfolio guardrails could not read tracked-position storage, so exposure notes may be incomplete.")
 
     allowed_asset_classes = _normalized_label_set(playbook.get("allowed_asset_classes") or [])
     if allowed_asset_classes and asset_class not in allowed_asset_classes:
@@ -1706,7 +1866,7 @@ def annotate_pick_with_guardrails(
         blocked.append(f"{playbook['label']} only surfaces high-convexity setups rated speculative on the risk/upside scale.")
 
     if enforce_portfolio_caps and playbook.get("block_same_ticker") and ticker and int(ticker_counts.get(ticker, 0) or 0) > 0:
-        blocked.append(f"An open tracked position already exists in {ticker}.")
+        cautions.append(f"An open tracked position already exists in {ticker}.")
 
     spread_signature = vertical_spread_signature(annotated)
     if (
@@ -1714,13 +1874,13 @@ def annotate_pick_with_guardrails(
         and spread_signature is not None
         and int(vertical_spread_signature_counts.get(repr(spread_signature), 0) or 0) > 0
     ):
-        blocked.append("An open tracked position already has this exact vertical spread.")
+        cautions.append("An open tracked position already has this exact vertical spread.")
 
     correlation_size_mult = 1.0
     if enforce_portfolio_caps:
         max_new_positions_per_day = int(playbook.get("max_new_positions_per_day", 2) or 2)
         if opened_today >= max_new_positions_per_day:
-            blocked.append(
+            cautions.append(
                 f"Playbook daily cap reached: {opened_today} new position(s) already opened today against a {max_new_positions_per_day}-position limit."
             )
         elif opened_today == max_new_positions_per_day - 1 and max_new_positions_per_day > 1:
@@ -1729,14 +1889,14 @@ def annotate_pick_with_guardrails(
         max_sector_open_positions = int(playbook.get("max_sector_open_positions", 1) or 1)
         current_sector_count = int(sector_counts.get(sector, 0) or 0) if sector else 0
         if sector and current_sector_count >= max_sector_open_positions:
-            blocked.append(f"Sector cap reached for {sector}: {current_sector_count} open position(s) against a {max_sector_open_positions}-position limit.")
+            cautions.append(f"Sector cap reached for {sector}: {current_sector_count} open position(s) against a {max_sector_open_positions}-position limit.")
         elif sector and current_sector_count == max_sector_open_positions - 1 and max_sector_open_positions > 1:
             cautions.append(f"{sector} is one trade away from the current sector cap.")
 
         max_regime_open_positions = int(playbook.get("max_regime_open_positions", 2) or 2)
         current_regime_count = int(regime_counts.get(market_regime, 0) or 0) if market_regime else 0
         if market_regime and market_regime != "unknown" and current_regime_count >= max_regime_open_positions:
-            blocked.append(
+            cautions.append(
                 f"Regime cap reached for {market_regime}: {current_regime_count} open position(s) against a {max_regime_open_positions}-position limit."
             )
         elif (
@@ -1756,9 +1916,27 @@ def annotate_pick_with_guardrails(
         daily_limit_usd = account_size * daily_loss_limit_pct / 100.0
         weekly_limit_usd = account_size * weekly_loss_limit_pct / 100.0
         if daily_realized_pnl < 0 and abs(daily_realized_pnl) >= daily_limit_usd:
-            blocked.append(f"Daily loss limit reached: ${abs(daily_realized_pnl):.2f} lost today against ${daily_limit_usd:.2f} cap ({daily_loss_limit_pct}%).")
+            cautions.append(f"Daily loss limit reached: ${abs(daily_realized_pnl):.2f} lost today against ${daily_limit_usd:.2f} cap ({daily_loss_limit_pct}%).")
         if weekly_realized_pnl < 0 and abs(weekly_realized_pnl) >= weekly_limit_usd:
-            blocked.append(f"Weekly loss limit reached: ${abs(weekly_realized_pnl):.2f} lost this week against ${weekly_limit_usd:.2f} cap ({weekly_loss_limit_pct}%).")
+            cautions.append(f"Weekly loss limit reached: ${abs(weekly_realized_pnl):.2f} lost this week against ${weekly_limit_usd:.2f} cap ({weekly_loss_limit_pct}%).")
+
+        # --- Open executable drawdown ---
+        open_executable_loss = float(exposure.get("open_executable_loss_usd", 0.0) or 0.0)
+        open_drawdown_cap_pct = float(
+            playbook.get("max_open_executable_drawdown_pct", daily_loss_limit_pct)
+            or daily_loss_limit_pct
+        )
+        open_drawdown_cap_usd = account_size * open_drawdown_cap_pct / 100.0
+        open_drawdown_pct = round(open_executable_loss / account_size * 100.0, 2) if account_size > 0 else 0.0
+        annotated["open_executable_drawdown_pct"] = open_drawdown_pct
+        annotated["open_executable_loss_usd"] = round(open_executable_loss, 2)
+        annotated["max_open_executable_drawdown_pct"] = open_drawdown_cap_pct
+        if open_executable_loss > 0 and open_executable_loss >= open_drawdown_cap_usd:
+            cautions.append(
+                f"Open executable drawdown is ${open_executable_loss:.2f} "
+                f"({open_drawdown_pct:.1f}% of account), at or above the "
+                f"{playbook['label']} cap of ${open_drawdown_cap_usd:.2f} ({open_drawdown_cap_pct}%)."
+            )
 
         # --- Capital at risk ---
         cost_risk = _position_cost_risk_usd(annotated)
@@ -1768,13 +1946,13 @@ def annotate_pick_with_guardrails(
         if cost_risk is not None and max_position_cost_risk_pct > 0:
             position_cap_usd = account_size * max_position_cost_risk_pct / 100.0
             if cost_risk > position_cap_usd:
-                blocked.append(
+                cautions.append(
                     f"Position cost risk ${cost_risk:.2f} exceeds the playbook per-position cap ${position_cap_usd:.2f} ({max_position_cost_risk_pct}%)."
                 )
         if cost_risk is not None and max_portfolio_cost_risk_pct > 0:
             portfolio_cap_usd = account_size * max_portfolio_cost_risk_pct / 100.0
             if open_cost_risk + cost_risk > portfolio_cap_usd:
-                blocked.append(
+                cautions.append(
                     f"Portfolio cost risk would be ${open_cost_risk + cost_risk:.2f}, above the playbook cap ${portfolio_cap_usd:.2f} ({max_portfolio_cost_risk_pct}%)."
                 )
 
@@ -1782,13 +1960,13 @@ def annotate_pick_with_guardrails(
         max_concurrent = int(playbook.get("max_concurrent_positions", 3) or 3)
         total_open = int(exposure.get("open_positions", 0) or 0)
         if total_open >= max_concurrent:
-            blocked.append(f"Max concurrent positions ({max_concurrent}) reached: {total_open} position(s) currently open.")
+            cautions.append(f"Max concurrent positions ({max_concurrent}) reached: {total_open} position(s) currently open.")
 
         # --- Correlated index positions ---
         max_correlated = int(playbook.get("max_correlated_index_positions", 1) or 1)
         correlated_count = int(exposure.get("correlated_index_count", 0) or 0)
         if ticker in CORRELATED_INDEXES and correlated_count >= max_correlated:
-            blocked.append(f"Correlated index limit ({max_correlated}) reached: {correlated_count} index position(s) already open across {', '.join(sorted(CORRELATED_INDEXES))}.")
+            cautions.append(f"Correlated index limit ({max_correlated}) reached: {correlated_count} index position(s) already open across {', '.join(sorted(CORRELATED_INDEXES))}.")
 
         # Correlation guard: reduce size when same sector + same direction is already concentrated
         sector_direction_counts = dict(exposure.get("sector_direction_counts") or {})
@@ -1832,6 +2010,20 @@ def annotate_pick_with_guardrails(
     annotated["guardrail_reasons"] = blocked if blocked else cautions
     annotated["suggested_size_tier"] = suggested_size_tier
     annotated["suggested_size_reason"] = suggested_size_reason
+    annotated["portfolio_caps_enforced"] = bool(enforce_portfolio_caps)
+    tracking_mode = str(playbook.get("position_tracking_mode") or POSITION_TRACKING_DISABLED).strip().lower()
+    creation_blockers: list[str] = []
+    if not enforce_portfolio_caps:
+        creation_blockers.append("portfolio_caps_not_enforced")
+    if guardrail_decision == "blocked":
+        creation_blockers.append("guardrail_blocked")
+    if tracking_mode in {POSITION_TRACKING_DIAGNOSTIC_ONLY, POSITION_TRACKING_DISABLED}:
+        creation_blockers.append(f"position_tracking_mode:{tracking_mode}")
+    if candidate_execution_label != EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL:
+        creation_blockers.append(f"candidate_execution_label:{candidate_execution_label or 'unlabeled'}")
+    annotated["position_tracking_mode"] = tracking_mode
+    annotated["creation_eligible"] = not creation_blockers
+    annotated["creation_blockers"] = creation_blockers
     forced_cohort_id = str(playbook.get("forced_cohort_id") or "").strip()
     if forced_cohort_id and ticker and direction:
         forced_profit_candidate_id = _candidate_profit_id(ticker, direction, forced_cohort_id)
@@ -1942,6 +2134,11 @@ def apply_playbook_guardrails(
         "sector_direction_counts": exposure.get("sector_direction_counts", {}),
         "vertical_spread_signature_counts": exposure.get("vertical_spread_signature_counts", {}),
         "open_cost_risk_usd": exposure.get("open_cost_risk_usd", 0.0),
+        "open_executable_pnl_usd": exposure.get("open_executable_pnl_usd", 0.0),
+        "open_executable_loss_usd": exposure.get("open_executable_loss_usd", 0.0),
+        "open_executable_review_count": exposure.get("open_executable_review_count", 0),
+        "open_stale_or_unpriced_review_count": exposure.get("open_stale_or_unpriced_review_count", 0),
+        "open_drawdown_gate_status": exposure.get("open_drawdown_gate_status", "unknown"),
         "warnings": exposure["warnings"],
         "portfolio_caps_enforced": bool(enforce_portfolio_caps),
     }
@@ -2068,7 +2265,7 @@ def run_supervised_scan(
         exit_audit = build_playbook_exit_audit(
             result=preferred_result,
             policy_bundle=policy,
-            playbook=str(playbook.get("id") or DEFAULT_SCAN_PLAYBOOK_ID),
+            playbook=str(playbook.get("id") or SCAN_PLAYBOOK_FALLBACK_ID),
             truth_lane=truth_lane or LIVE_SCAN_TRUTH_LANE,
             min_trades=int(min_trades),
             max_tickers=int(max_tickers),

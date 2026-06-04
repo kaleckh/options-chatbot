@@ -15,9 +15,9 @@ Before changing code or docs in this repo:
 
 ## Active Scope
 
-The active browser product is the regular supervised options lane: live scan, replay diagnostics, suggested trades, and tracked-position review.
+The active browser product is the regular supervised options lane family: live scan, replay diagnostics, suggested trades, and tracked-position review across peer regular-options lanes.
 
-The active non-browser proof lane is AI commodity / commodity-infrastructure options validation under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`.
+AI commodity / commodity-infrastructure options validation is a separate non-browser proof-first strategy lane under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`.
 
 Do not spend implementation or documentation effort on crypto options, Polymarket, or day-trading lanes unless the user explicitly asks to archive, remove, repair, or reopen those lanes.
 

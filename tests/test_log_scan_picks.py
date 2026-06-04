@@ -222,7 +222,7 @@ class LogScanPicksTests(unittest.TestCase):
             scan_result={
                 "playbook": {
                     "id": "bullish_pullback_observation",
-                    "label": "Bullish Pullback Primary",
+                    "label": "Bullish Pullback",
                     "forced_cohort_id": "bullish_pullback_observation",
                 }
             },
@@ -342,11 +342,12 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["production_filter_action"], "preserve_filters_until_exact_replay_unlock")
 
     def test_scan_allows_auto_track_ignores_legacy_observation_only_playbooks(self):
-        self.assertTrue(
+        self.assertFalse(
             log_scan_picks._scan_allows_auto_track(
                 {
                     "playbook": {"id": "quality90_debit55_canary", "observation_only": True},
                     "picks": [_make_pick("SPY", debit=5.0)],
+                    "exposure_snapshot": {"portfolio_caps_enforced": True},
                 }
             )
         )
@@ -358,9 +359,21 @@ class LogScanPicksTests(unittest.TestCase):
                     {
                         "playbook": {"id": "short_term", "observation_only": False},
                         "picks": [_make_pick("SPY", debit=5.0)],
+                        "exposure_snapshot": {"portfolio_caps_enforced": True},
                     }
                 )
             )
+
+    def test_scan_allows_auto_track_requires_market_open(self):
+        self.assertFalse(
+            log_scan_picks._scan_allows_auto_track(
+                {
+                    "playbook": {"id": "swing"},
+                    "market_open_at_run": False,
+                    "picks": [_make_pick("SPY", debit=5.0)],
+                }
+            )
+        )
 
     def test_print_scan_diagnostics_explains_no_pick_blockers(self):
         output = StringIO()
@@ -459,9 +472,9 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertTrue(rows[0]["policy_applied"])
             self.assertEqual(run_supervised_scan.call_count, 2)
             self.assertIs(run_supervised_scan.call_args.kwargs["scan_func"], fake_oc.scan_daily_top_trades)
-            self.assertEqual(run_supervised_scan.call_args.kwargs["playbook_id"], log_scan_picks.DEFAULT_SCAN_PLAYBOOK_ID)
+            self.assertEqual(run_supervised_scan.call_args.kwargs["playbook_id"], log_scan_picks.SCAN_PLAYBOOK_FALLBACK_ID)
             self.assertFalse(run_supervised_scan.call_args.kwargs["use_recommended_policy"])
-            self.assertFalse(run_supervised_scan.call_args.kwargs["enforce_portfolio_caps"])
+            self.assertTrue(run_supervised_scan.call_args.kwargs["enforce_portfolio_caps"])
             self.assertEqual(record_forward_snapshot.call_count, 2)
             latest_snapshot = record_forward_snapshot.call_args.kwargs["scan_snapshot"]
             self.assertEqual(latest_snapshot["picks"][0]["ticker"], "QQQ")
@@ -696,7 +709,7 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual((created, duplicates, skipped), (0, 0, 1))
         self.assertEqual(repository.created, [])
 
-    def test_main_logs_and_tracks_eligible_canary(self):
+    def test_main_logs_and_tracks_eligible_auto_track_lane_pick(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_dir = Path(tmpdir)
             log_file = log_dir / "scan_picks.jsonl"
@@ -705,15 +718,16 @@ class LogScanPicksTests(unittest.TestCase):
             fake_oc = types.SimpleNamespace(
                 DEFAULT_WATCHLIST=["SPY", "QQQ"],
                 scan_daily_top_trades=lambda **kwargs: [_make_pick("SPY", debit=5.0)],
+                _market_is_open=lambda: True,
             )
             pick = _make_pick("SPY", debit=5.0)
             pick.update(
                 {
-                    "cohort_id": "quality90_debit55_canary",
+                    "cohort_id": "short_term",
                     "contract_symbol": "SPY260515C00500000",
                     "short_contract_symbol": "SPY260515C00520000",
                     "selection_source": "live_chain_exact_contract",
-                    "promotion_class": "research_bootstrap",
+                    "promotion_class": "promotable_exact_contract",
                     "options_data_source": "alpaca_opra",
                     "quote_time_et": "2026-04-14T11:00:00-04:00",
                     "quote_time_utc": "2026-04-14T15:00:00Z",
@@ -763,9 +777,10 @@ class LogScanPicksTests(unittest.TestCase):
                         "policy_applied": False,
                         "policy_fail_closed": False,
                         "truth_lane": "historical_imported_daily",
+                        "exposure_snapshot": {"portfolio_caps_enforced": True},
                         "playbook": {
-                            "id": "quality90_debit55_canary",
-                            "label": "Quality90 Debit55 Canary",
+                            "id": "short_term",
+                            "label": "Short-Term",
                         },
                     },
                 ),
@@ -773,7 +788,13 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(
                     log_scan_picks,
                     "record_forward_snapshot",
-                    return_value={"session_id": 123, "scan_picks_count": 1, "eligibility_status": "eligible"},
+                    return_value={
+                        "session_id": 123,
+                        "scan_picks_count": 1,
+                        "eligibility_status": "eligible",
+                        "run_id": "scheduled_scan:test",
+                        "recorded_at_utc": "2026-04-14T17:00:00Z",
+                    },
                 ) as record_forward_snapshot,
                 patch.dict(
                     sys.modules,
@@ -787,7 +808,7 @@ class LogScanPicksTests(unittest.TestCase):
 
             rows = log_scan_picks._load_log_rows(log_file=log_file)
             self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["playbook_id"], "quality90_debit55_canary")
+            self.assertEqual(rows[0]["playbook_id"], "short_term")
             fill_rows = log_scan_picks._load_log_rows(log_file=log_dir / "fill_attempts.jsonl")
             self.assertEqual(len(fill_rows), 1)
             self.assertEqual(fill_rows[0]["fill_status"], "auto_tracked")
@@ -797,6 +818,12 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(len(repository.created), 1)
             self.assertEqual(repository.created[0]["ticker"], "SPY")
             self.assertTrue(repository.created[0]["proof_eligible"])
+            self.assertEqual(repository.created[0]["source_scan_session_id"], 123)
+            self.assertEqual(repository.created[0]["source_scan_run_id"], "scheduled_scan:test")
+            self.assertEqual(
+                repository.created[0]["source_pick_snapshot"]["source_scan_recorded_at_utc"],
+                "2026-04-14T17:00:00Z",
+            )
             self.assertEqual(review_open_positions.call_count, 3)
             review_open_positions.assert_any_call(repository, position_ids=[1])
             self.assertEqual(record_forward_snapshot.call_count, 1)

@@ -165,6 +165,34 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["active_incumbents"]["QQQ"]["put"]["candidate_id"].startswith("QQQ__put__"))
         self.assertFalse(Path(self.options_profit_state_dir).exists())
 
+    def test_supervised_scan_request_defaults_portfolio_caps_on(self):
+        captured: dict[str, object] = {}
+
+        def _fake_scan(**kwargs):
+            captured.update(kwargs)
+            return {
+                "picks": [],
+                "watch_picks": [],
+                "ranked_picks": [],
+                "candidate_audit_picks": [],
+                "playbooks": [],
+                "exposure_snapshot": {"portfolio_caps_enforced": True},
+            }
+
+        with patch.object(self.backend, "run_supervised_scan", side_effect=_fake_scan):
+            result = self.backend._run_supervised_scan_request({}, n_picks=2, include_policy_flags=True)
+
+        self.assertTrue(captured["enforce_portfolio_caps"])
+        self.assertEqual(result["scan_mode"], "production")
+
+    def test_supervised_scan_request_rejects_accidental_caps_off_production_scan(self):
+        with self.assertRaises(ValueError):
+            self.backend._run_supervised_scan_request(
+                {"enforce_portfolio_caps": False},
+                n_picks=2,
+                include_policy_flags=True,
+            )
+
     def test_options_profit_status_endpoint_overlays_current_tracked_positions_health(self):
         state_dir = Path(self.options_profit_state_dir)
         state_dir.mkdir(parents=True, exist_ok=True)
@@ -366,7 +394,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(payload["active_incumbents"]["SPY"]["put"]["candidate_id"].startswith("SPY__put__"))
         self.assertTrue(payload["active_incumbents"]["QQQ"]["call"]["candidate_id"].startswith("QQQ__call__"))
 
-    def test_scan_endpoint_defaults_to_bullish_pullback_primary(self):
+    def test_scan_endpoint_uses_bullish_pullback_routing_fallback(self):
         captured: dict[str, object] = {}
         scan_pick = {
             "ticker": "IWM",
@@ -387,10 +415,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             "strike": 210.0,
             "short_strike": 240.0,
             "spread_width": 30.0,
-            "net_debit": 12.0,
-            "premium": 12.0,
-            "mid": 12.0,
-            "entry_execution_price": 12.0,
+            "net_debit": 3.0,
+            "premium": 3.0,
+            "mid": 3.0,
+            "entry_execution_price": 3.0,
             "entry_execution_basis": "spread_ask_bid",
             "entry_fee_total_usd": 1.3,
             "contract_symbol": "IWM260626C00210000",
@@ -423,13 +451,13 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["playbook"]["id"], "bullish_pullback_observation")
-        self.assertEqual(payload["playbook"]["label"], "Bullish Pullback Primary")
-        self.assertEqual(payload["playbook"]["lane_role"], "primary_profit_candidate")
+        self.assertEqual(payload["playbook"]["label"], "Bullish Pullback")
+        self.assertEqual(payload["playbook"]["lane_role"], "regular_peer_strategy")
         self.assertEqual(captured["symbols"], list(ss.BULLISH_PULLBACK_SCAN_TICKERS))
         self.assertEqual(captured["allowed_directions"], ["call"])
         self.assertEqual(captured["signal_variant"], "pullback_uptrend")
         self.assertEqual(payload["picks"][0]["cohort_id"], "bullish_pullback_observation")
-        self.assertEqual(payload["picks"][0]["cohort_role"], "primary")
+        self.assertEqual(payload["picks"][0]["cohort_role"], "candidate")
 
     def test_scan_request_parsing_rejects_ambiguous_numeric_and_boolean_inputs(self):
         invalid_cases = [
@@ -447,7 +475,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 self.assertEqual(response.status_code, 400)
                 self.assertIn(expected_field, response.text)
 
-    def test_scan_request_parsing_honors_string_false_without_enabling_policy(self):
+    def test_scan_request_parsing_rejects_string_false_caps_off_in_production(self):
         scan_pick = {
             "ticker": "SPY",
             "type": "call",
@@ -476,8 +504,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(response.json()["policy_applied"])
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Caps-off scans require", response.text)
 
     def test_scan_endpoint_returns_sorted_normalized_contract(self):
         response = self.client.post(
@@ -593,7 +621,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIsNotNone(scan_pick["source_scan_session_id"])
         self.assertIsNotNone(scan_pick["source_scan_event_key"])
 
-        create_response = self.client.post(
+        scanner_response = self.client.post(
             "/api/positions",
             json={
                 "scan_pick": scan_pick,
@@ -601,7 +629,18 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 "contracts": 1,
             },
         )
+        self.assertEqual(scanner_response.status_code, 409)
+        self.assertIn("candidate_execution_label:fallback_delayed", str(scanner_response.json()["detail"]))
 
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": scan_pick["entry_execution_price"],
+                "contracts": 1,
+            },
+        )
         self.assertEqual(create_response.status_code, 200)
         position = create_response.json()["position"]
         self.assertEqual(position["source_scan_session_id"], scan_payload["forward_truth_session_id"])
@@ -627,7 +666,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertTrue(position["source_pick_snapshot"]["source_scan_lineage_verified"])
         self.assertNotIn("source_scan_lineage_unverified", position["proof_ineligibility_reason"] or "")
 
-    def test_mutated_scan_pick_entry_price_does_not_verify_live_scan_lineage(self):
+    def test_mutated_scanner_origin_scan_pick_entry_price_rejects_unverified_lineage(self):
         scan_response = self.client.post(
             "/api/scan",
             json={"playbook": "short_term", "n_picks": 2, "use_recommended_policy": False},
@@ -647,12 +686,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             },
         )
 
-        self.assertEqual(create_response.status_code, 200)
-        position = create_response.json()["position"]
-        self.assertFalse(position["source_pick_snapshot"]["source_scan_lineage_verified"])
-        self.assertFalse(position["proof_eligible"])
-        self.assertEqual(position["proof_class"], "ineligible")
-        self.assertIn("source_scan_lineage_unverified", position["proof_ineligibility_reason"] or "")
+        self.assertEqual(create_response.status_code, 409)
+        self.assertIn("source_scan_lineage_unverified", str(create_response.json()["detail"]))
 
     def test_scan_endpoint_ranks_dense_calibrated_live_picks_by_expectancy(self):
         def _lookup(_surface, *, direction_score, **_kwargs):
@@ -718,7 +753,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("exit audit unavailable", payload["policy_error"])
         self.assertEqual(payload["playbook_exit_audit"], None)
 
-    def test_scan_playbook_guardrails_fail_closed_when_positions_storage_is_unavailable(self):
+    def test_scan_playbook_guardrails_warn_when_positions_storage_is_unavailable(self):
         unavailable = UnavailableTrackedPositionsRepository("tracked positions unavailable")
         with patch.object(self.backend, "POSITIONS_REPOSITORY", unavailable):
             response = self.client.post(
@@ -736,11 +771,14 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         payload = response.json()
         self.assertTrue(payload["picks"])
         self.assertFalse(payload["exposure_snapshot"]["available"])
-        self.assertEqual(payload["guardrail_decision_counts"]["blocked"], len(payload["picks"]))
-        for pick in payload["picks"]:
-            self.assertEqual(pick["guardrail_decision"], "blocked")
-            self.assertEqual(pick["suggested_size_tier"], "blocked")
-            self.assertTrue(any("failed closed" in reason.lower() for reason in pick["guardrail_reasons"]))
+        self.assertEqual(payload["guardrail_decision_counts"], {"clear": 0, "caution": 1, "blocked": 1})
+        aaa_pick = next(pick for pick in payload["picks"] if pick["ticker"] == "AAA")
+        self.assertEqual(aaa_pick["guardrail_decision"], "caution")
+        self.assertNotEqual(aaa_pick["suggested_size_tier"], "blocked")
+        self.assertTrue(any("storage" in reason.lower() for reason in aaa_pick["guardrail_reasons"]))
+        spy_pick = next(pick for pick in payload["picks"] if pick["ticker"] == "SPY")
+        self.assertEqual(spy_pick["guardrail_decision"], "blocked")
+        self.assertTrue(any("quarantined" in reason.lower() for reason in spy_pick["guardrail_reasons"]))
 
     def test_scan_endpoint_fail_open_when_forward_truth_recording_fails(self):
         with patch.object(self.backend, "record_forward_snapshot", side_effect=RuntimeError("ledger down")):
@@ -1365,7 +1403,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
             }.issubset(exit_audit["approved"].keys())
         )
 
-    def test_scan_playbook_guardrails_block_duplicate_ticker_exposure(self):
+    def test_scan_playbook_guardrails_warn_duplicate_ticker_exposure(self):
         repo = MemoryTrackedPositionsRepository()
         open_pick = build_tracked_position_scan_pick(self.bundle)
         existing_position = build_position_payload(
@@ -1409,11 +1447,11 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
 
         aaa_pick = next((pick for pick in payload["picks"] if pick["ticker"] == "AAA"), None)
         self.assertIsNotNone(aaa_pick)
-        self.assertEqual(aaa_pick["guardrail_decision"], "blocked")
-        self.assertEqual(aaa_pick["suggested_size_tier"], "blocked")
+        self.assertEqual(aaa_pick["guardrail_decision"], "caution")
+        self.assertNotEqual(aaa_pick["suggested_size_tier"], "blocked")
         self.assertTrue(aaa_pick["guardrail_reasons"])
 
-    def test_scan_backfills_after_blocked_top_pick(self):
+    def test_scan_keeps_portfolio_caution_top_pick(self):
         repo = MemoryTrackedPositionsRepository()
         open_pick = build_tracked_position_scan_pick(self.bundle)
         repo.create_position(
@@ -1454,8 +1492,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["returned_count"], 1)
-        self.assertEqual(payload["scan_funnel"]["guardrail_filtered_out"], 1)
-        self.assertEqual(payload["picks"][0]["ticker"], "BBB")
+        self.assertEqual(payload["scan_funnel"]["guardrail_filtered_out"], 0)
+        self.assertEqual(payload["picks"][0]["ticker"], "AAA")
         self.assertEqual(payload["picks"][0]["guardrail_decision"], "caution")
 
     def test_scan_pick_carries_active_profit_candidate_context(self):

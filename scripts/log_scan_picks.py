@@ -29,7 +29,12 @@ from local_env import load_local_env
 from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
-from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID, LIVE_SCAN_TRUTH_LANE, run_supervised_scan
+from supervised_scan import (
+    LIVE_SCAN_TRUTH_LANE,
+    SCAN_PLAYBOOK_FALLBACK_ID,
+    run_supervised_scan,
+    scan_playbook_allows_auto_track,
+)
 from us_equity_market_calendar import is_us_equity_market_day
 
 
@@ -229,7 +234,17 @@ def _env_flag_enabled(name: str, default: bool = True) -> bool:
 
 
 def _scan_allows_auto_track(scan_result: dict[str, Any]) -> bool:
-    return _env_flag_enabled("OPTIONS_SCAN_AUTO_TRACK", True)
+    if not _env_flag_enabled("OPTIONS_SCAN_AUTO_TRACK", True):
+        return False
+    if scan_result.get("market_open_at_run") is False:
+        return False
+    playbook_id = str((scan_result.get("playbook") or {}).get("id") or "").strip()
+    if not scan_playbook_allows_auto_track(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID):
+        return False
+    exposure = scan_result.get("exposure_snapshot")
+    if not isinstance(exposure, dict) or not bool(exposure.get("portfolio_caps_enforced")):
+        return False
+    return True
 
 
 def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
@@ -325,6 +340,7 @@ def _auto_track_scan_picks(
                 require_proof_eligible=True,
                 require_resolved_contract=True,
                 preserve_fill_price=True,
+                source_scan_lineage_verified=True,
             )
         except Exception as exc:
             skipped += 1
@@ -901,6 +917,30 @@ def _record_forward_ledger_snapshot(
         return None
 
 
+def _annotate_picks_with_scan_provenance(
+    picks: list[dict[str, Any]],
+    *,
+    ledger_result: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    if not ledger_result:
+        return picks
+    session_id = ledger_result.get("session_id")
+    run_id = str(ledger_result.get("run_id") or "").strip()
+    recorded_at_utc = str(ledger_result.get("recorded_at_utc") or "").strip()
+    if session_id is None or not run_id or not recorded_at_utc:
+        return picks
+
+    annotated: list[dict[str, Any]] = []
+    for idx, pick in enumerate(list(picks or []), start=1):
+        next_pick = dict(pick)
+        next_pick["source_scan_session_id"] = int(session_id)
+        next_pick["source_scan_event_key"] = _scan_pick_event_key(next_pick, idx)
+        next_pick["source_scan_run_id"] = run_id
+        next_pick["source_scan_recorded_at_utc"] = recorded_at_utc
+        annotated.append(next_pick)
+    return annotated
+
+
 def _backfill_position_scan_provenance(
     *,
     repository: Any,
@@ -969,6 +1009,10 @@ def main() -> int:
     import market_data_service as mds
     mds._MEMORY_CACHE.clear()
     import options_chatbot as oc
+    try:
+        market_open_at_run = bool(oc._market_is_open())
+    except Exception:
+        market_open_at_run = False
 
     os.makedirs(LOG_DIR, exist_ok=True)
 
@@ -979,12 +1023,13 @@ def main() -> int:
         positions_repository=repository,
         n_picks=10,
         watchlist_size=len(oc.DEFAULT_WATCHLIST),
-        playbook_id=os.getenv("OPTIONS_SCAN_PLAYBOOK") or DEFAULT_SCAN_PLAYBOOK_ID,
+        playbook_id=os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID,
         use_recommended_policy=_env_flag_enabled("OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False),
-        enforce_portfolio_caps=_env_flag_enabled("OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS", False),
+        enforce_portfolio_caps=_env_flag_enabled("OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS", True),
         truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,
         min_trades=int(os.getenv("OPTIONS_SCAN_MIN_TRADES", "20")),
     )
+    scan_result["market_open_at_run"] = market_open_at_run
     if scan_result.get("policy_fail_closed"):
         print(f"Supervised scan failed closed: {scan_result.get('policy_error') or 'unknown policy error'}")
         return 1
@@ -1042,6 +1087,16 @@ def main() -> int:
     if near_miss_records:
         print(f"{len(near_miss_records)} liquidity near-miss record(s) logged to {LOG_DIR / 'liquidity_near_misses.jsonl'}")
 
+    ledger_result = _record_forward_ledger_snapshot(
+        scan_result=scan_result,
+        repository=repository,
+        reviewed_positions=reviewed_positions,
+        scan_date=scan_date,
+    )
+    if ledger_result is None:
+        return 1
+    picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
+
     tracked_links: list[tuple[int, int]] = []
     auto_track_allowed = _scan_allows_auto_track(scan_result)
     repository_available = bool(getattr(repository, "is_available", False))
@@ -1093,14 +1148,6 @@ def main() -> int:
     if fill_attempt_records:
         print(f"{len(fill_attempt_records)} fill-attempt record(s) logged to {LOG_DIR / 'fill_attempts.jsonl'}")
 
-    ledger_result = _record_forward_ledger_snapshot(
-        scan_result=scan_result,
-        repository=repository,
-        reviewed_positions=reviewed_positions,
-        scan_date=scan_date,
-    )
-    if ledger_result is None:
-        return 1
     _backfill_position_scan_provenance(
         repository=repository,
         picks=picks,

@@ -1,11 +1,21 @@
 from __future__ import annotations
 
 import argparse
-
-import pytest
+import unittest
+from unittest.mock import patch
 
 from scripts import audit_zero_pick_days_all_lanes as all_lanes
 from scripts import audit_zero_pick_days_current_main_lane as single_lane
+
+
+class _MonkeyPatch:
+    def __init__(self, test_case: unittest.TestCase) -> None:
+        self._test_case = test_case
+
+    def setattr(self, target: object, name: str, value: object) -> None:
+        patcher = patch.object(target, name, value)
+        patcher.start()
+        self._test_case.addCleanup(patcher.stop)
 
 
 def test_replay_adapter_does_not_force_pullback_defaults_for_momentum_lane() -> None:
@@ -26,7 +36,7 @@ def test_replay_adapter_uses_calibration_playbook_when_lane_lacks_direct_replay(
     assert replay_playbook["min_quality_score"] == 90.0
 
 
-def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: object) -> None:
     calls: list[tuple[str, str]] = []
 
     def fake_build_audit(args: argparse.Namespace) -> dict:
@@ -73,3 +83,14 @@ def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: pytest.MonkeyPatch
     assert audit["summary"]["completed_lane_count"] == 2
     assert audit["summary"]["signal_candidate_count"] == 4
     assert [lane["status"] for lane in audit["lanes"]] == ["completed", "completed"]
+
+
+class ZeroPickAllLanesAuditTests(unittest.TestCase):
+    def test_replay_adapter_does_not_force_pullback_defaults_for_momentum_lane(self) -> None:
+        test_replay_adapter_does_not_force_pullback_defaults_for_momentum_lane()
+
+    def test_replay_adapter_uses_calibration_playbook_when_lane_lacks_direct_replay(self) -> None:
+        test_replay_adapter_uses_calibration_playbook_when_lane_lacks_direct_replay()
+
+    def test_all_lanes_audit_invokes_requested_lanes(self) -> None:
+        test_all_lanes_audit_invokes_requested_lanes(_MonkeyPatch(self))

@@ -1,0 +1,283 @@
+{
+  "report_id": "current_policy_entry_filter_paper_monitor",
+  "generated_at_utc": "2026-06-02T02:02:39Z",
+  "scope": "regular_supervised_trading_desk_entry_filter_forward_monitor",
+  "evidence_boundary": {
+    "description": "Read-only paper monitor for the current-policy entry-filter champion. It classifies fresh tracked rows after the configured since date and does not mutate scanner guardrails.",
+    "not_claimed": "This is not promotion evidence until enough fresh rows mature with realized P&L."
+  },
+  "inputs": {
+    "since_date": "2026-06-02",
+    "position_count": 536,
+    "filter_lab_generated_at_utc": "2026-06-02T01:58:43Z",
+    "champion_filter_id": "short_term_fill_degradation_ge_15",
+    "shadow_thresholds": [
+      10.0,
+      12.5,
+      15.0,
+      17.5,
+      20.0
+    ],
+    "filter_lab": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_lab_latest.json"
+  },
+  "baseline": {
+    "rows": 0,
+    "open_rows": 0,
+    "closed_rows": 0,
+    "priced_rows": 0,
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "sum_pnl_pct": 0.0,
+    "negative_count": 0,
+    "positive_count": 0,
+    "negative_rate_pct": null,
+    "loss_le_50_count": 0,
+    "loss_le_90_count": 0
+  },
+  "thresholds": [
+    {
+      "filter_id": "short_term_fill_degradation_ge_10",
+      "threshold_pct": 10.0,
+      "matched": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "kept": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "losses_avoided": 0,
+      "deep_losses_avoided": 0,
+      "near_total_losses_avoided": 0,
+      "winners_lost": 0,
+      "sample_examples": []
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_12_5",
+      "threshold_pct": 12.5,
+      "matched": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "kept": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "losses_avoided": 0,
+      "deep_losses_avoided": 0,
+      "near_total_losses_avoided": 0,
+      "winners_lost": 0,
+      "sample_examples": []
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_15",
+      "threshold_pct": 15.0,
+      "matched": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "kept": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "losses_avoided": 0,
+      "deep_losses_avoided": 0,
+      "near_total_losses_avoided": 0,
+      "winners_lost": 0,
+      "sample_examples": []
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_17_5",
+      "threshold_pct": 17.5,
+      "matched": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "kept": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "losses_avoided": 0,
+      "deep_losses_avoided": 0,
+      "near_total_losses_avoided": 0,
+      "winners_lost": 0,
+      "sample_examples": []
+    },
+    {
+      "filter_id": "short_term_fill_degradation_ge_20",
+      "threshold_pct": 20.0,
+      "matched": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "kept": {
+        "rows": 0,
+        "open_rows": 0,
+        "closed_rows": 0,
+        "priced_rows": 0,
+        "avg_pnl_pct": null,
+        "median_pnl_pct": null,
+        "sum_pnl_pct": 0.0,
+        "negative_count": 0,
+        "positive_count": 0,
+        "negative_rate_pct": null,
+        "loss_le_50_count": 0,
+        "loss_le_90_count": 0
+      },
+      "losses_avoided": 0,
+      "deep_losses_avoided": 0,
+      "near_total_losses_avoided": 0,
+      "winners_lost": 0,
+      "sample_examples": []
+    }
+  ],
+  "champion": {
+    "filter_id": "short_term_fill_degradation_ge_15",
+    "threshold_pct": 15.0,
+    "matched": {
+      "rows": 0,
+      "open_rows": 0,
+      "closed_rows": 0,
+      "priced_rows": 0,
+      "avg_pnl_pct": null,
+      "median_pnl_pct": null,
+      "sum_pnl_pct": 0.0,
+      "negative_count": 0,
+      "positive_count": 0,
+      "negative_rate_pct": null,
+      "loss_le_50_count": 0,
+      "loss_le_90_count": 0
+    },
+    "kept": {
+      "rows": 0,
+      "open_rows": 0,
+      "closed_rows": 0,
+      "priced_rows": 0,
+      "avg_pnl_pct": null,
+      "median_pnl_pct": null,
+      "sum_pnl_pct": 0.0,
+      "negative_count": 0,
+      "positive_count": 0,
+      "negative_rate_pct": null,
+      "loss_le_50_count": 0,
+      "loss_le_90_count": 0
+    },
+    "losses_avoided": 0,
+    "deep_losses_avoided": 0,
+    "near_total_losses_avoided": 0,
+    "winners_lost": 0,
+    "sample_examples": []
+  },
+  "gate": {
+    "status": "collecting",
+    "failures": [
+      "insufficient_fresh_rows",
+      "insufficient_candidate_blocked_rows",
+      "blocked_rows_not_net_negative_or_deep_loss"
+    ],
+    "live_policy_change": false,
+    "minimum_fresh_rows": 20,
+    "minimum_candidate_blocked_rows": 5
+  },
+  "lane_counts": {},
+  "ticker_counts": {},
+  "artifacts": {
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260602T020239Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.json",
+    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260602T020239Z.csv",
+    "latest_csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.csv",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260602T020239Z.md",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.md",
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-entry-filter-paper-monitor.md"
+  }
+}

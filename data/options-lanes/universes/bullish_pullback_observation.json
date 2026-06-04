@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "lane_id": "bullish_pullback_observation",
-  "lane_name": "Bullish Pullback Primary",
+  "lane_name": "Bullish Pullback",
   "universe_version": "2026-05-23.1",
   "generated_at": "2026-05-23",
   "source_label": "lane_manifest_manual_review",

@@ -68,6 +68,12 @@ class SideAwareZeroBidReplayTests(unittest.TestCase):
         self.assertEqual(result["entry_px"], 3.0)
         self.assertEqual(result["exit_px"], 0.0)
         self.assertEqual(result["net_pnl_pct"], -100.87)
+        self.assertEqual(len(result["entry_quote_evidence"]), 2)
+        self.assertEqual(len(result["exit_quote_evidence"]), 2)
+        self.assertTrue(result["entry_quote_evidence"][0]["quote_row_sha256"])
+        self.assertTrue(result["exit_quote_evidence"][1]["quote_row_sha256"])
+        self.assertTrue(result["entry_evidence_sha256"])
+        self.assertTrue(result["trade_evidence_sha256"])
 
     def test_midpoint_mode_can_price_same_zero_bid_quote_less_conservatively(self):
         long_contract = "AAA260106C00100000"

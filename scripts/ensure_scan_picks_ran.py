@@ -15,9 +15,9 @@ if str(ROOT) not in sys.path:
 DEFAULT_LEDGER_DB = ROOT / "data" / "options-validation" / "forward_tracking_authoritative.db"
 LOG_SCAN_SCRIPT = ROOT / "scripts" / "log_scan_picks.py"
 try:
-    from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID
+    from supervised_scan import SCAN_PLAYBOOK_FALLBACK_ID
 except Exception:
-    DEFAULT_SCAN_PLAYBOOK_ID = "bullish_pullback_observation"
+    SCAN_PLAYBOOK_FALLBACK_ID = "bullish_pullback_observation"
 try:
     from us_equity_market_calendar import is_us_equity_market_day
 except Exception:
@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         description="Run the scheduled options scan if today's ledger session is missing."
     )
     parser.add_argument("--date", dest="scan_date", help="YYYY-MM-DD date to check; defaults to today.")
-    parser.add_argument("--playbook", default=os.getenv("OPTIONS_SCAN_PLAYBOOK") or DEFAULT_SCAN_PLAYBOOK_ID)
+    parser.add_argument("--playbook", default=os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID)
     parser.add_argument("--force", action="store_true", help="Run the scan even if today's ledger session exists.")
     parser.add_argument("--dry-run", action="store_true", help="Report what would happen without running the scan.")
     args = parser.parse_args(argv)

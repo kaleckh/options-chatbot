@@ -360,6 +360,208 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         """,
         encoding="utf8",
     )
+    entry_filter_monitor = tmp_path / "entry-filter-monitor.json"
+    entry_filter_monitor.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T02:02:39Z",
+          "inputs": {
+            "since_date": "2026-06-02",
+            "champion_filter_id": "short_term_fill_degradation_ge_15"
+          },
+          "baseline": {
+            "rows": 0,
+            "closed_rows": 0,
+            "priced_rows": 0,
+            "avg_pnl_pct": null,
+            "median_pnl_pct": null
+          },
+          "champion": {
+            "matched": {
+              "rows": 0,
+              "closed_rows": 0,
+              "avg_pnl_pct": null
+            },
+            "kept": {
+              "avg_pnl_pct": null,
+              "median_pnl_pct": null
+            }
+          },
+          "gate": {
+            "status": "collecting",
+            "failures": ["insufficient_fresh_rows"],
+            "live_policy_change": false
+          }
+        }
+        """,
+        encoding="utf8",
+    )
+    entry_filter_walkforward = tmp_path / "entry-filter-walkforward.json"
+    entry_filter_walkforward.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T03:00:00Z",
+          "inputs": {
+            "row_count": 112,
+            "months": ["2026-04", "2026-05"],
+            "latest_holdout_month": "2026-05"
+          },
+          "decision_summary": {
+            "status": "mixed_walkforward_watch_not_promoted",
+            "candidate_filter_id": "short_term_fill_degradation_ge_15",
+            "live_policy_change": false,
+            "recommended_next_action": "Keep paper-only."
+          },
+          "portfolio": {
+            "frozen_champion": {
+              "status": "historical_pass_candidate",
+              "matched": {"rows": 9},
+              "kept": {"avg_pnl_pct": 61.01, "median_pnl_pct": 53.33},
+              "avoided_deep_losses": 5,
+              "avoided_near_total_losses": 3,
+              "lost_winners": 2
+            },
+            "broad_all_lanes_fill_degradation_ge_15": {
+              "status": "winner_damage_too_high",
+              "matched": {"rows": 19},
+              "lost_winners": 10
+            }
+          },
+          "chronological_holdout": {
+            "train": {"status": "winner_damage_too_high"},
+            "holdout": {
+              "status": "historical_pass_candidate",
+              "matched": {"rows": 6},
+              "kept": {"avg_pnl_pct": 14.37}
+            }
+          },
+          "concentration": {
+            "lane_statuses": {
+              "short_term": "historical_pass_candidate",
+              "swing": "no_deep_loss_reduction"
+            },
+            "passing_months": ["2026-05"],
+            "failing_months": ["2026-04"]
+          }
+        }
+        """,
+        encoding="utf8",
+    )
+    profit_capture_queue = tmp_path / "profit-capture-queue.json"
+    profit_capture_queue.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T04:00:00Z",
+          "status": "research_paper_capture_queue",
+          "live_policy_change": false,
+          "summary": {
+            "queue_rows": 3,
+            "tier_counts": {
+              "tier_a_clean_exact_capture": 1,
+              "tier_b_profitable_watch_repair": 2
+            },
+            "evidence_repair_priority_counts": {
+              "high": 1,
+              "none": 1,
+              "medium": 1
+            },
+            "fresh_scan_match_count": 2,
+            "fresh_scan_guardrail_decision_counts": {
+              "blocked": 1,
+              "clear": 1
+            },
+            "blocked_but_interesting_count": 1,
+            "high_priority_evidence_repair_count": 1,
+            "quarantine_queue_count": 2,
+            "quarantine_overlay_count": 1,
+            "live_policy_change": false
+          },
+          "final_readback": {
+            "top_clean_exact": [
+              {
+                "symbol": "NEM",
+                "lane_id": "bullish_pullback_observation",
+                "capture_tier": "tier_a_clean_exact_capture",
+                "status": "keep",
+                "metrics": {
+                  "exact_trusted_priced_trades": 16,
+                  "unresolved_rows": 0,
+                  "quote_coverage": 100.0,
+                  "profit_factor": 13.37,
+                  "avg_pnl": 84.03,
+                  "median_pnl": 80.0
+                },
+                "evidence_repair_priority": "none",
+                "reason_codes": []
+              }
+            ],
+            "top_watch_repair": [
+              {
+                "symbol": "GOOGL",
+                "lane_id": "tracked_winner_primary",
+                "capture_tier": "tier_b_profitable_watch_repair",
+                "status": "watch",
+                "metrics": {
+                  "exact_trusted_priced_trades": 34,
+                  "unresolved_rows": 7,
+                  "quote_coverage": 82.93,
+                  "profit_factor": 7.14,
+                  "avg_pnl": 54.01,
+                  "median_pnl": 45.0
+                },
+                "evidence_repair_priority": "high",
+                "reason_codes": ["unresolved_rows_remain"]
+              }
+            ],
+            "evidence_repair_queue": [
+              {
+                "symbol": "GOOGL",
+                "lane_id": "tracked_winner_primary",
+                "capture_tier": "tier_b_profitable_watch_repair",
+                "status": "watch",
+                "metrics": {
+                  "exact_trusted_priced_trades": 34,
+                  "unresolved_rows": 7,
+                  "quote_coverage": 82.93,
+                  "profit_factor": 7.14,
+                  "avg_pnl": 54.01,
+                  "median_pnl": 45.0
+                },
+                "evidence_repair_priority": "high",
+                "reason_codes": ["unresolved_rows_remain"]
+              }
+            ],
+            "fresh_scan_matches": [
+              {
+                "symbol": "SPY",
+                "playbook_id": "swing",
+                "capture_tier": "tier_c_fresh_scan_signature_match",
+                "guardrail_decision": "clear",
+                "match_type": "lane_signature",
+                "debit_pct_of_width": 37.9,
+                "quality_score": 97.9,
+                "guardrail_reasons": [],
+                "matched_sleeves": []
+              }
+            ],
+            "blocked_but_interesting": [
+              {
+                "symbol": "QQQ",
+                "playbook_id": "speculative",
+                "capture_tier": "blocked_but_interesting",
+                "guardrail_decision": "blocked",
+                "match_type": "symbol_only",
+                "debit_pct_of_width": 49.9,
+                "quality_score": 63.6,
+                "guardrail_reasons": ["quality below minimum"],
+                "matched_sleeves": []
+              }
+            ]
+          }
+        }
+        """,
+        encoding="utf8",
+    )
 
     scorecard = build_scorecard(
         autoresearch_path=autoresearch,
@@ -372,6 +574,9 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         suggested_trade_close_risk_path=suggested_risk,
         api_performance_path=api_performance,
         ai_commodity_progress_path=ai_commodity,
+        entry_filter_monitor_path=entry_filter_monitor,
+        entry_filter_walkforward_path=entry_filter_walkforward,
+        profit_capture_queue_path=profit_capture_queue,
     )
 
     assert scorecard["scope"] == "active_options_operating_scorecard"
@@ -383,6 +588,24 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
     assert scorecard["negative_decision_audit"]["legacy_missed_close_target_count"] == 1
     assert scorecard["legacy_missed_close_audit"]["current_action_required_count"] == 0
     assert scorecard["guardrail_starvation_audit"]["status"] == "upstream_zero_candidate_scan_pressure"
+    assert scorecard["entry_filter_paper_monitor"]["status"] == "collecting"
+    assert scorecard["entry_filter_paper_monitor"]["champion_filter_id"] == "short_term_fill_degradation_ge_15"
+    assert scorecard["entry_filter_paper_monitor"]["live_policy_change"] is False
+    assert scorecard["entry_filter_walkforward"]["status"] == "mixed_walkforward_watch_not_promoted"
+    assert scorecard["entry_filter_walkforward"]["candidate_filter_id"] == "short_term_fill_degradation_ge_15"
+    assert scorecard["entry_filter_walkforward"]["frozen_avoided_deep_losses"] == 5
+    assert scorecard["entry_filter_walkforward"]["broad_all_lanes_status"] == "winner_damage_too_high"
+    assert scorecard["entry_filter_walkforward"]["latest_holdout_status"] == "historical_pass_candidate"
+    assert scorecard["entry_filter_walkforward"]["live_policy_change"] is False
+    assert scorecard["profit_capture_queue"]["status"] == "research_paper_capture_queue"
+    assert scorecard["profit_capture_queue"]["queue_rows"] == 3
+    assert scorecard["profit_capture_queue"]["tier_counts"]["tier_a_clean_exact_capture"] == 1
+    assert scorecard["profit_capture_queue"]["high_priority_evidence_repair_count"] == 1
+    assert scorecard["profit_capture_queue"]["fresh_scan_guardrail_decision_counts"]["clear"] == 1
+    assert scorecard["profit_capture_queue"]["blocked_but_interesting_count"] == 1
+    assert scorecard["profit_capture_queue"]["quarantine_queue_count"] == 2
+    assert scorecard["profit_capture_queue"]["top_watch_repair"][0]["symbol"] == "GOOGL"
+    assert scorecard["profit_capture_queue"]["live_policy_change"] is False
     assert scorecard["open_position_risk"]["open_rows"] == 48
     assert scorecard["open_position_risk"]["review_required_count"] == 1
     assert scorecard["open_position_risk"]["executable_close_ready_count"] == 0
@@ -410,5 +633,10 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
     assert any("stale or missing suggested-trade reviews" in action for action in scorecard["next_actions"])
     assert any("historical stale-policy diagnostics" in action for action in scorecard["next_actions"])
     assert any("Do not loosen promoted Trading Desk entry guardrails" in action for action in scorecard["next_actions"])
+    assert any("short-term fill-degradation entry filter paper-only" in action for action in scorecard["next_actions"])
+    assert any("all-lane walk-forward rejects the broad fill>=15 rule" in action for action in scorecard["next_actions"])
+    assert any("profit capture queue" in action for action in scorecard["next_actions"])
+    assert any("Tier C matches" in action for action in scorecard["next_actions"])
+    assert any("profitable-looking candidates blocked" in action for action in scorecard["next_actions"])
     assert any("AI commodity production filters locked" in action for action in scorecard["next_actions"])
     assert any("AI commodity exact OPRA capture failure" in action for action in scorecard["next_actions"])

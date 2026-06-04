@@ -1,13 +1,14 @@
 "use client";
 
 import { memo, useEffect, useMemo, useState } from "react";
-import { CheckCircle, RefreshCw } from "lucide-react";
+import { CalendarDays, CheckCircle, RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import FinTable from "@/components/ui/FinTable";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { CompactStat } from "@/components/predictions/TradingDeskCompactStat";
-import { fmtMoney, fmtPct } from "@/components/predictions/tradingDeskFormat";
+import { fmtMoney, fmtPct, metricToneClass } from "@/components/predictions/tradingDeskFormat";
 import {
+  formatSignalLabel,
   getCollectionReviewSummary,
   isShareSafeLivePosition,
   renderClosedStatusCell,
@@ -23,7 +24,9 @@ import {
   ALL_POSITION_LANES,
   buildPositionLaneOptions,
   entryDateFilterLabel,
+  fmtContractCoreLabel,
   fmtTakenDate,
+  getPositionLaneDescriptor,
   getTradeDateFilterValue,
   isTakenWithinLast24Hours,
   laneMixSummary,
@@ -75,6 +78,121 @@ type TrackedPositionsTabProps = {
 function fmtCohortAvg(summary?: PolicyCohortSummary | null): string {
   if (!summary) return "\u2014";
   return `${summary.key} ${fmtPct(summary.avgPnlPct)}`;
+}
+
+function isPickedToday(position: TrackedPosition): boolean {
+  return matchesEntryDateFilter(getTradeDateFilterValue(position), "today", "");
+}
+
+function sortTodayPicks(items: TrackedPosition[]): TrackedPosition[] {
+  return [...items].sort((a, b) => {
+    const aTime = new Date(a.filled_at).getTime();
+    const bTime = new Date(b.filled_at).getTime();
+    const aSort = Number.isNaN(aTime) ? 0 : aTime;
+    const bSort = Number.isNaN(bTime) ? 0 : bTime;
+    return bSort - aSort || b.id - a.id;
+  });
+}
+
+function TodayPicksStrip({
+  positions,
+  selectedLaneLabel,
+  entryDatePreset,
+  entryDateValue,
+  onShowToday,
+}: {
+  positions: TrackedPosition[];
+  selectedLaneLabel: string | null;
+  entryDatePreset: EntryDateFilterPreset;
+  entryDateValue: string;
+  onShowToday: () => void;
+}) {
+  const dateLabel = entryDateFilterLabel(entryDatePreset, entryDateValue);
+  const showingToday = entryDatePreset === "today";
+  const sublabel = selectedLaneLabel
+    ? `${selectedLaneLabel} / ${positions.length} picked today`
+    : `${positions.length} picked today`;
+
+  return (
+    <section
+      className="rounded-lg border border-green/30 bg-green-dim px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+      aria-label="Trades picked today"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-green/40 bg-bg-1 text-green">
+            <CalendarDays size={15} aria-hidden="true" />
+          </span>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-text-0">Today&apos;s Picks</div>
+            <div className="truncate text-xs text-text-2">{sublabel}</div>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {!showingToday && entryDatePreset !== "all" ? (
+            <span className="rounded border border-border bg-bg-2 px-2 py-1 text-xs text-text-2">
+              Table date: {dateLabel}
+            </span>
+          ) : null}
+          <Button
+            size="sm"
+            variant={showingToday ? "secondary" : "ghost"}
+            icon={<CalendarDays size={12} />}
+            aria-pressed={showingToday}
+            onClick={onShowToday}
+          >
+            Show Today
+          </Button>
+        </div>
+      </div>
+
+      {positions.length > 0 ? (
+        <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          {positions.map((position) => {
+            const lane = getPositionLaneDescriptor(position);
+            const pnlPct = getCloseNowPnlPct(position);
+            const directionLabel = position.direction === "call" ? "CALL" : "PUT";
+            return (
+              <article
+                key={position.id}
+                className="min-w-[210px] max-w-[250px] flex-1 rounded-md border border-border bg-bg-1/80 px-3 py-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-mono text-base font-semibold text-text-0">
+                        {position.ticker}
+                      </span>
+                      <span className={position.direction === "call" ? "badge-call" : "badge-put"}>
+                        {directionLabel}
+                      </span>
+                    </div>
+                    <div className="truncate text-xs text-text-2">{lane.label}</div>
+                  </div>
+                  <div className={`shrink-0 font-mono text-sm font-semibold ${metricToneClass(pnlPct)}`}>
+                    {fmtPct(pnlPct)}
+                  </div>
+                </div>
+                <div className="mt-2 truncate text-xs text-text-3" title={fmtContractCoreLabel(position)}>
+                  {fmtContractCoreLabel(position)}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                  <span className="truncate text-text-2">
+                    {formatSignalLabel(position.last_recommendation)}
+                  </span>
+                  <span className="shrink-0 font-mono text-text-3">{fmtTakenDate(position)}</span>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-md border border-border bg-bg-1/70 px-3 py-2 text-sm text-text-2">
+          No open trades picked today.
+        </div>
+      )}
+    </section>
+  );
 }
 
 function EntryDateFilterControls({
@@ -236,6 +354,12 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
   const dateLaneClosedPositions = closedPositions.filter((position) =>
     matchesEntryDateFilter(getTradeDateFilterValue(position), entryDatePreset, entryDateValue) &&
     matchesPositionLaneFilter(position, laneFilter)
+  );
+  const todayPickedPositions = useMemo(
+    () => sortTodayPicks(dedupedOpenPositions.filter((position) =>
+      isPickedToday(position) && matchesPositionLaneFilter(position, laneFilter)
+    )),
+    [dedupedOpenPositions, laneFilter]
   );
   const realizedPnlClosedPositions = dateLaneClosedPositions.filter(isRealizedPnlClosedPosition);
   const currentPolicyClosedPositions = dateLaneClosedPositions.filter(isCurrentPolicyClosedPosition);
@@ -445,6 +569,19 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
             </>
           )}
         </div>
+      ) : null}
+
+      {!error && view === "open" ? (
+        <TodayPicksStrip
+          positions={todayPickedPositions}
+          selectedLaneLabel={selectedLaneLabel}
+          entryDatePreset={entryDatePreset}
+          entryDateValue={entryDateValue}
+          onShowToday={() => {
+            setEntryDateValue("");
+            setEntryDatePreset("today");
+          }}
+        />
       ) : null}
 
       {!error && view === "open" ? (

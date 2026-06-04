@@ -13,16 +13,16 @@ Last updated: 2026-05-31
 
 ## Goal
 
-The active browser product is still the supervised options lane:
+The active browser product is still the supervised options lane family:
 - surface live options ideas
 - let the user log the trades they actually took
 - keep tracked positions and suggested trades separate
 - review and close positions manually with explicit pricing context
 
 This remains supervised decision support, not autonomous trading.
-The default supervised options scanner playbook is `bullish_pullback_observation`, surfaced as Bullish Pullback Primary. That legacy `_observation` cohort ID is not watch-only; eligible scheduled picks can auto-track under the current guardrails. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
+When no playbook is supplied to a scheduled scan command, the routing fallback is `bullish_pullback_observation`, surfaced as Bullish Pullback. That fallback is not a product-priority statement; all configured regular-options lanes are peer lanes and need lane-specific profitability, risk, and proof validation. The legacy `_observation` cohort ID is not watch-only; eligible scheduled picks can auto-track under the current guardrails.
 
-There is also an active non-browser proof lane for AI commodity / commodity-infrastructure options. That lane is proof-first and is not claim-ready; it waits on exact Alpaca SIP/OPRA bid/ask snapshot history before any production filter changes or profitability claims.
+AI commodity / commodity-infrastructure options is a separate non-browser proof-first strategy lane. It is not claim-ready; it waits on exact Alpaca SIP/OPRA bid/ask snapshot history before any production filter changes or profitability claims.
 
 ## Snapshot
 
@@ -131,7 +131,7 @@ The latest saved `data/options-profit/status.json` artifact was generated on `20
 
 ### AI commodity exact OPRA proof lane
 
-The latest generated AI commodity progress readback is `data/ai-commodity-infra/progress/latest.md`, generated on `2026-05-27T14:17:01Z`.
+The latest generated AI commodity progress readback is `data/ai-commodity-infra/progress/latest.md`, generated on `2026-06-03T20:22:59Z`.
 
 Current state:
 - lane: `ai_commodity_infra_observation`
@@ -141,12 +141,12 @@ Current state:
 - exact proof window: `3` of `100` shared quote dates, `2026-05-20` through `2026-05-22`
 - verification gate: `not_verified`
 - live scan candidates in the latest readback: `0`
-- next guarded capture target: `2026-05-26`, due now if Alpaca credentials and market-data access are available
+- latest guarded capture target: `2026-05-29`, attempted again on `2026-06-03`; capture returned `no_rows_captured`, all `24` target symbols remained missing, the exact proof window stayed at `3` / `100`, local exact store refresh cannot advance history depth, and the next evidence action is `repair_full_scan_universe_capture_and_proof_alignment`
 
 The current blocker is history depth, not a failed profitability result. Exact replay is blocked until enough shared OPRA bid/ask dates exist. Production filter changes and variant promotion remain locked until exact OPRA replay can measure the changes.
 
 The generated runbook's current selected step is:
-1. guarded capture with `python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-26`
+1. guarded capture with `python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-29`
 2. readback with `python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest`
 3. repair capture gaps before any replay or filter work if shared quote dates do not advance from `3` to `4`
 

@@ -224,7 +224,7 @@ def _candidate_lane(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 "min_quality_score": 60.0 if quality_values and min(quality_values) >= 60 else None,
             },
         },
-        "reason": "This lane describes what current tracked winners share; keep it as secondary shape guidance until closed exact-contract outcomes prove it.",
+        "reason": "This lane describes what current tracked winners share; keep it as peer-lane research evidence until closed exact-contract outcomes prove it.",
     }
 
 

@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-01
+Last updated: 2026-06-03
 
 ## Documentation Hygiene
 
@@ -10,6 +10,21 @@ Current read:
 - latest Markdown placement audit: `docs/markdown-audit-2026-05-31.md`
 
 1. When adding new Markdown, update `docs/index.md` only for living docs or reports that change the current decision surface. Keep generated research reports beside their source artifacts under `data/` or `research_runs/`.
+
+## Live Scanner And Creation Safety
+
+Current read:
+- regular playbooks now carry `fresh_live_validation_enabled`, `position_tracking_mode`, and `proof_scope` metadata; regular lanes default to fresh live validation, while AI Commodity remains separate
+- browser/API/scheduled production scans default to portfolio caps on; caps-off production scan requests are rejected unless marked diagnostic or explicitly allowed
+- scheduled auto-track requires the environment kill switch to be on, market-open status, an auto-track playbook, and a caps-enforced exposure snapshot
+- scanner-origin tracked-position and suggested-trade creation requires verified archived forward-scan lineage, caps-enforced source scan state, source `creation_eligible`, a current guardrail rerun, and proof-eligible exact-contract evidence
+- explicit `manual_paper` and `manual_broker` creation modes remain available for research/backfill or broker/manual rows, but those rows do not become production proof without exact OPRA/NBBO evidence and verified lineage
+- portfolio guardrails still include existing-position exposure, max concurrent positions, cost-risk, open executable drawdown, and correlated-index exposure, but these surface as visible cautions/sizing notes rather than hard blockers for otherwise proof-eligible trades
+- side-aware zero-bid replay now stores entry/exit quote evidence plus stable hashes so replay rows can be audited without relying on implicit quote reconstruction
+
+1. During the next market-hours scan, verify `scripts/validate_pending_scan_candidates.py` processes all pending regular validation-enabled lanes and that only auto-track metadata lanes can create rows after fresh executable evidence.
+
+2. Add point-in-time scanner replay and minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any historical entry filter or exit rule.
 
 ## Frontend Makeover Follow-Up
 
@@ -98,6 +113,11 @@ Current artifacts:
 - guardrail starvation audit script: `scripts/audit_regular_guardrail_starvation.py`
 - guardrail starvation latest JSON: `data/forward-tracking/regular_guardrail_starvation_latest.json`
 - guardrail starvation report: `docs/regular-guardrail-starvation-audit.md`
+- daily all-lanes audit safety net script: `scripts/ensure_daily_all_lanes_audit_ran.py`
+- daily all-lanes audit command: `npm run options:audit:all-lanes`
+- pending selected-candidate queue: `data/forward-tracking/pending_scan_candidates.jsonl`
+- pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
+- pending candidate live validator command: `npm run options:validate:pending-candidates`
 - open-position risk audit script: `scripts/audit_regular_open_position_risk.py`
 - open-position risk latest JSON: `data/forward-tracking/regular_open_position_risk_latest.json`
 - suggested-trade close-risk audit script: `scripts/audit_suggested_trade_close_risk.py`
@@ -111,6 +131,26 @@ Current artifacts:
 - current-policy cohort health script: `scripts/build_current_policy_cohort_health.py`
 - current-policy cohort health latest JSON: `data/forward-tracking/current_policy_cohort_health_latest.json`
 - current-policy cohort health report: `docs/current-policy-cohort-health.md`
+- current-policy historical stop-grid script: `scripts/replay_current_policy_historical_stop_grid.py`
+- current-policy historical stop-grid latest JSON: `data/forward-tracking/current_policy_historical_stop_grid_latest.json`
+- current-policy historical stop-grid latest CSV: `data/forward-tracking/current_policy_historical_stop_grid_latest.csv`
+- current-policy historical stop-grid report: `docs/current-policy-historical-stop-grid.md`
+- current-policy entry-filter lab script: `scripts/analyze_current_policy_entry_filters.py`
+- current-policy entry-filter lab latest JSON: `data/forward-tracking/current_policy_entry_filter_lab_latest.json`
+- current-policy entry-filter lab latest CSV: `data/forward-tracking/current_policy_entry_filter_lab_latest.csv`
+- current-policy entry-filter lab report: `docs/current-policy-entry-filter-lab.md`
+- current-policy entry-filter walk-forward script: `scripts/validate_current_policy_entry_filter_walkforward.py`
+- current-policy entry-filter walk-forward latest JSON: `data/forward-tracking/current_policy_entry_filter_walkforward_latest.json`
+- current-policy entry-filter walk-forward latest CSV: `data/forward-tracking/current_policy_entry_filter_walkforward_latest.csv`
+- current-policy entry-filter walk-forward report: `docs/current-policy-entry-filter-walkforward.md`
+- current-policy entry-filter paper-monitor script: `scripts/monitor_current_policy_entry_filter_paper.py`
+- current-policy entry-filter paper-monitor latest JSON: `data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.json`
+- current-policy entry-filter paper-monitor latest CSV: `data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.csv`
+- current-policy entry-filter paper-monitor report: `docs/current-policy-entry-filter-paper-monitor.md`
+- profit capture queue script: `scripts/build_regular_options_profit_capture_queue.py`
+- profit capture queue latest JSON: `data/profitability-lab/regular-options-profit-capture-queue/latest.json`
+- profit capture queue latest Markdown: `data/profitability-lab/regular-options-profit-capture-queue/latest.md`
+- profit capture queue report: `docs/regular-options-profit-capture-queue.md`
 
 Current read:
 - repair scope is the regular supervised Trading Desk lanes: `short_term`, `swing`, `bullish_momentum`, and Bullish Pullback
@@ -124,10 +164,15 @@ Current read:
 - current promoted entry guardrails hit `167` negative rows; the biggest guardrail hits are lane ticker quarantine (`101`), fill degradation (`79`), worst-leg spread (`73`), and debit over `45%` width (`46`)
 - executable-exit audit: `1` negative row had non-negative executable evidence before the first negative review; legacy rows `26`, `39`, and `44` had positive executable `SELL` reviews before the final negative outcome and need a separate legacy missed-auto-close audit before any current policy change
 - `186` negative rows have no stored intra-life review timeline, so missed-close claims are explicitly unavailable for those rows
-- exit-policy replay found `107` regular Trading Desk rows with stored executable review timelines; baseline on that replayable subset is already positive at avg `+37.28%`, median `+35.79%`, and `25` negatives
-- no tested broad exit rule is promotable: `stop_70` and `current_policy_replay` have positive average deltas but increase negatives to `26` and flip `2` stored winners to losses; global profit harvest, global trailing giveback, shorter time exits, and stored-SELL following reduce average executable P&L
+- exit-policy replay found `107` regular Trading Desk rows with stored executable review timelines; baseline on that replayable subset is already positive at avg `+39.06%`, median `+43.72%`, `23` negatives, and deep-loss buckets of `14` rows `<= -50%`, `11` `<= -70%`, `9` `<= -80%`, `2` `<= -90%`, `1` `<= -95%`, and `1` `<= -99%`
+- no tested broad exit rule is promotable: the new executable stop grid (`stop_60`, `stop_70`, `stop_80`, `stop_90`) can reduce the stored-review `<= -90%` bucket from `2` to `1`, but the positive-delta stop shapes still increase negatives to `24` and flip `2` stored winners to losses; `stop_50` increases negatives to `25` and flips `3` winners, while global profit harvest, global trailing giveback, shorter time exits, and stored-SELL following still reduce average executable P&L
+- current-policy exact-contract daily close-check stop grid replayed all `112` Postgres current-policy realized rows with `0` unresolved rows across all `17` tickers. Because that tracked slice is only Apr/May 2026, the same stop-grid report now also carries an annual replay-backed exact cohort from the regular multi-lane stack: `234` rows, entry window `2025-08-14` to `2026-03-24`, exit window `2025-09-09` to `2026-04-27`, and `0` unresolved rows across all `37` tickers. The annual cohort is audit evidence, not inserted tracked rows or broker/live fills. The tracked baseline is avg `+53.54%`, median `+50.60%`, `29` negatives, and `8` rows `<= -90%`; `stop_80` is the only non-destructive daily close-check candidate on that slice, with avg `+53.69%`, `29` negatives, `7` rows `<= -90%`, `9` stop hits, and `0` winner flips. The annual replay-backed grid argues against a broad stop change: every tested stop from `50%` through `90%` reduces average P&L and flips winners. The tracked `<= -50%` loss cohort is all historical paper, concentrated in `short_term` (`11` of `16`), with `6` rows at fill degradation `>=15%`, `4` quality scores below `60`, and repeat clusters in `TSLA`, `MSTR`, and `QQQ`.
+- current-policy entry-filter lab found one paper-only candidate: `short_term_fill_degradation_ge_15`. It blocks `9` historical current-policy rows, avoids `5` rows `<= -50%`, avoids `3` rows `<= -90%`, loses `2` winners, and improves the kept historical cohort to avg `+61.01%` and median `+53.33%`; broader quality/ticker/fill filters removed too many winners.
+- current-policy entry-filter walk-forward validated all regular repair lanes. Status is `mixed_walkforward_watch_not_promoted`: the frozen `short_term_fill_degradation_ge_15` rule is a `historical_pass_candidate` overall and on the `2026-05` holdout, but `2026-04` is `winner_damage_too_high`. A broad all-lane fill-degradation `>=15%` rule is rejected as `winner_damage_too_high` after losing `10` winners. Lane statuses: `short_term=historical_pass_candidate`, `swing=no_deep_loss_reduction`, `bullish_momentum=winner_damage_too_high`, `bullish_pullback_observation=no_coverage`.
+- current-policy entry-filter paper monitor is now collecting forward evidence since `2026-06-02`. Current read: `0` fresh rows and `0` champion-matched rows, so it is not eligible for scanner promotion. Required gates are at least `20` fresh current-policy rows, at least `5` fresh champion-matched candidate-blocked rows, trusted executable realized P&L, and monitor pass status.
+- profit capture queue is now the visibility layer for profitable evidence before scanner changes. Current read after the high-priority repair pass: `97` research/paper queue rows, `15` Tier A clean exact rows, `82` Tier B profitable watch/repair rows, `16` high-priority evidence repairs, `6` fresh scan signature matches, `4` blocked-but-interesting candidates, and `173` quarantine/do-not-chase rows. Selection readiness is explicit: `15` `paper_review_candidate`, `82` `watch_repair_only`, `2` `historical_signature_only`, `4` `blocked_guardrail_only`, and `173` `do_not_chase`. Clear fresh signature matches are SPY/QQQ swing historical signatures only; GOOGL remains high-priority Tier B repair/watch or quarantine evidence, not Tier A proof. NEM is the cleanest Tier A paper-review evidence, but it has no fresh executable match in this artifact.
 - legacy rows `26`, `39`, and `44` were audited directly. All three diagnose as `stale_or_non_autoclosing_review_path`, and `current_action_required_count=0`; preserve them as historical stale-policy diagnostics, not a current auto-close bug or global exit-policy change.
-- latest guardrail-starvation audit completed `13` / `13` regular playbooks with `0` candidates, `0` returned picks, and no guardrail-starved playbooks. Status is `upstream_zero_candidate_scan_pressure`, led by direction filters (`115`), option liquidity (`96`), momentum (`72`), history/liquidity (`60`), and tech score (`33`).
+- latest guardrail-starvation audit completed `14` / `14` supervised playbooks, included AI Commodity, and audited every configured ticker scope with default `watchlist_size=59`. It returned `6` read-only diagnostics after-hours: `2` clear Swing candidates and `4` blocked scout/control candidates. The `2` clear Swing rows are queued as `pending_live_validation`, not dropped and not positions. Status is `guardrail_starvation_detected`, led by direction filters (`116`), option liquidity (`109`), momentum (`85`), history/liquidity (`60`), tech score (`23`), and direction score (`3`).
 - latest open-position risk audit reports `48` open regular rows, `47` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, and `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX). Do not auto-close that row from the display-only mark; rerun explicit review during a fresh executable quote window or close only with separate executable evidence.
 - the open Trading Desk row for that class of state now shows `Review quote` rather than `Close now` unless the stored `SELL` review includes executable exit evidence.
 - latest suggested-trade close-risk audit reports `1` open suggested trade (`id=138`, AAA) with no stored review. There are `0` close-risk suggested rows and `0` executable close-ready suggested rows; refresh explicit review before relying on that paper-idea P&L or close state.
@@ -136,13 +181,33 @@ Current read:
 
 1. Treat current-policy picks as paper-only until the recent cohort revalidates. The April current-policy cohort is showable as a discovered edge, but do not showcase May/current rows as a working live algorithm while the latest week is `paper_only_recent_week_break`.
 
-2. Do not loosen promoted Trading Desk entry guardrails for the current no-pick state. The latest audit shows upstream scan/data/liquidity pressure, not guardrails filtering viable candidates; investigate those upstream drops first.
+2. Keep the daily all-lanes audit mandatory for no-pick explanations. A scheduled scan route may still run Bullish Pullback when no playbook is supplied, but `scripts/ensure_daily_all_lanes_audit_ran.py` must confirm the all-supervised artifact, include AI Commodity as a separate strategy lane, cover all configured ticker scopes each market day, and queue clear approved-lane candidates. During a live executable quote window, run the pending validator so selected candidates can be re-quoted with portfolio caps before promotion:
 
-3. Do not change the broad exit policy based on legacy rows `26`, `39`, and `44`. The focused audit found no current action required; future exit work should require a still-open row with executable `SELL` evidence that fails to auto-close.
+```powershell
+uv run --locked python scripts\validate_pending_scan_candidates.py
+```
 
-4. Treat position `104` as the current open-position safety follow-up: it is not executable-close-ready, so the next action is a fresh explicit executable review, not a display-only auto-close.
+3. Do not change the broad exit policy based on legacy rows `26`, `39`, and `44`, the stored-review stop grid, the tracked current-policy stop grid, or the annual replay-backed stop grid. The focused audits found no current action required. `stop_80` is a tracked-slice research candidate only, because it trims one near-total daily close-check loss but is not minute-level intraday evidence and the annual replay-backed cohort rejects broad stop tightening.
 
-5. Treat suggested trade `138` as a paper-idea refresh follow-up, not a close claim: the UI now flags it as review-needed, but it still has no stored review and no executable close evidence.
+4. Keep `short_term_fill_degradation_ge_15` lane-scoped and paper-only. Do not promote a broad all-lane fill-degradation rule. The next historical-data step is broader point-in-time scanner candidate replay across regular lanes, because the current walk-forward uses realized current-policy rows rather than reconstructing every historical candidate. For the current forward monitor, after fresh rows mature run:
+
+```powershell
+uv run --locked python scripts\monitor_current_policy_entry_filter_paper.py --no-write
+```
+
+Then run the same command without `--no-write` only when the readback is worth publishing. Do not promote until the monitor has at least `20` fresh current-policy rows, at least `5` champion-matched candidate-blocked rows, trusted executable realized P&L, and passing gates.
+
+5. Use the profit capture queue before lowering proof bars or chasing hidden profitable sleeves:
+
+```powershell
+uv run --locked python scripts\build_regular_options_profit_capture_queue.py --no-write
+```
+
+Then run without `--no-write` when the readback changes. The next useful work is a strict Tier A fresh-match bridge: only `paper_review_candidate` rows can enter a paper shortlist, and only after a fresh executable quote-window scanner match. Treat Tier B as `watch_repair_only`, Tier C as `historical_signature_only`, and GOOGL as blocked from chase/promotion while unresolved or zero-bid issues remain.
+
+6. Treat position `104` as the current open-position safety follow-up: it is not executable-close-ready, so the next action is a fresh explicit executable review, not a display-only auto-close.
+
+7. Treat suggested trade `138` as a paper-idea refresh follow-up, not a close claim: the UI now flags it as review-needed, but it still has no stored review and no executable close evidence.
 
 ## Regular Options Multi-Lane Portfolio
 
@@ -151,6 +216,10 @@ Current artifact:
 - per-symbol sleeve latest JSON: `data/profitability-lab/regular-options-symbol-sleeves/latest.json`
 - per-symbol sleeve latest Markdown: `data/profitability-lab/regular-options-symbol-sleeves/latest.md`
 - per-symbol sleeve report: `docs/regular-options-symbol-sleeves.md`
+- profit capture queue script: `scripts/build_regular_options_profit_capture_queue.py`
+- profit capture queue latest JSON: `data/profitability-lab/regular-options-profit-capture-queue/latest.json`
+- profit capture queue latest Markdown: `data/profitability-lab/regular-options-profit-capture-queue/latest.md`
+- profit capture queue report: `docs/regular-options-profit-capture-queue.md`
 - runner: `scripts/run_regular_options_multilane_portfolio.py`
 - latest JSON: `data/profitability-lab/regular-options-multilane/latest.json`
 - latest Markdown: `data/profitability-lab/regular-options-multilane/latest.md`
@@ -163,6 +232,11 @@ Current artifact:
 - guardrail starvation audit: `scripts/audit_regular_guardrail_starvation.py`
 - guardrail starvation latest JSON: `data/forward-tracking/regular_guardrail_starvation_latest.json`
 - guardrail starvation latest Markdown: `docs/regular-guardrail-starvation-audit.md`
+- daily all-lanes audit safety net: `scripts/ensure_daily_all_lanes_audit_ran.py`
+- daily all-lanes audit command: `npm run options:audit:all-lanes`
+- pending selected-candidate queue: `data/forward-tracking/pending_scan_candidates.jsonl`
+- pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
+- pending candidate live validator command: `npm run options:validate:pending-candidates`
 - open-position risk audit: `scripts/audit_regular_open_position_risk.py`
 - open-position risk latest JSON: `data/forward-tracking/regular_open_position_risk_latest.json`
 - suggested-trade close-risk audit: `scripts/audit_suggested_trade_close_risk.py`
@@ -177,22 +251,23 @@ Current artifact:
 - latest Lane A memory experiment batch: `data/profitability-lab/regular-options-autoresearch/experiments/20260601T020317Z/summary.json`
 - all-planned sleeves runner: `scripts/run_regular_options_all_planned_sleeves.py`
 - all-planned latest JSON: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/latest.json`
-- all-planned latest full batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T080215Z/summary.json`
+- all-planned latest full batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260602T163750Z/summary.json`
 - targeted tracked-winner zero-bid batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T074502Z/summary.json`
 - latest IWM all-planned partial batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T185035Z/summary.json`
 - latest liquidity-first all-planned partial batch: `data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/20260531T185933Z/summary.json`
 - sector ETF import planner: `scripts/plan_regular_sector_etf_imports.py`
 
 Current read:
-- per-symbol sleeve matrix: `60` tracked symbols and `335` symbol-lane rows. Classification counts are `keep=25`, `watch=60`, `quarantine=79`, `rejected=85`, and `needs-paper=86`; this is a queue/evidence readback, not a production-promotion claim.
+- per-symbol sleeve matrix: `60` tracked symbols and `343` symbol-lane rows. Classification counts are `keep=25`, `watch=59`, `quarantine=91`, `rejected=82`, and `needs-paper=86`; this is a queue/evidence readback, not a production-promotion claim.
 - Bullish Pullback carrier symbols remain `AAPL`, `COP`, `CVX`, `GOOGL`, `IWM`, `JNJ`, `LLY`, `NEM`, `UNH`, and `XOM`. Current Bullish Pullback remove recommendations remain `ABBV`, `BAC`, `C`, `COIN`, `FCX`, `JPM`, `PLTR`, `RTX`, and `SLB`.
 - high-beta "crushing" is not proven by the current symbol-sleeve matrix: no high-beta symbol-lane row clears the real-crusher sample/coverage bar; thin positives stay watch/noisy and broad high-beta failures stay quarantined or rejected.
+- profit capture queue status: `research_paper_capture_queue`, with `15` Tier A clean exact rows, `82` Tier B profitable watch/repair rows, `16` high-priority evidence repairs, `6` fresh scan matches, `4` blocked-but-interesting rows, and `173` quarantine/do-not-chase rows. Selection readiness is `15` paper-review candidates, `82` watch/repair-only rows, `2` historical-signature-only matches, `4` blocked guardrail rows, and `173` do-not-chase rows. The queue intentionally restores profitable evidence visibility without changing scanner guardrails or proof gates; it does not justify live picks from GOOGL, SPY, or QQQ by itself.
 - operating scorecard status: `visible_product_profitability_progress_but_proof_still_blocked`. Trading Desk product progress is visible, but proof-grade readiness remains blocked.
 - Trading Desk promoted guardrails kept subset: `130` rows, `116` priced, avg `+53.08%`, median `+46.4%`, negative rate `25.0%`, versus baseline `429` rows, `383` priced, avg `+5.21%`, median `-1.58%`, negative rate `50.4%`. This is product-side progress, not historical proof-grade promotion.
-- live-scan starvation status: `upstream_zero_candidate_scan_pressure`. The latest regular-lane audit completed `13` regular playbooks with `0` candidates and no guardrail-starved playbooks, so the current no-pick state should be attacked upstream rather than by loosening promoted profitability guardrails.
+- live-scan starvation status: `guardrail_starvation_detected` from the all-supervised read-only audit. The latest daily artifact completed `14` / `14` playbooks, included AI Commodity as a separate strategy lane, audited every configured ticker scope with configured `watchlist_size=59`, and returned `6` diagnostics after-hours (`2` clear Swing rows, `4` blocked scout/control rows). The clear Swing rows are preserved in `pending_scan_candidates.jsonl` as pending validation candidates. Treat them as selected candidates, not positions, until `scripts/validate_pending_scan_candidates.py` reruns the lane during a live executable quote window with portfolio caps enabled.
 - suggested-trade close-risk status: `1` open paper idea (`AAA`, id `138`) has no stored review, no executable close-ready evidence, and no close-risk SELL evidence. Refresh explicit review before using its P&L or close state.
 - API performance status: latest local read-only audit passed all `11` probes; the route layer now forwards backend duration headers for Trading Desk/proof-status reads, `/api/options-profit/status` uses a narrow tracked-position snapshot, the largest measured payload remains the first `100` closed tracked rows at `275,004` backend bytes / `273,882` Next bytes, and the full frontend probe payload total is now `466,024` bytes.
-- AI commodity status is now visible in the same scorecard: `3` / `100` exact shared Alpaca OPRA dates, `0` live/proof candidates, failed `2026-05-26` capture target with `24` missing symbols, and production filters locked until the guarded `python scripts/run_ai_commodity_opra_progress.py --skip-capture` event is allowed.
+- AI commodity status is now visible in the same scorecard: `3` / `100` exact shared Alpaca OPRA dates, `0` live/proof candidates, failed/no-progress fresh scan and `2026-05-29` capture events, and production filters locked until exact Alpaca OPRA replay gates unlock.
 - operator read: `200 good trades` is misframed. The multi-lane count gate is passed, but the frozen clean-promotion gate is still blocked.
 - combined proof-grade regular stock-options portfolio: `234` trusted intraday exact trades after strict entry-date + ticker + direction dedupe
 - PF: `2.16`
@@ -254,7 +329,7 @@ It separates symbol-lane status from evidence class and keeps queue removals/qua
 
 6. Keep the explicit tracked-winner intraday scout in the multi-lane runner before saying the existing artifact set cannot reach `300`. It has enough strict-new rows to matter for raw count, but the current rerun fails PF and coverage gates, so it should stay behind the quality gate unless a redesigned causal/contract-selection version clears them.
 
-7. Stop treating simple Lane A filter tuning, Lane A causal memory tuning, tracked-winner GOOGL/NVDA survivability, or the first regular sector ETF shapes as the primary path to `200` clean trades. Lane A entry short-bid, prior-quote, liquidity-score, tradability, early-exit, debit/width, broad bad-zero-ticker, selected-contract exit-failure memory, and symbol-health memory probes either leave conservative PF below gate or reduce the lane below the `100` exact-trade portfolio-candidate threshold. GOOGL/NVDA/no-SPY tracked-winner misses have now failed side-aware zero-bid economics. IWM is runnable but not promotable in the current shapes. The first liquidity-first tracked-winner contract-hygiene rule also failed PF, coverage, and stress gates. Sector ETF data is now ready, but the first XLE/XLF/KRE/SMH/TLT/sector-rotation probes were rejected or starved; the next implementation target should be a materially different causal liquidity/exit rule or non-overlapping sleeve construction rather than tuning these failed simple shapes.
+7. Stop treating simple Lane A filter tuning, Lane A causal memory tuning, tracked-winner GOOGL/NVDA survivability, or the first regular sector ETF shapes as the best route to `200` clean trades. Lane A entry short-bid, prior-quote, liquidity-score, tradability, early-exit, debit/width, broad bad-zero-ticker, selected-contract exit-failure memory, and symbol-health memory probes either leave conservative PF below gate or reduce the lane below the `100` exact-trade portfolio-candidate threshold. GOOGL/NVDA/no-SPY tracked-winner misses have now failed side-aware zero-bid economics. IWM is runnable but not promotable in the current shapes. The first liquidity-first tracked-winner contract-hygiene rule also failed PF, coverage, and stress gates. Sector ETF data is now ready, but the first XLE/XLF/KRE/SMH/TLT/sector-rotation probes were rejected or starved; the next implementation target should be a materially different causal liquidity/exit rule or non-overlapping sleeve construction rather than tuning these failed simple shapes.
 
 8. Do not promote the newly tested bearish put, range-breakout, or volatility-expansion probes. Put-chain data was imported and exact exits were filled where possible; the bearish time-exit lane priced `73` exact trades at PF `0.21`, and range/volatility probes remained negative or below breakeven.
 
@@ -303,12 +378,12 @@ Current full active-universe exact-contract status:
 - zero-pick all-lanes paper-position migration report: `data/forward-tracking/all_lanes_zero_pick_position_migration_v1_latest.json`
 - zero-pick all-lanes paper-position migration status: `425` historical paper positions created; after suggested-close P&L repair, `400` are closed and `25` are open as of `2026-05-31`; all `425` scan rows and fill-attempt rows are linked to tracked position IDs. Lane counts are `short_term=159`, `swing=157`, `bullish_momentum=51`, `tracked_winner_observation=35`, `tracked_winner_primary=12`, `volatility_expansion_observation=10`, and `range_breakout_observation=1`.
 - historical suggested-close P&L repair report: `data/forward-tracking/historical_suggested_close_realized_pnl_repair_v1_latest.json`
-- historical suggested-close P&L repair status: `98` tracked rows updated across two passes to first executable historical suggested close, final dry-run idempotence reported `369` already-correct executable suggested closes, and `61` closed backfill rows remain missing realized P&L because no trusted exact exit-leg quote was available (`54` all-lanes rows and `7` main-lane rows). Do not synthesize these unresolved exits from midpoint, last trade, daily/EOD, or stale marks.
+- historical suggested-close P&L repair status: `98` tracked rows updated across two passes to first executable historical suggested close, final dry-run idempotence reported `369` already-correct executable suggested closes, and `61` closed backfill rows remain missing realized P&L because no trusted exact exit-leg quote was available (`54` all-lanes rows and `7` legacy single-lane rows). Do not synthesize these unresolved exits from midpoint, last trade, daily/EOD, or stale marks.
 - zero-pick explicit single-lane diagnostic script: `scripts/audit_zero_pick_days_current_main_lane.py`
 - zero-pick explicit single-lane diagnostic report: `data/forward-tracking/main_lane_zero_pick_current_algo_audit_latest.json`
 - zero-pick paper-position migration script: `scripts/migrate_main_lane_backfills_to_positions.py`
 - zero-pick paper-position migration report: `data/forward-tracking/main_lane_zero_pick_position_migration_latest.json`
-- zero-pick audit tracking status: `60` exact historical main-lane picks appended as `research_backfill` / `backfilled_historical_track` and explicitly migrated into UI-backed Postgres paper tracked positions; after suggested-close P&L repair, final audit-position state is `23` open and `37` closed. These are historical paper positions, not live-production proof.
+- zero-pick audit tracking status: `60` exact historical legacy single-lane picks appended as `research_backfill` / `backfilled_historical_track` and explicitly migrated into UI-backed Postgres paper tracked positions; after suggested-close P&L repair, final audit-position state is `23` open and `37` closed. These are historical paper positions, not live-production proof.
 
 1. Use `sleeve_winner_cluster_exit_50_55_60_no_pld_xlk_v1` as the high-PF profitability-first paper/live-shadow branch: `120` candidates, `113` exact quoted trades, `7` unresolved candidates, `94.2%` quote coverage, PF `4.34`, avg `+49.78%`, median `+54.20%`, win rate `72.6%`, and all priced exits are bid/ask `time_exit` fills. It excludes `CAT`, `PM`, `PLD`, and `XLK`, uses 60% DTE exits for energy/GOOGL/JNJ/LLY, 55% for NEM/IWM, and 50% for AAPL/UNH.
 
@@ -331,7 +406,7 @@ Latest 2026-05-29 next-layer stop state:
 
 7. Do not call the 100+ quoted cluster or expanded refill sleeves strict proof-complete yet. Bounded exact-fill/classification for the cluster branches wrote `data/options-validation/thetadata-nbbo/thetadata_exact_missing_intraday_20260528T074150Z.json`; the refreshed count-expanded imports wrote `data/options-validation/thetadata-nbbo/thetadata_exact_missing_intraday_20260529T042128Z.json` and `20260529T042332Z.json` and returned `0` exact rows for the WMT/JNJ misses. The WMT/JNJ gaps remain provider no-match exact-contract gaps with same-expiry chain rows present.
 
-8. Do not keep tuning broad all-59 refill variants or the 2026-05-29 move-bucket scouts as the primary path. The tested broader refills added exact trades but failed the reliability tradeoff: the highest-count branch reached `165` exact trades but PF fell to `1.49`, coverage remained near `90%`, broad C/Blocked evidence is not tradable, and the best move-bucket scout added only `5` exact trades while missing the coverage/stress gates. The desired `200+` annual exact-trade cadence is blocked by lack of a repeatable exact pattern, not by an unattempted local ThetaData import.
+8. Do not keep tuning broad all-59 refill variants or the 2026-05-29 move-bucket scouts as the next route. The tested broader refills added exact trades but failed the reliability tradeoff: the highest-count branch reached `165` exact trades but PF fell to `1.49`, coverage remained near `90%`, broad C/Blocked evidence is not tradable, and the best move-bucket scout added only `5` exact trades while missing the coverage/stress gates. The desired `200+` annual exact-trade cadence is blocked by lack of a repeatable exact pattern, not by an unattempted local ThetaData import.
 
 9. Next concrete implementation target: wire `data/profitability-lab/bullish-pullback-observation/layer-stack/latest.json` into paper-shadow reporting/harness selection, then add an assignment/expiration-safe live-shadow harness for the quoted cluster and `sleeve_pf59_coverage_a_refill_v1` branches. Add trailing partial-window robustness and leg-level bid/ask execution audit/stress before sizing beyond paper. Separate scout lanes should resume only after a new data import or causal hypothesis, not by rerunning the exhausted 2026-05-29 variants.
 
@@ -339,17 +414,17 @@ Latest 2026-05-29 next-layer stop state:
 
 ## AI Commodity / Commodity-Infrastructure Lane
 
-Current readback source: `data/ai-commodity-infra/progress/latest.md`, generated `2026-05-31T09:10:46Z`.
+Current readback source: `data/ai-commodity-infra/progress/latest.md`, generated `2026-06-03T20:22:59Z`.
 
 Current state:
 - proof source: `alpaca:sip:opra` / `alpaca_opra_daily_snapshot`
 - exact shared quote dates: `3` / `100`, from `2026-05-20` through `2026-05-22`
 - scan/proof universe: `24` aligned symbols
-- latest live scan candidates: `0`
-- latest guarded capture target: `2026-05-26`, attempted again on `2026-05-31`
-- latest capture result: failed/no material progress; shared quote dates stayed `3`, all `24` target-date symbols remained missing, and the previous proof event reports `capture_status_after=no_rows_captured`
-- next guarded event: fresh scan/read-only evidence command `python scripts/run_ai_commodity_opra_progress.py --skip-capture`, not before `2026-06-01T08:10:00-06:00`
-- full replay unlock projection: `2026-10-12` if one shared OPRA date is captured per market day
+- latest live scan candidates: `0`; the `2026-06-01` fresh scan had quote freshness `fresh_or_not_age_limited` and still recorded raw drop reasons for `24` symbols
+- latest guarded capture target: `2026-05-29`, attempted again on `2026-06-03` with latest generated artifact `2026-06-03T20:22:59Z`
+- latest capture result: failed/no material progress again; capture status was `no_rows_captured`, all `24` target symbols remained missing for `2026-05-29`, shared quote dates stayed `3`, `exact_capture_progress_outcome.status` is `exact_capture_progress_failed_or_not_observed`, local exact store already matches the proof window, local refresh cannot advance history depth, `snapshot_updated_since_is_backfill_capability=false`, and missed capture dates since the latest shared date are `2026-05-26`, `2026-05-27`, and `2026-05-28`
+- next guarded event: the runbook still reports `python scripts/run_ai_commodity_opra_progress.py --force-capture --target-date 2026-05-29` as ready, but this target has repeatedly failed with no rows captured and now points the next evidence action at `repair_full_scan_universe_capture_and_proof_alignment`; inspect/repair the full-universe capture path before looping it
+- full replay unlock projection: `2026-10-15` if one shared OPRA date is captured per market day
 
 1. Wait until the next guarded event and rerun the generated runbook readback before using any stale command:
 
@@ -357,7 +432,7 @@ Current state:
 python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest
 ```
 
-Current guard state after the failed capture: `run_next_execution_command=false`, `guarded_command_decision_status=waiting_until_next_guarded_event`, and `guarded_command_decision_safe_to_execute_now=false`.
+Current guard state after the failed capture: `run_next_execution_command=true`, `guarded_command_decision_status=ready_to_run_primary_next_execution`, and `guarded_command_decision_safe_to_execute_now=true`, but this is the same repeated no-progress `2026-05-29` capture target and the next evidence action is repair, not replay or filter work.
 
 2. If that readback opens the fresh-scan guard, run exactly the allowed command:
 
@@ -371,7 +446,7 @@ Then immediately run the readback again:
 python scripts/run_ai_commodity_opra_progress.py --next-execution --from-latest
 ```
 
-3. Repair the `2026-05-26` full-universe capture failure before replay or filter work. The latest blocker lists the full 24-symbol capture target as missing: `FCX`, `SLV`, `VRT`, `VST`, `ETN`, `GEV`, `PWR`, `CCJ`, `CEG`, `SCCO`, `COPX`, `URA`, `ALB`, `SQM`, `MP`, `RIO`, `BHP`, `TECK`, `AA`, `XME`, `NRG`, `NVT`, `CARR`, and `TT`.
+3. Repair the full-universe capture failure before replay or filter work. The current target is `2026-05-29`, and the lane also reports missed capture dates `2026-05-26`, `2026-05-27`, and `2026-05-28`. The 24-symbol capture universe remains `FCX`, `SLV`, `VRT`, `VST`, `ETN`, `GEV`, `PWR`, `CCJ`, `CEG`, `SCCO`, `COPX`, `URA`, `ALB`, `SQM`, `MP`, `RIO`, `BHP`, `TECK`, `AA`, `XME`, `NRG`, `NVT`, `CARR`, and `TT`.
 
 4. If the local store changed and the readback says derived evidence is stale, refresh deterministic readiness without recapturing or rescanning:
 

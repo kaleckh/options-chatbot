@@ -482,6 +482,7 @@ class AlpacaMarketDataTests(unittest.TestCase):
             watchlist_size=1,
             playbook_id="short_term",
             enforce_portfolio_caps=False,
+            include_blocked_guardrail_picks=True,
         )
         with patch.object(ss, "_load_ai_commodity_readiness", return_value={}):
             commodity = ss.run_supervised_scan(
@@ -491,6 +492,7 @@ class AlpacaMarketDataTests(unittest.TestCase):
                 watchlist_size=1,
                 playbook_id="ai_commodity_infra_observation",
                 enforce_portfolio_caps=False,
+                include_blocked_guardrail_picks=True,
             )
 
         self.assertEqual(normal["picks"][0]["options_data_source"], amd.ALPACA_OPTIONS_SOURCE)

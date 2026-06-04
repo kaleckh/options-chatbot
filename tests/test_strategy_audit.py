@@ -2991,7 +2991,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
                 return []
 
         approved_pick = {
-            "ticker": "SPY",
+            "ticker": "AAPL",
             "direction": "call",
             "asset_class": "index",
             "sector": "Index ETF",
@@ -3013,7 +3013,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         }
         watch_pick = {
             **approved_pick,
-            "ticker": "QQQ",
+            "ticker": "MSFT",
             "selection_source": "model_contract_fallback",
             "contract_selection_source": "model_contract_fallback",
             "promotion_class": "research_bootstrap",
@@ -3027,8 +3027,8 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             "truth_window_status": "current",
             "authoritative_evidence_source": "archived_forward_daily",
             "authoritative_evidence_status": wfo.ARCHIVED_EXACT_PRIMARY_STATUS,
-            "watch_priority_symbols": ["SPY"],
-            "watch_deprioritized_symbols": ["QQQ"],
+            "watch_priority_symbols": ["AAPL"],
+            "watch_deprioritized_symbols": ["MSFT"],
             "scan_policy": {
                 "promotion_status": "promote",
                 "managed_lane_status": "open",
@@ -3036,11 +3036,11 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
                 "hard_filters": {
                     "direction_score_min": 0.0,
                     "tech_score_min": 0.0,
-                    "approved_tickers": ["SPY"],
+                    "approved_tickers": ["AAPL"],
                 },
                 "preferred_filters": {},
-                "watch_priority_symbols": ["SPY"],
-                "watch_deprioritized_symbols": ["QQQ"],
+                "watch_priority_symbols": ["AAPL"],
+                "watch_deprioritized_symbols": ["MSFT"],
             },
         }
 
@@ -3058,13 +3058,13 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             )
 
         self.assertTrue(result["policy_applied"])
-        self.assertEqual([pick["ticker"] for pick in result["picks"]], ["SPY"])
-        self.assertEqual([pick["ticker"] for pick in result["watch_picks"]], ["QQQ"])
+        self.assertEqual([pick["ticker"] for pick in result["picks"]], ["AAPL"])
+        self.assertEqual([pick["ticker"] for pick in result["watch_picks"]], ["MSFT"])
         self.assertTrue(result["picks"][0]["managed_eligible"])
         self.assertFalse(result["watch_picks"][0]["managed_eligible"])
         self.assertEqual(result["watch_picks"][0]["managed_block_reason"], "promotion_class:research_bootstrap")
 
-    def test_guardrails_block_duplicate_open_vertical_spread(self):
+    def test_guardrails_warn_duplicate_open_vertical_spread(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3116,7 +3116,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=True,
         )
 
-        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
         self.assertIn("exact vertical spread", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
         self.assertIn("vertical_spread_signature_counts", result["exposure_snapshot"])
 
@@ -3171,7 +3171,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(ranked["guardrail_reasons"], [])
         self.assertFalse(result["exposure_snapshot"]["portfolio_caps_enforced"])
 
-    def test_guardrails_preserve_blocked_candidates_for_audit_when_hidden(self):
+    def test_guardrails_keep_portfolio_caution_candidates_visible(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3215,11 +3215,12 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=False,
         )
 
-        self.assertEqual(result["ranked_picks"], [])
+        self.assertEqual(len(result["ranked_picks"]), 1)
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
         self.assertEqual(len(result["all_ranked_picks"]), 1)
-        self.assertEqual(result["all_ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertEqual(result["all_ranked_picks"][0]["guardrail_decision"], "caution")
 
-    def test_run_supervised_scan_returns_candidate_audit_picks_when_guardrails_hide_all(self):
+    def test_run_supervised_scan_returns_portfolio_caution_picks(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3263,10 +3264,10 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             use_recommended_policy=False,
         )
 
-        self.assertEqual(result["picks"], [])
-        self.assertEqual(result["ranked_picks"], [])
+        self.assertEqual(len(result["picks"]), 1)
+        self.assertEqual(len(result["ranked_picks"]), 1)
         self.assertEqual(len(result["candidate_audit_picks"]), 1)
-        self.assertEqual(result["candidate_audit_picks"][0]["guardrail_decision"], "blocked")
+        self.assertEqual(result["candidate_audit_picks"][0]["guardrail_decision"], "caution")
 
     def test_guardrails_count_positions_opened_today_even_if_closed(self):
         class _AvailablePositionsRepo:
@@ -3294,7 +3295,68 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(exposure["open_positions"], 0)
         self.assertEqual(exposure["opened_today"], 1)
 
-    def test_guardrails_block_position_cost_risk_over_cap(self):
+    def test_guardrails_warn_open_executable_drawdown_over_cap(self):
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                if status == "open":
+                    return [
+                        {
+                            "status": "open",
+                            "ticker": "OPEN",
+                            "direction": "call",
+                            "entry_execution_price": 4.0,
+                            "contracts": 1,
+                            "source_pick_snapshot": {"sector": "Technology", "market_regime": "bullish"},
+                            "latest_review": {
+                                "reviewed_at": _RealDateTime.now(ss._ET).isoformat(),
+                                "exit_execution_price": 2.5,
+                                "exit_execution_basis": "spread_bid_ask_exact",
+                                "net_pnl_usd": -125.0,
+                                "metrics_snapshot": {"price_trigger_ok": True},
+                            },
+                        }
+                    ]
+                return self.list_positions("open")
+
+        pick = {
+            "ticker": "AAA",
+            "direction": "call",
+            "type": "call",
+            "asset_class": "equity",
+            "sector": "Technology",
+            "market_regime": "bullish",
+            "expiry": "2026-04-17",
+            "strike": 105.0,
+            "contract_symbol": "AAA260417C00105000",
+            "entry_execution_price": 2.0,
+            "direction_score": 80.0,
+            "quality_score": 80.0,
+            "tech_score": 80.0,
+        }
+        playbook = {
+            **ss.get_scan_playbook("short_term"),
+            "account_size": 10_000,
+            "max_open_executable_drawdown_pct": 1.0,
+            "max_concurrent_positions": 10,
+            "max_sector_open_positions": 10,
+            "max_regime_open_positions": 10,
+        }
+
+        result = ss.apply_playbook_guardrails(
+            [pick],
+            playbook=playbook,
+            positions_repository=_AvailablePositionsRepo(),
+            include_blocked=True,
+        )
+
+        ranked = result["ranked_picks"][0]
+        self.assertEqual(ranked["guardrail_decision"], "caution")
+        self.assertIn("Open executable drawdown", " ".join(ranked["guardrail_reasons"]))
+        self.assertEqual(result["exposure_snapshot"]["open_executable_loss_usd"], 125.0)
+
+    def test_guardrails_warn_position_cost_risk_over_cap(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3326,7 +3388,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=True,
         )
 
-        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
         self.assertIn("Position cost risk", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
 
     def test_quality90_debit55_canary_blocks_expensive_spreads(self):
@@ -3619,7 +3681,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(playbook["expansion_tickers"], list(ss.BULLISH_PULLBACK_EXPANSION_TICKERS))
         self.assertEqual(playbook["historical_data_ready_tickers"], ["SPY", "QQQ"])
         self.assertEqual(playbook["signal_variant"], "pullback_uptrend")
-        self.assertEqual(playbook["lane_role"], "primary_profit_candidate")
+        self.assertEqual(playbook["lane_role"], "regular_peer_strategy")
         self.assertEqual(playbook["proof_yardstick_playbook"], "quality90_debit55_canary")
         self.assertEqual(playbook["required_candidate_execution_label"], "executable_opra_paper_candidate")
         self.assertFalse(playbook.get("observation_only", False))
@@ -3642,7 +3704,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
                 return []
 
         base = {
-            "ticker": "SPY",
+            "ticker": "IWM",
             "asset_class": "index",
             "sector": "Index ETF",
             "direction": "call",
@@ -3669,11 +3731,11 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         )
 
         by_ticker = {pick["ticker"]: pick for pick in result["ranked_picks"]}
-        self.assertEqual(by_ticker["SPY"]["guardrail_decision"], "clear")
-        self.assertFalse(by_ticker["SPY"].get("observation_only", False))
-        self.assertEqual(by_ticker["SPY"]["cohort_id"], "bullish_pullback_observation")
-        self.assertEqual(by_ticker["SPY"]["cohort_role"], "primary")
-        self.assertEqual(by_ticker["SPY"]["suggested_size_tier"], "starter")
+        self.assertEqual(by_ticker["IWM"]["guardrail_decision"], "caution")
+        self.assertFalse(by_ticker["IWM"].get("observation_only", False))
+        self.assertEqual(by_ticker["IWM"]["cohort_id"], "bullish_pullback_observation")
+        self.assertEqual(by_ticker["IWM"]["cohort_role"], "candidate")
+        self.assertEqual(by_ticker["IWM"]["suggested_size_tier"], "starter")
         self.assertEqual(by_ticker["QQQ"]["guardrail_decision"], "blocked")
         self.assertEqual(by_ticker["IBM"]["guardrail_decision"], "blocked")
         reasons = " ".join(reason for pick in result["ranked_picks"] for reason in pick["guardrail_reasons"])

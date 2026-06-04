@@ -1,0 +1,6 @@
+filter_id,threshold_pct,matched_rows,matched_closed_rows,matched_avg_pnl_pct,deep_losses_avoided,near_total_losses_avoided,winners_lost,kept_avg_pnl_pct,kept_median_pnl_pct
+short_term_fill_degradation_ge_10,10.0,0,0,,0,0,0,,
+short_term_fill_degradation_ge_12_5,12.5,0,0,,0,0,0,,
+short_term_fill_degradation_ge_15,15.0,0,0,,0,0,0,,
+short_term_fill_degradation_ge_17_5,17.5,0,0,,0,0,0,,
+short_term_fill_degradation_ge_20,20.0,0,0,,0,0,0,,

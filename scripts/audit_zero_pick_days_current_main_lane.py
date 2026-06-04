@@ -30,7 +30,7 @@ from historical_options_store import (
     HistoricalOptionsStore,
 )
 from local_env import load_local_env
-from supervised_scan import DEFAULT_SCAN_PLAYBOOK_ID, get_scan_playbook
+from supervised_scan import SCAN_PLAYBOOK_FALLBACK_ID, get_scan_playbook
 from us_equity_market_calendar import is_us_equity_market_day
 
 from scripts import log_scan_picks
@@ -762,7 +762,7 @@ class CurrentMainLaneReplay:
             "playbook_id": self.playbook_id,
             "playbook_label": self.scan_playbook.get("label") or self.replay_playbook.get("label"),
             "cohort_id": self.scan_playbook.get("forced_cohort_id") or self.playbook_id,
-            "cohort_role": self.scan_playbook.get("forced_cohort_role") or "primary",
+            "cohort_role": self.scan_playbook.get("forced_cohort_role") or "candidate",
             "truth_lane": self.truth_lane,
             "policy_applied": False,
             "stop_loss_pct": p_config.get("spread_stop_loss_pct", p_config.get("stop_loss_pct")),
@@ -782,7 +782,7 @@ def _pick_signature(pick: dict[str, Any]) -> str:
     return "|".join(
         [
             _date_text(pick.get("scan_date") or pick.get("date") or pick.get("quote_time_et")),
-            str(pick.get("playbook_id") or DEFAULT_SCAN_PLAYBOOK_ID),
+            str(pick.get("playbook_id") or SCAN_PLAYBOOK_FALLBACK_ID),
             str(pick.get("ticker") or "").upper(),
             str(pick.get("direction") or pick.get("type") or "").lower(),
             str(pick.get("contract_symbol") or "").upper(),
@@ -820,7 +820,7 @@ def _existing_ledger_run_ids(playbook_id: str) -> set[str]:
 
 
 def _research_backfill_run_id(*, audit_id: str, playbook_id: str, scan_date: date) -> str:
-    if audit_id == AUDIT_ID and playbook_id == DEFAULT_SCAN_PLAYBOOK_ID:
+    if audit_id == AUDIT_ID and playbook_id == SCAN_PLAYBOOK_FALLBACK_ID:
         return f"{audit_id}:{scan_date.isoformat()}"
     return f"{audit_id}:{playbook_id}:{scan_date.isoformat()}"
 
@@ -1137,7 +1137,7 @@ def write_report(audit: dict[str, Any], output_dir: Path) -> tuple[Path, Path]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit zero-pick days against one explicitly selected scan lane.")
-    parser.add_argument("--playbook", default=DEFAULT_SCAN_PLAYBOOK_ID)
+    parser.add_argument("--playbook", default=SCAN_PLAYBOOK_FALLBACK_ID)
     parser.add_argument("--scope", choices=["zero_any", "main_zero", "zero_any_or_main_zero"], default="zero_any_or_main_zero")
     parser.add_argument("--date-from")
     parser.add_argument("--date-to")

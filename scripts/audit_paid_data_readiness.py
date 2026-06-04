@@ -339,7 +339,7 @@ def _build_next_actions(
             f"{shared_quote_date_count} < target {min_shared_quote_dates}."
         )
     if not actions:
-        actions.append("Run exact-contract replay/backtest on the bullish-pullback main lane and canary proof/control yardstick.")
+        actions.append("Run exact-contract replay/backtest on the requested playbook and canary proof/control yardstick.")
     return actions
 
 

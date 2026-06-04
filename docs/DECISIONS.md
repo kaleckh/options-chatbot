@@ -1,5 +1,41 @@
 # Decisions
 
+## 2026-06-03: Make Scanner Creation Safety Lane-Wide And Metadata-Driven
+
+Scanner validation, auto-track, and position creation must be governed by playbook metadata across the regular supervised options lane family, not by a hardcoded Bullish Pullback exception. Every regular playbook defaults to fresh live validation; AI Commodity remains a separate proof-first strategy lane. Auto-track is allowed only for playbooks whose `position_tracking_mode` is `auto_track`, and diagnostic/control lanes stay paper-review or diagnostic-only even when they produce clear rows.
+
+Durable decision: production scans default to portfolio caps enabled in browser, API, and scheduled batch paths. Caps-off scans are diagnostic unless explicitly allowed, and scheduled auto-track refuses rows without a caps-enforced exposure snapshot. Scanner-origin `POST /api/positions` and `POST /api/suggested-trades` now require verified archived forward-scan lineage, a caps-enforced source scan, source `creation_eligible=true`, a current guardrail rerun, and proof-eligible exact-contract evidence. Lineage matching includes evidence/source/caps/creation fields so a caller cannot relabel fallback-delayed or caps-off rows as proof-grade. Historical/research rows can still be stored only through explicit `manual_paper` or `manual_broker` creation modes and remain proof-ineligible when lineage or OPRA/NBBO proof is missing. Portfolio caps now include open executable drawdown from fresh executable reviews; stale/unpriced/display-only review marks are counted separately and do not become executable P&L. Existing-position exposure, max concurrent positions, same-ticker/exact-spread exposure, daily/weekly loss, open drawdown, portfolio cost-risk, sector/regime caps, and correlated-index caps are diagnostic cautions and sizing notes rather than hard trade blockers; proof, lane-scope, execution-label, liquidity, and replay-promoted entry-quality failures remain hard blockers. Side-aware zero-bid replay rows persist entry/exit quote evidence and stable hashes for replay auditability.
+
+## 2026-06-02: Run The Daily No-Pick Audit Across All Supervised Lanes
+
+Daily no-pick explanations must not rely on one scheduled auto-track route alone. All configured regular-options lanes are peer lanes, and the daily audit/readback must run read-only across every configured supervised playbook, include AI Commodity as its own separate strategy lane, and cover each playbook's full configured ticker scope.
+
+Durable decision: `scripts/ensure_daily_all_lanes_audit_ran.py` owns this safety net. It requires an `all_supervised_guardrail_starvation` artifact for the market day, verifies that all `SCAN_PLAYBOOKS` completed, checks that commodity strategy playbooks and all configured ticker scopes were included, and repairs the artifact by running `scripts/audit_regular_guardrail_starvation.py --include-commodity` when needed. Clear rows from tracking-approved lanes are written to `data/forward-tracking/pending_scan_candidates.jsonl` as `pending_live_validation`, not dropped and not immediately created as positions. `scripts/validate_pending_scan_candidates.py` owns the market-hours follow-up: it reruns pending approved lanes with portfolio caps enabled, and only the live scan/proof path may create positions after fresh executable OPRA/NBBO evidence and verified forward-scan lineage. `scripts/run_scan_picks.bat` now forces the all-lanes audit after the scheduled live scan route, then runs pending-candidate validation; `scripts/run_scan_picks_safety_net.bat` verifies the same path. Manual commands are `npm run options:audit:all-lanes` and `npm run options:validate:pending-candidates`. Scout/control/blocked/stale rows stay diagnostics only.
+
+## 2026-06-02: Build A Profit Capture Queue Without Lowering Proof Bars
+
+The regular options profitability problem now has a visibility layer before any scanner-policy change. `scripts/build_regular_options_profit_capture_queue.py` reads the per-symbol sleeve matrix, current-policy historical picks, and fresh guardrail-starvation audit, then writes `data/profitability-lab/regular-options-profit-capture-queue/latest.json` plus `docs/regular-options-profit-capture-queue.md`. The repaired latest queue has `97` research/paper capture rows: `15` Tier A clean exact capture rows, `82` Tier B profitable watch/repair rows, `16` high-priority evidence repairs, `6` fresh scan signature matches, `4` blocked-but-interesting rows, and `173` quarantine/do-not-chase rows. It restores visibility into profitable sleeves such as GOOGL watch/repair, NEM/AAPL/LLY clean exact rows, and current-policy SPY/QQQ swing signatures while keeping guardrail reasons visible.
+
+Durable decision: the queue is a research/paper capture and proof-hardening layer, not a scanner promotion, broker recommendation, live stop change, or proof-bar reduction. Tier A requires trusted intraday OPRA/NBBO exact-contract evidence, zero unresolved rows, adequate sample, high quote coverage, positive PF/average P&L, and no clean disqualifier. Tier B is watch/repair evidence and must show unresolved/coverage/sample warnings. Tier C fresh scan matches are historical-signature matches only. The queue now carries explicit paper/research routing: Tier A is `paper_review_candidate`, Tier B is `watch_repair_only`, clear fresh signatures are `historical_signature_only`, blocked rows are `blocked_guardrail_only`, and quarantine rows are `do_not_chase`. Blocked candidates remain blocked until a separate replay/paper proof process justifies a scoped policy change. Do not chase GOOGL from the repaired queue; NEM can be considered only as a paper-review candidate unless a fresh executable scan matches it.
+
+## 2026-06-02: Treat 80% Historical Stops As Research, Not A Live Stop Change
+
+The current-policy exact-contract daily close-check stop grid found a small non-destructive `80%` stop candidate on the tracked current-policy slice, but it is not strong enough to promote live. The tracked replay covered `112` Postgres current-policy realized rows with `0` unresolved rows across all `17` tickers. Baseline was avg `+53.54%`, median `+50.60%`, `29` negatives, and `8` rows `<= -90%`. A daily close-check `80%` stop improved avg to `+53.69%`, kept negatives at `29`, reduced `<= -90%` to `7`, triggered `9` rows, and flipped `0` winners. Because the tracked slice is only Apr/May 2026, the report also includes a separate annual replay-backed exact cohort from the regular multi-lane stack: `234` rows, entry window `2025-08-14` to `2026-03-24`, exit window `2025-09-09` to `2026-04-27`, and `0` unresolved rows across all `37` tickers. That annual cohort is audit evidence, not inserted tracked rows or broker/live fills, and every tested stop from `50%` through `90%` reduced average P&L while flipping winners.
+
+Durable decision: keep the live `90%` stop cap for now. Treat `80%` as a research candidate that must pass minute-by-minute OPRA/NBBO stop replay and paper validation before promotion. Initial entry-avoidance testing for `short_term` concentration, fill degradation `>=15%`, quality score `<60`, and repeat ticker clusters is governed by the paper-monitor decision below.
+
+## 2026-06-02: Paper-Monitor The Short-Term Fill-Degradation Entry Filter Before Promotion
+
+The current-policy entry-filter lab found `short_term_fill_degradation_ge_15` is the only useful historical candidate from the first loss-cohort pass. It blocks `9` current-policy historical rows, avoids `5` rows `<= -50%`, avoids `3` rows `<= -90%`, loses `2` winners, and improves the kept historical cohort from avg `+53.54%` to `+61.01%`. Broader fill-degradation, quality-score, repeat-ticker, and tighter threshold filters removed too many winners or had insufficient coverage.
+
+Durable decision: do not promote this into live scanner guardrails from historical paper evidence. Run it as a paper-only forward monitor through `scripts/monitor_current_policy_entry_filter_paper.py`. Promotion requires at least `20` fresh current-policy rows, at least `5` fresh champion-matched candidate-blocked rows, trusted executable realized P&L, positive kept-cohort read, and monitor gates passing without winner damage. Until then, the operating scorecard should say to keep the filter paper-only.
+
+## 2026-06-02: Validate Entry Filters Across All Regular Lanes, But Keep Them Lane-Scoped
+
+The all-regular-lanes walk-forward validator found the frozen `short_term_fill_degradation_ge_15` rule is useful but not promotable. It is a `historical_pass_candidate` on all `112` current-policy realized rows and on the `2026-05` holdout, but the `2026-04` calibration slice is `winner_damage_too_high`. The same fill-degradation `>=15%` idea fails as a broad all-lane guardrail: it matches `19` rows, avoids `6` deep losses, but loses `10` winners and is `winner_damage_too_high`. Lane readbacks confirm the rule is only plausible in `short_term`; `swing` has `no_deep_loss_reduction`, `bullish_momentum` has `winner_damage_too_high`, and Bullish Pullback has `no_coverage`.
+
+Durable decision: all-lane validation is required before scanner promotion, but the current result argues against a global fill-degradation rule. Keep the frozen rule short-term-only and paper-only. The next historical-data step is broader point-in-time scanner candidate replay, not another threshold sweep on the same realized rows.
+
 ## 2026-06-01: Use Recent Cohort Health As The Current-Policy Paper-Only Kill Switch
 
 Current-policy replay can be positive in aggregate while the newest cohort is not showable. The Trading Desk should therefore separate `showcase_month` from `recent_month` / `recent_week` before presenting current-policy historical P&L as an active algorithm state.
@@ -36,7 +72,7 @@ Rows with no executable exit quote stay visibly missing rather than being filled
 
 ## 2026-05-31: Surface Trading Desk Lane Families, Not Source Variants
 
-The Trading Desk should show operator-facing lane families rather than combining lane names with evidence-source or migration provenance. The regular `bullish_pullback_observation` lane is displayed as `Bullish Pullback`; legacy labels such as `Bullish Pullback Primary`, `Bullish Pullback Observation`, and source details such as `Historical Backfill` or `Live Exact` should not split the lane list or repeat in the Lane column.
+The Trading Desk should show operator-facing lane families rather than combining lane names with evidence-source or migration provenance. The regular `bullish_pullback_observation` lane is displayed as `Bullish Pullback`; legacy lane-label variants and source details such as `Historical Backfill` or `Live Exact` should not split the lane list or repeat in the Lane column.
 
 Durable decision: use a clickable lane filter row near the top of tracked trades so open and closed positions can be filtered by lane family. Keep source/provenance details available in evidence-specific fields where needed, but do not use them as lane names.
 
@@ -72,9 +108,9 @@ The positions UI must not call the state-changing review endpoint during passive
 
 ## 2026-05-31: Run Zero-Pick Backfill Audits Through Every Runnable Lane
 
-There is no primary supervised options lane for historical selection audits. The default zero-pick/backfill audit surface is now `scripts/audit_zero_pick_days_all_lanes.py`, which iterates every supervised scan playbook, records whether each lane used a direct replay playbook or a calibration adapter, and reports lane failures explicitly instead of silently falling back to another lane's signal rules.
+There is no primary supervised options lane for historical selection audits. The zero-pick/backfill audit surface is `scripts/audit_zero_pick_days_all_lanes.py`, which iterates every supervised scan playbook, records whether each lane used a direct replay playbook or a calibration adapter, and reports lane failures explicitly instead of silently falling back to another lane's signal rules.
 
-The older `scripts/audit_zero_pick_days_current_main_lane.py` remains available only for explicit single-lane diagnosis. Its replay builder now uses the requested lane's replay/calibration metadata and no longer injects bullish-pullback signal defaults into non-pullback lanes. Future backfill claims must say whether they are all-lanes or explicitly single-lane; a single-lane result must not be described as "the" backfill.
+The older `scripts/audit_zero_pick_days_current_main_lane.py` remains available only for explicit single-lane diagnosis. Its replay builder now uses the requested lane's replay/calibration metadata and no longer injects bullish-pullback signal assumptions into non-pullback lanes. Future backfill claims must say whether they are all-lanes or explicitly single-lane; a single-lane result must not be described as "the" backfill.
 
 After the explicit operator correction that would-have-picked rows should be tracked for learning, the 2026-05-31 all-lanes audit was applied. It wrote `data/forward-tracking/all_lanes_zero_pick_current_algo_audit_latest.json` with `14` / `14` lanes completed, `1,496` signal candidates, `1,228` exact historical candidates, and `425` tracked research/backfill picks. `scripts/migrate_main_lane_backfills_to_positions.py` now supports `--playbook-id all`, and the all-lanes migration report is `data/forward-tracking/all_lanes_zero_pick_position_migration_v1_latest.json`: `425` historical paper positions created, `398` closed and `27` open as of `2026-05-31`, with all matching scan/fill log rows linked back to tracked position IDs.
 
@@ -224,17 +260,17 @@ Small local fixes may stay unstaged when the user asked only for investigation o
 
 ## 2026-05-25: Narrow Active Work To Regular Options And AI Commodity Options
 
-Active project work is limited to the regular supervised options lane and the AI commodity / commodity-infrastructure options lane for the foreseeable future.
+Active project work is limited to the regular supervised options lane family and the separate AI commodity / commodity-infrastructure options strategy lane for the foreseeable future.
 
 The crypto options lane, Polymarket lane, and day-trading lane are out of scope for implementation, performance work, research cycles, documentation work, and automation work unless the user explicitly asks to archive, remove, repair, or reopen one of those lanes. The day-trading lane is paused rather than deleted.
 
 Future agents should avoid optimizing or debugging `crypto_options/*`, `src/lib/polymarket/*`, `src/lib/day-trading/*`, and related lane-specific scripts/tests/docs unless that work is required by shared infrastructure for the active regular options or AI commodity options lanes.
 
-## 2026-05-23: Make Bullish Pullback The Main Supervised Options Lane
+## 2026-05-23: Superseded - Treat Bullish Pullback As A Scheduled Fallback, Not The Main Lane
 
-The main supervised options scanner now defaults to `bullish_pullback_observation`, surfaced as Bullish Pullback. It is a managed broad liquid-universe bullish call-vertical lane, not observation-only, and it keeps starter sizing while SPY/QQQ remain the currently historical-ready subset during closed forward Alpaca OPRA evidence collection.
+This decision is superseded by the 2026-06-02 all-lanes audit decision and the 2026-06-03 lane-parity correction. `bullish_pullback_observation`, surfaced as Bullish Pullback, remains a managed broad liquid-universe bullish call-vertical lane and may be used as a scheduled scan fallback when no playbook is supplied. That routing fallback is not a product-priority statement. All configured regular-options lanes are peer lanes and need lane-specific profitability, risk, execution, and proof validation.
 
-`tracked_winner_primary` remains selectable, but it is secondary shape guidance because it was derived from previously tracked winners rather than a clean closed-forward OPRA proof loop. `quality90_debit55_canary` remains the proof/control yardstick and requires executable OPRA paper candidates.
+`tracked_winner_primary` remains a selectable peer lane; its promotion status depends on the same proof bars as every other regular-options lane. `quality90_debit55_canary` remains the proof/control yardstick and requires executable OPRA paper candidates.
 
 No lane should be treated as promoted for sizing beyond the coded caps until closed forward Alpaca OPRA results show positive expectancy and pass the configured proof gates.
 

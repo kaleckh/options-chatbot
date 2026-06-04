@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 from datetime import date, timedelta
 
+import supervised_scan as ss
 import wfo_optimizer as wfo
 
 
@@ -60,8 +61,25 @@ def _find_candidate(report: dict, filters: dict) -> dict:
 
 
 class PlaybookDiscoveryTests(unittest.TestCase):
-    def test_exit_audit_default_tracks_bullish_pullback_playbook(self):
-        self.assertEqual(wfo.DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK, "bullish_pullback_observation")
+    def test_supervised_scan_playbooks_have_validation_tracking_metadata(self):
+        for playbook_id in ss.SCAN_PLAYBOOKS:
+            with self.subTest(playbook_id=playbook_id):
+                playbook = ss.get_scan_playbook(playbook_id)
+                self.assertIn("fresh_live_validation_enabled", playbook)
+                self.assertIn("position_tracking_mode", playbook)
+                self.assertIn("proof_scope", playbook)
+                self.assertIn(
+                    playbook["position_tracking_mode"],
+                    {
+                        ss.POSITION_TRACKING_AUTO_TRACK,
+                        ss.POSITION_TRACKING_PAPER_REVIEW_ONLY,
+                        ss.POSITION_TRACKING_DIAGNOSTIC_ONLY,
+                        ss.POSITION_TRACKING_DISABLED,
+                    },
+                )
+
+    def test_exit_audit_fallback_tracks_bullish_pullback_playbook(self):
+        self.assertEqual(wfo.PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK, "bullish_pullback_observation")
         self.assertEqual(wfo._playbook_trade_window(""), {"min_dte": 13, "max_dte": 45})
         self.assertEqual(wfo._playbook_trade_window("bullish_pullback_observation"), {"min_dte": 13, "max_dte": 45})
 

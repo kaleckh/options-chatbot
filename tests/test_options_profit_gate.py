@@ -84,7 +84,7 @@ class OptionsProfitGateTests(unittest.TestCase):
 
         self.assertEqual(metrics["closed_position_count"], 1)
         self.assertEqual(metrics["avg_gross_pnl_pct"], 1.0)
-        self.assertEqual(metrics["avg_net_pnl_pct"], -1.6)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -1.56)
         self.assertEqual(metrics["net_profit_factor"], 0.0)
         self.assertAlmostEqual(metrics["gross_realized_pnl_usd"], 1.0, places=2)
         self.assertAlmostEqual(metrics["net_realized_pnl_usd"], -1.6, places=2)

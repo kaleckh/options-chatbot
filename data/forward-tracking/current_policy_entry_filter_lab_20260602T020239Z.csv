@@ -1,0 +1,15 @@
+filter_id,status,blocked_rows,blocked_avg_pnl_pct,kept_avg_pnl_pct,kept_median_pnl_pct,kept_stop_80_avg_pnl_pct,kept_stop_80_median_pnl_pct,kept_stop_80_loss_le_90_pct,avoided_losses,avoided_deep_losses,avoided_near_total_losses,lost_winners,blocked_sum_delta_if_skipped_pct,latest_entry_month,latest_month_kept_avg_pnl_pct,latest_month_kept_median_pnl_pct,latest_month_kept_negative_count
+short_term_fill_degradation_ge_15,paper_research_candidate,9,-31.936,61.0077,53.3263,61.1697,53.3263,4,7,5,3,2,287.4239,2026-05,14.3695,2.7984,18
+short_term_fill_degradation_ge_16,paper_research_candidate_recent_unproven,6,-57.9782,59.8513,52.2683,60.0088,52.2683,5,5,4,2,1,347.869,2026-05,14.814,-1.5817,20
+short_term_loss_cohort_combo_v1,winner_damage_too_high,32,12.5834,69.9213,64.5275,69.9213,64.5275,2,16,10,6,16,-402.6674,2026-05,20.9529,7.5202,11
+short_term_fill_degradation_ge_10,winner_damage_too_high,26,13.7663,65.5634,67.3745,65.5634,67.3745,2,12,9,6,14,-357.9235,2026-05,23.4595,7.5202,14
+short_term_fill_degradation_ge_12_5,winner_damage_too_high,18,11.3357,61.6205,52.2683,61.6205,52.2683,3,9,7,5,9,-204.0428,2026-05,18.8516,7.1785,16
+short_term_fill15_or_quality60,winner_damage_too_high,27,25.4843,62.4506,51.2104,62.6469,51.2104,3,11,7,4,16,-688.0758,2026-05,7.9472,-2.0483,16
+short_term_fill_degradation_ge_14,winner_damage_too_high,14,-10.6281,62.7058,59.0808,62.8761,59.0808,3,8,6,4,6,148.7939,2026-05,15.4042,2.7984,17
+fill_degradation_ge_15,winner_damage_too_high,19,24.6999,59.4309,51.2052,59.6104,51.2052,3,9,6,4,10,-469.2974,2026-05,15.1636,7.1785,17
+repeat_deep_loss_ticker,winner_damage_too_high,31,28.2422,63.2206,51.2052,63.2206,51.2052,5,11,7,3,20,-875.508,2026-05,14.6047,-1.5817,14
+short_term_repeat_deep_loss_ticker,winner_damage_too_high,20,23.618,60.0436,51.184,60.0436,51.184,5,9,6,3,11,-472.3601,2026-05,12.7172,2.7984,16
+quality_lt_60,winner_damage_too_high,21,46.5909,55.1425,50.0302,55.3258,50.0302,5,6,4,2,15,-978.4091,2026-05,0.9964,-6.6905,19
+short_term_quality_lt_60,winner_damage_too_high,20,53.1011,53.6342,46.3995,53.8156,46.3995,5,5,3,2,15,-1062.0222,2026-05,-1.4921,-9.952,20
+short_term_fill_degradation_ge_17_5,winner_damage_too_high,3,-36.1536,56.0077,51.2052,56.1607,51.2052,6,2,1,1,1,108.4608,2026-05,10.1009,-2.5149,22
+short_term_fill_degradation_ge_20,no_coverage,0,,53.539,50.5965,53.688,50.5965,7,0,0,0,0,-0.0,2026-05,7.4924,-4.6027,23

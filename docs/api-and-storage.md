@@ -25,7 +25,7 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 ### Scan And Replay
 
 - `POST /api/scan`
-  - live options scan; defaults to `bullish_pullback_observation` / Bullish Pullback Primary when no playbook is supplied
+  - live options scan; uses `bullish_pullback_observation` / Bullish Pullback only as the technical fallback when no playbook is supplied
   - when forward evidence recording succeeds, returned picks carry `source_scan_session_id`, `source_scan_event_key`, `source_scan_run_id`, and `source_scan_recorded_at_utc` so a browser-created tracked position can preserve its scan lineage
 - `POST /api/backtest`
   - run replay

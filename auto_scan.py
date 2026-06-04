@@ -34,8 +34,8 @@ try:
     )
     from positions_repository import create_positions_repository
     from supervised_scan import (
-        DEFAULT_SCAN_PLAYBOOK_ID,
         LIVE_SCAN_TRUTH_LANE,
+        SCAN_PLAYBOOK_FALLBACK_ID,
         get_scan_playbook,
         run_supervised_scan,
     )
@@ -216,7 +216,7 @@ if _already:
 
 logging.info(f"Starting roll-forward scan for {today_str} ({len(pending)} pending picks)…")
 try:
-    scan_playbook_id = os.getenv("OPTIONS_SCAN_PLAYBOOK") or DEFAULT_SCAN_PLAYBOOK_ID
+    scan_playbook_id = os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID
     use_recommended_policy = _env_flag_enabled("OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False)
     logging.info(
         f"Supervised scan config: playbook={scan_playbook_id}, "

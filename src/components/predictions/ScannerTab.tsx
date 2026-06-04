@@ -30,13 +30,20 @@ import type {
   ScanPlaybook,
 } from "@/lib/types";
 
-const DEFAULT_SCAN_PLAYBOOKS = [
+const FALLBACK_SCAN_PLAYBOOKS = [
   { id: "bullish_pullback_observation", label: "Bullish Pullback" },
   { id: "tracked_winner_primary", label: "Tracked Winner Primary" },
   { id: "short_term", label: "Short-Term" },
   { id: "swing", label: "Swing" },
-  { id: "speculative", label: "Speculative" },
+  { id: "bullish_momentum", label: "Bullish Momentum" },
   { id: "bearish_defensive", label: "Bearish Defensive" },
+  { id: "regular_bearish_put_primary", label: "Regular Bearish Put Primary" },
+  { id: "tracked_winner_observation", label: "Tracked Winner Observation" },
+  { id: "quality90_debit55_canary", label: "Quality 90 Debit 55 Canary" },
+  { id: "bearish_index_put_observation", label: "Bearish Index Put Observation" },
+  { id: "range_breakout_observation", label: "Range Breakout Observation" },
+  { id: "volatility_expansion_observation", label: "Volatility Expansion Observation" },
+  { id: "speculative", label: "Speculative" },
 ] as const;
 
 const SCANNER_MONO_COLS: string[] = [
@@ -255,7 +262,7 @@ export const ScannerTab = memo(function ScannerTab({
               onChange={(event) => onPlaybookChange(event.target.value)}
               className="min-w-[220px] rounded-md border border-border bg-bg-2 px-3 py-1.5 text-sm text-text-0"
             >
-              {(playbooks.length ? playbooks : DEFAULT_SCAN_PLAYBOOKS).map((item) => (
+              {(playbooks.length ? playbooks : FALLBACK_SCAN_PLAYBOOKS).map((item) => (
                 <option key={item.id} value={item.id}>{displayLaneLabel(item.id, item.label)}</option>
               ))}
             </select>

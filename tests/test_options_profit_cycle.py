@@ -64,7 +64,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
 
         self.assertEqual(metrics["closed_position_count"], 1)
         self.assertEqual(metrics["exact_outcome_count"], 1)
-        self.assertEqual(metrics["avg_net_pnl_pct"], -1.6)
+        self.assertEqual(metrics["avg_net_pnl_pct"], -1.5595)
         self.assertEqual(metrics["profit_factor"], 0.0)
 
     def test_candidate_position_metrics_excludes_missing_proof_eligible_rows(self):

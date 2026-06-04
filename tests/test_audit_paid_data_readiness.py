@@ -86,7 +86,7 @@ class PaidDataReadinessAuditTests(unittest.TestCase):
         self.assertEqual(audit["required_underlying_health"]["SPY"]["executable_quote_pct"], 100.0)
         self.assertEqual(
             audit["next_actions"],
-            ["Run exact-contract replay/backtest on the bullish-pullback main lane and canary proof/control yardstick."],
+            ["Run exact-contract replay/backtest on the requested playbook and canary proof/control yardstick."],
         )
 
     def test_audit_blocks_missing_required_symbols(self):

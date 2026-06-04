@@ -98,6 +98,18 @@ def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf8"))
 
 
+def _load_fresh_partial_payload(full_path: Path, partial_path: Path) -> dict[str, Any]:
+    if not partial_path.exists():
+        return {}
+    if full_path.exists():
+        try:
+            if partial_path.stat().st_mtime <= full_path.stat().st_mtime:
+                return {}
+        except OSError:
+            return {}
+    return _load_json(partial_path)
+
+
 def _rel(path: Path | str | None) -> str | None:
     if path is None:
         return None
@@ -836,7 +848,7 @@ def build_report(
     bullish_ticker_audit = _load_json(bullish_ticker_audit_path) if bullish_ticker_audit_path.exists() else {}
     multilane = _load_json(multilane_path) if multilane_path.exists() else {}
     all_planned = _load_json(all_planned_path) if all_planned_path.exists() else {}
-    all_planned_partial = _load_json(all_planned_partial_path) if all_planned_partial_path.exists() else {}
+    all_planned_partial = _load_fresh_partial_payload(all_planned_path, all_planned_partial_path)
     lane_lab = _load_json(lane_lab_path) if lane_lab_path.exists() else {}
     guardrails = _load_json(guardrails_path) if guardrails_path.exists() else {}
     open_risk = _load_json(open_position_risk_path) if open_position_risk_path.exists() else {}

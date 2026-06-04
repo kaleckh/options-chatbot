@@ -45,6 +45,7 @@ CURRENT_PROFIT_HARVEST_LANES = {
     "tracked_winner_observation",
 }
 LEGACY_MISSED_CLOSE_IDS = {26, 39, 44}
+LOSS_BUCKET_THRESHOLDS = (50.0, 70.0, 80.0, 90.0, 95.0, 99.0)
 
 
 def _utc_now_iso() -> str:
@@ -150,7 +151,10 @@ POLICIES = [
     ),
     ExitPolicy("time_exit_7", "Force first executable time exit at 7 calendar days", time_exit_day=7),
     ExitPolicy("time_exit_10", "Force first executable time exit at 10 calendar days", time_exit_day=10),
+    ExitPolicy("stop_90", "Executable stop grid: 90%", stop_loss_pct=90.0),
+    ExitPolicy("stop_80", "Executable stop grid: 80%", stop_loss_pct=80.0),
     ExitPolicy("stop_70", "Tighten executable stop to 70%", stop_loss_pct=70.0),
+    ExitPolicy("stop_60", "Executable stop grid: 60%", stop_loss_pct=60.0),
     ExitPolicy("stop_50", "Tighten executable stop to 50%", stop_loss_pct=50.0),
     ExitPolicy("stored_sell_recommendation", "Follow stored executable SELL reviews", use_stored_sell=True),
 ]
@@ -265,6 +269,7 @@ def _summarize_pnls(values: list[float]) -> dict[str, Any]:
             "priced": 0,
             "negative": 0,
             "positive_or_flat": 0,
+            "loss_bucket_counts": _loss_bucket_counts(values),
             "avg_pnl_pct": None,
             "median_pnl_pct": None,
             "worst_pnl_pct": None,
@@ -276,11 +281,84 @@ def _summarize_pnls(values: list[float]) -> dict[str, Any]:
         "negative": len(negatives),
         "positive_or_flat": len(values) - len(negatives),
         "negative_rate_pct": round(len(negatives) / len(values) * 100.0, 1),
+        "loss_bucket_counts": _loss_bucket_counts(values),
         "avg_pnl_pct": round(sum(values) / len(values), 2),
         "median_pnl_pct": round(median(values), 2),
         "worst_pnl_pct": round(min(values), 2),
         "best_pnl_pct": round(max(values), 2),
     }
+
+
+def _loss_bucket_counts(values: list[float]) -> dict[str, int]:
+    return {f"loss_le_{int(threshold)}_pct": sum(1 for value in values if value <= -threshold) for threshold in LOSS_BUCKET_THRESHOLDS}
+
+
+def _loss_bucket_deltas(policy_summary: dict[str, Any], baseline_summary: dict[str, Any]) -> dict[str, int | None]:
+    policy_counts = policy_summary.get("loss_bucket_counts") or {}
+    baseline_counts = baseline_summary.get("loss_bucket_counts") or {}
+    deltas: dict[str, int | None] = {}
+    for threshold in LOSS_BUCKET_THRESHOLDS:
+        key = f"loss_le_{int(threshold)}_pct"
+        policy_value = policy_counts.get(key)
+        baseline_value = baseline_counts.get(key)
+        deltas[key] = (
+            int(policy_value) - int(baseline_value)
+            if policy_value is not None and baseline_value is not None
+            else None
+        )
+    return deltas
+
+
+def _summarize_stop_loss_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "count": 0,
+            "avg_policy_pnl_pct": None,
+            "avg_baseline_pnl_pct": None,
+            "avg_delta_vs_baseline_pct": None,
+            "median_delta_vs_baseline_pct": None,
+            "improved_count": 0,
+            "worse_count": 0,
+            "winner_flipped_to_loss_count": 0,
+            "loss_bucket_counts": _loss_bucket_counts([]),
+        }
+    policy_values = [float(row["policy_pnl_pct"]) for row in rows if row.get("policy_pnl_pct") is not None]
+    baseline_values = [float(row["baseline_pnl_pct"]) for row in rows if row.get("baseline_pnl_pct") is not None]
+    deltas = [float(row["delta_vs_baseline_pct"]) for row in rows if row.get("delta_vs_baseline_pct") is not None]
+    winner_flips = sum(
+        1
+        for row in rows
+        if row.get("baseline_pnl_pct") is not None
+        and row.get("policy_pnl_pct") is not None
+        and float(row["baseline_pnl_pct"]) >= 0
+        and float(row["policy_pnl_pct"]) < 0
+    )
+    return {
+        "count": len(rows),
+        "avg_policy_pnl_pct": round(sum(policy_values) / len(policy_values), 2) if policy_values else None,
+        "avg_baseline_pnl_pct": round(sum(baseline_values) / len(baseline_values), 2) if baseline_values else None,
+        "avg_delta_vs_baseline_pct": round(sum(deltas) / len(deltas), 2) if deltas else None,
+        "median_delta_vs_baseline_pct": round(median(deltas), 2) if deltas else None,
+        "improved_count": sum(1 for value in deltas if value > 0.0001),
+        "worse_count": sum(1 for value in deltas if value < -0.0001),
+        "winner_flipped_to_loss_count": winner_flips,
+        "loss_bucket_counts": _loss_bucket_counts(policy_values),
+    }
+
+
+def _summarize_stop_loss_groups(
+    rows: list[dict[str, Any]],
+    *,
+    group_key: str,
+    limit: int | None = None,
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        grouped[str(row.get(group_key) or "unknown")].append(row)
+    ordered = sorted(grouped.items(), key=lambda item: (-len(item[1]), item[0]))
+    if limit is not None:
+        ordered = ordered[:limit]
+    return {key: _summarize_stop_loss_rows(group_rows) for key, group_rows in ordered}
 
 
 def _baseline_value(position: dict[str, Any], reviews: list[dict[str, Any]]) -> float | None:
@@ -329,6 +407,7 @@ def build_report(
         worse_count = 0
         winner_loss_count = 0
         legacy_hits = []
+        policy_rows: list[dict[str, Any]] = []
         for position in replayable:
             position_id = int(position.get("id") or 0)
             result = simulate_exit_policy(position, reviews_by_position.get(position_id, []), policy)
@@ -363,16 +442,19 @@ def build_report(
                 "legacy_missed_close_target": position_id in LEGACY_MISSED_CLOSE_IDS,
             }
             row_results.append(row)
+            policy_rows.append(row)
             if position_id in LEGACY_MISSED_CLOSE_IDS:
                 legacy_hits.append(row)
         summary = _summarize_pnls(pnls)
         avg_delta = round(sum(improvements) / len(improvements), 2) if improvements else None
         median_delta = round(median(improvements), 2) if improvements else None
+        stop_loss_rows = [row for row in policy_rows if row.get("reason") == "stop_loss"]
         policy_results.append(
             {
                 "policy_id": policy.policy_id,
                 "label": policy.label,
                 "summary": summary,
+                "loss_bucket_delta_vs_baseline": _loss_bucket_deltas(summary, baseline_summary),
                 "closed_count": closed_count,
                 "reason_counts": dict(reasons.most_common()),
                 "avg_delta_vs_baseline_pct": avg_delta,
@@ -380,6 +462,9 @@ def build_report(
                 "improved_count": sum(1 for value in improvements if value > 0.0001),
                 "worse_count": worse_count,
                 "winner_flipped_to_loss_count": winner_loss_count,
+                "stop_loss_trigger_summary": _summarize_stop_loss_rows(stop_loss_rows),
+                "stop_loss_trigger_by_lane": _summarize_stop_loss_groups(stop_loss_rows, group_key="lane"),
+                "stop_loss_trigger_by_ticker": _summarize_stop_loss_groups(stop_loss_rows, group_key="ticker", limit=12),
                 "legacy_targets": legacy_hits,
                 "recommendation": _policy_recommendation(
                     summary,
@@ -486,7 +571,13 @@ def load_current_report() -> dict[str, Any]:
     return build_report(repository.list_positions("all"), reviews_by_position=_load_reviews(repository))
 
 
+def _fmt_pct(value: Any) -> str:
+    number = safe_float(value)
+    return "" if number is None else f"{number}%"
+
+
 def markdown_report(report: dict[str, Any]) -> str:
+    baseline_buckets = report["baseline"].get("loss_bucket_counts") or {}
     lines = [
         "# Trading Desk Exit Policy Replay - 2026-05-31",
         "",
@@ -508,18 +599,56 @@ def markdown_report(report: dict[str, Any]) -> str:
             f"{report['baseline']['median_pnl_pct']}% | {report['baseline'].get('negative_rate_pct')}% |"
         ),
         "",
+        "## Deep-Loss Buckets",
+        "",
+        "| Scope | <= -50% | <= -70% | <= -80% | <= -90% | <= -95% | <= -99% |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+        (
+            f"| Baseline | {baseline_buckets.get('loss_le_50_pct', 0)} | "
+            f"{baseline_buckets.get('loss_le_70_pct', 0)} | {baseline_buckets.get('loss_le_80_pct', 0)} | "
+            f"{baseline_buckets.get('loss_le_90_pct', 0)} | {baseline_buckets.get('loss_le_95_pct', 0)} | "
+            f"{baseline_buckets.get('loss_le_99_pct', 0)} |"
+        ),
+        "",
         "## Policy Results",
         "",
-        "| Policy | Recommendation | Avg Delta | Median Delta | Avg P&L | Median P&L | Negatives | Winner Losses | Top Reasons |",
-        "|---|---|---:|---:|---:|---:|---:|---:|---|",
+        "| Policy | Recommendation | Avg Delta | Avg P&L | Negatives | <= -90% | <= -95% | <= -99% | Stop Rows | Stop Avg Delta | Winner Losses | Top Reasons |",
+        "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for policy in report["policies"]:
         reasons = ", ".join(f"{key}:{value}" for key, value in list(policy["reason_counts"].items())[:4])
+        buckets = policy["summary"].get("loss_bucket_counts") or {}
+        stop_summary = policy.get("stop_loss_trigger_summary") or {}
         lines.append(
             f"| `{policy['policy_id']}` | {policy['recommendation']['status']} | "
-            f"{policy['avg_delta_vs_baseline_pct']}% | {policy['median_delta_vs_baseline_pct']}% | "
-            f"{policy['summary']['avg_pnl_pct']}% | {policy['summary']['median_pnl_pct']}% | "
-            f"{policy['summary']['negative']} | {policy['winner_flipped_to_loss_count']} | {reasons} |"
+            f"{_fmt_pct(policy['avg_delta_vs_baseline_pct'])} | {_fmt_pct(policy['summary']['avg_pnl_pct'])} | "
+            f"{policy['summary']['negative']} | {buckets.get('loss_le_90_pct', 0)} | "
+            f"{buckets.get('loss_le_95_pct', 0)} | {buckets.get('loss_le_99_pct', 0)} | "
+            f"{stop_summary.get('count', 0)} | {_fmt_pct(stop_summary.get('avg_delta_vs_baseline_pct'))} | "
+            f"{policy['winner_flipped_to_loss_count']} | {reasons} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Stop-Loss Trigger Detail",
+            "",
+            "| Policy | Stop Rows | Stop Avg P&L | Stop Avg Baseline | Stop Avg Delta | Stop <= -90% | Stop Winner Losses | Top Stop Lanes |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
+    for policy in report["policies"]:
+        stop_summary = policy.get("stop_loss_trigger_summary") or {}
+        if not stop_summary.get("count"):
+            continue
+        stop_buckets = stop_summary.get("loss_bucket_counts") or {}
+        lane_bits = []
+        for lane, lane_summary in list((policy.get("stop_loss_trigger_by_lane") or {}).items())[:4]:
+            lane_bits.append(f"{lane}:{lane_summary.get('count')}")
+        lines.append(
+            f"| `{policy['policy_id']}` | {stop_summary.get('count')} | "
+            f"{_fmt_pct(stop_summary.get('avg_policy_pnl_pct'))} | {_fmt_pct(stop_summary.get('avg_baseline_pnl_pct'))} | "
+            f"{_fmt_pct(stop_summary.get('avg_delta_vs_baseline_pct'))} | {stop_buckets.get('loss_le_90_pct', 0)} | "
+            f"{stop_summary.get('winner_flipped_to_loss_count', 0)} | {', '.join(lane_bits)} |"
         )
     lines.extend(
         [
@@ -542,7 +671,9 @@ def markdown_report(report: dict[str, Any]) -> str:
             "",
             "## Recommendation",
             "",
-            "Do not promote an exit rule unless it improves average and median executable P&L, does not increase the negative rate, and does not convert stored winners into losses. Treat legacy missed-auto-close rows as a separate diagnostic unless the same rule improves the broader executable-review universe.",
+            "Do not promote an exit rule unless it improves average and median executable P&L, reduces or holds the deep-loss buckets, does not increase the negative rate, and does not convert stored winners into losses. Treat legacy missed-auto-close rows as a separate diagnostic unless the same rule improves the broader executable-review universe.",
+            "",
+            "This stored-review replay cannot answer whether tighter stops would have saved current-policy historical-paper rows that have no executable review timeline. Those rows need a separate exact OPRA/NBBO historical stop replay before live review stops are changed.",
         ]
     )
     return "\n".join(lines) + "\n"

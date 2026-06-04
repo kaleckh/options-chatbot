@@ -33,19 +33,21 @@ def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _regular_playbook_ids() -> list[str]:
+def _regular_playbook_ids(*, include_commodity: bool = False) -> list[str]:
+    if include_commodity:
+        return list(SCAN_PLAYBOOKS)
     return [playbook_id for playbook_id in SCAN_PLAYBOOKS if playbook_id not in COMMODITY_PLAYBOOK_IDS]
 
 
-def _parse_playbooks(value: str | None) -> list[str]:
+def _parse_playbooks(value: str | None, *, include_commodity: bool = False) -> list[str]:
     if not value:
-        return _regular_playbook_ids()
+        return _regular_playbook_ids(include_commodity=include_commodity)
     playbooks = [item.strip() for item in value.split(",") if item.strip()]
     unknown = [item for item in playbooks if item not in SCAN_PLAYBOOKS]
     if unknown:
         raise ValueError(f"Unknown playbook(s): {', '.join(unknown)}")
     forbidden = [item for item in playbooks if item in COMMODITY_PLAYBOOK_IDS]
-    if forbidden:
+    if forbidden and not include_commodity:
         raise ValueError(
             "Commodity playbooks are intentionally excluded from this regular-lane audit: "
             + ", ".join(forbidden)
@@ -181,9 +183,13 @@ def _pick_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
         "ticker": pick.get("ticker"),
         "direction": pick.get("direction") or pick.get("option_type") or pick.get("type"),
         "expiry": pick.get("expiry") or pick.get("expiration_date"),
-        "long_strike": pick.get("long_strike"),
+        "contract_symbol": pick.get("contract_symbol") or pick.get("contractSymbol"),
+        "short_contract_symbol": pick.get("short_contract_symbol") or pick.get("shortContractSymbol"),
+        "long_strike": pick.get("long_strike") if pick.get("long_strike") is not None else pick.get("strike"),
         "short_strike": pick.get("short_strike"),
         "net_debit": pick.get("net_debit"),
+        "entry_execution_price": pick.get("entry_execution_price"),
+        "entry_execution_basis": pick.get("entry_execution_basis"),
         "debit_pct_of_width": pick.get("debit_pct_of_width"),
         "quality_score": pick.get("quality_score"),
         "confidence": pick.get("confidence"),
@@ -193,10 +199,42 @@ def _pick_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
         "suggested_size_tier": pick.get("suggested_size_tier"),
         "proof_eligible": pick.get("proof_eligible"),
         "candidate_execution_label": pick.get("candidate_execution_label"),
+        "quote_time_utc": pick.get("quote_time_utc"),
+        "quote_time_et": pick.get("quote_time_et"),
+        "quote_freshness_status": pick.get("quote_freshness_status"),
+        "selection_source": pick.get("selection_source"),
+        "promotion_class": pick.get("promotion_class"),
     }
 
 
-def _summarize_scan_result(playbook_id: str, result: dict[str, Any], *, top_limit: int) -> dict[str, Any]:
+def _scan_symbol_scope(playbook: dict[str, Any], *, watchlist_size: int) -> dict[str, Any]:
+    scan_tickers = list(((playbook.get("data_readiness") or {}).get("scan_tickers") or []))
+    if not scan_tickers:
+        scan_tickers = [
+            str(item or "").strip().upper()
+            for item in list(playbook.get("scan_tickers") or playbook.get("allowed_tickers") or [])
+            if str(item or "").strip()
+        ]
+    if scan_tickers:
+        return {
+            "source": "playbook_scan_tickers",
+            "symbol_count": len(list(dict.fromkeys(scan_tickers))),
+            "symbols": list(dict.fromkeys(scan_tickers)),
+        }
+    return {
+        "source": "default_watchlist",
+        "symbol_count": int(watchlist_size),
+        "symbols": [],
+    }
+
+
+def _summarize_scan_result(
+    playbook_id: str,
+    result: dict[str, Any],
+    *,
+    top_limit: int,
+    watchlist_size: int,
+) -> dict[str, Any]:
     candidate_picks = list(result.get("candidate_audit_picks") or [])
     returned_picks = list(result.get("picks") or [])
     decision_counts = Counter(_decision(pick.get("guardrail_decision")) for pick in candidate_picks)
@@ -242,9 +280,11 @@ def _summarize_scan_result(playbook_id: str, result: dict[str, Any], *, top_limi
     block_rate = round((guardrail_filtered / raw_candidates) * 100.0, 2) if raw_candidates else None
     clear_rate = round((clear_candidates / raw_candidates) * 100.0, 2) if raw_candidates else None
     starvation_flag = bool(raw_candidates and clear_candidates == 0 and guardrail_filtered > 0)
+    playbook = result.get("playbook") or {}
     return {
         "playbook_id": playbook_id,
-        "label": (result.get("playbook") or {}).get("label"),
+        "label": playbook.get("label"),
+        "scan_symbol_scope": _scan_symbol_scope(playbook, watchlist_size=watchlist_size),
         "policy_fail_closed": bool(result.get("policy_fail_closed")),
         "policy_error": result.get("policy_error"),
         "candidate_count": int(result.get("candidate_count") or raw_candidates),
@@ -310,7 +350,14 @@ def build_report(
         except Exception as exc:  # keep one data/provider failure from hiding the rest
             errors.append({"playbook_id": playbook_id, "error": str(exc)})
             continue
-        playbook_reports.append(_summarize_scan_result(playbook_id, result, top_limit=top_limit))
+        playbook_reports.append(
+            _summarize_scan_result(
+                playbook_id,
+                result,
+                top_limit=top_limit,
+                watchlist_size=watchlist_size,
+            )
+        )
 
     totals = Counter()
     starvation_playbooks: list[str] = []
@@ -361,9 +408,17 @@ def build_report(
     overall["status"] = _status_from_overall(overall, errors)
     return {
         "generated_at_utc": _utc_now_iso(),
-        "scope": "regular_supervised_guardrail_starvation",
+        "scope": (
+            "all_supervised_guardrail_starvation"
+            if any(playbook_id in COMMODITY_PLAYBOOK_IDS for playbook_id in playbook_ids)
+            else "regular_supervised_guardrail_starvation"
+        ),
         "read_only": True,
-        "commodity_playbooks_excluded": sorted(COMMODITY_PLAYBOOK_IDS),
+        "commodity_playbooks_excluded": (
+            []
+            if any(playbook_id in COMMODITY_PLAYBOOK_IDS for playbook_id in playbook_ids)
+            else sorted(COMMODITY_PLAYBOOK_IDS)
+        ),
         "playbooks": playbook_reports,
         "errors": errors,
         "overall": overall,
@@ -375,6 +430,10 @@ def build_report(
             "enforce_portfolio_caps": enforce_portfolio_caps,
             "truth_lane": truth_lane,
             "market_open_at_run": market_open_at_run,
+            "audit_all_configured_tickers": True,
+            "include_commodity_playbooks": any(
+                playbook_id in COMMODITY_PLAYBOOK_IDS for playbook_id in playbook_ids
+            ),
         },
     }
 
@@ -393,6 +452,8 @@ def markdown_report(report: dict[str, Any]) -> str:
         f"- Starvation playbooks: `{overall.get('starvation_playbooks')}`",
         f"- Zero-candidate playbooks: `{len(list(overall.get('zero_candidate_playbooks') or []))}`",
         f"- Market open at run: `{settings.get('market_open_at_run')}`",
+        f"- All configured ticker scopes audited: `{settings.get('audit_all_configured_tickers')}`",
+        f"- Commodity playbooks included: `{settings.get('include_commodity_playbooks')}`",
         "",
         "## Leading Upstream Drops",
         "",
@@ -445,13 +506,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--top-limit", type=int, default=8)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--doc-path", type=Path, default=DEFAULT_DOC)
+    parser.add_argument(
+        "--include-commodity",
+        action="store_true",
+        help="Include the separate AI commodity/infrastructure strategy lane in the cross-strategy daily audit.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the full report JSON.")
     parser.add_argument("--include-playbooks", action="store_true", help="Include compact per-playbook details in non-JSON console output.")
     parser.add_argument("--no-write", action="store_true", help="Run without writing latest JSON/Markdown artifacts.")
     args = parser.parse_args(argv)
 
     report = build_report(
-        playbook_ids=_parse_playbooks(args.playbooks),
+        playbook_ids=_parse_playbooks(args.playbooks, include_commodity=bool(args.include_commodity)),
         n_picks=max(int(args.n_picks), 0),
         watchlist_size=max(int(args.watchlist_size), 0),
         use_recommended_policy=bool(args.use_recommended_policy),
@@ -478,6 +544,7 @@ def main(argv: list[str] | None = None) -> int:
             console_payload["playbooks"] = [
                 {
                     "playbook_id": item["playbook_id"],
+                    "scan_symbol_scope": item["scan_symbol_scope"],
                     "candidate_count": item["candidate_count"],
                     "returned_count": item["returned_count"],
                     "candidate_decision_counts": item["candidate_decision_counts"],

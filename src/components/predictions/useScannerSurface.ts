@@ -60,7 +60,7 @@ export function useScannerSurface() {
           playbook: scanPlaybook,
           include_blocked_policy_picks: showBlockedIdeas,
           include_blocked_guardrail_picks: showBlockedIdeas,
-          enforce_portfolio_caps: false,
+          enforce_portfolio_caps: true,
         }),
       }, "Live scan");
       const data = await readJsonResponseOrThrow<LiveScanResponse>(res, "Live scan");

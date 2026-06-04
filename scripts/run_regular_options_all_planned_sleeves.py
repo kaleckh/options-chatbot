@@ -186,7 +186,7 @@ WFO_VARIANTS: list[dict[str, Any]] = [
         "variant_id": "regular_bearish_put_primary_chain_native_timeexit_all_sleeves",
         "base_playbook": "regular_bearish_put_primary",
         "n_picks": 5,
-        "description": "Full regular bearish put primary chain-native time-exit replay.",
+        "description": "Full regular bearish put chain-native time-exit replay.",
         "overrides": {**GENERIC_TIME_EXIT, "allowed_directions": ["put"], "max_debit_pct_of_width": 60.0},
     },
     {

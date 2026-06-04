@@ -39,6 +39,8 @@
     "options:experiments": "uv run --locked python scripts/options_experiment_matrix.py",
     "options:profit-lab": "uv run --locked python scripts/options_profitability_lab.py",
     "options:record": "uv run --locked python scripts/record_options_forward_truth.py --use-recommended-policy",
+    "options:audit:all-lanes": "uv run --locked python scripts/ensure_daily_all_lanes_audit_ran.py --force",
+    "options:validate:pending-candidates": "uv run --locked python scripts/validate_pending_scan_candidates.py",
     "profit-loop:health": "uv run --locked python scripts/automation_operational_health.py --json",
     "profit-loop:holdout": "uv run --locked python scripts/automation_truth_holdout.py --json",
     "profit-loop:validate": "uv run --locked python scripts/automation_profit_validation.py --json",

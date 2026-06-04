@@ -19853,7 +19853,7 @@ def build_compact_progress_summary(report: dict[str, Any]) -> dict[str, Any]:
         "gate_capture_target_complete": gates.get("capture_target_complete"),
         "gate_proof_scan_universe_aligned": gates.get("proof_scan_universe_aligned"),
         "lane_phase": lane_next_step.get("phase"),
-        "lane_priority_action": lane_next_step.get("priority_action"),
+        "lane_next_action": lane_next_step.get("priority_action"),
         "lane_primary_blocker": lane_next_step.get("primary_blocker"),
         "lane_safe_to_tune_filters": lane_next_step.get("safe_to_tune_filters"),
         "lane_next_timed_event_kind": lane_next_step.get("next_timed_event_kind"),

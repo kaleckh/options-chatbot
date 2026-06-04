@@ -20,7 +20,7 @@ The mounted browser product is the supervised options lane:
 - suggested trades
 - replay and truth diagnostics
 
-The active non-browser proof lane is the AI commodity / commodity-infrastructure lane:
+AI commodity / commodity-infrastructure options is a separate non-browser proof-first strategy lane:
 
 - `scripts/run_ai_commodity_opra_progress.py`
 - `data/ai-commodity-infra/universe.json`

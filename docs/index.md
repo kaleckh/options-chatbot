@@ -29,7 +29,7 @@ These are the living docs for the current worktree:
 - `docs/bullish-pullback-ticker-audit-2026-05-29.md`
   - current per-ticker keep/move/research/remove decisions for the 59-symbol bullish-pullback universe
 - `docs/main-lane-negative-trade-audit-2026-05-31.md`
-  - current audit of negative Bullish Pullback tracked rows, with research/backfill versus live-exact separation and guardrail recommendations
+  - legacy single-lane Bullish Pullback negative-trade audit, with research/backfill versus live-exact separation and guardrail recommendations
 - `docs/main-product-lane-negative-trade-audit-2026-05-31.md`
   - broader Trading Desk tracked-position negative audit across all regular supervised product-lane playbooks
 - `docs/main-product-lane-quality-system-2026-05-31.md`
@@ -40,6 +40,14 @@ These are the living docs for the current worktree:
   - current-policy replay of historical closed Trading Desk rows, separating would-take-today rows from learned-away backfill
 - `docs/current-policy-cohort-health.md`
   - current-policy cohort health report separating the April showcase edge from the broken recent paper-only cohort
+- `docs/current-policy-historical-stop-grid.md`
+  - current-policy exact-contract daily close-check stop grid, plus annual replay-backed exact cohort coverage, separating stop-policy candidates from entry-filter problems
+- `docs/current-policy-entry-filter-lab.md`
+  - current-policy entry-filter lab for avoiding deep loss cohorts without changing live scanner guardrails
+- `docs/current-policy-entry-filter-walkforward.md`
+  - all-regular-lanes walk-forward validation for the frozen entry-filter candidate and broad fill-degradation rejection
+- `docs/current-policy-entry-filter-paper-monitor.md`
+  - forward paper monitor for the best entry-filter candidate and its fresh-sample promotion gates
 - `docs/trading-desk-negative-trade-decision-audit-2026-05-31.md`
   - reproducible negative-trade decision audit with entry rationale, guardrail coverage, evidence quality, and executable-exit separation
 - `docs/trading-desk-exit-policy-replay-2026-05-31.md`
@@ -48,6 +56,8 @@ These are the living docs for the current worktree:
   - focused read-only audit of legacy rows 26/39/44 and whether they imply a current auto-close bug
 - `docs/regular-options-operating-scorecard.md`
   - active options scorecard separating visible Trading Desk profitability progress, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
+- `docs/regular-options-profit-capture-queue.md`
+  - generated research/paper capture queue that tiers profitable regular-options symbol/lane evidence, fresh scan signature matches, evidence-repair priorities, and quarantine/do-not-chase rows without changing scanner policy
 - `docs/regular-options-symbol-sleeves.md`
   - generated per-symbol sleeve matrix for regular supervised options, separating lane-symbol keep/watch/quarantine/rejected/needs-paper status from proof evidence class
 - `docs/regular-guardrail-starvation-audit.md`

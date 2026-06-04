@@ -18,9 +18,9 @@ The current user-facing browser flow is the supervised options lane:
 - review tracked positions
 - manage suggested trades
 
-The active non-browser proof lane is the AI commodity / commodity-infrastructure lane. It is orchestrated by `scripts/run_ai_commodity_opra_progress.py`, uses `data/ai-commodity-infra/universe.json`, and currently treats Alpaca SIP/OPRA bid/ask snapshots labeled `alpaca_opra_daily_snapshot` as the proof source.
+AI commodity / commodity-infrastructure options is a separate non-browser proof-first strategy lane. It is orchestrated by `scripts/run_ai_commodity_opra_progress.py`, uses `data/ai-commodity-infra/universe.json`, and currently treats Alpaca SIP/OPRA bid/ask snapshots labeled `alpaca_opra_daily_snapshot` as the proof source.
 
-The main scan lane defaults to `bullish_pullback_observation` (Bullish Pullback Primary). Despite the legacy ID suffix, this lane is not observation-only; it scans the broad liquid options universe while SPY/QQQ remain the currently historical-ready subset. `quality90_debit55_canary` is the proof/control yardstick and `tracked_winner_primary` is secondary shape guidance.
+Some scheduled scan commands fall back to `bullish_pullback_observation` (Bullish Pullback) when no playbook is supplied. That fallback is routing behavior only; every configured regular-options playbook is a peer lane that needs its own profitability, risk, execution, and proof validation. Despite the legacy ID suffix, Bullish Pullback is not observation-only.
 
 The current snapshot does not include the old app-facing day-trading route files or `DayTradingLab` component. The `src/app/api/day-trading/*` directories still exist as empty scaffolding folders in this worktree, but they do not currently expose route handlers. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
 

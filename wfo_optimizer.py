@@ -100,7 +100,7 @@ from options_execution import (
     quote_midpoint,
 )
 
-DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK = "bullish_pullback_observation"
+PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK = "bullish_pullback_observation"
 
 try:
     import optuna
@@ -395,7 +395,7 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
     },
     "tracked_winner_primary": {
         "id": "tracked_winner_primary",
-        "label": "Tracked Winner Primary",
+        "label": "Tracked Winner",
         "allowed_tickers": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
         "historical_required_underlyings": ["SPY", "GOOGL", "XLK", "DIA", "NVDA"],
         "allowed_market_regimes": ["bullish"],
@@ -595,7 +595,7 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
     },
     "bullish_pullback_observation": {
         "id": "bullish_pullback_observation",
-        "label": "Bullish Pullback Primary",
+        "label": "Bullish Pullback",
         "entry_signal_id": "pullback_uptrend",
         "historical_required_underlyings": list(BULLISH_PULLBACK_REPLAY_UNIVERSE),
         "allowed_directions": ["call"],
@@ -611,7 +611,7 @@ REPLAY_PLAYBOOKS: dict[str, dict] = {
     },
     "regular_bearish_put_primary": {
         "id": "regular_bearish_put_primary",
-        "label": "Regular Bearish Put Primary",
+        "label": "Regular Bearish Put",
         "allowed_asset_classes": ["index", "equity"],
         "allowed_tickers": list(REGULAR_OPTIONS_REPLAY_UNIVERSE),
         "historical_required_underlyings": list(REGULAR_OPTIONS_REPLAY_UNIVERSE),
@@ -5004,7 +5004,7 @@ def _classify_trade_against_live_policy(trade: dict, scan_policy: dict) -> dict:
 
 
 def _playbook_trade_window(playbook: str) -> dict[str, int]:
-    playbook_id = str(playbook or DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK).strip().lower()
+    playbook_id = str(playbook or PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK).strip().lower()
     if playbook_id == "swing":
         return {"min_dte": 13, "max_dte": 35}
     if playbook_id in {"bullish_pullback_observation", "tracked_winner_primary", "tracked_winner_observation"}:
@@ -5080,7 +5080,7 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
 def build_playbook_exit_audit(
     result: Optional[dict] = None,
     policy_bundle: Optional[dict] = None,
-    playbook: str = DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK,
+    playbook: str = PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK,
     truth_lane: Optional[str] = None,
     min_trades: int = 20,
     score_floors: Optional[list[int]] = None,
@@ -5115,7 +5115,7 @@ def build_playbook_exit_audit(
     if not trades:
         return {"error": "No backtest trades found"}
 
-    playbook_id = str(playbook or DEFAULT_PLAYBOOK_EXIT_AUDIT_PLAYBOOK).strip().lower()
+    playbook_id = str(playbook or PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK).strip().lower()
     window = _playbook_trade_window(playbook_id)
     filtered = [
         trade

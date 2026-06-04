@@ -42,14 +42,14 @@ def lane_definitions() -> list[dict[str, Any]]:
     return [
         {
             "id": "bullish_pullback_observation",
-            "label": "Regular Bullish Pullback Primary",
+            "label": "Regular Bullish Pullback",
             "lane_family": "regular_options",
             "direction": "call",
             "symbols": regular_symbols,
         },
         {
             "id": "regular_bearish_put_primary",
-            "label": "Regular Bearish Put Primary",
+            "label": "Regular Bearish Put",
             "lane_family": "regular_options",
             "direction": "put",
             "symbols": regular_symbols,

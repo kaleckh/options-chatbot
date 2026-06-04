@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -355,6 +356,30 @@ def _exit_leg_price(quote: RawQuote, *, leg: str, mode: str) -> float | None:
     raise ValueError(f"Unsupported mode {mode!r}")
 
 
+def _stable_hash(payload: dict[str, Any]) -> str:
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _quote_evidence(quote: RawQuote, *, role: str, side: str, mode: str, purpose: str) -> dict[str, Any]:
+    payload = {
+        "purpose": purpose,
+        "role": role,
+        "side": side,
+        "mode": mode,
+        "contract_symbol": quote.contract_symbol,
+        "quote_date_et": quote.quote_date_et,
+        "quote_minute_et": int(quote.quote_minute_et),
+        "bid": round(float(quote.bid), 4),
+        "ask": round(float(quote.ask), 4),
+        "source": quote.source,
+        "as_of_utc": quote.as_of_utc,
+        "underlying_price": quote.underlying_price,
+    }
+    payload["quote_row_sha256"] = _stable_hash(payload)
+    return payload
+
+
 def _pnl_metrics(pnls: list[float]) -> dict[str, Any]:
     wins = [item for item in pnls if item > 0]
     losses = [item for item in pnls if item < 0]
@@ -429,6 +454,11 @@ def replay_trade(
     net_debit = round(long_entry - short_entry, 4)
     if net_debit <= 0.01:
         return {**base_result, "priced": False, "unpriced_reason": "zero_or_negative_net_debit"}
+    entry_quote_evidence = [
+        _quote_evidence(long_entry_quote, role="long", side="buy_ask" if mode == "conservative" else "midpoint", mode=mode, purpose="entry"),
+        _quote_evidence(short_entry_quote, role="short", side="sell_bid" if mode == "conservative" else "midpoint", mode=mode, purpose="entry"),
+    ]
+    entry_evidence_sha256 = _stable_hash({"entry_quote_evidence": entry_quote_evidence, "entry_px": net_debit})
 
     spread_width = abs(long_parts.strike - short_parts.strike)
     actual_dte = max((expiry - entry_date).days, 1)
@@ -448,6 +478,8 @@ def replay_trade(
     missing_after_zero_bid_count = 0
     last_spread_value: float | None = None
     last_quote_date: date | None = None
+    last_exit_quote_evidence: list[dict[str, Any]] | None = None
+    exit_quote_evidence: list[dict[str, Any]] | None = None
 
     for exit_day, quote_date in enumerate(_market_days(date.fromordinal(entry_date.toordinal() + 1), expiry), start=1):
         long_quote = quote_provider.quote(
@@ -483,9 +515,14 @@ def replay_trade(
         short_exit = _exit_leg_price(short_quote, leg="short", mode=mode)
         if long_exit is None or short_exit is None:
             return {**base_result, "priced": False, "unpriced_reason": "non_executable_exit_quote", "missing_quote_date": quote_date.isoformat()}
+        current_exit_quote_evidence = [
+            _quote_evidence(long_quote, role="long", side="sell_bid" if mode == "conservative" else "midpoint", mode=mode, purpose="exit"),
+            _quote_evidence(short_quote, role="short", side="buy_ask" if mode == "conservative" else "midpoint", mode=mode, purpose="exit"),
+        ]
         spread_value = max(0.0, round(long_exit - short_exit, 4))
         last_spread_value = spread_value
         last_quote_date = quote_date
+        last_exit_quote_evidence = current_exit_quote_evidence
         if spread_value > high_watermark:
             high_watermark = spread_value
         peak_pnl_pct = ((high_watermark / net_debit) - 1.0) * 100.0 if net_debit > 0 else 0.0
@@ -500,16 +537,19 @@ def replay_trade(
             exit_value = spread_value
             exit_reason = "trailing_stop" if trail_active else "stop"
             exit_quote_date = quote_date
+            exit_quote_evidence = current_exit_quote_evidence
             break
         if spread_value >= target_value:
             exit_value = min(spread_value, target_value)
             exit_reason = "target"
             exit_quote_date = quote_date
+            exit_quote_evidence = current_exit_quote_evidence
             break
         if exit_day >= time_exit_day:
             exit_value = spread_value
             exit_reason = "time_exit"
             exit_quote_date = quote_date
+            exit_quote_evidence = current_exit_quote_evidence
             break
 
     if exit_value is None or exit_quote_date is None:
@@ -517,6 +557,7 @@ def replay_trade(
             exit_value = last_spread_value
             exit_quote_date = last_quote_date
             exit_reason = "expiry_quote_fallback"
+            exit_quote_evidence = last_exit_quote_evidence
         else:
             return {
                 **base_result,
@@ -542,6 +583,15 @@ def replay_trade(
     capital_at_risk = net_debit * 100.0
     gross_pnl_pct = gross_pnl_per_share / net_debit * 100.0
     net_pnl_pct = net_pnl_usd / capital_at_risk * 100.0
+    trade_evidence = {
+        "mode": mode,
+        "entry_quote_evidence": entry_quote_evidence,
+        "exit_quote_evidence": exit_quote_evidence or [],
+        "entry_px": round(net_debit, 4),
+        "exit_px": round(exit_value, 4),
+        "exit_date": exit_quote_date.isoformat(),
+        "exit_reason": exit_reason,
+    }
     return {
         **base_result,
         "priced": True,
@@ -562,6 +612,10 @@ def replay_trade(
         "zero_bid_exit_days": zero_bid_exit_days,
         "first_zero_bid_quote_date": first_zero_bid_quote_date,
         "used_zero_bid_exit_quote": zero_bid_exit_days > 0,
+        "entry_quote_evidence": entry_quote_evidence,
+        "exit_quote_evidence": exit_quote_evidence or [],
+        "entry_evidence_sha256": entry_evidence_sha256,
+        "trade_evidence_sha256": _stable_hash(trade_evidence),
     }
 
 

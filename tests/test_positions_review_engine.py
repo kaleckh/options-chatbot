@@ -660,7 +660,7 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertIn("Mechanical profit harvest", review["reason"])
         self.assertEqual(review["metrics_snapshot"]["profit_harvest"]["trigger_pct"], 50.0)
 
-    def test_bullish_pullback_primary_review_harvests_executable_profit_before_large_target(self):
+    def test_bullish_pullback_review_harvests_executable_profit_before_large_target(self):
         position = self._build_position(fill_price=2.0)
         position["profit_target_pct"] = 150.0
         position["source_pick_snapshot"]["cohort_id"] = "bullish_pullback_observation"

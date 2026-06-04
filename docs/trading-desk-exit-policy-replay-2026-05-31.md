@@ -12,31 +12,63 @@ This is a read-only replay of Trading Desk exit policies over stored executable 
 
 | Priced | Negative | Positive/Flat | Avg P&L | Median P&L | Negative Rate |
 |---:|---:|---:|---:|---:|---:|
-| 107 | 25 | 82 | 37.28% | 35.79% | 23.4% |
+| 107 | 23 | 84 | 39.06% | 43.72% | 21.5% |
+
+## Deep-Loss Buckets
+
+| Scope | <= -50% | <= -70% | <= -80% | <= -90% | <= -95% | <= -99% |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline | 14 | 11 | 9 | 2 | 1 | 1 |
 
 ## Policy Results
 
-No tested broad exit variant clears the promotion bar. The replayable subset has `107` regular Trading Desk rows with stored executable review timelines; the baseline is already positive at `+37.28%` average P&L and `+35.79%` median P&L. The only positive-delta broad shapes, `stop_70` and `current_policy_replay`, are research candidates because they still increase the negative count from `25` to `26` and convert `2` stored winners into losses. Global profit harvest, global trailing giveback, shorter time exits, and stored-SELL following all reduce average executable P&L.
+| Policy | Recommendation | Avg Delta | Avg P&L | Negatives | <= -90% | <= -95% | <= -99% | Stop Rows | Stop Avg Delta | Winner Losses | Top Reasons |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `stop_60` | research_candidate | 2.87% | 41.93% | 24 | 1 | 1 | 1 | 10 | 3.16% | 2 | time_exit:51, no_policy_trigger:41, stop_loss:10, profit_target:5 |
+| `stop_70` | research_candidate | 2.68% | 41.75% | 24 | 1 | 1 | 1 | 8 | 1.54% | 2 | time_exit:51, no_policy_trigger:43, stop_loss:8, profit_target:5 |
+| `stop_80` | research_candidate | 2.66% | 41.73% | 24 | 1 | 1 | 1 | 8 | 1.27% | 2 | time_exit:51, no_policy_trigger:43, stop_loss:8, profit_target:5 |
+| `stop_90` | research_candidate | 2.56% | 41.62% | 24 | 1 | 1 | 1 | 1 | -1.0% | 2 | time_exit:51, no_policy_trigger:50, profit_target:5, stop_loss:1 |
+| `current_policy_replay` | research_candidate | 1.59% | 40.65% | 24 | 1 | 1 | 1 | 1 | -1.0% | 2 | time_exit:49, no_policy_trigger:39, profit_harvest:8, trailing_giveback:5 |
+| `stop_50` | reject_current_shape | 1.51% | 40.58% | 25 | 1 | 1 | 1 | 13 | -7.5% | 3 | time_exit:49, no_policy_trigger:40, stop_loss:13, profit_target:5 |
+| `time_exit_10` | reject_current_shape | -4.89% | 34.17% | 26 | 1 | 1 | 1 | 1 | -1.0% | 6 | time_exit:101, no_policy_trigger:5, stop_loss:1 |
+| `profit_harvest_all_lanes_50` | reject_current_shape | -8.41% | 30.65% | 24 | 1 | 1 | 1 | 1 | -1.0% | 2 | profit_harvest:51, no_policy_trigger:38, time_exit:17, stop_loss:1 |
+| `stored_sell_recommendation` | reject_current_shape | -11.15% | 27.91% | 24 | 1 | 1 | 1 | 0 |  | 2 | stored_executable_sell_recommendation:76, no_policy_trigger:31 |
+| `profit_harvest_all_lanes_35` | reject_current_shape | -11.87% | 27.19% | 24 | 1 | 1 | 1 | 1 | -1.0% | 2 | profit_harvest:64, no_policy_trigger:32, time_exit:10, stop_loss:1 |
+| `time_exit_7` | reject_current_shape | -12.71% | 26.35% | 28 | 1 | 1 | 1 | 1 | -1.0% | 8 | time_exit:105, stop_loss:1, no_policy_trigger:1 |
+| `trailing_giveback_all_lanes_50_20` | reject_current_shape | -17.96% | 21.1% | 24 | 1 | 1 | 1 | 1 | -1.0% | 2 | no_policy_trigger:44, trailing_giveback:43, time_exit:19, stop_loss:1 |
 
-| Policy | Recommendation | Avg Delta | Median Delta | Avg P&L | Median P&L | Negatives | Winner Losses | Top Reasons |
-|---|---|---:|---:|---:|---:|---:|---:|---|
-| `stop_70` | research_candidate | 2.56% | 0.0% | 39.83% | 37.63% | 26 | 2 | time_exit:48, no_policy_trigger:48, stop_loss:7, profit_target:4 |
-| `current_policy_replay` | research_candidate | 2.32% | 0.0% | 39.6% | 36.34% | 26 | 2 | no_policy_trigger:53, time_exit:46, profit_target:4, profit_harvest:2 |
-| `stop_50` | reject_current_shape | 1.13% | 0.0% | 38.41% | 36.34% | 27 | 3 | time_exit:46, no_policy_trigger:45, stop_loss:12, profit_target:4 |
-| `time_exit_10` | reject_current_shape | -3.11% | 0.0% | 34.17% | 35.79% | 26 | 2 | time_exit:92, no_policy_trigger:14, stop_loss:1 |
-| `profit_harvest_all_lanes_50` | reject_current_shape | -7.94% | 0.0% | 29.34% | 37.63% | 26 | 2 | no_policy_trigger:51, profit_harvest:41, time_exit:14, stop_loss:1 |
-| `profit_harvest_all_lanes_35` | reject_current_shape | -10.12% | 0.0% | 27.16% | 37.42% | 26 | 2 | profit_harvest:60, no_policy_trigger:36, time_exit:10, stop_loss:1 |
-| `time_exit_7` | reject_current_shape | -10.92% | 0.0% | 26.35% | 34.09% | 28 | 4 | time_exit:105, stop_loss:1, no_policy_trigger:1 |
-| `stored_sell_recommendation` | reject_current_shape | -11.15% | 0.0% | 26.13% | 32.51% | 26 | 2 | stored_executable_sell_recommendation:60, no_policy_trigger:47 |
-| `trailing_giveback_all_lanes_50_20` | reject_current_shape | -16.75% | 0.0% | 20.53% | 28.44% | 26 | 2 | no_policy_trigger:52, trailing_giveback:38, time_exit:16, stop_loss:1 |
+## Stop-Loss Trigger Detail
+
+| Policy | Stop Rows | Stop Avg P&L | Stop Avg Baseline | Stop Avg Delta | Stop <= -90% | Stop Winner Losses | Top Stop Lanes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `stop_60` | 10 | -78.73% | -81.89% | 3.16% | 1 | 0 | bullish_pullback_observation:5, tracked_winner_observation:2, tracked_winner_primary:2, swing:1 |
+| `stop_70` | 8 | -85.1% | -86.64% | 1.54% | 1 | 0 | bullish_pullback_observation:3, tracked_winner_observation:2, tracked_winner_primary:2, swing:1 |
+| `stop_80` | 8 | -85.37% | -86.64% | 1.27% | 1 | 0 | bullish_pullback_observation:3, tracked_winner_observation:2, tracked_winner_primary:2, swing:1 |
+| `stop_90` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `current_policy_replay` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `stop_50` | 13 | -72.55% | -65.05% | -7.5% | 1 | 1 | bullish_pullback_observation:6, legacy_unlabeled:2, tracked_winner_observation:2, tracked_winner_primary:2 |
+| `time_exit_10` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `profit_harvest_all_lanes_50` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `profit_harvest_all_lanes_35` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `time_exit_7` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
+| `trailing_giveback_all_lanes_50_20` | 1 | -101.0% | -100.0% | -1.0% | 1 | 0 | bullish_pullback_observation:1 |
 
 ## Legacy Rows 26, 39, 44
 
 | Policy | Trade | Ticker | Lane | Baseline | Replay P&L | Delta | Reason | Reviewed At |
 |---|---:|---|---|---:|---:|---:|---|---|
+| `stop_60` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
+| `stop_60` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
+| `stop_60` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
 | `stop_70` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `stop_70` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `stop_70` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
+| `stop_80` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
+| `stop_80` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
+| `stop_80` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
+| `stop_90` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
+| `stop_90` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
+| `stop_90` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
 | `current_policy_replay` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `current_policy_replay` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `current_policy_replay` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
@@ -49,23 +81,21 @@ No tested broad exit variant clears the promotion bar. The replayable subset has
 | `profit_harvest_all_lanes_50` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `profit_harvest_all_lanes_50` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `profit_harvest_all_lanes_50` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
+| `stored_sell_recommendation` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | stored_executable_sell_recommendation | 2026-05-06 08:09:05.144366-06:00 |
+| `stored_sell_recommendation` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | stored_executable_sell_recommendation | 2026-05-06 08:03:06.827552-06:00 |
+| `stored_sell_recommendation` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 6.555% | 51.3346% | stored_executable_sell_recommendation | 2026-04-16 12:47:00.148232-06:00 |
 | `profit_harvest_all_lanes_35` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `profit_harvest_all_lanes_35` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `profit_harvest_all_lanes_35` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 35.1693% | 79.9489% | profit_harvest | 2026-04-20 11:00:38.270751-06:00 |
 | `time_exit_7` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `time_exit_7` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `time_exit_7` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 30.3304% | 75.11% | time_exit | 2026-04-22 10:32:51.424375-06:00 |
-| `stored_sell_recommendation` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | stored_executable_sell_recommendation | 2026-05-06 08:09:05.144366-06:00 |
-| `stored_sell_recommendation` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | stored_executable_sell_recommendation | 2026-05-06 08:03:06.827552-06:00 |
-| `stored_sell_recommendation` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 6.555% | 51.3346% | stored_executable_sell_recommendation | 2026-04-16 12:47:00.148232-06:00 |
 | `trailing_giveback_all_lanes_50_20` | 44 | JPM | `legacy_unlabeled` | -80.098% | -38.925% | 41.173% | time_exit | 2026-05-06 08:09:05.144366-06:00 |
 | `trailing_giveback_all_lanes_50_20` | 39 | DIA | `legacy_unlabeled` | -42.9751% | -22.179% | 20.7961% | time_exit | 2026-05-06 08:03:06.827552-06:00 |
 | `trailing_giveback_all_lanes_50_20` | 26 | JPM | `legacy_unlabeled` | -44.7796% | 3.9946% | 48.7742% | time_exit | 2026-05-06 08:09:09.055925-06:00 |
 
 ## Recommendation
 
-Do not promote a new broad exit rule from this replay. Keep the current profit-first `90%` stop posture and existing lane-limited profit harvest behavior.
+Do not promote an exit rule unless it improves average and median executable P&L, reduces or holds the deep-loss buckets, does not increase the negative rate, and does not convert stored winners into losses. Treat legacy missed-auto-close rows as a separate diagnostic unless the same rule improves the broader executable-review universe.
 
-The real follow-up is narrower: legacy rows `26`, `39`, and `44` show that current time-exit style replay would have materially improved their outcomes, but the broader universe does not support turning global harvest/giveback or shorter time exits into production rules. Audit those legacy rows as an execution/application problem: determine whether the state-changing review endpoint, historical migration timing, or stale policy-version behavior prevented an executable time exit from being realized.
-
-Do not promote an exit rule unless it improves average and median executable P&L, does not increase the negative rate, and does not convert stored winners into losses. Treat legacy missed-auto-close rows as a separate diagnostic unless the same rule improves the broader executable-review universe.
+This stored-review replay cannot answer whether tighter stops would have saved current-policy historical-paper rows that have no executable review timeline. Those rows need a separate exact OPRA/NBBO historical stop replay before live review stops are changed.

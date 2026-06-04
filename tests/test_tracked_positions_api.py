@@ -287,6 +287,78 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertNotIn("contract_symbol", position["source_pick_snapshot"])
         self.assertNotIn("backfill_audit_id", position["source_pick_snapshot"])
 
+    def test_create_scanner_origin_position_rejects_caps_off_source_scan(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "guardrail_decision": "clear",
+                "portfolio_caps_enforced": False,
+                "creation_blockers": ["portfolio_caps_not_enforced"],
+                "source_scan_session_id": 123,
+                "source_scan_event_key": "rank_1",
+                "source_scan_run_id": "scan:test",
+                "source_scan_recorded_at_utc": "2026-04-14T15:00:00Z",
+            }
+        )
+
+        with patch.object(self.backend, "_verify_source_scan_lineage", return_value=True):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.50,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("portfolio_caps_not_enforced", str(response.json()["detail"]))
+
+    def test_create_scanner_origin_position_reruns_current_guardrails(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "guardrail_decision": "clear",
+                "portfolio_caps_enforced": True,
+                "creation_blockers": [],
+                "candidate_execution_label": "executable_opra_paper_candidate",
+                "source_scan_session_id": 123,
+                "source_scan_event_key": "rank_1",
+                "source_scan_run_id": "scan:test",
+                "source_scan_recorded_at_utc": "2026-04-14T15:00:00Z",
+            }
+        )
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={
+                    "ranked_picks": [
+                        {
+                            **scan_pick,
+                            "guardrail_decision": "blocked",
+                            "guardrail_reasons": ["Max concurrent positions reached."],
+                        }
+                    ]
+                },
+            ),
+        ):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.50,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("Max concurrent positions", str(response.json()["detail"]))
+
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         self.client.post(
@@ -350,6 +422,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -426,6 +499,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_bad_time = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -438,6 +512,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -486,6 +561,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -593,6 +669,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -680,6 +757,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,
@@ -862,6 +940,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         create_response = self.client.post(
             "/api/positions",
             json={
+                "creation_mode": "manual_paper",
                 "scan_pick": scan_pick,
                 "fill_price": 4.50,
                 "contracts": 1,

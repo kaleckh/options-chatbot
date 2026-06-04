@@ -13,15 +13,15 @@
 
 This repo is a mixed Next.js plus FastAPI system for supervised options research and trade review.
 
-The mounted browser product is the regular supervised options lane:
+The mounted browser product is the regular supervised options lane family:
 - live scan
 - replay and truth diagnostics
 - tracked positions
 - paper ideas
 
-The active non-browser proof lane is the AI commodity / commodity-infrastructure options lane. It lives under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`, and is currently gated on exact Alpaca SIP/OPRA bid/ask snapshot history rather than profitability claims.
+AI commodity / commodity-infrastructure options is a separate non-browser proof-first strategy lane. It lives under `data/ai-commodity-infra/` and `scripts/run_ai_commodity_opra_progress.py`, and is currently gated on exact Alpaca SIP/OPRA bid/ask snapshot history rather than profitability claims.
 
-The default supervised options scanner playbook is `bullish_pullback_observation`, shown in the UI as Bullish Pullback. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior; eligible scheduled picks are allowed to auto-track. The lane scans a broad liquid options universe, with SPY/QQQ currently marked as the historical-ready subset.
+When a scan command omits a playbook, the scheduled routing fallback is currently `bullish_pullback_observation`, shown in the UI as Bullish Pullback. That fallback is an operator-routing detail only; all configured regular-options lanes are peer lanes and should be tested, monitored, and improved under the same proof bars. The `_observation` suffix is legacy cohort ID wording, not watch-only behavior.
 
 Current bullish-pullback profitability work uses trusted ThetaData intraday OPRA/NBBO exact-contract evidence. The latest per-ticker audit keeps `10` symbols in the current queue, routes `10` to separate scout lanes, removes `9` from the current queue, and leaves `30` research/data-needed. See `docs/bullish-pullback-ticker-audit-2026-05-29.md`.
 
