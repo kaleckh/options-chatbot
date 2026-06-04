@@ -194,6 +194,30 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
         self.assertEqual(gate["overall_status"], "quality_pending")
         self.assertIn("paper_shadow_fill_evidence_pending", gate["blockers"])
 
+    def test_quality_gate_blocks_bad_lane_a_zero_bid_economics(self):
+        gate = build_quality_gate(
+            [],
+            {"exact_trade_count": 230},
+            {
+                "modes": {
+                    "conservative": {
+                        "combined_with_existing_lane_a_metrics": {
+                            "profit_factor": 0.85,
+                            "avg_pnl_pct": -6.51,
+                        },
+                        "combined_lane_a_priced_count": 281,
+                        "combined_lane_a_unpriced_count": 0,
+                        "zero_bid_priced_count": 118,
+                        "zero_bid_exit_rate_pct": 41.99,
+                    }
+                }
+            },
+        )
+
+        self.assertEqual(gate["zero_bid_status"], "blocked")
+        self.assertIn("lane_a:conservative_zero_bid_pf_0.85_below_1_3", gate["blockers"])
+        self.assertIn("lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", gate["blockers"])
+
     def test_side_aware_zero_bid_summary_keeps_compact_metrics(self):
         summary = compact_side_aware_zero_bid_report(
             {
@@ -220,6 +244,7 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
         self.assertEqual(conservative["priced_count"], 126)
         self.assertEqual(conservative["zero_bid_priced_count"], 118)
         self.assertEqual(conservative["combined_lane_a_quote_coverage_pct"], 96.2)
+        self.assertEqual(conservative["zero_bid_exit_rate_pct"], 41.99)
         self.assertNotIn("priced_rows", conservative)
 
 

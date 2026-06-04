@@ -140,6 +140,14 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     return {}
 
 
+def _first_float(*values: Any) -> float | None:
+    for value in values:
+        parsed = _safe_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
 def _top_spread_alternatives(pick: dict[str, Any], *, limit: int = 3) -> list[dict[str, Any]]:
     alternatives = [
         dict(item)
@@ -568,6 +576,10 @@ def _build_log_record(
 
 def _spread_fill_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
     liquidity = _safe_dict(pick.get("spread_liquidity"))
+    long_bid = _first_float(liquidity.get("long_bid"), pick.get("long_bid"))
+    long_ask = _first_float(liquidity.get("long_ask"), pick.get("long_ask"))
+    short_bid = _first_float(liquidity.get("short_bid"), pick.get("short_bid"))
+    short_ask = _first_float(liquidity.get("short_ask"), pick.get("short_ask"))
     return {
         "ticker": pick.get("ticker"),
         "direction": pick.get("direction"),
@@ -583,9 +595,56 @@ def _spread_fill_snapshot(pick: dict[str, Any]) -> dict[str, Any]:
         "entry_execution_basis": pick.get("entry_execution_basis"),
         "spread_mid_debit": liquidity.get("spread_mid_debit"),
         "spread_entry_debit": liquidity.get("spread_entry_debit"),
+        "long_bid": long_bid,
+        "long_ask": long_ask,
+        "short_bid": short_bid,
+        "short_ask": short_ask,
+        "long_mid": round((long_bid + long_ask) / 2.0, 4) if long_bid is not None and long_ask is not None else None,
+        "short_mid": round((short_bid + short_ask) / 2.0, 4) if short_bid is not None and short_ask is not None else None,
+        "worst_leg_bid_ask_spread_pct": _first_float(
+            liquidity.get("worst_leg_bid_ask_spread_pct"),
+            pick.get("worst_leg_bid_ask_spread_pct"),
+        ),
         "spread_bid_ask_pct_of_mid": pick.get("spread_bid_ask_pct_of_mid"),
         "debit_pct_of_width": pick.get("debit_pct_of_width"),
+        "quote_time_et": pick.get("quote_time_et"),
+        "quote_time_utc": pick.get("quote_time_utc"),
+        "quote_freshness_status": pick.get("quote_freshness_status"),
+        "entry_quote_snapshot": copy.deepcopy(pick.get("entry_quote_snapshot")),
         "legs": copy.deepcopy(pick.get("legs") or []),
+    }
+
+
+def _fill_discipline_snapshot(
+    pick: dict[str, Any],
+    *,
+    selected_spread: dict[str, Any],
+    alternatives: list[dict[str, Any]],
+    intended_limit_price: float | None,
+    spread_mid: float | None,
+    fill_degradation_vs_mid: float | None,
+    fill_degradation_vs_mid_pct: float | None,
+) -> dict[str, Any]:
+    liquidity = _safe_dict(pick.get("spread_liquidity"))
+    return {
+        "attempted_limit_price": intended_limit_price,
+        "attempted_limit_basis": pick.get("entry_execution_basis"),
+        "spread_mid_debit": spread_mid,
+        "spread_entry_debit": _first_float(liquidity.get("spread_entry_debit"), pick.get("entry_execution_price")),
+        "fill_degradation_vs_mid": fill_degradation_vs_mid,
+        "fill_degradation_vs_mid_pct": fill_degradation_vs_mid_pct,
+        "spread_bid_ask_pct_of_mid": _first_float(
+            pick.get("spread_bid_ask_pct_of_mid"),
+            liquidity.get("spread_bid_ask_pct_of_mid"),
+        ),
+        "worst_leg_bid_ask_spread_pct": selected_spread.get("worst_leg_bid_ask_spread_pct"),
+        "long_bid": selected_spread.get("long_bid"),
+        "long_ask": selected_spread.get("long_ask"),
+        "short_bid": selected_spread.get("short_bid"),
+        "short_ask": selected_spread.get("short_ask"),
+        "selected_spread": copy.deepcopy(selected_spread),
+        "top_alternative_count": len(alternatives),
+        "top_alternatives": copy.deepcopy(alternatives),
     }
 
 
@@ -609,6 +668,18 @@ def _build_fill_attempt_record(
         fill_degradation_vs_mid = round(float(intended_limit_price) - float(spread_mid), 4)
         fill_degradation_vs_mid_pct = round(fill_degradation_vs_mid / float(spread_mid) * 100.0, 4)
     alternatives = _top_spread_alternatives(pick)
+    selected_spread = _spread_fill_snapshot(pick)
+    selected_spread["fill_degradation_vs_mid"] = fill_degradation_vs_mid
+    selected_spread["fill_degradation_vs_mid_pct"] = fill_degradation_vs_mid_pct
+    fill_discipline = _fill_discipline_snapshot(
+        pick,
+        selected_spread=selected_spread,
+        alternatives=alternatives,
+        intended_limit_price=intended_limit_price,
+        spread_mid=spread_mid,
+        fill_degradation_vs_mid=fill_degradation_vs_mid,
+        fill_degradation_vs_mid_pct=fill_degradation_vs_mid_pct,
+    )
     return {
         "logged_at": run_at.isoformat(),
         "scan_date": run_at.strftime("%Y-%m-%d"),
@@ -638,7 +709,7 @@ def _build_fill_attempt_record(
         "signal_variant": pick.get("signal_variant"),
         "signal_family": pick.get("signal_family"),
         "candidate_execution_label": pick.get("candidate_execution_label") or pick.get("execution_candidate_label"),
-        "selected_spread": _spread_fill_snapshot(pick),
+        "selected_spread": selected_spread,
         "top_alternatives": alternatives,
         "top_spread_alternatives": copy.deepcopy(alternatives),
         "intended_limit_price": intended_limit_price,
@@ -647,8 +718,17 @@ def _build_fill_attempt_record(
         "attempted_limit_basis": pick.get("entry_execution_basis"),
         "attempted_limit_quote_time_et": pick.get("quote_time_et"),
         "attempted_limit_quote_time_utc": pick.get("quote_time_utc"),
+        "spread_mid_debit": spread_mid,
+        "spread_entry_debit": fill_discipline.get("spread_entry_debit"),
+        "long_bid": fill_discipline.get("long_bid"),
+        "long_ask": fill_discipline.get("long_ask"),
+        "short_bid": fill_discipline.get("short_bid"),
+        "short_ask": fill_discipline.get("short_ask"),
+        "worst_leg_bid_ask_spread_pct": fill_discipline.get("worst_leg_bid_ask_spread_pct"),
+        "spread_bid_ask_pct_of_mid": fill_discipline.get("spread_bid_ask_pct_of_mid"),
         "fill_degradation_vs_mid": fill_degradation_vs_mid,
         "fill_degradation_vs_mid_pct": fill_degradation_vs_mid_pct,
+        "fill_discipline_snapshot": fill_discipline,
         "fill_outcome": "pending",
         "fill_outcome_reason": None,
         "auto_track_position_id": None,

@@ -2,7 +2,7 @@
 
 Read-only forward monitor for the entry-filter champion. It does not change live scanner behavior.
 
-- Generated: `2026-06-02T02:02:39Z`
+- Generated: `2026-06-04T21:43:39Z`
 - Since date: `2026-06-02`
 - Champion: `short_term_fill_degradation_ge_15`
 - Gate status: `collecting`

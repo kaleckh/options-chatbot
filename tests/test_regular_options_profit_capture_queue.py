@@ -288,6 +288,9 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertEqual(report["summary"]["evidence_repair_priority_counts"]["high"], 1)
         self.assertEqual(report["summary"]["fresh_scan_guardrail_decision_counts"]["clear"], 1)
         self.assertEqual(report["summary"]["fresh_scan_guardrail_decision_counts"]["blocked"], 1)
+        self.assertEqual(report["summary"]["tier_a_fresh_match_bridge_count"], 1)
+        self.assertEqual(report["summary"]["fresh_match_bridge_counts"][capture_queue.BRIDGE_READY], 1)
+        self.assertEqual(report["summary"]["fresh_match_bridge_counts"][capture_queue.BRIDGE_NOT_ELIGIBLE], 1)
         readiness_counts = report["summary"]["selection_readiness_counts"]
         self.assertGreaterEqual(readiness_counts[capture_queue.READINESS_PAPER_REVIEW], 3)
         self.assertEqual(readiness_counts[capture_queue.READINESS_WATCH_REPAIR], 1)
@@ -313,8 +316,15 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertEqual(report["quarantine_queue"][0]["symbol"], "TSLA")
         nem = next(row for row in report["capture_queue"] if row["symbol"] == "NEM")
         self.assertEqual(nem["selection_readiness"], capture_queue.READINESS_PAPER_REVIEW)
+        self.assertEqual(nem["paper_shortlist_bridge"]["status"], capture_queue.BRIDGE_REQUIRES_FRESH_MATCH)
+        self.assertFalse(nem["paper_shortlist_bridge"]["eligible"])
         self.assertEqual(nem["current_policy_overlay"]["negative_count"], 1)
         self.assertEqual(nem["current_policy_overlay"]["decision_counts"]["would_take_today"], 2)
+        bridge = report["tier_a_fresh_match_bridge"][0]
+        self.assertEqual(bridge["symbol"], "SPY")
+        self.assertEqual(bridge["fresh_match_bridge"]["status"], capture_queue.BRIDGE_READY)
+        self.assertTrue(bridge["fresh_executable_quote_window"])
+        self.assertEqual(bridge["fresh_match_bridge"]["matched_tier_a_lanes"], ["swing"])
 
     def test_repair_attempt_readback_marks_lookahead_only_as_not_exact_proof(self):
         with tempfile.TemporaryDirectory() as temp_dir:

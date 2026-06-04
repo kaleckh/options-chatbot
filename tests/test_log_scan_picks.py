@@ -200,7 +200,16 @@ class LogScanPicksTests(unittest.TestCase):
                 "contract_symbol": "SPY260626C00650000",
                 "short_contract_symbol": "SPY260626C00680000",
                 "spread_width": 30.0,
-                "spread_liquidity": {"spread_mid_debit": 5.0},
+                "spread_liquidity": {
+                    "spread_mid_debit": 5.0,
+                    "spread_entry_debit": 5.2,
+                    "long_bid": 8.9,
+                    "long_ask": 9.1,
+                    "short_bid": 3.8,
+                    "short_ask": 4.0,
+                    "worst_leg_bid_ask_spread_pct": 2.6,
+                    "spread_bid_ask_pct_of_mid": 4.0,
+                },
                 "spread_alternatives": [
                     {"rank": 1, "long_strike": 650.0, "short_strike": 680.0},
                     {"rank": 2, "long_strike": 645.0, "short_strike": 675.0},
@@ -237,8 +246,20 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertNotIn("observation_only", record)
         self.assertEqual(record["intended_limit_price"], 5.2)
         self.assertEqual(record["attempted_limit_price"], 5.2)
+        self.assertEqual(record["spread_mid_debit"], 5.0)
+        self.assertEqual(record["spread_entry_debit"], 5.2)
         self.assertEqual(record["fill_degradation_vs_mid"], 0.2)
+        self.assertEqual(record["fill_degradation_vs_mid_pct"], 4.0)
+        self.assertEqual(record["long_bid"], 8.9)
+        self.assertEqual(record["short_ask"], 4.0)
+        self.assertEqual(record["worst_leg_bid_ask_spread_pct"], 2.6)
+        self.assertEqual(record["spread_bid_ask_pct_of_mid"], 4.0)
         self.assertEqual(record["selected_spread"]["long_contract_symbol"], "SPY260626C00650000")
+        self.assertEqual(record["selected_spread"]["long_mid"], 9.0)
+        self.assertEqual(record["selected_spread"]["short_mid"], 3.9)
+        self.assertEqual(record["selected_spread"]["fill_degradation_vs_mid_pct"], 4.0)
+        self.assertEqual(record["fill_discipline_snapshot"]["attempted_limit_price"], 5.2)
+        self.assertEqual(record["fill_discipline_snapshot"]["top_alternative_count"], 3)
         self.assertEqual(len(record["top_alternatives"]), 3)
         self.assertEqual(record["top_spread_alternatives"], record["top_alternatives"])
         self.assertEqual(record["top_alternatives"][0]["short_strike"], 680.0)

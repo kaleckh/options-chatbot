@@ -41,6 +41,11 @@ READINESS_FRESH_SIGNATURE = "historical_signature_only"
 READINESS_BLOCKED = "blocked_guardrail_only"
 READINESS_DO_NOT_CHASE = "do_not_chase"
 
+BRIDGE_READY = "fresh_executable_tier_a_paper_shortlist_candidate"
+BRIDGE_REQUIRES_FRESH_MATCH = "requires_fresh_executable_tier_a_match"
+BRIDGE_NOT_TIER_A = "not_tier_a"
+BRIDGE_NOT_ELIGIBLE = "not_bridge_eligible"
+
 REPAIR_ACTION_NO_REPAIR_NEEDED = "no_repair_needed_clean_exact"
 REPAIR_ACTION_CAN_CLEAR_TIER_A = "can_clear_tier_a_with_exact_rows"
 REPAIR_ACTION_NEEDS_STATUS_OR_FORWARD = "needs_status_or_forward_validation_after_repair"
@@ -467,7 +472,10 @@ def selection_gate_for_tier(tier: str) -> dict[str, Any]:
     if tier == TIER_A:
         return {
             "selection_readiness": READINESS_PAPER_REVIEW,
-            "selection_reason": "Clean exact Tier A row; eligible for paper-review shortlist, not live auto-promotion.",
+            "selection_reason": (
+                "Clean exact Tier A row; eligible for paper review only after a fresh executable scanner match, "
+                "not live auto-promotion."
+            ),
         }
     if tier == TIER_B:
         return {
@@ -487,6 +495,82 @@ def selection_gate_for_tier(tier: str) -> dict[str, Any]:
     return {
         "selection_readiness": READINESS_DO_NOT_CHASE,
         "selection_reason": "Rejected, quarantined, or execution-risk row; do not chase.",
+    }
+
+
+def _fresh_executable_candidate(pick: dict[str, Any]) -> bool:
+    label = str(pick.get("candidate_execution_label") or pick.get("execution_candidate_label") or "").lower()
+    basis = str(pick.get("attempted_limit_basis") or pick.get("entry_execution_basis") or "").lower()
+    freshness = str(pick.get("quote_freshness_status") or "").lower()
+    source = " ".join(
+        str(pick.get(key) or "").lower()
+        for key in ("options_data_source", "pricing_evidence_class", "profitability_evidence_class", "selection_source")
+    )
+    blocked_tokens = ("stale", "fallback", "manual", "display_only", "midpoint_only", "eod")
+    if any(token in label or token in basis or token in freshness or token in source for token in blocked_tokens):
+        return False
+    if "executable" in label and "opra" in label:
+        return True
+    if basis in {"spread_ask_bid", "spread_bid_ask", "ask", "bid_ask"} and ("opra" in source or "exact" in source):
+        return True
+    return False
+
+
+def _fresh_bridge_for_pick(
+    *,
+    guardrail_decision: str,
+    match_type: str,
+    compact_sleeves: list[dict[str, Any]],
+    fresh_executable: bool,
+) -> dict[str, Any]:
+    blockers: list[str] = []
+    tier_a_matches = [row for row in compact_sleeves if row.get("capture_tier") == TIER_A]
+    if guardrail_decision != "clear":
+        blockers.append("guardrail_not_clear")
+    if match_type != "lane_signature":
+        blockers.append("lane_signature_not_matched")
+    if not tier_a_matches:
+        blockers.append("no_tier_a_lane_match")
+    if not fresh_executable:
+        blockers.append("fresh_executable_quote_missing")
+    status = BRIDGE_READY if not blockers else BRIDGE_NOT_ELIGIBLE
+    return {
+        "status": status,
+        "eligible": status == BRIDGE_READY,
+        "blockers": blockers,
+        "tier_a_lane_match_count": len(tier_a_matches),
+        "matched_tier_a_lanes": [str(row.get("lane_id") or "") for row in tier_a_matches],
+        "requires_fresh_executable_quote": True,
+        "live_policy_change": False,
+    }
+
+
+def _paper_shortlist_bridge_for_capture(tier: str, fresh: dict[str, Any]) -> dict[str, Any]:
+    if tier != TIER_A:
+        return {
+            "status": BRIDGE_NOT_TIER_A,
+            "eligible": False,
+            "blockers": ["not_tier_a_clean_exact"],
+            "live_policy_change": False,
+        }
+    if _safe_int(fresh.get("paper_shortlist_candidate_count")) > 0:
+        return {
+            "status": BRIDGE_READY,
+            "eligible": True,
+            "blockers": [],
+            "fresh_scan_match_count": _safe_int(fresh.get("fresh_scan_match_count")),
+            "paper_shortlist_candidate_count": _safe_int(fresh.get("paper_shortlist_candidate_count")),
+            "playbooks": list(fresh.get("playbooks") or []),
+            "live_policy_change": False,
+        }
+    return {
+        "status": BRIDGE_REQUIRES_FRESH_MATCH,
+        "eligible": False,
+        "blockers": ["fresh_executable_tier_a_match_required"],
+        "fresh_scan_match_count": _safe_int(fresh.get("fresh_scan_match_count")),
+        "paper_shortlist_candidate_count": _safe_int(fresh.get("paper_shortlist_candidate_count")),
+        "playbooks": list(fresh.get("playbooks") or []),
+        "live_policy_change": False,
     }
 
 
@@ -913,6 +997,7 @@ def build_capture_row(
         "quarantine_overlay": quarantine,
         "current_policy_overlay": policy,
         "fresh_scan_overlay": fresh,
+        "paper_shortlist_bridge": _paper_shortlist_bridge_for_capture(tier, fresh),
         "live_policy_change": False,
     }
 
@@ -966,6 +1051,13 @@ def fresh_scan_matches(
             match_type = "lane_signature" if lane_matches else "symbol_only" if matched_rows else "no_symbol_sleeve"
             capture_tier = TIER_C if guardrail_decision == "clear" else TIER_BLOCKED
             selection_gate = selection_gate_for_tier(capture_tier)
+            fresh_executable = _fresh_executable_candidate(pick)
+            bridge = _fresh_bridge_for_pick(
+                guardrail_decision=guardrail_decision,
+                match_type=match_type,
+                compact_sleeves=compact_sleeves,
+                fresh_executable=fresh_executable,
+            )
             record = {
                 "capture_tier": capture_tier,
                 **selection_gate,
@@ -978,6 +1070,12 @@ def fresh_scan_matches(
                 "guardrail_decision": guardrail_decision,
                 "guardrail_reasons": list(pick.get("guardrail_reasons") or []),
                 "candidate_execution_label": pick.get("candidate_execution_label"),
+                "quote_freshness_status": pick.get("quote_freshness_status"),
+                "options_data_source": pick.get("options_data_source"),
+                "pricing_evidence_class": pick.get("pricing_evidence_class"),
+                "selection_source": pick.get("selection_source") or pick.get("contract_selection_source"),
+                "fresh_executable_quote_window": fresh_executable,
+                "fresh_match_bridge": bridge,
                 "net_debit": _round(pick.get("net_debit"), 4),
                 "debit_pct_of_width": _round(pick.get("debit_pct_of_width")),
                 "quality_score": _round(pick.get("quality_score")),
@@ -995,8 +1093,11 @@ def fresh_scan_matches(
                         "fresh_scan_match_count": 0,
                         "clear_count": 0,
                         "blocked_count": 0,
+                        "fresh_executable_count": 0,
+                        "paper_shortlist_candidate_count": 0,
                         "playbooks": [],
                         "guardrail_reasons": [],
+                        "bridge_blockers": [],
                     },
                 )
                 status["fresh_scan_match_count"] += 1
@@ -1004,11 +1105,18 @@ def fresh_scan_matches(
                     status["clear_count"] += 1
                 if guardrail_decision == "blocked":
                     status["blocked_count"] += 1
+                if fresh_executable:
+                    status["fresh_executable_count"] += 1
+                if bridge["eligible"] and str(matched.get("lane_id") or "") in set(bridge["matched_tier_a_lanes"]):
+                    status["paper_shortlist_candidate_count"] += 1
                 if playbook_id not in status["playbooks"]:
                     status["playbooks"].append(playbook_id)
                 for reason in pick.get("guardrail_reasons") or []:
                     if reason not in status["guardrail_reasons"]:
                         status["guardrail_reasons"].append(reason)
+                for blocker in bridge["blockers"]:
+                    if blocker not in status["bridge_blockers"]:
+                        status["bridge_blockers"].append(blocker)
     matches.sort(
         key=lambda row: (
             0 if row["guardrail_decision"] == "clear" else 1,
@@ -1032,6 +1140,7 @@ def _queue_summary(
         str((row.get("repair_actionability") or {}).get("status") or "unknown") for row in rows
     )
     fresh_counts = Counter(str(row.get("guardrail_decision")) for row in fresh_rows)
+    bridge_counts = Counter(str((row.get("fresh_match_bridge") or {}).get("status") or "unknown") for row in fresh_rows)
     selection_counts = Counter(
         str(row.get("selection_readiness")) for row in [*rows, *fresh_rows, *quarantine_rows]
     )
@@ -1043,6 +1152,8 @@ def _queue_summary(
         "repair_actionability_counts": dict(sorted(actionability_counts.items())),
         "fresh_scan_match_count": len(fresh_rows),
         "fresh_scan_guardrail_decision_counts": dict(sorted(fresh_counts.items())),
+        "fresh_match_bridge_counts": dict(sorted(bridge_counts.items())),
+        "tier_a_fresh_match_bridge_count": bridge_counts.get(BRIDGE_READY, 0),
         "blocked_but_interesting_count": len(blocked_interesting_rows),
         "high_priority_evidence_repair_count": repair_counts.get("high", 0),
         "quarantine_queue_count": len(quarantine_rows),
@@ -1133,6 +1244,9 @@ def build_report(
             -_safe_int((row.get("metrics") or {}).get("unresolved_rows")),
         )
     )
+    tier_a_fresh_match_bridge = [
+        row for row in fresh_rows if (row.get("fresh_match_bridge") or {}).get("status") == BRIDGE_READY
+    ]
 
     report = {
         "schema_version": 1,
@@ -1155,6 +1269,10 @@ def build_report(
             ],
             "tier_b_means": "profitable keep/watch evidence that still needs proof repair, coverage, sample, or forward-paper validation",
             "tier_c_means": "fresh scan candidate matching a profitable historical signature; still paper/research unless separately proof-eligible",
+            "paper_shortlist_bridge": (
+                "Only Tier A paper_review_candidate evidence with a fresh executable quote-window lane match can enter "
+                "the paper shortlist bridge."
+            ),
             "blocked_rows_remain_blocked": True,
         },
         "inputs": [
@@ -1173,6 +1291,7 @@ def build_report(
         },
         "capture_queue": capture_rows,
         "fresh_scan_matches": fresh_rows,
+        "tier_a_fresh_match_bridge": tier_a_fresh_match_bridge,
         "blocked_but_interesting": blocked_interesting,
         "evidence_repair_queue": evidence_repair,
         "quarantine_queue": quarantine_rows,
@@ -1180,6 +1299,7 @@ def build_report(
         "final_readback": {
             "top_clean_exact": [row for row in capture_rows if row.get("capture_tier") == TIER_A][:12],
             "top_watch_repair": [row for row in capture_rows if row.get("capture_tier") == TIER_B][:20],
+            "tier_a_fresh_match_bridge": tier_a_fresh_match_bridge[:20],
             "fresh_scan_matches": fresh_rows[:20],
             "blocked_but_interesting": blocked_interesting[:20],
             "evidence_repair_queue": evidence_repair[:20],
@@ -1278,28 +1398,57 @@ def _repair_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
 
 def _fresh_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
     lines = [
-        "| Tier | Readiness | Symbol | Playbook | Decision | Match | Debit % | Quality | Matched sleeves | Reasons |",
-        "|---|---|---|---|---|---|---:|---:|---|---|",
+        "| Tier | Readiness | Bridge | Symbol | Playbook | Decision | Match | Executable | Debit % | Quality | Matched sleeves | Reasons |",
+        "|---|---|---|---|---|---|---|---|---:|---:|---|---|",
     ]
     for row in rows[:limit]:
         sleeves = ", ".join(
             f"{sleeve.get('lane_id')}:{sleeve.get('capture_tier') or sleeve.get('status')}"
             for sleeve in row.get("matched_sleeves") or []
         )
+        bridge = row.get("fresh_match_bridge") if isinstance(row.get("fresh_match_bridge"), dict) else {}
         lines.append(
             "| "
             + " | ".join(
                 [
                     _fmt(row.get("capture_tier")),
                     _fmt(row.get("selection_readiness")),
+                    _fmt(bridge.get("status")),
                     _fmt(row.get("symbol")),
                     _fmt(row.get("playbook_id")),
                     _fmt(row.get("guardrail_decision")),
                     _fmt(row.get("match_type")),
+                    _fmt(row.get("fresh_executable_quote_window")),
                     _fmt(row.get("debit_pct_of_width")),
                     _fmt(row.get("quality_score")),
                     _fmt(sleeves),
                     _fmt("; ".join(row.get("guardrail_reasons") or [])),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
+def _fresh_bridge_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
+    lines = [
+        "| Bridge | Symbol | Playbook | Match | Executable | Debit % | Quality | Tier A sleeves |",
+        "|---|---|---|---|---|---:|---:|---|",
+    ]
+    for row in rows[:limit]:
+        bridge = row.get("fresh_match_bridge") if isinstance(row.get("fresh_match_bridge"), dict) else {}
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _fmt(bridge.get("status")),
+                    _fmt(row.get("symbol")),
+                    _fmt(row.get("playbook_id")),
+                    _fmt(row.get("match_type")),
+                    _fmt(row.get("fresh_executable_quote_window")),
+                    _fmt(row.get("debit_pct_of_width")),
+                    _fmt(row.get("quality_score")),
+                    _fmt(", ".join(bridge.get("matched_tier_a_lanes") or [])),
                 ]
             )
             + " |"
@@ -1324,6 +1473,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Evidence repair priorities: `{json.dumps(summary.get('evidence_repair_priority_counts') or {}, sort_keys=True)}`.",
         f"- Repair actionability: `{json.dumps(summary.get('repair_actionability_counts') or {}, sort_keys=True)}`.",
         f"- Fresh scan matches: `{summary.get('fresh_scan_match_count')}` with decisions `{json.dumps(summary.get('fresh_scan_guardrail_decision_counts') or {}, sort_keys=True)}`.",
+        f"- Tier A fresh-match bridge: `{summary.get('tier_a_fresh_match_bridge_count')}` with statuses `{json.dumps(summary.get('fresh_match_bridge_counts') or {}, sort_keys=True)}`.",
         f"- Blocked but interesting: `{summary.get('blocked_but_interesting_count')}`.",
         f"- Quarantine queue rows: `{summary.get('quarantine_queue_count')}`.",
         f"- Live policy change: `{report.get('live_policy_change')}`.",
@@ -1333,6 +1483,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "- Tier A requires trusted intraday OPRA/NBBO exact-contract evidence, zero unresolved rows, adequate sample, high quote coverage, positive PF/average P&L, and no clean disqualifier.",
         "- Tier B is profitable watch evidence that still needs proof repair, sample, coverage, or forward-paper validation.",
         "- Tier C fresh scan matches are historical-signature matches only; they are not validated trade recommendations by themselves.",
+        "- The paper shortlist bridge requires both Tier A evidence and a fresh executable quote-window lane match.",
         "- Selection readiness is paper/research routing only; it does not change scanner, broker, or stop-loss behavior.",
         "- Blocked candidates remain blocked, with reasons preserved.",
         "",
@@ -1343,6 +1494,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         "## Tier B Watch / Repair",
         "",
         *_capture_table(final.get("top_watch_repair") or [], limit=30),
+        "",
+        "## Tier A Fresh-Match Paper Bridge",
+        "",
+        *_fresh_bridge_table(final.get("tier_a_fresh_match_bridge") or [], limit=30),
         "",
         "## Fresh Scan Signature Matches",
         "",

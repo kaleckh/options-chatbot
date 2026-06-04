@@ -2,7 +2,7 @@
 
 Read-only scanner candidate replay for the short-term fill-degradation champion. It does not change live guardrails.
 
-- Generated: `2026-06-04T05:26:13Z`
+- Generated: `2026-06-04T21:43:39Z`
 - Status: `paper_only_collecting`
 - Filter: `short_term_fill_degradation_ge_15`
 - Live policy change: `False`
@@ -12,9 +12,9 @@ Read-only scanner candidate replay for the short-term fill-degradation champion.
 
 | Slice | Rows | Exact priced | Avg | Median | Negatives | <= -50% | <= -90% |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Baseline | 5 | 0 | n/a | n/a | 0 | 0 | 0 |
+| Baseline | 11 | 0 | n/a | n/a | 0 | 0 | 0 |
 | Matched | 0 | 0 | n/a | n/a | 0 | 0 | 0 |
-| Kept | 5 | 0 | n/a | n/a | 0 | 0 | 0 |
+| Kept | 11 | 0 | n/a | n/a | 0 | 0 | 0 |
 
 ## Effect Read
 
@@ -26,9 +26,9 @@ Read-only scanner candidate replay for the short-term fill-degradation champion.
 
 ## Coverage
 
-- Zero-pick days: `1`
-- Unpriced or non-executable rows: `5`
-- Unpriced reasons: `{"missing_realized_pnl": 5}`
+- Zero-pick days: `0`
+- Unpriced or non-executable rows: `11`
+- Unpriced reasons: `{"missing_realized_pnl": 11}`
 
 Recommended next action: Keep the champion filter paper-only; continue fresh monitor collection and only revisit promotion after this replay has enough exact priced rows with no winner damage.
 

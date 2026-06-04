@@ -32,6 +32,8 @@ TARGET_EXACT_TRADES = 200
 COUNT_CANDIDATE_STATUS = "count_candidate"
 LEGACY_COUNT_CANDIDATE_STATUS = "portfolio_candidate"
 COUNT_CANDIDATE_STATUSES = {COUNT_CANDIDATE_STATUS, LEGACY_COUNT_CANDIDATE_STATUS}
+ZERO_BID_EXIT_RATE_MAX_PCT = 2.0
+ZERO_BID_REPLAY_MIN_COMBINED_PF = 1.3
 
 
 LANE_SOURCES: list[dict[str, Any]] = [
@@ -502,10 +504,44 @@ def classify_lane(run_metrics: dict[str, Any], robustness: dict[str, Any], proof
     return {"status": status, "blockers": blockers}
 
 
-def build_quality_gate(lane_reports: list[dict[str, Any]], combined_metrics: dict[str, Any]) -> dict[str, Any]:
+def _zero_bid_quality_blockers(side_aware_zero_bid: dict[str, Any] | None) -> list[str]:
+    if not isinstance(side_aware_zero_bid, dict):
+        return []
+    modes = side_aware_zero_bid.get("modes") if isinstance(side_aware_zero_bid.get("modes"), dict) else {}
+    conservative = modes.get("conservative") if isinstance(modes.get("conservative"), dict) else {}
+    if not conservative:
+        return []
+    blockers: list[str] = []
+    combined = conservative.get("combined_with_existing_lane_a_metrics") or {}
+    combined_pf = _safe_float(combined.get("profit_factor"))
+    if combined_pf < ZERO_BID_REPLAY_MIN_COMBINED_PF:
+        blockers.append(
+            f"lane_a:conservative_zero_bid_pf_{combined_pf:.2f}_below_{str(ZERO_BID_REPLAY_MIN_COMBINED_PF).replace('.', '_')}"
+        )
+    unpriced = _safe_int(conservative.get("combined_lane_a_unpriced_count"))
+    if unpriced > 0:
+        blockers.append(f"lane_a:conservative_zero_bid_unpriced_{unpriced}")
+    zero_bid_rate = conservative.get("zero_bid_exit_rate_pct")
+    if zero_bid_rate is not None:
+        parsed_rate = _safe_float(zero_bid_rate)
+        if parsed_rate > ZERO_BID_EXIT_RATE_MAX_PCT:
+            blockers.append(
+                f"lane_a:conservative_zero_bid_exit_rate_{parsed_rate:.2f}_above_{ZERO_BID_EXIT_RATE_MAX_PCT:.1f}"
+            )
+    elif _safe_int(conservative.get("zero_bid_priced_count")) > 0:
+        blockers.append("lane_a:conservative_zero_bid_exit_rate_missing")
+    return blockers
+
+
+def build_quality_gate(
+    lane_reports: list[dict[str, Any]],
+    combined_metrics: dict[str, Any],
+    side_aware_zero_bid: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     count_blockers: list[str] = []
     coverage_blockers: list[str] = []
     robustness_blockers: list[str] = []
+    zero_bid_blockers = _zero_bid_quality_blockers(side_aware_zero_bid)
 
     exact_count = _safe_int(combined_metrics.get("exact_trade_count"))
     if exact_count < TARGET_EXACT_TRADES:
@@ -538,12 +574,13 @@ def build_quality_gate(lane_reports: list[dict[str, Any]], combined_metrics: dic
             robustness_blockers.append(f"{lane_id}:stress_5pct_pf_{stress_pf:.2f}_below_1_2")
 
     paper_shadow_blockers = ["paper_shadow_fill_evidence_pending"]
-    all_blockers = count_blockers + coverage_blockers + robustness_blockers + paper_shadow_blockers
+    all_blockers = count_blockers + coverage_blockers + robustness_blockers + zero_bid_blockers + paper_shadow_blockers
     return {
         "overall_status": "production_ready" if not all_blockers else "quality_pending",
         "count_status": "passed" if not count_blockers else "blocked",
         "coverage_status": "passed" if not coverage_blockers else "blocked",
         "robustness_status": "passed" if not robustness_blockers else "blocked",
+        "zero_bid_status": "passed" if not zero_bid_blockers else "blocked",
         "paper_shadow_status": "pending",
         "blockers": all_blockers,
     }
@@ -564,6 +601,16 @@ def compact_side_aware_zero_bid_report(payload: dict[str, Any]) -> dict[str, Any
             "combined_lane_a_priced_count": _safe_int(mode.get("combined_lane_a_priced_count")),
             "combined_lane_a_unpriced_count": _safe_int(mode.get("combined_lane_a_unpriced_count")),
             "combined_lane_a_quote_coverage_pct": _safe_float(mode.get("combined_lane_a_quote_coverage_pct")),
+            "zero_bid_exit_rate_pct": (
+                round(
+                    _safe_int(mode.get("zero_bid_priced_count"))
+                    / _safe_int(mode.get("combined_lane_a_priced_count"))
+                    * 100.0,
+                    2,
+                )
+                if _safe_int(mode.get("combined_lane_a_priced_count")) > 0
+                else None
+            ),
             "exit_reasons": mode.get("exit_reasons") or {},
             "unpriced_reasons": mode.get("unpriced_reasons") or {},
         }
@@ -668,7 +715,8 @@ def build_report() -> dict[str, Any]:
     combined_metrics = metrics_for_trades(selected)
     by_lane = Counter(str(row.get("lane_id")) for row in selected)
     by_family = Counter(str(row.get("lane_family")) for row in selected)
-    quality_gate = build_quality_gate(lane_reports, combined_metrics)
+    side_aware_zero_bid = _side_aware_zero_bid_report()
+    quality_gate = build_quality_gate(lane_reports, combined_metrics, side_aware_zero_bid)
 
     status_counts = Counter(str(row.get("status")) for row in lane_reports)
     blocker_counts = Counter(blocker for row in lane_reports for blocker in row.get("blockers") or [])
@@ -697,7 +745,7 @@ def build_report() -> dict[str, Any]:
             "by_family": dict(sorted(by_family.items())),
         },
         "quality_gate": quality_gate,
-        "side_aware_zero_bid_replay": _side_aware_zero_bid_report(),
+        "side_aware_zero_bid_replay": side_aware_zero_bid,
         "lane_status_counts": dict(sorted(status_counts.items())),
         "lane_blocker_counts": dict(sorted(blocker_counts.items())),
         "lanes": lane_reports,
@@ -747,6 +795,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Count: `{report['quality_gate']['count_status']}`.",
         f"- Coverage: `{report['quality_gate']['coverage_status']}`.",
         f"- Robustness: `{report['quality_gate']['robustness_status']}`.",
+        f"- Lane A zero-bid: `{report['quality_gate'].get('zero_bid_status')}`.",
         f"- Paper shadow: `{report['quality_gate']['paper_shadow_status']}`.",
         f"- Blockers: `{json.dumps(report['quality_gate']['blockers'])}`.",
         "",
@@ -777,6 +826,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"- Conservative combined Lane A: `{conservative.get('combined_lane_a_priced_count')}` priced, "
                     f"`{conservative.get('combined_lane_a_unpriced_count')}` unpriced, "
                     f"coverage `{conservative.get('combined_lane_a_quote_coverage_pct')}%`, "
+                    f"zero-bid exit rate `{conservative.get('zero_bid_exit_rate_pct')}%`, "
                     f"PF `{conservative_combined.get('profit_factor')}`, avg `{conservative_combined.get('avg_pnl_pct')}%`."
                 ),
                 (

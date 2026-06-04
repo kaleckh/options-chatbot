@@ -25,15 +25,16 @@ Only trusted intraday OPRA/NBBO exact rows are counted in the proof portfolio. C
 - Count: `passed`.
 - Coverage: `blocked`.
 - Robustness: `blocked`.
+- Lane A zero-bid: `blocked`.
 - Paper shadow: `pending`.
-- Blockers: `["bullish_pullback_core:unpriced_candidates_3", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "paper_shadow_fill_evidence_pending"]`.
+- Blockers: `["bullish_pullback_core:unpriced_candidates_3", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "paper_shadow_fill_evidence_pending"]`.
 
 ## Lane A Side-Aware Zero-Bid Replay
 
 - Artifact: `data\profitability-lab\side-aware-zero-bid\latest_lane_a_side_aware_zero_bid.json`.
 - Conservative zero-bid mode priced `126` of `127` missing-exit candidates; `118` priced rows used at least one zero-bid exit quote.
 - Conservative side-aware rows alone: PF `0.11`, avg `-66.59%`, win rate `16.7%`.
-- Conservative combined Lane A: `281` priced, `11` unpriced, coverage `96.2%`, PF `0.85`, avg `-6.51%`.
+- Conservative combined Lane A: `281` priced, `11` unpriced, coverage `96.2%`, zero-bid exit rate `41.99%`, PF `0.85`, avg `-6.51%`.
 - Midpoint zero-bid combined Lane A is still weak: PF `1.11`, avg `3.79%`.
 - Read: the missing Lane A exits are mostly adverse zero-bid short-leg states, so the quality blocker is economic, not just a missing-import artifact.
 
