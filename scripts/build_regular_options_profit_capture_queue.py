@@ -28,6 +28,9 @@ TIER_B = "tier_b_profitable_watch_repair"
 TIER_C = "tier_c_fresh_scan_signature_match"
 TIER_BLOCKED = "blocked_but_interesting"
 TIER_QUARANTINE = "quarantine_do_not_chase"
+TIER_A_MIN_EXACT_TRADES = 10
+TIER_A_MIN_QUOTE_COVERAGE = 97.5
+TIER_A_MIN_PROFIT_FACTOR = 1.5
 
 READINESS_PAPER_REVIEW = "paper_review_candidate"
 READINESS_WATCH_REPAIR = "watch_repair_only"
@@ -291,10 +294,10 @@ def classify_capture_tier(row: dict[str, Any]) -> str | None:
     clean_exact = (
         status == "keep"
         and evidence_class == TRUSTED_EXACT
-        and exact >= 10
+        and exact >= TIER_A_MIN_EXACT_TRADES
         and unresolved == 0
-        and coverage >= 97.5
-        and profit_factor >= 1.5
+        and coverage >= TIER_A_MIN_QUOTE_COVERAGE
+        and profit_factor >= TIER_A_MIN_PROFIT_FACTOR
         and avg_pnl > 0
         and not (reason_codes & DISQUALIFYING_CLEAN_REASONS)
     )
@@ -321,6 +324,65 @@ def evidence_repair_priority(row: dict[str, Any], tier: str | None) -> str:
     if unresolved > 0 or coverage < 97.5:
         return "medium"
     return "low"
+
+
+def tier_a_promotion_gap(row: dict[str, Any]) -> dict[str, Any]:
+    metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+    reason_codes = set(row.get("reason_codes") or [])
+    blockers: list[dict[str, Any]] = []
+    status = str(row.get("status") or "")
+    evidence_class = str(row.get("evidence_class") or "")
+    exact = _safe_int(metrics.get("exact_trusted_priced_trades"))
+    unresolved = _safe_int(metrics.get("unresolved_rows"))
+    coverage = _safe_float(metrics.get("quote_coverage"))
+    profit_factor = _safe_float(metrics.get("profit_factor"))
+    avg_pnl = _safe_float(metrics.get("avg_pnl"))
+    disqualifiers = sorted(reason_codes & DISQUALIFYING_CLEAN_REASONS)
+
+    if status != "keep":
+        blockers.append({"gate": "status_keep", "current": status or None, "target": "keep"})
+    if evidence_class != TRUSTED_EXACT:
+        blockers.append({"gate": "trusted_exact_evidence", "current": evidence_class or None, "target": TRUSTED_EXACT})
+    if exact < TIER_A_MIN_EXACT_TRADES:
+        blockers.append(
+            {
+                "gate": "minimum_exact_trades",
+                "current": exact,
+                "target": TIER_A_MIN_EXACT_TRADES,
+                "remaining": TIER_A_MIN_EXACT_TRADES - exact,
+            }
+        )
+    if unresolved > 0:
+        blockers.append({"gate": "zero_unresolved_rows", "current": unresolved, "target": 0, "remaining": unresolved})
+    if coverage < TIER_A_MIN_QUOTE_COVERAGE:
+        blockers.append(
+            {
+                "gate": "quote_coverage",
+                "current": _round(coverage),
+                "target": TIER_A_MIN_QUOTE_COVERAGE,
+                "remaining": round(TIER_A_MIN_QUOTE_COVERAGE - coverage, 2),
+            }
+        )
+    if profit_factor < TIER_A_MIN_PROFIT_FACTOR:
+        blockers.append(
+            {
+                "gate": "profit_factor",
+                "current": _round(profit_factor),
+                "target": TIER_A_MIN_PROFIT_FACTOR,
+                "remaining": round(TIER_A_MIN_PROFIT_FACTOR - profit_factor, 2),
+            }
+        )
+    if avg_pnl <= 0:
+        blockers.append({"gate": "positive_average_pnl", "current": _round(avg_pnl), "target": ">0"})
+    if disqualifiers:
+        blockers.append({"gate": "clean_disqualifiers", "current": disqualifiers, "target": []})
+
+    return {
+        "target_tier": TIER_A,
+        "eligible_now": not blockers,
+        "blocking_gate_count": len(blockers),
+        "blocking_gates": blockers,
+    }
 
 
 def quarantine_overlay(row: dict[str, Any]) -> dict[str, Any]:
@@ -401,12 +463,180 @@ def _compact_metrics(metrics: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _resolve_artifact_path(path_value: Any) -> Path | None:
+    if path_value is None or path_value == "":
+        return None
+    path = Path(str(path_value))
+    if not path.is_absolute():
+        path = ROOT / path
+    return path
+
+
+def _load_artifact(path: Path, artifact_cache: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    cache_key = str(path)
+    if cache_key not in artifact_cache:
+        try:
+            artifact_cache[cache_key] = _load_json(path)
+        except Exception as exc:
+            artifact_cache[cache_key] = {"missing": True, "path": str(path), "error": str(exc)}
+    return artifact_cache[cache_key]
+
+
+def _missing_leg_role(trade: dict[str, Any]) -> str:
+    missing_long = bool(trade.get("missing_long_contract_symbol"))
+    missing_short = bool(trade.get("missing_short_contract_symbol"))
+    if missing_long and missing_short:
+        return "both"
+    if missing_long:
+        return "long"
+    if missing_short:
+        return "short"
+    return "unknown"
+
+
+def _repair_contracts(trade: dict[str, Any]) -> list[str]:
+    contracts = [
+        trade.get("missing_long_contract_symbol"),
+        trade.get("missing_short_contract_symbol"),
+    ]
+    if not any(contracts):
+        contracts = [trade.get("long_contract_symbol"), trade.get("short_contract_symbol")]
+    return sorted({str(contract) for contract in contracts if contract})
+
+
+def _compact_selected_spread(trade: dict[str, Any]) -> dict[str, Any]:
+    spread = trade.get("selected_spread") if isinstance(trade.get("selected_spread"), dict) else {}
+    return {
+        "debit_pct_of_width": _round(spread.get("debit_pct_of_width")),
+        "bid_ask_pct": _round(spread.get("bid_ask_pct")),
+        "fill_degradation_vs_mid_pct": _round(spread.get("fill_degradation_vs_mid_pct")),
+        "long_prior_quote_days": _safe_int(spread.get("long_prior_quote_days")) if spread.get("long_prior_quote_days") is not None else None,
+        "short_prior_quote_days": _safe_int(spread.get("short_prior_quote_days")) if spread.get("short_prior_quote_days") is not None else None,
+        "long_delta": _round(spread.get("long_delta"), 4),
+        "short_delta": _round(spread.get("short_delta"), 4),
+    }
+
+
+def _repair_target_from_trade(trade: dict[str, Any], *, source_artifact: Path) -> dict[str, Any]:
+    return {
+        "source_artifact": _rel(source_artifact),
+        "ticker": str(trade.get("ticker") or "").upper(),
+        "entry_date": trade.get("date"),
+        "missing_quote_date": trade.get("missing_quote_date"),
+        "unpriced_reason": trade.get("unpriced_reason") or trade.get("non_promotable_reason"),
+        "missing_leg_role": _missing_leg_role(trade),
+        "contracts": _repair_contracts(trade),
+        "long_contract_symbol": trade.get("long_contract_symbol"),
+        "short_contract_symbol": trade.get("short_contract_symbol"),
+        "long_entry_expiry": trade.get("long_entry_expiry"),
+        "short_entry_expiry": trade.get("short_entry_expiry"),
+        "long_entry_strike": _round(trade.get("long_entry_strike"), 4),
+        "short_entry_strike": _round(trade.get("short_entry_strike"), 4),
+        "selected_spread": _compact_selected_spread(trade),
+    }
+
+
+def _repair_target_key(target: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        target.get("ticker"),
+        target.get("entry_date"),
+        target.get("missing_quote_date"),
+        tuple(target.get("contracts") or []),
+        target.get("long_contract_symbol"),
+        target.get("short_contract_symbol"),
+    )
+
+
+def repair_target_summary(
+    row: dict[str, Any],
+    *,
+    artifact_cache: dict[str, dict[str, Any]],
+    limit: int = 8,
+) -> dict[str, Any]:
+    metrics = row.get("metrics") if isinstance(row.get("metrics"), dict) else {}
+    unresolved = _safe_int(metrics.get("unresolved_rows"))
+    source_paths = [
+        path
+        for path in (_resolve_artifact_path(path_value) for path_value in row.get("source_artifacts") or [])
+        if path is not None
+    ]
+    if unresolved <= 0:
+        return {
+            "detail_status": "not_applicable_no_unresolved_rows",
+            "unresolved_rows": unresolved,
+            "source_artifacts": [_rel(path) for path in source_paths],
+            "targets_found": 0,
+            "shown_target_count": 0,
+            "targets": [],
+        }
+    if not source_paths:
+        return {
+            "detail_status": "source_artifacts_missing",
+            "unresolved_rows": unresolved,
+            "source_artifacts": [],
+            "targets_found": 0,
+            "shown_target_count": 0,
+            "targets": [],
+            "next_repair_action": "Find the source replay artifact before attempting exact quote repair.",
+        }
+
+    symbol = str(row.get("symbol") or "").upper()
+    targets_by_key: dict[tuple[Any, ...], dict[str, Any]] = {}
+    unreadable_sources: list[str] = []
+    for path in source_paths:
+        payload = _load_artifact(path, artifact_cache)
+        if payload.get("missing") or payload.get("error"):
+            unreadable_sources.append(_rel(path) or str(path))
+            continue
+        for trade in payload.get("unpriced_trades") or []:
+            if not isinstance(trade, dict):
+                continue
+            if symbol and str(trade.get("ticker") or "").upper() != symbol:
+                continue
+            target = _repair_target_from_trade(trade, source_artifact=path)
+            targets_by_key.setdefault(_repair_target_key(target), target)
+
+    targets = sorted(
+        targets_by_key.values(),
+        key=lambda target: (
+            str(target.get("missing_quote_date") or ""),
+            str(target.get("entry_date") or ""),
+            ",".join(target.get("contracts") or []),
+        ),
+    )
+    missing_leg_counts = Counter(str(target.get("missing_leg_role") or "unknown") for target in targets)
+    missing_quote_dates = sorted({str(target.get("missing_quote_date")) for target in targets if target.get("missing_quote_date")})
+    contracts = sorted({contract for target in targets for contract in target.get("contracts") or []})
+    detail_status = "available" if targets else "unpriced_details_not_found"
+    if unreadable_sources and not targets:
+        detail_status = "source_artifacts_unreadable"
+    return {
+        "detail_status": detail_status,
+        "unresolved_rows": unresolved,
+        "source_artifacts": [_rel(path) for path in source_paths],
+        "unreadable_sources": unreadable_sources,
+        "targets_found": len(targets),
+        "shown_target_count": min(len(targets), limit),
+        "missing_leg_counts": dict(sorted(missing_leg_counts.items())),
+        "missing_quote_dates": missing_quote_dates[:limit],
+        "contracts": contracts[: limit * 2],
+        "targets": targets[:limit],
+        "next_repair_action": (
+            "Repair or re-import trusted intraday OPRA/NBBO quotes for these missing quote dates and exact contracts, "
+            "then rerun the source replay and rebuild this queue."
+            if targets
+            else "Open the source replay artifacts and classify why unpriced trade details are unavailable."
+        ),
+    }
+
+
 def build_capture_row(
     row: dict[str, Any],
     *,
     tier: str,
     current_policy: dict[tuple[str, str], dict[str, Any]],
     fresh_scan_status: dict[tuple[str, str], dict[str, Any]],
+    artifact_cache: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     symbol = str(row.get("symbol") or "")
     lane_id = str(row.get("lane_id") or "")
@@ -417,6 +647,9 @@ def build_capture_row(
     quarantine = quarantine_overlay(row)
     metrics = _compact_metrics(row.get("metrics") if isinstance(row.get("metrics"), dict) else {})
     selection_gate = selection_gate_for_tier(tier)
+    repair_summary = (
+        repair_target_summary(row, artifact_cache=artifact_cache) if repair in {"high", "medium"} else None
+    )
     return {
         "capture_tier": tier,
         **selection_gate,
@@ -432,6 +665,8 @@ def build_capture_row(
         "status_reason": row.get("status_reason"),
         "next_step": row.get("next_step"),
         "evidence_repair_priority": repair,
+        "tier_a_promotion_gap": tier_a_promotion_gap(row),
+        "repair_target_summary": repair_summary,
         "quarantine_overlay": quarantine,
         "current_policy_overlay": policy,
         "fresh_scan_overlay": fresh,
@@ -591,6 +826,7 @@ def build_report(
     current_policy_rows = current_policy_capture_rows(current_policy_index, existing_keys)
     evidence_rows = [*sleeve_rows, *current_policy_rows]
     fresh_rows, fresh_status = fresh_scan_matches(guardrail_starvation, evidence_rows)
+    artifact_cache: dict[str, dict[str, Any]] = {}
 
     capture_rows: list[dict[str, Any]] = []
     quarantine_rows: list[dict[str, Any]] = []
@@ -603,6 +839,7 @@ def build_report(
             tier=tier,
             current_policy=current_policy_index,
             fresh_scan_status=fresh_status,
+            artifact_cache=artifact_cache,
         )
         if tier == TIER_QUARANTINE:
             quarantine_rows.append(capture_row)
@@ -738,6 +975,52 @@ def _capture_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
     return lines
 
 
+def _repair_summary_cells(row: dict[str, Any]) -> list[str]:
+    summary = row.get("repair_target_summary") if isinstance(row.get("repair_target_summary"), dict) else {}
+    if not summary:
+        return ["", "", ""]
+    leg_counts = summary.get("missing_leg_counts") if isinstance(summary.get("missing_leg_counts"), dict) else {}
+    dates = ", ".join(str(value) for value in (summary.get("missing_quote_dates") or [])[:4])
+    contracts = ", ".join(str(value) for value in (summary.get("contracts") or [])[:4])
+    if not contracts:
+        contracts = str(summary.get("detail_status") or "")
+    return [
+        _fmt(json.dumps(leg_counts, sort_keys=True) if leg_counts else summary.get("detail_status")),
+        _fmt(dates),
+        _fmt(contracts),
+    ]
+
+
+def _repair_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
+    lines = [
+        "| Repair | Symbol | Lane | Exact | Unres | Cov % | PF | Avg % | Missing legs | Missing dates | Contracts/detail | Source |",
+        "|---|---|---|---:|---:|---:|---:|---:|---|---|---|---|",
+    ]
+    for row in rows[:limit]:
+        metrics = row.get("metrics") or {}
+        summary = row.get("repair_target_summary") if isinstance(row.get("repair_target_summary"), dict) else {}
+        sources = ", ".join(str(value) for value in (summary.get("source_artifacts") or [])[:2])
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _fmt(row.get("evidence_repair_priority")),
+                    _fmt(row.get("symbol")),
+                    _fmt(row.get("lane_id")),
+                    _fmt(metrics.get("exact_trusted_priced_trades", 0)),
+                    _fmt(metrics.get("unresolved_rows", 0)),
+                    _fmt(metrics.get("quote_coverage", "")),
+                    _fmt(metrics.get("profit_factor", "")),
+                    _fmt(metrics.get("avg_pnl", "")),
+                    *_repair_summary_cells(row),
+                    _fmt(sources),
+                ]
+            )
+            + " |"
+        )
+    return lines
+
+
 def _fresh_table(rows: list[dict[str, Any]], limit: int = 30) -> list[str]:
     lines = [
         "| Tier | Readiness | Symbol | Playbook | Decision | Match | Debit % | Quality | Matched sleeves | Reasons |",
@@ -815,7 +1098,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Evidence Repair Queue",
         "",
-        *_capture_table(final.get("evidence_repair_queue") or [], limit=30),
+        *_repair_table(final.get("evidence_repair_queue") or [], limit=30),
         "",
         "## Quarantine / Do Not Chase",
         "",

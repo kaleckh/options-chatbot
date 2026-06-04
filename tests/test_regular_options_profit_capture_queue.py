@@ -21,6 +21,7 @@ def _sleeve_row(
     avg_pnl: float,
     median_pnl: float = 0.0,
     reason_codes: list[str] | None = None,
+    source_artifacts: list[str] | None = None,
 ) -> dict:
     return {
         "symbol": symbol,
@@ -32,6 +33,7 @@ def _sleeve_row(
         "reason_codes": reason_codes or [],
         "status_reason": "; ".join(reason_codes or []),
         "next_step": "fixture next step",
+        "source_artifacts": source_artifacts or [],
         "metrics": {
             "exact_trusted_priced_trades": exact,
             "candidates": candidates,
@@ -102,6 +104,36 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
             sleeves = root / "sleeves.json"
             current_policy = root / "current-policy.json"
             starvation = root / "starvation.json"
+            googl_replay = root / "googl-replay.json"
+            googl_replay.write_text(
+                json.dumps(
+                    {
+                        "unpriced_trades": [
+                            {
+                                "ticker": "GOOGL",
+                                "date": "2025-12-03",
+                                "missing_quote_date": "2025-12-29",
+                                "unpriced_reason": "missing_exit_quote_for_leg",
+                                "missing_short_contract_symbol": "GOOGL260102C00350000",
+                                "long_contract_symbol": "GOOGL260102C00320000",
+                                "short_contract_symbol": "GOOGL260102C00350000",
+                                "long_entry_expiry": "2026-01-02",
+                                "short_entry_expiry": "2026-01-02",
+                                "long_entry_strike": 320.0,
+                                "short_entry_strike": 350.0,
+                                "selected_spread": {
+                                    "debit_pct_of_width": 29.16,
+                                    "bid_ask_pct": 3.67,
+                                    "fill_degradation_vs_mid_pct": 2.2,
+                                    "long_delta": 0.493,
+                                    "short_delta": 0.2214,
+                                },
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf8",
+            )
             sleeves.write_text(
                 json.dumps(
                     {
@@ -131,6 +163,7 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
                                 avg_pnl=54.01,
                                 median_pnl=45.0,
                                 reason_codes=["quote_coverage_below_97_5", "unresolved_rows_remain"],
+                                source_artifacts=[str(googl_replay)],
                             ),
                             _sleeve_row(
                                 "SPY",
@@ -264,6 +297,14 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertEqual(report["blocked_but_interesting"][0]["symbol"], "QQQ")
         self.assertEqual(report["evidence_repair_queue"][0]["symbol"], "GOOGL")
         self.assertEqual(report["evidence_repair_queue"][0]["selection_readiness"], capture_queue.READINESS_WATCH_REPAIR)
+        repair_summary = report["evidence_repair_queue"][0]["repair_target_summary"]
+        self.assertEqual(repair_summary["detail_status"], "available")
+        self.assertEqual(repair_summary["missing_leg_counts"], {"short": 1})
+        self.assertEqual(repair_summary["missing_quote_dates"], ["2025-12-29"])
+        self.assertIn("GOOGL260102C00350000", repair_summary["contracts"])
+        promotion_gap = report["evidence_repair_queue"][0]["tier_a_promotion_gap"]
+        self.assertFalse(promotion_gap["eligible_now"])
+        self.assertIn("zero_unresolved_rows", {gate["gate"] for gate in promotion_gap["blocking_gates"]})
         self.assertEqual(report["quarantine_queue"][0]["symbol"], "TSLA")
         nem = next(row for row in report["capture_queue"] if row["symbol"] == "NEM")
         self.assertEqual(nem["selection_readiness"], capture_queue.READINESS_PAPER_REVIEW)
