@@ -326,6 +326,140 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
         self.assertTrue(bridge["fresh_executable_quote_window"])
         self.assertEqual(bridge["fresh_match_bridge"]["matched_tier_a_lanes"], ["swing"])
 
+    def test_fresh_bridge_rejects_non_tier_a_symbol_only_blocked_and_non_executable_rows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            sleeves = root / "sleeves.json"
+            current_policy = root / "current-policy.json"
+            starvation = root / "starvation.json"
+            sleeves.write_text(
+                json.dumps(
+                    {
+                        "lane_symbol_rows": [
+                            _sleeve_row(
+                                "NEM",
+                                "swing",
+                                status="keep",
+                                exact=16,
+                                candidates=16,
+                                unresolved=0,
+                                coverage=100.0,
+                                profit_factor=13.37,
+                                avg_pnl=84.03,
+                            ),
+                            _sleeve_row(
+                                "GOOGL",
+                                "tracked_winner_primary",
+                                status="watch",
+                                exact=34,
+                                candidates=41,
+                                unresolved=7,
+                                coverage=82.93,
+                                profit_factor=7.14,
+                                avg_pnl=54.01,
+                                reason_codes=["quote_coverage_below_97_5", "unresolved_rows_remain"],
+                            ),
+                        ]
+                    }
+                ),
+                encoding="utf8",
+            )
+            current_policy.write_text(json.dumps({"rows": []}), encoding="utf8")
+            starvation.write_text(
+                json.dumps(
+                    {
+                        "overall": {"status": "guardrail_starvation_detected"},
+                        "playbooks": [
+                            {
+                                "playbook_id": "tracked_winner_primary",
+                                "returned_picks": [
+                                    {
+                                        "ticker": "GOOGL",
+                                        "guardrail_decision": "clear",
+                                        "guardrail_reasons": [],
+                                        "candidate_execution_label": "executable_opra_paper_candidate",
+                                    }
+                                ],
+                            },
+                            {
+                                "playbook_id": "short_term",
+                                "returned_picks": [
+                                    {
+                                        "ticker": "NEM",
+                                        "guardrail_decision": "clear",
+                                        "guardrail_reasons": [],
+                                        "candidate_execution_label": "executable_opra_paper_candidate",
+                                    }
+                                ],
+                            },
+                            {
+                                "playbook_id": "swing",
+                                "returned_picks": [
+                                    {
+                                        "ticker": "NEM",
+                                        "guardrail_decision": "blocked",
+                                        "guardrail_reasons": ["quality below minimum"],
+                                        "candidate_execution_label": "executable_opra_paper_candidate",
+                                    },
+                                    {
+                                        "ticker": "NEM",
+                                        "guardrail_decision": "clear",
+                                        "guardrail_reasons": [],
+                                        "candidate_execution_label": "executable_opra_paper_candidate",
+                                        "quote_freshness_status": "stale_snapshot",
+                                    },
+                                ],
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf8",
+            )
+
+            report = capture_queue.build_report(
+                symbol_sleeves_path=sleeves,
+                current_policy_path=current_policy,
+                guardrail_starvation_path=starvation,
+            )
+
+        self.assertEqual(report["summary"]["tier_a_fresh_match_bridge_count"], 0)
+        self.assertEqual(report["summary"]["fresh_match_bridge_counts"], {capture_queue.BRIDGE_NOT_ELIGIBLE: 4})
+        rows = {(row["symbol"], row["playbook_id"], row["guardrail_decision"]): row for row in report["fresh_scan_matches"]}
+        tier_b_bridge = rows[("GOOGL", "tracked_winner_primary", "clear")]["fresh_match_bridge"]
+        self.assertIn("no_tier_a_lane_match", tier_b_bridge["blockers"])
+        symbol_only_bridge = rows[("NEM", "short_term", "clear")]["fresh_match_bridge"]
+        self.assertIn("lane_signature_not_matched", symbol_only_bridge["blockers"])
+        blocked_bridge = rows[("NEM", "swing", "blocked")]["fresh_match_bridge"]
+        self.assertIn("guardrail_not_clear", blocked_bridge["blockers"])
+        stale_bridge = [
+            row
+            for row in report["fresh_scan_matches"]
+            if row["symbol"] == "NEM"
+            and row["playbook_id"] == "swing"
+            and row["guardrail_decision"] == "clear"
+            and row.get("quote_freshness_status") == "stale_snapshot"
+        ][0]["fresh_match_bridge"]
+        self.assertIn("fresh_executable_quote_missing", stale_bridge["blockers"])
+
+    def test_fresh_executable_candidate_rejects_stale_midpoint_eod_fallback_and_manual_evidence(self):
+        valid = {
+            "candidate_execution_label": "executable_opra_paper_candidate",
+            "quote_freshness_status": "fresh",
+            "options_data_source": "OPRA",
+            "pricing_evidence_class": "trusted_intraday_opra_nbbo_exact",
+        }
+        self.assertTrue(capture_queue._fresh_executable_candidate(valid))
+        rejected_cases = [
+            {"candidate_execution_label": "executable_opra_paper_candidate", "quote_freshness_status": "stale"},
+            {"attempted_limit_basis": "midpoint_only", "options_data_source": "OPRA"},
+            {"candidate_execution_label": "executable_opra_paper_candidate", "pricing_evidence_class": "daily_eod"},
+            {"candidate_execution_label": "fallback_executable_opra", "options_data_source": "OPRA"},
+            {"candidate_execution_label": "manual_executable_opra", "options_data_source": "OPRA"},
+        ]
+        for pick in rejected_cases:
+            with self.subTest(pick=pick):
+                self.assertFalse(capture_queue._fresh_executable_candidate(pick))
+
     def test_repair_attempt_readback_marks_lookahead_only_as_not_exact_proof(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
