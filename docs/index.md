@@ -114,6 +114,8 @@ These are the living docs for the current worktree:
   - current-policy replay of historical closed Trading Desk rows, separating would-take-today rows from learned-away backfill
 - `docs/current-policy-cohort-health.md`
   - current-policy cohort health report separating the April showcase edge from the broken recent paper-only cohort
+- `docs/current-policy-circuit-breaker.md`
+  - generated recent-cohort paper-validation circuit breaker for `short_term` and Bullish Pullback pending candidates
 - `docs/current-policy-historical-stop-grid.md`
   - current-policy exact-contract daily close-check stop grid, plus annual replay-backed exact cohort coverage, separating stop-policy candidates from entry-filter problems
 - `docs/current-policy-entry-filter-lab.md`

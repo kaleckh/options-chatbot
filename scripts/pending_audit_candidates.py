@@ -20,6 +20,7 @@ from supervised_scan import (
 DEFAULT_QUEUE_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidates.jsonl"
 DEFAULT_FILL_ATTEMPT_FILE = ROOT / "data" / "forward-tracking" / "fill_attempts.jsonl"
 DEFAULT_DISPOSITION_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidate_validation_latest.json"
+PAPER_VALIDATION_CIRCUIT_STATUS = "paper_validation_only_circuit_breaker"
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -290,10 +291,72 @@ def append_validation_attempt_rows(
     return appended
 
 
+def append_circuit_breaker_validation_rows(
+    rows: list[dict[str, Any]],
+    *,
+    queue_file: Path = DEFAULT_QUEUE_FILE,
+    playbook_id: str,
+    circuit_breaker: dict[str, Any],
+    recorded_at_utc: str | None = None,
+) -> int:
+    recorded_at = recorded_at_utc or _utc_now_iso()
+    summary = circuit_breaker.get("summary") if isinstance(circuit_breaker.get("summary"), dict) else {}
+    lane_route = next(
+        (
+            route
+            for route in circuit_breaker.get("lane_routes") or []
+            if isinstance(route, dict) and _norm_text(route.get("lane_id")) == playbook_id
+        ),
+        {},
+    )
+    breaker_snapshot = {
+        "report_id": circuit_breaker.get("report_id"),
+        "generated_at_utc": circuit_breaker.get("generated_at_utc"),
+        "overall_status": summary.get("overall_status"),
+        "route_status": lane_route.get("route_status") or "paper_validation_only",
+        "route_reason": lane_route.get("route_reason") or "circuit_breaker_missing_or_unavailable",
+        "recovery_gate_failures": list(lane_route.get("recovery_gate_failures") or []),
+        "live_policy_change": False,
+    }
+    reason = (
+        "circuit_breaker_missing_or_unavailable_routes_lane_to_paper_validation_only"
+        if circuit_breaker.get("missing") or not lane_route
+        else "recent_cohort_circuit_breaker_routes_lane_to_paper_validation_only"
+    )
+    appended = 0
+    if not rows:
+        return appended
+    queue_file.parent.mkdir(parents=True, exist_ok=True)
+    with queue_file.open("a", encoding="utf8") as handle:
+        for row in rows:
+            if _norm_text(row.get("playbook_id")) != playbook_id:
+                continue
+            next_row = dict(row)
+            next_row.update(
+                {
+                    "event_type": "pending_candidate_validation",
+                    "candidate_status": PAPER_VALIDATION_CIRCUIT_STATUS,
+                    "candidate_status_reason": reason,
+                    "validation_exit_code": None,
+                    "validation_recorded_at_utc": recorded_at,
+                    "recent_cohort_circuit_breaker": breaker_snapshot,
+                }
+            )
+            handle.write(json.dumps(next_row, sort_keys=True) + "\n")
+            appended += 1
+    return appended
+
+
 def _validation_outcome(row: dict[str, Any], fill_attempt: dict[str, Any] | None) -> tuple[str, str]:
     status = _norm_text(row.get("candidate_status"))
     if status == "live_validation_scan_failed":
         return "blocked", "validation_scan_failed"
+    if status == PAPER_VALIDATION_CIRCUIT_STATUS:
+        return (
+            "paper_only",
+            _norm_text(row.get("candidate_status_reason"))
+            or "recent_cohort_circuit_breaker_routes_lane_to_paper_validation_only",
+        )
     if status != "live_validation_attempted":
         return "no_longer_matched", "candidate_has_not_completed_live_validation"
     if fill_attempt is None:
@@ -328,7 +391,7 @@ def build_validation_disposition_report(
     candidates = []
     for row in latest_candidate_rows(queue_file):
         status = _norm_text(row.get("candidate_status"))
-        if status not in {"live_validation_attempted", "live_validation_scan_failed"}:
+        if status not in {"live_validation_attempted", "live_validation_scan_failed", PAPER_VALIDATION_CIRCUIT_STATUS}:
             continue
         if scan_date and _candidate_scan_date_for_disposition(row) != scan_date:
             continue
@@ -357,6 +420,7 @@ def build_validation_disposition_report(
                 "fill_outcome_reason": fill_attempt.get("fill_outcome_reason") if fill_attempt else None,
                 "auto_track_outcome": fill_attempt.get("auto_track_outcome") if fill_attempt else None,
                 "auto_track_position_id": fill_attempt.get("auto_track_position_id") if fill_attempt else None,
+                "recent_cohort_circuit_breaker": row.get("recent_cohort_circuit_breaker"),
             }
         )
     counts = Counter(str(item["outcome"]) for item in candidates)

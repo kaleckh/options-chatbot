@@ -1,0 +1,223 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-circuit-breaker.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260604T234617Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260604T234617Z.md"
+  },
+  "generated_at_utc": "2026-06-04T23:46:17Z",
+  "input_paths": {
+    "cohort_health": "data/forward-tracking/current_policy_cohort_health_latest.json",
+    "paper_monitor": "data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.json",
+    "point_in_time": "data/forward-tracking/short_term_filter_point_in_time_replay_latest.json"
+  },
+  "inputs": {
+    "champion_filter_id": "short_term_fill_degradation_ge_15",
+    "cohort_health_generated_at_utc": "2026-06-01T06:12:44Z",
+    "paper_monitor_generated_at_utc": "2026-06-04T21:43:39Z",
+    "point_in_time_generated_at_utc": "2026-06-04T21:43:39Z"
+  },
+  "lane_routes": [
+    {
+      "lane_deleted": false,
+      "lane_id": "short_term",
+      "live_policy_change": false,
+      "recent_month_health_status": "paper_only_recent_break",
+      "recent_month_summary": {
+        "avg_pnl_pct": -12.3,
+        "best_pnl_pct": 178.71,
+        "health_status": "paper_only_recent_break",
+        "median_pnl_pct": -55.41,
+        "negative": 12,
+        "negative_rate_priced_pct": 70.6,
+        "positive_or_flat": 5,
+        "priced": 17,
+        "rows": 17,
+        "worst_pnl_pct": -99.54
+      },
+      "recovery_gate_failures": [
+        "recent_cohort_recovered",
+        "fresh_current_policy_rows",
+        "fresh_champion_matched_rows",
+        "trusted_exact_realized_pnl_rows",
+        "point_in_time_replay_pass",
+        "paper_monitor_pass"
+      ],
+      "route_reason": "recovery_gates_failed",
+      "route_status": "paper_validation_only",
+      "short_term_filter_scope": "lane_scoped_paper_only"
+    },
+    {
+      "lane_deleted": false,
+      "lane_id": "bullish_pullback_observation",
+      "live_policy_change": false,
+      "recent_month_health_status": "paper_only_thin_severe",
+      "recent_month_summary": {
+        "avg_pnl_pct": -73.37,
+        "best_pnl_pct": -63.12,
+        "health_status": "paper_only_thin_severe",
+        "median_pnl_pct": -73.37,
+        "negative": 2,
+        "negative_rate_priced_pct": 100.0,
+        "positive_or_flat": 0,
+        "priced": 2,
+        "rows": 2,
+        "worst_pnl_pct": -83.61
+      },
+      "recovery_gate_failures": [
+        "recent_cohort_recovered",
+        "fresh_current_policy_rows",
+        "fresh_champion_matched_rows",
+        "trusted_exact_realized_pnl_rows",
+        "point_in_time_replay_pass",
+        "paper_monitor_pass"
+      ],
+      "route_reason": "recovery_gates_failed",
+      "route_status": "paper_validation_only",
+      "short_term_filter_scope": null
+    }
+  ],
+  "recovery_gates": [
+    {
+      "current": "paper_only_recent_week_break",
+      "detail": "The recent current-policy cohort must stop reporting a paper-only break.",
+      "gate": "recent_cohort_recovered",
+      "label": "Recent cohort recovered",
+      "passed": false,
+      "target": "not paper_only_*"
+    },
+    {
+      "current": 0,
+      "detail": "Forward monitor needs enough fresh current-policy rows before release discussion.",
+      "gate": "fresh_current_policy_rows",
+      "label": "Fresh current-policy rows",
+      "passed": false,
+      "target": 20
+    },
+    {
+      "current": 0,
+      "detail": "The lane-scoped champion must match enough candidate-blocked rows.",
+      "gate": "fresh_champion_matched_rows",
+      "label": "Champion-matched blocked rows",
+      "passed": false,
+      "target": 5
+    },
+    {
+      "current": {
+        "exact_priced_candidate_rows": 0,
+        "exact_priced_champion_rows": 0
+      },
+      "detail": "Point-in-time replay must have exact-priced realized outcomes, not unpriced or display-only rows.",
+      "gate": "trusted_exact_realized_pnl_rows",
+      "label": "Trusted exact realized P&L rows",
+      "passed": false,
+      "target": {
+        "exact_priced_candidate_rows": 20,
+        "exact_priced_champion_rows": 5
+      }
+    },
+    {
+      "current": {
+        "blockers": [
+          "insufficient_exact_priced_candidate_rows",
+          "insufficient_champion_matched_blocked_rows",
+          "matched_rows_not_net_harmful_or_deep_loss",
+          "unpriced_or_non_executable_rows_present"
+        ],
+        "status": "paper_only_collecting"
+      },
+      "detail": "The scanner-candidate replay must clear without promotion blockers.",
+      "gate": "point_in_time_replay_pass",
+      "label": "Point-in-time replay pass",
+      "passed": false,
+      "target": {
+        "blockers": [],
+        "status": "point_in_time_replay_pass_candidate_not_promoted"
+      }
+    },
+    {
+      "current": {
+        "failures": [
+          "insufficient_fresh_rows",
+          "insufficient_candidate_blocked_rows",
+          "blocked_rows_not_net_negative_or_deep_loss"
+        ],
+        "status": "collecting"
+      },
+      "detail": "The forward paper monitor must graduate from collecting/fail into pass-candidate.",
+      "gate": "paper_monitor_pass",
+      "label": "Paper monitor pass",
+      "passed": false,
+      "target": {
+        "failures": [],
+        "status": "paper_pass_candidate"
+      }
+    },
+    {
+      "current": {
+        "monitor_losses_avoided": 0,
+        "monitor_winners_lost": 0,
+        "point_in_time_losses_avoided": 0,
+        "point_in_time_lost_winners": 0
+      },
+      "detail": "Recovery cannot pass by blocking more winners than losses avoided.",
+      "gate": "no_winner_damage",
+      "label": "No winner damage",
+      "passed": true,
+      "target": "lost_winners <= losses_avoided in replay and monitor"
+    },
+    {
+      "current": {
+        "paper_monitor_live_policy_change": false,
+        "point_in_time_live_policy_change": false
+      },
+      "detail": "The breaker is a safety/readback route, not a scanner, broker, stop, auth, DB, or proof-bar mutation.",
+      "gate": "live_policy_change_false",
+      "label": "No live policy mutation",
+      "passed": true,
+      "target": false
+    }
+  ],
+  "report_id": "current_policy_circuit_breaker",
+  "routing_policy": {
+    "affected_lanes": [
+      "short_term",
+      "bullish_pullback_observation"
+    ],
+    "readback_is": "recent-cohort paper-only circuit breaker for pending regular-options validation candidates",
+    "readback_is_not": "lane deletion, scanner promotion, broker action, stop-policy change, auth change, DB migration, or proof-bar reduction",
+    "release_requires": [
+      "recent_cohort_recovered",
+      "fresh_current_policy_rows",
+      "fresh_champion_matched_rows",
+      "trusted_exact_realized_pnl_rows",
+      "point_in_time_replay_pass",
+      "paper_monitor_pass",
+      "no_winner_damage",
+      "live_policy_change_false"
+    ]
+  },
+  "schema_version": 1,
+  "scope": "regular_supervised_current_policy_recent_cohort_circuit_breaker",
+  "summary": {
+    "affected_lane_count": 2,
+    "breaker_active": true,
+    "lane_deletion": false,
+    "live_policy_change": false,
+    "overall_status": "paper_only_recent_week_break",
+    "paper_validation_only_lane_count": 2,
+    "recovery_gate_failed_count": 6,
+    "recovery_gate_failures": [
+      "recent_cohort_recovered",
+      "fresh_current_policy_rows",
+      "fresh_champion_matched_rows",
+      "trusted_exact_realized_pnl_rows",
+      "point_in_time_replay_pass",
+      "paper_monitor_pass"
+    ],
+    "recovery_gate_passed_count": 2,
+    "recovery_review_required_lane_count": 0,
+    "route_status": "paper_validation_only"
+  }
+}

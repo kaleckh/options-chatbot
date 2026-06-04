@@ -19,10 +19,12 @@ from scripts.pending_audit_candidates import (
     DEFAULT_DISPOSITION_FILE,
     DEFAULT_FILL_ATTEMPT_FILE,
     DEFAULT_QUEUE_FILE,
+    append_circuit_breaker_validation_rows,
     append_validation_attempt_rows,
     latest_candidate_rows,
     write_validation_disposition_report,
 )
+from scripts import build_current_policy_circuit_breaker as circuit_breaker
 from supervised_scan import scan_playbook_fresh_live_validation_enabled
 from us_equity_market_calendar import is_us_equity_market_day
 
@@ -91,6 +93,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--queue-file", type=Path, default=DEFAULT_QUEUE_FILE)
     parser.add_argument("--fill-attempt-file", type=Path, default=DEFAULT_FILL_ATTEMPT_FILE)
     parser.add_argument("--disposition-file", type=Path, default=DEFAULT_DISPOSITION_FILE)
+    parser.add_argument("--circuit-breaker", type=Path, default=circuit_breaker.DEFAULT_CIRCUIT_BREAKER)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -118,8 +121,23 @@ def main(argv: list[str] | None = None) -> int:
         print("dry-run: pending candidate validation scans not started")
         return 0
 
+    breaker_payload: dict[str, Any] = circuit_breaker.load_report(args.circuit_breaker)
+    validation_hold_playbooks = circuit_breaker.validation_hold_playbooks(breaker_payload)
+
     failures = 0
     for playbook_id in sorted(grouped):
+        if playbook_id in validation_hold_playbooks:
+            appended = append_circuit_breaker_validation_rows(
+                grouped[playbook_id],
+                queue_file=args.queue_file,
+                playbook_id=playbook_id,
+                circuit_breaker=breaker_payload,
+            )
+            print(
+                f"{datetime.now().isoformat(timespec='seconds')} "
+                f"playbook={playbook_id} circuit_breaker_paper_only_rows={appended}"
+            )
+            continue
         exit_code = _run_playbook_validation(playbook_id)
         appended = append_validation_attempt_rows(
             grouped[playbook_id],
