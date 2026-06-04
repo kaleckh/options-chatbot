@@ -40,6 +40,25 @@ DEFAULT_CSV = DEFAULT_OUTPUT_DIR / "trading_desk_negative_trade_decision_audit_l
 DEFAULT_JSON = DEFAULT_OUTPUT_DIR / "trading_desk_negative_trade_decision_audit_latest.json"
 REPAIR_LANES = {"short_term", "swing", "bullish_momentum", "bullish_pullback_observation"}
 LEGACY_MISSED_CLOSE_IDS = {26, 39, 44}
+EXECUTABLE_REVIEW_BASIS_TOKENS = (
+    "spread_bid_ask",
+    "bid_ask",
+    "historical_spread_bid_ask",
+    "historical_suggested_close",
+    "auto_sell_recommendation",
+    "auto_sell_review",
+    "broker",
+)
+NON_EXECUTABLE_REVIEW_BASIS_TOKENS = (
+    "last",
+    "last_price",
+    "manual",
+    "midpoint",
+    "midpoint_mark",
+    "mark",
+    "model",
+    "unpriced",
+)
 
 
 def _utc_now_iso() -> str:
@@ -93,7 +112,13 @@ def _review_is_executable(review: dict[str, Any]) -> bool:
         return False
     basis = str(review.get("exit_execution_basis") or "").strip().lower()
     metrics = _as_mapping(review.get("metrics_snapshot"))
-    return bool(metrics.get("price_trigger_ok")) or basis not in {"", "last", "last_price", "midpoint_mark"}
+    if bool(metrics.get("price_trigger_ok")):
+        return True
+    if not basis:
+        return False
+    if any(token in basis for token in NON_EXECUTABLE_REVIEW_BASIS_TOKENS):
+        return False
+    return any(token in basis for token in EXECUTABLE_REVIEW_BASIS_TOKENS)
 
 
 def _record_class(row: dict[str, Any]) -> str:

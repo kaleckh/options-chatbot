@@ -41,6 +41,7 @@ for candidate in (ROOT_DIR, BACKEND_DIR):
 _ENV_FILES_LOADED = load_local_env(ROOT_DIR)
 
 from positions_repository import create_positions_repository  # type: ignore  # noqa: E402
+from proof_contract import row_counts_as_proof_grade_exact_closed, row_has_raw_exact_contract  # type: ignore  # noqa: E402
 
 
 LIVE_EVIDENCE_CLASS = "live_production"
@@ -58,12 +59,6 @@ DEFAULT_MIN_CLOSED_TRACKED_POSITIONS = 1
 DEFAULT_MIN_REALIZED_PROFIT_FACTOR = 1.0
 DEFAULT_MIN_REALIZED_AVG_NET_PNL_PCT = 0.0
 DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS = 3
-PROOF_OPTIONS_SOURCE_LABELS = {
-    "alpaca_opra",
-    "alpaca_opra_daily_snapshot",
-    "alpaca:sip:opra",
-}
-
 # Loop-health thresholds (existing defaults above)
 LOOP_HEALTH_MIN_ELIGIBLE_FORWARD_EVENTS = 10
 LOOP_HEALTH_MIN_ELIGIBLE_EVENTS_PER_SYMBOL = 3
@@ -387,7 +382,7 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
                 net_pnl_pct = _safe_float(snapshot.get("net_pnl_pct"))
         if net_pnl_pct is None or gross_pnl_pct is None:
             continue
-        if str(position.get("contract_symbol") or "").strip():
+        if row_has_raw_exact_contract(position):
             exact_contract_count += 1
         net_pnls.append(net_pnl_pct)
         gross_pnls.append(gross_pnl_pct)
@@ -421,32 +416,7 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
 
 
 def _position_proof_eligible(position: dict[str, Any]) -> bool:
-    if position.get("proof_eligible") is not True:
-        return False
-    source = position.get("source_pick_snapshot")
-    source_pick = dict(source) if isinstance(source, dict) else {}
-    explicit_sources = [
-        position.get("source_label"),
-        position.get("proof_source_label"),
-        position.get("market_data_source"),
-        position.get("options_market_data_source"),
-        position.get("options_data_source"),
-        position.get("quote_source"),
-        position.get("data_source"),
-        source_pick.get("source_label"),
-        source_pick.get("proof_source_label"),
-        source_pick.get("market_data_source"),
-        source_pick.get("options_market_data_source"),
-        source_pick.get("options_data_source"),
-        source_pick.get("quote_source"),
-        source_pick.get("data_source"),
-    ]
-    normalized_sources = {
-        str(value or "").strip().lower()
-        for value in explicit_sources
-        if str(value or "").strip()
-    }
-    return bool(PROOF_OPTIONS_SOURCE_LABELS.intersection(normalized_sources))
+    return row_counts_as_proof_grade_exact_closed(position)
 
 
 def _forward_ledger_runtime_diagnostics(
@@ -1020,7 +990,7 @@ def evaluate_claim_readiness(
     per_symbol_closed: dict[str, int] = {}
     for position in closed_positions:
         symbol = str(position.get("ticker") or "").strip().upper()
-        if symbol and _position_proof_eligible(position) and str(position.get("contract_symbol") or "").strip():
+        if symbol and _position_proof_eligible(position) and row_has_raw_exact_contract(position):
             per_symbol_closed[symbol] = per_symbol_closed.get(symbol, 0) + 1
     for symbol in TARGET_SYMBOLS:
         symbol_count = per_symbol_closed.get(symbol, 0)

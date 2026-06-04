@@ -1,0 +1,2136 @@
+{
+  "artifact": "backend_route_ownership_map",
+  "excluded_next_only_routes": [
+    {
+      "browser_path": "/api/operator/session",
+      "method": "GET",
+      "next_path": "src/app/api/operator/session/route.ts",
+      "reason": "local operator session status"
+    },
+    {
+      "browser_path": "/api/operator/session",
+      "method": "POST",
+      "next_path": "src/app/api/operator/session/route.ts",
+      "reason": "local operator session unlock"
+    }
+  ],
+  "generated_by": "scripts/generate_backend_route_ownership_map.py",
+  "map_version": 1,
+  "modules": [
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "dependency_style": "module_globals_and_backend_route_context",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "FastAPI app setup, middleware, router mounting, report caches, and remaining inline route adapters.",
+      "path": "python-backend/main.py",
+      "role": "fastapi_composition_root",
+      "route_count": 32
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "dependency_style": "explicit_dependency_injection",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Profile, profiles, changelog, and risk settings routes.",
+      "path": "python-backend/profile_routes.py",
+      "role": "extracted_router",
+      "route_count": 5,
+      "router_factory": "create_profile_router"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "dependency_style": "BackendRouteContext",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Prediction history read/grade/delete routes.",
+      "path": "python-backend/predictions_routes.py",
+      "role": "extracted_router",
+      "route_count": 3,
+      "router_factory": "create_predictions_router"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "dependency_style": "BackendRouteContext",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Operator-gated backend tool dispatch route.",
+      "path": "python-backend/tools_routes.py",
+      "role": "extracted_router",
+      "route_count": 1,
+      "router_factory": "create_tools_router"
+    },
+    {
+      "adapter_kind": "support_module",
+      "dependency_style": "late_bound_namespace",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Late-bound access to the loaded backend module namespace for extracted routers and services.",
+      "path": "python-backend/backend_route_context.py",
+      "role": "support_context",
+      "route_count": 0
+    },
+    {
+      "adapter_kind": "decorator_free_service",
+      "dependency_style": "BackendRouteContext",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/proof-evidence-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Decorator-free proof-summary workflow assembly.",
+      "path": "python-backend/proof_summary_service.py",
+      "role": "application_service",
+      "route_count": 0
+    },
+    {
+      "adapter_kind": "decorator_free_service",
+      "dependency_style": "BackendRouteContext",
+      "imports_main": false,
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "owner_summary": "Decorator-free replay/profit readback assembly.",
+      "path": "python-backend/replay_profit_service.py",
+      "role": "application_service",
+      "route_count": 0
+    }
+  ],
+  "non_goals": [
+    "Does not import or introspect the running FastAPI app.",
+    "Does not define route behavior, payloads, response schemas, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
+    "Does not replace route parity, storage ownership, proof contracts, API contracts, or generated artifact governance.",
+    "Does not refactor main.py or extracted routers.",
+    "Does not reopen crypto, Polymarket, day-trading, or AI commodity browser lanes."
+  ],
+  "router_mounts": [
+    {
+      "dependency_style": "explicit_dependency_injection",
+      "mounted_in": "python-backend/main.py",
+      "router_factory": "create_profile_router",
+      "router_module": "python-backend/profile_routes.py"
+    },
+    {
+      "dependency_style": "BackendRouteContext",
+      "mounted_in": "python-backend/main.py",
+      "router_factory": "create_tools_router",
+      "router_module": "python-backend/tools_routes.py"
+    },
+    {
+      "dependency_style": "BackendRouteContext",
+      "mounted_in": "python-backend/main.py",
+      "router_factory": "create_predictions_router",
+      "router_module": "python-backend/predictions_routes.py"
+    }
+  ],
+  "routes": [
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "scan_run"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "forward_options_ledger.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "supervised_scan.py",
+        "options_chatbot.py"
+      ],
+      "handler": "run_scan_endpoint",
+      "lifecycle": "live_scan_run",
+      "line": 2188,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/scan",
+          "contract_ids": [
+            "scan_run"
+          ],
+          "next_path": "src/app/api/scan/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/scan",
+      "record_class": "scan_result",
+      "registration": "direct_app",
+      "route_family": "scanner",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "forward_evidence_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "tracked_positions_create"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/positions_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "create_position_endpoint",
+      "lifecycle": "create",
+      "line": 2256,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/positions",
+          "contract_ids": [
+            "tracked_positions_create"
+          ],
+          "next_path": "src/app/api/positions/route.ts",
+          "route_group": "Tracked Positions"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/positions",
+      "record_class": "tracked_position",
+      "registration": "direct_app",
+      "route_family": "trading_desk_positions",
+      "route_group": "Tracked Positions",
+      "router_factory": null,
+      "store": "postgres_tracked_positions",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "tracked_positions_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/positions_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "list_positions_endpoint",
+      "lifecycle": "read",
+      "line": 2328,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/positions",
+          "contract_ids": [
+            "tracked_positions_read"
+          ],
+          "next_path": "src/app/api/positions/route.ts",
+          "route_group": "Tracked Positions"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/positions",
+      "record_class": "tracked_position",
+      "registration": "direct_app",
+      "route_family": "trading_desk_positions",
+      "route_group": "Tracked Positions",
+      "router_factory": null,
+      "store": "postgres_tracked_positions",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "tracked_positions_review"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/positions_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "review_positions_endpoint",
+      "lifecycle": "review",
+      "line": 2373,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/positions/review",
+          "contract_ids": [
+            "tracked_positions_review"
+          ],
+          "next_path": "src/app/api/positions/review/route.ts",
+          "route_group": "Tracked Positions"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/positions/review",
+      "record_class": "tracked_position",
+      "registration": "direct_app",
+      "route_family": "trading_desk_positions",
+      "route_group": "Tracked Positions",
+      "router_factory": null,
+      "store": "postgres_tracked_positions",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/positions_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "close_prefill_endpoint",
+      "lifecycle": "read",
+      "line": 2412,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/positions/{position_id}/close-prefill",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "trading_desk_positions",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "tracked_positions_close"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/positions_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "close_position_endpoint",
+      "lifecycle": "close",
+      "line": 2456,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/positions/[id]/close",
+          "contract_ids": [
+            "tracked_positions_close"
+          ],
+          "next_path": "src/app/api/positions/[id]/close/route.ts",
+          "route_group": "Tracked Positions"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/positions/{position_id}/close",
+      "record_class": "tracked_position",
+      "registration": "direct_app",
+      "route_family": "trading_desk_positions",
+      "route_group": "Tracked Positions",
+      "router_factory": null,
+      "store": "postgres_tracked_positions",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "suggested_trades_create"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "create_suggested_trade_endpoint",
+      "lifecycle": "create",
+      "line": 2509,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/suggested-trades",
+          "contract_ids": [
+            "suggested_trades_create"
+          ],
+          "next_path": "src/app/api/suggested-trades/route.ts",
+          "route_group": "Suggested Trades"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/suggested-trades",
+      "record_class": "suggested_trade",
+      "registration": "direct_app",
+      "route_family": "suggested_trades",
+      "route_group": "Suggested Trades",
+      "router_factory": null,
+      "store": "sqlite_suggested_trades",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "suggested_trades_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "list_suggested_trades_endpoint",
+      "lifecycle": "read",
+      "line": 2549,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/suggested-trades",
+          "contract_ids": [
+            "suggested_trades_read"
+          ],
+          "next_path": "src/app/api/suggested-trades/route.ts",
+          "route_group": "Suggested Trades"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/suggested-trades",
+      "record_class": "suggested_trade",
+      "registration": "direct_app",
+      "route_family": "suggested_trades",
+      "route_group": "Suggested Trades",
+      "router_factory": null,
+      "store": "sqlite_suggested_trades",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "suggested_trades_review"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "review_suggested_trades_endpoint",
+      "lifecycle": "review",
+      "line": 2590,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/suggested-trades/review",
+          "contract_ids": [
+            "suggested_trades_review"
+          ],
+          "next_path": "src/app/api/suggested-trades/review/route.ts",
+          "route_group": "Suggested Trades"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/suggested-trades/review",
+      "record_class": "suggested_trade",
+      "registration": "direct_app",
+      "route_family": "suggested_trades",
+      "route_group": "Suggested Trades",
+      "router_factory": null,
+      "store": "sqlite_suggested_trades",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "suggested_trades_close"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/positions_service.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "close_suggested_trade_endpoint",
+      "lifecycle": "close",
+      "line": 2608,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/suggested-trades/[id]/close",
+          "contract_ids": [
+            "suggested_trades_close"
+          ],
+          "next_path": "src/app/api/suggested-trades/[id]/close/route.ts",
+          "route_group": "Suggested Trades"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/repository-contract.md",
+        "docs/trading-desk-record-parity.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "/api/suggested-trades/{position_id}/close",
+      "record_class": "suggested_trade",
+      "registration": "direct_app",
+      "route_family": "suggested_trades",
+      "route_group": "Suggested Trades",
+      "router_factory": null,
+      "store": "sqlite_suggested_trades",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "forward_options_ledger.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "supervised_scan.py",
+        "options_chatbot.py"
+      ],
+      "handler": "get_recommendations",
+      "lifecycle": "position_recommendation_support",
+      "line": 2639,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/scan/recommendations",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "scanner",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "forward_options_ledger.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "supervised_scan.py",
+        "options_chatbot.py"
+      ],
+      "handler": "roll_picks",
+      "lifecycle": "scan_roll_forward_write",
+      "line": 2675,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/scan/roll",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "scanner",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "sectors_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "market_data_service"
+      ],
+      "handler": "get_sector_sentiments",
+      "lifecycle": "read",
+      "line": 2714,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/sectors",
+          "contract_ids": [
+            "sectors_read"
+          ],
+          "next_path": "src/app/api/sectors/route.ts",
+          "route_group": "Support"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/storage-ownership-map.md"
+      ],
+      "path": "/api/sectors",
+      "record_class": "sector_sentiment_snapshot",
+      "registration": "direct_app",
+      "route_family": "market_data",
+      "route_group": "Support",
+      "router_factory": null,
+      "store": "market_data_cache",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "market_data_service"
+      ],
+      "handler": "get_market_data_cache_stats",
+      "lifecycle": "read",
+      "line": 2797,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/storage-ownership-map.md"
+      ],
+      "path": "/api/market-data/cache-stats",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "market_data",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "market_data_service"
+      ],
+      "handler": "reset_market_data_cache_stats",
+      "lifecycle": "market_data_cache_reset",
+      "line": 2803,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/storage-ownership-map.md"
+      ],
+      "path": "/api/market-data/cache-stats/reset",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "market_data",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "backtest_run"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "run_backtest_endpoint",
+      "lifecycle": "replay_run",
+      "line": 2812,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest",
+          "contract_ids": [
+            "backtest_run"
+          ],
+          "next_path": "src/app/api/backtest/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest",
+      "record_class": "backtest_result",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "run_archived_forward_backtest_endpoint",
+      "lifecycle": "archived_forward_replay_run",
+      "line": 2839,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/archived-forward",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "backtest_last_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_last_backtest",
+      "lifecycle": "read",
+      "line": 2853,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/last",
+          "contract_ids": [
+            "backtest_last_read"
+          ],
+          "next_path": "src/app/api/backtest/last/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/last",
+      "record_class": "backtest_result",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "forward_evidence_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_forward_evidence_report",
+      "lifecycle": "read",
+      "line": 2862,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/forward-evidence",
+          "contract_ids": [
+            "forward_evidence_read"
+          ],
+          "next_path": "src/app/api/backtest/forward-evidence/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/forward-evidence",
+      "record_class": "forward_evidence_report",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "forward_evidence_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "backtest_report_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_report",
+      "lifecycle": "read",
+      "line": 2871,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/report",
+          "contract_ids": [
+            "backtest_report_read"
+          ],
+          "next_path": "src/app/api/backtest/report/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/report",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "metric_truth_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_metric_truth_report",
+      "lifecycle": "read",
+      "line": 2885,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/metric-truth",
+          "contract_ids": [
+            "metric_truth_read"
+          ],
+          "next_path": "src/app/api/backtest/metric-truth/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/metric-truth",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_experiments",
+      "lifecycle": "research_experiment_run",
+      "line": 2897,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/experiments",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_profitability_forensics",
+      "lifecycle": "read",
+      "line": 2911,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/profitability-forensics",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_stability",
+      "lifecycle": "read",
+      "line": 2925,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/stability",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "live_policy_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_live_trade_policy",
+      "lifecycle": "read",
+      "line": 2944,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/live-policy",
+          "contract_ids": [
+            "live_policy_read"
+          ],
+          "next_path": "src/app/api/backtest/live-policy/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/live-policy",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "exit_audit_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_playbook_exit_audit",
+      "lifecycle": "read",
+      "line": 2969,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/exit-audit",
+          "contract_ids": [
+            "exit_audit_read"
+          ],
+          "next_path": "src/app/api/backtest/exit-audit/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/exit-audit",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "truth_lane_comparison_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_truth_lane_comparison",
+      "lifecycle": "read",
+      "line": 2996,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/comparison",
+          "contract_ids": [
+            "truth_lane_comparison_read"
+          ],
+          "next_path": "src/app/api/backtest/comparison/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/comparison",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "backtest_summary_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [
+        "python-backend/replay_profit_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "wfo_optimizer.py",
+        "metric_truth_audit.py"
+      ],
+      "handler": "get_backtest_summary",
+      "lifecycle": "read",
+      "line": 3009,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/backtest/summary",
+          "contract_ids": [
+            "backtest_summary_read"
+          ],
+          "next_path": "src/app/api/backtest/summary/route.ts",
+          "route_group": "Scan And Truth Diagnostics"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/backtest/summary",
+      "record_class": "backtest_artifact_bundle",
+      "registration": "direct_app",
+      "route_family": "replay_profit",
+      "route_group": "Scan And Truth Diagnostics",
+      "router_factory": null,
+      "store": "latest_replay_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/main.py"
+      ],
+      "handler": "get_daily_performance",
+      "lifecycle": "read",
+      "line": 3034,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/daily-performance",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "status",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/main.py"
+      ],
+      "handler": "health",
+      "lifecycle": "read",
+      "line": 3056,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/health",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "status",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "options_profit_status_read"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_profit_gate.py",
+        "options_profit_flywheel.py"
+      ],
+      "handler": "get_options_profit_status",
+      "lifecycle": "read",
+      "line": 3061,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/options-profit/status",
+          "contract_ids": [
+            "options_profit_status_read"
+          ],
+          "next_path": "src/app/api/options-profit/status/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/options-profit/status",
+      "record_class": "options_profit_status",
+      "registration": "direct_app",
+      "route_family": "options_profit_status",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": null,
+      "store": "options_profit_state_artifacts",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": false,
+      "delegate_modules": [
+        "python-backend/proof_summary_service.py"
+      ],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/proof_contract.py"
+      ],
+      "handler": "get_proof_summary",
+      "lifecycle": "read",
+      "line": 3070,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/proof-evidence-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/proof-summary",
+      "record_class": "backend_endpoint",
+      "registration": "direct_app",
+      "route_family": "proof_summary",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": null,
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/predictions_routes.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "predictions_read"
+      ],
+      "declared_in": "python-backend/predictions_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "BackendRouteContext",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "get_predictions",
+      "lifecycle": "read",
+      "line": 14,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/predictions",
+          "contract_ids": [
+            "predictions_read"
+          ],
+          "next_path": "src/app/api/predictions/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "path": "/api/predictions",
+      "record_class": "prediction_history",
+      "registration": "included_router",
+      "route_family": "predictions",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_predictions_router",
+      "store": "predictions_json",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/predictions_routes.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "predictions_grade"
+      ],
+      "declared_in": "python-backend/predictions_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "BackendRouteContext",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "grade_predictions",
+      "lifecycle": "prediction_grade",
+      "line": 19,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/predictions/grade",
+          "contract_ids": [
+            "predictions_grade"
+          ],
+          "next_path": "src/app/api/predictions/grade/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "path": "/api/predictions/grade",
+      "record_class": "prediction_history",
+      "registration": "included_router",
+      "route_family": "predictions",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_predictions_router",
+      "store": "predictions_json",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/predictions_routes.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/predictions_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "BackendRouteContext",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "delete_prediction",
+      "lifecycle": "prediction_delete",
+      "line": 30,
+      "method": "DELETE",
+      "mutating": true,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "path": "/api/predictions/{pred_id}",
+      "record_class": "backend_endpoint",
+      "registration": "included_router",
+      "route_family": "predictions",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": "create_predictions_router",
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/profile_routes.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "profile_read"
+      ],
+      "declared_in": "python-backend/profile_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "explicit_dependency_injection",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "get_profile",
+      "lifecycle": "read",
+      "line": 22,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/profile",
+          "contract_ids": [
+            "profile_read"
+          ],
+          "next_path": "src/app/api/profile/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/profile",
+      "record_class": "strategy_profile",
+      "registration": "included_router",
+      "route_family": "profile",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_profile_router",
+      "store": "strategy_profile_files",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/profile_routes.py",
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_ids": [
+        "backend_only"
+      ],
+      "declared_in": "python-backend/profile_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "explicit_dependency_injection",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "get_profiles",
+      "lifecycle": "read",
+      "line": 29,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/profiles",
+      "record_class": "backend_endpoint",
+      "registration": "included_router",
+      "route_family": "profile",
+      "route_group": "Backend-Only FastAPI",
+      "router_factory": "create_profile_router",
+      "store": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/profile_routes.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "profile_save"
+      ],
+      "declared_in": "python-backend/profile_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "explicit_dependency_injection",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "update_profile",
+      "lifecycle": "profile_save",
+      "line": 34,
+      "method": "PUT",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/profile",
+          "contract_ids": [
+            "profile_save"
+          ],
+          "next_path": "src/app/api/profile/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/profile",
+      "record_class": "strategy_profile",
+      "registration": "included_router",
+      "route_family": "profile",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_profile_router",
+      "store": "strategy_profile_files",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/profile_routes.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "profile_changelog_read"
+      ],
+      "declared_in": "python-backend/profile_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "explicit_dependency_injection",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "get_changelog",
+      "lifecycle": "read",
+      "line": 58,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/changelog",
+          "contract_ids": [
+            "profile_changelog_read"
+          ],
+          "next_path": "src/app/api/changelog/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/changelog",
+      "record_class": "strategy_profile",
+      "registration": "included_router",
+      "route_family": "profile",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_profile_router",
+      "store": "strategy_profile_files",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/profile_routes.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [
+        "risk_settings_read"
+      ],
+      "declared_in": "python-backend/profile_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "explicit_dependency_injection",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "options_chatbot.py"
+      ],
+      "handler": "get_risk_settings",
+      "lifecycle": "read",
+      "line": 70,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/risk-settings",
+          "contract_ids": [
+            "risk_settings_read"
+          ],
+          "next_path": "src/app/api/risk-settings/route.ts",
+          "route_group": "Profiles, Predictions, And Status"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "path": "/api/risk",
+      "record_class": "risk_settings",
+      "registration": "included_router",
+      "route_family": "profile",
+      "route_group": "Profiles, Predictions, And Status",
+      "router_factory": "create_profile_router",
+      "store": "strategy_profile_files",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "extracted_router",
+      "adapter_owner_module": "python-backend/tools_routes.py",
+      "auth_boundary": "local_operator",
+      "contract_ids": [
+        "tool_dispatch"
+      ],
+      "declared_in": "python-backend/tools_routes.py",
+      "deferred_split": false,
+      "delegate_modules": [],
+      "dependency_style": "BackendRouteContext",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "python-backend/main.py"
+      ],
+      "handler": "call_tool_endpoint",
+      "lifecycle": "tool_dispatch",
+      "line": 26,
+      "method": "POST",
+      "mutating": true,
+      "next_routes": [
+        {
+          "browser_path": "/api/tools/[name]",
+          "contract_ids": [
+            "tool_dispatch"
+          ],
+          "next_path": "src/app/api/tools/[name]/route.ts",
+          "route_group": "Support"
+        }
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-parity.md"
+      ],
+      "path": "/api/tools/{tool_name}",
+      "record_class": "tool_result",
+      "registration": "included_router",
+      "route_family": "tools",
+      "route_group": "Support",
+      "router_factory": "create_tools_router",
+      "store": "backend_tool_dispatch",
+      "surface": "mounted_browser"
+    }
+  ],
+  "runtime_use": false,
+  "scope": "Generated readability and drift-check map for FastAPI route adapter ownership, router extraction state, service delegation, and backend-only surfaces.",
+  "sources": [
+    "data/contracts/route-mutation-inventory.json",
+    "python-backend/main.py",
+    "python-backend/profile_routes.py",
+    "python-backend/predictions_routes.py",
+    "python-backend/tools_routes.py",
+    "python-backend/backend_route_context.py",
+    "python-backend/proof_summary_service.py",
+    "python-backend/replay_profit_service.py"
+  ],
+  "validation": {
+    "errors": []
+  }
+}

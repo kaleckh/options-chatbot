@@ -16,9 +16,12 @@ if str(ROOT) not in sys.path:
 
 from local_env import load_local_env
 from scripts.pending_audit_candidates import (
+    DEFAULT_DISPOSITION_FILE,
+    DEFAULT_FILL_ATTEMPT_FILE,
     DEFAULT_QUEUE_FILE,
     append_validation_attempt_rows,
     latest_candidate_rows,
+    write_validation_disposition_report,
 )
 from supervised_scan import scan_playbook_fresh_live_validation_enabled
 from us_equity_market_calendar import is_us_equity_market_day
@@ -86,6 +89,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--date", dest="scan_date", help="YYYY-MM-DD audit date to validate; defaults to today.")
     parser.add_argument("--queue-file", type=Path, default=DEFAULT_QUEUE_FILE)
+    parser.add_argument("--fill-attempt-file", type=Path, default=DEFAULT_FILL_ATTEMPT_FILE)
+    parser.add_argument("--disposition-file", type=Path, default=DEFAULT_DISPOSITION_FILE)
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -129,6 +134,17 @@ def main(argv: list[str] | None = None) -> int:
         if exit_code != 0:
             failures += 1
             print(f"{datetime.now().isoformat(timespec='seconds')} playbook={playbook_id} failed exit={exit_code}")
+    disposition = write_validation_disposition_report(
+        queue_file=args.queue_file,
+        fill_attempt_file=args.fill_attempt_file,
+        output_file=args.disposition_file,
+        scan_date=scan_date.isoformat(),
+    )
+    print(
+        f"{datetime.now().isoformat(timespec='seconds')} "
+        f"validation_disposition_file={args.disposition_file} "
+        f"candidates={disposition['summary']['candidate_count']}"
+    )
     return 1 if failures else 0
 
 

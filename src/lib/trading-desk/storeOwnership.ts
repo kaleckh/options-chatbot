@@ -16,15 +16,18 @@ export type TradingDeskRecordClass =
   | "tracked_position"
   | "suggested_trade";
 
-export type TradingDeskRouteContractId =
-  | "tracked_positions_read"
-  | "tracked_positions_create"
-  | "tracked_positions_review"
-  | "tracked_positions_close"
-  | "suggested_trades_read"
-  | "suggested_trades_create"
-  | "suggested_trades_review"
-  | "suggested_trades_close";
+export const TRADING_DESK_ROUTE_CONTRACT_IDS = [
+  "tracked_positions_read",
+  "tracked_positions_create",
+  "tracked_positions_review",
+  "tracked_positions_close",
+  "suggested_trades_read",
+  "suggested_trades_create",
+  "suggested_trades_review",
+  "suggested_trades_close",
+] as const;
+
+export type TradingDeskRouteContractId = (typeof TRADING_DESK_ROUTE_CONTRACT_IDS)[number];
 
 export type TradingDeskRouteContract = {
   id: TradingDeskRouteContractId;

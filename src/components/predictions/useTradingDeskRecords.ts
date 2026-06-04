@@ -4,6 +4,12 @@ import { useCallback, useRef, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
 import { fetchWithTimeout, readJsonResponseOrThrow } from "@/lib/client-json";
 import { tradingDeskMutationHeaders } from "@/lib/trading-desk/mutationIntent";
+import type {
+  ReviewSuggestedTradesResponse,
+  ReviewTrackedPositionsResponse,
+  SuggestedTradesListResponse,
+  TrackedPositionsListResponse,
+} from "@/lib/trading-desk/apiContracts";
 import type { SuggestedTrade, TrackedPosition } from "@/lib/types";
 
 const AUTO_REVIEW_STALE_MS = 5 * 60 * 1000;
@@ -169,7 +175,7 @@ export function useTradingDeskRecords() {
             )
           : Promise.resolve(null),
       ]);
-      const data = await readJsonResponseOrThrow<{ positions?: TrackedPosition[] }>(
+      const data = await readJsonResponseOrThrow<TrackedPositionsListResponse>(
         openRes,
         "Tracked open positions"
       );
@@ -177,7 +183,7 @@ export function useTradingDeskRecords() {
       const nextOpenPositions = (data.positions || []) as TrackedPosition[];
       setOpenPositions(nextOpenPositions);
       if (closedRes) {
-        const closedData = await readJsonResponseOrThrow<{ positions?: TrackedPosition[] }>(
+        const closedData = await readJsonResponseOrThrow<TrackedPositionsListResponse>(
           closedRes,
           "Tracked closed positions"
         );
@@ -207,7 +213,7 @@ export function useTradingDeskRecords() {
             headers: tradingDeskMutationHeaders("review_tracked_positions"),
             body: JSON.stringify({ position_ids: reviewIds }),
           }, "Tracked position review");
-          const reviewData = await readJsonResponseOrThrow<{ positions?: TrackedPosition[] }>(
+          const reviewData = await readJsonResponseOrThrow<ReviewTrackedPositionsResponse>(
             reviewRes,
             "Tracked position review"
           );
@@ -266,7 +272,7 @@ export function useTradingDeskRecords() {
         undefined,
         "Tracked closed positions"
       );
-      const data = await readJsonResponseOrThrow<{ positions?: TrackedPosition[] }>(
+      const data = await readJsonResponseOrThrow<TrackedPositionsListResponse>(
         res,
         "Tracked closed positions"
       );
@@ -312,7 +318,7 @@ export function useTradingDeskRecords() {
             )
           : Promise.resolve(null),
       ]);
-      const data = await readJsonResponseOrThrow<{ trades?: SuggestedTrade[] }>(
+      const data = await readJsonResponseOrThrow<SuggestedTradesListResponse>(
         openRes,
         "Open suggested trades"
       );
@@ -320,7 +326,7 @@ export function useTradingDeskRecords() {
       const nextOpenTrades = (data.trades || []) as SuggestedTrade[];
       setOpenSuggestedTrades(nextOpenTrades);
       if (closedRes) {
-        const closedData = await readJsonResponseOrThrow<{ trades?: SuggestedTrade[] }>(
+        const closedData = await readJsonResponseOrThrow<SuggestedTradesListResponse>(
           closedRes,
           "Closed suggested trades"
         );
@@ -350,7 +356,7 @@ export function useTradingDeskRecords() {
             headers: tradingDeskMutationHeaders("review_suggested_trades"),
             body: JSON.stringify({ position_ids: reviewIds }),
           }, "Suggested trade review");
-          const reviewData = await readJsonResponseOrThrow<{ trades?: SuggestedTrade[] }>(
+          const reviewData = await readJsonResponseOrThrow<ReviewSuggestedTradesResponse>(
             reviewRes,
             "Suggested trade review"
           );
@@ -409,7 +415,7 @@ export function useTradingDeskRecords() {
         undefined,
         "Closed suggested trades"
       );
-      const data = await readJsonResponseOrThrow<{ trades?: SuggestedTrade[] }>(
+      const data = await readJsonResponseOrThrow<SuggestedTradesListResponse>(
         res,
         "Closed suggested trades"
       );
@@ -445,7 +451,7 @@ export function useTradingDeskRecords() {
         headers: tradingDeskMutationHeaders("review_tracked_positions"),
         body: JSON.stringify({ position_ids: [positionId] }),
       }, "Tracked position review");
-      const data = await readJsonResponseOrThrow<{ positions?: TrackedPosition[] }>(
+      const data = await readJsonResponseOrThrow<ReviewTrackedPositionsResponse>(
         res,
         "Tracked position review"
       );
@@ -466,7 +472,7 @@ export function useTradingDeskRecords() {
         headers: tradingDeskMutationHeaders("review_suggested_trades"),
         body: JSON.stringify({ position_ids: [positionId] }),
       }, "Suggested trade review");
-      const data = await readJsonResponseOrThrow<{ trades?: SuggestedTrade[] }>(
+      const data = await readJsonResponseOrThrow<ReviewSuggestedTradesResponse>(
         res,
         "Suggested trade review"
       );

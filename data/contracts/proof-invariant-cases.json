@@ -1,0 +1,882 @@
+{
+  "artifact": "proof_invariant_cases",
+  "version": 1,
+  "runtime_use": false,
+  "owner": "Proof invariant tests for backend predicates and frontend evidence views.",
+  "scope": "Test-only invariant matrix for regular Trading Desk proof claims. It documents expected outcomes; runtime proof behavior remains owned by python-backend/proof_contract.py and src/lib/trading-desk/positionEvidence.ts.",
+  "non_goals": [
+    "Does not define runtime behavior, route payloads, scanner policy, DB schema, or frontend UI copy.",
+    "Does not replace data/contracts/proof-evidence-contract.json.",
+    "Does not make manual, research, historical paper, lifecycle-only, stale, midpoint, mark, last, or non-OPRA evidence production proof."
+  ],
+  "cases": [
+    {
+      "id": "live_exact_closed_truth_grade",
+      "description": "Closed live-scan exact-contract row with fresh OPRA entry, verified lineage, trusted exit, and calculable P&L.",
+      "row": {
+        "id": "case-live-closed",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": true,
+          "proof_grade_exact_closed": true
+        },
+        "frontend": {
+          "evidence_group": "live_exact",
+          "production_proof": true,
+          "truth_grade_closed": true,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": true,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "This is the only closed case in the table that may support a production proof claim."
+    },
+    {
+      "id": "live_exact_open_entry_proof_only",
+      "description": "Open live-scan exact-contract row with fresh OPRA entry and verified lineage but no closed exit.",
+      "row": {
+        "id": "case-live-open",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "open",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": false,
+          "calculable_realized_pnl": false,
+          "production_proof": true,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "live_exact",
+          "production_proof": true,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": false,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": false
+        }
+      },
+      "notes": "Open rows may show live exact entry proof, but they are not closed proof-grade outcomes."
+    },
+    {
+      "id": "raw_exact_without_proof_flags",
+      "description": "Exact contract symbol and executable prices exist, but the row is not marked as live-scan proof.",
+      "row": {
+        "id": "case-raw-exact",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "legacy_unclassified",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Raw exact is visible evidence, not production proof by itself."
+    },
+    {
+      "id": "manual_broker_exact_visible_not_proof",
+      "description": "Manual/broker exact contract row with trusted broker exit evidence.",
+      "row": {
+        "id": "case-manual-exact",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": false,
+        "proof_class": "manual_broker_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "broker_fill",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "broker",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "broker_fill"
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": false,
+          "verified_live_scan_lineage": false,
+          "trusted_opra_source": false,
+          "executable_entry": false,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "manual_exact",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Manual exact rows may enter realized P&L views but never production proof."
+    },
+    {
+      "id": "top_level_research_backfill_marker",
+      "description": "Otherwise clean live exact row carrying a top-level backfill identity marker.",
+      "row": {
+        "id": "case-top-research",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "backfill_audit_id": "all_lanes_zero_pick_current_algo_v1",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": true,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "research_backfill",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Research identity always overrides exact-looking proof fields."
+    },
+    {
+      "id": "source_snapshot_research_backfill_marker",
+      "description": "Otherwise clean live exact row carrying research/backfill identity inside source_pick_snapshot.",
+      "row": {
+        "id": "case-source-research",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true,
+          "backfill_audit_id": "source-audit-1",
+          "pricing_evidence_class": "research_backfill"
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": true,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "research_backfill",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Source-snapshot identity markers block proof just like top-level markers."
+    },
+    {
+      "id": "migrated_historical_paper",
+      "description": "Migrated historical paper row with exact-looking live fields.",
+      "row": {
+        "id": "case-historical-paper",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true,
+          "position_migration_id": "migration-1"
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": true,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "historical_paper",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Historical paper can be useful learning evidence but stays out of live-production proof."
+    },
+    {
+      "id": "stale_live_proof_flag_missing_gates",
+      "description": "Stale proof flags without exact selection source or verified scan lineage.",
+      "row": {
+        "id": "case-stale-proof-flag",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask"
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": false,
+          "verified_live_scan_lineage": false,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Proof class strings and stale proof_eligible flags are never sufficient."
+    },
+    {
+      "id": "missing_source_scan_event_key",
+      "description": "Live exact row missing one required source-scan lineage field.",
+      "row": {
+        "id": "case-missing-lineage",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": false,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "All required source scan session/event/run/timestamp fields are required."
+    },
+    {
+      "id": "non_opra_source",
+      "description": "Live proof flags with a non-OPRA option source.",
+      "row": {
+        "id": "case-non-opra",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "non_opra_vendor",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": false,
+          "executable_entry": true,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Exact-looking non-OPRA evidence is not production proof."
+    },
+    {
+      "id": "missing_quote_freshness",
+      "description": "Live exact row without an acceptable quote freshness value.",
+      "row": {
+        "id": "case-missing-freshness",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": null,
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": false,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Missing freshness is not treated as fresh."
+    },
+    {
+      "id": "stale_quote_freshness",
+      "description": "Live exact row with stale quote freshness.",
+      "row": {
+        "id": "case-stale-freshness",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "stale",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": false,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Stale freshness tokens block production proof."
+    },
+    {
+      "id": "midpoint_entry_basis",
+      "description": "Live proof flags with midpoint entry basis.",
+      "row": {
+        "id": "case-midpoint-entry",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "midpoint",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "midpoint",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": false,
+          "trusted_executable_exit": true,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "proof_ineligible",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": true,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": true
+        }
+      },
+      "notes": "Midpoint, mark, last, manual, model, comparable, historical, and unpriced entry bases are untrusted."
+    },
+    {
+      "id": "lifecycle_only_closed_exit",
+      "description": "Closed row with live entry proof but no executable exit price.",
+      "row": {
+        "id": "case-lifecycle-only",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": null,
+        "exit_option_price": null,
+        "exit_execution_basis": "lifecycle_elapsed",
+        "net_pnl_pct": null,
+        "gross_pnl_pct": null,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": false,
+          "calculable_realized_pnl": false,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "lifecycle_only",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": false,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": false
+        }
+      },
+      "notes": "Lifecycle-only close state is operational history, not executable proof."
+    },
+    {
+      "id": "mark_exit_closed",
+      "description": "Closed live exact row with display-only mark exit basis.",
+      "row": {
+        "id": "case-mark-exit",
+        "ticker": "SPY",
+        "direction": "call",
+        "status": "closed",
+        "contracts": 1,
+        "proof_eligible": true,
+        "proof_class": "live_scan_exact_contract",
+        "contract_symbol": "SPY260619C00600000",
+        "entry_execution_price": 1.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 1.3,
+        "exit_execution_basis": "mark",
+        "net_pnl_pct": 30.0,
+        "gross_pnl_pct": 30.0,
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260406T140000Z",
+        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+        "source_pick_snapshot": {
+          "ticker": "SPY",
+          "direction": "call",
+          "profit_candidate_id": "proof-invariant-case",
+          "selection_source": "live_chain_exact_contract",
+          "options_data_source": "alpaca_opra",
+          "quote_time_et": "2026-04-06T10:00:00-04:00",
+          "quote_freshness_status": "fresh",
+          "entry_execution_price": 1.0,
+          "entry_execution_basis": "ask",
+          "source_scan_lineage_verified": true
+        }
+      },
+      "expected": {
+        "backend": {
+          "raw_exact_contract": true,
+          "research_backfill_marker": false,
+          "live_exact_selection_source": true,
+          "verified_live_scan_lineage": true,
+          "trusted_opra_source": true,
+          "executable_entry": true,
+          "trusted_executable_exit": false,
+          "calculable_realized_pnl": true,
+          "production_proof": false,
+          "proof_grade_exact_closed": false
+        },
+        "frontend": {
+          "evidence_group": "live_exact",
+          "production_proof": false,
+          "truth_grade_closed": false,
+          "realized_pnl_closed": false,
+          "matches_truth_grade": false,
+          "matches_realized_pnl": false
+        }
+      },
+      "notes": "The row may retain live entry evidence display, but closed production-proof counts must require trusted exit evidence."
+    }
+  ]
+}

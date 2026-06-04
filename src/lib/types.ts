@@ -518,6 +518,7 @@ export interface ForwardEvidenceReport {
     without_contract_count?: number | null;
   } | null;
   forward_truth_recording_failure_count?: number | null;
+  position_event_recording_failure_count?: number | null;
   activation_check?: {
     active?: boolean;
     status?: string | null;
@@ -533,6 +534,11 @@ export interface ForwardEvidenceReport {
     scan_pick_count?: number | null;
     eligible_scan_pick_count?: number | null;
     observation_scan_pick_count?: number | null;
+    position_opened_event_count?: number | null;
+    position_review_event_count?: number | null;
+    review_event_count?: number | null;
+    position_event_count?: number | null;
+    event_type_counts?: Record<string, number> | null;
     recent_session_count?: number | null;
     authoritative_session_count?: number | null;
     [key: string]: unknown;
@@ -551,6 +557,25 @@ export interface ForwardEvidenceReport {
     [key: string]: unknown;
   } | null;
   recording_health?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface PositionEventPersistence {
+  status: "recorded" | "failed" | "skipped";
+  recorded: boolean;
+  skipped: boolean;
+  skip_reason?: string | null;
+  operation: string;
+  error?: string | null;
+  error_type?: string | null;
+  health_event_logged?: boolean | null;
+  health_event_error?: string | null;
+  session_id?: number | null;
+  run_id?: string | null;
+  recorded_at_utc?: string | null;
+  event_type?: string | null;
+  position_event_count?: number | null;
+  position_ids?: number[];
   [key: string]: unknown;
 }
 
@@ -635,25 +660,7 @@ export interface TrackedPosition {
   compact_evidence?: CompactPositionEvidence | null;
 }
 
-export interface CreateTrackedPositionRequest {
-  scan_pick: ScanPick;
-  fill_price: number;
-  contracts: number;
-  filled_at?: string;
-  notes?: string;
-}
-
-export interface CloseTrackedPositionRequest {
-  exit_price: number;
-  closed_at?: string;
-  notes?: string;
-}
-
 export type SuggestedTrade = TrackedPosition;
-
-export type CreateSuggestedTradeRequest = CreateTrackedPositionRequest;
-
-export type CloseSuggestedTradeRequest = CloseTrackedPositionRequest;
 
 export interface StrategyProfile {
   name: string;

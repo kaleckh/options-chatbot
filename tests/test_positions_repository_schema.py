@@ -39,6 +39,9 @@ class _FakeCursor:
     def execute(self, sql, params=None):
         self.executed_sql.append(str(sql))
 
+    def fetchone(self):
+        return None
+
 
 class _FakeConnection:
     def __init__(self, executed_sql: list[str]):

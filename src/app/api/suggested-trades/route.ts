@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   isTruthyQueryParam,
   jsonError,
-  jsonWithTradingDeskStore,
+  jsonWithValidatedTradingDeskStore,
   readJsonObject,
+  requireLocalOperator,
   requireTradingDeskMutationIntent,
 } from "@/app/api/_utils";
 import {
@@ -11,6 +12,7 @@ import {
   getGroupedSuggestedTradesWithBackendHeaders,
   getSuggestedTradesWithBackendHeaders,
 } from "@/lib/python-bridge";
+import type { CreateSuggestedTradeRequest } from "@/lib/trading-desk/apiContracts";
 
 export async function GET(req: NextRequest) {
   try {
@@ -23,10 +25,10 @@ export async function GET(req: NextRequest) {
     };
     if (grouped) {
       const result = await getGroupedSuggestedTradesWithBackendHeaders(status, window);
-      return jsonWithTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
+      return jsonWithValidatedTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
     }
     const result = await getSuggestedTradesWithBackendHeaders(status, window);
-    return jsonWithTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
+    return jsonWithValidatedTradingDeskStore(result.body, "suggested_trades_read", { headers: result.headers });
   } catch (err) {
     return jsonError(err, "Failed to fetch suggested trades");
   }
@@ -34,14 +36,16 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const authError = requireLocalOperator(req);
+    if (authError) return authError;
     const intentError = requireTradingDeskMutationIntent(req, "create_suggested_trade");
     if (intentError) return intentError;
-    const body = await readJsonObject(req);
+    const body = await readJsonObject<CreateSuggestedTradeRequest>(req);
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
     const result = await createSuggestedTrade(body);
-    return jsonWithTradingDeskStore(result, "suggested_trades_create");
+    return jsonWithValidatedTradingDeskStore(result, "suggested_trades_create");
   } catch (err) {
     return jsonError(err, "Failed to create suggested trade");
   }

@@ -1,0 +1,170 @@
+{
+  "artifact": "proof_replay_golden_readbacks",
+  "version": 1,
+  "runtime_use": false,
+  "owner": "Golden aggregate readbacks for proof counts, options-profit metrics, and replay readback assembly.",
+  "source_manifest": "data/contracts/proof-invariant-cases.json",
+  "scope": "Test-only golden expectations over the proof invariant rows and deterministic replay service fakes. Runtime proof behavior remains owned by proof_contract.py, options-profit metrics remain owned by options_profit_gate.py and options_profit_flywheel.py, and replay readback assembly remains owned by replay_profit_service.py.",
+  "non_goals": [
+    "Does not define runtime behavior, route payloads, scanner policy, DB schema, replay math, or frontend UI copy.",
+    "Does not run WFO replay, live market data, local databases, network calls, or AI commodity proof loops.",
+    "Does not promote raw exact, manual exact, research/backfill, historical paper, stale, lifecycle-only, midpoint, mark, last, or non-OPRA rows into production proof."
+  ],
+  "case_ids": [
+    "live_exact_closed_truth_grade",
+    "live_exact_open_entry_proof_only",
+    "raw_exact_without_proof_flags",
+    "manual_broker_exact_visible_not_proof",
+    "top_level_research_backfill_marker",
+    "source_snapshot_research_backfill_marker",
+    "migrated_historical_paper",
+    "stale_live_proof_flag_missing_gates",
+    "missing_source_scan_event_key",
+    "non_opra_source",
+    "missing_quote_freshness",
+    "stale_quote_freshness",
+    "midpoint_entry_basis",
+    "lifecycle_only_closed_exit",
+    "mark_exit_closed"
+  ],
+  "proof_case_counts": {
+    "total_cases": 15,
+    "open_rows": 1,
+    "closed_rows": 14,
+    "raw_exact_contract_closed_count": 14,
+    "production_proof_rows": 2,
+    "open_production_proof_rows": 1,
+    "closed_production_proof_rows": 1,
+    "proof_grade_exact_contract_closed_count": 1,
+    "non_proof_closed_position_count": 13
+  },
+  "proof_summary_tracked_positions": {
+    "available": true,
+    "open_count": 1,
+    "closed_count": 14,
+    "raw_exact_contract_closed_count": 14,
+    "proof_grade_exact_contract_closed_count": 1,
+    "exact_contract_closed_count": 1
+  },
+  "grouped_trading_desk_summary": {
+    "open": {
+      "tracked": {
+        "count": 1,
+        "priced_count": 0,
+        "wins": 0,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": null
+      },
+      "proof": {
+        "count": 1,
+        "priced_count": 0,
+        "wins": 0,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": null
+      }
+    },
+    "closed": {
+      "tracked": {
+        "count": 14,
+        "priced_count": 13,
+        "wins": 13,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": 30.0
+      },
+      "proof": {
+        "count": 1,
+        "priced_count": 1,
+        "wins": 1,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": 30.0
+      }
+    },
+    "all": {
+      "tracked": {
+        "count": 15,
+        "priced_count": 13,
+        "wins": 13,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": 30.0
+      },
+      "proof": {
+        "count": 2,
+        "priced_count": 1,
+        "wins": 1,
+        "losses": 0,
+        "flat": 0,
+        "net_pnl_usd": null,
+        "avg_pnl_pct": 30.0
+      }
+    }
+  },
+  "options_profit_realized_metrics": {
+    "closed_position_count": 1,
+    "exact_contract_closed_count": 1,
+    "avg_pnl_pct": 30.0,
+    "avg_net_pnl_pct": 30.0,
+    "avg_gross_pnl_pct": 30.0,
+    "profit_factor": 999.0,
+    "net_profit_factor": 999.0,
+    "positive_sum_pct": 30.0,
+    "negative_sum_pct": 0,
+    "net_realized_pnl_usd": 30.0,
+    "gross_realized_pnl_usd": 30.0,
+    "non_proof_closed_position_count": 13
+  },
+  "options_profit_status_overlay": {
+    "runtime_snapshot_source": "positions_repository_profit_status_snapshot",
+    "open_position_count": 1,
+    "total_closed_position_count": 14,
+    "closed_position_count": 1,
+    "exact_contract_closed_count": 1,
+    "non_proof_closed_position_count": 13,
+    "net_profit_factor": 999.0,
+    "avg_net_pnl_pct": 30.0,
+    "realized_profitability_ready": true
+  },
+  "candidate_metrics": {
+    "symbol": "SPY",
+    "direction": "call",
+    "candidate_id": "proof-invariant-case",
+    "expected": {
+      "closed_position_count": 1,
+      "exact_outcome_count": 1,
+      "avg_pnl_pct": 30.0,
+      "avg_net_pnl_pct": 30.0,
+      "profit_factor": 999.0,
+      "net_profit_factor": 999.0
+    }
+  },
+  "replay_service": {
+    "truth_lane": "golden_regular_options",
+    "min_trades": 3,
+    "bucket_size": 5,
+    "no_result_metric_truth": {
+      "error": "No backtest results found"
+    },
+    "summary_keys": [
+      "last",
+      "report",
+      "metricTruth",
+      "profitabilityForensics",
+      "comparison"
+    ],
+    "cache_key_prefixes": [
+      "backtest_report",
+      "metric_truth_report",
+      "backtest_profitability_forensics",
+      "truth_lane_comparison"
+    ]
+  }
+}

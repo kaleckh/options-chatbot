@@ -1,6 +1,6 @@
 # Architecture Audit
 
-Last updated: 2026-05-29
+Last updated: 2026-06-04
 
 ## Purpose
 
@@ -10,6 +10,8 @@ This file is the shortest honest answer to:
 - what is sidecar or legacy
 - where the dead or confusing surfaces are
 - which files are still too large
+
+Use `docs/architecture-best-practices.md` as the target rubric for deciding whether a future remediation actually improves ownership, boundaries, verification, and LLM/senior-engineer readability.
 
 ## Active Product Surface
 
@@ -25,6 +27,7 @@ AI commodity / commodity-infrastructure options is a separate non-browser proof-
 - `scripts/run_ai_commodity_opra_progress.py`
 - `data/ai-commodity-infra/universe.json`
 - `data/ai-commodity-infra/progress/latest.md`
+- `docs/ai-commodity-isolation.md`
 
 It is gated on exact Alpaca SIP/OPRA bid/ask snapshot history and is not claim-ready.
 
@@ -50,6 +53,8 @@ Current request path:
 This is the live path a senior engineer should follow first.
 
 ## Sidecar And Legacy Lanes
+
+The generated boundary owner for this section is `docs/legacy-lane-boundaries.md`, backed by `data/contracts/legacy-lane-boundaries.json`. The AI commodity detail owner is `docs/ai-commodity-isolation.md`, backed by `data/contracts/ai-commodity-isolation.json`.
 
 These exist in the repo, but they are not the mounted browser product:
 
@@ -83,6 +88,16 @@ These exist in the repo, but they are not the mounted browser product:
   - `src/components/predictions/legacy-tabs.tsx`
 - FastAPI profile, profile changelog, `/api/profiles`, and risk routes were extracted from `python-backend/main.py` into:
   - `python-backend/profile_routes.py`
+- FastAPI prediction read/grade/delete routes and tool dispatch were extracted from `python-backend/main.py` into late-bound support routers:
+  - `python-backend/backend_route_context.py`
+  - `python-backend/predictions_routes.py`
+  - `python-backend/tools_routes.py`
+- `/api/proof-summary` workflow assembly was extracted from `python-backend/main.py` into a decorator-free application service:
+  - `python-backend/proof_summary_service.py`
+- Replay/profit readback assembly for backtest reports, metric truth, forensics, stability, live policy, exit audit, comparison, and summary was extracted from `python-backend/main.py` into:
+  - `python-backend/replay_profit_service.py`
+- Trading Desk repository ownership and method contracts are documented in `docs/repository-contract.md`, with structural Protocols in:
+  - `python-backend/repository_contracts.py`
 - `scripts/generate_route_parity.py` now validates the browser request-flow contract from both sides: mirrored Next routes must have FastAPI decorators, and active client-component `/api/*` fetches must resolve to mounted Next routes.
 - the stale duplicate Next route `src/app/api/predictions/history/route.ts` was removed
 - `run_scan.bat` no longer points at an old machine-specific path
@@ -100,7 +115,7 @@ These are still the main architecture risks:
 - `profit_loop_automation.py`
   - oversized automation and policy orchestration surface
 - `python-backend/main.py`
-  - oversized FastAPI composition layer, with profile routes now split out as the first router extraction
+  - oversized FastAPI composition layer; profile, prediction, and tool routes are split out, proof-summary and replay/profit readback assembly are in application services, while scan, replay route adapters, trading-desk, status, sector, and market-data routes remain inline
 - `src/components/predictions/PredictionsView.tsx`
   - still the heaviest active client component
 - `src/lib/day-trading/engine.js`
@@ -123,7 +138,7 @@ These are still the main architecture risks:
   - backtest and truth
   - positions
   - suggested trades
-  - status and remaining support routes
+  - status, sector, and market-data support routes
 
 ### Core Python Domain
 
@@ -150,10 +165,17 @@ These are still the main architecture risks:
 2. `docs/route-parity.md`
 3. `src/lib/backend/*`
 4. `python-backend/main.py`
-5. `src/components/predictions/PredictionsView.tsx`
-6. `src/components/strategy/StrategyView.tsx`
-7. `options_chatbot.py`
-8. `wfo_optimizer.py`
+5. `python-backend/backend_route_context.py`
+6. `python-backend/repository_contracts.py`
+7. `python-backend/profile_routes.py`
+8. `python-backend/predictions_routes.py`
+9. `python-backend/tools_routes.py`
+10. `python-backend/proof_summary_service.py`
+11. `python-backend/replay_profit_service.py`
+12. `src/components/predictions/PredictionsView.tsx`
+13. `src/components/strategy/StrategyView.tsx`
+14. `options_chatbot.py`
+15. `wfo_optimizer.py`
 
 ## Bottom Line
 

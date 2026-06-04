@@ -3,12 +3,15 @@ import {
   jsonError,
   jsonWithStrategyLabContract,
   readJsonObject,
+  requireLocalOperator,
   requireStrategyLabMutationIntent,
 } from "@/app/api/_utils";
 import { runBacktest } from "@/lib/python-bridge";
 
 export async function POST(req: NextRequest) {
   try {
+    const authError = requireLocalOperator(req);
+    if (authError) return authError;
     const intentError = requireStrategyLabMutationIntent(req, "run_replay_backtest");
     if (intentError) return intentError;
     const body = await readJsonObject(req, { defaultValue: {} });

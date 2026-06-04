@@ -20,6 +20,39 @@ function fmtDate(value?: string | null): string {
   return value ? value.slice(0, 10) : "\u2014";
 }
 
+const PENDING_MOBILE_PRIORITY_COLS = [
+  "Trade",
+  "Dir. Score",
+  "Quality",
+  "Stock %",
+  "Premium",
+  "Strike",
+  "Target Date",
+];
+const GRADED_MOBILE_PRIORITY_COLS = [
+  "Trade",
+  "Date",
+  "Options P&L",
+  "Stock %",
+  "Dir. Score",
+  "Target Date",
+];
+const BREAKDOWN_TICKER_MOBILE_PRIORITY_COLS = [
+  "Picks",
+  "Hit %",
+  "Call/Put",
+  "Avg Score",
+  "Avg Move",
+];
+const SIM_MOBILE_PRIORITY_COLS = [
+  "Outcome",
+  "Direction",
+  "Date",
+  "P&L $",
+  "Cost Basis",
+  "Dir Score",
+];
+
 export function PendingTab({ predictions }: { predictions: Prediction[] }) {
   if (predictions.length === 0) {
     return (
@@ -72,6 +105,10 @@ export function PendingTab({ predictions }: { predictions: Prediction[] }) {
               pnlCols={["Stock %", "Options P&L"]}
               badgeCol="Trade"
               monoCols={["Dir. Score", "Tech", "Quality", "Stock Price", "Strike", "Premium"]}
+              mobileTitleCol="Ticker"
+              mobileSubtitleCol="Options P&L"
+              mobilePriorityCols={PENDING_MOBILE_PRIORITY_COLS}
+              mobileHiddenCols={["Tech", "Stock Price"]}
             />
           </div>
         );
@@ -114,6 +151,9 @@ export function GradedTab({ predictions }: { predictions: Prediction[] }) {
       badgeCol="Trade"
       monoCols={["Dir. Score"]}
       maxHeight="600px"
+      mobileTitleCol="Ticker"
+      mobileSubtitleCol="Outcome"
+      mobilePriorityCols={GRADED_MOBILE_PRIORITY_COLS}
     />
   );
 }
@@ -190,11 +230,25 @@ export function BreakdownTab({ predictions }: { predictions: Prediction[] }) {
     <div className="space-y-6">
       <div>
         <div className="section-header">Per-Ticker Accuracy</div>
-        <FinTable data={tickerRows} rateCols={["Hit %", "Dir %"]} monoCols={["Picks", "Avg Score"]} />
+        <FinTable
+          data={tickerRows}
+          rateCols={["Hit %", "Dir %"]}
+          monoCols={["Picks", "Avg Score"]}
+          mobileTitleCol="Ticker"
+          mobileSubtitleCol="Dir %"
+          mobilePriorityCols={BREAKDOWN_TICKER_MOBILE_PRIORITY_COLS}
+        />
       </div>
       <div>
         <div className="section-header">Direction Score vs Accuracy</div>
-        <FinTable data={bucketRows} rateCols={["Directional %"]} monoCols={["Picks"]} />
+        <FinTable
+          data={bucketRows}
+          rateCols={["Directional %"]}
+          monoCols={["Picks"]}
+          mobileTitleCol="Score Band"
+          mobileSubtitleCol="Directional %"
+          mobilePriorityCols={["Picks"]}
+        />
       </div>
     </div>
   );
@@ -283,6 +337,9 @@ export function SimTab({ predictions }: { predictions: Prediction[] }) {
             pnlCols={["P&L $", "P&L %"]}
             badgeCol="Direction"
             maxHeight="500px"
+            mobileTitleCol="Ticker"
+            mobileSubtitleCol="P&L %"
+            mobilePriorityCols={SIM_MOBILE_PRIORITY_COLS}
           />
         </div>
       ) : null}

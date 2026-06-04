@@ -1,0 +1,163 @@
+{
+  "allowed_shared_metadata": [
+    "Shared scanner/domain code may carry the `ai_commodity_infra_observation` playbook id.",
+    "Frontend display helpers may show AI Commodity provenance labels for historical/source-snapshot rows.",
+    "Read-only scorecards and operating dashboards may summarize AI commodity proof state beside regular-options status.",
+    "`/api/scan` may route a playbook-scoped diagnostic scan, but the AI commodity playbook must not auto-track or create Trading Desk rows."
+  ],
+  "artifact": "ai_commodity_isolation",
+  "browser_api_boundary": {
+    "active_browser_import_findings": [],
+    "active_browser_import_patterns_forbidden": [
+      "scripts/run_ai_commodity_opra_progress",
+      "run_ai_commodity_opra_progress.py",
+      "ai_commodity_universe",
+      "data/ai-commodity-infra"
+    ],
+    "dedicated_browser_routes_allowed": false,
+    "forbidden_route_surface_tokens": [
+      "/api/ai-commodity",
+      "/api/ai_commodity",
+      "/api/commodity",
+      "ai-commodity",
+      "ai_commodity"
+    ],
+    "navigation_route_lifecycle_findings": [],
+    "route_inventory_findings": [],
+    "tool_dispatch_findings": []
+  },
+  "generated_by": "scripts/generate_ai_commodity_isolation.py",
+  "lane": {
+    "lane_id": "ai_commodity_proof_lane",
+    "owner_paths": [
+      "scripts/run_ai_commodity_opra_progress.py",
+      "data/ai-commodity-infra",
+      "data/ai-commodity-infra/universe.json",
+      "data/ai-commodity-infra/progress/latest.json",
+      "tests/test_ai_commodity_opra_progress.py",
+      "tests/test_ai_commodity_universe.py"
+    ],
+    "playbook_id": "ai_commodity_infra_observation",
+    "proof_scope": "ai_commodity_separate",
+    "proof_source_label": "alpaca_opra_daily_snapshot",
+    "route_ui_status": "not_mounted_browser_product",
+    "status": "separate_non_browser_proof_lane"
+  },
+  "latest_progress_readback": {
+    "available": true,
+    "completion_claim_allowed": false,
+    "generated_at": "2026-06-03T20:22:59Z",
+    "live_scan_candidate_count": 0,
+    "no_mutation_guard": "production_filters_preserved_until_exact_alpaca_opra_replay_unlock",
+    "path": "data/ai-commodity-infra/progress/latest.json",
+    "proof_source_isolation": {
+      "blockers": [],
+      "decision": "only_alpaca_opra_daily_snapshot_counts_for_exact_profitability_proof",
+      "exact_profitability_proof_source_labels": [
+        "alpaca_opra_daily_snapshot"
+      ],
+      "research_only_source_labels": [
+        "thetadata_opra_nbbo_1m"
+      ],
+      "status": "isolated_to_alpaca_opra_proof_source",
+      "top_level_shared_dates_match_proof_source": true
+    },
+    "proof_source_label": "alpaca_opra_daily_snapshot",
+    "provider": "alpaca:sip:opra",
+    "shared_quote_dates": {
+      "current": 3,
+      "required": 100
+    },
+    "verification_status": "not_verified",
+    "verified": false
+  },
+  "legacy_lane_boundary": {
+    "available": true,
+    "detail_owner": "docs/ai-commodity-isolation.md",
+    "route_ui_status": "not_mounted_browser_product",
+    "status": "separate_non_browser_proof_lane"
+  },
+  "non_goals": [
+    "No proof-policy, replay math, scanner threshold, route payload, auth, frontend, DB, schema, or Trading Desk behavior changes.",
+    "No split or refactor of scripts/run_ai_commodity_opra_progress.py.",
+    "No network, WFO, capture, or fresh-scan execution in docs verification.",
+    "No broad ban on AI commodity display/provenance metadata in shared code."
+  ],
+  "proof_claim_boundary": {
+    "claim_rule": "Do not claim AI commodity profitability or promote filters until the generated progress readback independently verifies exact Alpaca OPRA bid/ask replay gates.",
+    "exact_profitability_proof_source_labels": [
+      "alpaca_opra_daily_snapshot"
+    ],
+    "non_proof_source_rules": [
+      "Underlying bars, option OHLC bars, historical option trades, last trades, stale snapshots, indicative feeds, midpoint-only fills, tiny samples, and in-sample-only sweeps do not verify this lane.",
+      "OnclickMedia EOD bid/ask and other non-OPRA-certified datasets are research context only.",
+      "Regular-options ThetaData/NBBO proof work does not automatically promote AI commodity; this lane is locked to its own Alpaca SIP/OPRA bid/ask snapshot path."
+    ]
+  },
+  "runtime_use": false,
+  "safe_readback_commands": {
+    "accuracy_report": "npm run accuracy:report",
+    "verify_accuracy_no_write": "npm run verify:accuracy:no-write"
+  },
+  "scanner_boundary": {
+    "hard_rules": [
+      "AI commodity must keep proof_scope=ai_commodity_separate.",
+      "AI commodity must keep position_tracking_mode=disabled.",
+      "AI commodity must not allow scheduled auto-track or scanner-origin row creation.",
+      "Fresh live validation for the regular browser auto-track lane must remain disabled for AI commodity."
+    ],
+    "runtime": {
+      "auto_track_allowed": false,
+      "available": true,
+      "commodity_proof_scope_constant": "ai_commodity_separate",
+      "creation_blocker_when_visible": "position_tracking_mode:disabled",
+      "fresh_live_validation_enabled": false,
+      "label": "AI Commodity Infra",
+      "playbook_id": "ai_commodity_infra_observation",
+      "position_tracking_mode": "disabled",
+      "proof_scope": "ai_commodity_separate",
+      "scan_ticker_count": 24
+    },
+    "scanner_creation_contract": {
+      "available": true,
+      "proof_scope": "ai_commodity_separate",
+      "tracking_modes": {
+        "autoTrack": "auto_track",
+        "diagnosticOnly": "diagnostic_only",
+        "disabled": "disabled",
+        "paperReviewOnly": "paper_review_only"
+      }
+    }
+  },
+  "scope": "Readability and drift-check contract for the separate, non-browser AI commodity proof-first strategy lane.",
+  "sources": [
+    "AGENTS.md",
+    "docs/PROJECT_CONTEXT.md",
+    "docs/legacy-lane-boundaries.md",
+    "data/contracts/route-mutation-inventory.json",
+    "data/contracts/storage-ownership-map.json",
+    "data/contracts/scanner-creation-safety-contract.json",
+    "data/ai-commodity-infra/progress/latest.json",
+    "supervised_scan.py"
+  ],
+  "storage_boundary": {
+    "available": true,
+    "location": "data/ai-commodity-infra/*",
+    "owners": [
+      "scripts/run_ai_commodity_opra_progress.py"
+    ],
+    "persistence": "file_artifact",
+    "route_contract_ids": [],
+    "route_references": {
+      "active_browser": [],
+      "backend_only": []
+    },
+    "scope": "separate_lane",
+    "storage_role": "separate_lane",
+    "store_id": "ai_commodity_artifacts"
+  },
+  "validation": {
+    "errors": []
+  },
+  "version": 1
+}

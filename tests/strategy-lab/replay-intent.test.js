@@ -6,6 +6,19 @@ const vm = require("node:vm");
 const ts = require("typescript");
 
 const ROOT = path.join(__dirname, "..", "..");
+const TEST_OPERATOR_TOKEN = "operator-test-token";
+
+function nextResponseMock() {
+  return {
+    NextResponse: {
+      json: (body, init = {}) => ({
+        body,
+        status: init.status ?? 200,
+        headers: init.headers ?? {},
+      }),
+    },
+  };
+}
 
 function transpileTsFile(sourcePath) {
   const source = fs.readFileSync(sourcePath, "utf8");
@@ -30,9 +43,11 @@ function runCommonJsModule(sourcePath, requireMap = {}) {
   vm.runInNewContext(
     transpiled,
     {
+      Buffer,
       console,
       exports: module.exports,
       module,
+      process: { env: { OPTIONS_LOCAL_OPERATOR_TOKEN: TEST_OPERATOR_TOKEN } },
       require: localRequire,
     },
     { filename: sourcePath }
@@ -49,9 +64,25 @@ function loadTradingDeskModule(relativePath) {
   return runCommonJsModule(path.join(ROOT, "src", "lib", "trading-desk", relativePath));
 }
 
+function loadRouteLifecycleModule() {
+  return runCommonJsModule(path.join(ROOT, "src", "lib", "route-lifecycle", "routeContracts.ts"));
+}
+
+function loadOperatorAuthModule() {
+  return runCommonJsModule(
+    path.join(ROOT, "src", "lib", "operator-auth.ts"),
+    {
+      "next/server": nextResponseMock(),
+    }
+  );
+}
+
 function loadApiUtilsModule(strategyLabIntent) {
   const tradingDeskMutationIntent = loadTradingDeskModule("mutationIntent.ts");
   const tradingDeskStoreOwnership = loadTradingDeskModule("storeOwnership.ts");
+  const tradingDeskResponseValidation = loadTradingDeskModule("apiResponseValidation.ts");
+  const routeLifecycle = loadRouteLifecycleModule();
+  const operatorAuth = loadOperatorAuthModule();
   return runCommonJsModule(
     path.join(ROOT, "src", "app", "api", "_utils.ts"),
     {
@@ -60,16 +91,11 @@ function loadApiUtilsModule(strategyLabIntent) {
       },
       "@/lib/trading-desk/mutationIntent": tradingDeskMutationIntent,
       "@/lib/trading-desk/storeOwnership": tradingDeskStoreOwnership,
+      "@/lib/trading-desk/apiResponseValidation": tradingDeskResponseValidation,
       "@/lib/strategy-lab/replayIntent": strategyLabIntent,
-      "next/server": {
-        NextResponse: {
-          json: (body, init = {}) => ({
-            body,
-            status: init.status ?? 200,
-            headers: init.headers ?? {},
-          }),
-        },
-      },
+      "@/lib/route-lifecycle/routeContracts": routeLifecycle,
+      "@/lib/operator-auth": operatorAuth,
+      "next/server": nextResponseMock(),
     }
   );
 }
@@ -84,26 +110,26 @@ function loadRouteModule(relativePath, bridgeMocks) {
       "../_utils": apiUtils,
       "../../_utils": apiUtils,
       "@/lib/python-bridge": bridgeMocks,
-      "next/server": {
-        NextResponse: {
-          json: (body, init = {}) => ({
-            body,
-            status: init.status ?? 200,
-            headers: init.headers ?? {},
-          }),
-        },
-      },
+      "next/server": nextResponseMock(),
     }
   );
 }
 
-function requestWithIntent(headerName, intent, bodyText) {
+function requestWithIntent(headerName, intent, bodyText, options = {}) {
+  const operatorToken = Object.prototype.hasOwnProperty.call(options, "operatorToken")
+    ? options.operatorToken
+    : TEST_OPERATOR_TOKEN;
   return {
     headers: {
       get: (name) => {
-        if (name.toLowerCase() !== headerName) return null;
-        return intent ?? null;
+        const normalizedName = name.toLowerCase();
+        if (normalizedName === "x-options-operator-token") return operatorToken ?? null;
+        if (normalizedName === headerName) return intent ?? null;
+        return null;
       },
+    },
+    cookies: {
+      get: () => undefined,
     },
     text: async () => {
       if (bodyText !== undefined) return bodyText;
@@ -153,6 +179,7 @@ test("Strategy Lab mutation routes require explicit mutation intent", () => {
 
   for (const [relativePath, expectedIntent] of routeExpectations) {
     const source = fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+    assert.match(source, /requireLocalOperator/);
     assert.match(source, /requireStrategyLabMutationIntent/);
     assert.match(source, new RegExp(`"${expectedIntent}"`));
   }
@@ -218,6 +245,34 @@ test("Strategy Lab mutation routes reject missing or wrong intent before bridge 
     );
     assert.equal(wrongIntentResponse.status, 428);
     assert.match(wrongIntentResponse.body.error, new RegExp(expectedIntent));
+  }
+});
+
+test("Strategy Lab mutation intent is not authorization", async () => {
+  const intent = loadStrategyLabIntentModule();
+  const routeExpectations = [
+    ["src/app/api/backtest/route.ts", "POST", "run_replay_backtest"],
+    ["src/app/api/profile/route.ts", "PUT", "save_strategy_profile"],
+  ];
+  const bridgeMocks = new Proxy({}, {
+    get: () => () => {
+      throw new Error("strategy lab mutation should not reach bridge without operator auth");
+    },
+  });
+
+  for (const [relativePath, methodName, expectedIntent] of routeExpectations) {
+    const route = loadRouteModule(relativePath, bridgeMocks);
+    const response = await route[methodName](
+      requestWithIntent(
+        intent.STRATEGY_LAB_MUTATION_HEADER,
+        expectedIntent,
+        undefined,
+        { operatorToken: null }
+      )
+    );
+
+    assert.equal(response.status, 401);
+    assert.match(response.body.error, /Local operator authorization/);
   }
 });
 

@@ -5,23 +5,33 @@ import {
   pythonBackendTimingHeaders,
   toSearchSuffix,
 } from "@/lib/backend/transport";
-
-type PositionListWindow = {
-  limit?: number | string | null;
-  offset?: number | string | null;
-  compact?: number | string | null;
-};
-
-type BackendBodyWithTimingHeaders<T = Record<string, unknown>> = {
-  body: T;
-  headers: Record<string, string>;
-};
+import type {
+  CloseSuggestedTradeRequest,
+  CloseSuggestedTradeResponse,
+  CloseTrackedPositionRequest,
+  CloseTrackedPositionResponse,
+  CreateSuggestedTradeRequest,
+  CreateSuggestedTradeResponse,
+  CreateTrackedPositionRequest,
+  CreateTrackedPositionResponse,
+  GroupedSuggestedTradesResponse,
+  GroupedTrackedPositionsResponse,
+  ReviewSuggestedTradesRequest,
+  ReviewSuggestedTradesResponse,
+  ReviewTrackedPositionsRequest,
+  ReviewTrackedPositionsResponse,
+  SuggestedTradesListResponse,
+  TrackedPositionsListResponse,
+  TradingDeskBackendResponseWithTiming,
+  TradingDeskListStatus,
+  TradingDeskListWindow,
+} from "@/lib/trading-desk/apiContracts";
 
 export async function getTrackedPositions(
-  status: "open" | "closed" | "all" = "open",
-  window: PositionListWindow = {}
-): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>(
+  status: TradingDeskListStatus = "open",
+  window: TradingDeskListWindow = {}
+): Promise<TrackedPositionsListResponse> {
+  return fetchBackendJson<TrackedPositionsListResponse>(
     `/api/positions${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch positions"
@@ -29,10 +39,10 @@ export async function getTrackedPositions(
 }
 
 export async function getTrackedPositionsWithBackendHeaders(
-  status: "open" | "closed" | "all" = "open",
-  window: PositionListWindow = {}
-): Promise<BackendBodyWithTimingHeaders> {
-  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+  status: TradingDeskListStatus = "open",
+  window: TradingDeskListWindow = {}
+): Promise<TradingDeskBackendResponseWithTiming<TrackedPositionsListResponse>> {
+  const result = await fetchBackendJsonWithHeaders<TrackedPositionsListResponse>(
     `/api/positions${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch positions"
@@ -41,28 +51,28 @@ export async function getTrackedPositionsWithBackendHeaders(
 }
 
 export async function getGroupedTrackedPositions(
-  status: "open" | "closed" | "all" = "all",
-  window: PositionListWindow = {}
-): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>(
+  status: TradingDeskListStatus = "all",
+  window: TradingDeskListWindow = {}
+): Promise<GroupedTrackedPositionsResponse> {
+  return fetchBackendJson<GroupedTrackedPositionsResponse>(
     `/api/positions${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
 }
 
 export async function getGroupedTrackedPositionsWithBackendHeaders(
-  status: "open" | "closed" | "all" = "all",
-  window: PositionListWindow = {}
-): Promise<BackendBodyWithTimingHeaders> {
-  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+  status: TradingDeskListStatus = "all",
+  window: TradingDeskListWindow = {}
+): Promise<TradingDeskBackendResponseWithTiming<GroupedTrackedPositionsResponse>> {
+  const result = await fetchBackendJsonWithHeaders<GroupedTrackedPositionsResponse>(
     `/api/positions${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
   return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
 }
 
 export async function createTrackedPosition(
-  payload: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: CreateTrackedPositionRequest
+): Promise<CreateTrackedPositionResponse> {
+  return postBackendJson<CreateTrackedPositionResponse, CreateTrackedPositionRequest>(
     "/api/positions",
     payload,
     "Failed to create tracked position"
@@ -70,9 +80,9 @@ export async function createTrackedPosition(
 }
 
 export async function reviewTrackedPositions(
-  payload: Record<string, unknown> = {}
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: ReviewTrackedPositionsRequest = {}
+): Promise<ReviewTrackedPositionsResponse> {
+  return postBackendJson<ReviewTrackedPositionsResponse, ReviewTrackedPositionsRequest>(
     "/api/positions/review",
     payload,
     "Failed to review tracked positions"
@@ -81,9 +91,9 @@ export async function reviewTrackedPositions(
 
 export async function closeTrackedPosition(
   positionId: number,
-  payload: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: CloseTrackedPositionRequest
+): Promise<CloseTrackedPositionResponse> {
+  return postBackendJson<CloseTrackedPositionResponse, CloseTrackedPositionRequest>(
     `/api/positions/${positionId}/close`,
     payload,
     "Failed to close tracked position"
@@ -91,10 +101,10 @@ export async function closeTrackedPosition(
 }
 
 export async function getSuggestedTrades(
-  status: "open" | "closed" | "all" = "open",
-  window: PositionListWindow = {}
-): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>(
+  status: TradingDeskListStatus = "open",
+  window: TradingDeskListWindow = {}
+): Promise<SuggestedTradesListResponse> {
+  return fetchBackendJson<SuggestedTradesListResponse>(
     `/api/suggested-trades${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch suggested trades"
@@ -102,10 +112,10 @@ export async function getSuggestedTrades(
 }
 
 export async function getSuggestedTradesWithBackendHeaders(
-  status: "open" | "closed" | "all" = "open",
-  window: PositionListWindow = {}
-): Promise<BackendBodyWithTimingHeaders> {
-  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+  status: TradingDeskListStatus = "open",
+  window: TradingDeskListWindow = {}
+): Promise<TradingDeskBackendResponseWithTiming<SuggestedTradesListResponse>> {
+  const result = await fetchBackendJsonWithHeaders<SuggestedTradesListResponse>(
     `/api/suggested-trades${toSearchSuffix({ status, ...window })}`,
     undefined,
     "Failed to fetch suggested trades"
@@ -114,28 +124,28 @@ export async function getSuggestedTradesWithBackendHeaders(
 }
 
 export async function getGroupedSuggestedTrades(
-  status: "open" | "closed" | "all" = "all",
-  window: PositionListWindow = {}
-): Promise<Record<string, unknown>> {
-  return fetchBackendJson<Record<string, unknown>>(
+  status: TradingDeskListStatus = "all",
+  window: TradingDeskListWindow = {}
+): Promise<GroupedSuggestedTradesResponse> {
+  return fetchBackendJson<GroupedSuggestedTradesResponse>(
     `/api/suggested-trades${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
 }
 
 export async function getGroupedSuggestedTradesWithBackendHeaders(
-  status: "open" | "closed" | "all" = "all",
-  window: PositionListWindow = {}
-): Promise<BackendBodyWithTimingHeaders> {
-  const result = await fetchBackendJsonWithHeaders<Record<string, unknown>>(
+  status: TradingDeskListStatus = "all",
+  window: TradingDeskListWindow = {}
+): Promise<TradingDeskBackendResponseWithTiming<GroupedSuggestedTradesResponse>> {
+  const result = await fetchBackendJsonWithHeaders<GroupedSuggestedTradesResponse>(
     `/api/suggested-trades${toSearchSuffix({ status, grouped: 1, ...window })}`
   );
   return { body: result.body, headers: pythonBackendTimingHeaders(result.headers) };
 }
 
 export async function createSuggestedTrade(
-  payload: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: CreateSuggestedTradeRequest
+): Promise<CreateSuggestedTradeResponse> {
+  return postBackendJson<CreateSuggestedTradeResponse, CreateSuggestedTradeRequest>(
     "/api/suggested-trades",
     payload,
     "Failed to create suggested trade"
@@ -143,9 +153,9 @@ export async function createSuggestedTrade(
 }
 
 export async function reviewSuggestedTrades(
-  payload: Record<string, unknown> = {}
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: ReviewSuggestedTradesRequest = {}
+): Promise<ReviewSuggestedTradesResponse> {
+  return postBackendJson<ReviewSuggestedTradesResponse, ReviewSuggestedTradesRequest>(
     "/api/suggested-trades/review",
     payload,
     "Failed to review suggested trades"
@@ -154,9 +164,9 @@ export async function reviewSuggestedTrades(
 
 export async function closeSuggestedTrade(
   positionId: number,
-  payload: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  return postBackendJson<Record<string, unknown>>(
+  payload: CloseSuggestedTradeRequest
+): Promise<CloseSuggestedTradeResponse> {
+  return postBackendJson<CloseSuggestedTradeResponse, CloseSuggestedTradeRequest>(
     `/api/suggested-trades/${positionId}/close`,
     payload,
     "Failed to close suggested trade"

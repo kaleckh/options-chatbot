@@ -11,6 +11,7 @@ import json
 import math
 import sqlite3
 import contextlib
+import secrets
 import threading
 import time
 from collections import deque
@@ -18,6 +19,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import Any
 
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,7 +88,17 @@ from forward_options_ledger import (
 )
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
+from proof_contract import (
+    row_counts_as_production_proof as _row_counts_as_production_proof,
+    row_counts_as_proof_grade_exact_closed as _row_counts_as_proof_grade_exact_closed,
+    row_has_raw_exact_contract as _row_has_raw_exact_contract,
+    row_has_research_backfill_marker as _row_has_research_backfill_marker,
+)
+from backend_route_context import BackendRouteContext
+from predictions_routes import create_predictions_router
 from profile_routes import create_profile_router
+import replay_profit_service
+from tools_routes import create_tools_router
 from suggested_trades_repository import create_suggested_trades_repository
 from supervised_scan import (
     LIVE_SCAN_TRUTH_LANE,
@@ -105,8 +117,24 @@ from options_profit_gate import (
     evaluate_measurement_gate,
 )
 from options_profit_state import build_read_only_profit_status_view, live_profile_entry_for_symbol
+from proof_summary_service import build_proof_summary
+from trading_desk_api_models import (
+    parse_close_trading_desk_record_body,
+    parse_create_trading_desk_record_body,
+    parse_review_trading_desk_records_body,
+)
 
 app = FastAPI(title="Options Chatbot Backend")
+
+BACKEND_API_TOKEN_HEADER = "x-options-backend-token"
+
+
+def _backend_api_token() -> str:
+    return str(os.getenv("OPTIONS_BACKEND_API_TOKEN") or "").strip()
+
+
+def _backend_api_token_required(path: str) -> bool:
+    return bool(_backend_api_token()) and str(path or "").startswith("/api/")
 
 app.add_middleware(
     CORSMiddleware,
@@ -126,6 +154,19 @@ async def add_backend_timing_header(request, call_next):
     return response
 
 
+@app.middleware("http")
+async def require_backend_api_token(request, call_next):
+    expected_token = _backend_api_token()
+    if expected_token and _backend_api_token_required(request.url.path):
+        actual_token = str(request.headers.get(BACKEND_API_TOKEN_HEADER) or "").strip()
+        if not secrets.compare_digest(actual_token, expected_token):
+            return JSONResponse(
+                {"detail": "Backend API token is required."},
+                status_code=401,
+            )
+    return await call_next(request)
+
+
 # ── SQLite session management (shared DB with existing Streamlit app) ──────────
 
 DB_PATH = os.path.join(ROOT_DIR, "chat_history.db")
@@ -138,6 +179,7 @@ _FORWARD_EVIDENCE_REPORT_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 _READONLY_REPORT_OUTPUT_CACHE: dict[tuple[Any, ...], Any] = {}
 _OPTIONS_PROFIT_SYMBOLS = ("SPY", "QQQ")
 _SHARE_SAFE_REVIEW_MAX_AGE = timedelta(minutes=15)
+_ROUTE_CONTEXT = BackendRouteContext(globals())
 
 app.include_router(
     create_profile_router(
@@ -146,6 +188,8 @@ app.include_router(
         changelog_files=CHANGELOG_FILES,
     )
 )
+app.include_router(create_tools_router(_ROUTE_CONTEXT))
+app.include_router(create_predictions_router(_ROUTE_CONTEXT))
 
 
 async def _run_in_worker(fn, /, *args, **kwargs):
@@ -404,61 +448,10 @@ def _db():
 # ── Tool dispatch endpoint ────────────────────────────────────────────────────
 
 
-@app.post("/api/tools/{tool_name}")
-async def call_tool_endpoint(tool_name: str, body: dict[str, Any] | None = None):
-    """Execute any of the 16 tool functions by name."""
-    body = body or {}
-    fn = TOOL_DISPATCH.get(tool_name)
-    if not fn:
-        raise HTTPException(404, f"Unknown tool: {tool_name}")
-    try:
-        result = await _run_in_worker(fn, **body)
-        return {"result": _coerce_tool_result(result)}
-    except Exception as e:
-        raise HTTPException(500, {"error": type(e).__name__, "message": str(e)})
-
-
-def _coerce_tool_result(result: Any) -> Any:
-    if not isinstance(result, str):
-        return result
-    text = result.strip()
-    if not text or text[0] not in "[{":
-        return result
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        return result
-
-
 # ── Profile endpoints ────────────────────────────────────────────────────────
 
 
 # ── Predictions endpoints ────────────────────────────────────────────────────
-
-
-@app.get("/api/predictions")
-async def get_predictions():
-    """Return all predictions."""
-    return _load_predictions()
-
-
-@app.post("/api/predictions/grade")
-async def grade_predictions(body: dict[str, Any] | None = None):
-    """Grade predictions."""
-    body = body or {}
-    scan_date = body.get("scan_date")
-    kwargs = {}
-    if scan_date:
-        kwargs["scan_date"] = scan_date
-    result = log_prediction(action="grade", **kwargs)
-    return json.loads(result)
-
-
-@app.delete("/api/predictions/{pred_id}")
-async def delete_prediction(pred_id: int):
-    """Delete a prediction by ID."""
-    result = log_prediction(action="delete", prediction_id=pred_id)
-    return json.loads(result)
 
 
 # ── Scan endpoints ────────────────────────────────────────────────────────────
@@ -912,6 +905,40 @@ def _blocked_create(detail: str, *, reasons: list[str] | None = None) -> None:
     raise HTTPException(409, payload)
 
 
+def _creation_blockers_from_pick(scan_pick: dict[str, Any]) -> list[str]:
+    return list(
+        dict.fromkeys(
+            str(item).strip()
+            for item in list(scan_pick.get("creation_blockers") or [])
+            if str(item).strip()
+        )
+    )
+
+
+def _require_scanner_creation_flags(scan_pick: dict[str, Any], *, stage: str) -> None:
+    reason_prefix = "source" if stage == "source" else "current"
+    if scan_pick.get("portfolio_caps_enforced") is not True:
+        _blocked_create(
+            "Scanner-origin position creation requires a caps-enforced scan.",
+            reasons=[f"{reason_prefix}_portfolio_caps_not_enforced"],
+        )
+    creation_blockers = _creation_blockers_from_pick(scan_pick)
+    if creation_blockers:
+        _blocked_create(
+            "Scanner-origin position creation is not eligible from the current scan."
+            if stage == "current"
+            else "Scanner-origin position creation is not eligible from the source scan.",
+            reasons=creation_blockers,
+        )
+    if scan_pick.get("creation_eligible") is not True:
+        _blocked_create(
+            "Scanner-origin position creation requires current scan creation_eligible=true."
+            if stage == "current"
+            else "Scanner-origin position creation requires source scan creation_eligible=true.",
+            reasons=[f"{reason_prefix}_creation_eligible_not_true"],
+        )
+
+
 def _validate_scanner_origin_create(
     scan_pick: dict[str, Any],
     *,
@@ -923,27 +950,13 @@ def _validate_scanner_origin_create(
             "Scanner-origin position creation requires verified archived forward scan lineage.",
             reasons=["source_scan_lineage_unverified"],
         )
-    if scan_pick.get("portfolio_caps_enforced") is not True:
-        _blocked_create(
-            "Scanner-origin position creation requires a caps-enforced scan.",
-            reasons=["portfolio_caps_not_enforced"],
-        )
     original_guardrail = str(scan_pick.get("guardrail_decision") or "clear").strip().lower()
     if original_guardrail == "blocked":
         _blocked_create(
             "Scanner-origin position creation is blocked by the source scan guardrails.",
             reasons=list(scan_pick.get("guardrail_reasons") or ["guardrail_blocked"]),
         )
-    creation_blockers = [
-        str(item)
-        for item in list(scan_pick.get("creation_blockers") or [])
-        if str(item).strip()
-    ]
-    if creation_blockers:
-        _blocked_create(
-            "Scanner-origin position creation is not eligible from the source scan.",
-            reasons=creation_blockers,
-        )
+    _require_scanner_creation_flags(scan_pick, stage="source")
 
     playbook = get_scan_playbook(_pick_playbook_id(scan_pick))
     guardrail_result = apply_playbook_guardrails(
@@ -960,7 +973,7 @@ def _validate_scanner_origin_create(
             "Current portfolio guardrails block this scanner-origin position.",
             reasons=list(rerun_pick.get("guardrail_reasons") or ["guardrail_blocked"]),
         )
-    rerun_pick["portfolio_caps_enforced"] = True
+    _require_scanner_creation_flags(rerun_pick, stage="current")
     return rerun_pick, lineage_verified
 
 
@@ -1482,9 +1495,15 @@ def _record_forward_truth_for_position_events(
     reviewed_positions: list[dict[str, Any]],
     run_mode: str,
     reason: str,
-) -> None:
+) -> dict[str, Any]:
     if not reviewed_positions:
-        return
+        return {
+            "recorded": False,
+            "skipped": True,
+            "skip_reason": "no_positions",
+            "run_mode": run_mode,
+            "reason": reason,
+        }
     tracked_positions = None
     positions_error = None
     if getattr(POSITIONS_REPOSITORY, "is_available", False):
@@ -1509,7 +1528,7 @@ def _record_forward_truth_for_position_events(
         is_fixture=_scan_is_fixture(),
         policy_artifact_id=reason,
     )
-    record_forward_snapshot(
+    return record_forward_snapshot(
         scan_snapshot=scan_snapshot,
         reviewed_positions=[_position_event_payload(position, reason=reason) for position in reviewed_positions],
         tracked_positions=tracked_positions,
@@ -1529,11 +1548,21 @@ def _append_forward_evidence_event(
     error: str | None,
     picks: list[dict[str, Any]],
     evidence_class: str | None = None,
+    recording_event_type: str = "scan_capture",
+    recording_operation: str | None = None,
+    run_mode: str | None = None,
+    reason: str | None = None,
+    position_event_count: int = 0,
+    position_ids: list[int] | None = None,
 ) -> None:
     normalized_evidence_class = str(evidence_class or MANUAL_OBSERVATION_EVIDENCE_CLASS).strip().lower()
     payload = {
         "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "source_label": ARCHIVED_FORWARD_SOURCE_LABEL,
+        "recording_event_type": str(recording_event_type or "scan_capture"),
+        "recording_operation": str(recording_operation).strip() if recording_operation else None,
+        "run_mode": str(run_mode).strip() if run_mode else None,
+        "reason": str(reason).strip() if reason else None,
         "forward_truth_recorded": bool(recorded),
         "forward_truth_session_id": session_id,
         "forward_truth_error": str(error) if error else None,
@@ -1543,11 +1572,112 @@ def _append_forward_evidence_event(
         "exact_contract_capture_count": sum(
             1 for pick in list(picks or []) if str(pick.get("contract_symbol") or "").strip()
         ),
+        "position_event_count": int(position_event_count or 0),
+        "position_ids": list(position_ids or []),
     }
     path = _forward_evidence_log_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "a", encoding="utf8") as handle:
         handle.write(json.dumps(payload) + "\n")
+
+
+def _position_ids_from_rows(rows: list[dict[str, Any]]) -> list[int]:
+    ids: list[int] = []
+    for row in list(rows or []):
+        try:
+            position_id = int(row.get("id"))
+        except (TypeError, ValueError):
+            continue
+        ids.append(position_id)
+    return ids
+
+
+def _position_event_recording_success(
+    result: dict[str, Any] | None,
+    *,
+    operation: str,
+    positions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if not result or result.get("skipped"):
+        return {
+            "status": "skipped",
+            "recorded": False,
+            "skipped": True,
+            "skip_reason": (result or {}).get("skip_reason") or "no_result",
+            "operation": operation,
+            "error": None,
+            "error_type": None,
+            "health_event_logged": None,
+            "health_event_error": None,
+            "session_id": None,
+            "run_id": None,
+            "recorded_at_utc": None,
+            "position_event_count": len(list(positions or [])),
+            "position_ids": _position_ids_from_rows(positions),
+        }
+    return {
+        "status": "recorded",
+        "recorded": True,
+        "skipped": False,
+        "skip_reason": None,
+        "operation": operation,
+        "error": None,
+        "error_type": None,
+        "health_event_logged": None,
+        "health_event_error": None,
+        "session_id": result.get("session_id"),
+        "run_id": result.get("run_id"),
+        "recorded_at_utc": result.get("recorded_at_utc"),
+        "event_type": result.get("event_type"),
+        "position_event_count": len(list(positions or [])),
+        "position_ids": _position_ids_from_rows(positions),
+    }
+
+
+async def _position_event_recording_failure(
+    *,
+    operation: str,
+    error: Exception,
+    positions: list[dict[str, Any]],
+    run_mode: str,
+    reason: str,
+) -> dict[str, Any]:
+    position_ids = _position_ids_from_rows(positions)
+    meta = {
+        "status": "failed",
+        "recorded": False,
+        "skipped": False,
+        "skip_reason": None,
+        "operation": operation,
+        "error": str(error),
+        "error_type": type(error).__name__,
+        "health_event_logged": False,
+        "health_event_error": None,
+        "session_id": None,
+        "run_id": None,
+        "recorded_at_utc": None,
+        "position_event_count": len(list(positions or [])),
+        "position_ids": position_ids,
+    }
+    try:
+        await _run_in_worker(
+            _append_forward_evidence_event,
+            recorded=False,
+            session_id=None,
+            error=str(error),
+            picks=[],
+            evidence_class=_scan_evidence_class(),
+            recording_event_type="position_event",
+            recording_operation=operation,
+            run_mode=run_mode,
+            reason=reason,
+            position_event_count=len(list(positions or [])),
+            position_ids=position_ids,
+        )
+        meta["health_event_logged"] = True
+    except Exception as log_exc:
+        meta["health_event_error"] = str(log_exc)
+    return meta
 
 
 def _read_forward_evidence_events(limit: int = 200) -> list[dict[str, Any]]:
@@ -1565,6 +1695,35 @@ def _read_forward_evidence_events(limit: int = 200) -> list[dict[str, Any]]:
             except json.JSONDecodeError:
                 continue
     return list(events)
+
+
+def _forward_event_counts_by_type(db_path: Path) -> dict[str, int]:
+    counts = {
+        "scan_pick": 0,
+        "position_opened": 0,
+        "position_review": 0,
+        "tracked_positions_snapshot": 0,
+    }
+    try:
+        with contextlib.closing(sqlite3.connect(str(db_path))) as conn:
+            rows = conn.execute(
+                """
+                SELECT event_type, COUNT(*) AS count
+                FROM forward_events
+                GROUP BY event_type
+                """
+            ).fetchall()
+    except Exception:
+        return counts
+    for event_type, count in rows:
+        key = str(event_type or "").strip()
+        if not key:
+            continue
+        try:
+            counts[key] = int(count)
+        except (TypeError, ValueError):
+            counts[key] = 0
+    return counts
 
 
 def _latest_artifact_timestamp(path: str) -> str | None:
@@ -1611,11 +1770,22 @@ def _build_forward_evidence_report() -> dict[str, Any]:
     latest_event = events[-1] if events else None
     failure_events = [event for event in events if not bool(event.get("forward_truth_recorded"))]
     latest_failure = failure_events[-1] if failure_events else None
+    failure_events_by_operation: dict[str, int] = {}
+    for event in failure_events:
+        operation = str(
+            event.get("recording_operation")
+            or event.get("recording_event_type")
+            or "unknown"
+        ).strip() or "unknown"
+        failure_events_by_operation[operation] = failure_events_by_operation.get(operation, 0) + 1
     authoritative_log_events = [
         event for event in events
         if bool(event.get("forward_truth_authoritative"))
     ]
     latest_authoritative_event = authoritative_log_events[-1] if authoritative_log_events else None
+    event_type_counts = _forward_event_counts_by_type(authoritative_db_path)
+    position_opened_event_count = int(event_type_counts.get("position_opened") or 0)
+    position_review_event_count = int(event_type_counts.get("position_review") or 0)
     latest_artifact = load_last_archived_forward_daily_results()
     latest_artifact_path = wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE
     latest_artifact_timestamp = _latest_artifact_timestamp(latest_artifact_path)
@@ -1665,6 +1835,11 @@ def _build_forward_evidence_report() -> dict[str, Any]:
             "all_without_contract_count": max(len(authoritative_all_events) - all_exact_contract_count, 0),
         },
         "forward_truth_recording_failure_count": len(failure_events),
+        "position_event_recording_failure_count": sum(
+            count
+            for operation, count in failure_events_by_operation.items()
+            if operation in {"position_opened", "positions_review", "positions_close", "position_event"}
+        ),
         "latest_archived_forward_artifact_timestamp": latest_artifact_timestamp,
         "activation_check": {
             "active": latest_capture_created_picks,
@@ -1677,6 +1852,7 @@ def _build_forward_evidence_report() -> dict[str, Any]:
             "events_logged": len(events),
             "recorded_success_count": sum(1 for event in events if bool(event.get("forward_truth_recorded"))),
             "recorded_failure_count": len(failure_events),
+            "recorded_failure_count_by_operation": failure_events_by_operation,
             "latest_event": latest_event,
             "latest_failure": latest_failure,
             "latest_authoritative_event": latest_authoritative_event,
@@ -1688,6 +1864,11 @@ def _build_forward_evidence_report() -> dict[str, Any]:
             "scan_pick_count": len(authoritative_all_events),
             "eligible_scan_pick_count": len(authoritative_events),
             "observation_scan_pick_count": len(observation_events),
+            "position_opened_event_count": position_opened_event_count,
+            "position_review_event_count": position_review_event_count,
+            "review_event_count": position_review_event_count,
+            "position_event_count": position_opened_event_count + position_review_event_count,
+            "event_type_counts": event_type_counts,
             "recent_session_count": len(recent_sessions),
             "authoritative_session_count": len(authoritative_sessions),
         },
@@ -1703,241 +1884,6 @@ def _build_forward_evidence_report() -> dict[str, Any]:
             "contract_resolution_overview": dict(latest_artifact.get("contract_resolution_overview") or {}) if latest_artifact else {},
             "archived_sample_date_coverage": dict(latest_artifact.get("archived_sample_date_coverage") or {}) if latest_artifact else {},
         },
-    }
-
-
-def _build_backtest_report(truth_lane: str | None, min_trades: int) -> dict[str, Any]:
-    return build_prediction_replay_report(
-        result=_cached_preferred_results_by_truth_lane(truth_lane),
-        min_trades=min_trades,
-    )
-
-
-def _build_metric_truth_report(truth_lane: str | None, min_trades: int, bucket_size: int) -> dict[str, Any]:
-    result = _cached_preferred_results_by_truth_lane(truth_lane)
-    if not result:
-        return {"error": "No backtest results found"}
-    return build_metric_truth_report(
-        result=result,
-        min_trades=min_trades,
-        bucket_size=bucket_size,
-    )
-
-
-def _build_backtest_experiments(body: dict[str, Any]) -> dict[str, Any]:
-    return build_options_experiment_matrix(
-        result=_cached_preferred_results_by_truth_lane(body.get("truth_lane")),
-        min_trades=body.get("min_trades", 20),
-        score_floors=body.get("score_floors"),
-        max_tickers=body.get("max_tickers", 8),
-        max_sectors=body.get("max_sectors", 8),
-        min_profit_factor=body.get("min_profit_factor", 1.05),
-        min_directional_accuracy_pct=body.get("min_directional_accuracy_pct", 50.0),
-    )
-
-
-def _build_backtest_profitability_forensics(
-    min_trades: int,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    return build_options_profitability_forensics(
-        result=_cached_preferred_results_by_truth_lane(truth_lane),
-        min_trades=min_trades,
-    )
-
-
-def _build_backtest_stability(
-    min_trades: int,
-    min_profit_factor: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    return build_options_stability_report(
-        result=_cached_preferred_results_by_truth_lane(truth_lane),
-        min_trades=min_trades,
-        min_profit_factor=min_profit_factor,
-    )
-
-
-def _build_live_trade_policy_report(
-    min_trades: int,
-    max_tickers: int,
-    max_sectors: int,
-    min_profit_factor: float,
-    min_directional_accuracy_pct: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    return build_live_options_trade_policy(
-        truth_lane=truth_lane,
-        min_trades=min_trades,
-        max_tickers=max_tickers,
-        max_sectors=max_sectors,
-        min_profit_factor=min_profit_factor,
-        min_directional_accuracy_pct=min_directional_accuracy_pct,
-    )
-
-
-def _build_playbook_exit_audit_report(
-    playbook: str,
-    min_trades: int,
-    max_tickers: int,
-    max_sectors: int,
-    min_profit_factor: float,
-    min_directional_accuracy_pct: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    return build_playbook_exit_audit(
-        playbook=playbook,
-        truth_lane=truth_lane,
-        min_trades=min_trades,
-        max_tickers=max_tickers,
-        max_sectors=max_sectors,
-        min_profit_factor=min_profit_factor,
-        min_directional_accuracy_pct=min_directional_accuracy_pct,
-    )
-
-
-def _build_truth_lane_comparison_report(truth_lane: str | None) -> dict[str, Any]:
-    return build_truth_lane_comparison(truth_lane=truth_lane)
-
-
-def _cached_backtest_report(truth_lane: str | None, min_trades: int) -> dict[str, Any]:
-    key = ("backtest_report", _preferred_results_cache_key(truth_lane), int(min_trades))
-    return _cached_readonly_report(key, lambda: _build_backtest_report(truth_lane, min_trades))
-
-
-def _cached_metric_truth_report(truth_lane: str | None, min_trades: int, bucket_size: int) -> dict[str, Any]:
-    key = (
-        "metric_truth_report",
-        _preferred_results_cache_key(truth_lane),
-        int(min_trades),
-        int(bucket_size),
-    )
-    return _cached_readonly_report(
-        key,
-        lambda: _build_metric_truth_report(truth_lane, min_trades, bucket_size),
-    )
-
-
-def _cached_backtest_experiments(body: dict[str, Any]) -> dict[str, Any]:
-    key = (
-        "backtest_experiments",
-        _preferred_results_cache_key(body.get("truth_lane")),
-        json.dumps(body, sort_keys=True, default=str),
-    )
-    return _cached_readonly_report(key, lambda: _build_backtest_experiments(body))
-
-
-def _cached_backtest_profitability_forensics(
-    min_trades: int,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    key = (
-        "backtest_profitability_forensics",
-        _preferred_results_cache_key(truth_lane),
-        int(min_trades),
-    )
-    return _cached_readonly_report(
-        key,
-        lambda: _build_backtest_profitability_forensics(min_trades, truth_lane),
-    )
-
-
-def _cached_backtest_stability(
-    min_trades: int,
-    min_profit_factor: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    key = (
-        "backtest_stability",
-        _preferred_results_cache_key(truth_lane),
-        int(min_trades),
-        float(min_profit_factor),
-    )
-    return _cached_readonly_report(
-        key,
-        lambda: _build_backtest_stability(min_trades, min_profit_factor, truth_lane),
-    )
-
-
-def _cached_live_trade_policy_report(
-    min_trades: int,
-    max_tickers: int,
-    max_sectors: int,
-    min_profit_factor: float,
-    min_directional_accuracy_pct: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    key = (
-        "live_trade_policy",
-        _preferred_results_cache_key(truth_lane),
-        int(min_trades),
-        int(max_tickers),
-        int(max_sectors),
-        float(min_profit_factor),
-        float(min_directional_accuracy_pct),
-    )
-    return _cached_readonly_report(
-        key,
-        lambda: _build_live_trade_policy_report(
-            min_trades,
-            max_tickers,
-            max_sectors,
-            min_profit_factor,
-            min_directional_accuracy_pct,
-            truth_lane,
-        ),
-    )
-
-
-def _cached_playbook_exit_audit_report(
-    playbook: str,
-    min_trades: int,
-    max_tickers: int,
-    max_sectors: int,
-    min_profit_factor: float,
-    min_directional_accuracy_pct: float,
-    truth_lane: str | None,
-) -> dict[str, Any]:
-    key = (
-        "playbook_exit_audit",
-        _preferred_results_cache_key(truth_lane),
-        str(playbook),
-        int(min_trades),
-        int(max_tickers),
-        int(max_sectors),
-        float(min_profit_factor),
-        float(min_directional_accuracy_pct),
-    )
-    return _cached_readonly_report(
-        key,
-        lambda: _build_playbook_exit_audit_report(
-            playbook,
-            min_trades,
-            max_tickers,
-            max_sectors,
-            min_profit_factor,
-            min_directional_accuracy_pct,
-            truth_lane,
-        ),
-    )
-
-
-def _cached_truth_lane_comparison_report(truth_lane: str | None) -> dict[str, Any]:
-    key = ("truth_lane_comparison", _preferred_results_cache_key(truth_lane))
-    return _cached_readonly_report(key, lambda: _build_truth_lane_comparison_report(truth_lane))
-
-
-def _build_backtest_summary(
-    truth_lane: str | None,
-    min_trades: int,
-    bucket_size: int,
-) -> dict[str, Any]:
-    return {
-        "last": _cached_last_results_by_truth_lane(truth_lane) or {"error": "No backtest results found"},
-        "report": _cached_backtest_report(truth_lane, min_trades),
-        "metricTruth": _cached_metric_truth_report(truth_lane, min_trades, bucket_size),
-        "profitabilityForensics": _cached_backtest_profitability_forensics(min_trades, truth_lane),
-        "comparison": _cached_truth_lane_comparison_report(truth_lane),
     }
 
 
@@ -2066,42 +2012,6 @@ def _pnl_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "net_pnl_usd": round(sum(usd_values), 2) if usd_values else None,
         "avg_pnl_pct": round(sum(pct_values) / len(pct_values), 2) if pct_values else None,
     }
-
-
-def _row_has_research_backfill_marker(row: dict[str, Any]) -> bool:
-    source = row.get("source_pick_snapshot") if isinstance(row.get("source_pick_snapshot"), dict) else {}
-    if bool(source.get("research_only")):
-        return True
-    if source.get("backfill_audit_id") or source.get("position_migration_id") or source.get("position_migrated_at_utc"):
-        return True
-    values = [
-        row.get("proof_class"),
-        row.get("proof_class_reason"),
-        row.get("proof_ineligibility_reason"),
-        row.get("notes"),
-        source.get("pricing_evidence_class"),
-        source.get("profitability_evidence_class"),
-        source.get("source_separation"),
-        source.get("promotion_class"),
-        source.get("selection_source"),
-        source.get("event_type"),
-        source.get("candidate_execution_label"),
-        source.get("market_data_source"),
-        source.get("status"),
-    ]
-    tokens = ("backfill", "research", "historical_replay", "historical_selection", "historical_chain_native")
-    return any(
-        any(token in str(value or "").strip().lower() for token in tokens)
-        for value in values
-    )
-
-
-def _row_counts_as_production_proof(row: dict[str, Any]) -> bool:
-    if _row_has_research_backfill_marker(row):
-        return False
-    source = row.get("source_pick_snapshot") if isinstance(row.get("source_pick_snapshot"), dict) else {}
-    proof_class = str(row.get("proof_class") or source.get("proof_class") or "").strip().lower()
-    return proof_class in {"live_scan_exact_contract", "manual_broker_exact_contract"} and bool(row.get("proof_eligible"))
 
 
 def _tracked_vs_proof_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -2318,6 +2228,7 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
             normalized_picks,
             forward_truth_meta=forward_truth_meta,
         )
+        forward_truth_event_log_error = None
         try:
             await _run_in_worker(
                 _append_forward_evidence_event,
@@ -2327,12 +2238,13 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
                 picks=normalized_picks,
                 evidence_class=forward_truth_meta.get("forward_truth_evidence_class"),
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            forward_truth_event_log_error = str(exc)
         return {
             **{key: value for key, value in result.items() if key not in {"picks", "ranked_picks", "watch_picks", "candidate_audit_picks"}},
             "picks": normalized_picks,
             "watch_picks": normalized_watch_picks,
+            "forward_truth_event_log_error": forward_truth_event_log_error,
             **forward_truth_meta,
         }
     except ValueError as exc:
@@ -2348,6 +2260,7 @@ async def create_position_endpoint(body: dict[str, Any]):
         return _positions_unavailable_response()
 
     try:
+        body = parse_create_trading_desk_record_body(body)
         scan_pick = body.get("scan_pick") or {}
         mode = _creation_mode(body, scan_pick)
         source_scan_lineage_verified = _verify_source_scan_lineage(scan_pick)
@@ -2369,10 +2282,19 @@ async def create_position_endpoint(body: dict[str, Any]):
         )
         existing_position = _find_existing_open_contract(POSITIONS_REPOSITORY, payload)
         if existing_position is not None:
-            return {"position": existing_position, "duplicate": True}
+            return {
+                "position": existing_position,
+                "duplicate": True,
+                "position_event_persistence": _position_event_recording_success(
+                    {"skipped": True, "skip_reason": "duplicate_open_contract"},
+                    operation="position_opened",
+                    positions=[existing_position],
+                ),
+            }
         position = POSITIONS_REPOSITORY.create_position(payload)
+        position_event_persistence: dict[str, Any]
         try:
-            await _run_in_worker(
+            recording_result = await _run_in_worker(
                 record_position_opened,
                 position=position,
                 source_label="position_opened",
@@ -2381,9 +2303,20 @@ async def create_position_endpoint(body: dict[str, Any]):
                 run_mode="position_opened",
                 is_fixture=_scan_is_fixture(),
             )
-        except Exception:
-            pass
-        return {"position": position}
+            position_event_persistence = _position_event_recording_success(
+                recording_result,
+                operation="position_opened",
+                positions=[position],
+            )
+        except Exception as exc:
+            position_event_persistence = await _position_event_recording_failure(
+                operation="position_opened",
+                error=exc,
+                positions=[position],
+                run_mode="position_opened",
+                reason="position_opened",
+            )
+        return {"position": position, "position_event_persistence": position_event_persistence}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except HTTPException:
@@ -2440,24 +2373,36 @@ async def list_positions_endpoint(
 @app.post("/api/positions/review")
 async def review_positions_endpoint(body: dict[str, Any] | None = None):
     """Review open tracked positions and return HOLD/SELL guidance."""
-    body = body or {}
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
 
     try:
+        body = parse_review_trading_desk_records_body(body)
         position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, POSITIONS_REPOSITORY, position_ids=position_ids)
         reviewed = _annotate_share_safety_rows(reviewed)
+        position_event_persistence: dict[str, Any]
         try:
-            await _run_in_worker(
+            recording_result = await _run_in_worker(
                 _record_forward_truth_for_position_events,
                 reviewed_positions=reviewed,
                 run_mode="positions_review",
                 reason="tracked_positions_review",
             )
-        except Exception:
-            pass
-        return {"positions": reviewed}
+            position_event_persistence = _position_event_recording_success(
+                recording_result,
+                operation="positions_review",
+                positions=reviewed,
+            )
+        except Exception as exc:
+            position_event_persistence = await _position_event_recording_failure(
+                operation="positions_review",
+                error=exc,
+                positions=reviewed,
+                run_mode="positions_review",
+                reason="tracked_positions_review",
+            )
+        return {"positions": reviewed, "position_event_persistence": position_event_persistence}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
@@ -2514,10 +2459,10 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
 
-    if body.get("exit_price") is None:
-        raise HTTPException(400, "exit_price is required")
-
     try:
+        body = parse_close_trading_desk_record_body(body)
+        if body.get("exit_price") is None:
+            raise HTTPException(400, "exit_price is required")
         closed_at = _parse_optional_iso_datetime(body.get("closed_at"), "closed_at")
         position = POSITIONS_REPOSITORY.close_position(
             position_id=position_id,
@@ -2529,16 +2474,28 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
         )
         if position is None:
             raise HTTPException(404, f"Tracked position {position_id} was not found")
+        position_event_persistence: dict[str, Any]
         try:
-            await _run_in_worker(
+            recording_result = await _run_in_worker(
                 _record_forward_truth_for_position_events,
                 reviewed_positions=[position],
                 run_mode="positions_close",
                 reason="manual_close",
             )
-        except Exception:
-            pass
-        return {"position": position}
+            position_event_persistence = _position_event_recording_success(
+                recording_result,
+                operation="positions_close",
+                positions=[position],
+            )
+        except Exception as exc:
+            position_event_persistence = await _position_event_recording_failure(
+                operation="positions_close",
+                error=exc,
+                positions=[position],
+                run_mode="positions_close",
+                reason="manual_close",
+            )
+        return {"position": position, "position_event_persistence": position_event_persistence}
     except HTTPException:
         raise
     except ValueError as exc:
@@ -2556,6 +2513,7 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
         return _suggested_trades_unavailable_response()
 
     try:
+        body = parse_create_trading_desk_record_body(body)
         scan_pick = body.get("scan_pick") or {}
         mode = _creation_mode(body, scan_pick)
         source_scan_lineage_verified = _verify_source_scan_lineage(scan_pick)
@@ -2632,11 +2590,11 @@ async def list_suggested_trades_endpoint(
 @app.post("/api/suggested-trades/review")
 async def review_suggested_trades_endpoint(body: dict[str, Any] | None = None):
     """Review open suggested trades and refresh their hypothetical P/L."""
-    body = body or {}
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
 
     try:
+        body = parse_review_trading_desk_records_body(body)
         position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, SUGGESTED_TRADES_REPOSITORY, position_ids=position_ids)
         reviewed = _annotate_share_safety_rows(reviewed)
@@ -2653,11 +2611,11 @@ async def close_suggested_trade_endpoint(position_id: int, body: dict[str, Any])
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
 
-    exit_price = body.get("exit_price")
-    if exit_price is None:
-        raise HTTPException(400, "exit_price is required")
-
     try:
+        body = parse_close_trading_desk_record_body(body)
+        exit_price = body.get("exit_price")
+        if exit_price is None:
+            raise HTTPException(400, "exit_price is required")
         closed_at = _parse_optional_iso_datetime(body.get("closed_at"), "closed_at")
         trade = SUGGESTED_TRADES_REPOSITORY.close_position(
             position_id=position_id,
@@ -2913,7 +2871,12 @@ async def get_forward_evidence_report():
 @app.get("/api/backtest/report")
 async def get_backtest_report(min_trades: int = 20, truth_lane: str | None = None):
     """Return a grouped replay report from the most recent backtest."""
-    result = await _run_in_worker(_cached_backtest_report, truth_lane, min_trades)
+    result = await _run_in_worker(
+        replay_profit_service.cached_backtest_report,
+        _ROUTE_CONTEXT,
+        truth_lane,
+        min_trades,
+    )
     if result.get("error"):
         return result
     return result
@@ -2922,14 +2885,24 @@ async def get_backtest_report(min_trades: int = 20, truth_lane: str | None = Non
 @app.get("/api/backtest/metric-truth")
 async def get_metric_truth_report(min_trades: int = 20, bucket_size: int = 10, truth_lane: str | None = None):
     """Return a calibration and profitability truth report from the most recent backtest."""
-    return await _run_in_worker(_cached_metric_truth_report, truth_lane, min_trades, bucket_size)
+    return await _run_in_worker(
+        replay_profit_service.cached_metric_truth_report,
+        _ROUTE_CONTEXT,
+        truth_lane,
+        min_trades,
+        bucket_size,
+    )
 
 
 @app.post("/api/backtest/experiments")
 async def get_backtest_experiments(body: dict[str, Any] | None = None):
     """Return a ranked options-only experiment matrix from the most recent backtest."""
     body = body or {}
-    result = await _run_in_worker(_cached_backtest_experiments, body)
+    result = await _run_in_worker(
+        replay_profit_service.cached_backtest_experiments,
+        _ROUTE_CONTEXT,
+        body,
+    )
     if result.get("error"):
         return result
     return result
@@ -2938,7 +2911,12 @@ async def get_backtest_experiments(body: dict[str, Any] | None = None):
 @app.get("/api/backtest/profitability-forensics")
 async def get_backtest_profitability_forensics(min_trades: int = 20, truth_lane: str | None = None):
     """Return slice-based profitability forensics from the most recent backtest."""
-    result = await _run_in_worker(_cached_backtest_profitability_forensics, min_trades, truth_lane)
+    result = await _run_in_worker(
+        replay_profit_service.cached_backtest_profitability_forensics,
+        _ROUTE_CONTEXT,
+        min_trades,
+        truth_lane,
+    )
     if result.get("error"):
         return result
     return result
@@ -2951,7 +2929,13 @@ async def get_backtest_stability(
     truth_lane: str | None = None,
 ):
     """Return fixed-window and rolling-window stability results for the latest backtest."""
-    result = await _run_in_worker(_cached_backtest_stability, min_trades, min_profit_factor, truth_lane)
+    result = await _run_in_worker(
+        replay_profit_service.cached_backtest_stability,
+        _ROUTE_CONTEXT,
+        min_trades,
+        min_profit_factor,
+        truth_lane,
+    )
     if result.get("error"):
         return result
     return result
@@ -2968,7 +2952,8 @@ async def get_live_trade_policy(
 ):
     """Return a replay-backed live trade policy for the supervised options scanner."""
     result = await _run_in_worker(
-        _cached_live_trade_policy_report,
+        replay_profit_service.cached_live_trade_policy_report,
+        _ROUTE_CONTEXT,
         min_trades,
         max_tickers,
         max_sectors,
@@ -2993,7 +2978,8 @@ async def get_playbook_exit_audit(
 ):
     """Return a replay exit audit for the approved/watch/blocked cohorts in a playbook window."""
     result = await _run_in_worker(
-        _cached_playbook_exit_audit_report,
+        replay_profit_service.cached_playbook_exit_audit_report,
+        _ROUTE_CONTEXT,
         playbook,
         min_trades,
         max_tickers,
@@ -3010,7 +2996,11 @@ async def get_playbook_exit_audit(
 @app.get("/api/backtest/comparison")
 async def get_backtest_truth_lane_comparison(truth_lane: str | None = None):
     """Compare the latest synthetic and imported validation lanes side by side."""
-    result = await _run_in_worker(_cached_truth_lane_comparison_report, truth_lane)
+    result = await _run_in_worker(
+        replay_profit_service.cached_truth_lane_comparison_report,
+        _ROUTE_CONTEXT,
+        truth_lane,
+    )
     if result.get("error"):
         return result
     return result
@@ -3024,7 +3014,13 @@ async def get_backtest_summary(
 ):
     """Return the current optimizer artifact bundle in one cached response."""
     try:
-        return await _run_in_worker(_build_backtest_summary, truth_lane, min_trades, bucket_size)
+        return await _run_in_worker(
+            replay_profit_service.build_backtest_summary,
+            _ROUTE_CONTEXT,
+            truth_lane,
+            min_trades,
+            bucket_size,
+        )
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
@@ -3051,10 +3047,10 @@ async def get_daily_performance():
         return []
 
 
-# ── Risk settings shortcut ────────────────────────────────────────────────────
+# -- Risk settings shortcut --
 
 
-# ── Health check ───────────────────────────────────��──────────────────────────
+# -- Health check --
 
 
 @app.get("/api/health")
@@ -3075,92 +3071,6 @@ async def get_options_profit_status():
 async def get_proof_summary():
     """Return the canonical proof-lane summary: loop-health and claim-readiness verdicts."""
     try:
-        def _build_proof_summary() -> dict[str, Any]:
-            loop_health = evaluate_measurement_gate()
-            claim_readiness = evaluate_claim_readiness()
-
-            # Count positions
-            positions_available = False
-            open_count = 0
-            closed_count = 0
-            exact_contract_closed = 0
-            if getattr(POSITIONS_REPOSITORY, "is_available", False):
-                positions_available = True
-                try:
-                    open_positions = POSITIONS_REPOSITORY.list_positions("open")
-                    closed_positions = POSITIONS_REPOSITORY.list_positions("closed")
-                    open_count = len(open_positions)
-                    closed_count = len(closed_positions)
-                    exact_contract_closed = sum(
-                        1 for p in closed_positions
-                        if str(p.get("contract_symbol") or "").strip()
-                    )
-                except Exception:
-                    pass
-
-            # Forward evidence counts
-            forward_evidence = _cached_forward_evidence_report()
-            ledger_summary = dict(forward_evidence.get("ledger_summary") or {})
-
-            def _evidence_count(*values: Any) -> int:
-                for value in values:
-                    try:
-                        count = int(value)
-                    except (TypeError, ValueError):
-                        continue
-                    if count >= 0:
-                        return count
-                return 0
-
-            eligible_scan_pick_event_count = _evidence_count(
-                forward_evidence.get("eligible_scan_pick_count"),
-                ledger_summary.get("eligible_scan_pick_count"),
-            )
-            scan_pick_event_count = _evidence_count(
-                forward_evidence.get("scan_pick_count"),
-                ledger_summary.get("scan_pick_count"),
-                eligible_scan_pick_event_count,
-            )
-            forward_event_count = _evidence_count(
-                forward_evidence.get("scan_pick_count"),
-                ledger_summary.get("scan_pick_count"),
-                scan_pick_event_count,
-            )
-
-            return {
-                "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-                "loop_health": {
-                    "state": loop_health["state"],
-                    "blocker_count": len(loop_health["blockers"]),
-                    "blockers": loop_health["blockers"],
-                },
-                "claim_readiness": {
-                    "state": claim_readiness["state"],
-                    "claim_ready": claim_readiness["claim_ready"],
-                    "blocker_count": claim_readiness["blocker_count"],
-                    "blockers": claim_readiness["blockers"],
-                },
-                "evidence_counts": {
-                    "forward_event_count": forward_event_count,
-                    "scan_pick_event_count": scan_pick_event_count,
-                    "eligible_scan_pick_event_count": eligible_scan_pick_event_count,
-                    "position_opened_event_count": _evidence_count(
-                        ledger_summary.get("position_opened_event_count")
-                    ),
-                    "review_event_count": _evidence_count(ledger_summary.get("review_event_count")),
-                    "eligible_event_count": claim_readiness.get("eligible_event_count", 0),
-                    "pending_truth_event_count": claim_readiness.get("pending_truth_event_count", 0),
-                    "by_symbol": claim_readiness.get("by_symbol", {}),
-                },
-                "tracked_positions": {
-                    "available": positions_available,
-                    "open_count": open_count,
-                    "closed_count": closed_count,
-                    "exact_contract_closed_count": exact_contract_closed,
-                },
-                "realized_metrics": claim_readiness.get("tracked_realized_metrics", {}),
-            }
-
-        return await _run_in_worker(_build_proof_summary)
+        return await _run_in_worker(build_proof_summary, _ROUTE_CONTEXT)
     except Exception as exc:
         raise HTTPException(500, str(exc))

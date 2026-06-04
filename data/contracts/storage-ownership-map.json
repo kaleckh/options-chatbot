@@ -1,0 +1,2188 @@
+{
+  "artifact": "storage_ownership_map",
+  "generated_by": "scripts/generate_storage_ownership_map.py",
+  "map_version": 1,
+  "non_goals": [
+    "No DB reads, audits, migrations, DDL, PRAGMAs, repairs, vacuuming, file deletion, or schema initialization.",
+    "No route handler, auth, request payload, response payload, or runtime validation behavior changes.",
+    "No proof, scanner creation, replay, options-profit, or AI commodity semantics.",
+    "No tracked-position SQLite fallback and no promotion of test or legacy stores to browser production storage.",
+    "No OpenAPI, JSON Schema, generated TypeScript, Pydantic response_model, or stale-artifact governance replacement.",
+    "Does not replace repository, migration, constraint, index, local DB, route, proof, scanner, or replay owner manifests."
+  ],
+  "route_store_references": [
+    {
+      "lifecycle": "archived_forward_replay_run",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/backtest/archived-forward",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "research_experiment_run",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/backtest/experiments",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/profitability-forensics",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/stability",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/daily-performance",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/health",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/market-data/cache-stats",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "market_data_cache_reset",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/market-data/cache-stats/reset",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/positions/{position_id}/close-prefill",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "prediction_delete",
+      "method": "DELETE",
+      "mutating": true,
+      "path": "/api/predictions/{pred_id}",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/profiles",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/proof-summary",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "position_recommendation_support",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/scan/recommendations",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "scan_roll_forward_write",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/scan/roll",
+      "store_id": "backend/domain",
+      "surface": "backend_only"
+    },
+    {
+      "lifecycle": "tool_dispatch",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/tools/[name]",
+      "store_id": "backend_tool_dispatch",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/forward-evidence",
+      "store_id": "forward_evidence_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "live_scan_run",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/scan",
+      "store_id": "forward_evidence_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "replay_run",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/backtest",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/comparison",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/exit-audit",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/last",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/live-policy",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/metric-truth",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/report",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/backtest/summary",
+      "store_id": "latest_replay_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "session_status",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/operator/session",
+      "store_id": "local_operator_session_cookie",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "session_unlock",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/operator/session",
+      "store_id": "local_operator_session_cookie",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/sectors",
+      "store_id": "market_data_cache",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/options-profit/status",
+      "store_id": "options_profit_state_artifacts",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/positions",
+      "store_id": "postgres_tracked_positions",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "create",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/positions",
+      "store_id": "postgres_tracked_positions",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "close",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/positions/[id]/close",
+      "store_id": "postgres_tracked_positions",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "review",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/positions/review",
+      "store_id": "postgres_tracked_positions",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/predictions",
+      "store_id": "predictions_json",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "prediction_grade",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/predictions/grade",
+      "store_id": "predictions_json",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/suggested-trades",
+      "store_id": "sqlite_suggested_trades",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "create",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/suggested-trades",
+      "store_id": "sqlite_suggested_trades",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "close",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/suggested-trades/[id]/close",
+      "store_id": "sqlite_suggested_trades",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "review",
+      "method": "POST",
+      "mutating": true,
+      "path": "/api/suggested-trades/review",
+      "store_id": "sqlite_suggested_trades",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/changelog",
+      "store_id": "strategy_profile_files",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/profile",
+      "store_id": "strategy_profile_files",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "profile_save",
+      "method": "PUT",
+      "mutating": true,
+      "path": "/api/profile",
+      "store_id": "strategy_profile_files",
+      "surface": "active_browser"
+    },
+    {
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "path": "/api/risk-settings",
+      "store_id": "strategy_profile_files",
+      "surface": "active_browser"
+    }
+  ],
+  "runtime_use": false,
+  "scope": "Generated readability and drift-check map for route, repository, local DB, artifact, and virtual storage ownership.",
+  "sources": [
+    "data/contracts/route-mutation-inventory.json",
+    "python-backend/repository_migrations.py",
+    "python-backend/repository_constraints.py",
+    "python-backend/repository_indexes.py",
+    "python-backend/local_db_hardening.py",
+    "python-backend/repository_parity.py"
+  ],
+  "stores": [
+    {
+      "hard_rules": [
+        "Do not mix AI commodity artifacts into browser Trading Desk storage ownership."
+      ],
+      "label": "AI commodity artifacts",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Separate AI commodity proof-first lane artifacts.",
+          "audit_checks": [
+            "classified_out_of_scope"
+          ],
+          "backup_rule": "Use AI commodity progress/acquisition runbooks.",
+          "database_id": "ai_commodity_artifacts",
+          "expected_connection_policy": [
+            "Owned by AI commodity lane tooling."
+          ],
+          "expected_tables": [],
+          "mutability": "outside_repository_scope",
+          "notes": "Separate non-browser proof lane; excluded from Trading Desk local DB hardening.",
+          "optional_tables": [],
+          "owner": "scripts/run_ai_commodity_opra_progress.py",
+          "path_pattern": "data/ai-commodity-infra/*",
+          "store_id": "ai_commodity_artifacts"
+        }
+      ],
+      "location": "data/ai-commodity-infra/*",
+      "notes": [],
+      "owner_docs": [
+        "docs/PROJECT_CONTEXT.md",
+        "docs/local-db-hardening.md"
+      ],
+      "owners": [
+        "scripts/run_ai_commodity_opra_progress.py"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Separate non-browser proof-first AI commodity lane artifacts.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "separate_lane",
+      "storage_role": "separate_lane",
+      "store_id": "ai_commodity_artifacts",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Do not treat backend/domain as a hidden DB or repository fallback."
+      ],
+      "label": "Backend domain placeholder",
+      "lifecycles": [
+        "archived_forward_replay_run",
+        "market_data_cache_reset",
+        "position_recommendation_support",
+        "prediction_delete",
+        "read",
+        "research_experiment_run",
+        "scan_roll_forward_write"
+      ],
+      "local_database_roles": [],
+      "location": "FastAPI backend-only route/domain logic",
+      "notes": [
+        "Use the route owner module for the concrete implementation path."
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-parity.md"
+      ],
+      "owners": [
+        "python-backend"
+      ],
+      "persistence": "virtual",
+      "production_role": "Placeholder for backend-only routes without a concrete route-lifecycle store contract.",
+      "record_classes": [
+        "backend_endpoint"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "backend_only"
+      ],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": [
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/positions/{position_id}/close-prefill",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "position_recommendation_support",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/scan/recommendations",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "scan_roll_forward_write",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/scan/roll",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/market-data/cache-stats",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "market_data_cache_reset",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/market-data/cache-stats/reset",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "archived_forward_replay_run",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/backtest/archived-forward",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "research_experiment_run",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/backtest/experiments",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/backtest/profitability-forensics",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/backtest/stability",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/daily-performance",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/health",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/proof-summary",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "prediction_delete",
+            "method": "DELETE",
+            "mutating": true,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/predictions/{pred_id}",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          },
+          {
+            "auth_boundary": "backend_bridge_token_when_configured",
+            "contract_ids": [
+              "backend_only"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend"
+            ],
+            "path": "/api/profiles",
+            "record_classes": [
+              "backend_endpoint"
+            ],
+            "route_group": "Backend-Only FastAPI",
+            "surface": "backend_only"
+          }
+        ]
+      },
+      "scope": "backend_support",
+      "storage_role": "backend_domain",
+      "store_id": "backend/domain",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Do not model backend tool dispatch as a concrete database."
+      ],
+      "label": "Backend tool dispatch",
+      "lifecycles": [
+        "tool_dispatch"
+      ],
+      "local_database_roles": [],
+      "location": "POST /api/tools/{name} dispatch",
+      "notes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-parity.md"
+      ],
+      "owners": [
+        "python-backend/tools_routes.py",
+        "python-backend/tools_routes.py /api/tools/{tool_name}",
+        "src/app/api/tools/[name]/route.ts"
+      ],
+      "persistence": "virtual",
+      "production_role": "Operator-gated tool invocation surface.",
+      "record_classes": [
+        "tool_result"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "tool_dispatch"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "tool_dispatch"
+            ],
+            "lifecycle": "tool_dispatch",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/tools_routes.py /api/tools/{tool_name}"
+            ],
+            "path": "/api/tools/[name]",
+            "record_classes": [
+              "tool_result"
+            ],
+            "route_group": "Support",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "backend_dispatch",
+      "store_id": "backend_tool_dispatch",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Forward evidence can support proof but does not make suggested trades production proof rows.",
+        "Exact-looking payloads without verified scan lineage remain proof-ineligible."
+      ],
+      "label": "Forward evidence artifacts",
+      "lifecycles": [
+        "live_scan_run",
+        "read"
+      ],
+      "local_database_roles": [],
+      "location": "data/options-validation/forward_tracking* and forward-evidence ledgers",
+      "notes": [],
+      "owner_docs": [
+        "docs/proof-evidence-contract.md",
+        "docs/scanner-creation-safety-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "data/forward-tracking and data/options-validation artifacts",
+        "forward_options_ledger.py",
+        "python-backend/main.py /api/scan and forward_options_ledger.py",
+        "python-backend/replay_profit_service.py"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Forward scan evidence, scanner lineage, and lifecycle event readbacks.",
+      "record_classes": [
+        "forward_evidence_report",
+        "scan_result"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "forward_evidence_read",
+        "scan_run"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "scan_run"
+            ],
+            "lifecycle": "live_scan_run",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/main.py /api/scan and forward_options_ledger.py"
+            ],
+            "path": "/api/scan",
+            "record_classes": [
+              "scan_result"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "forward_evidence_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "data/forward-tracking and data/options-validation artifacts"
+            ],
+            "path": "/api/backtest/forward-evidence",
+            "record_classes": [
+              "forward_evidence_report"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "route_artifact",
+      "store_id": "forward_evidence_artifacts",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Use forward-evidence runbooks rather than Trading Desk DB repair workflows."
+      ],
+      "label": "Forward tracking ledgers",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Canonical and archive forward-evidence ledgers.",
+          "audit_checks": [
+            "classified_out_of_scope"
+          ],
+          "backup_rule": "Use forward-evidence runbooks; do not repair from this Trading Desk audit.",
+          "database_id": "forward_tracking_ledgers",
+          "expected_connection_policy": [
+            "Owned by forward-evidence tooling, not Trading Desk repositories."
+          ],
+          "expected_tables": [],
+          "mutability": "outside_repository_scope",
+          "notes": "Forward evidence is proof-adjacent but not a local repository hardening target.",
+          "optional_tables": [],
+          "owner": "forward-evidence and options-profit tooling",
+          "path_pattern": "data/options-validation/forward_tracking*.db",
+          "store_id": "forward_tracking_ledgers"
+        }
+      ],
+      "location": "data/options-validation/forward_tracking*.db",
+      "notes": [],
+      "owner_docs": [
+        "docs/local-db-hardening.md",
+        "docs/proof-evidence-contract.md"
+      ],
+      "owners": [
+        "forward-evidence and options-profit tooling"
+      ],
+      "persistence": "sqlite",
+      "production_role": "Canonical and archive forward-evidence ledgers outside repository hardening.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "out_of_scope",
+      "storage_role": "out_of_scope_local_db",
+      "store_id": "forward_tracking_ledgers",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Replay artifacts do not redefine scanner policy or proof truth by themselves."
+      ],
+      "label": "Latest replay artifacts",
+      "lifecycles": [
+        "read",
+        "replay_run"
+      ],
+      "local_database_roles": [],
+      "location": "data/options-validation/* and related replay readbacks",
+      "notes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "python-backend/replay_profit_service.py",
+        "wfo_optimizer.py",
+        "wfo_optimizer.py build_live_trade_policy_report",
+        "wfo_optimizer.py build_metric_truth_report",
+        "wfo_optimizer.py build_playbook_exit_audit_report",
+        "wfo_optimizer.py build_prediction_replay_report",
+        "wfo_optimizer.py build_truth_lane_comparison_report",
+        "wfo_optimizer.py load_last_results_by_truth_lane",
+        "wfo_optimizer.py load_preferred_results_by_truth_lane",
+        "wfo_optimizer.py run_historical_backtest(save_result=True)"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Strategy Lab replay result, summary, report, comparison, and diagnostics artifacts.",
+      "record_classes": [
+        "backtest_artifact_bundle",
+        "backtest_result"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "backtest_last_read",
+        "backtest_report_read",
+        "backtest_run",
+        "backtest_summary_read",
+        "exit_audit_read",
+        "live_policy_read",
+        "metric_truth_read",
+        "truth_lane_comparison_read"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "backtest_run"
+            ],
+            "lifecycle": "replay_run",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "wfo_optimizer.py run_historical_backtest(save_result=True)"
+            ],
+            "path": "/api/backtest",
+            "record_classes": [
+              "backtest_result"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "backtest_summary_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py load_preferred_results_by_truth_lane"
+            ],
+            "path": "/api/backtest/summary",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "backtest_last_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py load_last_results_by_truth_lane"
+            ],
+            "path": "/api/backtest/last",
+            "record_classes": [
+              "backtest_result"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "live_policy_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py build_live_trade_policy_report"
+            ],
+            "path": "/api/backtest/live-policy",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "backtest_report_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py build_prediction_replay_report"
+            ],
+            "path": "/api/backtest/report",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "metric_truth_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py build_metric_truth_report"
+            ],
+            "path": "/api/backtest/metric-truth",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "truth_lane_comparison_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py build_truth_lane_comparison_report"
+            ],
+            "path": "/api/backtest/comparison",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "exit_audit_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "wfo_optimizer.py build_playbook_exit_audit_report"
+            ],
+            "path": "/api/backtest/exit-audit",
+            "record_classes": [
+              "backtest_artifact_bundle"
+            ],
+            "route_group": "Scan And Truth Diagnostics",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "route_artifact",
+      "store_id": "latest_replay_artifacts",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Session status is auth state, not repository or proof storage."
+      ],
+      "label": "Local operator session cookie",
+      "lifecycles": [
+        "session_status",
+        "session_unlock"
+      ],
+      "local_database_roles": [],
+      "location": "HttpOnly options_local_operator_session cookie",
+      "notes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "owners": [
+        "src/app/api/operator/session/route.ts",
+        "src/lib/operator-auth.ts"
+      ],
+      "persistence": "cookie",
+      "production_role": "Local browser unlock/session state for operator auth.",
+      "record_classes": [
+        "operator_session"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "operator_session_status",
+        "operator_session_unlock"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "next_only_session",
+            "contract_ids": [
+              "operator_session_status"
+            ],
+            "lifecycle": "session_status",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "src/lib/operator-auth.ts"
+            ],
+            "path": "/api/operator/session",
+            "record_classes": [
+              "operator_session"
+            ],
+            "route_group": "Operator Auth",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "next_only_session",
+            "contract_ids": [
+              "operator_session_unlock"
+            ],
+            "lifecycle": "session_unlock",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "src/lib/operator-auth.ts"
+            ],
+            "path": "/api/operator/session",
+            "record_classes": [
+              "operator_session"
+            ],
+            "route_group": "Operator Auth",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "session_cookie",
+      "store_id": "local_operator_session_cookie",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Outside Trading Desk repository migrations, constraints, indexes, and local DB repair."
+      ],
+      "label": "Market data cache",
+      "lifecycles": [
+        "read"
+      ],
+      "local_database_roles": [
+        {
+          "active_scope": "Market data cache and support data.",
+          "audit_checks": [
+            "classified_out_of_scope"
+          ],
+          "backup_rule": "Use market-data cache runbooks; cache rebuilds are outside Point 15.",
+          "database_id": "market_data_cache",
+          "expected_connection_policy": [
+            "Owned by market data cache code, not Trading Desk repositories."
+          ],
+          "expected_tables": [],
+          "mutability": "outside_repository_scope",
+          "notes": "Mutable cache, but outside Trading Desk repository migrations/constraints/indexes.",
+          "optional_tables": [],
+          "owner": "market data service and research support workflows",
+          "path_pattern": "market_data.db",
+          "store_id": "market_data_cache"
+        }
+      ],
+      "location": "market_data.db",
+      "notes": [
+        "Browser-readable support storage is not Trading Desk repository storage."
+      ],
+      "owner_docs": [
+        "docs/local-db-hardening.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "market data service and research support workflows",
+        "python-backend/main.py /api/sectors"
+      ],
+      "persistence": "sqlite_or_file_cache",
+      "production_role": "Market data cache and support readbacks such as sectors/cache stats.",
+      "record_classes": [
+        "sector_sentiment_snapshot"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "sectors_read"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "sectors_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend/main.py /api/sectors"
+            ],
+            "path": "/api/sectors",
+            "record_classes": [
+              "sector_sentiment_snapshot"
+            ],
+            "route_group": "Support",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "backend_support",
+      "storage_role": "support_cache",
+      "store_id": "market_data_cache",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Do not migrate or repair this store through Trading Desk repository contracts."
+      ],
+      "label": "Options history truth store",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Imported options truth store and replay input.",
+          "audit_checks": [
+            "classified_out_of_scope"
+          ],
+          "backup_rule": "Use options-history import/replay runbooks; do not repair from this Trading Desk audit.",
+          "database_id": "options_history_truth_store",
+          "expected_connection_policy": [
+            "Owned by options-history/import tooling, not Trading Desk repositories."
+          ],
+          "expected_tables": [],
+          "mutability": "outside_repository_scope",
+          "notes": "Large proof/research store; Point 15 does not open or mutate it by default.",
+          "optional_tables": [],
+          "owner": "historical_options_store.py and import/replay scripts",
+          "path_pattern": "data/options-validation/options_history.db",
+          "store_id": "options_history_truth_store"
+        }
+      ],
+      "location": "data/options-validation/options_history.db",
+      "notes": [],
+      "owner_docs": [
+        "docs/local-db-hardening.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "historical_options_store.py and import/replay scripts"
+      ],
+      "persistence": "sqlite",
+      "production_role": "Imported options truth store and replay input, outside Trading Desk repository hardening.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "out_of_scope",
+      "storage_role": "out_of_scope_local_db",
+      "store_id": "options_history_truth_store",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Options-profit status consumes proof and repository readbacks; it is not a proof owner."
+      ],
+      "label": "Options-profit state artifacts",
+      "lifecycles": [
+        "read"
+      ],
+      "local_database_roles": [],
+      "location": "data/options-profit/* and options-profit state",
+      "notes": [],
+      "owner_docs": [
+        "docs/replay-profit-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "options_profit_flywheel.py",
+        "options_profit_gate.py",
+        "python-backend/main.py /api/options-profit/status"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Options-profit status, gates, and proof/profit readbacks.",
+      "record_classes": [
+        "options_profit_status"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "options_profit_status_read"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "options_profit_status_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend/main.py /api/options-profit/status"
+            ],
+            "path": "/api/options-profit/status",
+            "record_classes": [
+              "options_profit_status"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "route_artifact",
+      "store_id": "options_profit_state_artifacts",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Tracked positions are Postgres-owned in the browser product.",
+        "Missing or failing DATABASE_URL fails closed through the unavailable sentinel.",
+        "Do not silently fall back to SQLite."
+      ],
+      "label": "Postgres tracked positions",
+      "lifecycles": [
+        "close",
+        "create",
+        "read",
+        "review"
+      ],
+      "local_database_roles": [],
+      "location": "DATABASE_URL",
+      "notes": [
+        "Proof definitions remain in the proof contract, not in storage ownership."
+      ],
+      "owner_docs": [
+        "docs/repository-contract.md",
+        "docs/api-and-storage.md",
+        "docs/repository-migrations.md",
+        "docs/repository-constraints.md",
+        "docs/repository-indexes.md"
+      ],
+      "owners": [
+        "python-backend/positions_repository.py",
+        "python-backend/positions_repository.py via DATABASE_URL",
+        "python-backend/positions_service.py and positions_repository.py via DATABASE_URL"
+      ],
+      "persistence": "postgres",
+      "production_role": "Production tracked-position rows, reviews, closes, proof/readback counts, and runtime health.",
+      "record_classes": [
+        "tracked_position"
+      ],
+      "repository_constraints_by_enforcement": {
+        "api_service_enforced": [
+          "close_exit_price_nonnegative",
+          "position_create_core_shape"
+        ],
+        "db_enforced": [
+          "repository_schema_migrations_unique_version",
+          "tracked_position_reviews_parent_fk",
+          "tracked_positions_primary_key"
+        ],
+        "deferred": [
+          "candidate_check_constraints",
+          "candidate_unique_open_contract"
+        ],
+        "proof_contract_owned": [
+          "proof_truth_not_sql"
+        ]
+      },
+      "repository_indexes_by_status": {
+        "candidate_deferred": [
+          "candidate_tracked_positions_status_closed_at",
+          "candidate_tracked_positions_status_filled_id",
+          "candidate_tracked_reviews_position_reviewed_id"
+        ],
+        "db_existing": [
+          "postgres_position_reviews_position_id",
+          "postgres_tracked_positions_filled_at",
+          "postgres_tracked_positions_status"
+        ]
+      },
+      "repository_migrations": [
+        {
+          "dialect": "postgres",
+          "migration_id": "tracked_positions_postgres_0001_current_schema_baseline",
+          "tables": [
+            "tracked_positions",
+            "position_reviews"
+          ]
+        }
+      ],
+      "route_contract_ids": [
+        "tracked_positions_close",
+        "tracked_positions_create",
+        "tracked_positions_read",
+        "tracked_positions_review"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "tracked_positions_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend/positions_repository.py via DATABASE_URL"
+            ],
+            "path": "/api/positions",
+            "record_classes": [
+              "tracked_position"
+            ],
+            "route_group": "Tracked Positions",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "tracked_positions_create"
+            ],
+            "lifecycle": "create",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/positions_repository.py via DATABASE_URL"
+            ],
+            "path": "/api/positions",
+            "record_classes": [
+              "tracked_position"
+            ],
+            "route_group": "Tracked Positions",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "tracked_positions_review"
+            ],
+            "lifecycle": "review",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/positions_service.py and positions_repository.py via DATABASE_URL"
+            ],
+            "path": "/api/positions/review",
+            "record_classes": [
+              "tracked_position"
+            ],
+            "route_group": "Tracked Positions",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "tracked_positions_close"
+            ],
+            "lifecycle": "close",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/positions_repository.py via DATABASE_URL"
+            ],
+            "path": "/api/positions/[id]/close",
+            "record_classes": [
+              "tracked_position"
+            ],
+            "route_group": "Tracked Positions",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "active_repository",
+      "store_id": "postgres_tracked_positions",
+      "tables": [
+        "position_reviews",
+        "repository_schema_migrations",
+        "tracked_positions"
+      ]
+    },
+    {
+      "hard_rules": [
+        "Do not treat prediction history as Trading Desk repository proof storage."
+      ],
+      "label": "Predictions JSON",
+      "lifecycles": [
+        "prediction_grade",
+        "read"
+      ],
+      "local_database_roles": [],
+      "location": "predictions.json",
+      "notes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "owners": [
+        "options_chatbot.py predictions.json",
+        "python-backend/predictions_routes.py",
+        "python-backend/predictions_routes.py grade_predictions_endpoint"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Prediction history and grade route artifact state.",
+      "record_classes": [
+        "prediction_history"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "predictions_grade",
+        "predictions_read"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "predictions_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "options_chatbot.py predictions.json"
+            ],
+            "path": "/api/predictions",
+            "record_classes": [
+              "prediction_history"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "predictions_grade"
+            ],
+            "lifecycle": "prediction_grade",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/predictions_routes.py grade_predictions_endpoint"
+            ],
+            "path": "/api/predictions/grade",
+            "record_classes": [
+              "prediction_history"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "route_artifact",
+      "store_id": "predictions_json",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Do not treat sidecars or backups as active stores."
+      ],
+      "label": "SQLite sidecars and backups",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "SQLite sidecars and backups generated by local runtime or repair scripts.",
+          "audit_checks": [
+            "classified_ignored"
+          ],
+          "backup_rule": "Keep ignored locally unless a specific recovery workflow needs them.",
+          "database_id": "sqlite_sidecars_and_backups",
+          "expected_connection_policy": [
+            "Do not treat sidecars or backups as active stores."
+          ],
+          "expected_tables": [],
+          "mutability": "ignored_sidecar_or_backup",
+          "notes": "Audit scripts may enumerate these files but must not delete or rewrite them.",
+          "optional_tables": [],
+          "owner": ".gitignore and manual backup hygiene",
+          "path_pattern": "*.db-wal, *.db-shm, chat_history.backup-*.db, data/tracked_positions.backup-*",
+          "store_id": "sqlite_sidecars_and_backups"
+        }
+      ],
+      "location": "*.db-wal, *.db-shm, chat_history.backup-*.db, data/tracked_positions.backup-*",
+      "notes": [],
+      "owner_docs": [
+        "docs/local-db-hardening.md"
+      ],
+      "owners": [
+        ".gitignore and manual backup hygiene"
+      ],
+      "persistence": "sqlite_sidecar_or_backup",
+      "production_role": "Local sidecars and backups generated by runtime or repair workflows.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "out_of_scope",
+      "storage_role": "ignored_sidecar_or_backup",
+      "store_id": "sqlite_sidecars_and_backups",
+      "tables": []
+    },
+    {
+      "hard_rules": [
+        "Suggested trades remain separate from tracked-position proof rows.",
+        "Suggested trades are not broker fills and do not feed production proof truth."
+      ],
+      "label": "SQLite suggested trades",
+      "lifecycles": [
+        "close",
+        "create",
+        "read",
+        "review"
+      ],
+      "local_database_roles": [
+        {
+          "active_scope": "Trading Desk suggested trades and local paper workflow state.",
+          "audit_checks": [
+            "exists_or_skipped",
+            "read_only_uri_open",
+            "quick_check",
+            "foreign_key_check",
+            "required_tables",
+            "sidecar_and_backup_inventory"
+          ],
+          "backup_rule": "Create an application-aware SQLite backup before manual mutation; do not prune backups from audit scripts.",
+          "database_id": "chat_history_sqlite_suggested_trades",
+          "expected_connection_policy": [
+            "repository write connections enable PRAGMA foreign_keys=ON",
+            "audits open existing files with SQLite mode=ro and do not initialize schema"
+          ],
+          "expected_tables": [
+            "suggested_trades",
+            "suggested_trade_reviews"
+          ],
+          "mutability": "active_mutable",
+          "notes": "This is the only active mutable Trading Desk SQLite browser store.",
+          "optional_tables": [
+            "repository_schema_migrations",
+            "sessions",
+            "messages",
+            "session_context"
+          ],
+          "owner": "python-backend/suggested_trades_repository.py",
+          "path_pattern": "chat_history.db",
+          "store_id": "sqlite_suggested_trades"
+        }
+      ],
+      "location": "chat_history.db",
+      "notes": [
+        "Repository write connections enable SQLite foreign keys."
+      ],
+      "owner_docs": [
+        "docs/repository-contract.md",
+        "docs/api-and-storage.md",
+        "docs/local-db-hardening.md",
+        "docs/repository-migrations.md",
+        "docs/repository-constraints.md",
+        "docs/repository-indexes.md"
+      ],
+      "owners": [
+        "python-backend/positions_service.py and suggested_trades_repository.py via chat_history.db",
+        "python-backend/suggested_trades_repository.py",
+        "python-backend/suggested_trades_repository.py via chat_history.db"
+      ],
+      "persistence": "sqlite",
+      "production_role": "Local paper and hypothetical suggested-trade workflow state.",
+      "record_classes": [
+        "suggested_trade"
+      ],
+      "repository_constraints_by_enforcement": {
+        "api_service_enforced": [
+          "suggested_trade_create_core_shape"
+        ],
+        "db_enforced": [
+          "sqlite_suggested_repository_schema_migrations_unique_version",
+          "suggested_trade_reviews_parent_fk",
+          "suggested_trades_primary_key"
+        ]
+      },
+      "repository_indexes_by_status": {
+        "candidate_deferred": [
+          "candidate_suggested_trades_status_filled_id"
+        ],
+        "db_existing": [
+          "sqlite_suggested_trade_reviews_position_id",
+          "sqlite_suggested_trades_filled_at",
+          "sqlite_suggested_trades_status"
+        ]
+      },
+      "repository_migrations": [
+        {
+          "dialect": "sqlite",
+          "migration_id": "suggested_trades_sqlite_0001_current_schema_baseline",
+          "tables": [
+            "suggested_trades",
+            "suggested_trade_reviews"
+          ]
+        }
+      ],
+      "route_contract_ids": [
+        "suggested_trades_close",
+        "suggested_trades_create",
+        "suggested_trades_read",
+        "suggested_trades_review"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "suggested_trades_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend/suggested_trades_repository.py via chat_history.db"
+            ],
+            "path": "/api/suggested-trades",
+            "record_classes": [
+              "suggested_trade"
+            ],
+            "route_group": "Suggested Trades",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "suggested_trades_create"
+            ],
+            "lifecycle": "create",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/suggested_trades_repository.py via chat_history.db"
+            ],
+            "path": "/api/suggested-trades",
+            "record_classes": [
+              "suggested_trade"
+            ],
+            "route_group": "Suggested Trades",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "suggested_trades_review"
+            ],
+            "lifecycle": "review",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/positions_service.py and suggested_trades_repository.py via chat_history.db"
+            ],
+            "path": "/api/suggested-trades/review",
+            "record_classes": [
+              "suggested_trade"
+            ],
+            "route_group": "Suggested Trades",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "suggested_trades_close"
+            ],
+            "lifecycle": "close",
+            "method": "POST",
+            "mutating": true,
+            "owners": [
+              "python-backend/suggested_trades_repository.py via chat_history.db"
+            ],
+            "path": "/api/suggested-trades/[id]/close",
+            "record_classes": [
+              "suggested_trade"
+            ],
+            "route_group": "Suggested Trades",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "active_repository",
+      "store_id": "sqlite_suggested_trades",
+      "tables": [
+        "repository_schema_migrations",
+        "suggested_trade_reviews",
+        "suggested_trades"
+      ]
+    },
+    {
+      "hard_rules": [
+        "Do not route browser tracked-position traffic to this store.",
+        "Do not promote this store to production fallback behavior."
+      ],
+      "label": "SQLite tracked positions test/legacy",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Explicit tests and legacy tools only; never the browser tracked-position fallback.",
+          "audit_checks": [
+            "exists_or_skipped",
+            "read_only_uri_open",
+            "quick_check",
+            "foreign_key_check",
+            "required_tables",
+            "sidecar_and_backup_inventory"
+          ],
+          "backup_rule": "Prefer JSON snapshots or SQLite backup API for legacy repair scripts; do not copy live SQLite files without quiescing writers.",
+          "database_id": "tracked_positions_sqlite_test_legacy",
+          "expected_connection_policy": [
+            "repository connections enable PRAGMA foreign_keys=ON",
+            "legacy repository connections currently request PRAGMA journal_mode=WAL",
+            "audits open existing files with SQLite mode=ro and do not initialize schema"
+          ],
+          "expected_tables": [
+            "tracked_positions",
+            "position_reviews"
+          ],
+          "mutability": "test_legacy_mutable",
+          "notes": "This DB is local legacy/test state and must not replace Postgres tracked positions.",
+          "optional_tables": [
+            "repository_schema_migrations"
+          ],
+          "owner": "python-backend/positions_repository.py::SqliteTrackedPositionsRepository",
+          "path_pattern": "data/tracked_positions.db",
+          "store_id": "sqlite_tracked_positions_test_legacy"
+        }
+      ],
+      "location": "data/tracked_positions.db",
+      "notes": [
+        "Kept visible so agents do not mistake legacy SQLite for production tracked storage."
+      ],
+      "owner_docs": [
+        "docs/repository-contract.md",
+        "docs/local-db-hardening.md",
+        "docs/repository-migrations.md"
+      ],
+      "owners": [
+        "python-backend/positions_repository.py::SqliteTrackedPositionsRepository"
+      ],
+      "persistence": "sqlite",
+      "production_role": "Explicit tests and legacy tools only; not browser tracked-position fallback.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {
+        "db_enforced": [
+          "sqlite_tracked_positions_test_legacy_parent_fk",
+          "sqlite_tracked_repository_schema_migrations_unique_version"
+        ]
+      },
+      "repository_indexes_by_status": {
+        "db_existing": [
+          "sqlite_position_reviews_position_id",
+          "sqlite_tracked_positions_filled_at",
+          "sqlite_tracked_positions_status"
+        ]
+      },
+      "repository_migrations": [
+        {
+          "dialect": "sqlite",
+          "migration_id": "tracked_positions_sqlite_0001_current_schema_baseline",
+          "tables": [
+            "tracked_positions",
+            "position_reviews"
+          ]
+        }
+      ],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "test_legacy",
+      "storage_role": "test_legacy_repository",
+      "store_id": "sqlite_tracked_positions_test_legacy",
+      "tables": [
+        "position_reviews",
+        "repository_schema_migrations",
+        "tracked_positions"
+      ]
+    },
+    {
+      "hard_rules": [
+        "Profile saves require local operator auth and mutation intent at the route boundary."
+      ],
+      "label": "Strategy profile files",
+      "lifecycles": [
+        "profile_save",
+        "read"
+      ],
+      "local_database_roles": [],
+      "location": "strategy_profile.json, brain_changelog.json, and risk/profile artifacts",
+      "notes": [],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "owners": [
+        "options_chatbot.py CHANGELOG_FILES and brain_changelog*.json",
+        "options_chatbot.py STRATEGY_PROFILES and strategy_profile.json",
+        "options_chatbot.py _save_profile and profile changelog files",
+        "python-backend/profile_routes.py",
+        "python-backend/profile_routes.py /api/risk"
+      ],
+      "persistence": "file_artifact",
+      "production_role": "Strategy Lab profile, risk, and changelog state.",
+      "record_classes": [
+        "risk_settings",
+        "strategy_profile"
+      ],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [
+        "profile_changelog_read",
+        "profile_read",
+        "profile_save",
+        "risk_settings_read"
+      ],
+      "route_references": {
+        "active_browser": [
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "profile_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "options_chatbot.py STRATEGY_PROFILES and strategy_profile.json"
+            ],
+            "path": "/api/profile",
+            "record_classes": [
+              "strategy_profile"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "local_operator",
+            "contract_ids": [
+              "profile_save"
+            ],
+            "lifecycle": "profile_save",
+            "method": "PUT",
+            "mutating": true,
+            "owners": [
+              "options_chatbot.py _save_profile and profile changelog files"
+            ],
+            "path": "/api/profile",
+            "record_classes": [
+              "strategy_profile"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "profile_changelog_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "options_chatbot.py CHANGELOG_FILES and brain_changelog*.json"
+            ],
+            "path": "/api/changelog",
+            "record_classes": [
+              "strategy_profile"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          },
+          {
+            "auth_boundary": "same_origin_read",
+            "contract_ids": [
+              "risk_settings_read"
+            ],
+            "lifecycle": "read",
+            "method": "GET",
+            "mutating": false,
+            "owners": [
+              "python-backend/profile_routes.py /api/risk"
+            ],
+            "path": "/api/risk-settings",
+            "record_classes": [
+              "risk_settings"
+            ],
+            "route_group": "Profiles, Predictions, And Status",
+            "surface": "active_browser"
+          }
+        ],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "route_artifact",
+      "store_id": "strategy_profile_files",
+      "tables": []
+    }
+  ],
+  "tracked_suggested_parity": {
+    "record_boundaries": [
+      {
+        "category": "intentional_difference",
+        "notes": "Route headers and docs must keep the store and record class distinct.",
+        "parity_id": "store_and_record_class_split",
+        "rule": "Never collapse suggested trades into tracked positions or tracked positions into SQLite fallback state.",
+        "suggested": "sqlite_suggested_trades / suggested_trade",
+        "tracked": "postgres_tracked_positions / tracked_position"
+      },
+      {
+        "category": "tracked_only",
+        "notes": "Suggested source snapshots can contain scanner context, but suggested rows are not production proof rows.",
+        "parity_id": "tracked_only_proof_fields",
+        "rule": "Proof/source-scan top-level fields stay tracked-position-only.",
+        "suggested": "absent from suggested_trades top-level rows",
+        "tracked": "source_scan_session_id, source_scan_event_key, source_scan_run_id, source_scan_recorded_at_utc, proof_eligible, proof_ineligibility_reason, proof_class, proof_class_reason"
+      },
+      {
+        "category": "tracked_only",
+        "notes": "Suggested-trade mutations are local paper workflow state and do not write lifecycle proof events.",
+        "parity_id": "tracked_only_lifecycle_event_persistence",
+        "rule": "Forward-evidence lifecycle event persistence remains tracked-position-only.",
+        "suggested": "absent from suggested create/review/close responses",
+        "tracked": "position_event_persistence"
+      },
+      {
+        "category": "tracked_only",
+        "notes": "Open paper ideas can be reviewed for operator workflow, not proof-lane claims.",
+        "parity_id": "tracked_only_profit_readbacks",
+        "rule": "Suggested trades do not feed proof-summary or options-profit production truth.",
+        "suggested": "not required and not production proof/profit input",
+        "tracked": "profit_status_snapshot, list_compact_positions, get_realized_pnl_since"
+      },
+      {
+        "category": "suggested_trade_boundary",
+        "notes": "This boundary survives even when scanner-origin safety gates are shared.",
+        "parity_id": "suggested_trade_paper_boundary",
+        "rule": "Suggested trades are not broker fills, not production proof, and not a tracked-position fallback.",
+        "suggested": "local paper/hypothetical suggested trades",
+        "tracked": "production tracked positions and historical learning rows"
+      }
+    ],
+    "route_parity": [
+      {
+        "intentional_difference": "Tracked readbacks can feed proof/profit summaries; suggested reads are paper ideas only.",
+        "lifecycle": "read",
+        "shared_contract": "status filtering, optional paging, grouped all-status reads, and lifecycle headers",
+        "suggested_method": "GET",
+        "suggested_record_class": "suggested_trade",
+        "suggested_response_key": "trades",
+        "suggested_route": "/api/suggested-trades",
+        "suggested_store_id": "sqlite_suggested_trades",
+        "tracked_method": "GET",
+        "tracked_record_class": "tracked_position",
+        "tracked_response_key": "positions",
+        "tracked_route": "/api/positions",
+        "tracked_store_id": "postgres_tracked_positions"
+      },
+      {
+        "intentional_difference": "Tracked creates persist proof/source-scan fields and lifecycle event status; suggested creates do not.",
+        "lifecycle": "create",
+        "shared_contract": "manual/scanner-origin payload building and scanner creation-safety validation",
+        "suggested_method": "POST",
+        "suggested_record_class": "suggested_trade",
+        "suggested_response_key": "trade",
+        "suggested_route": "/api/suggested-trades",
+        "suggested_store_id": "sqlite_suggested_trades",
+        "tracked_method": "POST",
+        "tracked_record_class": "tracked_position",
+        "tracked_response_key": "position",
+        "tracked_route": "/api/positions",
+        "tracked_store_id": "postgres_tracked_positions"
+      },
+      {
+        "intentional_difference": "Tracked reviews report position_event_persistence; suggested reviews update paper ideas only.",
+        "lifecycle": "review",
+        "shared_contract": "positions_service.review_open_positions computes review payloads for open rows",
+        "suggested_method": "POST",
+        "suggested_record_class": "suggested_trade",
+        "suggested_response_key": "trades",
+        "suggested_route": "/api/suggested-trades/review",
+        "suggested_store_id": "sqlite_suggested_trades",
+        "tracked_method": "POST",
+        "tracked_record_class": "tracked_position",
+        "tracked_response_key": "positions",
+        "tracked_route": "/api/positions/review",
+        "tracked_store_id": "postgres_tracked_positions"
+      },
+      {
+        "intentional_difference": "Suggested close reason is manual_hypothetical_close and never broker/live proof.",
+        "lifecycle": "close",
+        "shared_contract": "close rows store exit price, close time, P&L snapshot, and synthetic SELL latest_review",
+        "suggested_method": "POST",
+        "suggested_record_class": "suggested_trade",
+        "suggested_response_key": "trade",
+        "suggested_route": "/api/suggested-trades/{id}/close",
+        "suggested_store_id": "sqlite_suggested_trades",
+        "tracked_method": "POST",
+        "tracked_record_class": "tracked_position",
+        "tracked_response_key": "position",
+        "tracked_route": "/api/positions/{id}/close",
+        "tracked_store_id": "postgres_tracked_positions"
+      }
+    ]
+  },
+  "validation": {
+    "errors": []
+  }
+}

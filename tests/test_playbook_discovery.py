@@ -77,6 +77,17 @@ class PlaybookDiscoveryTests(unittest.TestCase):
                         ss.POSITION_TRACKING_DISABLED,
                     },
                 )
+                if playbook_id == ss.AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID:
+                    self.assertEqual(playbook["position_tracking_mode"], ss.POSITION_TRACKING_DISABLED)
+                    self.assertEqual(playbook["proof_scope"], ss.COMMODITY_PROOF_SCOPE)
+                else:
+                    self.assertEqual(playbook["position_tracking_mode"], ss.POSITION_TRACKING_AUTO_TRACK)
+                    expected_proof_scope = (
+                        ss.REGULAR_CONTROL_PROOF_SCOPE
+                        if playbook_id == ss.QUALITY90_DEBIT55_CANARY_COHORT_ID
+                        else ss.REGULAR_PROOF_SCOPE
+                    )
+                    self.assertEqual(playbook["proof_scope"], expected_proof_scope)
 
     def test_exit_audit_fallback_tracks_bullish_pullback_playbook(self):
         self.assertEqual(wfo.PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK, "bullish_pullback_observation")

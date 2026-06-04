@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
-import { RefreshCw, Timer, CheckCircle, BarChart3, DollarSign, Map, BriefcaseBusiness, Clipboard } from "lucide-react";
+import { RefreshCw, Timer, CheckCircle, BarChart3, DollarSign, Map, BriefcaseBusiness, Clipboard, type LucideIcon } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import Button from "@/components/ui/Button";
 import { MetricGridSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
@@ -21,48 +21,33 @@ import {
   type TrackedStockSummary,
 } from "@/components/predictions/TrackedStocksTab";
 import { TrackedPositionsTab } from "@/components/predictions/TrackedPositionsTab";
-import {
-  fmtDate,
-  fmtDateTime,
-  fmtMoney,
-  fmtPct,
-  fmtPricingSource,
-  metricToneClass,
-} from "@/components/predictions/tradingDeskFormat";
-import {
-  formatSignalLabel,
-  getLatestRecommendation,
-  getResolvedListedExpiry,
-  getReviewedAt,
-  getShareSafeReason,
-} from "@/components/predictions/tradingDeskCells";
+import { CloseTradeModal } from "@/components/predictions/CloseTradeModal";
+import { getLatestRecommendation } from "@/components/predictions/tradingDeskCells";
 import {
   buildContractSignature,
-  fmtTakenDate,
   getPositionLaneDescriptor,
   getSignalGivenDateValue,
   getTradeDateFilterValue,
   latestDateValue,
 } from "@/components/predictions/trackedPositionUtils";
+import { useTradingDeskCloseDialogs } from "@/components/predictions/useTradingDeskCloseDialogs";
 import { useScannerSurface } from "@/components/predictions/useScannerSurface";
 import { useTradingDeskRecords } from "@/components/predictions/useTradingDeskRecords";
 import type {
-  CloseSuggestedTradeRequest,
-  CloseTrackedPositionRequest,
-  CreateSuggestedTradeRequest,
-  CreateTrackedPositionRequest,
   Prediction,
   ScanPick,
   SectorSentiment,
   SuggestedTrade,
   TrackedPosition,
 } from "@/lib/types";
+import type {
+  CreateSuggestedTradeRequest,
+  CreateSuggestedTradeResponse,
+  CreateTrackedPositionRequest,
+  CreateTrackedPositionResponse,
+} from "@/lib/trading-desk/apiContracts";
 import {
-  calcNetOptionPnlPct,
   getCloseNowPnlPct,
-  getCloseNowPrice,
-  getEntryExecutionPrice,
-  getMarkPrice,
   getRealizedPnlPct,
   isRealizedPnlClosedPosition,
   isProductionProofPosition,
@@ -70,10 +55,23 @@ import {
   positionQualityPnlPct,
 } from "@/lib/trading-desk/positionEvidence";
 import { tradingDeskMutationHeaders } from "@/lib/trading-desk/mutationIntent";
+import {
+  isLegacyPredictionTabId,
+  resolveTradingDeskVisibleTab,
+  toTradingDeskVisibleTabId,
+  type TradingDeskPositionsView,
+  type TradingDeskSubTabId,
+  type TradingDeskVisibleTabId,
+} from "@/components/predictions/tradingDeskTabs";
 
 const INDEX_TICKERS = new Set(["QQQ", "SPY", "IWM", "DIA", "XLK"]);
-const LEGACY_PREDICTION_TABS = new Set(["pending", "graded", "breakdown", "sim", "sectors"]);
 const POSITION_SYNC_INTERVAL_MS = 60000;
+
+type TradingDeskTabButton = {
+  id: TradingDeskVisibleTabId;
+  label: string;
+  icon: LucideIcon;
+};
 
 const SuggestedTradesTab = dynamic(
   () => import("@/components/predictions/SuggestedTradesTab").then((mod) => mod.SuggestedTradesTab),
@@ -84,13 +82,6 @@ const ScannerTab = dynamic(
   () => import("@/components/predictions/ScannerTab").then((mod) => mod.ScannerTab),
   { loading: () => <TableSkeleton rows={6} /> }
 );
-
-function parseNonnegativePriceInput(value: string): number | null {
-  const normalized = value.trim();
-  if (!normalized) return null;
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
 
 function buildTrackedStockSummaries(
   openPositions: TrackedPosition[],
@@ -188,7 +179,7 @@ function buildTrackedStockSummaries(
 export default function PredictionsView() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [sectors, setSectors] = useState<SectorSentiment[]>([]);
-  const [activeSubTab, setActiveSubTab] = useState("positions");
+  const [activeSubTab, setActiveSubTab] = useState<TradingDeskSubTabId>("positions");
   const [loading, setLoading] = useState(true);
   const [grading, setGrading] = useState(false);
   const [predictionsLoaded, setPredictionsLoaded] = useState(false);
@@ -202,16 +193,8 @@ export default function PredictionsView() {
   const [takingTrade, setTakingTrade] = useState(false);
   const [savingSuggestedTrade, setSavingSuggestedTrade] = useState(false);
   const [showLegacyTabs, setShowLegacyTabs] = useState(false);
-  const [positionsView, setPositionsView] = useState<"open" | "closed">("open");
-  const [closingPosition, setClosingPosition] = useState<TrackedPosition | null>(null);
-  const [exitPrice, setExitPrice] = useState("");
-  const [closeNotes, setCloseNotes] = useState("");
-  const [closingId, setClosingId] = useState<number | null>(null);
-  const [suggestedTradesView, setSuggestedTradesView] = useState<"open" | "closed">("open");
-  const [closingSuggestedTrade, setClosingSuggestedTrade] = useState<SuggestedTrade | null>(null);
-  const [suggestedExitPrice, setSuggestedExitPrice] = useState("");
-  const [suggestedCloseNotes, setSuggestedCloseNotes] = useState("");
-  const [closingSuggestedTradeId, setClosingSuggestedTradeId] = useState<number | null>(null);
+  const [positionsView, setPositionsView] = useState<TradingDeskPositionsView>("open");
+  const [suggestedTradesView, setSuggestedTradesView] = useState<TradingDeskPositionsView>("open");
   const toast = useToast();
   const { guard } = useSubmitGuard();
   const {
@@ -264,6 +247,19 @@ export default function PredictionsView() {
     mergeTrackedPosition,
     mergeSuggestedTrade,
   } = useTradingDeskRecords();
+  const {
+    openCloseForm,
+    openCloseSuggestedTradeForm,
+    trackedCloseModalProps,
+    suggestedCloseModalProps,
+  } = useTradingDeskCloseDialogs({
+    guard,
+    toast,
+    mergeTrackedPosition,
+    mergeSuggestedTrade,
+    fetchPositions,
+    fetchSuggestedTrades,
+  });
   const predictionDataRequestIdRef = useRef(0);
 
   const fetchPredictionsData = useCallback(async ({
@@ -347,7 +343,7 @@ export default function PredictionsView() {
   }, [fetchPositions]);
 
   useEffect(() => {
-    if (!LEGACY_PREDICTION_TABS.has(activeSubTab)) return;
+    if (!isLegacyPredictionTabId(activeSubTab)) return;
     const includePredictions = !predictionsLoaded;
     const includeSectors = activeSubTab === "sectors" && !sectorsLoaded;
     if (!includePredictions && !includeSectors) return;
@@ -383,7 +379,7 @@ export default function PredictionsView() {
   }, [activeSubTab, closedSuggestedTradesLoaded, fetchClosedSuggestedTradesPage, suggestedTradesView]);
 
   useEffect(() => {
-    if (!showLegacyTabs && (LEGACY_PREDICTION_TABS.has(activeSubTab) || activeSubTab === "suggestions" || activeSubTab === "scanner")) {
+    if (!showLegacyTabs && (isLegacyPredictionTabId(activeSubTab) || activeSubTab === "suggestions" || activeSubTab === "scanner")) {
       setPositionsView("open");
       setActiveSubTab("positions");
     }
@@ -460,10 +456,7 @@ export default function PredictionsView() {
           headers: tradingDeskMutationHeaders("create_tracked_position"),
           body: JSON.stringify(payload),
         }, "Create tracked position");
-        const data = await readJsonResponseOrThrow<{
-          duplicate?: boolean;
-          position?: TrackedPosition;
-        }>(res, "Create tracked position");
+        const data = await readJsonResponseOrThrow<CreateTrackedPositionResponse>(res, "Create tracked position");
         if (data.position) {
           mergeTrackedPosition(data.position as TrackedPosition);
         }
@@ -507,10 +500,7 @@ export default function PredictionsView() {
           headers: tradingDeskMutationHeaders("create_suggested_trade"),
           body: JSON.stringify(payload),
         }, "Create suggested trade");
-        const data = await readJsonResponseOrThrow<{
-          duplicate?: boolean;
-          trade?: SuggestedTrade;
-        }>(res, "Create suggested trade");
+        const data = await readJsonResponseOrThrow<CreateSuggestedTradeResponse>(res, "Create suggested trade");
         if (data.trade) {
           mergeSuggestedTrade(data.trade as SuggestedTrade);
         }
@@ -523,108 +513,6 @@ export default function PredictionsView() {
         toast.error(err instanceof Error ? err.message : "Failed to save suggested trade.");
       } finally {
         setSavingSuggestedTrade(false);
-      }
-    });
-  };
-
-  const openCloseForm = useCallback((position: TrackedPosition) => {
-    setClosingPosition(position);
-    const suggestedExitPrice = getCloseNowPrice(position) ?? position.last_option_price;
-    setExitPrice(suggestedExitPrice != null ? suggestedExitPrice.toFixed(2) : "");
-    setCloseNotes("");
-  }, []);
-
-  const cancelCloseForm = useCallback(() => {
-    setClosingPosition(null);
-    setExitPrice("");
-    setCloseNotes("");
-    setClosingId(null);
-  }, []);
-
-  const openCloseSuggestedTradeForm = useCallback((trade: SuggestedTrade) => {
-    setClosingSuggestedTrade(trade);
-    const suggestedExitPrice = getCloseNowPrice(trade) ?? trade.last_option_price;
-    setSuggestedExitPrice(suggestedExitPrice != null ? suggestedExitPrice.toFixed(2) : "");
-    setSuggestedCloseNotes("");
-  }, []);
-
-  const cancelCloseSuggestedTradeForm = useCallback(() => {
-    setClosingSuggestedTrade(null);
-    setSuggestedExitPrice("");
-    setSuggestedCloseNotes("");
-    setClosingSuggestedTradeId(null);
-  }, []);
-
-  const submitClosePosition = async () => {
-    if (!closingPosition) return;
-    const parsedExitPrice = parseNonnegativePriceInput(exitPrice);
-    if (parsedExitPrice == null) {
-      toast.error("Enter a valid exit price of 0 or greater.");
-      return;
-    }
-    await guard(async () => {
-      setClosingId(closingPosition.id);
-      try {
-        const payload: CloseTrackedPositionRequest = {
-          exit_price: parsedExitPrice,
-          notes: closeNotes || undefined,
-        };
-        const res = await fetchWithTimeout(`/api/positions/${closingPosition.id}/close`, {
-          method: "POST",
-          headers: tradingDeskMutationHeaders("close_tracked_position"),
-          body: JSON.stringify(payload),
-        }, "Close tracked position");
-        const data = await readJsonResponseOrThrow<{ position?: TrackedPosition }>(
-          res,
-          "Close tracked position"
-        );
-        if (data.position) {
-          mergeTrackedPosition(data.position as TrackedPosition);
-        }
-        cancelCloseForm();
-        toast.success("Tracked position closed.");
-        void fetchPositions();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to close tracked position.");
-      } finally {
-        setClosingId(null);
-      }
-    });
-  };
-
-  const submitCloseSuggestedTrade = async () => {
-    if (!closingSuggestedTrade) return;
-    const parsedExitPrice = parseNonnegativePriceInput(suggestedExitPrice);
-    if (parsedExitPrice == null) {
-      toast.error("Enter a valid exit price of 0 or greater.");
-      return;
-    }
-    await guard(async () => {
-      setClosingSuggestedTradeId(closingSuggestedTrade.id);
-      try {
-        const payload: CloseSuggestedTradeRequest = {
-          exit_price: parsedExitPrice,
-          notes: suggestedCloseNotes || undefined,
-        };
-        const res = await fetchWithTimeout(`/api/suggested-trades/${closingSuggestedTrade.id}/close`, {
-          method: "POST",
-          headers: tradingDeskMutationHeaders("close_suggested_trade"),
-          body: JSON.stringify(payload),
-        }, "Close suggested trade");
-        const data = await readJsonResponseOrThrow<{ trade?: SuggestedTrade }>(
-          res,
-          "Close suggested trade"
-        );
-        if (data.trade) {
-          mergeSuggestedTrade(data.trade as SuggestedTrade);
-        }
-        cancelCloseSuggestedTradeForm();
-        toast.success("Suggested trade closed.");
-        void fetchSuggestedTrades();
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to close suggested trade.");
-      } finally {
-        setClosingSuggestedTradeId(null);
       }
     });
   };
@@ -675,10 +563,10 @@ export default function PredictionsView() {
       : `Tracked Stocks (${trackedStockCount})`;
 
   const PRIMARY_SUB_TABS = [
-    { id: "positions", label: `Open (${openPositions.length})`, icon: BriefcaseBusiness, targetView: "open" as const },
-    { id: "closed-trades", label: closedPositionCountLabel, icon: CheckCircle, targetView: "closed" as const },
+    { id: "positions", label: `Open (${openPositions.length})`, icon: BriefcaseBusiness },
+    { id: "closed-trades", label: closedPositionCountLabel, icon: CheckCircle },
     { id: "tracked-stocks", label: trackedStockCountLabel, icon: Map },
-  ] as const;
+  ] as const satisfies readonly TradingDeskTabButton[];
   const LEGACY_SUB_TABS = [
     { id: "scanner", label: `Live Scan (${scanPicks.length})`, icon: RefreshCw },
     { id: "suggestions", label: `Paper (${openSuggestedTrades.length})`, icon: Clipboard },
@@ -687,13 +575,17 @@ export default function PredictionsView() {
     { id: "breakdown", label: "Breakdown", icon: BarChart3 },
     { id: "sim", label: "Portfolio Sim", icon: DollarSign },
     { id: "sectors", label: "Sectors", icon: Map },
-  ] as const;
-  const SUB_TABS = showLegacyTabs ? [...PRIMARY_SUB_TABS, ...LEGACY_SUB_TABS] : PRIMARY_SUB_TABS;
-  const activeSubTabId =
-    activeSubTab === "positions" && positionsView === "closed"
-      ? "closed-trades"
-      : activeSubTab;
-  const legacyDataError = LEGACY_PREDICTION_TABS.has(activeSubTab)
+  ] as const satisfies readonly TradingDeskTabButton[];
+  const SUB_TABS: readonly TradingDeskTabButton[] = showLegacyTabs
+    ? [...PRIMARY_SUB_TABS, ...LEGACY_SUB_TABS]
+    : PRIMARY_SUB_TABS;
+  const activeSubTabId = toTradingDeskVisibleTabId(activeSubTab, positionsView);
+  const activateVisibleTab = (tabId: TradingDeskVisibleTabId) => {
+    const nextTab = resolveTradingDeskVisibleTab(tabId);
+    if (nextTab.positionsView) setPositionsView(nextTab.positionsView);
+    setActiveSubTab(nextTab.activeSubTab);
+  };
+  const legacyDataError = isLegacyPredictionTabId(activeSubTab)
     ? predictionsError || (activeSubTab === "sectors" ? sectorsError : null)
     : null;
 
@@ -708,7 +600,7 @@ export default function PredictionsView() {
 
   return (
     <div className="px-4 md:px-6 xl:px-8 py-5 max-w-[96vw] xl:max-w-[1800px] mx-auto">
-      {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
+      {isLegacyPredictionTabId(activeSubTab) && (
         <div className="space-y-6 mb-6">
           <div className="bg-bg-2 border border-border rounded-lg px-4 py-3 text-sm text-text-2">
             These legacy prediction analytics are archival scanner research, not the current supervised tracked-position workflow.
@@ -740,7 +632,7 @@ export default function PredictionsView() {
         </div>
       )}
 
-      {graded.length > 0 && LEGACY_PREDICTION_TABS.has(activeSubTab) && (
+      {graded.length > 0 && isLegacyPredictionTabId(activeSubTab) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           {["index", "equity"].map((assetClass) => {
             const subset = graded.filter((p) =>
@@ -795,7 +687,7 @@ export default function PredictionsView() {
           >
             {showLegacyTabs ? "Hide Archive" : "Archive"}
           </Button>
-          {LEGACY_PREDICTION_TABS.has(activeSubTab) && (
+          {isLegacyPredictionTabId(activeSubTab) && (
             <Button
               variant="secondary"
               size="sm"
@@ -851,12 +743,7 @@ export default function PredictionsView() {
               aria-controls={`${tab.id}-panel`}
               tabIndex={isActive ? 0 : -1}
               onClick={() => {
-                if ("targetView" in tab) {
-                  setPositionsView(tab.targetView);
-                  setActiveSubTab("positions");
-                  return;
-                }
-                setActiveSubTab(tab.id);
+                activateVisibleTab(tab.id);
               }}
               onKeyDown={(event) => {
                 const tabIds = SUB_TABS.map((item) => item.id);
@@ -869,12 +756,7 @@ export default function PredictionsView() {
                 if (nextIndex == null) return;
                 event.preventDefault();
                 const nextTab = SUB_TABS[nextIndex];
-                if ("targetView" in nextTab) {
-                  setPositionsView(nextTab.targetView);
-                  setActiveSubTab("positions");
-                } else {
-                  setActiveSubTab(nextTab.id);
-                }
+                activateVisibleTab(nextTab.id);
                 const buttons = event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
                 buttons?.[nextIndex]?.focus();
               }}
@@ -997,185 +879,9 @@ export default function PredictionsView() {
         )}
       </div>
 
-      <CloseTradeModal
-        item={closingPosition}
-        mode="tracked"
-        exitPrice={exitPrice}
-        notes={closeNotes}
-        closingId={closingId}
-        onExitPriceChange={setExitPrice}
-        onNotesChange={setCloseNotes}
-        onCancel={cancelCloseForm}
-        onConfirm={() => void submitClosePosition()}
-      />
+      <CloseTradeModal {...trackedCloseModalProps} />
 
-      <CloseTradeModal
-        item={closingSuggestedTrade}
-        mode="suggested"
-        exitPrice={suggestedExitPrice}
-        notes={suggestedCloseNotes}
-        closingId={closingSuggestedTradeId}
-        onExitPriceChange={setSuggestedExitPrice}
-        onNotesChange={setSuggestedCloseNotes}
-        onCancel={cancelCloseSuggestedTradeForm}
-        onConfirm={() => void submitCloseSuggestedTrade()}
-      />
-    </div>
-  );
-}
-
-function CloseTradeModal({
-  item,
-  mode,
-  exitPrice,
-  notes,
-  closingId,
-  onExitPriceChange,
-  onNotesChange,
-  onCancel,
-  onConfirm,
-}: {
-  item: TrackedPosition | SuggestedTrade | null;
-  mode: "tracked" | "suggested";
-  exitPrice: string;
-  notes: string;
-  closingId: number | null;
-  onExitPriceChange: (value: string) => void;
-  onNotesChange: (value: string) => void;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  useEffect(() => {
-    if (!item) return undefined;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && closingId !== item.id) {
-        onCancel();
-      }
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [item, closingId, onCancel]);
-
-  if (!item) return null;
-
-  const title = mode === "tracked" ? "Close Tracked Trade" : "Close Suggested Trade";
-  const confirmLabel = mode === "tracked" ? "Confirm Close" : "Confirm Hypothetical Close";
-  const exitLabel = mode === "tracked" ? "Actual exit price" : "Hypothetical exit price";
-  const liveExitPrice = getCloseNowPrice(item);
-  const markValue = getMarkPrice(item);
-  const enteredExitPrice = parseNonnegativePriceInput(exitPrice);
-  const exitPnl =
-    enteredExitPrice != null
-      ? calcNetOptionPnlPct({
-          entryPrice: getEntryExecutionPrice(item),
-          exitPrice: enteredExitPrice,
-          contracts: item.contracts,
-          feeTotalUsd: item.latest_review?.fee_total_usd ?? item.fee_total_usd ?? 0,
-        })
-      : getCloseNowPnlPct(item);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 bg-black/70 px-4 py-6 flex items-center justify-center"
-      onMouseDown={() => {
-        if (closingId !== item.id) onCancel();
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="close-trade-modal-title"
-        className="w-full max-w-2xl rounded-xl border border-border bg-bg-1 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="px-5 py-4 border-b border-border">
-          <div id="close-trade-modal-title" className="text-base font-semibold text-text-0">
-            {title}
-          </div>
-          <div className="text-sm text-text-2 mt-1">
-            {item.ticker} {item.direction.toUpperCase()} · Taken {fmtTakenDate(item)} · Exp {fmtDate(getResolvedListedExpiry(item))}
-          </div>
-        </div>
-
-        <div className="px-5 py-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Entry</div>
-              <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(item.entry_option_price)}</div>
-            </div>
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Mark Value</div>
-              <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(markValue)}</div>
-            </div>
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Est. Exit</div>
-              <div className="font-mono text-sm text-text-0 mt-1">{fmtMoney(liveExitPrice)}</div>
-            </div>
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">Exit P&L</div>
-              <div className={`font-mono text-sm mt-1 ${metricToneClass(exitPnl)}`}>{fmtPct(exitPnl)}</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-text-2">
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div>
-                Signal: <strong className="text-text-0">{formatSignalLabel(item.last_recommendation)}</strong>
-              </div>
-              <div className="mt-1">
-                Pricing: <strong className="text-text-0">{fmtPricingSource(item.latest_review?.pricing_source)}</strong>
-              </div>
-            </div>
-            <div className="bg-bg-2 border border-border rounded-lg px-3 py-2">
-              <div>
-                Provenance: <strong className="text-text-0">{getShareSafeReason(item)}</strong>
-              </div>
-              <div className="mt-1">
-                Renewed: <strong className="text-text-0">{fmtDateTime(getReviewedAt(item))}</strong>
-              </div>
-            </div>
-          </div>
-
-          {item.latest_review?.warnings?.length ? (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
-              {item.latest_review.warnings[0]}
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <label className="text-xs text-text-2 space-y-1">
-              <span className="block">{exitLabel}</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={exitPrice}
-                onChange={(e) => onExitPriceChange(e.target.value)}
-                className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0 font-mono"
-              />
-            </label>
-            <label className="text-xs text-text-2 space-y-1">
-              <span className="block">Notes</span>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => onNotesChange(e.target.value)}
-                placeholder="Optional close note"
-                className="w-full bg-bg-3 border border-border rounded px-3 py-2 text-sm text-text-0"
-              />
-            </label>
-          </div>
-        </div>
-
-        <div className="px-5 py-4 border-t border-border flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={closingId === item.id}>
-            Cancel
-          </Button>
-          <Button variant="danger" size="sm" loading={closingId === item.id} onClick={onConfirm}>
-            {confirmLabel}
-          </Button>
-        </div>
-      </div>
+      <CloseTradeModal {...suggestedCloseModalProps} />
     </div>
   );
 }

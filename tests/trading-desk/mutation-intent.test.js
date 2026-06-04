@@ -6,6 +6,19 @@ const vm = require("node:vm");
 const ts = require("typescript");
 
 const ROOT = path.join(__dirname, "..", "..");
+const TEST_OPERATOR_TOKEN = "operator-test-token";
+
+function nextResponseMock() {
+  return {
+    NextResponse: {
+      json: (body, init = {}) => ({
+        body,
+        status: init.status ?? 200,
+        headers: init.headers ?? {},
+      }),
+    },
+  };
+}
 
 function transpileTsFile(sourcePath) {
   const source = fs.readFileSync(sourcePath, "utf8");
@@ -30,9 +43,11 @@ function runCommonJsModule(sourcePath, requireMap = {}) {
   vm.runInNewContext(
     transpiled,
     {
+      Buffer,
       console,
       exports: module.exports,
       module,
+      process: { env: { OPTIONS_LOCAL_OPERATOR_TOKEN: TEST_OPERATOR_TOKEN } },
       require: localRequire,
     },
     { filename: sourcePath }
@@ -48,6 +63,7 @@ function loadMutationIntentModule() {
 function readTradingDeskClientSources() {
   return [
     path.join(ROOT, "src", "components", "predictions", "PredictionsView.tsx"),
+    path.join(ROOT, "src", "components", "predictions", "useTradingDeskCloseDialogs.ts"),
     path.join(ROOT, "src", "components", "predictions", "useTradingDeskRecords.ts"),
   ]
     .map((sourcePath) => fs.readFileSync(sourcePath, "utf8"))
@@ -62,27 +78,40 @@ function loadStrategyLabIntentModule() {
   return runCommonJsModule(path.join(ROOT, "src", "lib", "strategy-lab", "replayIntent.ts"));
 }
 
+function loadRouteLifecycleModule() {
+  return runCommonJsModule(path.join(ROOT, "src", "lib", "route-lifecycle", "routeContracts.ts"));
+}
+
+function loadOperatorAuthModule() {
+  return runCommonJsModule(
+    path.join(ROOT, "src", "lib", "operator-auth.ts"),
+    {
+      "next/server": nextResponseMock(),
+    }
+  );
+}
+
 function loadApiUtilsModule(mutationIntent) {
   const storeOwnership = loadStoreOwnershipModule();
   const strategyLabIntent = loadStrategyLabIntentModule();
+  const routeLifecycle = loadRouteLifecycleModule();
+  const operatorAuth = loadOperatorAuthModule();
+  const responseValidation = runCommonJsModule(
+    path.join(ROOT, "src", "lib", "trading-desk", "apiResponseValidation.ts")
+  );
   return runCommonJsModule(
     path.join(ROOT, "src", "app", "api", "_utils.ts"),
     {
       "@/lib/backend/transport": {
         BackendHttpError: class BackendHttpError extends Error {},
       },
+      "@/lib/trading-desk/apiResponseValidation": responseValidation,
       "@/lib/trading-desk/mutationIntent": mutationIntent,
       "@/lib/trading-desk/storeOwnership": storeOwnership,
       "@/lib/strategy-lab/replayIntent": strategyLabIntent,
-      "next/server": {
-        NextResponse: {
-          json: (body, init = {}) => ({
-            body,
-            status: init.status ?? 200,
-            headers: init.headers ?? {},
-          }),
-        },
-      },
+      "@/lib/route-lifecycle/routeContracts": routeLifecycle,
+      "@/lib/operator-auth": operatorAuth,
+      "next/server": nextResponseMock(),
     }
   );
 }
@@ -96,32 +125,85 @@ function loadRouteModule(relativePath, bridgeMocks) {
       "@/app/api/_utils": apiUtils,
       "../../../_utils": apiUtils,
       "@/lib/python-bridge": bridgeMocks,
-      "next/server": {
-        NextResponse: {
-          json: (body, init = {}) => ({
-            body,
-            status: init.status ?? 200,
-            headers: init.headers ?? {},
-          }),
-        },
-      },
+      "next/server": nextResponseMock(),
     }
   );
 }
 
-function requestWithIntent(intent, bodyText) {
+function requestWithIntent(intent, bodyText, options = {}) {
+  const operatorToken = Object.prototype.hasOwnProperty.call(options, "operatorToken")
+    ? options.operatorToken
+    : TEST_OPERATOR_TOKEN;
   return {
     headers: {
       get: (name) => {
-        if (name.toLowerCase() !== "x-trading-desk-mutation") return null;
-        return intent ?? null;
+        const normalizedName = name.toLowerCase();
+        if (normalizedName === "x-options-operator-token") return operatorToken ?? null;
+        if (normalizedName === "x-trading-desk-mutation") return intent ?? null;
+        return null;
       },
+    },
+    cookies: {
+      get: () => undefined,
     },
     text: async () => {
       if (bodyText !== undefined) return bodyText;
       throw new Error("mutation guard should run before body parsing");
     },
   };
+}
+
+function validTradingDeskRow(overrides = {}) {
+  return {
+    id: 7,
+    status: "open",
+    ticker: "AAA",
+    ...overrides,
+  };
+}
+
+function validBridgeResponse(name) {
+  if (name === "getGroupedTrackedPositionsWithBackendHeaders") {
+    return {
+      body: {
+        open: [validTradingDeskRow()],
+        closed: [validTradingDeskRow({ id: 8, status: "closed" })],
+        summary: { open: {}, closed: {}, all: {} },
+      },
+      headers: { "x-python-backend-duration-ms": "12.3" },
+    };
+  }
+  if (name === "getGroupedSuggestedTradesWithBackendHeaders") {
+    return {
+      body: {
+        open: [validTradingDeskRow()],
+        closed: [validTradingDeskRow({ id: 8, status: "closed" })],
+        summary: { open: {}, closed: {}, all: {} },
+      },
+      headers: { "x-python-backend-duration-ms": "12.3" },
+    };
+  }
+  if (name === "createTrackedPosition" || name === "closeTrackedPosition") {
+    return {
+      position: validTradingDeskRow({ status: name === "closeTrackedPosition" ? "closed" : "open" }),
+      position_event_persistence: { status: "recorded" },
+    };
+  }
+  if (name === "reviewTrackedPositions") {
+    return {
+      positions: [validTradingDeskRow()],
+      position_event_persistence: { status: "recorded" },
+    };
+  }
+  if (name === "createSuggestedTrade" || name === "closeSuggestedTrade") {
+    return {
+      trade: validTradingDeskRow({ status: name === "closeSuggestedTrade" ? "closed" : "open" }),
+    };
+  }
+  if (name === "reviewSuggestedTrades") {
+    return { trades: [validTradingDeskRow()] };
+  }
+  return { error: `No test fixture for ${name}` };
 }
 
 test("Trading Desk mutation headers declare a specific mutating intent", () => {
@@ -162,6 +244,7 @@ test("Trading Desk mutation routes require explicit mutation intent", () => {
 
   for (const [relativePath, expectedIntent] of routeExpectations) {
     const source = fs.readFileSync(path.join(ROOT, relativePath), "utf8");
+    assert.match(source, /requireLocalOperator/);
     assert.match(source, /requireTradingDeskMutationIntent/);
     assert.match(source, new RegExp(`"${expectedIntent}"`));
   }
@@ -178,10 +261,7 @@ test("Trading Desk read routes declare read-only store ownership", async () => {
     const bridgeMocks = new Proxy({}, {
       get: (_target, property) => async (...args) => {
         calls.push({ name: String(property), args });
-        return {
-          body: { ok: true, bridge: String(property) },
-          headers: { "x-python-backend-duration-ms": "12.3" },
-        };
+        return validBridgeResponse(String(property));
       },
     });
     const route = loadRouteModule(relativePath, bridgeMocks);
@@ -190,7 +270,7 @@ test("Trading Desk read routes declare read-only store ownership", async () => {
     });
 
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, { ok: true, bridge: expectedBridgeName });
+    assert.deepEqual(response.body, validBridgeResponse(expectedBridgeName).body);
     assert.equal(response.headers["x-python-backend-duration-ms"], "12.3");
     assert.equal(response.headers["x-trading-desk-store"], expectedStore);
     assert.equal(response.headers["x-trading-desk-lifecycle"], "read");
@@ -239,6 +319,36 @@ test("Trading Desk mutation routes reject missing or wrong intent before bridge 
   }
 });
 
+test("Trading Desk mutation intent is not authorization", async () => {
+  const routeExpectations = [
+    ["src/app/api/positions/route.ts", "create_tracked_position"],
+    ["src/app/api/positions/review/route.ts", "review_tracked_positions"],
+    ["src/app/api/positions/[id]/close/route.ts", "close_tracked_position"],
+    ["src/app/api/suggested-trades/route.ts", "create_suggested_trade"],
+    ["src/app/api/suggested-trades/review/route.ts", "review_suggested_trades"],
+    ["src/app/api/suggested-trades/[id]/close/route.ts", "close_suggested_trade"],
+  ];
+  const bridgeMocks = new Proxy({}, {
+    get: () => () => {
+      throw new Error("bridge mutation should not be called without operator auth");
+    },
+  });
+
+  for (const [relativePath, expectedIntent] of routeExpectations) {
+    const route = loadRouteModule(relativePath, bridgeMocks);
+    const routeContext = relativePath.includes("[id]")
+      ? { params: Promise.resolve({ id: "1" }) }
+      : undefined;
+    const request = requestWithIntent(expectedIntent, undefined, { operatorToken: null });
+    const response = routeContext
+      ? await route.POST(request, routeContext)
+      : await route.POST(request);
+
+    assert.equal(response.status, 401);
+    assert.match(response.body.error, /Local operator authorization/);
+  }
+});
+
 test("Trading Desk mutation routes reach the bridge only with matching intent", async () => {
   const routeExpectations = [
     ["src/app/api/positions/route.ts", "create_tracked_position", "createTrackedPosition", "postgres_tracked_positions", "create", "tracked_position"],
@@ -261,7 +371,7 @@ test("Trading Desk mutation routes reach the bridge only with matching intent", 
     const bridgeMocks = new Proxy({}, {
       get: (_target, property) => async (...args) => {
         calls.push({ name: String(property), args });
-        return { ok: true, bridge: String(property) };
+        return validBridgeResponse(String(property));
       },
     });
     const route = loadRouteModule(relativePath, bridgeMocks);
@@ -274,13 +384,34 @@ test("Trading Desk mutation routes reach the bridge only with matching intent", 
       : await route.POST(request);
 
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body, { ok: true, bridge: expectedBridgeName });
+    assert.deepEqual(response.body, validBridgeResponse(expectedBridgeName));
     assert.equal(response.headers["x-trading-desk-store"], expectedStore);
     assert.equal(response.headers["x-trading-desk-lifecycle"], expectedLifecycle);
     assert.equal(response.headers["x-trading-desk-record-class"], expectedRecordClass);
     assert.equal(calls.length, 1);
     assert.equal(calls[0].name, expectedBridgeName);
   }
+});
+
+test("Trading Desk routes fail closed when backend response envelope is invalid", async () => {
+  const bridgeMocks = {
+    createSuggestedTrade: async () => ({
+      trade: validTradingDeskRow(),
+      position_event_persistence: { status: "recorded" },
+    }),
+  };
+  const route = loadRouteModule("src/app/api/suggested-trades/route.ts", bridgeMocks);
+  const response = await route.POST(
+    requestWithIntent("create_suggested_trade", JSON.stringify({ scan_pick: {}, fill_price: 1 }))
+  );
+
+  assert.equal(response.status, 502);
+  assert.equal(response.body.route_contract, "suggested_trades_create");
+  assert.match(response.body.error, /failed validation/);
+  assert.match(response.body.reason, /position_event_persistence/);
+  assert.equal(response.headers["x-trading-desk-store"], "sqlite_suggested_trades");
+  assert.equal(response.headers["x-trading-desk-lifecycle"], "create");
+  assert.equal(response.headers["x-trading-desk-record-class"], "suggested_trade");
 });
 
 test("Trading Desk component POSTs use mutation intent headers", () => {

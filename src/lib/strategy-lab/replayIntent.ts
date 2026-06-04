@@ -23,19 +23,22 @@ export type StrategyLabRecordClass =
   | "strategy_profile"
   | "forward_evidence_report";
 
-export type StrategyLabRouteContractId =
-  | "backtest_run"
-  | "backtest_summary_read"
-  | "backtest_last_read"
-  | "backtest_report_read"
-  | "metric_truth_read"
-  | "truth_lane_comparison_read"
-  | "live_policy_read"
-  | "exit_audit_read"
-  | "forward_evidence_read"
-  | "profile_read"
-  | "profile_changelog_read"
-  | "profile_save";
+export const STRATEGY_LAB_ROUTE_CONTRACT_IDS = [
+  "backtest_run",
+  "backtest_summary_read",
+  "backtest_last_read",
+  "backtest_report_read",
+  "metric_truth_read",
+  "truth_lane_comparison_read",
+  "live_policy_read",
+  "exit_audit_read",
+  "forward_evidence_read",
+  "profile_read",
+  "profile_changelog_read",
+  "profile_save",
+] as const;
+
+export type StrategyLabRouteContractId = (typeof STRATEGY_LAB_ROUTE_CONTRACT_IDS)[number];
 
 export type StrategyLabRouteContract = {
   id: StrategyLabRouteContractId;

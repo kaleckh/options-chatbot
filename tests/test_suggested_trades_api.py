@@ -1,3 +1,4 @@
+import copy
 import gc
 import os
 import sys
@@ -28,6 +29,8 @@ from positions_repository import UnavailableTrackedPositionsRepository
 from options_algorithm_fixtures import (
     FrozenDateTime,
     build_options_algorithm_fixture_bundle,
+    build_scanner_origin_forward_event,
+    build_scanner_origin_proof_scan_pick,
     build_tracked_position_scan_pick,
     load_backend_main,
 )
@@ -92,7 +95,9 @@ class SuggestedTradesApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(create_response.status_code, 200)
-        trade = create_response.json()["trade"]
+        create_payload = create_response.json()
+        self.assertNotIn("position_event_persistence", create_payload)
+        trade = create_payload["trade"]
         self.assertEqual(trade["ticker"], scan_pick["ticker"])
         self.assertEqual(trade["contract_symbol"], scan_pick["contract_symbol"])
         self.assertEqual(trade["entry_option_price"], 4.1)
@@ -131,7 +136,9 @@ class SuggestedTradesApiTests(unittest.TestCase):
 
         review_response = self.client.post("/api/suggested-trades/review", json={})
         self.assertEqual(review_response.status_code, 200)
-        reviewed = review_response.json()["trades"][0]
+        review_payload = review_response.json()
+        self.assertNotIn("position_event_persistence", review_payload)
+        reviewed = review_payload["trades"][0]
         self.assertTrue(
             {
                 "id",
@@ -154,7 +161,9 @@ class SuggestedTradesApiTests(unittest.TestCase):
             json={"exit_price": 5.15, "notes": "Paper exit"},
         )
         self.assertEqual(close_response.status_code, 200)
-        closed_trade = close_response.json()["trade"]
+        close_payload = close_response.json()
+        self.assertNotIn("position_event_persistence", close_payload)
+        closed_trade = close_payload["trade"]
         self.assertEqual(closed_trade["status"], "closed")
         self.assertEqual(closed_trade["exit_option_price"], 5.15)
         self.assertEqual(closed_trade["exit_execution_price"], 5.15)
@@ -225,6 +234,130 @@ class SuggestedTradesApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertIn("portfolio_caps_not_enforced", str(response.json()["detail"]))
+
+    def test_create_scanner_origin_suggested_trade_rejects_ineligible_current_rerun(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "guardrail_decision": "clear",
+                "portfolio_caps_enforced": True,
+                "creation_eligible": True,
+                "creation_blockers": [],
+                "candidate_execution_label": "executable_opra_paper_candidate",
+                "source_scan_session_id": 123,
+                "source_scan_event_key": "rank_1",
+                "source_scan_run_id": "scan:test",
+                "source_scan_recorded_at_utc": "2026-04-14T15:00:00Z",
+            }
+        )
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={
+                    "ranked_picks": [
+                        {
+                            **scan_pick,
+                            "guardrail_decision": "clear",
+                            "portfolio_caps_enforced": True,
+                            "creation_eligible": False,
+                            "creation_blockers": ["candidate_execution_label:fallback_delayed"],
+                            "candidate_execution_label": "fallback_delayed",
+                        }
+                    ]
+                },
+            ),
+        ):
+            response = self.client.post(
+                "/api/suggested-trades",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.10,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("candidate_execution_label:fallback_delayed", str(response.json()["detail"]))
+
+    def test_create_scanner_origin_suggested_trade_accepts_matching_archived_lineage(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(scan_pick)
+
+        with (
+            patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+        ):
+            response = self.client.post(
+                "/api/suggested-trades",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": scan_pick["entry_execution_price"],
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        trade = response.json()["trade"]
+        self.assertEqual(trade["ticker"], scan_pick["ticker"])
+        self.assertEqual(trade["contract_symbol"], scan_pick["contract_symbol"])
+        self.assertTrue(trade["source_pick_snapshot"]["source_scan_lineage_verified"])
+        self.assertEqual(
+            trade["source_pick_snapshot"]["source_scan_event_key"],
+            scan_pick["source_scan_event_key"],
+        )
+
+    def test_create_scanner_origin_suggested_trade_rejects_mutated_archived_lineage_fields(self):
+        baseline_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(baseline_pick)
+
+        mutations = {
+            "source_scan_run_id": lambda pick: pick.update({"source_scan_run_id": "api_scan_tampered"}),
+            "contract_symbol": lambda pick: pick.update({"contract_symbol": "AAA260408C99999999"}),
+            "entry_execution_price": lambda pick: pick.update({"entry_execution_price": 4.75}),
+            "options_data_source": lambda pick: pick.update({"options_data_source": "delayed_vendor"}),
+            "creation_eligible": lambda pick: pick.update({"creation_eligible": False}),
+        }
+
+        with patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]):
+            self.assertTrue(self.backend._verify_source_scan_lineage(baseline_pick))
+
+        for field, mutate in mutations.items():
+            with self.subTest(field=field):
+                scan_pick = copy.deepcopy(baseline_pick)
+                mutate(scan_pick)
+                before_count = len(self.backend.SUGGESTED_TRADES_REPOSITORY.list_positions("open"))
+
+                with (
+                    patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+                    patch.object(
+                        self.backend,
+                        "apply_playbook_guardrails",
+                        return_value={"ranked_picks": [dict(scan_pick)]},
+                    ),
+                ):
+                    response = self.client.post(
+                        "/api/suggested-trades",
+                        json={
+                            "creation_mode": "scanner",
+                            "scan_pick": scan_pick,
+                            "fill_price": scan_pick["entry_execution_price"],
+                            "contracts": 1,
+                        },
+                    )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertIn("source_scan_lineage_unverified", str(response.json()["detail"]))
+                after_count = len(self.backend.SUGGESTED_TRADES_REPOSITORY.list_positions("open"))
+                self.assertEqual(after_count, before_count)
 
     def test_create_and_close_reject_json_booleans_as_numbers(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

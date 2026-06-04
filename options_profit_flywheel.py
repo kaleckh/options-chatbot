@@ -39,17 +39,12 @@ for candidate in (ROOT_DIR, ROOT_DIR / "python-backend"):
         sys.path.insert(0, candidate_str)
 
 from positions_repository import create_positions_repository  # type: ignore  # noqa: E402
+from proof_contract import row_counts_as_proof_grade_exact_closed, row_has_raw_exact_contract  # type: ignore  # noqa: E402
 
 
 TARGET_SYMBOL_SET = set(TARGET_SYMBOLS)
 CANARY_REQUIRED_OUTCOMES = 10
 SHADOW_ONLY_DIRECTIONS = {"put"}
-PROOF_OPTIONS_SOURCE_LABELS = {
-    "alpaca_opra",
-    "alpaca_opra_daily_snapshot",
-    "alpaca:sip:opra",
-}
-
 
 def _normalize_direction(direction: Any) -> Optional[str]:
     value = str(direction or "").strip().lower()
@@ -282,32 +277,7 @@ def _load_closed_positions() -> list[dict[str, Any]]:
 
 
 def _position_proof_eligible(position: dict[str, Any]) -> bool:
-    if position.get("proof_eligible") is not True:
-        return False
-    source = position.get("source_pick_snapshot")
-    source_pick = dict(source) if isinstance(source, dict) else {}
-    explicit_sources = [
-        position.get("source_label"),
-        position.get("proof_source_label"),
-        position.get("market_data_source"),
-        position.get("options_market_data_source"),
-        position.get("options_data_source"),
-        position.get("quote_source"),
-        position.get("data_source"),
-        source_pick.get("source_label"),
-        source_pick.get("proof_source_label"),
-        source_pick.get("market_data_source"),
-        source_pick.get("options_market_data_source"),
-        source_pick.get("options_data_source"),
-        source_pick.get("quote_source"),
-        source_pick.get("data_source"),
-    ]
-    normalized_sources = {
-        str(value or "").strip().lower()
-        for value in explicit_sources
-        if str(value or "").strip()
-    }
-    return bool(PROOF_OPTIONS_SOURCE_LABELS.intersection(normalized_sources))
+    return row_counts_as_proof_grade_exact_closed(position)
 
 
 def _blocked_daily_truth_refresh_gate(refresh_result: dict[str, Any]) -> dict[str, Any]:
@@ -393,7 +363,7 @@ def _candidate_position_metrics(
         net_pnl_pct = _position_net_pnl_pct(position)
         if net_pnl_pct is None:
             continue
-        if str(position.get("contract_symbol") or source.get("contract_symbol") or "").strip():
+        if row_has_raw_exact_contract(position):
             exact_outcome_count += 1
         pnls.append(net_pnl_pct)
     positive = sum(value for value in pnls if value > 0)

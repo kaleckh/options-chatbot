@@ -1,0 +1,856 @@
+{
+  "artifact": "generated_artifact_governance",
+  "excluded_artifact_classes": [
+    "docs/archive/**",
+    "docs/autoresearch/**",
+    "research_runs/**",
+    "data/ai-commodity-infra/progress/**",
+    "data/options-validation/**",
+    "data/options-profit/**",
+    ".next/**",
+    "*.db, *.db-wal, *.db-shm"
+  ],
+  "generated_by": "scripts/generate_generated_artifact_governance.py",
+  "governance_version": 1,
+  "governed_artifacts": [
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_route_parity.py --check",
+      "generator": "scripts/generate_route_parity.py",
+      "hand_edit_allowed": false,
+      "id": "docs_route_parity_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:route-parity",
+      "owner_docs": [
+        "docs/route-parity.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "docs/route-parity.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "src/app/api",
+        "python-backend",
+        "src/lib/trading-desk/storeOwnership.ts",
+        "src/lib/strategy-lab/replayIntent.ts",
+        "src/lib/route-lifecycle/routeContracts.ts"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:route-parity. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_route_parity.py --check",
+      "generator": "scripts/generate_route_parity.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_route_mutation_inventory_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:route-parity",
+      "owner_docs": [
+        "docs/route-parity.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "data/contracts/route-mutation-inventory.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "src/app/api",
+        "python-backend",
+        "src/lib/trading-desk/storeOwnership.ts",
+        "src/lib/strategy-lab/replayIntent.ts",
+        "src/lib/route-lifecycle/routeContracts.ts"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:route-parity. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_backend_route_ownership_map.py --check",
+      "generator": "scripts/generate_backend_route_ownership_map.py",
+      "hand_edit_allowed": false,
+      "id": "docs_backend_route_ownership_map_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:backend-route-ownership-map",
+      "owner_docs": [
+        "docs/backend-route-ownership-map.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "docs/backend-route-ownership-map.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "python-backend/main.py",
+        "python-backend/profile_routes.py",
+        "python-backend/predictions_routes.py",
+        "python-backend/tools_routes.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:backend-route-ownership-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_backend_route_ownership_map.py --check",
+      "generator": "scripts/generate_backend_route_ownership_map.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_backend_route_ownership_map_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:backend-route-ownership-map",
+      "owner_docs": [
+        "docs/backend-route-ownership-map.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "data/contracts/backend-route-ownership-map.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "python-backend/main.py",
+        "python-backend/profile_routes.py",
+        "python-backend/predictions_routes.py",
+        "python-backend/tools_routes.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:backend-route-ownership-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_storage_ownership_map.py --check",
+      "generator": "scripts/generate_storage_ownership_map.py",
+      "hand_edit_allowed": false,
+      "id": "docs_storage_ownership_map_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:storage-ownership-map",
+      "owner_docs": [
+        "docs/storage-ownership-map.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "docs/storage-ownership-map.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "python-backend/repository_migrations.py",
+        "python-backend/repository_constraints.py",
+        "python-backend/repository_indexes.py",
+        "python-backend/local_db_hardening.py",
+        "python-backend/repository_parity.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:storage-ownership-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_storage_ownership_map.py --check",
+      "generator": "scripts/generate_storage_ownership_map.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_storage_ownership_map_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:storage-ownership-map",
+      "owner_docs": [
+        "docs/storage-ownership-map.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "data/contracts/storage-ownership-map.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "python-backend/repository_migrations.py",
+        "python-backend/repository_constraints.py",
+        "python-backend/repository_indexes.py",
+        "python-backend/local_db_hardening.py",
+        "python-backend/repository_parity.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:storage-ownership-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_trading_desk_schema_bridge.py --check",
+      "generator": "scripts/generate_trading_desk_schema_bridge.py",
+      "hand_edit_allowed": false,
+      "id": "docs_trading_desk_schema_bridge_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:trading-desk-schema-bridge",
+      "owner_docs": [
+        "docs/trading-desk-schema-bridge.md",
+        "docs/typescript-api-contracts.md",
+        "docs/trading-desk-api-models.md"
+      ],
+      "path": "docs/trading-desk-schema-bridge.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "src/lib/trading-desk/storeOwnership.ts",
+        "src/lib/trading-desk/apiContracts.ts",
+        "python-backend/trading_desk_api_models.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:trading-desk-schema-bridge. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_trading_desk_schema_bridge.py --check",
+      "generator": "scripts/generate_trading_desk_schema_bridge.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_trading_desk_api_schema_bridge_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:trading-desk-schema-bridge",
+      "owner_docs": [
+        "docs/trading-desk-schema-bridge.md",
+        "docs/typescript-api-contracts.md",
+        "docs/trading-desk-api-models.md"
+      ],
+      "path": "data/contracts/trading-desk-api-schema-bridge.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "src/lib/trading-desk/storeOwnership.ts",
+        "src/lib/trading-desk/apiContracts.ts",
+        "python-backend/trading_desk_api_models.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:trading-desk-schema-bridge. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "typescript",
+      "check_command": "uv run --locked python scripts/generate_proof_evidence_contract.py --check",
+      "generator": "scripts/generate_proof_evidence_contract.py",
+      "hand_edit_allowed": false,
+      "id": "src_lib_generated_proofevidencecontract_ts",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "contracts:proof-evidence",
+      "owner_docs": [
+        "docs/proof-evidence-contract.md"
+      ],
+      "path": "src/lib/generated/proofEvidenceContract.ts",
+      "runtime_posture": "generated_frontend_runtime_policy",
+      "runtime_use": true,
+      "source_inputs": [
+        "data/contracts/proof-evidence-contract.json"
+      ],
+      "source_of_truth_for_runtime": true,
+      "source_of_truth_role": "generated runtime projection of data/contracts/proof-evidence-contract.json",
+      "stale_action": "Do not hand-edit; run npm run contracts:proof-evidence. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_runtime_bridge",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_proof_invariant_table.py --check",
+      "generator": "scripts/generate_proof_invariant_table.py",
+      "hand_edit_allowed": false,
+      "id": "docs_proof_invariant_table_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:proof-invariant-table",
+      "owner_docs": [
+        "docs/proof-invariant-table.md",
+        "docs/proof-evidence-contract.md"
+      ],
+      "path": "docs/proof-invariant-table.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/proof-invariant-cases.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived test/readability projection",
+      "stale_action": "Do not hand-edit; run npm run docs:proof-invariant-table. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "test_readability_projection",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_legacy_lane_boundaries.py --check",
+      "generator": "scripts/generate_legacy_lane_boundaries.py",
+      "hand_edit_allowed": false,
+      "id": "docs_legacy_lane_boundaries_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:legacy-lane-boundaries",
+      "owner_docs": [
+        "docs/legacy-lane-boundaries.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "docs/legacy-lane-boundaries.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:legacy-lane-boundaries. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_legacy_lane_boundaries.py --check",
+      "generator": "scripts/generate_legacy_lane_boundaries.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_legacy_lane_boundaries_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:legacy-lane-boundaries",
+      "owner_docs": [
+        "docs/legacy-lane-boundaries.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "data/contracts/legacy-lane-boundaries.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:legacy-lane-boundaries. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_ai_commodity_isolation.py --check",
+      "generator": "scripts/generate_ai_commodity_isolation.py",
+      "hand_edit_allowed": false,
+      "id": "docs_ai_commodity_isolation_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:ai-commodity-isolation",
+      "owner_docs": [
+        "docs/ai-commodity-isolation.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "docs/ai-commodity-isolation.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "data/contracts/storage-ownership-map.json",
+        "data/ai-commodity-infra/progress/latest.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:ai-commodity-isolation. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_ai_commodity_isolation.py --check",
+      "generator": "scripts/generate_ai_commodity_isolation.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_ai_commodity_isolation_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:ai-commodity-isolation",
+      "owner_docs": [
+        "docs/ai-commodity-isolation.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "data/contracts/ai-commodity-isolation.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/route-mutation-inventory.json",
+        "data/contracts/storage-ownership-map.json",
+        "data/ai-commodity-infra/progress/latest.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:ai-commodity-isolation. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_remediation_loop_map.py --check",
+      "generator": "scripts/generate_remediation_loop_map.py",
+      "hand_edit_allowed": false,
+      "id": "docs_remediation_loop_map_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:remediation-loop-map",
+      "owner_docs": [
+        "docs/remediation-loop-map.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "path": "docs/remediation-loop-map.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "docs/WORKLOG.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:remediation-loop-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "handoff_ledger",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_remediation_loop_map.py --check",
+      "generator": "scripts/generate_remediation_loop_map.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_remediation_loop_map_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:remediation-loop-map",
+      "owner_docs": [
+        "docs/remediation-loop-map.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "path": "data/contracts/remediation-loop-map.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "docs/WORKLOG.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:remediation-loop-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_agent_memory_graph.py --check",
+      "generator": "scripts/generate_agent_memory_graph.py",
+      "hand_edit_allowed": false,
+      "id": "docs_agent_memory_graph_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:agent-memory-graph",
+      "owner_docs": [
+        "docs/agent-memory-graph.md",
+        "docs/index.md"
+      ],
+      "path": "docs/agent-memory-graph.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "docs/architecture-best-practices.md",
+        "docs/index.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:agent-memory-graph. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_agent_memory_graph.py --check",
+      "generator": "scripts/generate_agent_memory_graph.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_agent_memory_graph_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:agent-memory-graph",
+      "owner_docs": [
+        "docs/agent-memory-graph.md",
+        "docs/index.md"
+      ],
+      "path": "data/contracts/agent-memory-graph.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "docs/architecture-best-practices.md",
+        "docs/index.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:agent-memory-graph. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_generated_artifact_governance.py --check",
+      "generator": "scripts/generate_generated_artifact_governance.py",
+      "hand_edit_allowed": false,
+      "id": "docs_generated_artifact_governance_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:generated-artifact-governance",
+      "owner_docs": [
+        "docs/generated-artifact-governance.md",
+        "docs/living-docs-hygiene.md"
+      ],
+      "path": "docs/generated-artifact-governance.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generated_artifact_manifest.py",
+        "scripts/check_living_docs_hygiene.py",
+        "package.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:generated-artifact-governance. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_generated_artifact_governance.py --check",
+      "generator": "scripts/generate_generated_artifact_governance.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_generated_artifact_governance_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:generated-artifact-governance",
+      "owner_docs": [
+        "docs/generated-artifact-governance.md",
+        "docs/living-docs-hygiene.md"
+      ],
+      "path": "data/contracts/generated-artifact-governance.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generated_artifact_manifest.py",
+        "scripts/check_living_docs_hygiene.py",
+        "package.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:generated-artifact-governance. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_final_remediation_closure_pack.py --check",
+      "generator": "scripts/generate_final_remediation_closure_pack.py",
+      "hand_edit_allowed": false,
+      "id": "docs_final_remediation_closure_pack_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:final-remediation-closure-pack",
+      "owner_docs": [
+        "docs/final-remediation-closure-pack.md",
+        "docs/remediation-loop-map.md"
+      ],
+      "path": "docs/final-remediation-closure-pack.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/remediation-loop-map.json",
+        "data/contracts/generated-artifact-governance.json",
+        "data/contracts/agent-memory-graph.json",
+        "data/contracts/route-mutation-inventory.json",
+        "data/contracts/backend-route-ownership-map.json",
+        "data/contracts/storage-ownership-map.json",
+        "data/contracts/legacy-lane-boundaries.json",
+        "data/contracts/ai-commodity-isolation.json",
+        "docs/index.md",
+        "docs/living-docs-hygiene.md",
+        "docs/architecture-best-practices.md",
+        "docs/WORKLOG.md",
+        "package.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived final closure readback from checked generated artifacts and living docs",
+      "stale_action": "Do not hand-edit; run npm run docs:final-remediation-closure-pack. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "closure_readback",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_final_remediation_closure_pack.py --check",
+      "generator": "scripts/generate_final_remediation_closure_pack.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_final_remediation_closure_pack_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:final-remediation-closure-pack",
+      "owner_docs": [
+        "docs/final-remediation-closure-pack.md",
+        "docs/remediation-loop-map.md"
+      ],
+      "path": "data/contracts/final-remediation-closure-pack.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "data/contracts/remediation-loop-map.json",
+        "data/contracts/generated-artifact-governance.json",
+        "data/contracts/agent-memory-graph.json",
+        "data/contracts/route-mutation-inventory.json",
+        "data/contracts/backend-route-ownership-map.json",
+        "data/contracts/storage-ownership-map.json",
+        "data/contracts/legacy-lane-boundaries.json",
+        "data/contracts/ai-commodity-isolation.json",
+        "docs/index.md",
+        "docs/living-docs-hygiene.md",
+        "docs/architecture-best-practices.md",
+        "docs/WORKLOG.md",
+        "package.json"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived final closure readback from checked generated artifacts and living docs",
+      "stale_action": "Do not hand-edit; run npm run docs:final-remediation-closure-pack. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    }
+  ],
+  "non_goals": [
+    "Does not govern volatile research runs, generated market-data outputs, DB sidecars, build output, archives, or dated evidence reports.",
+    "Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
+    "Does not promote generated snapshots into runtime policy unless the artifact is already runtime-consumed generated code.",
+    "Does not use timestamps, mtimes, content hashes, or network freshness checks."
+  ],
+  "runtime_use": false,
+  "scope": "Generated trust-boundary and stale-handling inventory for checked generated docs, contracts, and runtime-generated policy artifacts.",
+  "sources": [
+    "scripts/generated_artifact_manifest.py",
+    "scripts/check_living_docs_hygiene.py",
+    "package.json"
+  ],
+  "supporting_source_inputs": {
+    "scripts/generate_agent_memory_graph.py": [
+      "docs/architecture-best-practices.md",
+      "docs/index.md"
+    ],
+    "scripts/generate_ai_commodity_isolation.py": [
+      "data/contracts/route-mutation-inventory.json",
+      "data/contracts/storage-ownership-map.json",
+      "data/ai-commodity-infra/progress/latest.json"
+    ],
+    "scripts/generate_backend_route_ownership_map.py": [
+      "data/contracts/route-mutation-inventory.json",
+      "python-backend/main.py",
+      "python-backend/profile_routes.py",
+      "python-backend/predictions_routes.py",
+      "python-backend/tools_routes.py"
+    ],
+    "scripts/generate_final_remediation_closure_pack.py": [
+      "data/contracts/remediation-loop-map.json",
+      "data/contracts/generated-artifact-governance.json",
+      "data/contracts/agent-memory-graph.json",
+      "data/contracts/route-mutation-inventory.json",
+      "data/contracts/backend-route-ownership-map.json",
+      "data/contracts/storage-ownership-map.json",
+      "data/contracts/legacy-lane-boundaries.json",
+      "data/contracts/ai-commodity-isolation.json",
+      "docs/index.md",
+      "docs/living-docs-hygiene.md",
+      "docs/architecture-best-practices.md",
+      "docs/WORKLOG.md",
+      "package.json"
+    ],
+    "scripts/generate_generated_artifact_governance.py": [
+      "scripts/generated_artifact_manifest.py",
+      "scripts/check_living_docs_hygiene.py",
+      "package.json"
+    ],
+    "scripts/generate_legacy_lane_boundaries.py": [
+      "data/contracts/route-mutation-inventory.json",
+      "docs/PROJECT_CONTEXT.md"
+    ],
+    "scripts/generate_proof_evidence_contract.py": [
+      "data/contracts/proof-evidence-contract.json"
+    ],
+    "scripts/generate_proof_invariant_table.py": [
+      "data/contracts/proof-invariant-cases.json"
+    ],
+    "scripts/generate_remediation_loop_map.py": [
+      "docs/WORKLOG.md",
+      "docs/architecture-best-practices.md"
+    ],
+    "scripts/generate_route_parity.py": [
+      "src/app/api",
+      "python-backend",
+      "src/lib/trading-desk/storeOwnership.ts",
+      "src/lib/strategy-lab/replayIntent.ts",
+      "src/lib/route-lifecycle/routeContracts.ts"
+    ],
+    "scripts/generate_storage_ownership_map.py": [
+      "data/contracts/route-mutation-inventory.json",
+      "python-backend/repository_migrations.py",
+      "python-backend/repository_constraints.py",
+      "python-backend/repository_indexes.py",
+      "python-backend/local_db_hardening.py",
+      "python-backend/repository_parity.py"
+    ],
+    "scripts/generate_trading_desk_schema_bridge.py": [
+      "src/lib/trading-desk/storeOwnership.ts",
+      "src/lib/trading-desk/apiContracts.ts",
+      "python-backend/trading_desk_api_models.py"
+    ]
+  },
+  "validation": {
+    "errors": []
+  }
+}

@@ -7,6 +7,10 @@ import Header from "@/components/layout/Header";
 import { ToastProvider, useToast } from "@/components/ui/Toast";
 import ErrorBoundary from "@/components/ui/ErrorBoundary";
 import { MetricGridSkeleton } from "@/components/ui/Skeleton";
+import {
+  DEFAULT_MAIN_APP_TAB_ID,
+  type MainAppTabId,
+} from "@/lib/navigation/tabs";
 
 function LoadingSkeleton() {
   return (
@@ -29,7 +33,7 @@ const StrategyView = dynamic(
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const toast = useToast();
 
-  const [activeTab, setActiveTab] = useState<string>("predictions");
+  const [activeTab, setActiveTab] = useState<MainAppTabId>(DEFAULT_MAIN_APP_TAB_ID);
   const [riskSettings, setRiskSettings] = useState<Record<string, unknown> | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

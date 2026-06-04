@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,8 @@ from supervised_scan import (
 )
 
 DEFAULT_QUEUE_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidates.jsonl"
+DEFAULT_FILL_ATTEMPT_FILE = ROOT / "data" / "forward-tracking" / "fill_attempts.jsonl"
+DEFAULT_DISPOSITION_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidate_validation_latest.json"
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -85,6 +88,60 @@ def latest_candidate_rows(queue_file: Path = DEFAULT_QUEUE_FILE) -> list[dict[st
             continue
         latest_by_key[key] = payload
     return list(latest_by_key.values())
+
+
+def _load_jsonl_rows(path: Path) -> list[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf8").splitlines()
+    except OSError:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict):
+            rows.append(payload)
+    return rows
+
+
+def _candidate_identity_from_row(row: dict[str, Any]) -> str:
+    selected = row.get("selected_spread") if isinstance(row.get("selected_spread"), dict) else {}
+    pick = {
+        "ticker": row.get("ticker"),
+        "direction": row.get("direction") or row.get("type") or row.get("option_type"),
+        "expiry": row.get("expiry") or selected.get("expiry"),
+        "contract_symbol": row.get("contract_symbol") or selected.get("long_contract_symbol"),
+        "short_contract_symbol": row.get("short_contract_symbol") or selected.get("short_contract_symbol"),
+        "long_strike": (
+            row.get("long_strike")
+            if row.get("long_strike") is not None
+            else selected.get("long_strike")
+            if selected.get("long_strike") is not None
+            else row.get("strike")
+        ),
+        "short_strike": row.get("short_strike") if row.get("short_strike") is not None else selected.get("short_strike"),
+    }
+    scan_date = _norm_text(row.get("scan_date") or row.get("audit_generated_at_utc") or row.get("queue_recorded_at_utc"))
+    return _candidate_identity(
+        audit_generated_at_utc=scan_date,
+        playbook_id=_norm_text(row.get("playbook_id")),
+        pick=pick,
+    )
+
+
+def latest_fill_attempt_rows(fill_attempt_file: Path = DEFAULT_FILL_ATTEMPT_FILE) -> dict[str, dict[str, Any]]:
+    latest_by_key: dict[str, dict[str, Any]] = {}
+    for row in _load_jsonl_rows(fill_attempt_file):
+        if _norm_text(row.get("event_type")) != "candidate_shown":
+            continue
+        key = _candidate_identity_from_row(row)
+        if key:
+            latest_by_key[key] = row
+    return latest_by_key
 
 
 def _candidate_status(playbook_id: str) -> tuple[str, str]:
@@ -231,3 +288,123 @@ def append_validation_attempt_rows(
             handle.write(json.dumps(next_row, sort_keys=True) + "\n")
             appended += 1
     return appended
+
+
+def _validation_outcome(row: dict[str, Any], fill_attempt: dict[str, Any] | None) -> tuple[str, str]:
+    status = _norm_text(row.get("candidate_status"))
+    if status == "live_validation_scan_failed":
+        return "blocked", "validation_scan_failed"
+    if status != "live_validation_attempted":
+        return "no_longer_matched", "candidate_has_not_completed_live_validation"
+    if fill_attempt is None:
+        return "no_longer_matched", "candidate_not_returned_by_market_hours_validation_scan"
+
+    tracking_mode = _norm_text(row.get("position_tracking_mode") or fill_attempt.get("position_tracking_mode"))
+    tracking_approved = bool(row.get("tracking_approved_lane"))
+    fill_status = _norm_text(fill_attempt.get("fill_status"))
+    fill_reason = _norm_text(fill_attempt.get("fill_outcome_reason"))
+    track_outcome = _norm_text(fill_attempt.get("auto_track_outcome"))
+
+    if not tracking_approved or tracking_mode not in {"", "auto_track"} or "auto_track_disabled" in fill_reason:
+        return "paper_only", "validation_matched_but_lane_is_not_auto_track_eligible"
+    if fill_attempt.get("filled") is True and fill_attempt.get("auto_track_position_id") is not None:
+        if track_outcome == "duplicate_open":
+            return "duplicate", "matching_position_was_already_open"
+        return "created", "fresh_validation_created_or_confirmed_auto_track_position"
+    if "not_submitted" in fill_status or "not_filled" in fill_status:
+        return "proof_ineligible", fill_reason or "validation_matched_but_creation_or_proof_gate_failed"
+    return "blocked", fill_reason or "validation_matched_but_no_create_outcome_was_recorded"
+
+
+def build_validation_disposition_report(
+    *,
+    queue_file: Path = DEFAULT_QUEUE_FILE,
+    fill_attempt_file: Path = DEFAULT_FILL_ATTEMPT_FILE,
+    scan_date: str | None = None,
+    generated_at_utc: str | None = None,
+) -> dict[str, Any]:
+    generated_at = generated_at_utc or _utc_now_iso()
+    fill_attempts = latest_fill_attempt_rows(fill_attempt_file)
+    candidates = []
+    for row in latest_candidate_rows(queue_file):
+        status = _norm_text(row.get("candidate_status"))
+        if status not in {"live_validation_attempted", "live_validation_scan_failed"}:
+            continue
+        if scan_date and _candidate_scan_date_for_disposition(row) != scan_date:
+            continue
+        key = _norm_text(row.get("candidate_key")) or _candidate_identity_from_row(row)
+        fill_attempt = fill_attempts.get(key)
+        outcome, reason = _validation_outcome(row, fill_attempt)
+        candidates.append(
+            {
+                "candidate_key": key,
+                "outcome": outcome,
+                "outcome_reason": reason,
+                "candidate_status": status,
+                "validation_exit_code": row.get("validation_exit_code"),
+                "playbook_id": row.get("playbook_id"),
+                "position_tracking_mode": row.get("position_tracking_mode"),
+                "tracking_approved_lane": row.get("tracking_approved_lane"),
+                "ticker": row.get("ticker"),
+                "direction": row.get("direction"),
+                "expiry": row.get("expiry"),
+                "contract_symbol": row.get("contract_symbol"),
+                "short_contract_symbol": row.get("short_contract_symbol"),
+                "validation_recorded_at_utc": row.get("validation_recorded_at_utc"),
+                "fill_attempt_logged_at": fill_attempt.get("logged_at") if fill_attempt else None,
+                "fill_status": fill_attempt.get("fill_status") if fill_attempt else None,
+                "fill_outcome": fill_attempt.get("fill_outcome") if fill_attempt else None,
+                "fill_outcome_reason": fill_attempt.get("fill_outcome_reason") if fill_attempt else None,
+                "auto_track_outcome": fill_attempt.get("auto_track_outcome") if fill_attempt else None,
+                "auto_track_position_id": fill_attempt.get("auto_track_position_id") if fill_attempt else None,
+            }
+        )
+    counts = Counter(str(item["outcome"]) for item in candidates)
+    return {
+        "report_id": "pending_scan_candidate_validation_disposition",
+        "generated_at_utc": generated_at,
+        "scan_date": scan_date,
+        "inputs": {
+            "queue_file": str(queue_file),
+            "fill_attempt_file": str(fill_attempt_file),
+        },
+        "summary": {
+            "candidate_count": len(candidates),
+            "outcome_counts": dict(sorted(counts.items())),
+        },
+        "candidates": sorted(
+            candidates,
+            key=lambda item: (
+                str(item.get("playbook_id") or ""),
+                str(item.get("ticker") or ""),
+                str(item.get("candidate_key") or ""),
+            ),
+        ),
+    }
+
+
+def _candidate_scan_date_for_disposition(row: dict[str, Any]) -> str:
+    validation = _norm_text(row.get("validation_recorded_at_utc"))
+    if validation:
+        return validation[:10]
+    audit = _norm_text(row.get("audit_generated_at_utc"))
+    if audit:
+        return audit[:10]
+    return _norm_text(row.get("queue_recorded_at_utc"))[:10]
+
+
+def write_validation_disposition_report(
+    *,
+    queue_file: Path = DEFAULT_QUEUE_FILE,
+    fill_attempt_file: Path = DEFAULT_FILL_ATTEMPT_FILE,
+    output_file: Path = DEFAULT_DISPOSITION_FILE,
+    scan_date: str | None = None,
+) -> dict[str, Any]:
+    report = build_validation_disposition_report(
+        queue_file=queue_file,
+        fill_attempt_file=fill_attempt_file,
+        scan_date=scan_date,
+    )
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    output_file.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    return report

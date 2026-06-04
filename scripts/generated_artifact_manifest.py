@@ -1,0 +1,149 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class GeneratedArtifact:
+    path: str
+    command: str
+    generator: str
+    artifact_type: str
+    runtime_use_false: bool = True
+
+
+GENERATED_ARTIFACTS = (
+    GeneratedArtifact(
+        path="docs/route-parity.md",
+        command="docs:route-parity",
+        generator="scripts/generate_route_parity.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/route-mutation-inventory.json",
+        command="docs:route-parity",
+        generator="scripts/generate_route_parity.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/backend-route-ownership-map.md",
+        command="docs:backend-route-ownership-map",
+        generator="scripts/generate_backend_route_ownership_map.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/backend-route-ownership-map.json",
+        command="docs:backend-route-ownership-map",
+        generator="scripts/generate_backend_route_ownership_map.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/storage-ownership-map.md",
+        command="docs:storage-ownership-map",
+        generator="scripts/generate_storage_ownership_map.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/storage-ownership-map.json",
+        command="docs:storage-ownership-map",
+        generator="scripts/generate_storage_ownership_map.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/trading-desk-schema-bridge.md",
+        command="docs:trading-desk-schema-bridge",
+        generator="scripts/generate_trading_desk_schema_bridge.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/trading-desk-api-schema-bridge.json",
+        command="docs:trading-desk-schema-bridge",
+        generator="scripts/generate_trading_desk_schema_bridge.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="src/lib/generated/proofEvidenceContract.ts",
+        command="contracts:proof-evidence",
+        generator="scripts/generate_proof_evidence_contract.py",
+        artifact_type="typescript",
+        runtime_use_false=False,
+    ),
+    GeneratedArtifact(
+        path="docs/proof-invariant-table.md",
+        command="docs:proof-invariant-table",
+        generator="scripts/generate_proof_invariant_table.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="docs/legacy-lane-boundaries.md",
+        command="docs:legacy-lane-boundaries",
+        generator="scripts/generate_legacy_lane_boundaries.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/legacy-lane-boundaries.json",
+        command="docs:legacy-lane-boundaries",
+        generator="scripts/generate_legacy_lane_boundaries.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/ai-commodity-isolation.md",
+        command="docs:ai-commodity-isolation",
+        generator="scripts/generate_ai_commodity_isolation.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/ai-commodity-isolation.json",
+        command="docs:ai-commodity-isolation",
+        generator="scripts/generate_ai_commodity_isolation.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/remediation-loop-map.md",
+        command="docs:remediation-loop-map",
+        generator="scripts/generate_remediation_loop_map.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/remediation-loop-map.json",
+        command="docs:remediation-loop-map",
+        generator="scripts/generate_remediation_loop_map.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/agent-memory-graph.md",
+        command="docs:agent-memory-graph",
+        generator="scripts/generate_agent_memory_graph.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/agent-memory-graph.json",
+        command="docs:agent-memory-graph",
+        generator="scripts/generate_agent_memory_graph.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/generated-artifact-governance.md",
+        command="docs:generated-artifact-governance",
+        generator="scripts/generate_generated_artifact_governance.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/generated-artifact-governance.json",
+        command="docs:generated-artifact-governance",
+        generator="scripts/generate_generated_artifact_governance.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/final-remediation-closure-pack.md",
+        command="docs:final-remediation-closure-pack",
+        generator="scripts/generate_final_remediation_closure_pack.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/final-remediation-closure-pack.json",
+        command="docs:final-remediation-closure-pack",
+        generator="scripts/generate_final_remediation_closure_pack.py",
+        artifact_type="json",
+    ),
+)

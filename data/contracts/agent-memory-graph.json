@@ -1,0 +1,1625 @@
+{
+  "artifact": "agent_memory_graph",
+  "edges": [
+    {
+      "from": "docs_index",
+      "reason": "Index points agents to the current system map.",
+      "to": "architecture_overview",
+      "type": "read_after"
+    },
+    {
+      "from": "docs_index",
+      "reason": "Index points agents to living-doc ownership and source-of-truth rules.",
+      "to": "living_docs_hygiene",
+      "type": "documents"
+    },
+    {
+      "from": "architecture_best_practices",
+      "reason": "Best-practices rubric names the memory graph as orientation metadata.",
+      "to": "memory_graph_doc",
+      "type": "documents"
+    },
+    {
+      "from": "architecture_best_practices",
+      "reason": "Best-practices rubric names the living-doc hygiene owner.",
+      "to": "living_docs_hygiene",
+      "type": "documents"
+    },
+    {
+      "from": "living_docs_hygiene_checker",
+      "reason": "Hygiene checker guards living-doc ownership and generated-artifact rules.",
+      "to": "living_docs_hygiene",
+      "type": "checks"
+    },
+    {
+      "from": "living_docs_hygiene_checker",
+      "reason": "Hygiene checker verifies the living reading order links required docs and artifacts.",
+      "to": "docs_index",
+      "type": "checks"
+    },
+    {
+      "from": "memory_graph_generator",
+      "reason": "Generator emits machine-readable graph.",
+      "to": "memory_graph_json",
+      "type": "generates"
+    },
+    {
+      "from": "memory_graph_generator",
+      "reason": "Generator emits human-readable graph.",
+      "to": "memory_graph_doc",
+      "type": "generates"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Markdown is rendered from the JSON graph manifest.",
+      "to": "memory_graph_json",
+      "type": "documents"
+    },
+    {
+      "from": "remediation_loop_map_generator",
+      "reason": "Generator emits the machine-readable remediation handoff ledger.",
+      "to": "remediation_loop_map_json",
+      "type": "generates"
+    },
+    {
+      "from": "remediation_loop_map_generator",
+      "reason": "Generator emits the human-readable remediation handoff ledger.",
+      "to": "remediation_loop_map_doc",
+      "type": "generates"
+    },
+    {
+      "from": "remediation_loop_map_doc",
+      "reason": "Markdown is rendered from the JSON handoff ledger.",
+      "to": "remediation_loop_map_json",
+      "type": "documents"
+    },
+    {
+      "from": "architecture_best_practices",
+      "reason": "Best-practices rubric tells agents to read the loop ledger before continuing the 44-point goal.",
+      "to": "remediation_loop_map_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "remediation_loop_map_doc",
+      "reason": "Completed points require dated worklog evidence anchors.",
+      "to": "worklog",
+      "type": "checks"
+    },
+    {
+      "from": "remediation_loop_map_doc",
+      "reason": "The loop ledger records status and handoff anchors but not the architecture rubric.",
+      "to": "architecture_best_practices",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "generated_artifact_governance_generator",
+      "reason": "Generator emits the machine-readable generated-artifact governance map.",
+      "to": "generated_artifact_governance_json",
+      "type": "generates"
+    },
+    {
+      "from": "generated_artifact_governance_generator",
+      "reason": "Generator emits the human-readable generated-artifact governance map.",
+      "to": "generated_artifact_governance_doc",
+      "type": "generates"
+    },
+    {
+      "from": "generated_artifact_governance_doc",
+      "reason": "Markdown is rendered from the JSON generated-artifact governance map.",
+      "to": "generated_artifact_governance_json",
+      "type": "documents"
+    },
+    {
+      "from": "generated_artifact_governance_json",
+      "reason": "Governance consumes the shared generated artifact manifest.",
+      "to": "generated_artifact_manifest",
+      "type": "checks"
+    },
+    {
+      "from": "living_docs_hygiene_checker",
+      "reason": "Hygiene checker and governance share one generated artifact manifest.",
+      "to": "generated_artifact_manifest",
+      "type": "consumes"
+    },
+    {
+      "from": "living_docs_hygiene",
+      "reason": "Living-doc hygiene points detailed generated-artifact trust rules to the generated governance map.",
+      "to": "generated_artifact_governance_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "final_remediation_closure_pack_generator",
+      "reason": "Generator emits the machine-readable final closure pack.",
+      "to": "final_remediation_closure_pack_json",
+      "type": "generates"
+    },
+    {
+      "from": "final_remediation_closure_pack_generator",
+      "reason": "Generator emits the human-readable final closure pack.",
+      "to": "final_remediation_closure_pack_doc",
+      "type": "generates"
+    },
+    {
+      "from": "final_remediation_closure_pack_doc",
+      "reason": "Markdown is rendered from the JSON closure pack.",
+      "to": "final_remediation_closure_pack_json",
+      "type": "documents"
+    },
+    {
+      "from": "final_remediation_closure_pack_json",
+      "reason": "Closure pack proves all 44 remediation points are completed.",
+      "to": "remediation_loop_map_json",
+      "type": "checks"
+    },
+    {
+      "from": "final_remediation_closure_pack_json",
+      "reason": "Closure pack proves generated artifacts are governed and non-runtime except the explicit generated proof artifact.",
+      "to": "generated_artifact_governance_json",
+      "type": "checks"
+    },
+    {
+      "from": "final_remediation_closure_pack_json",
+      "reason": "Closure pack proves the memory graph discovers closure artifacts.",
+      "to": "memory_graph_json",
+      "type": "checks"
+    },
+    {
+      "from": "ai_commodity_isolation_generator",
+      "reason": "Generator emits the AI commodity isolation contract.",
+      "to": "ai_commodity_isolation_json",
+      "type": "generates"
+    },
+    {
+      "from": "ai_commodity_isolation_generator",
+      "reason": "Generator emits the AI commodity isolation Markdown.",
+      "to": "ai_commodity_isolation_doc",
+      "type": "generates"
+    },
+    {
+      "from": "ai_commodity_isolation_doc",
+      "reason": "Markdown is rendered from the machine-readable isolation contract.",
+      "to": "ai_commodity_isolation_json",
+      "type": "documents"
+    },
+    {
+      "from": "route_parity_generator",
+      "reason": "Route parity generator owns the generated route inventory.",
+      "to": "route_parity_doc",
+      "type": "generates"
+    },
+    {
+      "from": "route_parity_generator",
+      "reason": "Route parity generator owns the machine-readable route mutation inventory.",
+      "to": "route_mutation_inventory_json",
+      "type": "generates"
+    },
+    {
+      "from": "backend_route_ownership_map_generator",
+      "reason": "Generator emits the machine-readable FastAPI route ownership map.",
+      "to": "backend_route_ownership_map_json",
+      "type": "generates"
+    },
+    {
+      "from": "backend_route_ownership_map_generator",
+      "reason": "Generator emits the human-readable FastAPI route ownership map.",
+      "to": "backend_route_ownership_map_doc",
+      "type": "generates"
+    },
+    {
+      "from": "backend_route_ownership_map_doc",
+      "reason": "Markdown is rendered from the JSON backend route ownership map.",
+      "to": "backend_route_ownership_map_json",
+      "type": "documents"
+    },
+    {
+      "from": "backend_route_ownership_map_json",
+      "reason": "Backend map cross-checks FastAPI decorators against route inventory classifications.",
+      "to": "route_mutation_inventory_json",
+      "type": "checks"
+    },
+    {
+      "from": "api_and_storage",
+      "reason": "API/storage doc points route edits to backend adapter ownership.",
+      "to": "backend_route_ownership_map_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "storage_ownership_map_generator",
+      "reason": "Storage ownership generator emits the machine-readable storage map.",
+      "to": "storage_ownership_map_json",
+      "type": "generates"
+    },
+    {
+      "from": "storage_ownership_map_generator",
+      "reason": "Storage ownership generator emits the human-readable storage map.",
+      "to": "storage_ownership_map_doc",
+      "type": "generates"
+    },
+    {
+      "from": "storage_ownership_map_json",
+      "reason": "Storage map reads route inventory store references instead of reparsing routes.",
+      "to": "route_mutation_inventory_json",
+      "type": "consumes"
+    },
+    {
+      "from": "route_lifecycle_doc",
+      "reason": "Doc owns the descriptive lifecycle header contract.",
+      "to": "route_lifecycle_code",
+      "type": "owns"
+    },
+    {
+      "from": "api_and_storage",
+      "reason": "API/storage doc maps browser-facing route groups.",
+      "to": "app_api_routes",
+      "type": "documents"
+    },
+    {
+      "from": "api_and_storage",
+      "reason": "API/storage doc names backend-only and mirrored FastAPI endpoints.",
+      "to": "fastapi_main",
+      "type": "documents"
+    },
+    {
+      "from": "operator_auth",
+      "reason": "Browser-facing writes should pass local operator auth before body parsing.",
+      "to": "app_api_routes",
+      "type": "checks"
+    },
+    {
+      "from": "backend_transport",
+      "reason": "Backend transport forwards optional backend bridge auth to FastAPI.",
+      "to": "fastapi_main",
+      "type": "implements"
+    },
+    {
+      "from": "proof_doc",
+      "reason": "Proof doc explains the versioned proof/evidence source contract.",
+      "to": "proof_contract_json",
+      "type": "owns"
+    },
+    {
+      "from": "proof_backend",
+      "reason": "Backend proof predicates load the canonical contract.",
+      "to": "proof_contract_json",
+      "type": "implements"
+    },
+    {
+      "from": "proof_generator",
+      "reason": "Generator emits frontend proof artifact from the JSON contract.",
+      "to": "proof_generated_ts",
+      "type": "generates"
+    },
+    {
+      "from": "proof_invariant_generator",
+      "reason": "Generator emits human-readable proof invariant table.",
+      "to": "proof_invariant_doc",
+      "type": "generates"
+    },
+    {
+      "from": "proof_invariant_generator",
+      "reason": "Generator reads the test-only proof invariant manifest.",
+      "to": "proof_invariant_cases",
+      "type": "consumes"
+    },
+    {
+      "from": "proof_invariant_doc",
+      "reason": "Markdown table is rendered from the invariant case manifest.",
+      "to": "proof_invariant_cases",
+      "type": "documents"
+    },
+    {
+      "from": "proof_doc",
+      "reason": "Proof owner doc points agents to the invariant matrix.",
+      "to": "proof_invariant_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "proof_frontend_facade",
+      "reason": "Frontend proof facade imports generated artifact.",
+      "to": "proof_generated_ts",
+      "type": "consumes"
+    },
+    {
+      "from": "position_evidence",
+      "reason": "Position evidence UI uses the human proof facade.",
+      "to": "proof_frontend_facade",
+      "type": "consumes"
+    },
+    {
+      "from": "scanner_doc",
+      "reason": "Scanner doc explains the versioned creation-safety contract.",
+      "to": "scanner_contract_json",
+      "type": "owns"
+    },
+    {
+      "from": "supervised_scan",
+      "reason": "Scanner engine implements scan policy and guardrail behavior.",
+      "to": "scanner_doc",
+      "type": "implements"
+    },
+    {
+      "from": "replay_profit_doc",
+      "reason": "Replay/profit doc maps readback assembly ownership.",
+      "to": "replay_profit_service",
+      "type": "owns"
+    },
+    {
+      "from": "replay_profit_service",
+      "reason": "Replay service assembles readbacks from replay engine outputs.",
+      "to": "wfo_optimizer",
+      "type": "read_after"
+    },
+    {
+      "from": "repository_doc",
+      "reason": "Repository doc maps structural repository capability contracts.",
+      "to": "repository_contracts_code",
+      "type": "owns"
+    },
+    {
+      "from": "record_parity_doc",
+      "reason": "Parity doc separates tracked-position and suggested-trade row semantics.",
+      "to": "positions_repository",
+      "type": "documents"
+    },
+    {
+      "from": "record_parity_doc",
+      "reason": "Parity doc separates suggested paper ideas from tracked production rows.",
+      "to": "suggested_trades_repository",
+      "type": "documents"
+    },
+    {
+      "from": "repository_migrations_doc",
+      "reason": "Migration doc owns the versioned migration manifest.",
+      "to": "repository_migrations_code",
+      "type": "owns"
+    },
+    {
+      "from": "repository_constraints_doc",
+      "reason": "Constraint doc owns DB/API/proof invariant boundaries.",
+      "to": "repository_constraints_code",
+      "type": "owns"
+    },
+    {
+      "from": "repository_indexes_doc",
+      "reason": "Index doc owns read-path index boundaries.",
+      "to": "repository_indexes_code",
+      "type": "owns"
+    },
+    {
+      "from": "local_db_doc",
+      "reason": "Local DB doc owns SQLite role classifications.",
+      "to": "local_db_manifest",
+      "type": "owns"
+    },
+    {
+      "from": "storage_ownership_map_doc",
+      "reason": "Storage map points agents to repository ownership docs.",
+      "to": "repository_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "storage_ownership_map_doc",
+      "reason": "Storage map points agents to local DB hardening docs.",
+      "to": "local_db_doc",
+      "type": "points_to"
+    },
+    {
+      "from": "api_models_doc",
+      "reason": "API models doc owns backend mutation adapter boundary.",
+      "to": "api_models_code",
+      "type": "owns"
+    },
+    {
+      "from": "ts_api_contracts_doc",
+      "reason": "TypeScript contracts doc owns manual TS request/response shapes.",
+      "to": "ts_api_contracts_code",
+      "type": "owns"
+    },
+    {
+      "from": "api_response_validation",
+      "reason": "Response validation checks shallow envelopes named by TS contracts.",
+      "to": "ts_api_contracts_code",
+      "type": "implements"
+    },
+    {
+      "from": "schema_bridge_generator",
+      "reason": "Schema bridge generator emits JSON check artifact.",
+      "to": "schema_bridge_json",
+      "type": "generates"
+    },
+    {
+      "from": "schema_bridge_generator",
+      "reason": "Schema bridge generator emits Markdown check artifact.",
+      "to": "schema_bridge_doc",
+      "type": "generates"
+    },
+    {
+      "from": "schema_bridge_json",
+      "reason": "Bridge maps manual TypeScript contracts.",
+      "to": "ts_api_contracts_code",
+      "type": "checks"
+    },
+    {
+      "from": "schema_bridge_json",
+      "reason": "Bridge maps narrow Pydantic adapter schemas.",
+      "to": "api_models_code",
+      "type": "checks"
+    },
+    {
+      "from": "store_ownership_code",
+      "reason": "Store/lifecycle registry appears in route parity output.",
+      "to": "route_parity_doc",
+      "type": "documents"
+    },
+    {
+      "from": "strategy_replay_intent",
+      "reason": "Strategy Lab route contracts appear in route parity output.",
+      "to": "route_parity_doc",
+      "type": "documents"
+    },
+    {
+      "from": "predictions_view",
+      "reason": "Trading Desk coordinator uses typed tab IDs.",
+      "to": "trading_desk_tabs",
+      "type": "consumes"
+    },
+    {
+      "from": "scanner_tab",
+      "reason": "Scanner evidence display is split into a focused component.",
+      "to": "scanner_evidence_panel",
+      "type": "implements"
+    },
+    {
+      "from": "scanner_tab",
+      "reason": "Selected-pick record UI is split into a focused component.",
+      "to": "scanner_record_form",
+      "type": "implements"
+    },
+    {
+      "from": "tracked_positions_tab",
+      "reason": "Tracked-position surface uses explicit FinTable mobile contract.",
+      "to": "fintable",
+      "type": "consumes"
+    },
+    {
+      "from": "suggested_trades_tab",
+      "reason": "Suggested-trade surface uses explicit FinTable mobile contract.",
+      "to": "fintable",
+      "type": "consumes"
+    },
+    {
+      "from": "scanner_tab",
+      "reason": "Scanner surface uses explicit FinTable mobile contract.",
+      "to": "fintable",
+      "type": "consumes"
+    },
+    {
+      "from": "app_shell",
+      "reason": "App shell consumes typed main navigation tabs.",
+      "to": "navigation_tabs",
+      "type": "consumes"
+    },
+    {
+      "from": "strategy_view",
+      "reason": "Strategy Lab profile surface lives in BrainTab.",
+      "to": "brain_tab",
+      "type": "implements"
+    },
+    {
+      "from": "strategy_view",
+      "reason": "Strategy Lab replay surface lives in OptimizerTab.",
+      "to": "optimizer_tab",
+      "type": "implements"
+    },
+    {
+      "from": "ai_commodity_runner",
+      "reason": "AI commodity runner emits latest proof-lane readback.",
+      "to": "ai_commodity_latest",
+      "type": "generates"
+    },
+    {
+      "from": "ai_commodity_isolation_doc",
+      "reason": "Isolation contract tells agents when to avoid runner changes.",
+      "to": "ai_commodity_runner",
+      "type": "bounds"
+    },
+    {
+      "from": "ai_commodity_isolation_doc",
+      "reason": "Isolation contract consumes storage-map classification for AI commodity artifacts.",
+      "to": "storage_ownership_map_doc",
+      "type": "checks"
+    },
+    {
+      "from": "ai_commodity_isolation_doc",
+      "reason": "Isolation contract consumes route inventory to guard browser/API exposure.",
+      "to": "route_mutation_inventory_json",
+      "type": "checks"
+    },
+    {
+      "from": "ai_commodity_runner",
+      "reason": "AI commodity remains separate from mounted browser product.",
+      "to": "project_context",
+      "type": "deferred_to"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to generated route inventory instead of duplicating it.",
+      "to": "route_parity_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to machine-readable route mutation inventory instead of duplicating it.",
+      "to": "route_mutation_inventory_json",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to the generated backend route ownership map instead of duplicating route adapters.",
+      "to": "backend_route_ownership_map_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to generated storage ownership map instead of duplicating it.",
+      "to": "storage_ownership_map_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to generated artifact governance instead of duplicating trust boundaries.",
+      "to": "generated_artifact_governance_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to the 44-point handoff ledger instead of duplicating status.",
+      "to": "remediation_loop_map_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to the final closure pack instead of duplicating closure validation.",
+      "to": "final_remediation_closure_pack_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "final_remediation_closure_pack_doc",
+      "reason": "Closure pack proves the loop is closed but the loop map owns per-point status details.",
+      "to": "remediation_loop_map_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "final_remediation_closure_pack_doc",
+      "reason": "Closure pack proves governance is clean but governance owns generated-artifact trust boundaries.",
+      "to": "generated_artifact_governance_doc",
+      "type": "does_not_replace"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "Memory graph points to storage/API owner docs instead of duplicating inventories.",
+      "to": "api_and_storage",
+      "type": "does_not_replace"
+    }
+  ],
+  "generated_by": "scripts/generate_agent_memory_graph.py",
+  "graph_version": 1,
+  "nodes": [
+    {
+      "id": "readme",
+      "kind": "doc",
+      "label": "README",
+      "owner_summary": "Top-level product and runtime summary.",
+      "path": "README.md",
+      "read_when": "Starting a repo session."
+    },
+    {
+      "id": "agents_guide",
+      "kind": "doc",
+      "label": "Agent guide",
+      "owner_summary": "Repo-specific agent startup, evidence rules, and docs placement.",
+      "path": "AGENTS.md",
+      "read_when": "Before code or docs edits."
+    },
+    {
+      "id": "docs_index",
+      "kind": "doc",
+      "label": "Docs index",
+      "owner_summary": "Living docs map and reading order.",
+      "path": "docs/index.md",
+      "read_when": "Choosing the living reading order."
+    },
+    {
+      "id": "project_context",
+      "kind": "doc",
+      "label": "Project context",
+      "owner_summary": "Current product scope, lane boundaries, and architecture summary.",
+      "path": "docs/PROJECT_CONTEXT.md",
+      "read_when": "Checking product scope, lane boundaries, and proof posture."
+    },
+    {
+      "id": "next_steps",
+      "kind": "doc",
+      "label": "Next steps",
+      "owner_summary": "Active blockers, commands, and next actions.",
+      "path": "docs/NEXT_STEPS.md",
+      "read_when": "Checking active blockers and current commands."
+    },
+    {
+      "id": "decisions",
+      "kind": "doc",
+      "label": "Decisions",
+      "owner_summary": "Durable product and technical decisions.",
+      "path": "docs/DECISIONS.md",
+      "read_when": "Checking durable decisions."
+    },
+    {
+      "id": "worklog",
+      "kind": "doc",
+      "label": "Worklog",
+      "owner_summary": "Dated summaries of meaningful local work.",
+      "path": "docs/WORKLOG.md",
+      "read_when": "Checking dated local work evidence."
+    },
+    {
+      "id": "architecture_overview",
+      "kind": "doc",
+      "label": "Architecture overview",
+      "owner_summary": "Current system map and subsystem ownership.",
+      "path": "docs/architecture-overview.md",
+      "read_when": "Understanding the current system map."
+    },
+    {
+      "id": "architecture_best_practices",
+      "kind": "doc",
+      "label": "Architecture best practices",
+      "owner_summary": "Target architecture and readability rubric.",
+      "path": "docs/architecture-best-practices.md",
+      "read_when": "Judging whether a remediation improves architecture readability."
+    },
+    {
+      "id": "living_docs_hygiene",
+      "kind": "doc",
+      "label": "Living docs hygiene",
+      "owner_summary": "Living-doc ownership, generated-artifact, and source-of-truth hygiene rules.",
+      "path": "docs/living-docs-hygiene.md",
+      "read_when": "Touching living docs, generated artifacts, or source-of-truth documentation."
+    },
+    {
+      "id": "architecture_audit",
+      "kind": "doc",
+      "label": "Architecture audit",
+      "owner_summary": "Live audit of confusing surfaces and remaining monoliths.",
+      "path": "docs/architecture-audit.md",
+      "read_when": "Finding current architecture risks and monoliths."
+    },
+    {
+      "id": "runtime_request_flow",
+      "kind": "doc",
+      "label": "Runtime request flow",
+      "owner_summary": "Narrative request-flow map.",
+      "path": "docs/runtime-request-flow.md",
+      "read_when": "Following browser to backend request flow."
+    },
+    {
+      "id": "api_and_storage",
+      "kind": "doc",
+      "label": "API and storage",
+      "owner_summary": "Active route groups, auth boundaries, and storage ownership.",
+      "path": "docs/api-and-storage.md",
+      "read_when": "Touching routes, auth, storage, or backend-only endpoints."
+    },
+    {
+      "id": "route_parity_doc",
+      "kind": "generated_artifact",
+      "label": "Route parity",
+      "owner_summary": "Generated browser route to Next route to FastAPI map.",
+      "path": "docs/route-parity.md",
+      "read_when": "Touching mounted browser routes or backend route parity."
+    },
+    {
+      "id": "route_mutation_inventory_json",
+      "kind": "generated_artifact",
+      "label": "Route mutation inventory JSON",
+      "owner_summary": "Generated machine-readable route and mutation inventory.",
+      "path": "data/contracts/route-mutation-inventory.json",
+      "read_when": "Machine-reading route auth, mutation, lifecycle, and store inventory."
+    },
+    {
+      "id": "route_parity_generator",
+      "kind": "script",
+      "label": "Route parity generator",
+      "owner_summary": "Generates docs/route-parity.md and route-mutation-inventory.json.",
+      "path": "scripts/generate_route_parity.py",
+      "read_when": "Regenerating or checking route parity."
+    },
+    {
+      "id": "backend_route_ownership_map_doc",
+      "kind": "generated_artifact",
+      "label": "Backend route ownership map",
+      "owner_summary": "Generated FastAPI adapter ownership and backend route delegation map.",
+      "path": "docs/backend-route-ownership-map.md",
+      "read_when": "Touching FastAPI route adapters, extracted routers, backend-only routes, or service delegation."
+    },
+    {
+      "id": "backend_route_ownership_map_json",
+      "kind": "generated_artifact",
+      "label": "Backend route ownership JSON",
+      "owner_summary": "Generated machine-readable backend route ownership map.",
+      "path": "data/contracts/backend-route-ownership-map.json",
+      "read_when": "Machine-reading FastAPI adapter ownership and backend route surface classifications."
+    },
+    {
+      "id": "backend_route_ownership_map_generator",
+      "kind": "script",
+      "label": "Backend route ownership generator",
+      "owner_summary": "Generates checked backend route ownership JSON and Markdown.",
+      "path": "scripts/generate_backend_route_ownership_map.py",
+      "read_when": "Regenerating or checking backend route ownership artifacts."
+    },
+    {
+      "id": "storage_ownership_map_json",
+      "kind": "generated_artifact",
+      "label": "Storage ownership map JSON",
+      "owner_summary": "Generated machine-readable storage ownership map.",
+      "path": "data/contracts/storage-ownership-map.json",
+      "read_when": "Machine-reading route, repository, local DB, artifact, and virtual store ownership."
+    },
+    {
+      "id": "storage_ownership_map_doc",
+      "kind": "generated_artifact",
+      "label": "Storage ownership map",
+      "owner_summary": "Generated human-readable storage ownership map.",
+      "path": "docs/storage-ownership-map.md",
+      "read_when": "Finding storage owners, route usage, local DB roles, and repository-store boundaries."
+    },
+    {
+      "id": "route_lifecycle_doc",
+      "kind": "doc",
+      "label": "Route lifecycle contracts",
+      "owner_summary": "Descriptive lifecycle header contract for generic route groups.",
+      "path": "docs/route-lifecycle-contracts.md",
+      "read_when": "Touching generic Next route lifecycle headers."
+    },
+    {
+      "id": "route_lifecycle_code",
+      "kind": "code",
+      "label": "Route lifecycle registry",
+      "owner_summary": "Typed route lifecycle registry and helper.",
+      "path": "src/lib/route-lifecycle/routeContracts.ts",
+      "read_when": "Changing generic route lifecycle headers."
+    },
+    {
+      "id": "app_api_routes",
+      "kind": "code",
+      "label": "Next API routes",
+      "owner_summary": "Same-origin Next route handlers.",
+      "path": "src/app/api",
+      "read_when": "Touching browser-facing API routes."
+    },
+    {
+      "id": "backend_helpers",
+      "kind": "code",
+      "label": "Backend helpers",
+      "owner_summary": "Backend helper layer used by Next route handlers.",
+      "path": "src/lib/backend",
+      "read_when": "Touching Next-to-FastAPI transport helpers."
+    },
+    {
+      "id": "fastapi_main",
+      "kind": "code",
+      "label": "FastAPI composition root",
+      "owner_summary": "FastAPI app wiring and remaining inline route adapters.",
+      "path": "python-backend/main.py",
+      "read_when": "Touching backend route composition."
+    },
+    {
+      "id": "operator_auth",
+      "kind": "code",
+      "label": "Local operator auth",
+      "owner_summary": "Local operator auth boundary for state-changing and tool routes.",
+      "path": "src/lib/operator-auth.ts",
+      "read_when": "Touching browser-facing write authorization."
+    },
+    {
+      "id": "backend_transport",
+      "kind": "code",
+      "label": "Backend transport",
+      "owner_summary": "Backend bridge transport and optional backend API token forwarding.",
+      "path": "src/lib/backend/transport.ts",
+      "read_when": "Touching Next-to-FastAPI auth or transport."
+    },
+    {
+      "id": "proof_doc",
+      "kind": "doc",
+      "label": "Proof evidence contract",
+      "owner_summary": "Semantic owner for Trading Desk proof and evidence language.",
+      "path": "docs/proof-evidence-contract.md",
+      "read_when": "Touching proof classes, evidence groups, or proof claims."
+    },
+    {
+      "id": "proof_contract_json",
+      "kind": "contract",
+      "label": "Proof contract JSON",
+      "owner_summary": "Versioned proof/evidence source contract.",
+      "path": "data/contracts/proof-evidence-contract.json",
+      "read_when": "Changing versioned proof/evidence tokens."
+    },
+    {
+      "id": "proof_backend",
+      "kind": "code",
+      "label": "Backend proof predicates",
+      "owner_summary": "Backend proof predicates and canonical tokens.",
+      "path": "python-backend/proof_contract.py",
+      "read_when": "Touching backend proof classification."
+    },
+    {
+      "id": "proof_generator",
+      "kind": "script",
+      "label": "Proof contract generator",
+      "owner_summary": "Generates src/lib/generated/proofEvidenceContract.ts.",
+      "path": "scripts/generate_proof_evidence_contract.py",
+      "read_when": "Regenerating frontend proof contract artifact."
+    },
+    {
+      "id": "proof_generated_ts",
+      "kind": "generated_artifact",
+      "label": "Generated frontend proof contract",
+      "owner_summary": "Generated TypeScript proof/evidence artifact.",
+      "path": "src/lib/generated/proofEvidenceContract.ts",
+      "read_when": "Checking frontend proof policy source."
+    },
+    {
+      "id": "proof_invariant_cases",
+      "kind": "contract",
+      "label": "Proof invariant cases",
+      "owner_summary": "Test-only proof invariant matrix for raw exact, production proof, Truth-grade, and realized-P&L boundaries.",
+      "path": "data/contracts/proof-invariant-cases.json",
+      "read_when": "Checking backend/frontend proof invariant expectations."
+    },
+    {
+      "id": "proof_invariant_generator",
+      "kind": "script",
+      "label": "Proof invariant table generator",
+      "owner_summary": "Generates the human proof invariant table from the test-only case manifest.",
+      "path": "scripts/generate_proof_invariant_table.py",
+      "read_when": "Regenerating the proof invariant table docs."
+    },
+    {
+      "id": "proof_invariant_doc",
+      "kind": "generated_artifact",
+      "label": "Proof invariant table",
+      "owner_summary": "Generated human-readable proof invariant matrix.",
+      "path": "docs/proof-invariant-table.md",
+      "read_when": "Reading proof edge cases across backend and frontend predicates."
+    },
+    {
+      "id": "proof_frontend_facade",
+      "kind": "code",
+      "label": "Frontend proof facade",
+      "owner_summary": "Human TypeScript facade over the generated proof artifact.",
+      "path": "src/lib/trading-desk/proofContract.ts",
+      "read_when": "Touching frontend proof constants."
+    },
+    {
+      "id": "position_evidence",
+      "kind": "code",
+      "label": "Position evidence UI logic",
+      "owner_summary": "Frontend evidence grouping and closed-row view predicates.",
+      "path": "src/lib/trading-desk/positionEvidence.ts",
+      "read_when": "Touching frontend evidence grouping."
+    },
+    {
+      "id": "scanner_doc",
+      "kind": "doc",
+      "label": "Scanner creation safety contract",
+      "owner_summary": "Scanner stage map and creation safety rules.",
+      "path": "docs/scanner-creation-safety-contract.md",
+      "read_when": "Touching scanner-origin creation."
+    },
+    {
+      "id": "scanner_contract_json",
+      "kind": "contract",
+      "label": "Scanner safety JSON",
+      "owner_summary": "Versioned scanner creation safety source contract.",
+      "path": "data/contracts/scanner-creation-safety-contract.json",
+      "read_when": "Changing scanner creation safety tokens."
+    },
+    {
+      "id": "supervised_scan",
+      "kind": "code",
+      "label": "Supervised scan engine",
+      "owner_summary": "Regular supervised options scan logic.",
+      "path": "supervised_scan.py",
+      "read_when": "Touching live scan candidate generation or guardrails."
+    },
+    {
+      "id": "replay_profit_doc",
+      "kind": "doc",
+      "label": "Replay profit contract",
+      "owner_summary": "Replay/profit ownership map.",
+      "path": "docs/replay-profit-contract.md",
+      "read_when": "Touching replay readbacks, policy, or options-profit status."
+    },
+    {
+      "id": "replay_profit_service",
+      "kind": "code",
+      "label": "Replay profit service",
+      "owner_summary": "Decorator-free replay/profit readback service.",
+      "path": "python-backend/replay_profit_service.py",
+      "read_when": "Touching replay/profit readback assembly."
+    },
+    {
+      "id": "wfo_optimizer",
+      "kind": "code",
+      "label": "WFO optimizer",
+      "owner_summary": "Large replay and optimization engine.",
+      "path": "wfo_optimizer.py",
+      "read_when": "Touching replay or optimization engine behavior."
+    },
+    {
+      "id": "metric_truth_audit",
+      "kind": "code",
+      "label": "Metric truth audit",
+      "owner_summary": "Metric truth and calibration audit logic.",
+      "path": "metric_truth_audit.py",
+      "read_when": "Touching metric truth diagnostics."
+    },
+    {
+      "id": "options_profit_gate",
+      "kind": "code",
+      "label": "Options profit gate",
+      "owner_summary": "Production readiness and proof-grade profit gates.",
+      "path": "options_profit_gate.py",
+      "read_when": "Touching profit readiness gates."
+    },
+    {
+      "id": "options_profit_flywheel",
+      "kind": "code",
+      "label": "Options profit flywheel",
+      "owner_summary": "Options profit-cycle orchestration state.",
+      "path": "options_profit_flywheel.py",
+      "read_when": "Touching profit-cycle state."
+    },
+    {
+      "id": "repository_doc",
+      "kind": "doc",
+      "label": "Repository contract",
+      "owner_summary": "Repository ownership map and structural interface contract.",
+      "path": "docs/repository-contract.md",
+      "read_when": "Touching Trading Desk repository ownership."
+    },
+    {
+      "id": "record_parity_doc",
+      "kind": "doc",
+      "label": "Trading Desk record parity",
+      "owner_summary": "Tracked-position versus suggested-trade parity and separation.",
+      "path": "docs/trading-desk-record-parity.md",
+      "read_when": "Touching tracked versus suggested row parity."
+    },
+    {
+      "id": "repository_migrations_doc",
+      "kind": "doc",
+      "label": "Repository migrations",
+      "owner_summary": "Versioned repository migration manifest and ledger contract.",
+      "path": "docs/repository-migrations.md",
+      "read_when": "Touching repository schema evolution."
+    },
+    {
+      "id": "repository_constraints_doc",
+      "kind": "doc",
+      "label": "Repository constraints",
+      "owner_summary": "DB-enforced, API-enforced, and proof-owned invariant boundaries.",
+      "path": "docs/repository-constraints.md",
+      "read_when": "Touching DB/API/proof invariant ownership."
+    },
+    {
+      "id": "repository_indexes_doc",
+      "kind": "doc",
+      "label": "Repository indexes",
+      "owner_summary": "Current and deferred repository index ownership.",
+      "path": "docs/repository-indexes.md",
+      "read_when": "Touching repository read-path indexes."
+    },
+    {
+      "id": "local_db_doc",
+      "kind": "doc",
+      "label": "Local DB hardening",
+      "owner_summary": "Local SQLite role and read-only audit contract.",
+      "path": "docs/local-db-hardening.md",
+      "read_when": "Touching local SQLite stores or backups."
+    },
+    {
+      "id": "repository_contracts_code",
+      "kind": "code",
+      "label": "Repository structural Protocols",
+      "owner_summary": "Structural Protocols for repository capabilities.",
+      "path": "python-backend/repository_contracts.py",
+      "read_when": "Touching repository interface readability."
+    },
+    {
+      "id": "positions_repository",
+      "kind": "code",
+      "label": "Positions repository",
+      "owner_summary": "Postgres-backed tracked-position repository.",
+      "path": "python-backend/positions_repository.py",
+      "read_when": "Touching tracked-position persistence."
+    },
+    {
+      "id": "suggested_trades_repository",
+      "kind": "code",
+      "label": "Suggested trades repository",
+      "owner_summary": "SQLite-backed suggested-trade repository.",
+      "path": "python-backend/suggested_trades_repository.py",
+      "read_when": "Touching suggested-trade persistence."
+    },
+    {
+      "id": "local_db_manifest",
+      "kind": "code",
+      "label": "Local DB role manifest",
+      "owner_summary": "Local SQLite role manifest.",
+      "path": "python-backend/local_db_hardening.py",
+      "read_when": "Touching local DB audit classifications."
+    },
+    {
+      "id": "repository_migrations_code",
+      "kind": "code",
+      "label": "Repository migrations manifest",
+      "owner_summary": "Versioned repository migration manifest and ledger helpers.",
+      "path": "python-backend/repository_migrations.py",
+      "read_when": "Touching repository migration definitions."
+    },
+    {
+      "id": "repository_constraints_code",
+      "kind": "code",
+      "label": "Repository constraints manifest",
+      "owner_summary": "Repository constraint ownership manifest.",
+      "path": "python-backend/repository_constraints.py",
+      "read_when": "Touching repository invariant ownership."
+    },
+    {
+      "id": "repository_indexes_code",
+      "kind": "code",
+      "label": "Repository indexes manifest",
+      "owner_summary": "Repository index ownership manifest.",
+      "path": "python-backend/repository_indexes.py",
+      "read_when": "Touching index ownership."
+    },
+    {
+      "id": "storage_ownership_map_generator",
+      "kind": "script",
+      "label": "Storage ownership map generator",
+      "owner_summary": "Generates storage ownership JSON and Markdown from route and repository manifests.",
+      "path": "scripts/generate_storage_ownership_map.py",
+      "read_when": "Regenerating or checking storage ownership map artifacts."
+    },
+    {
+      "id": "api_models_doc",
+      "kind": "doc",
+      "label": "Trading Desk API models",
+      "owner_summary": "Narrow Pydantic model boundary for Trading Desk mutation bodies.",
+      "path": "docs/trading-desk-api-models.md",
+      "read_when": "Touching backend mutation body adapters."
+    },
+    {
+      "id": "api_models_code",
+      "kind": "code",
+      "label": "Trading Desk API model code",
+      "owner_summary": "Pydantic mutation body adapters and envelope drift guards.",
+      "path": "python-backend/trading_desk_api_models.py",
+      "read_when": "Touching Pydantic adapters or envelope guards."
+    },
+    {
+      "id": "ts_api_contracts_doc",
+      "kind": "doc",
+      "label": "TypeScript API contracts",
+      "owner_summary": "Manual TypeScript API contract boundary.",
+      "path": "docs/typescript-api-contracts.md",
+      "read_when": "Touching Trading Desk TypeScript request/response shapes."
+    },
+    {
+      "id": "ts_api_contracts_code",
+      "kind": "code",
+      "label": "TypeScript API contract code",
+      "owner_summary": "Named Trading Desk TypeScript request and response contracts.",
+      "path": "src/lib/trading-desk/apiContracts.ts",
+      "read_when": "Touching Trading Desk request/response envelope types."
+    },
+    {
+      "id": "api_response_validation",
+      "kind": "code",
+      "label": "Trading Desk response validation",
+      "owner_summary": "Shallow Trading Desk response-envelope validation.",
+      "path": "src/lib/trading-desk/apiResponseValidation.ts",
+      "read_when": "Touching Next-boundary Trading Desk response validation."
+    },
+    {
+      "id": "schema_bridge_doc",
+      "kind": "generated_artifact",
+      "label": "Trading Desk schema bridge docs",
+      "owner_summary": "Generated Trading Desk schema bridge documentation.",
+      "path": "docs/trading-desk-schema-bridge.md",
+      "read_when": "Touching Trading Desk schema bridge documentation."
+    },
+    {
+      "id": "schema_bridge_json",
+      "kind": "generated_artifact",
+      "label": "Trading Desk schema bridge JSON",
+      "owner_summary": "Generated Trading Desk schema bridge JSON artifact.",
+      "path": "data/contracts/trading-desk-api-schema-bridge.json",
+      "read_when": "Touching Trading Desk schema bridge artifact."
+    },
+    {
+      "id": "schema_bridge_generator",
+      "kind": "script",
+      "label": "Trading Desk schema bridge generator",
+      "owner_summary": "Generates Trading Desk schema bridge JSON and Markdown.",
+      "path": "scripts/generate_trading_desk_schema_bridge.py",
+      "read_when": "Regenerating Trading Desk schema bridge artifacts."
+    },
+    {
+      "id": "store_ownership_code",
+      "kind": "code",
+      "label": "Trading Desk store ownership",
+      "owner_summary": "Trading Desk route lifecycle and store ownership registry.",
+      "path": "src/lib/trading-desk/storeOwnership.ts",
+      "read_when": "Touching Trading Desk route/store/lifecycle headers."
+    },
+    {
+      "id": "strategy_replay_intent",
+      "kind": "code",
+      "label": "Strategy Lab route intent",
+      "owner_summary": "Strategy Lab route ownership and mutation-intent registry.",
+      "path": "src/lib/strategy-lab/replayIntent.ts",
+      "read_when": "Touching Strategy Lab route lifecycle or mutation intent."
+    },
+    {
+      "id": "app_shell",
+      "kind": "code",
+      "label": "App shell",
+      "owner_summary": "Main client shell and view switching.",
+      "path": "src/components/layout/AppShell.tsx",
+      "read_when": "Touching main app shell or tab orchestration."
+    },
+    {
+      "id": "navigation_tabs",
+      "kind": "code",
+      "label": "Main navigation tabs",
+      "owner_summary": "Typed main app tab catalog.",
+      "path": "src/lib/navigation/tabs.ts",
+      "read_when": "Touching main app tab IDs or nav copy."
+    },
+    {
+      "id": "predictions_view",
+      "kind": "code",
+      "label": "Trading Desk coordinator",
+      "owner_summary": "Trading Desk client coordinator.",
+      "path": "src/components/predictions/PredictionsView.tsx",
+      "read_when": "Touching Trading Desk tab orchestration."
+    },
+    {
+      "id": "trading_desk_tabs",
+      "kind": "code",
+      "label": "Trading Desk tab IDs",
+      "owner_summary": "Typed Trading Desk active and visible tab catalogs.",
+      "path": "src/components/predictions/tradingDeskTabs.ts",
+      "read_when": "Touching Trading Desk visible or active tab IDs."
+    },
+    {
+      "id": "tracked_positions_tab",
+      "kind": "code",
+      "label": "Tracked positions tab",
+      "owner_summary": "Tracked-position table surface.",
+      "path": "src/components/predictions/TrackedPositionsTab.tsx",
+      "read_when": "Touching tracked-position table UI."
+    },
+    {
+      "id": "suggested_trades_tab",
+      "kind": "code",
+      "label": "Suggested trades tab",
+      "owner_summary": "Suggested-trade table surface.",
+      "path": "src/components/predictions/SuggestedTradesTab.tsx",
+      "read_when": "Touching suggested-trade table UI."
+    },
+    {
+      "id": "scanner_tab",
+      "kind": "code",
+      "label": "Scanner tab",
+      "owner_summary": "Scanner UI coordinator and table row/mobile contracts.",
+      "path": "src/components/predictions/ScannerTab.tsx",
+      "read_when": "Touching archive-gated live scanner UI."
+    },
+    {
+      "id": "scanner_evidence_panel",
+      "kind": "code",
+      "label": "Scanner evidence panel",
+      "owner_summary": "Scanner evidence and guardrail display component.",
+      "path": "src/components/predictions/ScannerEvidencePanel.tsx",
+      "read_when": "Touching scanner evidence/truth/guardrail display."
+    },
+    {
+      "id": "scanner_record_form",
+      "kind": "code",
+      "label": "Scanner record form",
+      "owner_summary": "Selected-pick record form component.",
+      "path": "src/components/predictions/ScannerPickRecordForm.tsx",
+      "read_when": "Touching scanner selected-pick record UI."
+    },
+    {
+      "id": "fintable",
+      "kind": "code",
+      "label": "FinTable",
+      "owner_summary": "Shared table with explicit mobile-card contracts.",
+      "path": "src/components/ui/FinTable.tsx",
+      "read_when": "Touching shared dense table rendering."
+    },
+    {
+      "id": "strategy_view",
+      "kind": "code",
+      "label": "Strategy Lab coordinator",
+      "owner_summary": "Strategy Lab client coordinator.",
+      "path": "src/components/strategy/StrategyView.tsx",
+      "read_when": "Touching Strategy Lab client orchestration."
+    },
+    {
+      "id": "brain_tab",
+      "kind": "code",
+      "label": "Brain tab",
+      "owner_summary": "Strategy profile and changelog surface.",
+      "path": "src/components/strategy/BrainTab.tsx",
+      "read_when": "Touching strategy profile editing."
+    },
+    {
+      "id": "optimizer_tab",
+      "kind": "code",
+      "label": "Optimizer tab",
+      "owner_summary": "Replay and optimizer result surface.",
+      "path": "src/components/strategy/OptimizerTab.tsx",
+      "read_when": "Touching replay/optimizer UI."
+    },
+    {
+      "id": "ai_commodity_runner",
+      "kind": "script",
+      "label": "AI commodity OPRA progress runner",
+      "owner_summary": "Separate non-browser AI commodity proof-lane orchestrator.",
+      "path": "scripts/run_ai_commodity_opra_progress.py",
+      "read_when": "Touching AI commodity proof lane."
+    },
+    {
+      "id": "ai_commodity_latest",
+      "kind": "generated_artifact",
+      "label": "AI commodity latest progress",
+      "owner_summary": "Generated AI commodity proof-lane progress readback.",
+      "path": "data/ai-commodity-infra/progress/latest.md",
+      "read_when": "Checking latest AI commodity proof state."
+    },
+    {
+      "id": "ai_commodity_isolation_doc",
+      "kind": "generated_artifact",
+      "label": "AI commodity isolation",
+      "owner_summary": "Generated AI commodity non-browser proof-lane isolation map.",
+      "path": "docs/ai-commodity-isolation.md",
+      "read_when": "Checking AI commodity browser, scanner, proof-source, tool, and storage boundaries."
+    },
+    {
+      "id": "ai_commodity_isolation_json",
+      "kind": "generated_artifact",
+      "label": "AI commodity isolation JSON",
+      "owner_summary": "Generated machine-readable AI commodity isolation contract.",
+      "path": "data/contracts/ai-commodity-isolation.json",
+      "read_when": "Machine-reading AI commodity isolation guard results."
+    },
+    {
+      "id": "ai_commodity_isolation_generator",
+      "kind": "script",
+      "label": "AI commodity isolation generator",
+      "owner_summary": "Generates checked AI commodity isolation JSON and Markdown.",
+      "path": "scripts/generate_ai_commodity_isolation.py",
+      "read_when": "Regenerating or checking AI commodity isolation artifacts."
+    },
+    {
+      "id": "remediation_loop_map_generator",
+      "kind": "script",
+      "label": "Remediation loop map generator",
+      "owner_summary": "Generates checked remediation loop JSON and Markdown.",
+      "path": "scripts/generate_remediation_loop_map.py",
+      "read_when": "Regenerating or checking the 44-point remediation handoff ledger."
+    },
+    {
+      "id": "remediation_loop_map_json",
+      "kind": "generated_artifact",
+      "label": "Remediation loop map JSON",
+      "owner_summary": "Generated machine-readable remediation loop handoff ledger.",
+      "path": "data/contracts/remediation-loop-map.json",
+      "read_when": "Machine-reading 44-point remediation status, owner artifacts, checks, and evidence anchors."
+    },
+    {
+      "id": "remediation_loop_map_doc",
+      "kind": "generated_artifact",
+      "label": "Remediation loop map",
+      "owner_summary": "Generated human-readable remediation loop handoff ledger.",
+      "path": "docs/remediation-loop-map.md",
+      "read_when": "Continuing the 44-point remediation loop after context compaction."
+    },
+    {
+      "id": "generated_artifact_manifest",
+      "kind": "script",
+      "label": "Generated artifact manifest",
+      "owner_summary": "Shared manifest of checked generated artifacts.",
+      "path": "scripts/generated_artifact_manifest.py",
+      "read_when": "Touching generated artifact governance or living-doc generated artifact checks."
+    },
+    {
+      "id": "generated_artifact_governance_generator",
+      "kind": "script",
+      "label": "Generated artifact governance generator",
+      "owner_summary": "Generates checked generated artifact governance JSON and Markdown.",
+      "path": "scripts/generate_generated_artifact_governance.py",
+      "read_when": "Regenerating or checking generated artifact governance."
+    },
+    {
+      "id": "generated_artifact_governance_json",
+      "kind": "generated_artifact",
+      "label": "Generated artifact governance JSON",
+      "owner_summary": "Generated machine-readable generated-artifact governance map.",
+      "path": "data/contracts/generated-artifact-governance.json",
+      "read_when": "Machine-reading generated artifact trust boundaries and stale handling."
+    },
+    {
+      "id": "generated_artifact_governance_doc",
+      "kind": "generated_artifact",
+      "label": "Generated artifact governance",
+      "owner_summary": "Generated generated-artifact trust-boundary and stale-handling inventory.",
+      "path": "docs/generated-artifact-governance.md",
+      "read_when": "Checking generated artifact runtime posture, stale handling, owner commands, and hand-edit policy."
+    },
+    {
+      "id": "final_remediation_closure_pack_generator",
+      "kind": "script",
+      "label": "Final remediation closure generator",
+      "owner_summary": "Generates checked final closure JSON and Markdown.",
+      "path": "scripts/generate_final_remediation_closure_pack.py",
+      "read_when": "Regenerating or checking the 44-point final closure pack."
+    },
+    {
+      "id": "final_remediation_closure_pack_json",
+      "kind": "generated_artifact",
+      "label": "Final remediation closure JSON",
+      "owner_summary": "Generated machine-readable final closure pack.",
+      "path": "data/contracts/final-remediation-closure-pack.json",
+      "read_when": "Machine-reading final remediation closure status, validation, and scope boundaries."
+    },
+    {
+      "id": "final_remediation_closure_pack_doc",
+      "kind": "generated_artifact",
+      "label": "Final remediation closure pack",
+      "owner_summary": "Generated human-readable final closure readback.",
+      "path": "docs/final-remediation-closure-pack.md",
+      "read_when": "Checking the final 44-point loop closure and verification ladder."
+    },
+    {
+      "id": "memory_graph_generator",
+      "kind": "script",
+      "label": "Agent memory graph generator",
+      "owner_summary": "Generates checked agent orientation graph artifacts.",
+      "path": "scripts/generate_agent_memory_graph.py",
+      "read_when": "Regenerating this memory graph."
+    },
+    {
+      "id": "living_docs_hygiene_checker",
+      "kind": "script",
+      "label": "Living docs hygiene checker",
+      "owner_summary": "Manifest-driven living-doc hygiene check.",
+      "path": "scripts/check_living_docs_hygiene.py",
+      "read_when": "Checking living-doc and generated-artifact hygiene."
+    },
+    {
+      "id": "memory_graph_json",
+      "kind": "generated_artifact",
+      "label": "Agent memory graph JSON",
+      "owner_summary": "Generated agent orientation graph JSON.",
+      "path": "data/contracts/agent-memory-graph.json",
+      "read_when": "Machine-readable owner and navigation graph."
+    },
+    {
+      "id": "memory_graph_doc",
+      "kind": "generated_artifact",
+      "label": "Agent memory graph docs",
+      "owner_summary": "Generated agent orientation graph Markdown.",
+      "path": "docs/agent-memory-graph.md",
+      "read_when": "Human-readable where-to-go memory graph."
+    }
+  ],
+  "non_goals": [
+    "Does not replace generated route inventory.",
+    "Does not replace route mutation inventory.",
+    "Does not replace storage ownership maps.",
+    "Does not replace proof/source contracts.",
+    "Does not replace the remediation loop handoff ledger.",
+    "Does not replace generated artifact governance.",
+    "Does not replace the final remediation closure pack.",
+    "Does not define runtime behavior, route payloads, auth, scanner policy, proof semantics, or DB schema."
+  ],
+  "playbooks": [
+    {
+      "heading": "Start Here",
+      "id": "start_here",
+      "nodes": [
+        "agents_guide",
+        "readme",
+        "docs_index",
+        "living_docs_hygiene",
+        "project_context",
+        "architecture_overview",
+        "architecture_best_practices",
+        "final_remediation_closure_pack_doc",
+        "remediation_loop_map_doc",
+        "next_steps"
+      ],
+      "summary": "Use this path before broad architecture or product-scope work."
+    },
+    {
+      "heading": "If Touching Routes/Auth",
+      "id": "routes_auth",
+      "nodes": [
+        "api_and_storage",
+        "route_parity_doc",
+        "route_mutation_inventory_json",
+        "backend_route_ownership_map_doc",
+        "runtime_request_flow",
+        "route_lifecycle_doc",
+        "operator_auth",
+        "backend_transport",
+        "app_api_routes",
+        "fastapi_main"
+      ],
+      "summary": "Follow route ownership, auth boundaries, and generated parity before route edits."
+    },
+    {
+      "heading": "If Touching Proof/Evidence",
+      "id": "proof_evidence",
+      "nodes": [
+        "proof_doc",
+        "proof_contract_json",
+        "proof_invariant_cases",
+        "proof_invariant_doc",
+        "proof_backend",
+        "proof_generated_ts",
+        "proof_frontend_facade",
+        "position_evidence"
+      ],
+      "summary": "Proof claims must stay stricter than UI display groups."
+    },
+    {
+      "heading": "If Touching Scanner/Creation",
+      "id": "scanner_creation",
+      "nodes": [
+        "scanner_doc",
+        "scanner_contract_json",
+        "supervised_scan",
+        "store_ownership_code",
+        "route_parity_doc"
+      ],
+      "summary": "Keep candidate visibility, creation eligibility, and row creation separate."
+    },
+    {
+      "heading": "If Touching Replay/Profit",
+      "id": "replay_profit",
+      "nodes": [
+        "replay_profit_doc",
+        "replay_profit_service",
+        "wfo_optimizer",
+        "metric_truth_audit",
+        "options_profit_gate",
+        "options_profit_flywheel"
+      ],
+      "summary": "Replay readbacks, policy, proof predicates, and profit-cycle state have separate owners."
+    },
+    {
+      "heading": "If Touching DB/Repositories",
+      "id": "db_repositories",
+      "nodes": [
+        "storage_ownership_map_doc",
+        "repository_doc",
+        "record_parity_doc",
+        "repository_migrations_doc",
+        "repository_constraints_doc",
+        "repository_indexes_doc",
+        "local_db_doc",
+        "positions_repository",
+        "suggested_trades_repository"
+      ],
+      "summary": "Preserve tracked-position Postgres ownership and suggested-trade SQLite separation."
+    },
+    {
+      "heading": "If Touching Frontend",
+      "id": "frontend_trading_desk",
+      "nodes": [
+        "app_shell",
+        "navigation_tabs",
+        "predictions_view",
+        "trading_desk_tabs",
+        "tracked_positions_tab",
+        "suggested_trades_tab",
+        "scanner_tab",
+        "fintable",
+        "strategy_view"
+      ],
+      "summary": "Use typed IDs and focused workflow components before changing Trading Desk or Strategy Lab surfaces."
+    },
+    {
+      "heading": "If Touching Generated Artifacts",
+      "id": "generated_artifacts",
+      "nodes": [
+        "living_docs_hygiene",
+        "living_docs_hygiene_checker",
+        "generated_artifact_manifest",
+        "generated_artifact_governance_generator",
+        "final_remediation_closure_pack_generator",
+        "route_parity_generator",
+        "backend_route_ownership_map_generator",
+        "storage_ownership_map_generator",
+        "schema_bridge_generator",
+        "proof_generator",
+        "proof_invariant_generator",
+        "ai_commodity_isolation_generator",
+        "remediation_loop_map_generator",
+        "memory_graph_generator",
+        "route_parity_doc",
+        "route_mutation_inventory_json",
+        "backend_route_ownership_map_doc",
+        "backend_route_ownership_map_json",
+        "storage_ownership_map_json",
+        "storage_ownership_map_doc",
+        "schema_bridge_doc",
+        "proof_generated_ts",
+        "proof_invariant_doc",
+        "ai_commodity_isolation_doc",
+        "ai_commodity_isolation_json",
+        "remediation_loop_map_doc",
+        "remediation_loop_map_json",
+        "generated_artifact_governance_doc",
+        "generated_artifact_governance_json",
+        "final_remediation_closure_pack_doc",
+        "final_remediation_closure_pack_json",
+        "memory_graph_doc"
+      ],
+      "summary": "Run the owner generator and keep generated artifacts deterministic and checked."
+    },
+    {
+      "heading": "If Touching AI Commodity",
+      "id": "ai_commodity",
+      "nodes": [
+        "project_context",
+        "ai_commodity_isolation_doc",
+        "ai_commodity_isolation_json",
+        "next_steps",
+        "ai_commodity_runner",
+        "ai_commodity_latest"
+      ],
+      "summary": "Treat AI commodity as a separate non-browser proof-first lane."
+    },
+    {
+      "heading": "Final Closure",
+      "id": "final_closure",
+      "nodes": [
+        "final_remediation_closure_pack_doc",
+        "final_remediation_closure_pack_json",
+        "remediation_loop_map_doc",
+        "generated_artifact_governance_doc",
+        "memory_graph_doc",
+        "living_docs_hygiene",
+        "architecture_best_practices",
+        "project_context"
+      ],
+      "summary": "Use this path to prove the 44-point remediation loop is closed without treating closure as runtime behavior."
+    }
+  ],
+  "runtime_use": false,
+  "scope": "Orientation metadata for regular supervised options browser product work and the separate AI commodity proof lane. It helps agents choose owner docs and code paths.",
+  "sources": [
+    "Explicit manifest in scripts/generate_agent_memory_graph.py",
+    "docs/architecture-best-practices.md",
+    "docs/index.md"
+  ]
+}

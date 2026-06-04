@@ -1,0 +1,403 @@
+{
+  "artifact": "trading_desk_api_schema_bridge",
+  "generated_by": "scripts/generate_trading_desk_schema_bridge.py",
+  "json_schema": {
+    "$defs": {
+      "CloseTradingDeskRecordBody": {
+        "additionalProperties": true,
+        "properties": {
+          "closed_at": {
+            "default": null,
+            "title": "Closed At"
+          },
+          "exit_price": {
+            "default": null,
+            "title": "Exit Price"
+          },
+          "notes": {
+            "default": null,
+            "title": "Notes"
+          }
+        },
+        "title": "CloseTradingDeskRecordBody",
+        "type": "object"
+      },
+      "CreateTradingDeskRecordBody": {
+        "additionalProperties": true,
+        "properties": {
+          "contracts": {
+            "default": null,
+            "title": "Contracts"
+          },
+          "creation_mode": {
+            "default": null,
+            "title": "Creation Mode"
+          },
+          "fill_price": {
+            "default": null,
+            "title": "Fill Price"
+          },
+          "filled_at": {
+            "default": null,
+            "title": "Filled At"
+          },
+          "notes": {
+            "default": null,
+            "title": "Notes"
+          },
+          "scan_pick": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scan Pick"
+          }
+        },
+        "title": "CreateTradingDeskRecordBody",
+        "type": "object"
+      },
+      "ReviewTradingDeskRecordsBody": {
+        "additionalProperties": true,
+        "properties": {
+          "position_ids": {
+            "default": null,
+            "title": "Position Ids"
+          }
+        },
+        "title": "ReviewTradingDeskRecordsBody",
+        "type": "object"
+      },
+      "SuggestedTradeEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duplicate"
+          },
+          "trade": {
+            "additionalProperties": true,
+            "title": "Trade",
+            "type": "object"
+          }
+        },
+        "required": [
+          "trade"
+        ],
+        "title": "SuggestedTradeEnvelope",
+        "type": "object"
+      },
+      "SuggestedTradesEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "trades": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Trades",
+            "type": "array"
+          }
+        },
+        "required": [
+          "trades"
+        ],
+        "title": "SuggestedTradesEnvelope",
+        "type": "object"
+      },
+      "TrackedPositionEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "duplicate": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duplicate"
+          },
+          "position": {
+            "additionalProperties": true,
+            "title": "Position",
+            "type": "object"
+          },
+          "position_event_persistence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Position Event Persistence"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "TrackedPositionEnvelope",
+        "type": "object"
+      },
+      "TrackedPositionsEnvelope": {
+        "additionalProperties": false,
+        "properties": {
+          "position_event_persistence": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Position Event Persistence"
+          },
+          "positions": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Positions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "positions"
+        ],
+        "title": "TrackedPositionsEnvelope",
+        "type": "object"
+      }
+    },
+    "$schema": "https://json-schema.org/draft/2020-12/schema"
+  },
+  "non_goals": [
+    "No FastAPI response_model decorators or endpoint body annotations.",
+    "No automatic FastAPI 422 request validation.",
+    "No OpenAPI generation, serving, or replacement for FastAPI route metadata.",
+    "No runtime JSON Schema, Zod, or AJV validation.",
+    "No generated TypeScript replacement for the manual Trading Desk contracts.",
+    "No response payload reshaping, auth/header/cookie behavior changes, or DB changes.",
+    "No deep TrackedPosition, SuggestedTrade, ScanPick, proof, scanner, replay, P&L, or review schemas.",
+    "No Strategy Lab, generic route lifecycle, backend-only FastAPI, AI commodity, crypto, Polymarket, or day-trading schema sweep."
+  ],
+  "route_contracts": [
+    {
+      "family": "trading_desk",
+      "lifecycle": "read",
+      "method": "GET",
+      "owner": "python-backend/positions_repository.py via DATABASE_URL",
+      "pydantic": null,
+      "record_class": "tracked_position",
+      "route": "/api/positions",
+      "route_id": "tracked_positions_read",
+      "runtime_use": false,
+      "schema_status": "typescript_contract_only",
+      "store": "postgres_tracked_positions",
+      "typescript": {
+        "envelope": "positions",
+        "includes_position_event_persistence": false,
+        "request": "TradingDeskListWindow",
+        "response": "TrackedPositionsListResponse | GroupedTrackedPositionsResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "create",
+      "method": "POST",
+      "owner": "python-backend/positions_repository.py via DATABASE_URL",
+      "pydantic": {
+        "notes": "Request body is modeled, but price/contracts semantics stay in existing route parsers.",
+        "request_model": "CreateTradingDeskRecordBody",
+        "request_schema_ref": "#/$defs/CreateTradingDeskRecordBody",
+        "response_envelope_model": "TrackedPositionEnvelope",
+        "response_envelope_schema_ref": "#/$defs/TrackedPositionEnvelope"
+      },
+      "record_class": "tracked_position",
+      "route": "/api/positions",
+      "route_id": "tracked_positions_create",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "postgres_tracked_positions",
+      "typescript": {
+        "envelope": "position",
+        "includes_position_event_persistence": true,
+        "request": "CreateTrackedPositionRequest",
+        "response": "CreateTrackedPositionResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "review",
+      "method": "POST",
+      "owner": "python-backend/positions_service.py and positions_repository.py via DATABASE_URL",
+      "pydantic": {
+        "notes": "position_ids remains raw so current positive-int list validation and 400 behavior stay unchanged.",
+        "request_model": "ReviewTradingDeskRecordsBody",
+        "request_schema_ref": "#/$defs/ReviewTradingDeskRecordsBody",
+        "response_envelope_model": "TrackedPositionsEnvelope",
+        "response_envelope_schema_ref": "#/$defs/TrackedPositionsEnvelope"
+      },
+      "record_class": "tracked_position",
+      "route": "/api/positions/review",
+      "route_id": "tracked_positions_review",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "postgres_tracked_positions",
+      "typescript": {
+        "envelope": "positions",
+        "includes_position_event_persistence": true,
+        "request": "ReviewTrackedPositionsRequest",
+        "response": "ReviewTrackedPositionsResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "close",
+      "method": "POST",
+      "owner": "python-backend/positions_repository.py via DATABASE_URL",
+      "pydantic": {
+        "notes": "exit_price and closed_at remain raw so existing close parsers own validation.",
+        "request_model": "CloseTradingDeskRecordBody",
+        "request_schema_ref": "#/$defs/CloseTradingDeskRecordBody",
+        "response_envelope_model": "TrackedPositionEnvelope",
+        "response_envelope_schema_ref": "#/$defs/TrackedPositionEnvelope"
+      },
+      "record_class": "tracked_position",
+      "route": "/api/positions/{id}/close",
+      "route_id": "tracked_positions_close",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "postgres_tracked_positions",
+      "typescript": {
+        "envelope": "position",
+        "includes_position_event_persistence": true,
+        "request": "CloseTrackedPositionRequest",
+        "response": "CloseTrackedPositionResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "read",
+      "method": "GET",
+      "owner": "python-backend/suggested_trades_repository.py via chat_history.db",
+      "pydantic": null,
+      "record_class": "suggested_trade",
+      "route": "/api/suggested-trades",
+      "route_id": "suggested_trades_read",
+      "runtime_use": false,
+      "schema_status": "typescript_contract_only",
+      "store": "sqlite_suggested_trades",
+      "typescript": {
+        "envelope": "trades",
+        "includes_position_event_persistence": false,
+        "request": "TradingDeskListWindow",
+        "response": "SuggestedTradesListResponse | GroupedSuggestedTradesResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "create",
+      "method": "POST",
+      "owner": "python-backend/suggested_trades_repository.py via chat_history.db",
+      "pydantic": {
+        "notes": "Missing contracts remains absent so suggested create keeps the legacy default of 1.",
+        "request_model": "CreateTradingDeskRecordBody",
+        "request_schema_ref": "#/$defs/CreateTradingDeskRecordBody",
+        "response_envelope_model": "SuggestedTradeEnvelope",
+        "response_envelope_schema_ref": "#/$defs/SuggestedTradeEnvelope"
+      },
+      "record_class": "suggested_trade",
+      "route": "/api/suggested-trades",
+      "route_id": "suggested_trades_create",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "sqlite_suggested_trades",
+      "typescript": {
+        "envelope": "trade",
+        "includes_position_event_persistence": false,
+        "request": "CreateSuggestedTradeRequest",
+        "response": "CreateSuggestedTradeResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "review",
+      "method": "POST",
+      "owner": "python-backend/positions_service.py and suggested_trades_repository.py via chat_history.db",
+      "pydantic": {
+        "notes": "Suggested review response envelope intentionally has no position_event_persistence.",
+        "request_model": "ReviewTradingDeskRecordsBody",
+        "request_schema_ref": "#/$defs/ReviewTradingDeskRecordsBody",
+        "response_envelope_model": "SuggestedTradesEnvelope",
+        "response_envelope_schema_ref": "#/$defs/SuggestedTradesEnvelope"
+      },
+      "record_class": "suggested_trade",
+      "route": "/api/suggested-trades/review",
+      "route_id": "suggested_trades_review",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "sqlite_suggested_trades",
+      "typescript": {
+        "envelope": "trades",
+        "includes_position_event_persistence": false,
+        "request": "ReviewSuggestedTradesRequest",
+        "response": "ReviewSuggestedTradesResponse"
+      }
+    },
+    {
+      "family": "trading_desk",
+      "lifecycle": "close",
+      "method": "POST",
+      "owner": "python-backend/suggested_trades_repository.py via chat_history.db",
+      "pydantic": {
+        "notes": "Suggested close response envelope intentionally has no position_event_persistence.",
+        "request_model": "CloseTradingDeskRecordBody",
+        "request_schema_ref": "#/$defs/CloseTradingDeskRecordBody",
+        "response_envelope_model": "SuggestedTradeEnvelope",
+        "response_envelope_schema_ref": "#/$defs/SuggestedTradeEnvelope"
+      },
+      "record_class": "suggested_trade",
+      "route": "/api/suggested-trades/{id}/close",
+      "route_id": "suggested_trades_close",
+      "runtime_use": false,
+      "schema_status": "pydantic_adapter_schema",
+      "store": "sqlite_suggested_trades",
+      "typescript": {
+        "envelope": "trade",
+        "includes_position_event_persistence": false,
+        "request": "CloseSuggestedTradeRequest",
+        "response": "CloseSuggestedTradeResponse"
+      }
+    }
+  ],
+  "runtime_use": false,
+  "schema_version": 1,
+  "scope": "Generated documentation and drift-check bridge for the active Trading Desk API contract slice.",
+  "sources": [
+    "python-backend/trading_desk_api_models.py",
+    "src/lib/trading-desk/apiContracts.ts",
+    "src/lib/trading-desk/storeOwnership.ts"
+  ]
+}

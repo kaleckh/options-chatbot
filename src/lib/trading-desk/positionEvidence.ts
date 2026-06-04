@@ -1,4 +1,24 @@
 import type { SuggestedTrade, TrackedPosition } from "@/lib/types";
+import {
+  PRODUCTION_EVIDENCE_GROUP_IDS,
+  PROOF_CLASSES,
+  ENTRY_PRICE_FIELDS,
+  PROOF_SOURCE_FIELDS,
+  QUOTE_FRESHNESS_FIELDS,
+  QUOTE_FRESHNESS_REQUIRED,
+  QUOTE_TIME_FIELDS,
+  REQUIRED_LIVE_SELECTION_SOURCE,
+  REQUIRED_SOURCE_SCAN_LINEAGE_FIELDS,
+  RESEARCH_BACKFILL_IDENTITY_FIELDS,
+  RESEARCH_BACKFILL_TOKENS,
+  TRUSTED_ENTRY_BASIS_TOKENS,
+  TRUSTED_EXIT_BASIS_TOKENS,
+  TRUSTED_OPTIONS_SOURCE_LABELS,
+  TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS,
+  UNTRUSTED_ENTRY_BASIS_TOKENS,
+  UNTRUSTED_EXIT_BASIS_TOKENS,
+  UNTRUSTED_QUOTE_FRESHNESS_TOKENS,
+} from "@/lib/trading-desk/proofContract";
 
 export type PositionEvidenceTone = "live" | "warning" | "muted";
 
@@ -117,7 +137,9 @@ export type CurrentPolicyCohortHealth = {
     | PolicyCohortHealthStatus;
 };
 
-const PRODUCTION_EVIDENCE_IDS = new Set<PositionEvidenceGroupId>(["live_exact", "manual_exact"]);
+const PRODUCTION_EVIDENCE_IDS = new Set<PositionEvidenceGroupId>(
+  PRODUCTION_EVIDENCE_GROUP_IDS as readonly PositionEvidenceGroupId[]
+);
 const CURRENT_POLICY_REPAIR_LANES = new Set([
   "short_term",
   "swing",
@@ -130,25 +152,6 @@ const LANE_TICKER_QUARANTINES: Record<string, Set<string>> = {
   swing: new Set(["IWM", "XLK", "SLB", "DIA", "NFLX"]),
   bullish_momentum: new Set(["NVDA", "TSLA", "COIN"]),
 };
-const TRUSTED_EXIT_BASIS_TOKENS = [
-  "spread_bid_ask",
-  "spread_bid_ask_exact",
-  "historical_spread_bid_ask",
-  "historical_suggested_close",
-  "auto_sell_recommendation",
-  "manual",
-  "broker",
-  "exact",
-];
-const UNTRUSTED_EXIT_BASIS_TOKENS = [
-  "lifecycle",
-  "elapsed",
-  "last",
-  "midpoint",
-  "mark",
-  "model",
-  "unpriced",
-];
 
 export function normalizeEvidenceValue(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
@@ -526,8 +529,147 @@ export function getCurrentPolicyReplayState(position: TrackedPosition | Suggeste
   };
 }
 
-function hasAnyEvidenceToken(values: string[], tokens: string[]): boolean {
+function hasAnyEvidenceToken(values: string[], tokens: readonly string[]): boolean {
   return values.some((value) => tokens.some((token) => value.includes(token)));
+}
+
+function hasAnyEvidenceIdentityField(
+  row: Record<string, unknown>,
+  source: Record<string, unknown>,
+  fields: readonly string[]
+): boolean {
+  return fields.some((field) =>
+    (row[field] != null && row[field] !== "") ||
+    (source[field] != null && source[field] !== "")
+  );
+}
+
+function asEvidenceRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+}
+
+function sourceEvidenceRecord(position: TrackedPosition | SuggestedTrade): Record<string, unknown> {
+  return asEvidenceRecord(position.source_pick_snapshot);
+}
+
+function entryQuoteSnapshotRecord(position: TrackedPosition | SuggestedTrade): Record<string, unknown> {
+  const topLevel = asEvidenceRecord((position as unknown as Record<string, unknown>).entry_quote_snapshot);
+  if (Object.keys(topLevel).length > 0) return topLevel;
+  return asEvidenceRecord(sourceEvidenceRecord(position).entry_quote_snapshot);
+}
+
+function finiteEvidenceNumber(value: unknown): number | null {
+  if (typeof value === "boolean" || value == null || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function firstEvidenceValue(
+  position: TrackedPosition | SuggestedTrade,
+  fields: readonly string[],
+  snapshot: Record<string, unknown> = entryQuoteSnapshotRecord(position)
+): unknown {
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  for (const field of fields) {
+    if (row[field] != null && row[field] !== "") return row[field];
+    if (source[field] != null && source[field] !== "") return source[field];
+    if (snapshot[field] != null && snapshot[field] !== "") return snapshot[field];
+  }
+  return null;
+}
+
+function hasEvidenceValue(position: TrackedPosition | SuggestedTrade, fields: readonly string[]): boolean {
+  return firstEvidenceValue(position, fields) != null;
+}
+
+function hasRawExactContract(position: TrackedPosition | SuggestedTrade): boolean {
+  return Boolean(
+    normalizeEvidenceValue(position.contract_symbol || sourceEvidenceRecord(position).contract_symbol).trim()
+  );
+}
+
+function hasLiveExactSelectionSource(position: TrackedPosition | SuggestedTrade): boolean {
+  return (
+    normalizeEvidenceValue(
+      firstEvidenceValue(position, ["selection_source", "contract_selection_source"])
+    ) === REQUIRED_LIVE_SELECTION_SOURCE
+  );
+}
+
+function hasVerifiedSourceScanLineage(position: TrackedPosition | SuggestedTrade): boolean {
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  const hasRequiredFields = REQUIRED_SOURCE_SCAN_LINEAGE_FIELDS.every((field) =>
+    (row[field] != null && row[field] !== "") ||
+    (source[field] != null && source[field] !== "")
+  );
+  if (!hasRequiredFields) return false;
+  return Boolean(row.source_scan_lineage_verified || source.source_scan_lineage_verified);
+}
+
+function hasTrustedOpraSource(position: TrackedPosition | SuggestedTrade): boolean {
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  const values = PROOF_SOURCE_FIELDS.flatMap((field) => [
+    normalizeEvidenceValue(row[field]),
+    normalizeEvidenceValue(source[field]),
+  ]).filter(Boolean);
+  return values.some(
+    (value) =>
+      TRUSTED_OPTIONS_SOURCE_LABELS.includes(value) ||
+      TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS.every((token) => value.includes(token))
+  );
+}
+
+function hasFreshProofQuote(position: TrackedPosition | SuggestedTrade): boolean {
+  const snapshot = entryQuoteSnapshotRecord(position);
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  const freshnessValues = QUOTE_FRESHNESS_FIELDS.flatMap((field) => [
+    normalizeEvidenceValue(row[field]),
+    normalizeEvidenceValue(source[field]),
+    normalizeEvidenceValue(snapshot[field]),
+  ]);
+  if (QUOTE_FRESHNESS_REQUIRED && !freshnessValues.some(Boolean)) return false;
+  return !freshnessValues.some((value) =>
+    UNTRUSTED_QUOTE_FRESHNESS_TOKENS.some((token) => value.includes(token))
+  );
+}
+
+function hasExecutableProofEntry(position: TrackedPosition | SuggestedTrade): boolean {
+  const snapshot = entryQuoteSnapshotRecord(position);
+  const entryPrice = finiteEvidenceNumber(firstEvidenceValue(position, ENTRY_PRICE_FIELDS, snapshot));
+  if (entryPrice == null || entryPrice <= 0) return false;
+  const basis = normalizeEvidenceValue(
+    (position as unknown as Record<string, unknown>).entry_execution_basis ||
+    sourceEvidenceRecord(position).entry_execution_basis ||
+    snapshot.entry_execution_basis
+  );
+  if (!basis) return false;
+  if (UNTRUSTED_ENTRY_BASIS_TOKENS.some((token) => basis.includes(token))) return false;
+  if (!TRUSTED_ENTRY_BASIS_TOKENS.some((token) => basis.includes(token))) return false;
+  const quoteTimestamp = Boolean(
+    hasEvidenceValue(position, QUOTE_TIME_FIELDS) ||
+    snapshot.quote_time_et ||
+    snapshot.quote_time_utc ||
+    snapshot.captured_at_utc
+  );
+  return quoteTimestamp && hasFreshProofQuote(position);
+}
+
+function hasLiveExactProductionProof(position: TrackedPosition | SuggestedTrade): boolean {
+  const source = sourceEvidenceRecord(position);
+  const proofClass = normalizeEvidenceValue(position.proof_class ?? source.proof_class);
+  return (
+    proofClass === PROOF_CLASSES.liveScanExact &&
+    position.proof_eligible === true &&
+    hasRawExactContract(position) &&
+    hasLiveExactSelectionSource(position) &&
+    hasVerifiedSourceScanLineage(position) &&
+    hasTrustedOpraSource(position) &&
+    hasExecutableProofEntry(position)
+  );
 }
 
 export function getPositionEvidenceDescriptor(
@@ -538,17 +680,17 @@ export function getPositionEvidenceDescriptor(
   const proofClass = normalizeEvidenceValue(position.proof_class ?? source?.proof_class);
   const proofReason = compactEvidenceText(position.proof_class_reason || position.proof_ineligibility_reason);
   const evidenceValues = positionEvidenceValues(position);
+  const rowRecord = position as unknown as Record<string, unknown>;
+  const sourceRecord = sourceEvidenceRecord(position);
   const migratedPaper = Boolean(
     source?.position_migration_id ||
     source?.position_migrated_at_utc ||
     compactEvidence.migrated_paper
   );
-  const backfillOrResearch = Boolean(source?.research_only || compactEvidence.research_backfill) || hasAnyEvidenceToken(evidenceValues, [
-    "backfill",
-    "research",
-    "historical_replay",
-    "historical_selection",
-  ]);
+  const backfillOrResearch =
+    Boolean(source?.research_only || compactEvidence.research_backfill) ||
+    hasAnyEvidenceIdentityField(rowRecord, sourceRecord, RESEARCH_BACKFILL_IDENTITY_FIELDS) ||
+    hasAnyEvidenceToken(evidenceValues, RESEARCH_BACKFILL_TOKENS);
   const lifecycleOnly =
     position.status === "closed" &&
     position.exit_execution_price == null &&
@@ -591,7 +733,16 @@ export function getPositionEvidenceDescriptor(
     };
   }
 
-  if (proofClass === "ineligible" || position.proof_eligible === false) {
+  if (proofClass === PROOF_CLASSES.manualBrokerExact) {
+    return {
+      id: "manual_exact",
+      label: "Manual exact",
+      detail: "Broker/manual fill",
+      tone: "muted",
+    };
+  }
+
+  if (proofClass === PROOF_CLASSES.ineligible || position.proof_eligible === false) {
     return {
       id: "proof_ineligible",
       label: "Proof ineligible",
@@ -600,21 +751,20 @@ export function getPositionEvidenceDescriptor(
     };
   }
 
-  if (proofClass === "live_scan_exact_contract" || position.proof_eligible) {
+  if (proofClass === PROOF_CLASSES.liveScanExact) {
+    if (!hasLiveExactProductionProof(position)) {
+      return {
+        id: "proof_ineligible",
+        label: "Proof ineligible",
+        detail: proofReason || "Missing persisted live proof gate",
+        tone: "warning",
+      };
+    }
     return {
       id: "live_exact",
       label: "Live exact",
       detail: "Proof eligible scan row",
       tone: "live",
-    };
-  }
-
-  if (proofClass === "manual_broker_exact_contract") {
-    return {
-      id: "manual_exact",
-      label: "Manual exact",
-      detail: "Broker/manual fill",
-      tone: "muted",
     };
   }
 
@@ -637,7 +787,7 @@ export function getPositionEvidenceGroup(position: TrackedPosition | SuggestedTr
     return { ...base, id: "live_exact", productionProof: true, researchLearning: false };
   }
   if (descriptor.id === "manual_exact") {
-    return { ...base, id: "manual_exact", productionProof: true, researchLearning: false };
+    return { ...base, id: "manual_exact", productionProof: false, researchLearning: false };
   }
   if (descriptor.id === "historical_paper") {
     return { ...base, id: "historical_paper", productionProof: false, researchLearning: true };
@@ -658,7 +808,10 @@ export function getPositionEvidenceGroup(position: TrackedPosition | SuggestedTr
 }
 
 export function isProductionProofPosition(position: TrackedPosition | SuggestedTrade): boolean {
-  return PRODUCTION_EVIDENCE_IDS.has(getPositionEvidenceGroup(position).id);
+  const hasProductionEntryEvidence = PRODUCTION_EVIDENCE_IDS.has(getPositionEvidenceGroup(position).id);
+  if (!hasProductionEntryEvidence) return false;
+  // Closed production-proof claims need trusted exit evidence and calculable realized P&L.
+  return position.status === "closed" ? isTruthGradeClosedPosition(position) : true;
 }
 
 export function isResearchLearningPosition(position: TrackedPosition | SuggestedTrade): boolean {

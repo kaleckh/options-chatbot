@@ -45,6 +45,91 @@ SCAN_FUNNEL_DROP_KEYS = (
     "guardrails",
     "exceptions",
 )
+SCANNER_PIPELINE_STAGES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "playbook_resolution",
+        "owner": "supervised_scan.get_scan_playbook",
+        "emitted_fields": ["playbook", "playbooks", "data_readiness", "truth_lane"],
+    },
+    {
+        "id": "raw_candidate_generation",
+        "owner": "supervised_scan.run_supervised_scan",
+        "emitted_fields": ["candidate_count"],
+    },
+    {
+        "id": "scan_drop_diagnostics",
+        "owner": "supervised_scan.run_supervised_scan",
+        "emitted_fields": ["scan_drop_reasons", "scan_funnel.drop_counts"],
+    },
+    {
+        "id": "policy_gate",
+        "owner": "supervised_scan.run_supervised_scan",
+        "emitted_fields": [
+            "policy",
+            "policy_error",
+            "policy_fail_closed",
+            "playbook_exit_audit",
+            "playbook_exit_audit_error",
+        ],
+    },
+    {
+        "id": "policy_filter",
+        "owner": "supervised_scan.apply_trade_policy_to_scan",
+        "emitted_fields": ["policy_decision_counts", "scan_funnel.policy_counts"],
+    },
+    {
+        "id": "guardrail_annotation",
+        "owner": "supervised_scan.apply_playbook_guardrails",
+        "emitted_fields": [
+            "guardrail_decision_counts",
+            "scan_funnel.guardrail_counts",
+            "exposure_snapshot",
+            "guardrail_decision",
+            "portfolio_caps_enforced",
+            "position_tracking_mode",
+            "creation_eligible",
+            "creation_blockers",
+        ],
+    },
+    {
+        "id": "managed_selection",
+        "owner": "supervised_scan.run_supervised_scan",
+        "emitted_fields": [
+            "picks",
+            "watch_picks",
+            "ranked_picks",
+            "candidate_audit_picks",
+            "managed_lane_status",
+            "watch_priority_symbols",
+            "watch_deprioritized_symbols",
+        ],
+    },
+    {
+        "id": "payload_assembly",
+        "owner": "supervised_scan.run_supervised_scan",
+        "emitted_fields": ["scan_funnel", "candidate_count", "returned_count"],
+    },
+    {
+        "id": "forward_lineage_capture",
+        "owner": "python-backend/main.py run_scan_endpoint",
+        "emitted_fields": [
+            "source_scan_session_id",
+            "source_scan_event_key",
+            "source_scan_run_id",
+            "source_scan_recorded_at_utc",
+        ],
+    },
+    {
+        "id": "proof_classification",
+        "owner": "python-backend/positions_service.py build_position_payload",
+        "emitted_fields": ["proof_class", "proof_eligible", "proof_ineligibility_reason"],
+    },
+    {
+        "id": "creation_or_validation_disposition",
+        "owner": "python-backend/main.py and scripts/validate_pending_scan_candidates.py",
+        "emitted_fields": ["position_id", "auto_track_outcome", "candidates[].outcome", "summary.outcome_counts"],
+    },
+)
 
 SPECULATIVE_ALLOWED_TICKERS = ("SPY", "QQQ")
 EXECUTABLE_OPRA_PAPER_CANDIDATE_LABEL = "executable_opra_paper_candidate"
@@ -564,14 +649,12 @@ _LANE_DISPLAY_ORDER = {
     "speculative": 110,
 }
 
-_AUTO_TRACK_PLAYBOOK_IDS = {
-    "short_term",
-    "swing",
-    "bullish_momentum",
-    "bullish_pullback_observation",
+_AUTO_TRACK_EXCLUDED_PLAYBOOK_IDS = {
+    AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID,
 }
-_DIAGNOSTIC_ONLY_PLAYBOOK_IDS = {
-    "quality90_debit55_canary",
+_DIAGNOSTIC_ONLY_PLAYBOOK_IDS: set[str] = set()
+_CONTROL_PROOF_SCOPE_PLAYBOOK_IDS = {
+    QUALITY90_DEBIT55_CANARY_COHORT_ID,
 }
 _DISABLED_TRACKING_PLAYBOOK_IDS = {
     AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID,
@@ -583,15 +666,15 @@ def _default_position_tracking_mode(playbook_id: str) -> str:
         return POSITION_TRACKING_DISABLED
     if playbook_id in _DIAGNOSTIC_ONLY_PLAYBOOK_IDS:
         return POSITION_TRACKING_DIAGNOSTIC_ONLY
-    if playbook_id in _AUTO_TRACK_PLAYBOOK_IDS:
+    if playbook_id not in _AUTO_TRACK_EXCLUDED_PLAYBOOK_IDS:
         return POSITION_TRACKING_AUTO_TRACK
-    return POSITION_TRACKING_PAPER_REVIEW_ONLY
+    return POSITION_TRACKING_DISABLED
 
 
 def _default_proof_scope(playbook_id: str) -> str:
     if playbook_id == AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID:
         return COMMODITY_PROOF_SCOPE
-    if playbook_id in _DIAGNOSTIC_ONLY_PLAYBOOK_IDS:
+    if playbook_id in _CONTROL_PROOF_SCOPE_PLAYBOOK_IDS:
         return REGULAR_CONTROL_PROOF_SCOPE
     return REGULAR_PROOF_SCOPE
 

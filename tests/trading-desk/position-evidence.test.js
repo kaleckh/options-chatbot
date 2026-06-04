@@ -17,6 +17,73 @@ function loadPositionEvidenceModule() {
     fileName: sourcePath,
   }).outputText;
   const module = { exports: {} };
+  const localRequire = (specifier) => {
+    if (specifier === "@/lib/trading-desk/proofContract") {
+      return loadProofContractModule();
+    }
+    return require(specifier);
+  };
+
+  vm.runInNewContext(
+    transpiled,
+    {
+      console,
+      exports: module.exports,
+      module,
+      require: localRequire,
+    },
+    { filename: sourcePath }
+  );
+
+  return module.exports;
+}
+
+function loadProofContractModule() {
+  const sourcePath = path.join(__dirname, "..", "..", "src", "lib", "trading-desk", "proofContract.ts");
+  const source = fs.readFileSync(sourcePath, "utf8");
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      resolveJsonModule: true,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: sourcePath,
+  }).outputText;
+  const module = { exports: {} };
+  const localRequire = (specifier) => {
+    if (specifier === "@/lib/generated/proofEvidenceContract") {
+      return loadGeneratedProofEvidenceContractModule();
+    }
+    return require(specifier);
+  };
+
+  vm.runInNewContext(
+    transpiled,
+    {
+      console,
+      exports: module.exports,
+      module,
+      require: localRequire,
+    },
+    { filename: sourcePath }
+  );
+
+  return module.exports;
+}
+
+function loadGeneratedProofEvidenceContractModule() {
+  const sourcePath = path.join(__dirname, "..", "..", "src", "lib", "generated", "proofEvidenceContract.ts");
+  const source = fs.readFileSync(sourcePath, "utf8");
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: sourcePath,
+  }).outputText;
+  const module = { exports: {} };
 
   vm.runInNewContext(
     transpiled,
@@ -33,6 +100,7 @@ function loadPositionEvidenceModule() {
 }
 
 const evidence = loadPositionEvidenceModule();
+const proofContract = loadProofContractModule();
 
 function closedPosition(overrides = {}) {
   return {
@@ -49,14 +117,156 @@ function closedPosition(overrides = {}) {
   };
 }
 
-test("production live exact rows qualify for truth-grade closed outcomes", () => {
-  const position = closedPosition({
+function liveExactClosedPosition(overrides = {}) {
+  const sourceOverrides = overrides.source_pick_snapshot || {};
+  const rest = { ...overrides };
+  delete rest.source_pick_snapshot;
+  return closedPosition({
+    proof_eligible: true,
     proof_class: "live_scan_exact_contract",
+    contract_symbol: "SPY260619C00600000",
+    entry_execution_price: 1,
+    entry_execution_basis: "ask",
+    source_scan_session_id: 55,
+    source_scan_event_key: "short_term:rank_1",
+    source_scan_run_id: "api_scan_20260406T100000Z",
+    source_scan_recorded_at_utc: "2026-04-06T14:00:00Z",
+    source_pick_snapshot: {
+      selection_source: "live_chain_exact_contract",
+      options_data_source: "alpaca_opra",
+      quote_time_et: "2026-04-06T10:00:00-04:00",
+      quote_freshness_status: "fresh",
+      entry_execution_price: 1,
+      entry_execution_basis: "ask",
+      source_scan_lineage_verified: true,
+      ...sourceOverrides,
+    },
+    ...rest,
   });
+}
+
+test("proof contract declares production group and display precedence", () => {
+  assert.deepEqual(Array.from(proofContract.PRODUCTION_EVIDENCE_GROUP_IDS), ["live_exact"]);
+  assert.deepEqual(Array.from(proofContract.EVIDENCE_DISPLAY_PRECEDENCE), [
+    "lifecycle_only",
+    "historical_paper",
+    "research_backfill",
+    "proof_ineligible",
+    "manual_exact",
+    "live_exact",
+    "legacy_unclassified",
+  ]);
+  assert.equal(proofContract.PROOF_CLASSES.liveScanExact, "live_scan_exact_contract");
+  assert.equal(proofContract.REQUIRED_LIVE_SELECTION_SOURCE, "live_chain_exact_contract");
+  assert.ok(proofContract.REQUIRED_SOURCE_SCAN_LINEAGE_FIELDS.includes("source_scan_event_key"));
+  assert.ok(proofContract.RESEARCH_BACKFILL_IDENTITY_FIELDS.includes("backfill_audit_id"));
+  assert.equal(proofContract.QUOTE_FRESHNESS_REQUIRED, true);
+  assert.ok(proofContract.UNTRUSTED_QUOTE_FRESHNESS_TOKENS.includes("stale"));
+});
+
+test("production live exact rows qualify for truth-grade closed outcomes", () => {
+  const position = liveExactClosedPosition();
 
   assert.equal(evidence.getPositionEvidenceGroup(position).id, "live_exact");
   assert.equal(evidence.isProductionProofPosition(position), true);
   assert.equal(evidence.isTruthGradeClosedPosition(position), true);
+});
+
+test("bare live proof class without persisted entry proof gates is not production proof", () => {
+  const position = closedPosition({
+    proof_eligible: true,
+    proof_class: "live_scan_exact_contract",
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "proof_ineligible");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("stale quote freshness blocks frontend production proof", () => {
+  const position = liveExactClosedPosition({
+    source_pick_snapshot: {
+      quote_freshness_status: "stale",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "proof_ineligible");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("missing quote freshness blocks frontend production proof", () => {
+  const position = liveExactClosedPosition({
+    source_pick_snapshot: {
+      quote_freshness_status: null,
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "proof_ineligible");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("research identity fields block frontend production proof even with opaque ids", () => {
+  const position = liveExactClosedPosition({
+    source_pick_snapshot: {
+      backfill_audit_id: "audit-1",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "research_backfill");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("manual exact rows are visible but not production proof", () => {
+  const position = closedPosition({
+    proof_class: "manual_broker_exact_contract",
+    proof_eligible: false,
+    exit_execution_basis: "broker_fill",
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "manual_exact");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.hasTrustedExecutableExit(position), true);
+  assert.equal(evidence.isRealizedPnlClosedPosition(position), true);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("stale proof eligible flags without live proof class do not become production proof", () => {
+  const position = closedPosition({
+    proof_eligible: true,
+    source_pick_snapshot: {
+      options_data_source: "alpaca_opra",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "legacy_unclassified");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("manual closes without broker or executable bid ask evidence are not trusted exits", () => {
+  const position = closedPosition({
+    proof_class: "live_scan_exact_contract",
+    exit_execution_basis: "manual_close",
+  });
+
+  assert.equal(evidence.hasTrustedExecutableExit(position), false);
+  assert.equal(evidence.isRealizedPnlClosedPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
 });
 
 test("migrated historical paper rows stay out of production and truth-grade views", () => {

@@ -7,12 +7,22 @@ The browser never talks directly to FastAPI from the client components. The requ
 1. client component under `src/components/*`
 2. Next route handler under `src/app/api/*`
 3. `src/lib/backend/*` through `src/lib/python-bridge.ts`
-4. FastAPI handler in `python-backend/main.py`
+4. FastAPI handler mounted by `python-backend/main.py`
 5. domain module or repository
 
 FastAPI also exposes backend-only support endpoints, but the browser app only reaches the endpoints that are mirrored through `src/app/api/*`.
 
-`docs/route-parity.md` is generated from source and now includes a client fetch surface extracted from active components. `npm run verify:docs` fails when a client component fetches an `/api/*` path without a matching Next route, or when a mirrored Next route has no matching FastAPI decorator.
+`python-backend/main.py` is the composition root, not the only route owner. Extracted routers such as `python-backend/profile_routes.py`, `python-backend/predictions_routes.py`, and `python-backend/tools_routes.py` own their route decorators while `main.py` mounts them. Routers that need mutable backend globals use `python-backend/backend_route_context.py` so tests and fixtures can still patch the loaded backend module after app creation.
+
+`docs/route-parity.md` is generated from source and now includes a client fetch surface plus route auth/mutation inventory extracted from route files. `npm run verify:docs` fails when a client component fetches an `/api/*` path without a matching Next route, when a mirrored Next route has no matching FastAPI decorator, or when a mutating Next route lacks the local operator guard.
+
+## Auth Boundaries
+
+Local operator auth is the browser-facing write boundary. State-changing and tool routes call `requireLocalOperator(req)` before reading the request body or checking mutation-intent headers. Configure `OPTIONS_LOCAL_OPERATOR_TOKEN` server-side; callers can use `x-options-operator-token`, `Authorization: Bearer ...`, or the HttpOnly session cookie from `POST /api/operator/session`.
+
+Backend bridge auth is separate service-to-service protection. When `OPTIONS_BACKEND_API_TOKEN` is set, Next forwards `x-options-backend-token` to FastAPI and direct `/api/*` calls without the token are rejected.
+
+Mutation-intent headers are not auth. They remain useful write-intent labels for Trading Desk and Strategy Lab routes, but correct intent with missing operator auth still fails.
 
 ## Active Route Map
 
@@ -21,6 +31,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `POST /api/scan`
   - Next: `src/app/api/scan/route.ts`
   - FastAPI: `/api/scan`
+  - local operator auth: required
   - backend domain: `options_chatbot.py`, `supervised_scan.py`, positions and evidence helpers
 - `GET /api/backtest/summary`
   - Next: `src/app/api/backtest/summary/route.ts`
@@ -51,6 +62,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `POST /api/backtest`
   - Next: `src/app/api/backtest/route.ts`
   - FastAPI: `/api/backtest`
+  - local operator auth: required
   - Strategy Lab lifecycle: requires `x-strategy-lab-mutation: run_replay_backtest`; writes `latest_replay_artifacts` / `replay_run` / `backtest_result`
 
 ### Profiles, Predictions, And Status
@@ -62,6 +74,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `PUT /api/profile`
   - Next: `src/app/api/profile/route.ts`
   - FastAPI: `/api/profile`
+  - local operator auth: required
   - Strategy Lab lifecycle: requires `x-strategy-lab-mutation: save_strategy_profile`; writes `strategy_profile_files` / `profile_save` / `strategy_profile`
 - `GET /api/changelog`
   - Next: `src/app/api/changelog/route.ts`
@@ -73,6 +86,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `POST /api/predictions/grade`
   - Next: `src/app/api/predictions/grade/route.ts`
   - FastAPI: `/api/predictions/grade`
+  - local operator auth: required
 - `GET /api/risk-settings`
   - Next: `src/app/api/risk-settings/route.ts`
   - FastAPI: `/api/risk`
@@ -88,12 +102,15 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `POST /api/positions`
   - Next: `src/app/api/positions/route.ts`
   - FastAPI: `/api/positions`
+  - local operator auth: required before Trading Desk mutation intent
 - `POST /api/positions/review`
   - Next: `src/app/api/positions/review/route.ts`
   - FastAPI: `/api/positions/review`
+  - local operator auth: required before Trading Desk mutation intent
 - `POST /api/positions/[id]/close`
   - Next: `src/app/api/positions/[id]/close/route.ts`
   - FastAPI: `/api/positions/{id}/close`
+  - local operator auth: required before Trading Desk mutation intent
 
 ### Suggested Trades
 
@@ -103,18 +120,28 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 - `POST /api/suggested-trades`
   - Next: `src/app/api/suggested-trades/route.ts`
   - FastAPI: `/api/suggested-trades`
+  - local operator auth: required before Trading Desk mutation intent
 - `POST /api/suggested-trades/review`
   - Next: `src/app/api/suggested-trades/review/route.ts`
   - FastAPI: `/api/suggested-trades/review`
+  - local operator auth: required before Trading Desk mutation intent
 - `POST /api/suggested-trades/[id]/close`
   - Next: `src/app/api/suggested-trades/[id]/close/route.ts`
   - FastAPI: `/api/suggested-trades/{id}/close`
+  - local operator auth: required before Trading Desk mutation intent
 
 ### Tools And Support
 
+- `GET /api/operator/session`
+  - Next: `src/app/api/operator/session/route.ts`
+  - FastAPI: Next-only local operator session status
+- `POST /api/operator/session`
+  - Next: `src/app/api/operator/session/route.ts`
+  - FastAPI: Next-only local operator session unlock
 - `POST /api/tools/[name]`
   - Next: `src/app/api/tools/[name]/route.ts`
   - FastAPI: `/api/tools/{tool_name}`
+  - local operator auth: required
 - `GET /api/sectors`
   - Next: `src/app/api/sectors/route.ts`
   - FastAPI: `/api/sectors`

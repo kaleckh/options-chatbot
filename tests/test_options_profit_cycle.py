@@ -39,26 +39,59 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
+    def _live_proof_position(
+        self,
+        *,
+        ticker: str = "SPY",
+        direction: str = "call",
+        candidate_id: str = "candidate-1",
+        contract_symbol: str = "SPY240101C00500000",
+        **overrides,
+    ) -> dict:
+        source = {
+            "profit_candidate_id": candidate_id,
+            "selection_source": "live_chain_exact_contract",
+            "options_data_source": "alpaca_opra",
+            "quote_time_et": "2026-04-01T10:00:00-04:00",
+            "quote_freshness_status": "fresh",
+            "entry_execution_price": 1.0,
+            "entry_execution_basis": "ask",
+            "source_scan_lineage_verified": True,
+        }
+        source.update(overrides.pop("source_pick_snapshot", {}))
+        row = {
+            "status": "closed",
+            "ticker": ticker,
+            "direction": direction,
+            "contract_symbol": contract_symbol,
+            "proof_eligible": True,
+            "proof_class": "live_scan_exact_contract",
+            "entry_execution_price": 1.0,
+            "entry_execution_basis": "ask",
+            "exit_execution_price": 1.5,
+            "exit_execution_basis": "spread_bid_ask_exact",
+            "source_scan_session_id": 101,
+            "source_scan_event_key": "short_term:rank_1",
+            "source_scan_run_id": "api_scan_20260401T140000Z",
+            "source_scan_recorded_at_utc": "2026-04-01T14:00:00Z",
+            "source_pick_snapshot": source,
+        }
+        row.update(overrides)
+        return row
+
     def test_candidate_position_metrics_fee_aware_fallback_for_missing_net_pnl(self):
         metrics = _candidate_position_metrics(
             "SPY",
             "call",
             "candidate-1",
             [
-                {
-                    "ticker": "SPY",
-                    "direction": "call",
-                    "contract_symbol": "SPY240101C00500000",
-                    "proof_eligible": True,
-                    "entry_execution_price": 1.0,
-                    "exit_execution_price": 1.01,
-                    "contracts": 1,
-                    "fee_total_usd": 2.60,
-                    "source_pick_snapshot": {
-                        "profit_candidate_id": "candidate-1",
-                        "options_data_source": "alpaca_opra",
-                    },
-                }
+                self._live_proof_position(
+                    entry_execution_price=1.0,
+                    exit_execution_price=1.01,
+                    contracts=1,
+                    fee_total_usd=2.60,
+                    source_pick_snapshot={"entry_execution_price": 1.0},
+                )
             ],
         )
 
@@ -80,17 +113,10 @@ class OptionsProfitCycleTests(unittest.TestCase):
                     "net_pnl_pct": -99.0,
                     "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
                 },
-                {
-                    "ticker": "SPY",
-                    "direction": "call",
-                    "contract_symbol": "SPY240101C00510000",
-                    "proof_eligible": True,
-                    "net_pnl_pct": 15.0,
-                    "source_pick_snapshot": {
-                        "profit_candidate_id": "candidate-1",
-                        "options_data_source": "alpaca_opra",
-                    },
-                },
+                self._live_proof_position(
+                    contract_symbol="SPY240101C00510000",
+                    net_pnl_pct=15.0,
+                ),
             ],
         )
 
@@ -112,17 +138,10 @@ class OptionsProfitCycleTests(unittest.TestCase):
                     "net_pnl_pct": -99.0,
                     "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
                 },
-                {
-                    "ticker": "SPY",
-                    "direction": "call",
-                    "contract_symbol": "SPY240101C00510000",
-                    "proof_eligible": True,
-                    "net_pnl_pct": 15.0,
-                    "source_pick_snapshot": {
-                        "profit_candidate_id": "candidate-1",
-                        "options_data_source": "alpaca_opra",
-                    },
-                },
+                self._live_proof_position(
+                    contract_symbol="SPY240101C00510000",
+                    net_pnl_pct=15.0,
+                ),
             ],
         )
 
@@ -141,21 +160,15 @@ class OptionsProfitCycleTests(unittest.TestCase):
                     "direction": "call",
                     "contract_symbol": "SPY240101C00500000",
                     "proof_eligible": True,
+                    "proof_class": "live_scan_exact_contract",
                     "source_label": "non_opra_vendor",
                     "net_pnl_pct": 99.0,
                     "source_pick_snapshot": {"profit_candidate_id": "candidate-1"},
                 },
-                {
-                    "ticker": "SPY",
-                    "direction": "call",
-                    "contract_symbol": "SPY240101C00510000",
-                    "proof_eligible": True,
-                    "net_pnl_pct": -5.0,
-                    "source_pick_snapshot": {
-                        "profit_candidate_id": "candidate-1",
-                        "options_data_source": "alpaca_opra",
-                    },
-                },
+                self._live_proof_position(
+                    contract_symbol="SPY240101C00510000",
+                    net_pnl_pct=-5.0,
+                ),
             ],
         )
 
@@ -394,20 +407,18 @@ class OptionsProfitCycleTests(unittest.TestCase):
         save_incumbents_state(incumbents)
 
         closed_positions = [
-            {
-                "ticker": "SPY",
-                "direction": "call",
-                "contract_symbol": "SPY260417C00500000",
-                "proof_eligible": True,
-                "net_pnl_pct": 15.0,
-                "source_pick_snapshot": {
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol="SPY260417C00500000",
+                net_pnl_pct=15.0,
+                source_pick_snapshot={
                     "ticker": "SPY",
                     "direction": "call",
-                    "profit_candidate_id": candidate_id,
                     "contract_symbol": "SPY260417C00500000",
-                    "options_data_source": "alpaca_opra",
                 },
-            }
+            )
         ]
 
         with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \

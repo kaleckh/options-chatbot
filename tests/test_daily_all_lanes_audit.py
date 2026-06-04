@@ -120,7 +120,7 @@ def test_daily_all_lanes_runner_launches_include_commodity_audit(
     assert calls[0][calls[0].index("--watchlist-size") + 1] == "59"
 
 
-def test_pending_candidate_queue_records_clear_approved_lane_and_ignores_blocked(
+def test_pending_candidate_queue_records_clear_regular_auto_track_lane_and_ignores_blocked(
     tmp_path: Path,
 ) -> None:
     report = {
@@ -179,7 +179,7 @@ def test_pending_candidate_queue_records_clear_approved_lane_and_ignores_blocked
     assert repeat["duplicate_candidates"] == 1
 
 
-def test_pending_candidate_queue_marks_clear_unapproved_lane_as_diagnostic_only(
+def test_pending_candidate_queue_marks_clear_separate_nontracking_lane_as_diagnostic_only(
     tmp_path: Path,
 ) -> None:
     report = {
@@ -300,6 +300,172 @@ def test_validation_attempt_resolves_pending_candidate(
     assert latest[0]["candidate_status"] == "live_validation_attempted"
 
 
+def test_validation_disposition_splits_created_duplicate_and_no_longer_matched(
+    tmp_path: Path,
+) -> None:
+    queue = tmp_path / "pending.jsonl"
+    fill_attempts = tmp_path / "fills.jsonl"
+    base = {
+        "audit_generated_at_utc": "2026-06-02T06:39:32Z",
+        "candidate_status": "live_validation_attempted",
+        "validation_exit_code": 0,
+        "validation_recorded_at_utc": "2026-06-02T15:00:00Z",
+        "tracking_approved_lane": True,
+        "position_tracking_mode": "auto_track",
+        "playbook_id": "swing",
+        "direction": "call",
+        "expiry": "2026-06-26",
+        "long_strike": 760.0,
+        "short_strike": 780.0,
+    }
+    rows = [
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|SPY|call|2026-06-26|||760.0|780.0",
+            "ticker": "SPY",
+        },
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|QQQ|call|2026-06-26|||760.0|780.0",
+            "ticker": "QQQ",
+        },
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|IWM|call|2026-06-26|||760.0|780.0",
+            "ticker": "IWM",
+        },
+    ]
+    queue.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+    fill_rows = [
+        {
+            "event_type": "candidate_shown",
+            "status": "shown",
+            "scan_date": "2026-06-02",
+            "playbook_id": "swing",
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-06-26",
+            "selected_spread": {"long_strike": 760.0, "short_strike": 780.0},
+            "filled": True,
+            "fill_status": "auto_tracked",
+            "fill_outcome": "paper_fill_recorded",
+            "fill_outcome_reason": "auto_track_position_created",
+            "auto_track_outcome": "created",
+            "auto_track_position_id": 11,
+        },
+        {
+            "event_type": "candidate_shown",
+            "status": "shown",
+            "scan_date": "2026-06-02",
+            "playbook_id": "swing",
+            "ticker": "QQQ",
+            "direction": "call",
+            "expiry": "2026-06-26",
+            "selected_spread": {"long_strike": 760.0, "short_strike": 780.0},
+            "filled": True,
+            "fill_status": "auto_tracked",
+            "fill_outcome": "paper_fill_recorded",
+            "fill_outcome_reason": "auto_track_position_already_open",
+            "auto_track_outcome": "duplicate_open",
+            "auto_track_position_id": 12,
+        },
+    ]
+    fill_attempts.write_text("\n".join(json.dumps(row) for row in fill_rows) + "\n", encoding="utf8")
+
+    report = pending_audit_candidates.build_validation_disposition_report(
+        queue_file=queue,
+        fill_attempt_file=fill_attempts,
+        scan_date="2026-06-02",
+    )
+    outcomes = {row["ticker"]: row["outcome"] for row in report["candidates"]}
+
+    assert outcomes == {"SPY": "created", "QQQ": "duplicate", "IWM": "no_longer_matched"}
+    assert report["summary"]["outcome_counts"] == {"created": 1, "duplicate": 1, "no_longer_matched": 1}
+
+
+def test_validation_disposition_splits_paper_proof_and_blocked(
+    tmp_path: Path,
+) -> None:
+    queue = tmp_path / "pending.jsonl"
+    fill_attempts = tmp_path / "fills.jsonl"
+    base = {
+        "audit_generated_at_utc": "2026-06-02T06:39:32Z",
+        "candidate_status": "live_validation_attempted",
+        "validation_exit_code": 0,
+        "validation_recorded_at_utc": "2026-06-02T15:00:00Z",
+        "tracking_approved_lane": True,
+        "position_tracking_mode": "auto_track",
+        "playbook_id": "swing",
+        "direction": "call",
+        "expiry": "2026-06-26",
+        "long_strike": 760.0,
+        "short_strike": 780.0,
+    }
+    rows = [
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|SPY|call|2026-06-26|||760.0|780.0",
+            "ticker": "SPY",
+            "tracking_approved_lane": False,
+            "position_tracking_mode": "disabled",
+        },
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|QQQ|call|2026-06-26|||760.0|780.0",
+            "ticker": "QQQ",
+        },
+        {
+            **base,
+            "candidate_key": "2026-06-02|swing|IWM|call|2026-06-26|||760.0|780.0",
+            "ticker": "IWM",
+            "candidate_status": "live_validation_scan_failed",
+            "validation_exit_code": 1,
+        },
+    ]
+    queue.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+    fill_rows = [
+        {
+            "event_type": "candidate_shown",
+            "status": "shown",
+            "scan_date": "2026-06-02",
+            "playbook_id": "swing",
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-06-26",
+            "selected_spread": {"long_strike": 760.0, "short_strike": 780.0},
+            "filled": False,
+            "fill_status": "not_submitted_auto_track_disabled",
+            "fill_outcome": "not_submitted",
+            "fill_outcome_reason": "auto_track_disabled",
+        },
+        {
+            "event_type": "candidate_shown",
+            "status": "shown",
+            "scan_date": "2026-06-02",
+            "playbook_id": "swing",
+            "ticker": "QQQ",
+            "direction": "call",
+            "expiry": "2026-06-26",
+            "selected_spread": {"long_strike": 760.0, "short_strike": 780.0},
+            "filled": False,
+            "fill_status": "not_filled_auto_track_skipped",
+            "fill_outcome": "no_fill",
+            "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+        },
+    ]
+    fill_attempts.write_text("\n".join(json.dumps(row) for row in fill_rows) + "\n", encoding="utf8")
+
+    report = pending_audit_candidates.build_validation_disposition_report(
+        queue_file=queue,
+        fill_attempt_file=fill_attempts,
+        scan_date="2026-06-02",
+    )
+    outcomes = {row["ticker"]: row["outcome"] for row in report["candidates"]}
+
+    assert outcomes == {"SPY": "paper_only", "QQQ": "proof_ineligible", "IWM": "blocked"}
+    assert report["summary"]["outcome_counts"] == {"blocked": 1, "paper_only": 1, "proof_ineligible": 1}
+
+
 class DailyAllLanesAuditTests(unittest.TestCase):
     def test_starvation_audit_can_include_every_supervised_playbook(self) -> None:
         test_starvation_audit_can_include_every_supervised_playbook()
@@ -321,13 +487,13 @@ class DailyAllLanesAuditTests(unittest.TestCase):
                 _MonkeyPatch(self),
             )
 
-    def test_pending_candidate_queue_records_clear_approved_lane_and_ignores_blocked(self) -> None:
+    def test_pending_candidate_queue_records_clear_regular_auto_track_lane_and_ignores_blocked(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            test_pending_candidate_queue_records_clear_approved_lane_and_ignores_blocked(Path(temp_dir))
+            test_pending_candidate_queue_records_clear_regular_auto_track_lane_and_ignores_blocked(Path(temp_dir))
 
-    def test_pending_candidate_queue_marks_clear_unapproved_lane_as_diagnostic_only(self) -> None:
+    def test_pending_candidate_queue_marks_clear_separate_nontracking_lane_as_diagnostic_only(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            test_pending_candidate_queue_marks_clear_unapproved_lane_as_diagnostic_only(Path(temp_dir))
+            test_pending_candidate_queue_marks_clear_separate_nontracking_lane_as_diagnostic_only(Path(temp_dir))
 
     def test_pending_candidate_validation_groups_all_validation_enabled_pending_rows(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -339,3 +505,11 @@ class DailyAllLanesAuditTests(unittest.TestCase):
     def test_validation_attempt_resolves_pending_candidate(self) -> None:
         with TemporaryDirectory() as temp_dir:
             test_validation_attempt_resolves_pending_candidate(Path(temp_dir))
+
+    def test_validation_disposition_splits_created_duplicate_and_no_longer_matched(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            test_validation_disposition_splits_created_duplicate_and_no_longer_matched(Path(temp_dir))
+
+    def test_validation_disposition_splits_paper_proof_and_blocked(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            test_validation_disposition_splits_paper_proof_and_blocked(Path(temp_dir))

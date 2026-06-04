@@ -9,6 +9,8 @@ function parseBackendTimeoutMs(value: string | undefined): number {
 const PYTHON_BACKEND_TIMEOUT_MS = parseBackendTimeoutMs(
   process.env.PYTHON_BACKEND_TIMEOUT_MS
 );
+const BACKEND_API_TOKEN = (process.env.OPTIONS_BACKEND_API_TOKEN || "").trim();
+const BACKEND_API_TOKEN_HEADER = "x-options-backend-token";
 const JSON_REQUEST_HEADERS = { "Content-Type": "application/json" };
 export const PYTHON_BACKEND_DURATION_HEADER = "x-python-backend-duration-ms";
 
@@ -37,8 +39,13 @@ export async function fetchBackendResponse(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), PYTHON_BACKEND_TIMEOUT_MS);
   try {
+    const headers = new Headers(init?.headers);
+    if (BACKEND_API_TOKEN) {
+      headers.set(BACKEND_API_TOKEN_HEADER, BACKEND_API_TOKEN);
+    }
     return await fetch(`${PYTHON_BACKEND_URL}${path}`, {
       ...init,
+      headers,
       signal: controller.signal,
     });
   } catch (error) {
@@ -106,7 +113,7 @@ export function pythonBackendTimingHeaders(headers: Headers): Record<string, str
   return duration ? { [PYTHON_BACKEND_DURATION_HEADER]: duration } : {};
 }
 
-export function toJsonBody(value: Record<string, unknown>): string {
+export function toJsonBody(value: object): string {
   return JSON.stringify(value);
 }
 
@@ -155,9 +162,9 @@ function backendErrorMessage(
   return fallback;
 }
 
-export async function postBackendJson<T = Record<string, unknown>>(
+export async function postBackendJson<T = Record<string, unknown>, Payload extends object = Record<string, unknown>>(
   path: string,
-  payload: Record<string, unknown>,
+  payload: Payload,
   errorPrefix: string
 ): Promise<T> {
   return fetchBackendJson<T>(
@@ -171,9 +178,9 @@ export async function postBackendJson<T = Record<string, unknown>>(
   );
 }
 
-export async function putBackendJson(
+export async function putBackendJson<Payload extends object = Record<string, unknown>>(
   path: string,
-  payload: Record<string, unknown>,
+  payload: Payload,
   errorPrefix: string
 ): Promise<void> {
   await fetchBackendJson<Record<string, unknown>>(

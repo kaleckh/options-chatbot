@@ -34,6 +34,8 @@ from supervised_scan import (
     SCAN_PLAYBOOK_FALLBACK_ID,
     run_supervised_scan,
     scan_playbook_allows_auto_track,
+    scan_playbook_fresh_live_validation_enabled,
+    scan_playbook_position_tracking_mode,
 )
 from us_equity_market_calendar import is_us_equity_market_day
 
@@ -233,18 +235,49 @@ def _env_flag_enabled(name: str, default: bool = True) -> bool:
     return raw not in {"0", "false", "no", "off"}
 
 
-def _scan_allows_auto_track(scan_result: dict[str, Any]) -> bool:
+def _safe_scan_playbook_allows_auto_track(playbook_id: str) -> bool:
+    try:
+        return scan_playbook_allows_auto_track(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID)
+    except Exception:
+        return False
+
+
+def _safe_scan_playbook_position_tracking_mode(playbook_id: str) -> str:
+    try:
+        return scan_playbook_position_tracking_mode(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID)
+    except Exception:
+        return "unknown"
+
+
+def _safe_scan_playbook_fresh_live_validation_enabled(playbook_id: str) -> bool:
+    try:
+        return scan_playbook_fresh_live_validation_enabled(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID)
+    except Exception:
+        return False
+
+
+def _scan_auto_track_blockers(scan_result: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
     if not _env_flag_enabled("OPTIONS_SCAN_AUTO_TRACK", True):
-        return False
-    if scan_result.get("market_open_at_run") is False:
-        return False
+        blockers.append("auto_track_env_disabled")
+    if scan_result.get("market_open_at_run") is not True:
+        blockers.append("market_not_open_or_unknown")
     playbook_id = str((scan_result.get("playbook") or {}).get("id") or "").strip()
-    if not scan_playbook_allows_auto_track(playbook_id or SCAN_PLAYBOOK_FALLBACK_ID):
-        return False
+    if not _safe_scan_playbook_allows_auto_track(playbook_id):
+        blockers.append("playbook_not_auto_track")
     exposure = scan_result.get("exposure_snapshot")
-    if not isinstance(exposure, dict) or not bool(exposure.get("portfolio_caps_enforced")):
-        return False
-    return True
+    if not isinstance(exposure, dict):
+        blockers.append("exposure_snapshot_missing")
+    else:
+        if exposure.get("available") is not True:
+            blockers.append("exposure_snapshot_unavailable")
+        if exposure.get("portfolio_caps_enforced") is not True:
+            blockers.append("portfolio_caps_not_enforced")
+    return list(dict.fromkeys(blockers))
+
+
+def _scan_allows_auto_track(scan_result: dict[str, Any]) -> bool:
+    return not _scan_auto_track_blockers(scan_result)
 
 
 def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
@@ -310,13 +343,26 @@ def _scan_pick_event_key(pick: dict[str, Any], candidate_rank: int) -> str:
     return f"{cohort_id}:{event_key}" if cohort_id else event_key
 
 
+def _scan_pick_creation_blockers(pick: dict[str, Any]) -> list[str]:
+    blockers = [
+        str(item).strip()
+        for item in list(pick.get("creation_blockers") or [])
+        if str(item).strip()
+    ]
+    if pick.get("creation_eligible") is not True:
+        blockers.append("creation_eligible_not_true")
+    if str(pick.get("guardrail_decision") or "").strip().lower() == "blocked":
+        blockers.append("guardrail_blocked")
+    return list(dict.fromkeys(blockers))
+
+
 def _auto_track_scan_picks(
     *,
     repository: Any,
     picks: list[dict[str, Any]],
     filled_at: str,
     scan_date: str,
-    tracked_links: list[tuple[int, int]] | None = None,
+    tracked_links: list[tuple[int, int] | tuple[int, int, str]] | None = None,
 ) -> tuple[int, int, int]:
     created_ids: list[int] = []
     created = 0
@@ -324,6 +370,15 @@ def _auto_track_scan_picks(
     skipped = 0
 
     for idx, pick in enumerate(picks, start=1):
+        creation_blockers = _scan_pick_creation_blockers(pick)
+        if creation_blockers:
+            skipped += 1
+            print(
+                f"  Skipped auto-track: {pick.get('ticker')} "
+                f"creation blocked ({', '.join(creation_blockers)})"
+            )
+            continue
+
         fill_price = _pick_fill_price(pick)
         if fill_price is None:
             skipped += 1
@@ -351,7 +406,7 @@ def _auto_track_scan_picks(
         if existing_position is not None:
             duplicates += 1
             if tracked_links is not None and existing_position.get("id") is not None:
-                tracked_links.append((int(existing_position["id"]), idx))
+                tracked_links.append((int(existing_position["id"]), idx, "duplicate_open"))
             print(f"  Already open: {pick.get('ticker')} {payload.get('expiry')}")
             continue
 
@@ -360,7 +415,7 @@ def _auto_track_scan_picks(
         if created_position.get("id") is not None:
             created_ids.append(int(created_position["id"]))
             if tracked_links is not None:
-                tracked_links.append((int(created_position["id"]), idx))
+                tracked_links.append((int(created_position["id"]), idx, "created"))
         print(
             "  Auto-tracked: "
             f"{created_position.get('ticker')} {created_position.get('direction')} "
@@ -543,6 +598,8 @@ def _build_fill_attempt_record(
 ) -> dict[str, Any]:
     scan_result = scan_result or {}
     playbook = _safe_dict(scan_result.get("playbook"))
+    playbook_id = str(pick.get("playbook_id") or playbook.get("id") or "").strip()
+    exposure = _safe_dict(scan_result.get("exposure_snapshot"))
     liquidity = _safe_dict(pick.get("spread_liquidity"))
     intended_limit_price = _pick_fill_price(pick)
     spread_mid = _safe_float(liquidity.get("spread_mid_debit") or pick.get("mid"))
@@ -559,9 +616,22 @@ def _build_fill_attempt_record(
         "status": "shown",
         "fill_status": "pending_auto_track",
         "candidate_rank": int(candidate_rank),
-        "playbook_id": pick.get("playbook_id") or playbook.get("id"),
+        "playbook_id": playbook_id or None,
         "playbook_label": pick.get("playbook_label") or playbook.get("label"),
         "cohort_id": pick.get("cohort_id") or playbook.get("forced_cohort_id"),
+        "market_open_at_run": scan_result.get("market_open_at_run"),
+        "portfolio_caps_enforced": exposure.get("portfolio_caps_enforced"),
+        "exposure_available": exposure.get("available"),
+        "auto_track_gate_blockers": _scan_auto_track_blockers(scan_result),
+        "position_tracking_mode": (
+            pick.get("position_tracking_mode")
+            or playbook.get("position_tracking_mode")
+            or _safe_scan_playbook_position_tracking_mode(playbook_id)
+        ),
+        "tracking_approved_lane": _safe_scan_playbook_allows_auto_track(playbook_id),
+        "fresh_live_validation_enabled": _safe_scan_playbook_fresh_live_validation_enabled(playbook_id),
+        "creation_eligible": pick.get("creation_eligible"),
+        "creation_blockers": list(pick.get("creation_blockers") or []),
         "ticker": pick.get("ticker"),
         "direction": pick.get("direction"),
         "strategy_type": pick.get("strategy_type"),
@@ -614,12 +684,18 @@ def _build_fill_attempt_record(
 def _annotate_fill_attempt_outcomes(
     records: list[dict[str, Any]],
     *,
-    tracked_links: list[tuple[int, int]],
+    tracked_links: list[tuple[int, int] | tuple[int, int, str]],
     auto_track_allowed: bool,
     repository_available: bool,
     reviewed_positions: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    position_by_rank = {int(rank): int(position_id) for position_id, rank in tracked_links}
+    position_by_rank: dict[int, int] = {}
+    outcome_by_rank: dict[int, str] = {}
+    for link in tracked_links:
+        position_id = int(link[0])
+        rank = int(link[1])
+        position_by_rank[rank] = position_id
+        outcome_by_rank[rank] = str(link[2]) if len(link) > 2 else "created_or_existing"
     reviews_by_id = {
         int(position.get("id")): dict(position)
         for position in list(reviewed_positions or [])
@@ -628,6 +704,7 @@ def _annotate_fill_attempt_outcomes(
     for record in records:
         rank = int(record.get("candidate_rank") or 0)
         position_id = position_by_rank.get(rank)
+        auto_track_outcome = outcome_by_rank.get(rank)
         if not auto_track_allowed:
             record.update(
                 {
@@ -664,7 +741,14 @@ def _annotate_fill_attempt_outcomes(
             {
                 "fill_status": "auto_tracked",
                 "fill_outcome": "paper_fill_recorded",
-                "fill_outcome_reason": "auto_track_position_created_or_existing",
+                "fill_outcome_reason": (
+                    "auto_track_position_already_open"
+                    if auto_track_outcome == "duplicate_open"
+                    else "auto_track_position_created"
+                    if auto_track_outcome == "created"
+                    else "auto_track_position_created_or_existing"
+                ),
+                "auto_track_outcome": auto_track_outcome,
                 "auto_track_position_id": position_id,
                 "filled": True,
                 "filled_price": record.get("attempted_limit_price"),
@@ -945,7 +1029,7 @@ def _backfill_position_scan_provenance(
     *,
     repository: Any,
     picks: list[dict[str, Any]],
-    tracked_links: list[tuple[int, int]],
+    tracked_links: list[tuple[int, int] | tuple[int, int, str]],
     ledger_result: dict[str, Any] | None,
 ) -> int:
     if not ledger_result or not tracked_links or not getattr(repository, "is_available", False):
@@ -957,7 +1041,8 @@ def _backfill_position_scan_provenance(
         return 0
 
     updated = 0
-    for position_id, candidate_rank in tracked_links:
+    for link in tracked_links:
+        position_id, candidate_rank = int(link[0]), int(link[1])
         if candidate_rank <= 0 or candidate_rank > len(picks):
             continue
         try:
@@ -1097,7 +1182,7 @@ def main() -> int:
         return 1
     picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
 
-    tracked_links: list[tuple[int, int]] = []
+    tracked_links: list[tuple[int, int] | tuple[int, int, str]] = []
     auto_track_allowed = _scan_allows_auto_track(scan_result)
     repository_available = bool(getattr(repository, "is_available", False))
     if repository_available and auto_track_allowed:

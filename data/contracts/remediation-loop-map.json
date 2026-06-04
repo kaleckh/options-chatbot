@@ -1,0 +1,1395 @@
+{
+  "artifact": "remediation_loop_map",
+  "current_state": {
+    "completed_points": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44
+    ],
+    "completed_through_point": 44,
+    "next_point": null,
+    "planned_points": [],
+    "total_points": 44
+  },
+  "generated_by": "scripts/generate_remediation_loop_map.py",
+  "map_version": 1,
+  "non_goals": [
+    "Does not replace owner docs, generated inventories, or generated contract artifacts.",
+    "Does not define runtime behavior, route payloads, auth semantics, proof predicates, scanner policy, DB schema, or UI behavior.",
+    "Does not replace the final closure pack; it records point status, owner artifacts, checks, and worklog anchors.",
+    "Does not treat dated reports, archived docs, or chat context as more authoritative than code and living owner docs."
+  ],
+  "points": [
+    {
+      "behavior_changed": true,
+      "category": "auth_routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/lib/operator-auth.ts",
+        "src/lib/backend/transport.ts",
+        "src/app/api/operator/session/route.ts"
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/runtime-request-flow.md"
+      ],
+      "point": 1,
+      "scope": "separate local operator auth from backend bridge auth",
+      "status": "completed",
+      "summary": "State-changing browser routes gained local operator auth before body parsing, while backend bridge auth stayed separate.",
+      "tests_or_checks": [
+        "tests/ui/operator-auth.test.js",
+        "tests.test_backend_bridge_auth"
+      ],
+      "title": "Auth Boundaries",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 1"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_route_parity.py",
+        "data/contracts/route-mutation-inventory.json"
+      ],
+      "owner_docs": [
+        "docs/route-parity.md"
+      ],
+      "point": 2,
+      "scope": "make mutation/auth/lifecycle signals generated and inspectable",
+      "status": "completed",
+      "summary": "Route parity began exposing mounted Next routes, backend routes, auth, mutation-intent, lifecycle, store, and owner fields.",
+      "tests_or_checks": [
+        "tests.test_route_parity_generator",
+        "tests/ui/operator-auth.test.js"
+      ],
+      "title": "Route Mutation Inventory",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 2"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "proof_evidence",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "data/contracts/proof-evidence-contract.json",
+        "python-backend/proof_contract.py",
+        "src/lib/trading-desk/proofContract.ts",
+        "src/lib/trading-desk/positionEvidence.ts"
+      ],
+      "owner_docs": [
+        "docs/proof-evidence-contract.md"
+      ],
+      "point": 3,
+      "scope": "centralize proof class and evidence semantics",
+      "status": "completed",
+      "summary": "Backend predicates and frontend display group rules now share the canonical proof/evidence contract boundary.",
+      "tests_or_checks": [
+        "tests.test_proof_contract",
+        "tests/trading-desk/position-evidence.test.js"
+      ],
+      "title": "Proof And Evidence Contract Centralization",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 3",
+        "Tightened Point 3",
+        "Closed Point 3"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "scanner_creation",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "data/contracts/scanner-creation-safety-contract.json",
+        "supervised_scan.py"
+      ],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "point": 4,
+      "scope": "make scanner-origin row creation eligibility explicit",
+      "status": "completed",
+      "summary": "Scanner-origin tracked and suggested creates now require archived lineage, current guardrails, caps, creation eligibility, and proof eligibility.",
+      "tests_or_checks": [
+        "tests.test_scanner_creation_contract",
+        "tests.test_tracked_positions_api",
+        "tests.test_suggested_trades_api"
+      ],
+      "title": "Scanner Creation Safety Centralization",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 4"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "observability",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/main.py"
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "point": 5,
+      "scope": "surface lifecycle evidence persistence status",
+      "status": "completed",
+      "summary": "Tracked-position mutations and scan capture now report lifecycle/forward-evidence persistence outcomes instead of hiding failures.",
+      "tests_or_checks": [
+        "tests.test_tracked_positions_api",
+        "tests.test_forward_options_ledger"
+      ],
+      "title": "Evidence Recording Observability",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 5"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "backend_routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/main.py",
+        "python-backend/predictions_routes.py",
+        "python-backend/tools_routes.py",
+        "python-backend/backend_route_context.py"
+      ],
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md"
+      ],
+      "point": 6,
+      "scope": "keep main.py as composition root while extracting support routers",
+      "status": "completed",
+      "summary": "Prediction support routes and tool dispatch moved to router modules with late-bound backend context.",
+      "tests_or_checks": [
+        "tests.test_backend_support_routes",
+        "tests.test_route_parity_generator"
+      ],
+      "title": "FastAPI Router Split Pilot",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 6"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "backend_services",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/proof_summary_service.py",
+        "python-backend/backend_route_context.py"
+      ],
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/proof-evidence-contract.md"
+      ],
+      "point": 7,
+      "scope": "move proof-summary assembly behind a decorator-free service",
+      "status": "completed",
+      "summary": "The proof summary route now delegates assembly work to a service while preserving route adapter ownership in main.py.",
+      "tests_or_checks": [
+        "tests.test_proof_summary_service",
+        "tests.test_proof_contract"
+      ],
+      "title": "Application Service Pilot",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 7"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "scanner_creation",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "data/contracts/scanner-creation-safety-contract.json",
+        "supervised_scan.py"
+      ],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "point": 8,
+      "scope": "name scanner pipeline stages for future changes",
+      "status": "completed",
+      "summary": "The scanner creation safety contract and supervised scan code now share a descriptive stage map without changing scan behavior.",
+      "tests_or_checks": [
+        "tests.test_scanner_creation_contract"
+      ],
+      "title": "Scanner Pipeline Stage Map",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 8"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "replay_profit",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/replay_profit_service.py",
+        "python-backend/main.py"
+      ],
+      "owner_docs": [
+        "docs/replay-profit-contract.md"
+      ],
+      "point": 9,
+      "scope": "extract replay/profit readback assembly from route decorators",
+      "status": "completed",
+      "summary": "Replay/profit readback assembly moved into a service while preserving replay math, cache ownership, and API payloads.",
+      "tests_or_checks": [
+        "tests.test_replay_profit_service",
+        "tests.test_replay_profit_contract"
+      ],
+      "title": "Replay And Profit Modularization",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 9"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_contracts.py",
+        "python-backend/positions_repository.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "owner_docs": [
+        "docs/repository-contract.md"
+      ],
+      "point": 10,
+      "scope": "make repository capabilities structural and explicit",
+      "status": "completed",
+      "summary": "Trading Desk repository Protocols now describe shared tracked/suggested capabilities and optional tracked-only capabilities.",
+      "tests_or_checks": [
+        "tests.test_repository_contract"
+      ],
+      "title": "Repository Interfaces",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 10"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_migrations.py",
+        "python-backend/positions_repository.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "owner_docs": [
+        "docs/repository-migrations.md"
+      ],
+      "point": 11,
+      "scope": "record current repository schemas as versioned baselines",
+      "status": "completed",
+      "summary": "Repository migrations gained a checksum-guarded manifest and schema migration ledger helpers.",
+      "tests_or_checks": [
+        "tests.test_repository_migrations",
+        "tests.test_positions_repository_schema"
+      ],
+      "title": "Versioned Repository Migrations",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 11"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_constraints.py",
+        "scripts/audit_repository_constraints.py",
+        "python-backend/suggested_trades_repository.py"
+      ],
+      "owner_docs": [
+        "docs/repository-constraints.md"
+      ],
+      "point": 12,
+      "scope": "separate DB-enforced invariants from API/proof-owned semantics",
+      "status": "completed",
+      "summary": "Repository constraint ownership and read-only audits now identify DB, API, proof, and deferred constraint boundaries.",
+      "tests_or_checks": [
+        "tests.test_repository_constraints",
+        "scripts/audit_repository_constraints.py --json"
+      ],
+      "title": "Repository Constraint Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 12"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_indexes.py",
+        "scripts/audit_repository_indexes.py"
+      ],
+      "owner_docs": [
+        "docs/repository-indexes.md"
+      ],
+      "point": 13,
+      "scope": "document existing and deferred repository index ownership",
+      "status": "completed",
+      "summary": "Repository index manifests and read-only audits now distinguish current indexes from deferred performance candidates.",
+      "tests_or_checks": [
+        "tests.test_repository_indexes",
+        "scripts/audit_repository_indexes.py --json"
+      ],
+      "title": "Repository Index Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 13"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_parity.py"
+      ],
+      "owner_docs": [
+        "docs/trading-desk-record-parity.md"
+      ],
+      "point": 14,
+      "scope": "clarify tracked versus suggested row parity and differences",
+      "status": "completed",
+      "summary": "Suggested trades gained an explicit parity owner so local paper ideas are not confused with tracked production proof rows.",
+      "tests_or_checks": [
+        "tests.test_trading_desk_record_parity"
+      ],
+      "title": "Suggested-Trade Parity Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 14"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/local_db_hardening.py",
+        "scripts/audit_local_databases.py"
+      ],
+      "owner_docs": [
+        "docs/local-db-hardening.md"
+      ],
+      "point": 15,
+      "scope": "classify local SQLite stores and audit them read-only",
+      "status": "completed",
+      "summary": "Local DB roles and read-only audit checks now keep support, legacy/test, out-of-scope, and ignored stores separate.",
+      "tests_or_checks": [
+        "tests.test_local_db_hardening",
+        "scripts/audit_local_databases.py"
+      ],
+      "title": "Local DB Hardening Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 15"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "api_contracts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/trading_desk_api_models.py"
+      ],
+      "owner_docs": [
+        "docs/trading-desk-api-models.md"
+      ],
+      "point": 16,
+      "scope": "name narrow backend mutation body adapters",
+      "status": "completed",
+      "summary": "Trading Desk mutation bodies gained Pydantic adapters and top-level envelope drift guards without changing endpoint signatures.",
+      "tests_or_checks": [
+        "tests.test_trading_desk_api_models"
+      ],
+      "title": "Trading Desk API Model Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 16"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "api_contracts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/lib/trading-desk/apiContracts.ts",
+        "src/lib/backend/positions.ts"
+      ],
+      "owner_docs": [
+        "docs/typescript-api-contracts.md"
+      ],
+      "point": 17,
+      "scope": "name frontend request and response envelopes",
+      "status": "completed",
+      "summary": "Trading Desk TypeScript contracts now give route helpers and UI code named request/response types.",
+      "tests_or_checks": [
+        "tests/trading-desk/api-contracts.test.js",
+        "npm run verify:typecheck"
+      ],
+      "title": "TypeScript API Contract Ownership",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 17"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "api_contracts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/lib/trading-desk/apiResponseValidation.ts",
+        "src/app/api/positions/route.ts",
+        "src/app/api/suggested-trades/route.ts"
+      ],
+      "owner_docs": [
+        "docs/typescript-api-contracts.md"
+      ],
+      "point": 18,
+      "scope": "shallow-check backend envelopes at the Next boundary",
+      "status": "completed",
+      "summary": "Trading Desk Next routes now reject malformed backend envelopes with scoped 502 errors and existing store headers.",
+      "tests_or_checks": [
+        "tests/trading-desk/api-response-validation.test.js"
+      ],
+      "title": "Trading Desk Response-Envelope Validation",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 18"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "category": "routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/lib/route-lifecycle/routeContracts.ts",
+        "scripts/generate_route_parity.py"
+      ],
+      "owner_docs": [
+        "docs/route-lifecycle-contracts.md",
+        "docs/route-parity.md"
+      ],
+      "point": 19,
+      "scope": "name lifecycle headers for mounted generic Next route groups",
+      "status": "completed",
+      "summary": "Generic route contracts now apply route lifecycle headers for scan, predictions, risk/status, sectors, tools, and operator session routes.",
+      "tests_or_checks": [
+        "tests/ui/route-lifecycle.test.js",
+        "tests.test_route_parity_generator"
+      ],
+      "title": "Generic Route Lifecycle Headers",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 19"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_trading_desk_schema_bridge.py",
+        "data/contracts/trading-desk-api-schema-bridge.json"
+      ],
+      "owner_docs": [
+        "docs/trading-desk-schema-bridge.md"
+      ],
+      "point": 20,
+      "scope": "check TypeScript and Pydantic contract alignment",
+      "status": "completed",
+      "summary": "A generated schema bridge now maps route contracts, manual TypeScript names, and narrow Pydantic adapter schemas.",
+      "tests_or_checks": [
+        "tests.test_trading_desk_schema_bridge",
+        "tests/trading-desk/schema-bridge.test.js"
+      ],
+      "title": "Generated Trading Desk Schema Bridge",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 20"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "frontend_readability",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/components/predictions/PredictionsView.tsx",
+        "src/components/predictions/useTradingDeskCloseDialogs.ts",
+        "src/components/predictions/CloseTradeModal.tsx",
+        "src/components/predictions/tradingDeskCloseForm.ts"
+      ],
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 21,
+      "scope": "split tracked/suggested close dialogs from the Trading Desk coordinator",
+      "status": "completed",
+      "summary": "Close dialog state, modal UI, and exit-price parsing moved into focused frontend modules.",
+      "tests_or_checks": [
+        "tests/trading-desk/predictions-view-readability.test.js"
+      ],
+      "title": "PredictionsView Close-Flow Extraction",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 21"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "frontend_readability",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/components/predictions/ScannerTab.tsx",
+        "src/components/predictions/ScannerEvidencePanel.tsx",
+        "src/components/predictions/ScannerPickRecordForm.tsx"
+      ],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 22,
+      "scope": "split scanner evidence and record form panels out of ScannerTab",
+      "status": "completed",
+      "summary": "Scanner evidence and selected-pick record UI now live in focused components, reducing ScannerTab size.",
+      "tests_or_checks": [
+        "tests/trading-desk/scanner-tab-readability.test.js"
+      ],
+      "title": "ScannerTab Readability Split",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 22"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "frontend_readability",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/lib/navigation/tabs.ts",
+        "src/components/predictions/tradingDeskTabs.ts",
+        "src/lib/route-lifecycle/routeContracts.ts"
+      ],
+      "owner_docs": [
+        "docs/architecture-overview.md",
+        "docs/route-lifecycle-contracts.md"
+      ],
+      "point": 23,
+      "scope": "centralize app tab and route contract identifiers",
+      "status": "completed",
+      "summary": "Main app tabs, Trading Desk tabs, Strategy Lab IDs, and generic route contract IDs now derive types from readonly catalogs.",
+      "tests_or_checks": [
+        "tests/ui/navigation-tab-ids.test.js",
+        "tests/ui/route-lifecycle.test.js"
+      ],
+      "title": "Typed Tab And Route ID Catalogs",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 23"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_proof_evidence_contract.py",
+        "src/lib/generated/proofEvidenceContract.ts"
+      ],
+      "owner_docs": [
+        "docs/proof-evidence-contract.md"
+      ],
+      "point": 24,
+      "scope": "generate frontend proof constants from the canonical proof contract",
+      "status": "completed",
+      "summary": "The frontend proof facade now imports a generated TypeScript artifact produced from the proof/evidence contract.",
+      "tests_or_checks": [
+        "tests/trading-desk/proof-contract-generation.test.js",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Frontend Proof/Evidence Policy Artifact",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 24"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "frontend_readability",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "src/components/ui/FinTable.tsx",
+        "src/components/predictions/legacy-tabs.tsx"
+      ],
+      "owner_docs": [
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 25,
+      "scope": "require explicit mobile contracts for production FinTable usage",
+      "status": "completed",
+      "summary": "Production FinTable call sites now expose mobile title, subtitle, and priority-column contracts.",
+      "tests_or_checks": [
+        "tests/ui/fin-table.test.js"
+      ],
+      "title": "FinTable Mobile Contract Coverage",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 25"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "living_docs",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "tests/test_architecture_best_practices_doc.py"
+      ],
+      "owner_docs": [
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 26,
+      "scope": "write the target architecture/readability rubric",
+      "status": "completed",
+      "summary": "The architecture best-practices doc now defines the target bar and completion checklist for remediation loops.",
+      "tests_or_checks": [
+        "tests.test_architecture_best_practices_doc"
+      ],
+      "title": "Architecture Best-Practices Target Doc",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 26"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_agent_memory_graph.py",
+        "data/contracts/agent-memory-graph.json"
+      ],
+      "owner_docs": [
+        "docs/agent-memory-graph.md"
+      ],
+      "point": 27,
+      "scope": "create generated owner-doc navigation metadata",
+      "status": "completed",
+      "summary": "The generated memory graph maps owner docs, code, contracts, generated artifacts, edges, and playbooks for agents.",
+      "tests_or_checks": [
+        "tests.test_agent_memory_graph",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Agent Memory Graph",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 27"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_route_parity.py",
+        "data/contracts/route-mutation-inventory.json"
+      ],
+      "owner_docs": [
+        "docs/route-parity.md"
+      ],
+      "point": 28,
+      "scope": "emit machine-readable route and mutation inventory",
+      "status": "completed",
+      "summary": "Route parity now writes a JSON sibling for route auth, mutation, lifecycle, store, backend-only, and client-fetch inventory.",
+      "tests_or_checks": [
+        "tests.test_route_parity_generator",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Route/Mutation JSON Inventory",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 28"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_storage_ownership_map.py",
+        "data/contracts/storage-ownership-map.json"
+      ],
+      "owner_docs": [
+        "docs/storage-ownership-map.md"
+      ],
+      "point": 29,
+      "scope": "emit route, repository, artifact, local DB, and virtual storage ownership",
+      "status": "completed",
+      "summary": "A generated storage ownership map now composes route inventory and repository manifests into human and JSON artifacts.",
+      "tests_or_checks": [
+        "tests.test_storage_ownership_map",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Storage Ownership Map",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 29"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "living_docs",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/check_living_docs_hygiene.py"
+      ],
+      "owner_docs": [
+        "docs/living-docs-hygiene.md"
+      ],
+      "point": 30,
+      "scope": "check living docs, source-of-truth boundaries, and generated artifacts",
+      "status": "completed",
+      "summary": "The living-docs hygiene checker now guards required docs, generated links, generated banners, package wiring, and placeholder markers.",
+      "tests_or_checks": [
+        "tests.test_living_docs_hygiene",
+        "npm run verify:docs"
+      ],
+      "title": "Living-Docs Hygiene Guard",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 30"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_route_parity.py",
+        "data/contracts/route-mutation-inventory.json"
+      ],
+      "owner_docs": [
+        "docs/route-parity.md"
+      ],
+      "point": 31,
+      "scope": "fail generated route parity for authenticated mutators without explicit ownership",
+      "status": "completed",
+      "summary": "Route parity validation now rejects mutating routes that lack explicit lifecycle/store/record contracts.",
+      "tests_or_checks": [
+        "tests.test_route_parity_generator",
+        "npm run verify:docs"
+      ],
+      "title": "No-Unclassified-Mutation Route Guard",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 31"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "auth_routes",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "tests/ui/operator-auth.test.js"
+      ],
+      "owner_docs": [
+        "docs/api-and-storage.md"
+      ],
+      "point": 32,
+      "scope": "pin local-operator auth rejection and allowance behavior",
+      "status": "completed",
+      "summary": "Operator auth tests now prove mutating proxy routes reject bad auth before body parsing and allow valid local operator auth.",
+      "tests_or_checks": [
+        "tests/ui/operator-auth.test.js"
+      ],
+      "title": "Auth Rejection/Allowance Coverage",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 32"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "proof_evidence",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_proof_invariant_table.py",
+        "data/contracts/proof-invariant-cases.json"
+      ],
+      "owner_docs": [
+        "docs/proof-invariant-table.md",
+        "docs/proof-evidence-contract.md"
+      ],
+      "point": 33,
+      "scope": "pin proof/evidence edge cases across backend and frontend",
+      "status": "completed",
+      "summary": "A test-only proof invariant matrix now drives backend, frontend, proof-summary, and options-profit regression tests.",
+      "tests_or_checks": [
+        "tests.test_proof_invariant_cases",
+        "tests/trading-desk/proof-invariants.test.js"
+      ],
+      "title": "Proof Invariant Table Tests",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 33"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "scanner_creation",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "tests/options_algorithm_fixtures.py"
+      ],
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/api-and-storage.md"
+      ],
+      "point": 34,
+      "scope": "test scanner-origin create tamper cases",
+      "status": "completed",
+      "summary": "Tracked-position and suggested-trade create tests now reject scanner lineage, contract, execution, and source mutations.",
+      "tests_or_checks": [
+        "tests.test_tracked_positions_api",
+        "tests.test_suggested_trades_api"
+      ],
+      "title": "Scanner Lineage Mutation Coverage",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 34"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "python-backend/repository_constraints.py"
+      ],
+      "owner_docs": [
+        "docs/repository-migrations.md",
+        "docs/repository-constraints.md"
+      ],
+      "point": 35,
+      "scope": "pin migration ledger and constraint-audit safety",
+      "status": "completed",
+      "summary": "Repository migration and constraint tests now guard baseline checksums, ledger uniqueness, unknown-store safety, and dirty audit reporting.",
+      "tests_or_checks": [
+        "tests.test_repository_migrations",
+        "tests.test_repository_constraints"
+      ],
+      "title": "DB Migration/Constraint Safety Tests",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 35"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "database_repositories",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "tests/test_trading_desk_record_parity.py"
+      ],
+      "owner_docs": [
+        "docs/trading-desk-record-parity.md"
+      ],
+      "point": 36,
+      "scope": "exercise common tracked and suggested row lifecycle shape",
+      "status": "completed",
+      "summary": "Runtime tests now create, review, and close equivalent tracked/suggested rows while preserving tracked-only proof and lineage boundaries.",
+      "tests_or_checks": [
+        "tests.test_trading_desk_record_parity"
+      ],
+      "title": "Suggested/Tracked Parity Runtime Tests",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 36"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "proof_evidence",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "data/contracts/proof-replay-golden-readbacks.json",
+        "tests/test_golden_proof_replay_readbacks.py"
+      ],
+      "owner_docs": [
+        "docs/proof-evidence-contract.md",
+        "docs/replay-profit-contract.md"
+      ],
+      "point": 37,
+      "scope": "pin aggregate proof and replay readbacks",
+      "status": "completed",
+      "summary": "Golden readback fixtures now assert deterministic proof-summary, options-profit, profit-cycle, grouped summary, and replay-service counts.",
+      "tests_or_checks": [
+        "tests.test_golden_proof_replay_readbacks"
+      ],
+      "title": "Golden Proof-Count/Replay Readback Tests",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 37"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "hygiene",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "options_chatbot.py",
+        "tests/test_text_encoding_hygiene.py"
+      ],
+      "owner_docs": [
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 38,
+      "scope": "remove corrupted text signatures from active files",
+      "status": "completed",
+      "summary": "Active source/docs/test/checked-contract scans now reject replacement characters and common mojibake signatures.",
+      "tests_or_checks": [
+        "tests.test_text_encoding_hygiene"
+      ],
+      "title": "Encoding/Mojibake Cleanup",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 38"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "lane_boundaries",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_legacy_lane_boundaries.py",
+        "data/contracts/legacy-lane-boundaries.json"
+      ],
+      "owner_docs": [
+        "docs/legacy-lane-boundaries.md"
+      ],
+      "point": 39,
+      "scope": "generate active, separate, legacy, and paused lane boundaries",
+      "status": "completed",
+      "summary": "A checked lane-boundary manifest now keeps regular options, AI commodity, day-trading, crypto-options, and Polymarket scope readable.",
+      "tests_or_checks": [
+        "tests.test_legacy_lane_boundaries",
+        "npm run verify:docs"
+      ],
+      "title": "Legacy Lane Boundary Governance",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 39"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "lane_boundaries",
+      "does_not_own": [
+        "unrelated lane behavior",
+        "future remediation points",
+        "historical evidence records as source of truth"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_ai_commodity_isolation.py",
+        "data/contracts/ai-commodity-isolation.json"
+      ],
+      "owner_docs": [
+        "docs/ai-commodity-isolation.md"
+      ],
+      "point": 40,
+      "scope": "generate non-browser AI commodity proof-lane isolation checks",
+      "status": "completed",
+      "summary": "A checked isolation contract now verifies AI commodity remains separate from browser/API/tool routes, scanner tracking, and active proof claims.",
+      "tests_or_checks": [
+        "tests.test_ai_commodity_isolation",
+        "npm run verify:docs"
+      ],
+      "title": "AI Commodity Isolation Governance",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 40"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "llm_readability",
+      "does_not_own": [
+        "route handler behavior",
+        "auth semantics",
+        "proof predicates",
+        "scanner policy",
+        "database schema or persistence behavior",
+        "frontend runtime behavior",
+        "generated artifact stale-governance rules",
+        "backend route ownership inventory",
+        "final closure verification pack"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_remediation_loop_map.py",
+        "data/contracts/remediation-loop-map.json"
+      ],
+      "owner_docs": [
+        "docs/remediation-loop-map.md",
+        "docs/architecture-best-practices.md",
+        "docs/autoresearch/code-audit-remediation-goal.md"
+      ],
+      "point": 41,
+      "scope": "make the 44-point remediation loop recoverable without chat context",
+      "status": "completed",
+      "summary": "This generated ledger records all point targets, status split, owner artifacts, verification anchors, non-goals, and worklog evidence.",
+      "tests_or_checks": [
+        "tests.test_remediation_loop_map",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Remediation Loop Map / LLM Handoff Ledger",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 41"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "backend_routes",
+      "does_not_own": [
+        "FastAPI route handler behavior",
+        "decorators or route paths",
+        "auth behavior",
+        "request or response payloads",
+        "proof/scanner/replay semantics",
+        "database schema or repositories",
+        "frontend behavior",
+        "generated artifact stale-governance rules",
+        "final closure verification pack"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_backend_route_ownership_map.py",
+        "data/contracts/backend-route-ownership-map.json"
+      ],
+      "owner_docs": [
+        "docs/backend-route-ownership-map.md",
+        "docs/api-and-storage.md",
+        "docs/architecture-overview.md"
+      ],
+      "point": 42,
+      "scope": "map FastAPI adapter ownership, router extraction, service delegation, and backend-only surfaces",
+      "status": "completed",
+      "summary": "A generated backend route ownership map now statically cross-checks FastAPI decorators against the route inventory and owner docs.",
+      "tests_or_checks": [
+        "tests.test_backend_route_ownership_map",
+        "npm run verify:docs"
+      ],
+      "title": "Backend Route Ownership Map",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 42"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "generated_artifacts",
+      "does_not_own": [
+        "route behavior",
+        "auth semantics",
+        "request or response payloads",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond existing generated runtime projection",
+        "volatile research or market-data report governance",
+        "final closure verification pack"
+      ],
+      "owner_artifacts": [
+        "scripts/generated_artifact_manifest.py",
+        "scripts/generate_generated_artifact_governance.py",
+        "data/contracts/generated-artifact-governance.json"
+      ],
+      "owner_docs": [
+        "docs/generated-artifact-governance.md",
+        "docs/living-docs-hygiene.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 43,
+      "scope": "classify generated artifact ownership, runtime posture, and stale handling",
+      "status": "completed",
+      "summary": "A shared generated-artifact manifest and generated governance map now define owner commands, checks, trust roles, runtime posture, and stale-action rules.",
+      "tests_or_checks": [
+        "tests.test_generated_artifact_governance",
+        "npm run verify:docs"
+      ],
+      "title": "Generated Artifact Governance And Stale-Artifact Trust Boundaries",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 43"
+      ]
+    },
+    {
+      "behavior_changed": false,
+      "category": "verification",
+      "does_not_own": [
+        "route behavior",
+        "auth semantics",
+        "request or response payloads",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior",
+        "product profitability or broker execution readiness",
+        "AI commodity proof completion",
+        "paused sidecar lane reopening"
+      ],
+      "owner_artifacts": [
+        "scripts/generate_final_remediation_closure_pack.py",
+        "data/contracts/final-remediation-closure-pack.json"
+      ],
+      "owner_docs": [
+        "docs/final-remediation-closure-pack.md",
+        "docs/architecture-best-practices.md"
+      ],
+      "point": 44,
+      "scope": "prove the 44-point loop is complete, checked, discoverable, and still within active scope",
+      "status": "completed",
+      "summary": "The generated closure pack now reads the loop map, generated artifact governance, memory graph, living docs, and lane guard artifacts to prove all 44 points are complete.",
+      "tests_or_checks": [
+        "tests.test_final_remediation_closure_pack",
+        "npm run verify:docs"
+      ],
+      "title": "Final Goal Closure Verification Pack",
+      "verification_scope": "focused tests and generated checks named by this point",
+      "worklog_evidence": [
+        "Added Point 44"
+      ]
+    }
+  ],
+  "runtime_use": false,
+  "scope": "Generated handoff ledger for the 44-point architecture/readability remediation loop. It tells future LLM agents and senior engineers what has been completed, what remains, which owner artifacts to read, and which boundaries each point deliberately does not own.",
+  "sources": [
+    "Explicit manifest in scripts/generate_remediation_loop_map.py",
+    "docs/WORKLOG.md",
+    "docs/architecture-best-practices.md",
+    "docs/index.md"
+  ],
+  "validation": {
+    "errors": [],
+    "point_count": 44,
+    "status_split": {
+      "completed": 44,
+      "in_progress": 0,
+      "planned": 0
+    }
+  }
+}

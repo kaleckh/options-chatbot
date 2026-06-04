@@ -128,6 +128,7 @@ class PositionsReviewEngineTests(unittest.TestCase):
             "quote_basis": "mid",
             "quote_time_et": "2026-04-06T10:00:00-04:00",
             "quote_time_utc": "2026-04-06T14:00:00Z",
+            "options_data_source": "alpaca_opra",
             "selection_source": "live_chain_exact_contract",
             "promotion_class": "promotable_exact_contract",
             "entry_execution_price": inflated_entry,
@@ -138,6 +139,7 @@ class PositionsReviewEngineTests(unittest.TestCase):
                 "ticker": "AAA",
                 "direction": "call",
                 "strategy_type": "vertical_spread",
+                "options_data_source": "alpaca_opra",
                 "entry_execution_price": inflated_entry,
                 "entry_execution_basis": "ask",
                 "net_debit": net_debit,
@@ -375,6 +377,7 @@ class PositionsReviewEngineTests(unittest.TestCase):
         scan_pick["source_scan_event_key"] = "bullish_pullback_observation:rank_1"
         scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
         scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
 
         payload = svc.build_position_payload(
             scan_pick=scan_pick,

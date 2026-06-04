@@ -20,7 +20,7 @@ The active browser product is still the supervised options lane family:
 - review and close positions manually with explicit pricing context
 
 This remains supervised decision support, not autonomous trading.
-When no playbook is supplied to a scheduled scan command, the routing fallback is `bullish_pullback_observation`, surfaced as Bullish Pullback. That fallback is not a product-priority statement; all configured regular-options lanes are peer lanes and need lane-specific profitability, risk, and proof validation. The legacy `_observation` cohort ID is not watch-only; eligible scheduled picks can auto-track under the current guardrails.
+When no playbook is supplied to a scheduled scan command, the routing fallback is `bullish_pullback_observation`, surfaced as Bullish Pullback. That fallback is not a product-priority statement; all configured regular-options lanes are peer lanes and need lane-specific profitability, risk, and proof validation. Regular supervised options playbooks default to auto-track eligibility; fresh row creation still requires market-open validation, caps-enforced scan state, `creation_eligible=true`, current guardrail rerun, and exact executable OPRA/NBBO evidence. AI Commodity remains outside this browser/tracked-position default.
 
 AI commodity / commodity-infrastructure options is a separate non-browser proof-first strategy lane. It is not claim-ready; it waits on exact Alpaca SIP/OPRA bid/ask snapshot history before any production filter changes or profitability claims.
 

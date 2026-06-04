@@ -7167,7 +7167,7 @@ def evaluate_trade_signal(
             "regime_notes":      regime["regime_notes"],
         }
 
-        # ── 5. EV calculation ─────────────────────────────────────────────────
+        # -- 5. EV calculation --
         ev_signal = False
         if delta is not None:
             if expectancy_surface is not None and calibration is None:
@@ -7181,7 +7181,7 @@ def evaluate_trade_signal(
                     "ev_dollars": None,
                     "required_ev_pct": round(float(_eval_sp["filters"].get("min_calibrated_expectancy_pct", 0.0)), 1),
                     "trade_signal": False,
-                    "ev_note": "âŒ No dense positive replay-backed expectancy is available for this score/regime bucket.",
+                    "ev_note": "Error: No dense positive replay-backed expectancy is available for this score/regime bucket.",
                 }
             else:
                 ev = _calculate_ev(

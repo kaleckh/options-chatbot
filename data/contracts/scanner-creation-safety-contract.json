@@ -1,0 +1,214 @@
+{
+  "version": 1,
+  "creationModes": {
+    "scanner": "scanner",
+    "manualPaper": "manual_paper",
+    "manualBroker": "manual_broker"
+  },
+  "trackingModes": {
+    "autoTrack": "auto_track",
+    "paperReviewOnly": "paper_review_only",
+    "diagnosticOnly": "diagnostic_only",
+    "disabled": "disabled"
+  },
+  "proofScopes": {
+    "regular": "regular_supervised_options",
+    "regularControl": "regular_supervised_control",
+    "commodity": "ai_commodity_separate"
+  },
+  "candidateExecutionLabels": {
+    "executableOpraPaperCandidate": "executable_opra_paper_candidate"
+  },
+  "scannerPipelineStages": [
+    {
+      "id": "playbook_resolution",
+      "owner": "supervised_scan.get_scan_playbook",
+      "emittedFields": [
+        "playbook",
+        "playbooks",
+        "data_readiness",
+        "truth_lane"
+      ]
+    },
+    {
+      "id": "raw_candidate_generation",
+      "owner": "supervised_scan.run_supervised_scan",
+      "emittedFields": [
+        "candidate_count"
+      ]
+    },
+    {
+      "id": "scan_drop_diagnostics",
+      "owner": "supervised_scan.run_supervised_scan",
+      "emittedFields": [
+        "scan_drop_reasons",
+        "scan_funnel.drop_counts"
+      ]
+    },
+    {
+      "id": "policy_gate",
+      "owner": "supervised_scan.run_supervised_scan",
+      "emittedFields": [
+        "policy",
+        "policy_error",
+        "policy_fail_closed",
+        "playbook_exit_audit",
+        "playbook_exit_audit_error"
+      ]
+    },
+    {
+      "id": "policy_filter",
+      "owner": "supervised_scan.apply_trade_policy_to_scan",
+      "emittedFields": [
+        "policy_decision_counts",
+        "scan_funnel.policy_counts"
+      ]
+    },
+    {
+      "id": "guardrail_annotation",
+      "owner": "supervised_scan.apply_playbook_guardrails",
+      "emittedFields": [
+        "guardrail_decision_counts",
+        "scan_funnel.guardrail_counts",
+        "exposure_snapshot",
+        "guardrail_decision",
+        "portfolio_caps_enforced",
+        "position_tracking_mode",
+        "creation_eligible",
+        "creation_blockers"
+      ]
+    },
+    {
+      "id": "managed_selection",
+      "owner": "supervised_scan.run_supervised_scan",
+      "emittedFields": [
+        "picks",
+        "watch_picks",
+        "ranked_picks",
+        "candidate_audit_picks",
+        "managed_lane_status",
+        "watch_priority_symbols",
+        "watch_deprioritized_symbols"
+      ]
+    },
+    {
+      "id": "payload_assembly",
+      "owner": "supervised_scan.run_supervised_scan",
+      "emittedFields": [
+        "scan_funnel",
+        "candidate_count",
+        "returned_count"
+      ]
+    },
+    {
+      "id": "forward_lineage_capture",
+      "owner": "python-backend/main.py run_scan_endpoint",
+      "emittedFields": [
+        "source_scan_session_id",
+        "source_scan_event_key",
+        "source_scan_run_id",
+        "source_scan_recorded_at_utc"
+      ]
+    },
+    {
+      "id": "proof_classification",
+      "owner": "python-backend/positions_service.py build_position_payload",
+      "emittedFields": [
+        "proof_class",
+        "proof_eligible",
+        "proof_ineligibility_reason"
+      ]
+    },
+    {
+      "id": "creation_or_validation_disposition",
+      "owner": "python-backend/main.py and scripts/validate_pending_scan_candidates.py",
+      "emittedFields": [
+        "position_id",
+        "auto_track_outcome",
+        "candidates[].outcome",
+        "summary.outcome_counts"
+      ]
+    }
+  ],
+  "scannerOriginCreate": {
+    "requiredSourceFields": [
+      "source_scan_session_id",
+      "source_scan_event_key",
+      "source_scan_run_id",
+      "source_scan_recorded_at_utc",
+      "portfolio_caps_enforced",
+      "creation_eligible",
+      "creation_blockers"
+    ],
+    "requiredCurrentRerunFields": [
+      "portfolio_caps_enforced",
+      "creation_eligible",
+      "creation_blockers",
+      "guardrail_decision"
+    ],
+    "hardBlockers": [
+      "source_scan_lineage_unverified",
+      "source_portfolio_caps_not_enforced",
+      "source_creation_eligible_not_true",
+      "current_portfolio_caps_not_enforced",
+      "current_creation_eligible_not_true",
+      "guardrail_blocked",
+      "portfolio_caps_not_enforced",
+      "candidate_execution_label"
+    ]
+  },
+  "scheduledAutoTrack": {
+    "requiredScanResultFields": [
+      "market_open_at_run",
+      "exposure_snapshot.available",
+      "exposure_snapshot.portfolio_caps_enforced",
+      "playbook.id"
+    ],
+    "requiredPickFields": [
+      "creation_eligible",
+      "creation_blockers",
+      "guardrail_decision",
+      "candidate_execution_label"
+    ],
+    "blockers": [
+      "auto_track_env_disabled",
+      "market_not_open_or_unknown",
+      "playbook_not_auto_track",
+      "exposure_snapshot_missing",
+      "exposure_snapshot_unavailable",
+      "portfolio_caps_not_enforced",
+      "creation_eligible_not_true",
+      "guardrail_blocked",
+      "candidate_execution_label"
+    ],
+    "fillAttemptAuditFields": [
+      "market_open_at_run",
+      "portfolio_caps_enforced",
+      "exposure_available",
+      "auto_track_gate_blockers",
+      "position_tracking_mode",
+      "tracking_approved_lane",
+      "fresh_live_validation_enabled",
+      "creation_eligible",
+      "creation_blockers",
+      "auto_track_outcome",
+      "auto_track_position_id"
+    ]
+  },
+  "pendingValidation": {
+    "statuses": [
+      "pending_live_validation",
+      "diagnostic_only_unapproved_lane",
+      "live_validation_attempted",
+      "live_validation_scan_failed"
+    ],
+    "outcomes": [
+      "created",
+      "duplicate",
+      "blocked",
+      "no_longer_matched",
+      "paper_only",
+      "proof_ineligible"
+    ]
+  }
+}

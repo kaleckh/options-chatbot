@@ -1,0 +1,183 @@
+{
+  "version": 1,
+  "proofClasses": {
+    "liveScanExact": "live_scan_exact_contract",
+    "manualBrokerExact": "manual_broker_exact_contract",
+    "ineligible": "ineligible"
+  },
+  "frontendGroups": {
+    "productionEvidenceGroupIds": ["live_exact"],
+    "displayPrecedence": [
+      "lifecycle_only",
+      "historical_paper",
+      "research_backfill",
+      "proof_ineligible",
+      "manual_exact",
+      "live_exact",
+      "legacy_unclassified"
+    ],
+    "groups": {
+      "live_exact": {
+        "label": "Live exact",
+        "tone": "live",
+        "productionProof": true,
+        "researchLearning": false
+      },
+      "manual_exact": {
+        "label": "Manual exact",
+        "tone": "muted",
+        "productionProof": false,
+        "researchLearning": false
+      },
+      "historical_paper": {
+        "label": "Historical paper",
+        "tone": "warning",
+        "productionProof": false,
+        "researchLearning": true
+      },
+      "research_backfill": {
+        "label": "Research backfill",
+        "tone": "warning",
+        "productionProof": false,
+        "researchLearning": true
+      },
+      "lifecycle_only": {
+        "label": "Lifecycle-only",
+        "tone": "warning",
+        "productionProof": false,
+        "researchLearning": true
+      },
+      "proof_ineligible": {
+        "label": "Proof ineligible",
+        "tone": "warning",
+        "productionProof": false,
+        "researchLearning": true
+      },
+      "legacy_unclassified": {
+        "label": "Legacy/unclassified",
+        "tone": "muted",
+        "productionProof": false,
+        "researchLearning": false
+      }
+    }
+  },
+  "researchBackfill": {
+    "identityFields": [
+      "backfill_audit_id",
+      "position_migration_id",
+      "position_migrated_at_utc"
+    ],
+    "tokens": [
+      "backfill",
+      "research",
+      "historical_replay",
+      "historical_selection",
+      "historical_chain_native"
+    ],
+    "scanMarkerFields": [
+      "pricing_evidence_class",
+      "profitability_evidence_class",
+      "source_separation",
+      "promotion_class",
+      "selection_source",
+      "event_type",
+      "candidate_execution_label",
+      "market_data_source",
+      "status"
+    ],
+    "rowMarkerFields": [
+      "proof_class",
+      "proof_class_reason",
+      "proof_ineligibility_reason",
+      "notes"
+    ]
+  },
+  "entryProof": {
+    "requiredSelectionSource": "live_chain_exact_contract",
+    "requiredLineageFields": [
+      "source_scan_session_id",
+      "source_scan_event_key",
+      "source_scan_run_id",
+      "source_scan_recorded_at_utc"
+    ],
+    "trustedOptionsSourceLabels": [
+      "alpaca_opra",
+      "alpaca_opra_daily_snapshot",
+      "alpaca:sip:opra"
+    ],
+    "trustedOptionsSourceRequiredTokens": [
+      "alpaca",
+      "opra"
+    ],
+    "sourceFields": [
+      "source_label",
+      "proof_source_label",
+      "market_data_source",
+      "options_market_data_source",
+      "options_data_source",
+      "quote_source",
+      "data_source"
+    ],
+    "trustedEntryBasisTokens": [
+      "ask",
+      "spread_ask_bid"
+    ],
+    "untrustedEntryBasisTokens": [
+      "manual",
+      "broker",
+      "midpoint",
+      "mark",
+      "last",
+      "model",
+      "comparable",
+      "historical",
+      "unpriced"
+    ],
+    "entryPriceFields": [
+      "entry_execution_price",
+      "entry_option_price"
+    ],
+    "quoteTimeFields": [
+      "quote_time_et",
+      "quote_time_utc",
+      "entry_quote_time_et"
+    ],
+    "quoteFreshnessFields": [
+      "quote_freshness_status",
+      "options_snapshot_status",
+      "option_chain_status"
+    ],
+    "quoteFreshnessRequired": true,
+    "untrustedQuoteFreshnessTokens": [
+      "stale",
+      "expired",
+      "delayed",
+      "missing",
+      "unavailable",
+      "unpriced",
+      "unknown"
+    ]
+  },
+  "exitBasis": {
+    "trustedTokens": [
+      "spread_bid_ask",
+      "spread_bid_ask_exact",
+      "bid_ask",
+      "historical_spread_bid_ask",
+      "historical_suggested_close",
+      "auto_sell_recommendation",
+      "auto_sell_review",
+      "broker"
+    ],
+    "untrustedTokens": [
+      "lifecycle",
+      "elapsed",
+      "last",
+      "manual",
+      "midpoint",
+      "mark",
+      "model",
+      "unpriced"
+    ]
+  }
+}

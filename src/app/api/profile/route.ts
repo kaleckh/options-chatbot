@@ -3,6 +3,7 @@ import {
   jsonError,
   jsonWithStrategyLabContract,
   readJsonObject,
+  requireLocalOperator,
   requireStrategyLabMutationIntent,
 } from "@/app/api/_utils";
 import { getProfile, saveProfile } from "@/lib/python-bridge";
@@ -19,6 +20,8 @@ export async function GET(req: NextRequest) {
 
 export async function PUT(req: NextRequest) {
   try {
+    const authError = requireLocalOperator(req);
+    if (authError) return authError;
     const intentError = requireStrategyLabMutationIntent(req, "save_strategy_profile");
     if (intentError) return intentError;
     const body = await readJsonObject(req);

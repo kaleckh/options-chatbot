@@ -6,6 +6,8 @@ Use this prompt when running a multi-agent `/goal` loop to harden the active opt
 
 Iterate through the active regular supervised options product and AI commodity proof-lane code audit sections until each section has a durable implementation, verification evidence, and reviewer consensus.
 
+Use `docs/architecture-best-practices.md` as the target rubric for architecture/readability work. Use `docs/final-remediation-closure-pack.md` to confirm the completed 44-point remediation loop, `docs/remediation-loop-map.md` as the generated per-point handoff ledger, and `docs/generated-artifact-governance.md` for generated-artifact trust boundaries and stale handling. Use `docs/architecture-overview.md` for the current map and `docs/architecture-audit.md` for the current risk snapshot.
+
 Do not spend implementation effort on crypto options, Polymarket, or day-trading lanes unless a shared-infrastructure change directly touches the active regular options product or AI commodity proof lane.
 
 ## Audit Sections
@@ -70,7 +72,7 @@ Do not treat the vote as a substitute for correctness. If any reviewer reports a
 8. If `4` or more reviewers agree and no severe blocker remains, mark the section addressed in the run report.
 9. Continue until all sections are addressed.
 
-Do not edit this goal prompt to make an in-progress run pass. If the acceptance criteria need to change, stop the run and get explicit operator approval.
+Do not edit this goal prompt to make an in-progress run pass. If the acceptance criteria need to change, stop the run and get explicit operator approval. Do not hand-edit `docs/remediation-loop-map.md`, `data/contracts/remediation-loop-map.json`, `docs/final-remediation-closure-pack.md`, or `data/contracts/final-remediation-closure-pack.json`; update their generators and run the owner docs commands.
 
 ## Required Section Report
 

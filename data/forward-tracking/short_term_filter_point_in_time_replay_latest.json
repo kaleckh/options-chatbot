@@ -1,0 +1,203 @@
+{
+  "report_id": "short_term_filter_point_in_time_replay",
+  "generated_at_utc": "2026-06-04T05:26:13Z",
+  "scope": "regular_supervised_short_term_entry_filter_point_in_time_replay",
+  "evidence_boundary": {
+    "description": "Read-only point-in-time scanner candidate replay for the short-term fill-degradation champion. It uses logged as-of candidate fields and exact priced tracked outcomes only.",
+    "not_claimed": "This does not change live scanner guardrails or exit policy."
+  },
+  "inputs": {
+    "fill_attempt_rows": 490,
+    "shown_candidate_rows": 5,
+    "stop_grid_report_id": "current_policy_historical_stop_grid",
+    "stop_grid_generated_at_utc": "2026-06-02T14:05:32Z",
+    "starvation_audit_report_id": null,
+    "starvation_audit_generated_at_utc": "2026-06-03T17:07:56Z",
+    "fill_attempts": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+    "stop_grid": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_historical_stop_grid_latest.json",
+    "starvation_audit": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json"
+  },
+  "filter": {
+    "filter_id": "short_term_fill_degradation_ge_15",
+    "live_policy_change": false,
+    "matcher": "playbook_id == short_term and fill_degradation_vs_mid_pct >= 15"
+  },
+  "baseline": {
+    "rows": 5,
+    "exact_priced_rows": 0,
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "sum_pnl_pct": 0.0,
+    "negative_count": 0,
+    "positive_count": 0,
+    "negative_rate_pct": null,
+    "loss_le_50_count": 0,
+    "loss_le_90_count": 0
+  },
+  "matched": {
+    "rows": 0,
+    "exact_priced_rows": 0,
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "sum_pnl_pct": 0.0,
+    "negative_count": 0,
+    "positive_count": 0,
+    "negative_rate_pct": null,
+    "loss_le_50_count": 0,
+    "loss_le_90_count": 0
+  },
+  "kept": {
+    "rows": 5,
+    "exact_priced_rows": 0,
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "sum_pnl_pct": 0.0,
+    "negative_count": 0,
+    "positive_count": 0,
+    "negative_rate_pct": null,
+    "loss_le_50_count": 0,
+    "loss_le_90_count": 0
+  },
+  "effects": {
+    "avoided_losses": 0,
+    "avoided_deep_losses": 0,
+    "avoided_near_total_losses": 0,
+    "lost_winners": 0,
+    "blocked_sum_delta_if_skipped_pct": -0.0
+  },
+  "coverage": {
+    "zero_pick_days": [
+      "2026-06-03"
+    ],
+    "zero_pick_day_count": 1,
+    "unpriced_or_non_executable_count": 5,
+    "unpriced_reasons": {
+      "missing_realized_pnl": 5
+    },
+    "matched_ticker_counts": {}
+  },
+  "decision_summary": {
+    "status": "paper_only_collecting",
+    "promotion_blockers": [
+      "insufficient_exact_priced_candidate_rows",
+      "insufficient_champion_matched_blocked_rows",
+      "matched_rows_not_net_harmful_or_deep_loss",
+      "unpriced_or_non_executable_rows_present"
+    ],
+    "recommended_next_action": "Keep the champion filter paper-only; continue fresh monitor collection and only revisit promotion after this replay has enough exact priced rows with no winner damage."
+  },
+  "examples": {
+    "matched": [],
+    "unpriced": [
+      {
+        "candidate_key": "2026-05-21|bullish_pullback_observation|QQQ|call||QQQ260618C00710000",
+        "scan_date": "2026-05-21",
+        "playbook_id": "bullish_pullback_observation",
+        "ticker": "QQQ",
+        "direction": "call",
+        "expiry": null,
+        "position_id": null,
+        "matched_champion_filter": false,
+        "fill_degradation_pct": 5.4485,
+        "candidate_execution_label": "executable_opra_paper_candidate",
+        "attempted_limit_basis": null,
+        "fill_status": "skipped_observation_only",
+        "fill_outcome": null,
+        "fill_outcome_reason": null,
+        "exact_priced": false,
+        "unpriced_reason": "missing_realized_pnl",
+        "baseline_pnl_pct": null,
+        "raw_pnl_pct": null
+      },
+      {
+        "candidate_key": "2026-05-21|bullish_pullback_observation|SPY|call||SPY260618C00740000",
+        "scan_date": "2026-05-21",
+        "playbook_id": "bullish_pullback_observation",
+        "ticker": "SPY",
+        "direction": "call",
+        "expiry": null,
+        "position_id": null,
+        "matched_champion_filter": false,
+        "fill_degradation_pct": 5.4953,
+        "candidate_execution_label": "executable_opra_paper_candidate",
+        "attempted_limit_basis": null,
+        "fill_status": "skipped_observation_only",
+        "fill_outcome": null,
+        "fill_outcome_reason": null,
+        "exact_priced": false,
+        "unpriced_reason": "missing_realized_pnl",
+        "baseline_pnl_pct": null,
+        "raw_pnl_pct": null
+      },
+      {
+        "candidate_key": "2026-05-29|volatility_expansion_observation|IWM|call||IWM260612C00290000",
+        "scan_date": "2026-05-29",
+        "playbook_id": "volatility_expansion_observation",
+        "ticker": "IWM",
+        "direction": "call",
+        "expiry": null,
+        "position_id": null,
+        "matched_champion_filter": false,
+        "fill_degradation_pct": 6.4162,
+        "candidate_execution_label": "executable_opra_paper_candidate",
+        "attempted_limit_basis": "spread_ask_bid",
+        "fill_status": "not_submitted_auto_track_disabled",
+        "fill_outcome": "not_submitted",
+        "fill_outcome_reason": "auto_track_disabled",
+        "exact_priced": false,
+        "unpriced_reason": "missing_realized_pnl",
+        "baseline_pnl_pct": null,
+        "raw_pnl_pct": null
+      },
+      {
+        "candidate_key": "2026-05-29|volatility_expansion_observation|QQQ|call||QQQ260612C00738000",
+        "scan_date": "2026-05-29",
+        "playbook_id": "volatility_expansion_observation",
+        "ticker": "QQQ",
+        "direction": "call",
+        "expiry": null,
+        "position_id": null,
+        "matched_champion_filter": false,
+        "fill_degradation_pct": 5.4495,
+        "candidate_execution_label": "executable_opra_paper_candidate",
+        "attempted_limit_basis": "spread_ask_bid",
+        "fill_status": "not_submitted_auto_track_disabled",
+        "fill_outcome": "not_submitted",
+        "fill_outcome_reason": "auto_track_disabled",
+        "exact_priced": false,
+        "unpriced_reason": "missing_realized_pnl",
+        "baseline_pnl_pct": null,
+        "raw_pnl_pct": null
+      },
+      {
+        "candidate_key": "2026-05-29|volatility_expansion_observation|SPY|call||SPY260612C00757000",
+        "scan_date": "2026-05-29",
+        "playbook_id": "volatility_expansion_observation",
+        "ticker": "SPY",
+        "direction": "call",
+        "expiry": null,
+        "position_id": null,
+        "matched_champion_filter": false,
+        "fill_degradation_pct": 5.3992,
+        "candidate_execution_label": "executable_opra_paper_candidate",
+        "attempted_limit_basis": "spread_ask_bid",
+        "fill_status": "not_submitted_auto_track_disabled",
+        "fill_outcome": "not_submitted",
+        "fill_outcome_reason": "auto_track_disabled",
+        "exact_priced": false,
+        "unpriced_reason": "missing_realized_pnl",
+        "baseline_pnl_pct": null,
+        "raw_pnl_pct": null
+      }
+    ]
+  },
+  "artifacts": {
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_20260604T052613Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_latest.json",
+    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_20260604T052613Z.csv",
+    "latest_csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_latest.csv",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_20260604T052613Z.md",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_latest.md",
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-entry-filter-point-in-time.md"
+  }
+}

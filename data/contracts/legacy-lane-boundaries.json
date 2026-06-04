@@ -1,0 +1,189 @@
+{
+  "artifact": "legacy_lane_boundaries",
+  "generated_by": "scripts/generate_legacy_lane_boundaries.py",
+  "lanes": [
+    {
+      "allowed_work": [
+        "Live scan, replay diagnostics, paper ideas, tracked-position review, route/readback contracts, and regular-options proof hygiene."
+      ],
+      "forbidden_work": [
+        "Do not route active browser work through paused day-trading, crypto-options, or Polymarket code paths."
+      ],
+      "hard_rules": [
+        "This is the only mounted browser product family in the current worktree.",
+        "Regular playbook lanes are peers; legacy cohort suffixes do not make a lane watch-only by themselves."
+      ],
+      "label": "Regular supervised options browser",
+      "lane_id": "regular_supervised_options_browser",
+      "owner_docs": [
+        "docs/PROJECT_CONTEXT.md",
+        "docs/architecture-overview.md",
+        "docs/api-and-storage.md",
+        "docs/replay-profit-contract.md"
+      ],
+      "path_roots": [
+        "src/components/predictions",
+        "src/components/strategy",
+        "src/app/api/scan",
+        "src/app/api/positions",
+        "src/app/api/suggested-trades",
+        "src/app/api/backtest",
+        "python-backend/main.py",
+        "options_chatbot.py",
+        "wfo_optimizer.py"
+      ],
+      "route_ui_status": "mounted_browser_product",
+      "status": "active_browser_product"
+    },
+    {
+      "allowed_work": [
+        "Readability, mobile table contracts, and analytics maintenance when tied to the active Trading Desk."
+      ],
+      "forbidden_work": [
+        "Do not confuse these Trading Desk analytics tabs with paused day-trading, crypto-options, or Polymarket lanes."
+      ],
+      "hard_rules": [
+        "Legacy analytics are still inside the Trading Desk surface.",
+        "They are not a reopen signal for paused sidecar lanes."
+      ],
+      "label": "Legacy prediction analytics tabs",
+      "lane_id": "legacy_prediction_analytics",
+      "owner_docs": [
+        "docs/architecture-audit.md",
+        "docs/architecture-overview.md"
+      ],
+      "path_roots": [
+        "src/components/predictions/legacy-tabs.tsx",
+        "src/components/predictions/tradingDeskTabs.ts",
+        "tests/trading-desk/trading-desk-tab-ids.test.js"
+      ],
+      "route_ui_status": "mounted_inside_trading_desk_analytics",
+      "status": "active_browser_legacy_analytics"
+    },
+    {
+      "allowed_work": [
+        "Proof-source acquisition, readiness, OPRA/SIP/NBBO validation, and lane-specific automation when explicitly scoped."
+      ],
+      "detail_owner": "docs/ai-commodity-isolation.md",
+      "forbidden_work": [
+        "Do not treat AI commodity as a mounted browser route or regular supervised browser fallback."
+      ],
+      "hard_rules": [
+        "AI commodity is separate from the active browser product.",
+        "docs/ai-commodity-isolation.md owns deeper AI commodity isolation checks."
+      ],
+      "label": "AI commodity proof lane",
+      "lane_id": "ai_commodity_proof_lane",
+      "owner_docs": [
+        "docs/PROJECT_CONTEXT.md",
+        "docs/architecture-overview.md",
+        "docs/ai-commodity-isolation.md"
+      ],
+      "path_roots": [
+        "scripts/run_ai_commodity_opra_progress.py",
+        "data/ai-commodity-infra",
+        "tests/test_ai_commodity_opra_progress.py"
+      ],
+      "route_ui_status": "not_mounted_browser_product",
+      "status": "separate_non_browser_proof_lane"
+    },
+    {
+      "allowed_work": [
+        "Only archive, remove, repair, or reopen work explicitly requested by the user."
+      ],
+      "forbidden_work": [
+        "Do not add app-facing routes, UI tabs, background automation, performance work, or fresh documentation effort by default."
+      ],
+      "hard_rules": [
+        "The current src/app/api/day-trading folders are empty scaffolding, not live routes.",
+        "Existing engine code and tests may remain without making the lane active.",
+        "Reopening requires an explicit user request."
+      ],
+      "label": "Paused day-trading lane",
+      "lane_id": "day_trading",
+      "owner_docs": [
+        "docs/day-trading-current-state.md",
+        "docs/archive/day-trading-product-roadmap.md"
+      ],
+      "path_roots": [
+        "src/lib/day-trading",
+        "tests/day-trading",
+        "src/app/api/day-trading",
+        "docs/day-trading-current-state.md",
+        "docs/archive/day-trading-product-roadmap.md"
+      ],
+      "route_ui_status": "empty_route_scaffolding_only",
+      "status": "paused_out_of_scope"
+    },
+    {
+      "allowed_work": [
+        "Only archive, remove, repair, or reopen work explicitly requested by the user."
+      ],
+      "forbidden_work": [
+        "Do not tune, route, monitor, or expand crypto options from regular-options remediation loops."
+      ],
+      "hard_rules": [
+        "Crypto options are out of active product scope.",
+        "Package scripts may exist without making this an active browser lane.",
+        "Reopening requires an explicit user request."
+      ],
+      "label": "Crypto options sidecar",
+      "lane_id": "crypto_options_sidecar",
+      "owner_docs": [
+        "docs/PROJECT_CONTEXT.md",
+        "docs/architecture-audit.md"
+      ],
+      "path_roots": [
+        "crypto_options",
+        "scripts/run_crypto_scan.bat"
+      ],
+      "route_ui_status": "not_mounted_browser_product",
+      "status": "paused_out_of_scope"
+    },
+    {
+      "allowed_work": [
+        "Only archive, remove, repair, or reopen work explicitly requested by the user."
+      ],
+      "forbidden_work": [
+        "Do not wire Polymarket into active navigation, route lifecycle, scanner, proof, or Trading Desk flows."
+      ],
+      "hard_rules": [
+        "Polymarket code is adjacent tooling, not the active browser product.",
+        "Existing tests may remain without making this lane active.",
+        "Reopening requires an explicit user request."
+      ],
+      "label": "Polymarket sidecar",
+      "lane_id": "polymarket_sidecar",
+      "owner_docs": [
+        "docs/PROJECT_CONTEXT.md",
+        "docs/architecture-audit.md"
+      ],
+      "path_roots": [
+        "src/lib/polymarket",
+        "tests/polymarket"
+      ],
+      "route_ui_status": "not_mounted_browser_product",
+      "status": "paused_out_of_scope"
+    }
+  ],
+  "non_goals": [
+    "No deletion, repair, refactor, or expansion of paused day-trading, crypto-options, or Polymarket code.",
+    "No browser route, navigation tab, route lifecycle, auth, payload, proof, scanner, replay, DB, or schema behavior changes.",
+    "No package-script disabling; legacy and sidecar test commands may exist without making a lane active.",
+    "No AI commodity isolation work beyond naming it as a separate lane deferred to the AI commodity isolation contract."
+  ],
+  "owner": "Legacy, sidecar, paused, and active lane boundary map for agent orientation.",
+  "runtime_use": false,
+  "scope": "Classifies active browser product lanes, active legacy analytics inside Trading Desk, the separate AI commodity proof lane, and paused/out-of-scope sidecars.",
+  "sources": [
+    "AGENTS.md",
+    "docs/PROJECT_CONTEXT.md",
+    "docs/architecture-audit.md",
+    "docs/architecture-overview.md",
+    "data/contracts/route-mutation-inventory.json"
+  ],
+  "validation": {
+    "errors": []
+  },
+  "version": 1
+}

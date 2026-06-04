@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.audit_trading_desk_negative_trade_decisions import build_report
+from scripts.audit_trading_desk_negative_trade_decisions import _review_is_executable, build_report
 
 
 def _row(position_id: int, ticker: str, playbook_id: str, pnl_pct: float, **overrides):
@@ -94,3 +94,34 @@ def test_negative_audit_marks_missing_timeline_without_overclaiming_missed_exit(
     assert row["failure_category"] == "missing_review_timeline"
     assert row["executable_exit_before_negative"] is False
     assert row["executable_profit_sell_before_final_loss"] is False
+
+
+def test_review_executable_predicate_requires_whitelisted_basis_or_trigger_metric():
+    assert _review_is_executable(
+        {
+            "exit_execution_price": 1.2,
+            "exit_execution_basis": "spread_bid_ask_exact",
+            "metrics_snapshot": {},
+        }
+    )
+    assert not _review_is_executable(
+        {
+            "exit_execution_price": 1.2,
+            "exit_execution_basis": "manual_close",
+            "metrics_snapshot": {},
+        }
+    )
+    assert not _review_is_executable(
+        {
+            "exit_execution_price": 1.2,
+            "exit_execution_basis": "vendor_mark",
+            "metrics_snapshot": {},
+        }
+    )
+    assert _review_is_executable(
+        {
+            "exit_execution_price": 1.2,
+            "exit_execution_basis": "midpoint_mark",
+            "metrics_snapshot": {"price_trigger_ok": True},
+        }
+    )

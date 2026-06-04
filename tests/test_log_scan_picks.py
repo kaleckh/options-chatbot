@@ -270,11 +270,72 @@ class LogScanPicksTests(unittest.TestCase):
 
         self.assertEqual(annotated["fill_status"], "auto_tracked")
         self.assertEqual(annotated["fill_outcome"], "paper_fill_recorded")
+        self.assertEqual(annotated["auto_track_outcome"], "created_or_existing")
         self.assertTrue(annotated["filled"])
         self.assertEqual(annotated["auto_track_position_id"], 42)
         self.assertEqual(annotated["review_status"], "closed")
         self.assertEqual(annotated["close_review_status"], "auto_sell_recommendation")
         self.assertEqual(annotated["close_marked_at"], "2026-04-14T12:00:00-04:00")
+
+    def test_annotate_fill_attempt_distinguishes_created_from_duplicate(self):
+        records = [
+            log_scan_picks._build_fill_attempt_record(
+                _make_pick("SPY", debit=5.0),
+                run_at=_WeekdayDateTime.now(),
+                scan_result={"playbook": {"id": "swing"}},
+                candidate_rank=1,
+            ),
+            log_scan_picks._build_fill_attempt_record(
+                _make_pick("QQQ", debit=5.0),
+                run_at=_WeekdayDateTime.now(),
+                scan_result={"playbook": {"id": "swing"}},
+                candidate_rank=2,
+            ),
+        ]
+
+        annotated = log_scan_picks._annotate_fill_attempt_outcomes(
+            records,
+            tracked_links=[(42, 1, "created"), (43, 2, "duplicate_open")],
+            auto_track_allowed=True,
+            repository_available=True,
+        )
+
+        self.assertEqual(annotated[0]["auto_track_outcome"], "created")
+        self.assertEqual(annotated[0]["fill_outcome_reason"], "auto_track_position_created")
+        self.assertEqual(annotated[1]["auto_track_outcome"], "duplicate_open")
+        self.assertEqual(annotated[1]["fill_outcome_reason"], "auto_track_position_already_open")
+
+    def test_build_fill_attempt_record_preserves_creation_safety_state(self):
+        pick = _make_pick("SPY", debit=5.0)
+        pick.update(
+            {
+                "playbook_id": "swing",
+                "position_tracking_mode": "auto_track",
+                "creation_eligible": False,
+                "creation_blockers": ["candidate_execution_label:fallback_delayed"],
+            }
+        )
+
+        record = log_scan_picks._build_fill_attempt_record(
+            pick,
+            run_at=_WeekdayDateTime.now(),
+            scan_result={
+                "market_open_at_run": True,
+                "playbook": {"id": "swing", "label": "Swing"},
+                "exposure_snapshot": {"available": False, "portfolio_caps_enforced": True},
+            },
+            candidate_rank=1,
+        )
+
+        self.assertTrue(record["market_open_at_run"])
+        self.assertTrue(record["portfolio_caps_enforced"])
+        self.assertFalse(record["exposure_available"])
+        self.assertIn("exposure_snapshot_unavailable", record["auto_track_gate_blockers"])
+        self.assertEqual(record["position_tracking_mode"], "auto_track")
+        self.assertTrue(record["tracking_approved_lane"])
+        self.assertTrue(record["fresh_live_validation_enabled"])
+        self.assertFalse(record["creation_eligible"])
+        self.assertEqual(record["creation_blockers"], ["candidate_execution_label:fallback_delayed"])
 
     def test_build_liquidity_near_miss_record_preserves_alternatives_and_distance(self):
         record = log_scan_picks._build_liquidity_near_miss_records(
@@ -341,13 +402,14 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertTrue(record["non_promotable"])
         self.assertEqual(record["production_filter_action"], "preserve_filters_until_exact_replay_unlock")
 
-    def test_scan_allows_auto_track_ignores_legacy_observation_only_playbooks(self):
-        self.assertFalse(
+    def test_scan_allows_auto_track_defaults_regular_control_playbooks_to_tracking(self):
+        self.assertTrue(
             log_scan_picks._scan_allows_auto_track(
                 {
                     "playbook": {"id": "quality90_debit55_canary", "observation_only": True},
+                    "market_open_at_run": True,
                     "picks": [_make_pick("SPY", debit=5.0)],
-                    "exposure_snapshot": {"portfolio_caps_enforced": True},
+                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
                 }
             )
         )
@@ -358,8 +420,9 @@ class LogScanPicksTests(unittest.TestCase):
                 log_scan_picks._scan_allows_auto_track(
                     {
                         "playbook": {"id": "short_term", "observation_only": False},
+                        "market_open_at_run": True,
                         "picks": [_make_pick("SPY", debit=5.0)],
-                        "exposure_snapshot": {"portfolio_caps_enforced": True},
+                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
                     }
                 )
             )
@@ -371,6 +434,38 @@ class LogScanPicksTests(unittest.TestCase):
                     "playbook": {"id": "swing"},
                     "market_open_at_run": False,
                     "picks": [_make_pick("SPY", debit=5.0)],
+                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                }
+            )
+        )
+        self.assertFalse(
+            log_scan_picks._scan_allows_auto_track(
+                {
+                    "playbook": {"id": "swing"},
+                    "picks": [_make_pick("SPY", debit=5.0)],
+                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                }
+            )
+        )
+
+    def test_scan_allows_auto_track_requires_available_caps_snapshot(self):
+        self.assertFalse(
+            log_scan_picks._scan_allows_auto_track(
+                {
+                    "playbook": {"id": "swing"},
+                    "market_open_at_run": True,
+                    "picks": [_make_pick("SPY", debit=5.0)],
+                    "exposure_snapshot": {"available": False, "portfolio_caps_enforced": True},
+                }
+            )
+        )
+        self.assertFalse(
+            log_scan_picks._scan_allows_auto_track(
+                {
+                    "playbook": {"id": "swing"},
+                    "market_open_at_run": True,
+                    "picks": [_make_pick("SPY", debit=5.0)],
+                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": False},
                 }
             )
         )
@@ -709,6 +804,80 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual((created, duplicates, skipped), (0, 0, 1))
         self.assertEqual(repository.created, [])
 
+    def test_auto_track_respects_scan_creation_blockers(self):
+        repository = _TrackingRepository()
+        pick = _make_pick("SPY", debit=5.0)
+        pick.update(
+            {
+                "creation_eligible": False,
+                "creation_blockers": ["position_tracking_mode:paper_review_only"],
+                "selection_source": "live_chain_exact_contract",
+                "promotion_class": "promotable_exact_contract",
+                "options_data_source": "alpaca_opra",
+                "quote_time_et": "2026-04-14T11:00:00-04:00",
+                "quote_time_utc": "2026-04-14T15:00:00Z",
+                "entry_execution_price": 5.0,
+                "entry_execution_basis": "spread_ask_bid",
+            }
+        )
+
+        output = StringIO()
+        with (
+            redirect_stdout(output),
+            patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
+        ):
+            created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
+                repository=repository,
+                picks=[pick],
+                filled_at="2026-04-14T11:00:00-04:00",
+                scan_date="2026-04-14",
+            )
+
+        self.assertEqual((created, duplicates, skipped), (0, 0, 1))
+        self.assertEqual(repository.created, [])
+        build_position_payload.assert_not_called()
+        self.assertIn("position_tracking_mode:paper_review_only", output.getvalue())
+
+    def test_auto_track_requires_explicit_creation_eligible_true(self):
+        for value in (None, "true", 1):
+            with self.subTest(creation_eligible=value):
+                pick = _make_pick("SPY", debit=5.0)
+                if value is not None:
+                    pick["creation_eligible"] = value
+
+                self.assertIn("creation_eligible_not_true", log_scan_picks._scan_pick_creation_blockers(pick))
+
+        repository = _TrackingRepository()
+        pick = _make_pick("SPY", debit=5.0)
+        pick.update(
+            {
+                "selection_source": "live_chain_exact_contract",
+                "promotion_class": "promotable_exact_contract",
+                "options_data_source": "alpaca_opra",
+                "quote_time_et": "2026-04-14T11:00:00-04:00",
+                "quote_time_utc": "2026-04-14T15:00:00Z",
+                "entry_execution_price": 5.0,
+                "entry_execution_basis": "spread_ask_bid",
+            }
+        )
+
+        output = StringIO()
+        with (
+            redirect_stdout(output),
+            patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
+        ):
+            created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
+                repository=repository,
+                picks=[pick],
+                filled_at="2026-04-14T11:00:00-04:00",
+                scan_date="2026-04-14",
+            )
+
+        self.assertEqual((created, duplicates, skipped), (0, 0, 1))
+        self.assertEqual(repository.created, [])
+        build_position_payload.assert_not_called()
+        self.assertIn("creation_eligible_not_true", output.getvalue())
+
     def test_main_logs_and_tracks_eligible_auto_track_lane_pick(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_dir = Path(tmpdir)
@@ -729,8 +898,11 @@ class LogScanPicksTests(unittest.TestCase):
                     "selection_source": "live_chain_exact_contract",
                     "promotion_class": "promotable_exact_contract",
                     "options_data_source": "alpaca_opra",
+                    "creation_eligible": True,
+                    "creation_blockers": [],
                     "quote_time_et": "2026-04-14T11:00:00-04:00",
                     "quote_time_utc": "2026-04-14T15:00:00Z",
+                    "quote_freshness_status": "fresh",
                     "entry_execution_price": 5.0,
                     "entry_execution_basis": "spread_ask_bid",
                     "entry_quote_snapshot": {
@@ -777,7 +949,8 @@ class LogScanPicksTests(unittest.TestCase):
                         "policy_applied": False,
                         "policy_fail_closed": False,
                         "truth_lane": "historical_imported_daily",
-                        "exposure_snapshot": {"portfolio_caps_enforced": True},
+                        "market_open_at_run": True,
+                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
                         "playbook": {
                             "id": "short_term",
                             "label": "Short-Term",

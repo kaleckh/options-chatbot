@@ -8,17 +8,24 @@ import {
   tradingDeskStoreHeaders,
   type TradingDeskRouteContractId,
 } from "@/lib/trading-desk/storeOwnership";
+import { validateTradingDeskApiResponse } from "@/lib/trading-desk/apiResponseValidation";
 import {
   STRATEGY_LAB_MUTATION_HEADER,
   strategyLabRouteHeaders,
   type StrategyLabMutationIntent,
   type StrategyLabRouteContractId,
 } from "@/lib/strategy-lab/replayIntent";
+import {
+  optionsRouteLifecycleHeaders,
+  type OptionsRouteLifecycleContractId,
+} from "@/lib/route-lifecycle/routeContracts";
 
-export async function readJsonObject(
+export { requireLocalOperator } from "@/lib/operator-auth";
+
+export async function readJsonObject<T extends object = Record<string, unknown>>(
   req: NextRequest,
-  options: { defaultValue?: Record<string, unknown> } = {}
-): Promise<Record<string, unknown> | null> {
+  options: { defaultValue?: T } = {}
+): Promise<T | null> {
   const text = await req.text();
   if (!text.trim()) {
     return options.defaultValue ?? null;
@@ -28,7 +35,7 @@ export async function readJsonObject(
     if (!body || typeof body !== "object" || Array.isArray(body)) {
       return null;
     }
-    return body as Record<string, unknown>;
+    return body as T;
   } catch {
     return null;
   }
@@ -88,6 +95,30 @@ export function jsonWithTradingDeskStore(
   );
 }
 
+export function jsonWithValidatedTradingDeskStore(
+  body: unknown,
+  contractId: TradingDeskRouteContractId,
+  init: ResponseInit = {}
+) {
+  const headers = {
+    ...tradingDeskStoreHeaders(contractId),
+    ...(init.headers as Record<string, string> | undefined),
+  };
+  const validation = validateTradingDeskApiResponse(contractId, body);
+  if (!validation.ok) {
+    return NextResponse.json(
+      {
+        error: "Trading Desk backend response failed validation",
+        route_contract: contractId,
+        path: validation.path,
+        reason: validation.reason,
+      },
+      { status: 502, headers }
+    );
+  }
+  return NextResponse.json(body, { ...init, headers });
+}
+
 export function requireStrategyLabMutationIntent(
   req: NextRequest,
   expectedIntent: StrategyLabMutationIntent
@@ -113,6 +144,23 @@ export function jsonWithStrategyLabContract(
       ...init,
       headers: {
         ...strategyLabRouteHeaders(contractId),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    }
+  );
+}
+
+export function jsonWithRouteLifecycle(
+  body: unknown,
+  contractId: OptionsRouteLifecycleContractId,
+  init: ResponseInit = {}
+) {
+  return NextResponse.json(
+    body,
+    {
+      ...init,
+      headers: {
+        ...optionsRouteLifecycleHeaders(contractId),
         ...(init.headers as Record<string, string> | undefined),
       },
     }

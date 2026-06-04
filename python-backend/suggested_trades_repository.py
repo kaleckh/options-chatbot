@@ -9,6 +9,11 @@ from datetime import date, datetime
 from typing import Any, Optional
 
 from options_execution import commission_total_usd, option_pnl_snapshot
+from repository_contracts import SuggestedTradesRepository
+from repository_migrations import (
+    SQLITE_SUGGESTED_TRADES_STORE_ID,
+    apply_sqlite_repository_migrations,
+)
 
 
 def _to_iso(value: Any) -> Any:
@@ -281,6 +286,7 @@ class SQLiteSuggestedTradesRepository:
         conn = sqlite3.connect(self.db_path)
         try:
             conn.row_factory = sqlite3.Row
+            conn.execute("PRAGMA foreign_keys=ON")
             yield conn
             conn.commit()
         except Exception:
@@ -402,6 +408,7 @@ class SQLiteSuggestedTradesRepository:
                         except sqlite3.OperationalError as exc:
                             if "duplicate column name" not in str(exc).lower():
                                 raise
+                apply_sqlite_repository_migrations(conn, SQLITE_SUGGESTED_TRADES_STORE_ID)
             return True
         except Exception as exc:
             self.is_available = False
@@ -834,7 +841,7 @@ class SQLiteSuggestedTradesRepository:
             return position
 
 
-def create_suggested_trades_repository(db_path: str):
+def create_suggested_trades_repository(db_path: str) -> SuggestedTradesRepository:
     repo = SQLiteSuggestedTradesRepository(db_path)
     repo.init_schema()
     return repo

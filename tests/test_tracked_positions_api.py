@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import tempfile
@@ -6,6 +7,7 @@ from contextlib import ExitStack
 from pathlib import Path
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import options_chatbot as oc
@@ -24,9 +26,12 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 import positions_service as psvc
+from proof_contract import PROOF_SOURCE_FIELDS
 from options_algorithm_fixtures import (
     FrozenDateTime,
     build_options_algorithm_fixture_bundle,
+    build_scanner_origin_forward_event,
+    build_scanner_origin_proof_scan_pick,
     build_tracked_position_scan_pick,
     load_backend_main,
 )
@@ -114,6 +119,61 @@ class _CompactClosedPositionsOnlyRepository:
                 "updated_at": "2026-01-03T15:00:00Z",
                 "latest_review": {"id": 1, "recommendation": "SELL"},
             }
+        ]
+
+
+class _ProofSummaryRepository:
+    is_available = True
+
+    def list_positions(self, status="open", *args, **kwargs):
+        if status == "open":
+            return []
+        if status != "closed":
+            return []
+        return [
+            {
+                "id": 1,
+                "status": "closed",
+                "ticker": "SPY",
+                "contract_symbol": "SPY260619C00600000",
+                "entry_execution_price": 4.5,
+                "entry_execution_basis": "ask",
+                "exit_execution_price": 5.5,
+                "exit_execution_basis": "spread_bid_ask_exact",
+                "net_pnl_pct": 22.2,
+                "source_scan_session_id": 55,
+                "source_scan_event_key": "short_term:rank_1",
+                "source_scan_run_id": "api_scan_20260406T100000Z",
+                "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+                "proof_eligible": True,
+                "proof_class": "live_scan_exact_contract",
+                "source_pick_snapshot": {
+                    "selection_source": "live_chain_exact_contract",
+                    "options_data_source": "alpaca_opra",
+                    "quote_time_et": "2026-04-06T10:00:00-04:00",
+                    "quote_freshness_status": "fresh",
+                    "entry_execution_price": 4.5,
+                    "entry_execution_basis": "ask",
+                    "source_scan_lineage_verified": True,
+                },
+            },
+            {
+                "id": 2,
+                "status": "closed",
+                "ticker": "QQQ",
+                "contract_symbol": "QQQ260619C00500000",
+                "proof_eligible": False,
+                "proof_class": "manual_broker_exact_contract",
+            },
+            {
+                "id": 3,
+                "status": "closed",
+                "ticker": "IWM",
+                "contract_symbol": "IWM260619C00220000",
+                "proof_eligible": True,
+                "proof_class": "live_scan_exact_contract",
+                "source_pick_snapshot": {"backfill_audit_id": "all_lanes_zero_pick_current_algo_v1"},
+            },
         ]
 
 
@@ -263,6 +323,124 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(grouped_closed_payload["summary"]["closed"]["tracked"]["priced_count"], 1)
         self.assertIn("proof", grouped_closed_payload["summary"]["closed"])
 
+    def test_create_position_reports_position_opened_event_failure(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+
+        with patch.object(self.backend, "record_position_opened", side_effect=RuntimeError("position event down")):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "manual_paper",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.50,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["position"]["ticker"], scan_pick["ticker"])
+        persistence = payload["position_event_persistence"]
+        self.assertEqual(persistence["status"], "failed")
+        self.assertEqual(persistence["operation"], "position_opened")
+        self.assertEqual(persistence["error_type"], "RuntimeError")
+        self.assertIn("position event down", persistence["error"])
+        self.assertTrue(persistence["health_event_logged"])
+
+        evidence = self.client.get("/api/backtest/forward-evidence").json()
+        self.assertGreaterEqual(evidence["position_event_recording_failure_count"], 1)
+        self.assertIn("position_opened_event_count", evidence["ledger_summary"])
+        self.assertIn("position_review_event_count", evidence["ledger_summary"])
+        health = evidence["recording_health"]
+        self.assertEqual(health["latest_failure"]["recording_operation"], "position_opened")
+        self.assertIn("position event down", health["latest_failure"]["forward_truth_error"])
+
+    def test_duplicate_create_reports_skipped_position_event_persistence(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_body = {
+            "creation_mode": "manual_paper",
+            "scan_pick": scan_pick,
+            "fill_price": 4.50,
+            "contracts": 1,
+        }
+        first_response = self.client.post("/api/positions", json=create_body)
+        self.assertEqual(first_response.status_code, 200)
+
+        duplicate_response = self.client.post("/api/positions", json=create_body)
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        payload = duplicate_response.json()
+        self.assertTrue(payload["duplicate"])
+        persistence = payload["position_event_persistence"]
+        self.assertEqual(persistence["status"], "skipped")
+        self.assertEqual(persistence["operation"], "position_opened")
+        self.assertEqual(persistence["skip_reason"], "duplicate_open_contract")
+        self.assertFalse(persistence["recorded"])
+
+    def test_review_positions_reports_position_event_failure(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+
+        with patch.object(
+            self.backend,
+            "_record_forward_truth_for_position_events",
+            side_effect=RuntimeError("review event down"),
+        ):
+            response = self.client.post("/api/positions/review", json={})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["positions"]), 1)
+        persistence = payload["position_event_persistence"]
+        self.assertEqual(persistence["status"], "failed")
+        self.assertEqual(persistence["operation"], "positions_review")
+        self.assertEqual(persistence["error_type"], "RuntimeError")
+        self.assertIn("review event down", persistence["error"])
+        self.assertTrue(persistence["health_event_logged"])
+
+    def test_close_position_reports_position_event_failure(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        with patch.object(
+            self.backend,
+            "_record_forward_truth_for_position_events",
+            side_effect=RuntimeError("close event down"),
+        ):
+            response = self.client.post(
+                f"/api/positions/{position_id}/close",
+                json={"exit_price": 5.0},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["position"]["status"], "closed")
+        persistence = payload["position_event_persistence"]
+        self.assertEqual(persistence["status"], "failed")
+        self.assertEqual(persistence["operation"], "positions_close")
+        self.assertEqual(persistence["error_type"], "RuntimeError")
+        self.assertIn("close event down", persistence["error"])
+        self.assertTrue(persistence["health_event_logged"])
+
     def test_compact_closed_positions_use_narrow_repository_path(self):
         repository = _CompactClosedPositionsOnlyRepository()
         with patch.object(self.backend, "POSITIONS_REPOSITORY", repository):
@@ -321,6 +499,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
             {
                 "guardrail_decision": "clear",
                 "portfolio_caps_enforced": True,
+                "creation_eligible": True,
                 "creation_blockers": [],
                 "candidate_execution_label": "executable_opra_paper_candidate",
                 "source_scan_session_id": 123,
@@ -358,6 +537,178 @@ class TrackedPositionsApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
         self.assertIn("Max concurrent positions", str(response.json()["detail"]))
+
+    def test_create_scanner_origin_position_rejects_ineligible_current_rerun(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "guardrail_decision": "clear",
+                "portfolio_caps_enforced": True,
+                "creation_eligible": True,
+                "creation_blockers": [],
+                "candidate_execution_label": "executable_opra_paper_candidate",
+                "source_scan_session_id": 123,
+                "source_scan_event_key": "rank_1",
+                "source_scan_run_id": "scan:test",
+                "source_scan_recorded_at_utc": "2026-04-14T15:00:00Z",
+            }
+        )
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={
+                    "ranked_picks": [
+                        {
+                            **scan_pick,
+                            "guardrail_decision": "clear",
+                            "portfolio_caps_enforced": True,
+                            "creation_eligible": False,
+                            "creation_blockers": ["candidate_execution_label:fallback_delayed"],
+                            "candidate_execution_label": "fallback_delayed",
+                        }
+                    ]
+                },
+            ),
+        ):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": 4.50,
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("candidate_execution_label:fallback_delayed", str(response.json()["detail"]))
+
+    def test_create_scanner_origin_position_accepts_matching_archived_lineage(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(scan_pick)
+
+        with (
+            patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]) as list_events,
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch.object(
+                self.backend,
+                "record_position_opened",
+                return_value={
+                    "session_id": 777,
+                    "run_id": "position_opened:test",
+                    "recorded_at_utc": "2026-04-06T14:01:00Z",
+                },
+            ),
+        ):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": scan_pick["entry_execution_price"],
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        position = response.json()["position"]
+        self.assertTrue(position["proof_eligible"])
+        self.assertEqual(position["proof_class"], "live_scan_exact_contract")
+        self.assertTrue(position["source_pick_snapshot"]["source_scan_lineage_verified"])
+        self.assertEqual(position["source_scan_event_key"], scan_pick["source_scan_event_key"])
+        self.assertEqual(list_events.call_args.kwargs["source_label"], self.backend.ARCHIVED_FORWARD_SOURCE_LABEL)
+        self.assertEqual(list_events.call_args.kwargs["tickers"], [scan_pick["ticker"]])
+
+    def test_create_scanner_origin_position_rejects_mutated_archived_lineage_fields(self):
+        baseline_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(baseline_pick)
+
+        mutations = {
+            "source_scan_session_id": lambda pick: pick.update({"source_scan_session_id": 999}),
+            "source_scan_event_key": lambda pick: pick.update({"source_scan_event_key": "short_term:rank_99"}),
+            "source_scan_run_id": lambda pick: pick.update({"source_scan_run_id": "api_scan_tampered"}),
+            "source_scan_recorded_at_utc": lambda pick: pick.update(
+                {"source_scan_recorded_at_utc": "2026-04-06T14:05:00Z"}
+            ),
+            "ticker": lambda pick: pick.update({"ticker": "SPY"}),
+            "direction": lambda pick: pick.update({"direction": "put", "type": "put"}),
+            "contract_symbol": lambda pick: pick.update({"contract_symbol": "AAA260408C99999999"}),
+            "expiry": lambda pick: pick.update({"expiry": "2026-07-17"}),
+            "strike": lambda pick: pick.update({"strike": float(pick["strike"]) + 5.0}),
+            "entry_execution_price": lambda pick: pick.update({"entry_execution_price": 4.75}),
+            "entry_execution_basis": lambda pick: pick.update({"entry_execution_basis": "mid"}),
+            "selection_source": lambda pick: pick.update({"selection_source": "nearest_strike"}),
+            "promotion_class": lambda pick: pick.update({"promotion_class": "research_backfill_exact_contract"}),
+            "options_data_source": lambda pick: pick.update({"options_data_source": "delayed_vendor"}),
+            "quote_time_et": lambda pick: pick.update({"quote_time_et": "2026-04-06T10:05:00-04:00"}),
+            "portfolio_caps_enforced": lambda pick: pick.update({"portfolio_caps_enforced": False}),
+            "creation_eligible": lambda pick: pick.update({"creation_eligible": False}),
+            "creation_blockers": lambda pick: pick.update({"creation_blockers": ["portfolio_caps_not_enforced"]}),
+        }
+
+        for field, mutate in mutations.items():
+            with self.subTest(field=field):
+                repository = MemoryTrackedPositionsRepository()
+                scan_pick = copy.deepcopy(baseline_pick)
+                mutate(scan_pick)
+
+                with (
+                    patch.object(self.backend, "POSITIONS_REPOSITORY", repository),
+                    patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+                    patch.object(
+                        self.backend,
+                        "apply_playbook_guardrails",
+                        return_value={"ranked_picks": [dict(scan_pick)]},
+                    ),
+                ):
+                    response = self.client.post(
+                        "/api/positions",
+                        json={
+                            "creation_mode": "scanner",
+                            "scan_pick": scan_pick,
+                            "fill_price": scan_pick["entry_execution_price"],
+                            "contracts": 1,
+                        },
+                    )
+
+                self.assertEqual(response.status_code, 409)
+                self.assertIn("source_scan_lineage_unverified", str(response.json()["detail"]))
+                self.assertEqual(repository.list_positions("open"), [])
+
+    def test_create_scanner_origin_position_rejects_fill_price_mutation_after_verified_lineage(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(scan_pick)
+        repository = MemoryTrackedPositionsRepository()
+
+        with (
+            patch.object(self.backend, "POSITIONS_REPOSITORY", repository),
+            patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+        ):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": round(float(scan_pick["entry_execution_price"]) + 0.25, 4),
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("entry_execution_price_mismatch", response.text)
+        self.assertEqual(repository.list_positions("open"), [])
 
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -647,6 +998,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["source_separation"] = "historical_replay"
         scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
         scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
         scan_pick["bid"] = 4.4
         scan_pick["ask"] = 4.6
         scan_pick["mid"] = 4.5
@@ -737,6 +1089,8 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["promotion_class"] = "promotable_exact_contract"
         scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
         scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
+        scan_pick["options_data_source"] = "alpaca_opra"
         scan_pick["bid"] = 4.4
         scan_pick["ask"] = 4.6
         scan_pick["entry_execution_price"] = 4.5
@@ -813,6 +1167,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["promotion_class"] = "promotable_exact_contract"
         scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
         scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["options_data_source"] = "alpaca_opra"
         scan_pick["bid"] = 4.4
         scan_pick["ask"] = 4.6
         scan_pick["entry_execution_price"] = 4.5
@@ -845,6 +1200,8 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick["promotion_class"] = "promotable_exact_contract"
         scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
         scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
+        scan_pick["options_data_source"] = "alpaca_opra"
         scan_pick["bid"] = 4.4
         scan_pick["ask"] = 4.6
         scan_pick["entry_execution_price"] = 4.5
@@ -864,6 +1221,72 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertIsNone(payload["proof_ineligibility_reason"])
         self.assertEqual(payload["proof_class"], "live_scan_exact_contract")
         self.assertTrue(payload["source_pick_snapshot"]["source_scan_lineage_verified"])
+
+    def test_live_scan_proof_requires_quote_freshness_status(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "baseline_broad_control:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["options_data_source"] = "alpaca_opra"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+            require_resolved_contract=True,
+            preserve_fill_price=True,
+            source_scan_lineage_verified=True,
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertEqual(payload["proof_class"], "ineligible")
+        self.assertIn("quote_freshness_status", payload["proof_ineligibility_reason"])
+
+    def test_live_scan_proof_requires_opra_source_label(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "baseline_broad_control:rank_1"
+        scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["promotion_class"] = "promotable_exact_contract"
+        scan_pick["quote_time_et"] = "2026-04-06T10:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-04-06T14:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+        for field in PROOF_SOURCE_FIELDS:
+            scan_pick.pop(field, None)
+        entry_snapshot = scan_pick.get("entry_quote_snapshot")
+        if isinstance(entry_snapshot, dict):
+            for field in PROOF_SOURCE_FIELDS:
+                entry_snapshot.pop(field, None)
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-04-06T10:00:00-04:00",
+            require_resolved_contract=True,
+            preserve_fill_price=True,
+            source_scan_lineage_verified=True,
+        )
+
+        self.assertFalse(payload["proof_eligible"])
+        self.assertEqual(payload["proof_class"], "ineligible")
+        self.assertIn("options_source_not_opra", payload["proof_ineligibility_reason"])
 
     def test_research_backfill_marker_blocks_live_proof_even_with_exact_contract(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -914,6 +1337,57 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(payload["proof_class"], "ineligible")
         self.assertIn("research_backfill_not_live_proof", payload["proof_ineligibility_reason"])
         self.assertNotEqual(payload["proof_class"], "manual_broker_exact_contract")
+
+    def test_scanner_origin_create_requires_explicit_creation_eligible_true(self):
+        scan_pick = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-06-19",
+            "portfolio_caps_enforced": True,
+            "guardrail_decision": "clear",
+            "creation_blockers": [],
+        }
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            self.backend._validate_scanner_origin_create(
+                scan_pick,
+                positions_repository=MemoryTrackedPositionsRepository(),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("source_creation_eligible_not_true", ctx.exception.detail["reasons"])
+
+    def test_proof_summary_splits_raw_exact_from_proof_grade_closed(self):
+        with (
+            patch.object(self.backend, "POSITIONS_REPOSITORY", _ProofSummaryRepository()),
+            patch.object(self.backend, "evaluate_measurement_gate", return_value={"state": "blocked", "blockers": []}),
+            patch.object(
+                self.backend,
+                "evaluate_claim_readiness",
+                return_value={
+                    "state": "blocked",
+                    "claim_ready": False,
+                    "blocker_count": 0,
+                    "blockers": [],
+                    "eligible_event_count": 0,
+                    "pending_truth_event_count": 0,
+                    "by_symbol": {},
+                    "tracked_realized_metrics": {},
+                },
+            ),
+            patch.object(self.backend, "_cached_forward_evidence_report", return_value={"ledger_summary": {}}),
+        ):
+            response = self.client.get("/api/proof-summary")
+
+        self.assertEqual(response.status_code, 200)
+        tracked = response.json()["tracked_positions"]
+        self.assertEqual(tracked["closed_count"], 3)
+        self.assertEqual(tracked["raw_exact_contract_closed_count"], 3)
+        self.assertEqual(tracked["proof_grade_exact_contract_closed_count"], 1)
+        self.assertEqual(tracked["exact_contract_closed_count"], 1)
 
     def test_grouped_summary_excludes_stale_research_backfill_proof_flags(self):
         row = {

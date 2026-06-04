@@ -38,6 +38,80 @@ from options_algorithm_fixtures import (
 from workspace_tempdir import WorkspaceTempDir
 
 
+PROOF_GRADE_SCAN_FIELDS = {
+    "selection_source": "live_chain_exact_contract",
+    "contract_selection_source": "live_chain_exact_contract",
+    "promotion_class": "promotable_exact_contract",
+    "source_scan_session_id": 55,
+    "source_scan_event_key": "short_term:rank_1",
+    "source_scan_run_id": "api_scan_20260330T133500Z",
+    "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+    "quote_time_et": "2026-03-30T09:35:00-04:00",
+    "quote_time_utc": "2026-03-30T13:35:00Z",
+    "quote_freshness_status": "fresh",
+    "options_data_source": "alpaca_opra",
+    "quote_source": "alpaca_opra",
+    "entry_execution_basis": "ask",
+    "entry_execution_price": 3.2,
+    "bid": 3.1,
+    "ask": 3.2,
+}
+
+
+def _proof_grade_scan_pick(scan_pick: dict) -> dict:
+    proof_pick = dict(scan_pick)
+    proof_pick.update(PROOF_GRADE_SCAN_FIELDS)
+    return proof_pick
+
+
+def _proof_grade_closed_snapshot_row() -> dict:
+    return {
+        "status": "closed",
+        "contract_symbol": "SPY260619C00500000",
+        "contracts": 1,
+        "entry_execution_price": 2.0,
+        "entry_execution_basis": "ask",
+        "exit_execution_price": 4.0,
+        "exit_execution_basis": "spread_bid_ask_exact",
+        "net_pnl_pct": 99.0,
+        "gross_pnl_pct": 100.0,
+        "net_pnl_usd": 198.0,
+        "gross_pnl_usd": 200.0,
+        "proof_eligible": True,
+        "proof_class": "live_scan_exact_contract",
+        "source_scan_lineage_verified": True,
+        "selection_source": "live_chain_exact_contract",
+        "contract_selection_source": "live_chain_exact_contract",
+        "source_scan_session_id": 55,
+        "source_scan_event_key": "short_term:rank_1",
+        "source_scan_run_id": "api_scan_20260330T133500Z",
+        "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+        "quote_time_et": "2026-03-30T09:35:00-04:00",
+        "quote_time_utc": "2026-03-30T13:35:00Z",
+        "quote_freshness_status": "fresh",
+        "options_data_source": "alpaca_opra",
+        "quote_source": "alpaca_opra",
+        "source_pick_snapshot": {
+            "contract_symbol": "SPY260619C00500000",
+            "proof_class": "live_scan_exact_contract",
+            "source_scan_lineage_verified": True,
+            "selection_source": "live_chain_exact_contract",
+            "contract_selection_source": "live_chain_exact_contract",
+            "source_scan_session_id": 55,
+            "source_scan_event_key": "short_term:rank_1",
+            "source_scan_run_id": "api_scan_20260330T133500Z",
+            "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+            "quote_time_et": "2026-03-30T09:35:00-04:00",
+            "quote_time_utc": "2026-03-30T13:35:00Z",
+            "quote_freshness_status": "fresh",
+            "options_data_source": "alpaca_opra",
+            "quote_source": "alpaca_opra",
+            "entry_execution_price": 2.0,
+            "entry_execution_basis": "ask",
+        },
+    }
+
+
 class _ProfitStatusSnapshotOnlyRepository:
     is_available = True
     error_message = None
@@ -48,18 +122,7 @@ class _ProfitStatusSnapshotOnlyRepository:
             "open_position_count": 2,
             "total_closed_position_count": 2,
             "closed_positions": [
-                {
-                    "contract_symbol": "SPY260619C00500000",
-                    "contracts": 1,
-                    "entry_execution_price": 2.0,
-                    "exit_execution_price": 4.0,
-                    "net_pnl_pct": 99.0,
-                    "gross_pnl_pct": 100.0,
-                    "net_pnl_usd": 198.0,
-                    "gross_pnl_usd": 200.0,
-                    "proof_eligible": True,
-                    "quote_source": "alpaca_opra",
-                },
+                _proof_grade_closed_snapshot_row(),
                 {
                     "contract_symbol": "QQQ260619C00400000",
                     "contracts": 1,
@@ -229,22 +292,23 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                 notes="Open position",
             )
         )
+        closed_scan_pick = _proof_grade_scan_pick(open_pick)
         closed_payload = build_position_payload(
-            scan_pick=open_pick,
+            scan_pick=closed_scan_pick,
             fill_price=3.2,
             contracts=1,
             filled_at="2026-03-30T09:35:00",
             notes="Closed proof position",
+            preserve_fill_price=True,
+            source_scan_lineage_verified=True,
         )
-        closed_payload["proof_eligible"] = True
-        closed_payload["source_pick_snapshot"]["options_data_source"] = "alpaca_opra"
-        closed_payload["source_pick_snapshot"]["quote_source"] = "alpaca_opra"
         closed_position = repo.create_position(closed_payload)
         repo.close_position(
             closed_position["id"],
             4.8,
             datetime(2026, 4, 2, 20, 0, tzinfo=UTC),
             "test_exit",
+            exit_execution_basis="spread_bid_ask_exact",
         )
 
         response = self.client.get("/api/options-profit/status")

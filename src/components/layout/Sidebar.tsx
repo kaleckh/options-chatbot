@@ -1,20 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { BarChart3, FlaskConical, X } from "lucide-react";
+import { BarChart3, FlaskConical, X, type LucideIcon } from "lucide-react";
+import {
+  MAIN_APP_TAB_IDS,
+  MAIN_APP_TAB_LIST,
+  type MainAppTabId,
+} from "@/lib/navigation/tabs";
 
 interface SidebarProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
+  activeTab: MainAppTabId;
+  onTabChange: (tab: MainAppTabId) => void;
   riskSettings: Record<string, unknown> | null;
   isOpen: boolean;
   onClose: () => void;
 }
 
-const TABS = [
-  { id: "predictions", label: "Trading Desk", icon: BarChart3 },
-  { id: "strategy", label: "Strategy Lab", icon: FlaskConical },
-];
+const TAB_ICONS: Record<MainAppTabId, LucideIcon> = {
+  predictions: BarChart3,
+  strategy: FlaskConical,
+};
 
 export default function Sidebar({
   activeTab,
@@ -32,14 +37,14 @@ export default function Sidebar({
   const stopLoss = Number(risk?.stop_loss_pct || 90);
   const maxPct = Number(risk?.max_position_pct || 40);
 
-  const selectTab = useCallback((tabId: string) => {
+  const selectTab = useCallback((tabId: MainAppTabId) => {
     onTabChange(tabId);
     if (isOpen) onClose();
   }, [isOpen, onClose, onTabChange]);
 
   const handleTabKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLButtonElement>) => {
-      const tabIds = TABS.map((t) => t.id);
+      const tabIds = MAIN_APP_TAB_IDS;
       const currentIdx = tabIds.indexOf(activeTab);
       let nextIdx: number | null = null;
 
@@ -141,8 +146,8 @@ export default function Sidebar({
           aria-label="Main navigation"
           className="space-y-1"
         >
-          {TABS.map((tab) => {
-            const Icon = tab.icon;
+          {MAIN_APP_TAB_LIST.map((tab) => {
+            const Icon = TAB_ICONS[tab.id];
             const isActive = activeTab === tab.id;
             return (
               <button

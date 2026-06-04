@@ -12,6 +12,13 @@ from pathlib import Path
 from typing import Any, Optional
 
 from options_execution import commission_total_usd, option_pnl_snapshot
+from repository_contracts import TrackedPositionsRepository
+from repository_migrations import (
+    POSTGRES_TRACKED_POSITIONS_STORE_ID,
+    SQLITE_TRACKED_POSITIONS_STORE_ID,
+    apply_postgres_repository_migrations,
+    apply_sqlite_repository_migrations,
+)
 
 
 class _PostgresConnectionPool:
@@ -625,6 +632,7 @@ class PostgresTrackedPositionsRepository:
             with self._connect() as conn:
                 with conn.cursor() as cur:
                     cur.execute(schema_sql)
+                    apply_postgres_repository_migrations(cur, POSTGRES_TRACKED_POSITIONS_STORE_ID)
             return True
         except Exception as exc:
             self.is_available = False
@@ -1272,7 +1280,7 @@ class PostgresTrackedPositionsRepository:
 
 
 class SqliteTrackedPositionsRepository:
-    """SQLite-backed tracked positions repository (fallback when Postgres is unavailable)."""
+    """SQLite-backed tracked positions repository for explicit tests and legacy tools only."""
 
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
@@ -1437,6 +1445,7 @@ class SqliteTrackedPositionsRepository:
                         except sqlite3.OperationalError as exc:
                             if "duplicate column name" not in str(exc).lower():
                                 raise
+                apply_sqlite_repository_migrations(conn, SQLITE_TRACKED_POSITIONS_STORE_ID)
             return True
         except Exception as exc:
             self.is_available = False
@@ -2152,7 +2161,7 @@ class MemoryTrackedPositionsRepository:
         return total
 
 
-def create_positions_repository(database_url: Optional[str]):
+def create_positions_repository(database_url: Optional[str]) -> TrackedPositionsRepository:
     if database_url:
         repo = PostgresTrackedPositionsRepository(database_url)
         repo.init_schema()

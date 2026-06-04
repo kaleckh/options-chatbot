@@ -1,0 +1,1024 @@
+{
+  "artifact": "route_mutation_inventory",
+  "backend_only_routes": [
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/positions/{position_id}/close-prefill",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "position_recommendation_support",
+      "method": "POST",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/scan/recommendations",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "scan_roll_forward_write",
+      "method": "POST",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/scan/roll",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/market-data/cache-stats",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "market_data_cache_reset",
+      "method": "POST",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/market-data/cache-stats/reset",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "archived_forward_replay_run",
+      "method": "POST",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/backtest/archived-forward",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "research_experiment_run",
+      "method": "POST",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/backtest/experiments",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/backtest/profitability-forensics",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/backtest/stability",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/daily-performance",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/health",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/proof-summary",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "prediction_delete",
+      "method": "DELETE",
+      "mutating": true,
+      "owner": "python-backend",
+      "path": "/api/predictions/{pred_id}",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    },
+    {
+      "auth_boundary": "backend_bridge_token_when_configured",
+      "contract_id": "backend_only",
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "owner": "python-backend",
+      "path": "/api/profiles",
+      "record_class": "backend_endpoint",
+      "store": "backend/domain"
+    }
+  ],
+  "client_fetches": [
+    {
+      "absolute_url": false,
+      "browser_path": "/api/backtest",
+      "source_path": "src/components/strategy/StrategyView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/backtest/forward-evidence",
+      "source_path": "src/components/predictions/useScannerSurface.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/backtest/summary",
+      "source_path": "src/components/strategy/StrategyView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/changelog",
+      "source_path": "src/components/strategy/StrategyView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/options-profit/status",
+      "source_path": "src/components/predictions/useScannerSurface.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/positions",
+      "source_path": "src/components/predictions/PredictionsView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/positions",
+      "source_path": "src/components/predictions/useTradingDeskRecords.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/positions/[param]/close",
+      "source_path": "src/components/predictions/useTradingDeskCloseDialogs.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/positions/review",
+      "source_path": "src/components/predictions/useTradingDeskRecords.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/predictions",
+      "source_path": "src/components/predictions/PredictionsView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/predictions/grade",
+      "source_path": "src/components/predictions/PredictionsView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/profile",
+      "source_path": "src/components/strategy/StrategyView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/risk-settings",
+      "source_path": "src/components/layout/AppShell.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/scan",
+      "source_path": "src/components/predictions/useScannerSurface.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/sectors",
+      "source_path": "src/components/predictions/PredictionsView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/suggested-trades",
+      "source_path": "src/components/predictions/PredictionsView.tsx"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/suggested-trades",
+      "source_path": "src/components/predictions/useTradingDeskRecords.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/suggested-trades/[param]/close",
+      "source_path": "src/components/predictions/useTradingDeskCloseDialogs.ts"
+    },
+    {
+      "absolute_url": false,
+      "browser_path": "/api/suggested-trades/review",
+      "source_path": "src/components/predictions/useTradingDeskRecords.ts"
+    }
+  ],
+  "generated_by": "scripts/generate_route_parity.py",
+  "inventory_version": 1,
+  "mounted_browser_routes": [
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/scan",
+      "contract_ids": [
+        "scan_run"
+      ],
+      "fastapi_path": "/api/scan",
+      "intent_labels": [],
+      "lifecycle": "live_scan_run",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/scan/route.ts",
+      "owners": [
+        "python-backend/main.py /api/scan and forward_options_ledger.py"
+      ],
+      "record_classes": [
+        "scan_result"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "forward_evidence_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/backtest",
+      "contract_ids": [
+        "backtest_run"
+      ],
+      "fastapi_path": "/api/backtest",
+      "intent_labels": [
+        "x-strategy-lab-mutation: run_replay_backtest"
+      ],
+      "lifecycle": "replay_run",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/route.ts",
+      "owners": [
+        "wfo_optimizer.py run_historical_backtest(save_result=True)"
+      ],
+      "record_classes": [
+        "backtest_result"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/summary",
+      "contract_ids": [
+        "backtest_summary_read"
+      ],
+      "fastapi_path": "/api/backtest/summary",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/summary/route.ts",
+      "owners": [
+        "wfo_optimizer.py load_preferred_results_by_truth_lane"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/last",
+      "contract_ids": [
+        "backtest_last_read"
+      ],
+      "fastapi_path": "/api/backtest/last",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/last/route.ts",
+      "owners": [
+        "wfo_optimizer.py load_last_results_by_truth_lane"
+      ],
+      "record_classes": [
+        "backtest_result"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/live-policy",
+      "contract_ids": [
+        "live_policy_read"
+      ],
+      "fastapi_path": "/api/backtest/live-policy",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/live-policy/route.ts",
+      "owners": [
+        "wfo_optimizer.py build_live_trade_policy_report"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/report",
+      "contract_ids": [
+        "backtest_report_read"
+      ],
+      "fastapi_path": "/api/backtest/report",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/report/route.ts",
+      "owners": [
+        "wfo_optimizer.py build_prediction_replay_report"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/metric-truth",
+      "contract_ids": [
+        "metric_truth_read"
+      ],
+      "fastapi_path": "/api/backtest/metric-truth",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/metric-truth/route.ts",
+      "owners": [
+        "wfo_optimizer.py build_metric_truth_report"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/comparison",
+      "contract_ids": [
+        "truth_lane_comparison_read"
+      ],
+      "fastapi_path": "/api/backtest/comparison",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/comparison/route.ts",
+      "owners": [
+        "wfo_optimizer.py build_truth_lane_comparison_report"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/forward-evidence",
+      "contract_ids": [
+        "forward_evidence_read"
+      ],
+      "fastapi_path": "/api/backtest/forward-evidence",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/forward-evidence/route.ts",
+      "owners": [
+        "data/forward-tracking and data/options-validation artifacts"
+      ],
+      "record_classes": [
+        "forward_evidence_report"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "forward_evidence_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/backtest/exit-audit",
+      "contract_ids": [
+        "exit_audit_read"
+      ],
+      "fastapi_path": "/api/backtest/exit-audit",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/backtest/exit-audit/route.ts",
+      "owners": [
+        "wfo_optimizer.py build_playbook_exit_audit_report"
+      ],
+      "record_classes": [
+        "backtest_artifact_bundle"
+      ],
+      "route_group": "Scan And Truth Diagnostics",
+      "stores": [
+        "latest_replay_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/profile",
+      "contract_ids": [
+        "profile_read"
+      ],
+      "fastapi_path": "/api/profile",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/profile/route.ts",
+      "owners": [
+        "options_chatbot.py STRATEGY_PROFILES and strategy_profile.json"
+      ],
+      "record_classes": [
+        "strategy_profile"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "strategy_profile_files"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/profile",
+      "contract_ids": [
+        "profile_save"
+      ],
+      "fastapi_path": "/api/profile",
+      "intent_labels": [
+        "x-strategy-lab-mutation: save_strategy_profile"
+      ],
+      "lifecycle": "profile_save",
+      "method": "PUT",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/profile/route.ts",
+      "owners": [
+        "options_chatbot.py _save_profile and profile changelog files"
+      ],
+      "record_classes": [
+        "strategy_profile"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "strategy_profile_files"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/changelog",
+      "contract_ids": [
+        "profile_changelog_read"
+      ],
+      "fastapi_path": "/api/changelog",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/changelog/route.ts",
+      "owners": [
+        "options_chatbot.py CHANGELOG_FILES and brain_changelog*.json"
+      ],
+      "record_classes": [
+        "strategy_profile"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "strategy_profile_files"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/predictions",
+      "contract_ids": [
+        "predictions_read"
+      ],
+      "fastapi_path": "/api/predictions",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/predictions/route.ts",
+      "owners": [
+        "options_chatbot.py predictions.json"
+      ],
+      "record_classes": [
+        "prediction_history"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "predictions_json"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/predictions/grade",
+      "contract_ids": [
+        "predictions_grade"
+      ],
+      "fastapi_path": "/api/predictions/grade",
+      "intent_labels": [],
+      "lifecycle": "prediction_grade",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/predictions/grade/route.ts",
+      "owners": [
+        "python-backend/predictions_routes.py grade_predictions_endpoint"
+      ],
+      "record_classes": [
+        "prediction_history"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "predictions_json"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/risk-settings",
+      "contract_ids": [
+        "risk_settings_read"
+      ],
+      "fastapi_path": "/api/risk",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/risk-settings/route.ts",
+      "owners": [
+        "python-backend/profile_routes.py /api/risk"
+      ],
+      "record_classes": [
+        "risk_settings"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "strategy_profile_files"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/options-profit/status",
+      "contract_ids": [
+        "options_profit_status_read"
+      ],
+      "fastapi_path": "/api/options-profit/status",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/options-profit/status/route.ts",
+      "owners": [
+        "python-backend/main.py /api/options-profit/status"
+      ],
+      "record_classes": [
+        "options_profit_status"
+      ],
+      "route_group": "Profiles, Predictions, And Status",
+      "stores": [
+        "options_profit_state_artifacts"
+      ]
+    },
+    {
+      "auth_boundary": "next_only_session",
+      "browser_path": "/api/operator/session",
+      "contract_ids": [
+        "operator_session_status"
+      ],
+      "fastapi_path": "/api/operator/session",
+      "intent_labels": [],
+      "lifecycle": "session_status",
+      "method": "GET",
+      "mutating": false,
+      "next_only": true,
+      "next_only_reason": "local operator session status",
+      "next_path": "src/app/api/operator/session/route.ts",
+      "owners": [
+        "src/lib/operator-auth.ts"
+      ],
+      "record_classes": [
+        "operator_session"
+      ],
+      "route_group": "Operator Auth",
+      "stores": [
+        "local_operator_session_cookie"
+      ]
+    },
+    {
+      "auth_boundary": "next_only_session",
+      "browser_path": "/api/operator/session",
+      "contract_ids": [
+        "operator_session_unlock"
+      ],
+      "fastapi_path": "/api/operator/session",
+      "intent_labels": [],
+      "lifecycle": "session_unlock",
+      "method": "POST",
+      "mutating": true,
+      "next_only": true,
+      "next_only_reason": "local operator session unlock",
+      "next_path": "src/app/api/operator/session/route.ts",
+      "owners": [
+        "src/lib/operator-auth.ts"
+      ],
+      "record_classes": [
+        "operator_session"
+      ],
+      "route_group": "Operator Auth",
+      "stores": [
+        "local_operator_session_cookie"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/positions",
+      "contract_ids": [
+        "tracked_positions_read"
+      ],
+      "fastapi_path": "/api/positions",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/positions/route.ts",
+      "owners": [
+        "python-backend/positions_repository.py via DATABASE_URL"
+      ],
+      "record_classes": [
+        "tracked_position"
+      ],
+      "route_group": "Tracked Positions",
+      "stores": [
+        "postgres_tracked_positions"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/positions",
+      "contract_ids": [
+        "tracked_positions_create"
+      ],
+      "fastapi_path": "/api/positions",
+      "intent_labels": [
+        "x-trading-desk-mutation: create_tracked_position"
+      ],
+      "lifecycle": "create",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/positions/route.ts",
+      "owners": [
+        "python-backend/positions_repository.py via DATABASE_URL"
+      ],
+      "record_classes": [
+        "tracked_position"
+      ],
+      "route_group": "Tracked Positions",
+      "stores": [
+        "postgres_tracked_positions"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/positions/review",
+      "contract_ids": [
+        "tracked_positions_review"
+      ],
+      "fastapi_path": "/api/positions/review",
+      "intent_labels": [
+        "x-trading-desk-mutation: review_tracked_positions"
+      ],
+      "lifecycle": "review",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/positions/review/route.ts",
+      "owners": [
+        "python-backend/positions_service.py and positions_repository.py via DATABASE_URL"
+      ],
+      "record_classes": [
+        "tracked_position"
+      ],
+      "route_group": "Tracked Positions",
+      "stores": [
+        "postgres_tracked_positions"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/positions/[id]/close",
+      "contract_ids": [
+        "tracked_positions_close"
+      ],
+      "fastapi_path": "/api/positions/{position_id}/close",
+      "intent_labels": [
+        "x-trading-desk-mutation: close_tracked_position"
+      ],
+      "lifecycle": "close",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/positions/[id]/close/route.ts",
+      "owners": [
+        "python-backend/positions_repository.py via DATABASE_URL"
+      ],
+      "record_classes": [
+        "tracked_position"
+      ],
+      "route_group": "Tracked Positions",
+      "stores": [
+        "postgres_tracked_positions"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/suggested-trades",
+      "contract_ids": [
+        "suggested_trades_read"
+      ],
+      "fastapi_path": "/api/suggested-trades",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/suggested-trades/route.ts",
+      "owners": [
+        "python-backend/suggested_trades_repository.py via chat_history.db"
+      ],
+      "record_classes": [
+        "suggested_trade"
+      ],
+      "route_group": "Suggested Trades",
+      "stores": [
+        "sqlite_suggested_trades"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/suggested-trades",
+      "contract_ids": [
+        "suggested_trades_create"
+      ],
+      "fastapi_path": "/api/suggested-trades",
+      "intent_labels": [
+        "x-trading-desk-mutation: create_suggested_trade"
+      ],
+      "lifecycle": "create",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/suggested-trades/route.ts",
+      "owners": [
+        "python-backend/suggested_trades_repository.py via chat_history.db"
+      ],
+      "record_classes": [
+        "suggested_trade"
+      ],
+      "route_group": "Suggested Trades",
+      "stores": [
+        "sqlite_suggested_trades"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/suggested-trades/review",
+      "contract_ids": [
+        "suggested_trades_review"
+      ],
+      "fastapi_path": "/api/suggested-trades/review",
+      "intent_labels": [
+        "x-trading-desk-mutation: review_suggested_trades"
+      ],
+      "lifecycle": "review",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/suggested-trades/review/route.ts",
+      "owners": [
+        "python-backend/positions_service.py and suggested_trades_repository.py via chat_history.db"
+      ],
+      "record_classes": [
+        "suggested_trade"
+      ],
+      "route_group": "Suggested Trades",
+      "stores": [
+        "sqlite_suggested_trades"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/suggested-trades/[id]/close",
+      "contract_ids": [
+        "suggested_trades_close"
+      ],
+      "fastapi_path": "/api/suggested-trades/{position_id}/close",
+      "intent_labels": [
+        "x-trading-desk-mutation: close_suggested_trade"
+      ],
+      "lifecycle": "close",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/suggested-trades/[id]/close/route.ts",
+      "owners": [
+        "python-backend/suggested_trades_repository.py via chat_history.db"
+      ],
+      "record_classes": [
+        "suggested_trade"
+      ],
+      "route_group": "Suggested Trades",
+      "stores": [
+        "sqlite_suggested_trades"
+      ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/sectors",
+      "contract_ids": [
+        "sectors_read"
+      ],
+      "fastapi_path": "/api/sectors",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/sectors/route.ts",
+      "owners": [
+        "python-backend/main.py /api/sectors"
+      ],
+      "record_classes": [
+        "sector_sentiment_snapshot"
+      ],
+      "route_group": "Support",
+      "stores": [
+        "market_data_cache"
+      ]
+    },
+    {
+      "auth_boundary": "local_operator",
+      "browser_path": "/api/tools/[name]",
+      "contract_ids": [
+        "tool_dispatch"
+      ],
+      "fastapi_path": "/api/tools/{tool_name}",
+      "intent_labels": [],
+      "lifecycle": "tool_dispatch",
+      "method": "POST",
+      "mutating": true,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/tools/[name]/route.ts",
+      "owners": [
+        "python-backend/tools_routes.py /api/tools/{tool_name}"
+      ],
+      "record_classes": [
+        "tool_result"
+      ],
+      "route_group": "Support",
+      "stores": [
+        "backend_tool_dispatch"
+      ]
+    }
+  ],
+  "non_goals": [
+    "Does not define API behavior, route payload shape, response schema, auth behavior, proof semantics, scanner policy, or DB schema.",
+    "Does not replace OpenAPI, JSON Schema, TypeScript contracts, or Pydantic models.",
+    "Does not replace the future storage ownership map.",
+    "Does not replace generated artifact governance or stale-artifact checks beyond this route inventory freshness check.",
+    "Does not reopen crypto, Polymarket, day-trading, or AI commodity browser routes."
+  ],
+  "runtime_use": false,
+  "sources": {
+    "client_fetch_roots": [
+      "src/components"
+    ],
+    "contract_registries": [
+      "src/lib/trading-desk/storeOwnership.ts",
+      "src/lib/strategy-lab/replayIntent.ts",
+      "src/lib/route-lifecycle/routeContracts.ts"
+    ],
+    "fastapi_route_root": "python-backend",
+    "next_api_root": "src/app/api"
+  },
+  "validation": {
+    "errors": []
+  }
+}

@@ -1,30 +1,58 @@
 # Next Steps
 
-Last updated: 2026-06-03
+Last updated: 2026-06-04
 
 ## Documentation Hygiene
 
 Current read:
 - global agent behavior rules live in `C:\Users\kalec\AGENTS.md` and `C:\Users\kalec\CLAUDE.md`
 - repo-specific agent startup and evidence rules live in `AGENTS.md`
+- living-doc ownership, generated-artifact, and source-of-truth hygiene rules live in `docs/living-docs-hygiene.md`
+- `npm run verify:docs` now runs generated artifact checks, the final remediation closure pack check, and `scripts/check_living_docs_hygiene.py`
 - latest Markdown placement audit: `docs/markdown-audit-2026-05-31.md`
 
 1. When adding new Markdown, update `docs/index.md` only for living docs or reports that change the current decision surface. Keep generated research reports beside their source artifacts under `data/` or `research_runs/`.
 
+## Architecture And Auth Hardening
+
+Current read:
+- browser-facing state-changing and tool routes now call `requireLocalOperator(req)` before body parsing
+- `OPTIONS_LOCAL_OPERATOR_TOKEN` is the local operator secret; callers can use `x-options-operator-token`, `Authorization: Bearer ...`, or the HttpOnly session cookie opened by `POST /api/operator/session`
+- `OPTIONS_BACKEND_API_TOKEN` is a separate Next-to-FastAPI bridge token and is forwarded only by the server-side backend transport
+- Trading Desk and Strategy Lab mutation-intent headers are still required for audited writes, but they are not authorization
+- `docs/route-parity.md` now includes a generated route auth/mutation inventory covering mounted browser routes and backend-only FastAPI routes
+- `tests/ui/operator-auth.test.js` fails if a future browser-facing mutation route lacks the operator guard, except the explicit operator session endpoint, and it directly proves scan, prediction grading, and tool routes reject missing or wrong auth before body parsing or bridge calls and allow valid auth through to mocked bridge calls with lifecycle headers
+- `tests/ui/operator-auth.test.js` also directly proves `POST /api/operator/session` rejects unconfigured or invalid unlock attempts and sets only the expected HttpOnly SameSite=Strict local session cookie on valid unlock
+- `npm run verify:docs` also fails if a mutating mounted Next route is missing local operator auth
+
+1. Add a small browser unlock affordance for `POST /api/operator/session` so local operators do not need to use curl or scripts to open the HttpOnly session cookie.
+
+## Proof/Evidence Contract
+
+Current read:
+- proof/evidence semantics are versioned at `data/contracts/proof-evidence-contract.json` and explained in `docs/proof-evidence-contract.md`
+- `python-backend/proof_contract.py` owns the backend proof predicates used by `positions_service.py` and `/api/proof-summary`
+- `options_profit_gate.py` and `options_profit_flywheel.py` consume the same closed-row proof-grade predicate for production readiness metrics
+- generated `src/lib/generated/proofEvidenceContract.ts`, `src/lib/trading-desk/proofContract.ts`, and `src/lib/trading-desk/positionEvidence.ts` consume the same proof classes, entry-proof gates, display groups, research/backfill markers, quote-freshness tokens, and exit-basis tokens
+- production evidence remains limited to fresh live scanner exact-contract proof; creation-time classification, stored-row predicates, and frontend display re-check exact selection source, verified scan lineage, OPRA source, executable entry, present acceptable quote freshness, trusted closed exit, calculable P&L, and absence of row-level or source-snapshot backfill/migration identity fields such as `backfill_audit_id`, `position_migration_id`, and `position_migrated_at_utc` rather than trusting stale proof flags
+
+1. Consider emitting `evidence_group` and `proof_contract_version` from backend compact rows so frontend display can stop inferring display groups from mixed historical fields.
+
 ## Live Scanner And Creation Safety
 
 Current read:
-- regular playbooks now carry `fresh_live_validation_enabled`, `position_tracking_mode`, and `proof_scope` metadata; regular lanes default to fresh live validation, while AI Commodity remains separate
+- scanner creation safety semantics are versioned at `data/contracts/scanner-creation-safety-contract.json` and explained in `docs/scanner-creation-safety-contract.md`
+- regular playbooks now carry `fresh_live_validation_enabled`, `position_tracking_mode`, and `proof_scope` metadata; every regular supervised options playbook defaults to `position_tracking_mode=auto_track`, while AI Commodity remains separate with scanner/tracked-position tracking disabled
 - browser/API/scheduled production scans default to portfolio caps on; caps-off production scan requests are rejected unless marked diagnostic or explicitly allowed
-- scheduled auto-track requires the environment kill switch to be on, market-open status, an auto-track playbook, and a caps-enforced exposure snapshot
-- scanner-origin tracked-position and suggested-trade creation requires verified archived forward-scan lineage, caps-enforced source scan state, source `creation_eligible`, a current guardrail rerun, and proof-eligible exact-contract evidence
+- scheduled auto-track requires the environment kill switch to be on, `market_open_at_run=true`, a regular auto-track playbook, `exposure_snapshot.available=true`, `exposure_snapshot.portfolio_caps_enforced=true`, and per-pick creation metadata with no `creation_blockers`
+- scanner-origin tracked-position and suggested-trade creation requires verified archived forward-scan lineage, caps-enforced source scan state, source `creation_eligible=true`, a current guardrail rerun that still has caps-enforced `creation_eligible=true` and no blockers, and proof-eligible exact-contract evidence
 - explicit `manual_paper` and `manual_broker` creation modes remain available for research/backfill or broker/manual rows, but those rows do not become production proof without exact OPRA/NBBO evidence and verified lineage
 - portfolio guardrails still include existing-position exposure, max concurrent positions, cost-risk, open executable drawdown, and correlated-index exposure, but these surface as visible cautions/sizing notes rather than hard blockers for otherwise proof-eligible trades
 - side-aware zero-bid replay now stores entry/exit quote evidence plus stable hashes so replay rows can be audited without relying on implicit quote reconstruction
 
-1. During the next market-hours scan, verify `scripts/validate_pending_scan_candidates.py` processes all pending regular validation-enabled lanes and that only auto-track metadata lanes can create rows after fresh executable evidence.
+1. During the next market-hours scan, verify `scripts/validate_pending_scan_candidates.py` processes all pending regular validation-enabled lanes and that all regular auto-track lanes can create rows after fresh executable evidence, while blocked/stale/unpriced/proof-ineligible rows receive explicit validation dispositions.
 
-2. Add point-in-time scanner replay and minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any historical entry filter or exit rule.
+2. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
 
 ## Frontend Makeover Follow-Up
 
@@ -34,7 +62,7 @@ Current read:
 - tracked trades now expose clickable lane-family filters near the top of the view, and `bullish_pullback_observation` is displayed as `Bullish Pullback` rather than split by source/provenance variants
 - tracked-trade evidence mix, lane-quality, and guardrail-readback card decks were removed from the primary Open/Closed surface; row-level evidence badges and scanner/archive diagnostics remain available
 - `FinTable` now renders mobile cards below tablet width, while desktop tables retain horizontal density
-- shared `FinTable` mobile cards now use explicit per-table mobile title, subtitle, priority-field, and hidden-field contracts instead of relying on object key order
+- shared `FinTable` mobile cards now use explicit per-table mobile title, subtitle, priority-field, and optional hidden-field contracts instead of relying on object key order; `tests/ui/fin-table.test.js` scans production TSX so new `FinTable` call sites must declare the core mobile hierarchy
 - `FinTable` now renders only one responsive surface at a time: desktop table at wide viewports, mobile cards below the table breakpoint. It no longer mounts duplicate desktop and mobile row trees for every visible row.
 - the tracked-stock rollup is now split into `src/components/predictions/TrackedStocksTab.tsx`, shared Trading Desk formatters live in `src/components/predictions/tradingDeskFormat.ts`, and `PredictionsView.tsx` computes the tracked-stock summary once for both the tab label and tab body.
 - Paper Ideas is now split into `src/components/predictions/SuggestedTradesTab.tsx` and loaded dynamically from the archive-gated tab; shared position/suggested-trade row cells live in `src/components/predictions/tradingDeskCells.tsx`.
@@ -48,7 +76,7 @@ Current read:
 
 2. Continue reducing the remaining `src/components/predictions/PredictionsView.tsx` surface by extracting scanner/truth-health state, trade-entry form state, or close-modal state only where the split lowers verification burden without changing route contracts.
 
-3. Continue responsive polish around trade row details and drawers, but keep the shared table mobile hierarchy explicit through `mobileTitleCol`, `mobileSubtitleCol`, `mobilePriorityCols`, and `mobileHiddenCols` when adding new dense tables.
+3. Continue responsive polish around trade row details and drawers, but keep the shared table mobile hierarchy explicit through `mobileTitleCol`, `mobileSubtitleCol`, `mobilePriorityCols`, and optional `mobileHiddenCols` when adding new dense tables.
 
 ## Tracked Position Profit Controls
 
@@ -118,6 +146,7 @@ Current artifacts:
 - pending selected-candidate queue: `data/forward-tracking/pending_scan_candidates.jsonl`
 - pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
 - pending candidate live validator command: `npm run options:validate:pending-candidates`
+- pending candidate validation disposition latest JSON: `data/forward-tracking/pending_scan_candidate_validation_latest.json`
 - open-position risk audit script: `scripts/audit_regular_open_position_risk.py`
 - open-position risk latest JSON: `data/forward-tracking/regular_open_position_risk_latest.json`
 - suggested-trade close-risk audit script: `scripts/audit_suggested_trade_close_risk.py`
@@ -147,6 +176,11 @@ Current artifacts:
 - current-policy entry-filter paper-monitor latest JSON: `data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.json`
 - current-policy entry-filter paper-monitor latest CSV: `data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.csv`
 - current-policy entry-filter paper-monitor report: `docs/current-policy-entry-filter-paper-monitor.md`
+- current-policy entry-filter point-in-time replay script: `scripts/replay_short_term_filter_point_in_time.py`
+- current-policy entry-filter point-in-time replay command: `npm run options:replay:short-term-filter`
+- current-policy entry-filter point-in-time replay latest JSON: `data/forward-tracking/short_term_filter_point_in_time_replay_latest.json`
+- current-policy entry-filter point-in-time replay latest CSV: `data/forward-tracking/short_term_filter_point_in_time_replay_latest.csv`
+- current-policy entry-filter point-in-time replay report: `docs/current-policy-entry-filter-point-in-time.md`
 - profit capture queue script: `scripts/build_regular_options_profit_capture_queue.py`
 - profit capture queue latest JSON: `data/profitability-lab/regular-options-profit-capture-queue/latest.json`
 - profit capture queue latest Markdown: `data/profitability-lab/regular-options-profit-capture-queue/latest.md`
@@ -170,9 +204,10 @@ Current read:
 - current-policy entry-filter lab found one paper-only candidate: `short_term_fill_degradation_ge_15`. It blocks `9` historical current-policy rows, avoids `5` rows `<= -50%`, avoids `3` rows `<= -90%`, loses `2` winners, and improves the kept historical cohort to avg `+61.01%` and median `+53.33%`; broader quality/ticker/fill filters removed too many winners.
 - current-policy entry-filter walk-forward validated all regular repair lanes. Status is `mixed_walkforward_watch_not_promoted`: the frozen `short_term_fill_degradation_ge_15` rule is a `historical_pass_candidate` overall and on the `2026-05` holdout, but `2026-04` is `winner_damage_too_high`. A broad all-lane fill-degradation `>=15%` rule is rejected as `winner_damage_too_high` after losing `10` winners. Lane statuses: `short_term=historical_pass_candidate`, `swing=no_deep_loss_reduction`, `bullish_momentum=winner_damage_too_high`, `bullish_pullback_observation=no_coverage`.
 - current-policy entry-filter paper monitor is now collecting forward evidence since `2026-06-02`. Current read: `0` fresh rows and `0` champion-matched rows, so it is not eligible for scanner promotion. Required gates are at least `20` fresh current-policy rows, at least `5` fresh champion-matched candidate-blocked rows, trusted executable realized P&L, and monitor pass status.
+- current-policy entry-filter point-in-time replay is now available for `short_term_fill_degradation_ge_15`. Latest readback is `paper_only_collecting`: `5` scanner candidate rows, `0` champion-matched rows, `0` exact-priced rows, `5` unpriced/non-executable rows, and promotion blockers `insufficient_exact_priced_candidate_rows`, `insufficient_champion_matched_blocked_rows`, `matched_rows_not_net_harmful_or_deep_loss`, and `unpriced_or_non_executable_rows_present`.
 - profit capture queue is now the visibility layer for profitable evidence before scanner changes. Current read after the high-priority repair pass: `97` research/paper queue rows, `15` Tier A clean exact rows, `82` Tier B profitable watch/repair rows, `16` high-priority evidence repairs, `6` fresh scan signature matches, `4` blocked-but-interesting candidates, and `173` quarantine/do-not-chase rows. Selection readiness is explicit: `15` `paper_review_candidate`, `82` `watch_repair_only`, `2` `historical_signature_only`, `4` `blocked_guardrail_only`, and `173` `do_not_chase`. Clear fresh signature matches are SPY/QQQ swing historical signatures only; GOOGL remains high-priority Tier B repair/watch or quarantine evidence, not Tier A proof. NEM is the cleanest Tier A paper-review evidence, but it has no fresh executable match in this artifact.
 - legacy rows `26`, `39`, and `44` were audited directly. All three diagnose as `stale_or_non_autoclosing_review_path`, and `current_action_required_count=0`; preserve them as historical stale-policy diagnostics, not a current auto-close bug or global exit-policy change.
-- latest guardrail-starvation audit completed `14` / `14` supervised playbooks, included AI Commodity, and audited every configured ticker scope with default `watchlist_size=59`. It returned `6` read-only diagnostics after-hours: `2` clear Swing candidates and `4` blocked scout/control candidates. The `2` clear Swing rows are queued as `pending_live_validation`, not dropped and not positions. Status is `guardrail_starvation_detected`, led by direction filters (`116`), option liquidity (`109`), momentum (`85`), history/liquidity (`60`), tech score (`23`), and direction score (`3`).
+- latest guardrail-starvation audit completed `14` / `14` supervised playbooks, included AI Commodity, and audited every configured ticker scope with default `watchlist_size=59`. It returned `13` read-only diagnostics after-hours: `6` clear pending candidates across Swing, Volatility Expansion, and Quality90 canary, plus `7` blocked candidates across Short Term, Speculative, Bullish Momentum, and Range Breakout. The `6` clear regular auto-track rows are queued as `pending_live_validation`, not dropped and not positions. Status is `guardrail_starvation_detected`, led by direction filters (`109`), momentum (`99`), option liquidity (`94`), history/liquidity (`54`), and tech score (`33`).
 - latest open-position risk audit reports `48` open regular rows, `47` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, and `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX). Do not auto-close that row from the display-only mark; rerun explicit review during a fresh executable quote window or close only with separate executable evidence.
 - the open Trading Desk row for that class of state now shows `Review quote` rather than `Close now` unless the stored `SELL` review includes executable exit evidence.
 - latest suggested-trade close-risk audit reports `1` open suggested trade (`id=138`, AAA) with no stored review. There are `0` close-risk suggested rows and `0` executable close-ready suggested rows; refresh explicit review before relying on that paper-idea P&L or close state.
@@ -181,7 +216,7 @@ Current read:
 
 1. Treat current-policy picks as paper-only until the recent cohort revalidates. The April current-policy cohort is showable as a discovered edge, but do not showcase May/current rows as a working live algorithm while the latest week is `paper_only_recent_week_break`.
 
-2. Keep the daily all-lanes audit mandatory for no-pick explanations. A scheduled scan route may still run Bullish Pullback when no playbook is supplied, but `scripts/ensure_daily_all_lanes_audit_ran.py` must confirm the all-supervised artifact, include AI Commodity as a separate strategy lane, cover all configured ticker scopes each market day, and queue clear approved-lane candidates. During a live executable quote window, run the pending validator so selected candidates can be re-quoted with portfolio caps before promotion:
+2. Keep the daily all-lanes audit mandatory for no-pick explanations. A scheduled scan route may still run Bullish Pullback when no playbook is supplied, but `scripts/ensure_daily_all_lanes_audit_ran.py` must confirm the all-supervised artifact, include AI Commodity as a separate strategy lane, cover all configured ticker scopes each market day, and queue clear regular auto-track candidates. During a live executable quote window, run the pending validator so selected candidates can be re-quoted with portfolio caps before promotion:
 
 ```powershell
 uv run --locked python scripts\validate_pending_scan_candidates.py
@@ -189,7 +224,13 @@ uv run --locked python scripts\validate_pending_scan_candidates.py
 
 3. Do not change the broad exit policy based on legacy rows `26`, `39`, and `44`, the stored-review stop grid, the tracked current-policy stop grid, or the annual replay-backed stop grid. The focused audits found no current action required. `stop_80` is a tracked-slice research candidate only, because it trims one near-total daily close-check loss but is not minute-level intraday evidence and the annual replay-backed cohort rejects broad stop tightening.
 
-4. Keep `short_term_fill_degradation_ge_15` lane-scoped and paper-only. Do not promote a broad all-lane fill-degradation rule. The next historical-data step is broader point-in-time scanner candidate replay across regular lanes, because the current walk-forward uses realized current-policy rows rather than reconstructing every historical candidate. For the current forward monitor, after fresh rows mature run:
+4. Keep `short_term_fill_degradation_ge_15` lane-scoped and paper-only. Do not promote a broad all-lane fill-degradation rule. Rerun the point-in-time scanner replay after new candidate rows and tracked outcomes mature, because the promotion gate must use as-of scanner candidates rather than only realized current-policy rows:
+
+```powershell
+uv run --locked python scripts\replay_short_term_filter_point_in_time.py --no-write
+```
+
+For the current forward monitor, after fresh rows mature run:
 
 ```powershell
 uv run --locked python scripts\monitor_current_policy_entry_filter_paper.py --no-write
@@ -237,6 +278,7 @@ Current artifact:
 - pending selected-candidate queue: `data/forward-tracking/pending_scan_candidates.jsonl`
 - pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
 - pending candidate live validator command: `npm run options:validate:pending-candidates`
+- pending candidate validation disposition latest JSON: `data/forward-tracking/pending_scan_candidate_validation_latest.json`
 - open-position risk audit: `scripts/audit_regular_open_position_risk.py`
 - open-position risk latest JSON: `data/forward-tracking/regular_open_position_risk_latest.json`
 - suggested-trade close-risk audit: `scripts/audit_suggested_trade_close_risk.py`
@@ -264,7 +306,7 @@ Current read:
 - profit capture queue status: `research_paper_capture_queue`, with `15` Tier A clean exact rows, `82` Tier B profitable watch/repair rows, `16` high-priority evidence repairs, `6` fresh scan matches, `4` blocked-but-interesting rows, and `173` quarantine/do-not-chase rows. Selection readiness is `15` paper-review candidates, `82` watch/repair-only rows, `2` historical-signature-only matches, `4` blocked guardrail rows, and `173` do-not-chase rows. The queue intentionally restores profitable evidence visibility without changing scanner guardrails or proof gates; it does not justify live picks from GOOGL, SPY, or QQQ by itself.
 - operating scorecard status: `visible_product_profitability_progress_but_proof_still_blocked`. Trading Desk product progress is visible, but proof-grade readiness remains blocked.
 - Trading Desk promoted guardrails kept subset: `130` rows, `116` priced, avg `+53.08%`, median `+46.4%`, negative rate `25.0%`, versus baseline `429` rows, `383` priced, avg `+5.21%`, median `-1.58%`, negative rate `50.4%`. This is product-side progress, not historical proof-grade promotion.
-- live-scan starvation status: `guardrail_starvation_detected` from the all-supervised read-only audit. The latest daily artifact completed `14` / `14` playbooks, included AI Commodity as a separate strategy lane, audited every configured ticker scope with configured `watchlist_size=59`, and returned `6` diagnostics after-hours (`2` clear Swing rows, `4` blocked scout/control rows). The clear Swing rows are preserved in `pending_scan_candidates.jsonl` as pending validation candidates. Treat them as selected candidates, not positions, until `scripts/validate_pending_scan_candidates.py` reruns the lane during a live executable quote window with portfolio caps enabled.
+- live-scan starvation status: `guardrail_starvation_detected` from the all-supervised read-only audit. The latest daily artifact completed `14` / `14` playbooks, included AI Commodity as a separate strategy lane, audited every configured ticker scope with configured `watchlist_size=59`, and returned `13` diagnostics after-hours (`6` clear pending rows across Swing, Volatility Expansion, and Quality90 canary; `7` blocked rows across Short Term, Speculative, Bullish Momentum, and Range Breakout). The clear regular auto-track rows are preserved in `pending_scan_candidates.jsonl` as pending validation candidates. Treat them as selected candidates, not positions, until `scripts/validate_pending_scan_candidates.py` reruns the lane during a live executable quote window with portfolio caps enabled.
 - suggested-trade close-risk status: `1` open paper idea (`AAA`, id `138`) has no stored review, no executable close-ready evidence, and no close-risk SELL evidence. Refresh explicit review before using its P&L or close state.
 - API performance status: latest local read-only audit passed all `11` probes; the route layer now forwards backend duration headers for Trading Desk/proof-status reads, `/api/options-profit/status` uses a narrow tracked-position snapshot, the largest measured payload remains the first `100` closed tracked rows at `275,004` backend bytes / `273,882` Next bytes, and the full frontend probe payload total is now `466,024` bytes.
 - AI commodity status is now visible in the same scorecard: `3` / `100` exact shared Alpaca OPRA dates, `0` live/proof candidates, failed/no-progress fresh scan and `2026-05-29` capture events, and production filters locked until exact Alpaca OPRA replay gates unlock.

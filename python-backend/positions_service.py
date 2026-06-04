@@ -22,11 +22,25 @@ from options_execution import (
     executable_option_price,
     option_pnl_snapshot,
 )
+from repository_contracts import TradingDeskPositionRepository
 from options_chatbot import (
     _check_early_exit,
     _compute_direction_score,
     _compute_tech_score_live,
     _get_profile,
+)
+from proof_contract import (
+    INELIGIBLE_PROOF_CLASS,
+    LIVE_SCAN_EXACT_PROOF_CLASS,
+    MANUAL_BROKER_EXACT_PROOF_CLASS,
+    PROOF_SOURCE_FIELDS,
+    QUOTE_FRESHNESS_REQUIRED,
+    QUOTE_FRESHNESS_FIELDS,
+    REQUIRED_LIVE_SELECTION_SOURCE,
+    TRUSTED_OPTIONS_SOURCE_LABELS,
+    TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS,
+    UNTRUSTED_QUOTE_FRESHNESS_TOKENS,
+    scan_pick_has_research_backfill_marker,
 )
 
 
@@ -425,32 +439,38 @@ def _spread_has_executable_leg_quotes(scan_pick: dict[str, Any]) -> bool:
 
 
 def _scan_pick_has_research_backfill_marker(scan_pick: dict[str, Any]) -> bool:
-    if bool(scan_pick.get("research_only")):
-        return True
-    if scan_pick.get("backfill_audit_id") or scan_pick.get("position_migration_id") or scan_pick.get("position_migrated_at_utc"):
-        return True
-    marker_fields = [
-        "pricing_evidence_class",
-        "profitability_evidence_class",
-        "source_separation",
-        "promotion_class",
-        "selection_source",
-        "event_type",
-        "candidate_execution_label",
-        "market_data_source",
-        "status",
+    return scan_pick_has_research_backfill_marker(scan_pick)
+
+
+def _scan_pick_has_fresh_quote_status(scan_pick: dict[str, Any]) -> bool:
+    values = [
+        str(scan_pick.get(field) or "").strip().lower()
+        for field in QUOTE_FRESHNESS_FIELDS
     ]
-    research_tokens = (
-        "backfill",
-        "research",
-        "historical_replay",
-        "historical_selection",
-        "historical_chain_native",
+    snapshot = _safe_dict(scan_pick.get("entry_quote_snapshot"))
+    values.extend(
+        str(snapshot.get(field) or "").strip().lower()
+        for field in QUOTE_FRESHNESS_FIELDS
     )
-    for field in marker_fields:
-        value = str(scan_pick.get(field) or "").strip().lower()
-        if value and any(token in value for token in research_tokens):
-            return True
+    if QUOTE_FRESHNESS_REQUIRED and not any(values):
+        return False
+    return not any(
+        any(token in value for token in UNTRUSTED_QUOTE_FRESHNESS_TOKENS)
+        for value in values
+    )
+
+
+def _scan_pick_has_trusted_opra_source(scan_pick: dict[str, Any]) -> bool:
+    records = [scan_pick, _safe_dict(scan_pick.get("entry_quote_snapshot"))]
+    for record in records:
+        for field in PROOF_SOURCE_FIELDS:
+            value = str(record.get(field) or "").strip().lower()
+            if not value:
+                continue
+            if value in TRUSTED_OPTIONS_SOURCE_LABELS:
+                return True
+            if all(token in value for token in TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS):
+                return True
     return False
 
 
@@ -495,7 +515,9 @@ def _classify_position_proof(
         and str(normalized_entry_execution_basis or "").strip().lower() != "spread_ask_bid"
     ):
         proof_missing.append("spread_entry_not_bid_ask")
-    if selection_source != "live_chain_exact_contract":
+    if not _scan_pick_has_fresh_quote_status(scan_pick):
+        proof_missing.append("quote_freshness_status")
+    if selection_source != REQUIRED_LIVE_SELECTION_SOURCE:
         proof_missing.append("selection_source_not_exact")
     if scan_pick.get("source_scan_session_id") in (None, ""):
         proof_missing.append("source_scan_session_id")
@@ -507,34 +529,25 @@ def _classify_position_proof(
         proof_missing.append("source_scan_recorded_at_utc")
     if not bool(source_scan_lineage_verified):
         proof_missing.append("source_scan_lineage_unverified")
-    options_source = str(
-        scan_pick.get("options_data_source")
-        or scan_pick.get("market_data_source")
-        or scan_pick.get("quote_source")
-        or ""
-    ).strip().lower()
-    has_opra_source = options_source == "alpaca_opra" or ("alpaca" in options_source and "opra" in options_source)
-    if alpaca_provider_requested() and not has_opra_source:
-        proof_missing.append("options_source_not_opra")
-    elif options_source and not has_opra_source:
+    if not _scan_pick_has_trusted_opra_source(scan_pick):
         proof_missing.append("options_source_not_opra")
 
     if not proof_missing:
-        return True, None, "live_scan_exact_contract", None
+        return True, None, LIVE_SCAN_EXACT_PROOF_CLASS, None
 
     proof_ineligibility_reason = ", ".join(proof_missing)
     if "research_backfill_not_live_proof" in proof_missing:
-        return False, proof_ineligibility_reason, "ineligible", proof_ineligibility_reason
+        return False, proof_ineligibility_reason, INELIGIBLE_PROOF_CLASS, proof_ineligibility_reason
 
     normalized_basis = str(normalized_entry_execution_basis or "").strip().lower()
     if normalized_basis in {"manual_fill", "broker_fill"} and contract_symbol and _has_resolved_contract_identity(scan_pick):
         return (
             False,
             proof_ineligibility_reason,
-            "manual_broker_exact_contract",
+            MANUAL_BROKER_EXACT_PROOF_CLASS,
             "Exact contract identity with manual/broker fill; excluded from scanner proof lane.",
         )
-    return False, proof_ineligibility_reason, "ineligible", proof_ineligibility_reason
+    return False, proof_ineligibility_reason, INELIGIBLE_PROOF_CLASS, proof_ineligibility_reason
 
 
 def _entry_quote_snapshot(scan_pick: dict[str, Any]) -> dict[str, Any]:
@@ -1886,7 +1899,10 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
     }
 
 
-def review_open_positions(repository, position_ids: Optional[list[int]] = None) -> list[dict[str, Any]]:
+def review_open_positions(
+    repository: TradingDeskPositionRepository,
+    position_ids: Optional[list[int]] = None,
+) -> list[dict[str, Any]]:
     with _market_data_request_scope():
         review_context = _ReviewContext()
         positions = repository.list_positions(status="open")

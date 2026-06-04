@@ -231,6 +231,50 @@ def build_tracked_position_scan_pick(bundle: OptionsAlgorithmFixtureBundle) -> d
     }
 
 
+def build_scanner_origin_proof_scan_pick(bundle: OptionsAlgorithmFixtureBundle) -> dict[str, Any]:
+    scan_pick = build_tracked_position_scan_pick(bundle)
+    scan_pick.update(
+        {
+            "cohort_id": "short_term",
+            "playbook_id": "short_term",
+            "guardrail_decision": "clear",
+            "portfolio_caps_enforced": True,
+            "creation_eligible": True,
+            "creation_blockers": [],
+            "candidate_execution_label": "executable_opra_paper_candidate",
+            "source_scan_session_id": 123,
+            "source_scan_event_key": "short_term:rank_1",
+            "source_scan_run_id": "api_scan_20260406T140000Z",
+            "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+            "selection_source": "live_chain_exact_contract",
+            "contract_selection_source": "live_chain_exact_contract",
+            "promotion_class": "promotable_exact_contract",
+            "quote_time_et": "2026-04-06T10:00:00-04:00",
+            "quote_time_utc": "2026-04-06T14:00:00Z",
+            "quote_freshness_status": "fresh",
+            "options_data_source": "alpaca_opra",
+            "quote_basis": "ask",
+            "bid": 4.4,
+            "ask": 4.6,
+            "mid": 4.5,
+            "entry_execution_price": 4.5,
+            "entry_execution_basis": "ask",
+        }
+    )
+    return scan_pick
+
+
+def build_scanner_origin_forward_event(scan_pick: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **dict(scan_pick),
+        "session_id": int(scan_pick["source_scan_session_id"]),
+        "event_key": scan_pick["source_scan_event_key"],
+        "run_id": scan_pick["source_scan_run_id"],
+        "recorded_at_utc": scan_pick["source_scan_recorded_at_utc"],
+        "option_type": scan_pick.get("direction") or scan_pick.get("type"),
+    }
+
+
 def load_backend_main(db_path: str, database_url: str | None = ""):
     module_name = f"options_chatbot_test_backend_{abs(hash(db_path))}"
     if module_name in sys.modules:

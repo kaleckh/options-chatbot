@@ -62,9 +62,7 @@ TRUSTED_EXIT_BASIS_TOKENS = [
     "historical_spread_bid_ask",
     "historical_suggested_close",
     "auto_sell_recommendation",
-    "manual",
     "broker",
-    "exact",
 ]
 UNTRUSTED_EXIT_BASIS_TOKENS = [
     "lifecycle",
@@ -284,7 +282,7 @@ def evidence_group(row: dict[str, Any]) -> str:
         return "proof_ineligible"
     if proof_class == "ineligible" or row.get("proof_eligible") is False:
         return "proof_ineligible"
-    if proof_class == "live_scan_exact_contract" or row.get("proof_eligible"):
+    if proof_class == "live_scan_exact_contract" or (row.get("proof_eligible") and proof_class != "manual_broker_exact_contract"):
         return "live_exact"
     if proof_class == "manual_broker_exact_contract":
         return "manual_exact"

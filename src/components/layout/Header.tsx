@@ -2,18 +2,18 @@
 
 import { useEffect, useState, memo } from "react";
 import { Menu, ShieldCheck } from "lucide-react";
+import { getMainAppTab, type MainAppTabId } from "@/lib/navigation/tabs";
 
 interface HeaderProps {
   onMenuClick?: () => void;
-  activeTab: string;
+  activeTab: MainAppTabId;
 }
 
 function Header({ onMenuClick, activeTab }: HeaderProps) {
   const [now, setNow] = useState("");
-  const title = activeTab === "strategy" ? "Strategy Lab" : "Trading Desk";
-  const subtitle = activeTab === "strategy"
-    ? "Replay validation and policy tuning"
-    : "Open positions, scan picks, and paper ideas";
+  const activeTabMeta = getMainAppTab(activeTab);
+  const title = activeTabMeta.title;
+  const subtitle = activeTabMeta.subtitle;
 
   useEffect(() => {
     const update = () => {
