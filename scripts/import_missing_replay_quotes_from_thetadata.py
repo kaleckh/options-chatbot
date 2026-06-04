@@ -37,10 +37,12 @@ def _parse_occ(symbol: str) -> dict[str, Any] | None:
         return None
     expiry_raw = match.group("expiry")
     expiry = date(2000 + int(expiry_raw[:2]), int(expiry_raw[2:4]), int(expiry_raw[4:6]))
+    right = match.group("right")
     return {
         "root": match.group("root"),
         "expiry": expiry,
-        "right": match.group("right"),
+        "right": right,
+        "option_type": "call" if right == "C" else "put",
         "strike": int(match.group("strike")) / 1000.0,
     }
 
@@ -58,11 +60,24 @@ def _missing_items(run_paths: list[Path]) -> list[dict[str, Any]]:
                 parsed = _parse_occ(contract)
                 if not parsed:
                     continue
-                items[(quote_date, contract)] = {
-                    "quote_date": date.fromisoformat(quote_date[:10]),
-                    "contract_symbol": contract,
-                    **parsed,
-                }
+                item = items.setdefault(
+                    (quote_date, contract),
+                    {
+                        "quote_date": date.fromisoformat(quote_date[:10]),
+                        "contract_symbol": contract,
+                        **parsed,
+                        "source_occurrences": [],
+                    },
+                )
+                item["source_occurrences"].append(
+                    {
+                        "run_path": str(path),
+                        "ticker": trade.get("ticker"),
+                        "entry_date": trade.get("date"),
+                        "source_field": key,
+                        "unpriced_reason": trade.get("unpriced_reason"),
+                    }
+                )
     return [items[key] for key in sorted(items)]
 
 
@@ -85,6 +100,51 @@ def _expand_items(items: list[dict[str, Any]], *, lookahead_calendar_days: int) 
                 }
             current += timedelta(days=1)
     return [expanded[key] for key in sorted(expanded)]
+
+
+def _json_item(item: dict[str, Any]) -> dict[str, Any]:
+    quote_date_value = item.get("quote_date")
+    expiry_value = item.get("expiry")
+    original_value = item.get("original_missing_quote_date")
+    return {
+        "quote_date": quote_date_value.isoformat() if isinstance(quote_date_value, date) else str(quote_date_value),
+        "original_missing_quote_date": (
+            original_value.isoformat() if isinstance(original_value, date) else str(original_value)
+        )
+        if original_value
+        else None,
+        "contract_symbol": item.get("contract_symbol"),
+        "underlying": item.get("root"),
+        "expiry": expiry_value.isoformat() if isinstance(expiry_value, date) else str(expiry_value),
+        "option_type": item.get("option_type"),
+        "right": item.get("right"),
+        "strike": item.get("strike"),
+        "source_occurrences": sorted(
+            item.get("source_occurrences") or [],
+            key=lambda row: (
+                str(row.get("run_path") or ""),
+                str(row.get("entry_date") or ""),
+                str(row.get("source_field") or ""),
+            ),
+        ),
+    }
+
+
+def _repair_manifest(
+    *,
+    base_items: list[dict[str, Any]],
+    request_items: list[dict[str, Any]],
+    expanded_item_count: int,
+    max_requests: int,
+) -> dict[str, Any]:
+    return {
+        "base_targets": [_json_item(item) for item in base_items],
+        "request_targets": [_json_item(item) for item in request_items],
+        "base_target_count": len(base_items),
+        "request_target_count": len(request_items),
+        "source_occurrence_count": sum(len(item.get("source_occurrences") or []) for item in base_items),
+        "max_requests_applied": int(max_requests) > 0 and len(request_items) < int(expanded_item_count),
+    }
 
 
 def _theta_rows_for_contract(
@@ -149,15 +209,22 @@ def main() -> int:
         help="Also request this many calendar days after each missing quote date, capped at expiration.",
     )
     parser.add_argument("--max-requests", type=int, default=0, help="Optional cap on expanded ThetaData requests.")
-    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="Fetch and normalize rows, but do not write summaries, CSVs, or DB imports.")
+    parser.add_argument(
+        "--plan-only",
+        action="store_true",
+        help="Print the de-duplicated repair manifest without requesting ThetaData or writing files.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     run_paths = [path.resolve() for path in args.run_paths]
     base_items = _missing_items(run_paths)
     items = _expand_items(base_items, lookahead_calendar_days=int(args.lookahead_calendar_days))
+    expanded_item_count = len(items)
     if int(args.max_requests) > 0:
         items = items[: int(args.max_requests)]
+    no_write = bool(args.dry_run or args.plan_only)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     csv_path = Path(args.output_dir) / f"thetadata_opra_nbbo_exact_missing_intraday_{stamp}.csv"
     summary_path = Path(args.output_dir) / f"thetadata_exact_missing_intraday_{stamp}.json"
@@ -167,32 +234,33 @@ def main() -> int:
     rows_by_contract: Counter[str] = Counter()
     rows_by_date: Counter[str] = Counter()
     request_count = 0
-    with requests.Session() as session:
-        for item in items:
-            try:
-                matches = _theta_rows_for_contract(
-                    session,
-                    theta_url=args.theta_url,
-                    item=item,
-                    start_time=args.start_time,
-                    end_time=args.end_time,
-                    interval=args.interval,
-                    timeout=float(args.timeout),
-                )
-                request_count += 1
-            except Exception as exc:
-                errors.append(f"{item['quote_date']} {item['contract_symbol']}: {exc}")
-                continue
-            if not matches:
-                errors.append(f"{item['quote_date']} {item['contract_symbol']}: no matched rows")
-                continue
-            for row in matches:
-                rows.append(row)
-                rows_by_contract[row["contract_symbol"]] += 1
-                rows_by_date[row["as_of_utc"][:10]] += 1
+    if not args.plan_only:
+        with requests.Session() as session:
+            for item in items:
+                try:
+                    matches = _theta_rows_for_contract(
+                        session,
+                        theta_url=args.theta_url,
+                        item=item,
+                        start_time=args.start_time,
+                        end_time=args.end_time,
+                        interval=args.interval,
+                        timeout=float(args.timeout),
+                    )
+                    request_count += 1
+                except Exception as exc:
+                    errors.append(f"{item['quote_date']} {item['contract_symbol']}: {exc}")
+                    continue
+                if not matches:
+                    errors.append(f"{item['quote_date']} {item['contract_symbol']}: no matched rows")
+                    continue
+                for row in matches:
+                    rows.append(row)
+                    rows_by_contract[row["contract_symbol"]] += 1
+                    rows_by_date[row["as_of_utc"][:10]] += 1
 
     import_result = None
-    if rows and not args.dry_run:
+    if rows and not no_write:
         _write_csv(csv_path, rows)
         import_result = import_historical_option_snapshots(
             csv_path,
@@ -205,21 +273,51 @@ def main() -> int:
     payload = {
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "input_run_paths": [str(path) for path in run_paths],
+        "dry_run": bool(args.dry_run),
+        "plan_only": bool(args.plan_only),
+        "write_artifacts": not no_write,
         "base_unique_items": len(base_items),
         "unique_items": len(items),
+        "expanded_unique_items": expanded_item_count,
         "request_count": request_count,
         "lookahead_calendar_days": int(args.lookahead_calendar_days),
         "normalized_rows": len(rows),
-        "csv_path": None if args.dry_run or not rows else str(csv_path.resolve()),
-        "summary_path": str(summary_path.resolve()),
+        "csv_path": None if no_write or not rows else str(csv_path.resolve()),
+        "summary_path": None if no_write else str(summary_path.resolve()),
+        "repair_manifest": _repair_manifest(
+            base_items=base_items,
+            request_items=items,
+            expanded_item_count=expanded_item_count,
+            max_requests=int(args.max_requests),
+        ),
         "rows_by_contract": dict(sorted(rows_by_contract.items())),
         "rows_by_date": dict(sorted(rows_by_date.items())),
         "errors": errors,
         "import_result": import_result,
     }
-    summary_path.parent.mkdir(parents=True, exist_ok=True)
-    summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf8")
-    print(json.dumps(payload if args.json else {k: payload[k] for k in ("unique_items", "request_count", "normalized_rows", "csv_path", "summary_path", "import_result")}, indent=2))
+    if not no_write:
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        summary_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf8")
+    print(
+        json.dumps(
+            payload
+            if args.json
+            else {
+                k: payload[k]
+                for k in (
+                    "dry_run",
+                    "plan_only",
+                    "unique_items",
+                    "request_count",
+                    "normalized_rows",
+                    "csv_path",
+                    "summary_path",
+                    "import_result",
+                )
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
