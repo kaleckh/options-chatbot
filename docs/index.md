@@ -156,6 +156,8 @@ These are the living docs for the current worktree:
   - reusable six-subagent goal prompt for code audit remediation and long-term fixes
 - `docs/autoresearch/active-options-performance-goal.md`
   - reusable multi-lane goal prompt for improving Trading Desk runtime, profitability, live-scan, proof, AI commodity, and architecture performance
+- `docs/autoresearch/profitability-paper-gate-goal.md`
+  - reusable six-sprint goal prompt for finishing the profitability paper-gate operator workflow with six-subagent review gates
 - `docs/agent-worktree-hygiene.md`
   - agent branch, push, untracked-file, and clean-worktree rules
 

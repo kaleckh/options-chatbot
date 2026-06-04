@@ -191,6 +191,23 @@ Current artifacts:
 - shared repair-target parser: `scripts/regular_options_repair_targets.py`
 - exact missing replay importer: `scripts/import_missing_replay_quotes_from_thetadata.py`
 - exact missing replay classifier: `scripts/classify_missing_replay_contracts.py`
+- profitability paper-gate goal prompt: `docs/autoresearch/profitability-paper-gate-goal.md`
+
+Profitability Paper Gate Operator Workflow sprint backlog:
+
+1. Paper Gate Release Pack: add a generated paper-shortlist readback, focused bridge tests, negative tests for non-eligible evidence classes, and a dedicated release verification command. Current expected readback remains `eligible_count=0` until a fresh executable Tier A lane match exists.
+
+2. Fresh Exact Evidence Loop: connect pending scan validation, fill-attempt snapshots, paper/tracked linkage, exact OPRA/NBBO exit evidence, and realized P&L readbacks so point-in-time replay can distinguish missing P&L, no-longer-matched, proof-ineligible, stale, and non-executable states.
+
+3. Recent-Cohort Circuit Breaker: keep `short_term` and `bullish_pullback_observation` paper-only while the current-policy cohort is `paper_only_recent_week_break`, with recovery gates rather than permanent lane deletion.
+
+4. Operator Workflow: add the browser operator unlock/session affordance if still missing, surface bridge status and blockers in the Trading Desk scanner/archive flow, and make pending validation and no-fill outcomes operator-readable without presenting paper gates as trade recommendations.
+
+5. Exact Repair Queue Burn-Down: use the evidence repair queue and repair-attempt readback to target only unexhausted exact-date repairs, treat lookahead-only rows as diagnostic, rerun source replay before graduation, and avoid repeating exhausted provider no-match loops.
+
+6. Scorecard And Agent Memory: add paper-gate readiness counts to the operating scorecard or companion report, add a paper-gate path to the generated agent memory graph, and keep living docs current so future agents can answer what is eligible, blocked, paper-only, or live-prohibited.
+
+Done gate for each sprint: finish implementation, run focused verification, update living docs and generated reports when owned facts change, then spawn or resume six independent subagents to review and debate the fix. Required review lenses are profitability strategy, proof/evidence, data lifecycle/storage, Trading Desk operator workflow/auth, tests/regression, and LLM readability/maintainability. A sprint is done only with at least `4` of `6` agreement and no credible severe blocker involving data loss, proof-source contamination, unintended state mutation, incorrect P&L, auth bypass, live-promotion leakage, broker action, or a broken primary Trading Desk flow.
 
 Current read:
 - repair scope is the regular supervised Trading Desk lanes: `short_term`, `swing`, `bullish_momentum`, and Bullish Pullback

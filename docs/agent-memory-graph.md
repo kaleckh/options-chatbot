@@ -75,6 +75,20 @@ Replay readbacks, policy, proof predicates, and profit-cycle state have separate
 - `options_profit_gate`: Options profit gate - `options_profit_gate.py`. Touching profit readiness gates.
 - `options_profit_flywheel`: Options profit flywheel - `options_profit_flywheel.py`. Touching profit-cycle state.
 
+## If Touching Profitability Paper Gates
+
+Use the sprint goal and current readbacks before changing paper-gate eligibility or operator workflow.
+
+- `profitability_paper_gate_goal`: Profitability paper-gate goal - `docs/autoresearch/profitability-paper-gate-goal.md`. Running the paper-gate sprint backlog end to end.
+- `next_steps`: Next steps - `docs/NEXT_STEPS.md`. Checking active blockers and current commands.
+- `project_context`: Project context - `docs/PROJECT_CONTEXT.md`. Checking product scope, lane boundaries, and proof posture.
+- `decisions`: Decisions - `docs/DECISIONS.md`. Checking durable decisions.
+- `replay_profit_doc`: Replay profit contract - `docs/replay-profit-contract.md`. Touching replay readbacks, policy, or options-profit status.
+- `scanner_doc`: Scanner creation safety contract - `docs/scanner-creation-safety-contract.md`. Touching scanner-origin creation.
+- `proof_doc`: Proof evidence contract - `docs/proof-evidence-contract.md`. Touching proof classes, evidence groups, or proof claims.
+- `options_profit_gate`: Options profit gate - `options_profit_gate.py`. Touching profit readiness gates.
+- `options_profit_flywheel`: Options profit flywheel - `options_profit_flywheel.py`. Touching profit-cycle state.
+
 ## If Touching DB/Repositories
 
 Preserve tracked-position Postgres ownership and suggested-trade SQLite separation.
@@ -173,6 +187,7 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `docs_index` | `doc` | `docs/index.md` | Living docs map and reading order. |
 | `project_context` | `doc` | `docs/PROJECT_CONTEXT.md` | Current product scope, lane boundaries, and architecture summary. |
 | `next_steps` | `doc` | `docs/NEXT_STEPS.md` | Active blockers, commands, and next actions. |
+| `profitability_paper_gate_goal` | `doc` | `docs/autoresearch/profitability-paper-gate-goal.md` | Six-sprint goal prompt for the profitability paper-gate operator workflow. |
 | `decisions` | `doc` | `docs/DECISIONS.md` | Durable product and technical decisions. |
 | `worklog` | `doc` | `docs/WORKLOG.md` | Dated summaries of meaningful local work. |
 | `architecture_overview` | `doc` | `docs/architecture-overview.md` | Current system map and subsystem ownership. |
@@ -334,6 +349,8 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `supervised_scan` | `implements` | `scanner_doc` | Scanner engine implements scan policy and guardrail behavior. |
 | `replay_profit_doc` | `owns` | `replay_profit_service` | Replay/profit doc maps readback assembly ownership. |
 | `replay_profit_service` | `read_after` | `wfo_optimizer` | Replay service assembles readbacks from replay engine outputs. |
+| `profitability_paper_gate_goal` | `implements` | `next_steps` | Goal prompt turns the active paper-gate sprint backlog into an end-to-end runbook. |
+| `profitability_paper_gate_goal` | `bounded_by` | `decisions` | Paper-gate sprint work must preserve durable profitability bridge decisions. |
 | `repository_doc` | `owns` | `repository_contracts_code` | Repository doc maps structural repository capability contracts. |
 | `record_parity_doc` | `documents` | `positions_repository` | Parity doc separates tracked-position and suggested-trade row semantics. |
 | `record_parity_doc` | `documents` | `suggested_trades_repository` | Parity doc separates suggested paper ideas from tracked production rows. |

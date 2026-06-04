@@ -64,6 +64,14 @@ NODES: tuple[dict[str, str], ...] = (
         "owner_summary": "Active blockers, commands, and next actions.",
     },
     {
+        "id": "profitability_paper_gate_goal",
+        "kind": "doc",
+        "path": "docs/autoresearch/profitability-paper-gate-goal.md",
+        "label": "Profitability paper-gate goal",
+        "read_when": "Running the paper-gate sprint backlog end to end.",
+        "owner_summary": "Six-sprint goal prompt for the profitability paper-gate operator workflow.",
+    },
+    {
         "id": "decisions",
         "kind": "doc",
         "path": "docs/DECISIONS.md",
@@ -908,6 +916,8 @@ EDGES: tuple[dict[str, str], ...] = (
     {"from": "supervised_scan", "to": "scanner_doc", "type": "implements", "reason": "Scanner engine implements scan policy and guardrail behavior."},
     {"from": "replay_profit_doc", "to": "replay_profit_service", "type": "owns", "reason": "Replay/profit doc maps readback assembly ownership."},
     {"from": "replay_profit_service", "to": "wfo_optimizer", "type": "read_after", "reason": "Replay service assembles readbacks from replay engine outputs."},
+    {"from": "profitability_paper_gate_goal", "to": "next_steps", "type": "implements", "reason": "Goal prompt turns the active paper-gate sprint backlog into an end-to-end runbook."},
+    {"from": "profitability_paper_gate_goal", "to": "decisions", "type": "bounded_by", "reason": "Paper-gate sprint work must preserve durable profitability bridge decisions."},
     {"from": "repository_doc", "to": "repository_contracts_code", "type": "owns", "reason": "Repository doc maps structural repository capability contracts."},
     {"from": "record_parity_doc", "to": "positions_repository", "type": "documents", "reason": "Parity doc separates tracked-position and suggested-trade row semantics."},
     {"from": "record_parity_doc", "to": "suggested_trades_repository", "type": "documents", "reason": "Parity doc separates suggested paper ideas from tracked production rows."},
@@ -982,6 +992,12 @@ PLAYBOOKS: tuple[dict[str, Any], ...] = (
         "heading": "If Touching Replay/Profit",
         "summary": "Replay readbacks, policy, proof predicates, and profit-cycle state have separate owners.",
         "nodes": ["replay_profit_doc", "replay_profit_service", "wfo_optimizer", "metric_truth_audit", "options_profit_gate", "options_profit_flywheel"],
+    },
+    {
+        "id": "profitability_paper_gates",
+        "heading": "If Touching Profitability Paper Gates",
+        "summary": "Use the sprint goal and current readbacks before changing paper-gate eligibility or operator workflow.",
+        "nodes": ["profitability_paper_gate_goal", "next_steps", "project_context", "decisions", "replay_profit_doc", "scanner_doc", "proof_doc", "options_profit_gate", "options_profit_flywheel"],
     },
     {
         "id": "db_repositories",

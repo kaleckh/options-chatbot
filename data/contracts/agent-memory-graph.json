@@ -350,6 +350,18 @@
       "type": "read_after"
     },
     {
+      "from": "profitability_paper_gate_goal",
+      "reason": "Goal prompt turns the active paper-gate sprint backlog into an end-to-end runbook.",
+      "to": "next_steps",
+      "type": "implements"
+    },
+    {
+      "from": "profitability_paper_gate_goal",
+      "reason": "Paper-gate sprint work must preserve durable profitability bridge decisions.",
+      "to": "decisions",
+      "type": "bounded_by"
+    },
+    {
       "from": "repository_doc",
       "reason": "Repository doc maps structural repository capability contracts.",
       "to": "repository_contracts_code",
@@ -644,6 +656,14 @@
       "owner_summary": "Active blockers, commands, and next actions.",
       "path": "docs/NEXT_STEPS.md",
       "read_when": "Checking active blockers and current commands."
+    },
+    {
+      "id": "profitability_paper_gate_goal",
+      "kind": "doc",
+      "label": "Profitability paper-gate goal",
+      "owner_summary": "Six-sprint goal prompt for the profitability paper-gate operator workflow.",
+      "path": "docs/autoresearch/profitability-paper-gate-goal.md",
+      "read_when": "Running the paper-gate sprint backlog end to end."
     },
     {
       "id": "decisions",
@@ -1514,6 +1534,22 @@
         "options_profit_flywheel"
       ],
       "summary": "Replay readbacks, policy, proof predicates, and profit-cycle state have separate owners."
+    },
+    {
+      "heading": "If Touching Profitability Paper Gates",
+      "id": "profitability_paper_gates",
+      "nodes": [
+        "profitability_paper_gate_goal",
+        "next_steps",
+        "project_context",
+        "decisions",
+        "replay_profit_doc",
+        "scanner_doc",
+        "proof_doc",
+        "options_profit_gate",
+        "options_profit_flywheel"
+      ],
+      "summary": "Use the sprint goal and current readbacks before changing paper-gate eligibility or operator workflow."
     },
     {
       "heading": "If Touching DB/Repositories",
