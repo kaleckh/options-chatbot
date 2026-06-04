@@ -31,6 +31,16 @@ from scripts.import_thetadata_options_nbbo import (  # noqa: E402
 OCC_RE = re.compile(r"^(?P<root>[A-Z.]+)(?P<expiry>\d{6})(?P<right>[CP])(?P<strike>\d{8})$")
 
 
+def _filter_values(values: list[str] | None, *, upper: bool = False) -> set[str]:
+    parsed: set[str] = set()
+    for value in values or []:
+        for item in str(value).split(","):
+            text = item.strip()
+            if text:
+                parsed.add(text.upper() if upper else text)
+    return parsed
+
+
 def _parse_occ(symbol: str) -> dict[str, Any] | None:
     match = OCC_RE.match(str(symbol or "").strip().upper())
     if not match:
@@ -47,16 +57,32 @@ def _parse_occ(symbol: str) -> dict[str, Any] | None:
     }
 
 
-def _missing_items(run_paths: list[Path]) -> list[dict[str, Any]]:
+def _missing_items(
+    run_paths: list[Path],
+    *,
+    tickers: set[str] | None = None,
+    contract_symbols: set[str] | None = None,
+    quote_dates: set[str] | None = None,
+) -> list[dict[str, Any]]:
     items: dict[tuple[str, str], dict[str, Any]] = {}
+    ticker_filter = tickers or set()
+    contract_filter = contract_symbols or set()
+    quote_date_filter = quote_dates or set()
     for path in run_paths:
         payload = json.loads(path.read_text(encoding="utf8"))
         for trade in payload.get("unpriced_trades") or []:
+            ticker = str(trade.get("ticker") or "").strip().upper()
+            if ticker_filter and ticker not in ticker_filter:
+                continue
             quote_date = str(trade.get("missing_quote_date") or "").strip()
             if not quote_date:
                 continue
+            if quote_date_filter and quote_date[:10] not in quote_date_filter:
+                continue
             for key in ("missing_long_contract_symbol", "missing_short_contract_symbol"):
                 contract = str(trade.get(key) or "").strip().upper()
+                if contract_filter and contract not in contract_filter:
+                    continue
                 parsed = _parse_occ(contract)
                 if not parsed:
                     continue
@@ -209,6 +235,24 @@ def main() -> int:
         help="Also request this many calendar days after each missing quote date, capped at expiration.",
     )
     parser.add_argument("--max-requests", type=int, default=0, help="Optional cap on expanded ThetaData requests.")
+    parser.add_argument(
+        "--ticker",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated tickers. Can be repeated.",
+    )
+    parser.add_argument(
+        "--contract-symbol",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated exact OCC contract symbols. Can be repeated.",
+    )
+    parser.add_argument(
+        "--quote-date",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated missing quote dates in YYYY-MM-DD form. Can be repeated.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="Fetch and normalize rows, but do not write summaries, CSVs, or DB imports.")
     parser.add_argument(
         "--plan-only",
@@ -219,7 +263,17 @@ def main() -> int:
     args = parser.parse_args()
 
     run_paths = [path.resolve() for path in args.run_paths]
-    base_items = _missing_items(run_paths)
+    target_filters = {
+        "tickers": sorted(_filter_values(args.ticker, upper=True)),
+        "contract_symbols": sorted(_filter_values(args.contract_symbol, upper=True)),
+        "quote_dates": sorted(_filter_values(args.quote_date)),
+    }
+    base_items = _missing_items(
+        run_paths,
+        tickers=set(target_filters["tickers"]),
+        contract_symbols=set(target_filters["contract_symbols"]),
+        quote_dates=set(target_filters["quote_dates"]),
+    )
     items = _expand_items(base_items, lookahead_calendar_days=int(args.lookahead_calendar_days))
     expanded_item_count = len(items)
     if int(args.max_requests) > 0:
@@ -273,6 +327,7 @@ def main() -> int:
     payload = {
         "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "input_run_paths": [str(path) for path in run_paths],
+        "target_filters": target_filters,
         "dry_run": bool(args.dry_run),
         "plan_only": bool(args.plan_only),
         "write_artifacts": not no_write,

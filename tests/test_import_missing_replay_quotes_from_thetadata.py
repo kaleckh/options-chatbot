@@ -45,6 +45,39 @@ def _write_run(path: Path) -> None:
     )
 
 
+def _write_mixed_run(path: Path) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "unpriced_trades": [
+                    {
+                        "ticker": "WMT",
+                        "date": "2026-02-25",
+                        "missing_quote_date": "2026-03-25",
+                        "missing_short_contract_symbol": "WMT260402C00140000",
+                        "unpriced_reason": "missing_exit_quote_for_leg",
+                    },
+                    {
+                        "ticker": "WMT",
+                        "date": "2026-02-26",
+                        "missing_quote_date": "2026-03-26",
+                        "missing_short_contract_symbol": "WMT260402C00139000",
+                        "unpriced_reason": "missing_exit_quote_for_leg",
+                    },
+                    {
+                        "ticker": "PG",
+                        "date": "2026-02-25",
+                        "missing_quote_date": "2026-03-25",
+                        "missing_short_contract_symbol": "PG260402C00170000",
+                        "unpriced_reason": "missing_exit_quote_for_leg",
+                    },
+                ]
+            }
+        ),
+        encoding="utf8",
+    )
+
+
 class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
     def test_dry_run_fetches_but_does_not_write_summary_csv_or_import(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -128,6 +161,44 @@ class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
             self.assertIsNone(payload["summary_path"])
             self.assertFalse(output_dir.exists())
             theta_rows.assert_not_called()
+
+    def test_plan_only_filters_targets_before_lookahead_expansion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_path = root / "run.json"
+            _write_mixed_run(run_path)
+            stdout = io.StringIO()
+
+            argv = [
+                "import_missing_replay_quotes_from_thetadata.py",
+                str(run_path),
+                "--ticker",
+                "wmt",
+                "--contract-symbol",
+                "WMT260402C00140000",
+                "--quote-date",
+                "2026-03-25",
+                "--lookahead-calendar-days",
+                "2",
+                "--plan-only",
+                "--json",
+            ]
+            with mock.patch.object(sys, "argv", argv), redirect_stdout(stdout):
+                self.assertEqual(importer.main(), 0)
+
+            payload = json.loads(stdout.getvalue())
+            manifest = payload["repair_manifest"]
+            self.assertEqual(payload["target_filters"]["tickers"], ["WMT"])
+            self.assertEqual(payload["target_filters"]["contract_symbols"], ["WMT260402C00140000"])
+            self.assertEqual(payload["target_filters"]["quote_dates"], ["2026-03-25"])
+            self.assertEqual(payload["base_unique_items"], 1)
+            self.assertEqual(manifest["base_target_count"], 1)
+            self.assertEqual(manifest["request_target_count"], 3)
+            self.assertEqual(manifest["base_targets"][0]["contract_symbol"], "WMT260402C00140000")
+            self.assertEqual(
+                [item["contract_symbol"] for item in manifest["request_targets"]],
+                ["WMT260402C00140000", "WMT260402C00140000", "WMT260402C00140000"],
+            )
 
 
 if __name__ == "__main__":

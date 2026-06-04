@@ -21,6 +21,16 @@ load_local_env(ROOT)
 DEFAULT_DB = ROOT / "data" / "options-validation" / "options_history.db"
 
 
+def _filter_values(values: list[str] | None, *, upper: bool = False) -> set[str]:
+    parsed: set[str] = set()
+    for value in values or []:
+        for item in str(value).split(","):
+            text = item.strip()
+            if text:
+                parsed.add(text.upper() if upper else text)
+    return parsed
+
+
 def _contract_parts(symbol: str) -> dict[str, Any]:
     text = str(symbol or "").strip().upper()
     if len(text) < 15:
@@ -105,14 +115,30 @@ def _classify_contract(conn: sqlite3.Connection, *, contract_symbol: str, quote_
     }
 
 
-def classify_run(run_path: Path, *, db_path: Path = DEFAULT_DB, source_labels: list[str] | None = None) -> dict[str, Any]:
+def classify_run(
+    run_path: Path,
+    *,
+    db_path: Path = DEFAULT_DB,
+    source_labels: list[str] | None = None,
+    tickers: set[str] | None = None,
+    contract_symbols: set[str] | None = None,
+    quote_dates: set[str] | None = None,
+) -> dict[str, Any]:
     result = json.loads(run_path.read_text(encoding="utf8"))
     labels = source_labels or ["thetadata_opra_nbbo_1m"]
+    ticker_filter = tickers or set()
+    contract_filter = contract_symbols or set()
+    quote_date_filter = quote_dates or set()
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str]] = set()
     for trade in result.get("unpriced_trades") or []:
+        ticker = str(trade.get("ticker") or "").strip().upper()
+        if ticker_filter and ticker not in ticker_filter:
+            continue
         quote_date = str(trade.get("missing_quote_date") or "").strip()
         if not quote_date:
+            continue
+        if quote_date_filter and quote_date[:10] not in quote_date_filter:
             continue
         keys = [
             key
@@ -128,6 +154,8 @@ def classify_run(run_path: Path, *, db_path: Path = DEFAULT_DB, source_labels: l
         for key in keys:
             contract_symbol = str(trade.get(key) or "").strip().upper()
             if not contract_symbol:
+                continue
+            if contract_filter and contract_symbol not in contract_filter:
                 continue
             pair = (contract_symbol, quote_date)
             if pair in seen:
@@ -150,6 +178,11 @@ def classify_run(run_path: Path, *, db_path: Path = DEFAULT_DB, source_labels: l
         "run_path": str(run_path),
         "db_path": str(db_path),
         "source_labels": labels,
+        "target_filters": {
+            "tickers": sorted(ticker_filter),
+            "contract_symbols": sorted(contract_filter),
+            "quote_dates": sorted(quote_date_filter),
+        },
         "classified_count": len(classified),
         "classification_counts": dict(counts),
         "by_ticker": dict(by_ticker),
@@ -162,10 +195,35 @@ def main() -> int:
     parser.add_argument("run_path", type=Path)
     parser.add_argument("--db-path", type=Path, default=DEFAULT_DB)
     parser.add_argument("--source-labels", default="thetadata_opra_nbbo_1m")
+    parser.add_argument(
+        "--ticker",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated tickers. Can be repeated.",
+    )
+    parser.add_argument(
+        "--contract-symbol",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated exact OCC contract symbols. Can be repeated.",
+    )
+    parser.add_argument(
+        "--quote-date",
+        action="append",
+        default=[],
+        help="Limit targets to one or more comma-separated missing quote dates in YYYY-MM-DD form. Can be repeated.",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     labels = [item.strip() for item in str(args.source_labels).split(",") if item.strip()]
-    report = classify_run(args.run_path, db_path=args.db_path, source_labels=labels)
+    report = classify_run(
+        args.run_path,
+        db_path=args.db_path,
+        source_labels=labels,
+        tickers=_filter_values(args.ticker, upper=True),
+        contract_symbols=_filter_values(args.contract_symbol, upper=True),
+        quote_dates=_filter_values(args.quote_date),
+    )
     if args.json:
         print(json.dumps(report, indent=2))
     else:
