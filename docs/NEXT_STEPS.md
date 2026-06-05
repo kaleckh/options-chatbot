@@ -53,10 +53,13 @@ Current read:
 - side-aware zero-bid replay now stores entry/exit quote evidence plus stable hashes so replay rows can be audited without relying on implicit quote reconstruction
 - the June 4 pending-candidate validation did log live OPRA SPY/QQQ spreads, but auto-track skipped them with `research_backfill_not_live_proof` because the proof contract treated generic `research` calibration labels as backfill identity; that false-positive marker is fixed, and a read-only reproduction against a June 4 SPY spread now classifies it as `live_scan_exact_contract`
 - future fill-attempt rows now preserve detailed `auto_track_skip_reason` values for creation blockers, missing fill price, and proof-gate exceptions; the pending-validation disposition report and `/api/options-profit/status` compact rows surface that reason instead of collapsing proof failures to only `auto_track_skipped_or_missing_fill_price`
+- local scheduler audit on 2026-06-05 confirmed `OptionsScanPicks` and `OptionsScanPicksSafetyNet` are enabled for weekdays at `11:00` and `11:30` Mountain time, last exited `0` on 2026-06-04, and are next scheduled for 2026-06-05; `OptionsRegimeObservationLanes` is also enabled for weekdays at `11:45`, but its 2026-06-04 run exited `1` after the core daily audit because the worktree contained merge-conflict text at that time. Current code has no conflict markers and `scripts/run_regime_observation_lanes.py --dry-run` enumerates the four configured observation playbooks.
 
 1. During the next market-hours scan, rerun `scripts/validate_pending_scan_candidates.py` or the scheduled safety-net path so fresh candidates are revalidated with the fixed proof/backfill marker; then verify regular auto-track lanes can create rows after fresh executable evidence, while blocked/stale/unpriced/proof-ineligible rows receive explicit validation dispositions with detailed `auto_track_skip_reason` values when creation is skipped.
 
-2. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
+2. Confirm the next `OptionsRegimeObservationLanes` scheduled run exits `0` in `data/forward-tracking/observation_lanes_log.txt`; if it fails again, repair that candidate-lane scheduler before relying on side-lane daily coverage.
+
+3. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
 
 ## Frontend Makeover Follow-Up
 
