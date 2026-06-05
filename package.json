@@ -89,6 +89,7 @@
     "typescript": "^5.7.0"
   },
   "overrides": {
+    "axios": "^1.17.0",
     "postcss": "^8.5.15",
     "ws": "^8.21.0"
   }

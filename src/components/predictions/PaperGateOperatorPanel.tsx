@@ -73,24 +73,32 @@ function ValidationRows({ rows }: { rows: PaperGateValidationRow[] }) {
   }
   return (
     <div className="space-y-2">
-      {rows.slice(0, 6).map((row, index) => (
-        <div key={`${row.candidate_key || row.contract_symbol || index}`} className="rounded-md border border-border bg-bg-3 px-3 py-2">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs font-semibold text-text-1">{candidateLabel(row) || "Source missing"}</div>
-            <div className="font-mono text-[11px] uppercase text-text-3">
-              {fmtUpperLabel(row.validation_outcome)}
+      {rows.slice(0, 6).map((row, index) => {
+        const skipReason = row.auto_track_skip_reason || row.fill_outcome_reason || null;
+        return (
+          <div key={`${row.candidate_key || row.contract_symbol || index}`} className="rounded-md border border-border bg-bg-3 px-3 py-2">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-xs font-semibold text-text-1">{candidateLabel(row) || "Source missing"}</div>
+              <div className="font-mono text-[11px] uppercase text-text-3">
+                {fmtUpperLabel(row.validation_outcome)}
+              </div>
+            </div>
+            <div className="mt-1 text-xs text-text-3">
+              {row.fill_discipline_explanation || "No fill-discipline explanation recorded."}
+            </div>
+            {skipReason ? (
+              <div className="mt-1 text-[11px] text-text-2">
+                Skip reason: {skipReason}
+              </div>
+            ) : null}
+            <div className="mt-1 text-[11px] uppercase tracking-wide text-text-3">
+              Fill {fmtCompactLabel(row.fill_status || row.fill_attempt_status)}
+              {" "}&middot; Link {fmtCompactLabel(row.position_link_status)}
+              {" "}&middot; Realized P&L {fmtCompactLabel(row.realized_pnl_status)}
             </div>
           </div>
-          <div className="mt-1 text-xs text-text-3">
-            {row.fill_discipline_explanation || "No fill-discipline explanation recorded."}
-          </div>
-          <div className="mt-1 text-[11px] uppercase tracking-wide text-text-3">
-            Fill {fmtCompactLabel(row.fill_status || row.fill_attempt_status)}
-            {" "}&middot; Link {fmtCompactLabel(row.position_link_status)}
-            {" "}&middot; Realized P&L {fmtCompactLabel(row.realized_pnl_status)}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

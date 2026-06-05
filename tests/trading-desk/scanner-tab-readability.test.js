@@ -102,6 +102,8 @@ test("Paper gate validation rows keep auto-track skip reason available end to en
   assert.match(types, /auto_track_skip_reason\?: string \| null;/);
   assert.match(backend, /"auto_track_skip_reason": row\.get\("auto_track_skip_reason"\)/);
   assert.match(pendingAudit, /"auto_track_skip_reason": fill_attempt\.get\("auto_track_skip_reason"\)/);
+  assert.match(panel, /row\.auto_track_skip_reason \|\| row\.fill_outcome_reason/);
+  assert.match(panel, /Skip reason: \{skipReason\}/);
   assert.match(panel, /No-Fill \/ Skipped Auto-Track/);
   assert.match(panel, /candidateLabel\(row\) \|\| "Source missing"/);
 });
