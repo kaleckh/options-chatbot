@@ -847,16 +847,19 @@ class LogScanPicksTests(unittest.TestCase):
             redirect_stdout(output),
             patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
         ):
+            skip_reasons: dict[int, str] = {}
             created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
                 repository=repository,
                 picks=[pick],
                 filled_at="2026-04-14T11:00:00-04:00",
                 scan_date="2026-04-14",
+                auto_track_skip_reasons=skip_reasons,
             )
 
         self.assertEqual((created, duplicates, skipped), (0, 0, 1))
         self.assertEqual(repository.created, [])
         build_position_payload.assert_not_called()
+        self.assertEqual(skip_reasons[1], "creation_blocked:position_tracking_mode:paper_review_only,creation_eligible_not_true")
         self.assertIn("position_tracking_mode:paper_review_only", output.getvalue())
 
     def test_auto_track_requires_explicit_creation_eligible_true(self):
@@ -887,17 +890,51 @@ class LogScanPicksTests(unittest.TestCase):
             redirect_stdout(output),
             patch.object(log_scan_picks, "build_position_payload") as build_position_payload,
         ):
+            skip_reasons: dict[int, str] = {}
             created, duplicates, skipped = log_scan_picks._auto_track_scan_picks(
                 repository=repository,
                 picks=[pick],
                 filled_at="2026-04-14T11:00:00-04:00",
                 scan_date="2026-04-14",
+                auto_track_skip_reasons=skip_reasons,
             )
 
         self.assertEqual((created, duplicates, skipped), (0, 0, 1))
         self.assertEqual(repository.created, [])
         build_position_payload.assert_not_called()
+        self.assertEqual(skip_reasons[1], "creation_blocked:creation_eligible_not_true")
         self.assertIn("creation_eligible_not_true", output.getvalue())
+
+    def test_fill_attempt_skip_reason_preserves_proof_gate_detail(self):
+        pick = _make_pick("SPY", debit=5.0)
+        record = log_scan_picks._build_fill_attempt_record(
+            pick,
+            run_at=_WeekdayDateTime(2026, 4, 14, 11, 0, 0),
+            scan_result={
+                "market_open_at_run": True,
+                "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                "playbook": {"id": "short_term", "label": "Short-Term"},
+            },
+            candidate_rank=1,
+        )
+        reason = (
+            "Proof-lane position creation blocked: research_backfill_not_live_proof. "
+            "All proof-lane positions require exact-contract identity, executable entry quote, "
+            "live_chain_exact_contract selection source, and verified forward scan lineage."
+        )
+
+        annotated = log_scan_picks._annotate_fill_attempt_outcomes(
+            [record],
+            tracked_links=[],
+            auto_track_allowed=True,
+            repository_available=True,
+            auto_track_skip_reasons={1: reason},
+        )
+
+        self.assertEqual(annotated[0]["fill_status"], "not_filled_auto_track_skipped")
+        self.assertEqual(annotated[0]["fill_outcome_reason"], reason)
+        self.assertEqual(annotated[0]["auto_track_outcome"], "skipped")
+        self.assertEqual(annotated[0]["auto_track_skip_reason"], reason)
 
     def test_main_logs_and_tracks_eligible_auto_track_lane_pick(self):
         with tempfile.TemporaryDirectory() as tmpdir:

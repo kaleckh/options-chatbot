@@ -378,6 +378,10 @@ class PositionsReviewEngineTests(unittest.TestCase):
         scan_pick["source_scan_run_id"] = "api_scan_20260406T100000Z"
         scan_pick["source_scan_recorded_at_utc"] = "2026-04-06T14:00:00Z"
         scan_pick["quote_freshness_status"] = "fresh"
+        scan_pick["pricing_evidence_class"] = "proof_live_opra_exact_contract"
+        scan_pick["profitability_evidence_class"] = "research_profitability_calibration"
+        scan_pick["source_separation"] = "pricing_proof_profitability_research"
+        scan_pick["promotion_class"] = "research_bootstrap"
 
         payload = svc.build_position_payload(
             scan_pick=scan_pick,

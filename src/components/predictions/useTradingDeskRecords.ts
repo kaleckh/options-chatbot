@@ -13,7 +13,7 @@ import type {
 import type { SuggestedTrade, TrackedPosition } from "@/lib/types";
 
 const AUTO_REVIEW_STALE_MS = 5 * 60 * 1000;
-export const CLOSED_POSITION_PAGE_SIZE = 100;
+export const CLOSED_POSITION_PAGE_SIZE = 50;
 export const CLOSED_SUGGESTED_TRADE_PAGE_SIZE = 100;
 
 export type PositionLoadOptions = {

@@ -1222,6 +1222,40 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(payload["proof_class"], "live_scan_exact_contract")
         self.assertTrue(payload["source_pick_snapshot"]["source_scan_lineage_verified"])
 
+    def test_live_scan_proof_allows_research_profitability_calibration_labels(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick["source_scan_session_id"] = 55
+        scan_pick["source_scan_event_key"] = "swing:rank_1"
+        scan_pick["source_scan_run_id"] = "scheduled_scan_20260604T170000Z"
+        scan_pick["source_scan_recorded_at_utc"] = "2026-06-04T17:00:00Z"
+        scan_pick["selection_source"] = "live_chain_exact_contract"
+        scan_pick["pricing_evidence_class"] = "proof_live_opra_exact_contract"
+        scan_pick["profitability_evidence_class"] = "research_profitability_calibration"
+        scan_pick["source_separation"] = "pricing_proof_profitability_research"
+        scan_pick["promotion_class"] = "research_bootstrap"
+        scan_pick["quote_time_et"] = "2026-06-04T13:00:00-04:00"
+        scan_pick["quote_time_utc"] = "2026-06-04T17:00:00Z"
+        scan_pick["quote_freshness_status"] = "fresh"
+        scan_pick["options_data_source"] = "alpaca_opra"
+        scan_pick["bid"] = 4.4
+        scan_pick["ask"] = 4.6
+        scan_pick["entry_execution_price"] = 4.5
+        scan_pick["entry_execution_basis"] = "ask"
+
+        payload = psvc.build_position_payload(
+            scan_pick=scan_pick,
+            fill_price=4.5,
+            contracts=1,
+            filled_at="2026-06-04T13:00:00-04:00",
+            require_resolved_contract=True,
+            preserve_fill_price=True,
+            source_scan_lineage_verified=True,
+        )
+
+        self.assertTrue(payload["proof_eligible"])
+        self.assertIsNone(payload["proof_ineligibility_reason"])
+        self.assertEqual(payload["proof_class"], "live_scan_exact_contract")
+
     def test_live_scan_proof_requires_quote_freshness_status(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         scan_pick["source_scan_session_id"] = 55

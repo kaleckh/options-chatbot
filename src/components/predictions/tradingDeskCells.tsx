@@ -171,6 +171,12 @@ export function renderRealizedPnlCell(value?: number | null) {
   const hasValue = value != null && !Number.isNaN(value);
   const isPositive = hasValue && value > 0;
   const isNegative = hasValue && value < 0;
+  const displayValue = hasValue ? fmtPct(value) : "\u2014";
+  const exactValue = hasValue ? fmtPct(value, 4) : null;
+  const precisionLabel =
+    hasValue && exactValue && displayValue !== exactValue
+      ? `${displayValue} (exact ${exactValue})`
+      : displayValue;
   const toneClass = isPositive ? "text-green" : isNegative ? "text-red" : "text-text-2";
   const dotClass = isPositive
     ? "bg-green shadow-[0_0_8px_var(--green)]"
@@ -188,11 +194,11 @@ export function renderRealizedPnlCell(value?: number | null) {
   return (
     <span
       className={`inline-flex min-w-[92px] items-center gap-1.5 font-mono text-sm font-semibold ${toneClass}`}
-      aria-label={hasValue ? `${label}: ${fmtPct(value)}` : label}
-      title={label}
+      aria-label={hasValue ? `${label}: ${precisionLabel}` : label}
+      title={hasValue ? `${label}: ${precisionLabel}` : label}
     >
       <span className={`h-2 w-2 rounded-full ${dotClass}`} aria-hidden="true" />
-      {hasValue ? fmtPct(value) : "\u2014"}
+      {displayValue}
     </span>
   );
 }

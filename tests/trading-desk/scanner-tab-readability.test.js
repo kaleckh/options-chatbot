@@ -34,6 +34,17 @@ test("ScannerTab keeps explicit scanner table mobile contracts", () => {
   assert.match(scannerTab, /mobileHiddenCols=\{SCANNER_MOBILE_HIDDEN_COLS\}/);
 });
 
+test("ScannerTab fallback playbook labels avoid legacy observation wording", () => {
+  const scannerTab = readRepoFile("src/components/predictions/ScannerTab.tsx");
+
+  assert.match(scannerTab, /\{ id: "tracked_winner_observation", label: "Tracked Winner Research" \}/);
+  assert.match(scannerTab, /\{ id: "bearish_index_put_observation", label: "Bearish Index Put" \}/);
+  assert.match(scannerTab, /\{ id: "range_breakout_observation", label: "Range Breakout" \}/);
+  assert.match(scannerTab, /\{ id: "volatility_expansion_observation", label: "Volatility Expansion" \}/);
+  assert.doesNotMatch(scannerTab, /label: "Tracked Winner Observation"/);
+  assert.doesNotMatch(scannerTab, /label: "Range Breakout Observation"/);
+});
+
 test("ScannerEvidencePanel owns scanner evidence copy without mutations", () => {
   const evidencePanel = readRepoFile("src/components/predictions/ScannerEvidencePanel.tsx");
 
@@ -80,6 +91,19 @@ test("PaperGateOperatorPanel renders paper workflow facts without route behavior
   assert.doesNotMatch(panel, /tradingDeskMutationHeaders/);
   assert.doesNotMatch(panel, /\/api\/scan/);
   assert.doesNotMatch(panel, /\/api\/positions/);
+});
+
+test("Paper gate validation rows keep auto-track skip reason available end to end", () => {
+  const types = readRepoFile("src/lib/types.ts");
+  const backend = readRepoFile("python-backend/main.py");
+  const pendingAudit = readRepoFile("scripts/pending_audit_candidates.py");
+  const panel = readRepoFile("src/components/predictions/PaperGateOperatorPanel.tsx");
+
+  assert.match(types, /auto_track_skip_reason\?: string \| null;/);
+  assert.match(backend, /"auto_track_skip_reason": row\.get\("auto_track_skip_reason"\)/);
+  assert.match(pendingAudit, /"auto_track_skip_reason": fill_attempt\.get\("auto_track_skip_reason"\)/);
+  assert.match(panel, /No-Fill \/ Skipped Auto-Track/);
+  assert.match(panel, /candidateLabel\(row\) \|\| "Source missing"/);
 });
 
 test("OperatorSessionPanel owns local unlock without persisting the private token", () => {

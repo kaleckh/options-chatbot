@@ -172,6 +172,23 @@ test("production live exact rows qualify for truth-grade closed outcomes", () =>
   assert.equal(evidence.isTruthGradeClosedPosition(position), true);
 });
 
+test("live exact rows can carry research profitability calibration labels", () => {
+  const position = liveExactClosedPosition({
+    source_pick_snapshot: {
+      pricing_evidence_class: "proof_live_opra_exact_contract",
+      profitability_evidence_class: "research_profitability_calibration",
+      source_separation: "pricing_proof_profitability_research",
+      promotion_class: "research_bootstrap",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "live_exact");
+  assert.equal(group.productionProof, true);
+  assert.equal(evidence.isProductionProofPosition(position), true);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), true);
+});
+
 test("bare live proof class without persisted entry proof gates is not production proof", () => {
   const position = closedPosition({
     proof_eligible: true,
@@ -218,6 +235,18 @@ test("research identity fields block frontend production proof even with opaque 
     source_pick_snapshot: {
       backfill_audit_id: "audit-1",
     },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "research_backfill");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+  assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("top-level research_only blocks frontend production proof", () => {
+  const position = liveExactClosedPosition({
+    research_only: true,
   });
 
   const group = evidence.getPositionEvidenceGroup(position);

@@ -74,6 +74,7 @@ options_history.db
 *.db-wal
 *.pid
 auto_scan.log
+dev-server*.log
 daily_performance.json
 data/tracked_positions.db
 data/tracked_positions.backup-*

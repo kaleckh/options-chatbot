@@ -861,7 +861,10 @@ export default function PredictionsView() {
               review: "force",
               includeClosed: positionsView === "closed",
             })}
-            onLoadClosedRows={() => void fetchClosedPositionsPage({ append: true, notify: true })}
+            onLoadClosedRows={(options) => void fetchClosedPositionsPage({
+              append: true,
+              notify: options?.notify === true,
+            })}
             onReviewPosition={(positionId) => void reviewSinglePosition(positionId)}
             onOpenClose={openCloseForm}
           />

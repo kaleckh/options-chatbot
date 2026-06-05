@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, CheckCircle, RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import FinTable from "@/components/ui/FinTable";
@@ -70,7 +70,7 @@ type TrackedPositionsTabProps = {
   closedRowsHasMore: boolean;
   closedRowsLoading: boolean;
   onRefresh: () => void;
-  onLoadClosedRows: () => void;
+  onLoadClosedRows: (options?: { notify?: boolean }) => void;
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
 };
@@ -219,7 +219,7 @@ function EntryDateFilterControls({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-text-2">
-            Lanes
+            Source
           </span>
           <Button
             size="sm"
@@ -318,6 +318,7 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
   const [entryDatePreset, setEntryDatePreset] = useState<EntryDateFilterPreset>("all");
   const [entryDateValue, setEntryDateValue] = useState("");
   const [laneFilter, setLaneFilter] = useState(ALL_POSITION_LANES);
+  const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const shareSafeOpenPositions = dedupedOpenPositions.filter((position) => isShareSafeLivePosition(position));
   const hiddenOpenPositionCount = Math.max(dedupedOpenPositions.length - shareSafeOpenPositions.length, 0);
   const openBasePositions = openFilter === "share-safe" ? shareSafeOpenPositions : dedupedOpenPositions;
@@ -327,8 +328,6 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
     [closedPositions, dedupedOpenPositions]
   );
   const selectedLaneLabel = positionLaneFilterLabel(laneFilter, laneOptions);
-  const needsCompletePolicyHistory =
-    view === "closed" && (closedDataView === "current_policy" || closedDataView === "learned_away");
   useEffect(() => {
     if (
       laneFilter !== ALL_POSITION_LANES &&
@@ -337,16 +336,6 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
       setLaneFilter(ALL_POSITION_LANES);
     }
   }, [laneFilter, laneOptions]);
-  useEffect(() => {
-    if (!needsCompletePolicyHistory || !closedRowsLoaded || !closedRowsHasMore || closedRowsLoading) return;
-    onLoadClosedRows();
-  }, [
-    closedRowsHasMore,
-    closedRowsLoaded,
-    closedRowsLoading,
-    needsCompletePolicyHistory,
-    onLoadClosedRows,
-  ]);
   const filteredOpenPositions = openBasePositions.filter((position) =>
     matchesEntryDateFilter(getTradeDateFilterValue(position), entryDatePreset, entryDateValue) &&
     matchesPositionLaneFilter(position, laneFilter)
@@ -376,6 +365,26 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
     ? "Loading"
     : policyCohortHealthStatusLabel(currentPolicyCohortHealth.overallStatus);
   const positions = view === "open" ? filteredOpenPositions : filteredClosedPositions;
+  const shouldOfferClosedPagination = view === "closed" && closedRowsHasMore && !error;
+  const shouldAutoLoadNextClosedBatch = shouldOfferClosedPagination && positions.length > 0;
+  useEffect(() => {
+    if (!shouldAutoLoadNextClosedBatch || closedRowsLoading) return;
+    const sentinel = loadMoreSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        onLoadClosedRows();
+      }
+    }, {
+      root: null,
+      rootMargin: "320px 0px",
+      threshold: 0,
+    });
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [closedRowsLoading, onLoadClosedRows, shouldAutoLoadNextClosedBatch]);
   const recentVisiblePositionCount = positions.filter(isTakenWithinLast24Hours).length;
   const closedEvidenceHiddenCount = Math.max(dateLaneClosedPositions.length - filteredClosedPositions.length, 0);
   const hiddenByFilterCount = Math.max(
@@ -392,7 +401,7 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
   const openReviewSummary = view === "open" ? getCollectionReviewSummary(positions) : null;
   const tableMaxHeight = view === "open"
     ? "min(calc(100vh - 18rem), 920px)"
-    : "min(calc(100vh - 17rem), 940px)";
+    : "none";
   const buildRows = (items: TrackedPosition[]) =>
     items.map((position) => {
       const realizedPnl = getRealizedPnlPct(position);
@@ -594,7 +603,7 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
               ? ` Entry-date filter is showing ${positions.length} of ${basePositions.length} position(s) from ${entryDateFilterLabel(entryDatePreset, entryDateValue)}.`
               : ""}
             {selectedLaneLabel
-              ? ` Lane filter: ${selectedLaneLabel}.`
+              ? ` Source filter: ${selectedLaneLabel}.`
               : ` ${laneMixSummary(laneOptions)}`}
           </span>
           {openReviewSummary ? (
@@ -607,16 +616,21 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
           {closedRowsHasMore ? "+" : ""}
           {closedDataView !== "all" ? ` in ${closedDataViewLabel(closedDataView)}` : ""}
           {entryDatePreset !== "all" ? ` from ${entryDateFilterLabel(entryDatePreset, entryDateValue)}` : ""}
-          {selectedLaneLabel ? ` in ${selectedLaneLabel}` : ""}.
+          {selectedLaneLabel ? ` from ${selectedLaneLabel}` : ""}.
           {!closedRowsLoaded ? " Closed rows are loading on demand." : ""}
+          {closedRowsHasMore
+            ? closedRowsLoading
+              ? " Loading the next closed-history batch."
+              : " More closed history is available; scroll to the bottom or use Load More for the next batch."
+            : ""}
           {closedDataView === "truth_grade"
             ? ` ${closedEvidenceHiddenCount} non-truth-grade row(s) are hidden from this strict production-proof view.`
             : ""}
           {closedDataView === "current_policy"
-            ? ` Raw realized rows: ${realizedPnlClosedPositions.length}; learned-away rows: ${learnedAwayClosedPositions.length}. Cohort state: ${currentPolicyCohortState}; showcase ${fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)}; recent ${fmtCohortAvg(currentPolicyCohortHealth.recentMonth)}, median ${fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)}.${closedRowsHasMore ? " Loading remaining closed history for the full policy read." : ""}`
+            ? ` Raw realized rows: ${realizedPnlClosedPositions.length}; learned-away rows: ${learnedAwayClosedPositions.length}. Cohort state: ${currentPolicyCohortState}; showcase ${fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)}; recent ${fmtCohortAvg(currentPolicyCohortHealth.recentMonth)}, median ${fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)}.`
             : ""}
           {closedDataView === "learned_away"
-            ? ` These rows stay visible as historical learning data, but current promoted entry guardrails would block them.${closedRowsHasMore ? " Loading remaining closed history for the full learned-away read." : ""}`
+            ? " These rows stay visible as historical learning data, but current promoted entry guardrails would block them."
             : ""}
           {closedDataView === "realized_pnl"
             ? ` ${closedEvidenceHiddenCount} row(s) without trusted realized P&L are hidden.`
@@ -641,13 +655,13 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
                   ? "No closed trades match those filters."
                   : "No closed trades yet."}
           </div>
-          {view === "closed" && closedRowsHasMore ? (
+          {shouldOfferClosedPagination ? (
             <div className="mt-3 flex justify-center">
               <Button
                 size="sm"
                 variant="ghost"
                 loading={closedRowsLoading}
-                onClick={onLoadClosedRows}
+                onClick={() => onLoadClosedRows({ notify: true })}
               >
                 Load More
               </Button>
@@ -672,13 +686,14 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
                 : ["Status", "Signal", "Trade", "Taken", "Entry", "Exit Px"]
             }
           />
-          {view === "closed" && closedRowsHasMore ? (
-            <div className="flex justify-center pt-2">
+          {shouldOfferClosedPagination ? (
+            <div className="flex flex-col items-center gap-2 pt-2">
+              <div ref={loadMoreSentinelRef} className="h-2 w-full" aria-hidden="true" />
               <Button
                 size="sm"
                 variant="ghost"
                 loading={closedRowsLoading}
-                onClick={onLoadClosedRows}
+                onClick={() => onLoadClosedRows({ notify: true })}
               >
                 Load More
               </Button>

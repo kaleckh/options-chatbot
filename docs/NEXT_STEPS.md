@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-04
+Last updated: 2026-06-05
 
 ## Documentation Hygiene
 
@@ -36,6 +36,7 @@ Current read:
 - `options_profit_gate.py` and `options_profit_flywheel.py` consume the same closed-row proof-grade predicate for production readiness metrics
 - generated `src/lib/generated/proofEvidenceContract.ts`, `src/lib/trading-desk/proofContract.ts`, and `src/lib/trading-desk/positionEvidence.ts` consume the same proof classes, entry-proof gates, display groups, research/backfill markers, quote-freshness tokens, and exit-basis tokens
 - production evidence remains limited to fresh live scanner exact-contract proof; creation-time classification, stored-row predicates, and frontend display re-check exact selection source, verified scan lineage, OPRA source, executable entry, present acceptable quote freshness, trusted closed exit, calculable P&L, and absence of row-level or source-snapshot backfill/migration identity fields such as `backfill_audit_id`, `position_migration_id`, and `position_migrated_at_utc` rather than trusting stale proof flags
+- live OPRA entry rows may carry profitability-calibration labels such as `research_profitability_calibration`, `pricing_proof_profitability_research`, or `research_bootstrap`; those labels alone are not research/backfill identity and must not block otherwise proof-eligible scanner-origin creates
 
 1. Consider emitting `evidence_group` and `proof_contract_version` from backend compact rows so frontend display can stop inferring display groups from mixed historical fields.
 
@@ -50,8 +51,10 @@ Current read:
 - explicit `manual_paper` and `manual_broker` creation modes remain available for research/backfill or broker/manual rows, but those rows do not become production proof without exact OPRA/NBBO evidence and verified lineage
 - portfolio guardrails still include existing-position exposure, max concurrent positions, cost-risk, open executable drawdown, and correlated-index exposure, but these surface as visible cautions/sizing notes rather than hard blockers for otherwise proof-eligible trades
 - side-aware zero-bid replay now stores entry/exit quote evidence plus stable hashes so replay rows can be audited without relying on implicit quote reconstruction
+- the June 4 pending-candidate validation did log live OPRA SPY/QQQ spreads, but auto-track skipped them with `research_backfill_not_live_proof` because the proof contract treated generic `research` calibration labels as backfill identity; that false-positive marker is fixed, and a read-only reproduction against a June 4 SPY spread now classifies it as `live_scan_exact_contract`
+- future fill-attempt rows now preserve detailed `auto_track_skip_reason` values for creation blockers, missing fill price, and proof-gate exceptions; the pending-validation disposition report and `/api/options-profit/status` compact rows surface that reason instead of collapsing proof failures to only `auto_track_skipped_or_missing_fill_price`
 
-1. During the next market-hours scan, verify `scripts/validate_pending_scan_candidates.py` processes all pending regular validation-enabled lanes and that all regular auto-track lanes can create rows after fresh executable evidence, while blocked/stale/unpriced/proof-ineligible rows receive explicit validation dispositions.
+1. During the next market-hours scan, rerun `scripts/validate_pending_scan_candidates.py` or the scheduled safety-net path so fresh candidates are revalidated with the fixed proof/backfill marker; then verify regular auto-track lanes can create rows after fresh executable evidence, while blocked/stale/unpriced/proof-ineligible rows receive explicit validation dispositions with detailed `auto_track_skip_reason` values when creation is skipped.
 
 2. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
 
@@ -70,6 +73,7 @@ Current read:
 - tracked positions are now split into `src/components/predictions/TrackedPositionsTab.tsx`, with shared date, lane, contract, and ticker helpers in `src/components/predictions/trackedPositionUtils.tsx`.
 - the archive-gated live scanner is now split into `src/components/predictions/ScannerTab.tsx` and dynamically loaded; scanner rows/column contracts are memoized inside that focused component.
 - tracked-position and suggested-trade data/review/paging state now live in `src/components/predictions/useTradingDeskRecords.ts`, keeping `PredictionsView.tsx` focused on tab orchestration, scanner/trade-entry state, and modal wiring. Current line read: `PredictionsView.tsx` `1283` lines, `useTradingDeskRecords.ts` `510` lines.
+- Closed Trades now page-scrolls its loaded rows and loads tracked closed history in `50`-row batches, fetching the next batch when the operator reaches the bottom or presses `Load More` instead of pulling the full archive at once.
 - fresh runtime smoke on temporary Next `3015` and backend `8115` exercised Open, Tracked Stocks, and archive-gated Paper on desktop `1440x1000` and mobile `390x844`; console/page errors were `0`, page-level horizontal overflow was `0`, and Paper still surfaced `Needs Review` / `Review needed` for the stale suggested trade. Artifact: `tmp/trading-desk-hook-qa-20260601T0711Z/browser-hook-qa-summary.json`.
 - fresh browser QA on temporary Next `3014` and backend `8114` opened Archive > Live Scan and expanded `Evidence & guardrails` on desktop `1440x1000` and mobile `390x844`; console/page errors were `0`, page-level horizontal overflow was `0`, and the expanded truth-health card showed `TRACKED DB READY`. Artifacts: `tmp/browser-qa-20260601T0646Z/browser-qa-expanded-summary.json`, `desktop-1440x1000-live-scan-expanded.png`, and `mobile-390x844-live-scan-tracked-db.png`.
 
@@ -86,7 +90,7 @@ Current read:
 - Closed Trades now defaults to a current-policy data view: promoted repair-lane rows that clear today's entry guardrails and have trusted realized P&L
 - Closed Trades keeps separate filters for current policy, learned-away rows, raw realized P&L, truth-grade production proof, all closed rows, historical paper, lifecycle-only, unpriced, and legacy rows so proof claims stay separate from historical-learning review
 - closed-position summary cards now foreground current-policy row count, learned-away row count, shown-row win rate, shown-row average P&L, and strict truth-grade average P&L
-- Current Policy and Learned Away views keep loading closed-history pages until the policy read is complete, because the first `100` newest closed rows can be a materially worse recent slice than the full historical policy replay
+- Closed Trades uses `50`-row tracked closed-history batches with page-level scrolling and bottom-of-list lazy loading, because the first `50` newest rows can be a materially worse recent slice than the full historical policy replay and should not be the only reachable window
 - live review intentionally honors `90%` configured stops for profit-first paper/live-shadow behavior
 - configured stops wider than `90%` are capped to `90%`, while retaining both `configured_stop_loss_pct` and `effective_stop_loss_pct` in review metrics
 - verified executable zero exits can now auto-close paper positions at `0.0` instead of leaving total-loss options open
@@ -101,7 +105,7 @@ Current read:
 - FastAPI responses now include `x-python-backend-duration-ms` so local Trading Desk/API checks can compare route latency before and after payload or query changes.
 - Trading Desk and proof-status Next read routes now forward `x-python-backend-duration-ms` from the Python backend, so route probes can compare Next elapsed time against backend handler time without changing response bodies.
 - `/api/positions` and `/api/suggested-trades` now accept `limit` and `offset`, forward those windows through the Next API layer, and return page metadata so the UI can lazy-load closed/history-heavy tables.
-- `PredictionsView.tsx` now fetches open tracked positions and open suggested trades by default; Closed Trades and Closed Ideas request the first `100` rows on demand and page older closed rows through `Load More`, so Open and Tracked Stocks refreshes no longer pull the full closed/research archive.
+- `PredictionsView.tsx` now fetches open tracked positions and open suggested trades by default; Closed Trades requests tracked closed rows in `50`-row batches while Closed Ideas still requests the first `100` rows on demand, and both page older closed rows through `Load More`, so Open and Tracked Stocks refreshes no longer pull the full closed/research archive.
 - Tracked Stocks now receives the parent-level tracked-stock summary and renders through a focused memoized component, avoiding a duplicate summary build while continuing to show closed-row totals as on-demand until the archive is loaded.
 - Paper Ideas now lives outside the default `PredictionsView.tsx` body and is dynamically loaded only when the archive-gated paper tab is opened.
 - the default Open/Closed tracked-position board now renders through `TrackedPositionsTab.tsx`, and shared tracked-position helper logic lives in `trackedPositionUtils.tsx` for reuse by scanner, close dialogs, and tracked-stock summaries.

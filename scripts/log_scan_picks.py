@@ -371,6 +371,7 @@ def _auto_track_scan_picks(
     filled_at: str,
     scan_date: str,
     tracked_links: list[tuple[int, int] | tuple[int, int, str]] | None = None,
+    auto_track_skip_reasons: dict[int, str] | None = None,
 ) -> tuple[int, int, int]:
     created_ids: list[int] = []
     created = 0
@@ -381,6 +382,8 @@ def _auto_track_scan_picks(
         creation_blockers = _scan_pick_creation_blockers(pick)
         if creation_blockers:
             skipped += 1
+            if auto_track_skip_reasons is not None:
+                auto_track_skip_reasons[idx] = f"creation_blocked:{','.join(creation_blockers)}"
             print(
                 f"  Skipped auto-track: {pick.get('ticker')} "
                 f"creation blocked ({', '.join(creation_blockers)})"
@@ -390,6 +393,8 @@ def _auto_track_scan_picks(
         fill_price = _pick_fill_price(pick)
         if fill_price is None:
             skipped += 1
+            if auto_track_skip_reasons is not None:
+                auto_track_skip_reasons[idx] = "missing_fill_price"
             print(f"  Skipped auto-track: {pick.get('ticker')} missing fill price")
             continue
 
@@ -407,6 +412,8 @@ def _auto_track_scan_picks(
             )
         except Exception as exc:
             skipped += 1
+            if auto_track_skip_reasons is not None:
+                auto_track_skip_reasons[idx] = str(exc)
             print(f"  Skipped auto-track: {pick.get('ticker')} ({exc})")
             continue
 
@@ -767,6 +774,7 @@ def _annotate_fill_attempt_outcomes(
     tracked_links: list[tuple[int, int] | tuple[int, int, str]],
     auto_track_allowed: bool,
     repository_available: bool,
+    auto_track_skip_reasons: dict[int, str] | None = None,
     reviewed_positions: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     position_by_rank: dict[int, int] = {}
@@ -785,6 +793,7 @@ def _annotate_fill_attempt_outcomes(
         rank = int(record.get("candidate_rank") or 0)
         position_id = position_by_rank.get(rank)
         auto_track_outcome = outcome_by_rank.get(rank)
+        auto_track_skip_reason = str((auto_track_skip_reasons or {}).get(rank) or "").strip()
         if not auto_track_allowed:
             record.update(
                 {
@@ -806,11 +815,14 @@ def _annotate_fill_attempt_outcomes(
             )
             continue
         if position_id is None:
+            fill_outcome_reason = auto_track_skip_reason or "auto_track_skipped_or_missing_fill_price"
             record.update(
                 {
                     "fill_status": "not_filled_auto_track_skipped",
                     "fill_outcome": "no_fill",
-                    "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                    "fill_outcome_reason": fill_outcome_reason,
+                    "auto_track_outcome": "skipped",
+                    "auto_track_skip_reason": fill_outcome_reason,
                     "filled": False,
                 }
             )
@@ -1263,6 +1275,7 @@ def main() -> int:
     picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
 
     tracked_links: list[tuple[int, int] | tuple[int, int, str]] = []
+    auto_track_skip_reasons: dict[int, str] = {}
     auto_track_allowed = _scan_allows_auto_track(scan_result)
     repository_available = bool(getattr(repository, "is_available", False))
     if repository_available and auto_track_allowed:
@@ -1272,6 +1285,7 @@ def main() -> int:
             filled_at=run_at.isoformat(),
             scan_date=scan_date,
             tracked_links=tracked_links,
+            auto_track_skip_reasons=auto_track_skip_reasons,
         )
         print(
             f"Auto-track summary: created={created}, duplicate_open={duplicates}, skipped={skipped}"
@@ -1307,6 +1321,7 @@ def main() -> int:
         tracked_links=tracked_links,
         auto_track_allowed=auto_track_allowed,
         repository_available=repository_available,
+        auto_track_skip_reasons=auto_track_skip_reasons,
         reviewed_positions=reviewed_positions,
     )
     _append_fill_attempt_records(fill_attempt_records)

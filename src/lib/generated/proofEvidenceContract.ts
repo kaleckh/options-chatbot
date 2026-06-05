@@ -77,7 +77,6 @@ export const PROOF_EVIDENCE_CONTRACT = {
     ],
     "tokens": [
       "backfill",
-      "research",
       "historical_replay",
       "historical_selection",
       "historical_chain_native"

@@ -438,22 +438,24 @@ test("Trading Desk component lazy-loads closed rows through paged read routes", 
   assert.ok(source.includes("/api/suggested-trades?status=open"));
   assert.ok(source.includes("status=closed&limit=${CLOSED_POSITION_PAGE_SIZE}&offset="));
   assert.ok(source.includes("status=closed&limit=${CLOSED_SUGGESTED_TRADE_PAGE_SIZE}&offset="));
+  assert.ok(source.includes("CLOSED_POSITION_PAGE_SIZE = 50"));
   assert.ok(source.includes("compact=1"));
   assert.ok(source.includes("fetchClosedPositionsPage"));
   assert.ok(source.includes("fetchClosedSuggestedTradesPage"));
 });
 
-test("Tracked position policy views keep loading until policy history is complete", () => {
+test("Tracked position closed view loads the next batch as the operator scrolls", () => {
   const source = fs.readFileSync(
     path.join(ROOT, "src", "components", "predictions", "TrackedPositionsTab.tsx"),
     "utf8"
   );
 
-  assert.match(source, /needsCompletePolicyHistory/);
-  assert.match(source, /closedDataView === "current_policy"/);
-  assert.match(source, /closedDataView === "learned_away"/);
+  assert.match(source, /IntersectionObserver/);
+  assert.match(source, /shouldAutoLoadNextClosedBatch/);
+  assert.match(source, /More closed history is available/);
   assert.match(source, /onLoadClosedRows\(\)/);
-  assert.match(source, /Loading remaining closed history/);
+  assert.match(source, /onClick=\{\(\) => onLoadClosedRows\(\{ notify: true \}\)\}/);
+  assert.match(source, /: "none"/);
 });
 
 test("Tracked position current policy view shows cohort health rather than raw recent negativity alone", () => {

@@ -89,6 +89,11 @@ class ProofContractTests(unittest.TestCase):
         self.assertFalse(contract.row_counts_as_production_proof(row))
         self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(row))
 
+        research_only_row = self._live_proof_row(research_only=True)
+        self.assertTrue(contract.row_has_research_backfill_marker(research_only_row))
+        self.assertFalse(contract.row_counts_as_production_proof(research_only_row))
+        self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(research_only_row))
+
     def test_proof_grade_exact_closed_requires_contract_and_live_proof(self):
         row = self._live_proof_row()
 
@@ -169,9 +174,27 @@ class ProofContractTests(unittest.TestCase):
                 {"selection_source": "historical_chain_native_exact_contract"}
             )
         )
+        self.assertTrue(contract.scan_pick_has_research_backfill_marker({"research_only": True}))
+        for field, value in {
+            "pricing_evidence_class": "historical_replay",
+            "profitability_evidence_class": "historical_selection",
+            "source_separation": "historical_chain_native",
+        }.items():
+            self.assertTrue(contract.scan_pick_has_research_backfill_marker({field: value}))
         self.assertFalse(
             contract.scan_pick_has_research_backfill_marker(
                 {"selection_source": "live_chain_exact_contract"}
+            )
+        )
+        self.assertFalse(
+            contract.scan_pick_has_research_backfill_marker(
+                {
+                    "selection_source": "live_chain_exact_contract",
+                    "pricing_evidence_class": "proof_live_opra_exact_contract",
+                    "profitability_evidence_class": "research_profitability_calibration",
+                    "source_separation": "pricing_proof_profitability_research",
+                    "promotion_class": "research_bootstrap",
+                }
             )
         )
 

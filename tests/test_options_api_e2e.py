@@ -296,6 +296,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                             "fill_status": "not_filled_auto_track_skipped",
                             "fill_outcome": "no_fill",
                             "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                            "auto_track_skip_reason": "proof_gate_detail_kept_for_operator_audit",
                         },
                         {
                             "candidate_key": "MSFT|swing",
@@ -330,6 +331,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                             "fill_status": "not_filled_auto_track_skipped",
                             "fill_outcome": "no_fill",
                             "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                            "auto_track_skip_reason": "proof_gate_detail_kept_for_operator_audit",
                             "position_link_status": "no_tracked_or_suggested_link",
                             "realized_pnl_status": "no_position_link",
                         }
@@ -380,6 +382,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertEqual(bridge_row["blockers"], [])
         no_fill_row = workflow["no_fill_and_auto_track"]["rows"][0]
         self.assertIn("no executable fill price", no_fill_row["fill_discipline_explanation"])
+        self.assertEqual(
+            no_fill_row["auto_track_skip_reason"],
+            "proof_gate_detail_kept_for_operator_audit",
+        )
         self.assertEqual(
             workflow["current_policy_circuit_breaker"]["lane_routes"][0]["route_status"],
             "paper_validation_only",

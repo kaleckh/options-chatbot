@@ -35,11 +35,11 @@ const FALLBACK_SCAN_PLAYBOOKS = [
   { id: "bullish_momentum", label: "Bullish Momentum" },
   { id: "bearish_defensive", label: "Bearish Defensive" },
   { id: "regular_bearish_put_primary", label: "Regular Bearish Put Primary" },
-  { id: "tracked_winner_observation", label: "Tracked Winner Observation" },
+  { id: "tracked_winner_observation", label: "Tracked Winner Research" },
   { id: "quality90_debit55_canary", label: "Quality 90 Debit 55 Canary" },
-  { id: "bearish_index_put_observation", label: "Bearish Index Put Observation" },
-  { id: "range_breakout_observation", label: "Range Breakout Observation" },
-  { id: "volatility_expansion_observation", label: "Volatility Expansion Observation" },
+  { id: "bearish_index_put_observation", label: "Bearish Index Put" },
+  { id: "range_breakout_observation", label: "Range Breakout" },
+  { id: "volatility_expansion_observation", label: "Volatility Expansion" },
   { id: "speculative", label: "Speculative" },
 ] as const;
 

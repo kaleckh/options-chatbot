@@ -492,6 +492,7 @@ export interface PaperGateValidationRow {
   fill_outcome?: string | null;
   fill_outcome_reason?: string | null;
   auto_track_outcome?: string | null;
+  auto_track_skip_reason?: string | null;
   auto_track_position_id?: number | null;
   position_link_status?: string | null;
   realized_pnl_status?: string | null;

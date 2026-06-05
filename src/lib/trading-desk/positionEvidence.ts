@@ -688,7 +688,7 @@ export function getPositionEvidenceDescriptor(
     compactEvidence.migrated_paper
   );
   const backfillOrResearch =
-    Boolean(source?.research_only || compactEvidence.research_backfill) ||
+    Boolean(rowRecord.research_only || source?.research_only || compactEvidence.research_backfill) ||
     hasAnyEvidenceIdentityField(rowRecord, sourceRecord, RESEARCH_BACKFILL_IDENTITY_FIELDS) ||
     hasAnyEvidenceToken(evidenceValues, RESEARCH_BACKFILL_TOKENS);
   const lifecycleOnly =

@@ -287,7 +287,7 @@ function titleCaseWords(value: string): string {
 
 function normalizeLaneId(value: string): string {
   const normalized = value.trim().toLowerCase();
-  return normalized || "unlabeled";
+  return normalized || "source_missing";
 }
 
 function laneLabelFromId(value: string): string {
@@ -301,14 +301,26 @@ function canonicalLaneDescriptor(rawId: string, rawLabel?: string | null): {
   const id = normalizeLaneId(rawId);
   const label = String(rawLabel || "").trim();
   const searchable = `${id} ${label}`.toLowerCase();
+  if (id === "source_missing" || id === "unlabeled" || id === "unknown") {
+    return { id: "source_missing", label: "Source Missing" };
+  }
+  if (id === "legacy_scheduled_scan") {
+    return { id: "historical_import", label: "Historical Import" };
+  }
   if (searchable.includes("bullish_pullback") || searchable.includes("bullish pullback")) {
     return { id: "bullish_pullback", label: "Bullish Pullback" };
+  }
+  if (id === "tracked_winner_primary") {
+    return { id, label: "Tracked Winner" };
+  }
+  if (id === "tracked_winner_observation") {
+    return { id, label: "Tracked Winner Research" };
   }
   if (id === COMMODITY_PLAYBOOK_ID || searchable.includes("ai_commodity") || searchable.includes("ai commodity")) {
     return { id: "ai_commodity", label: "AI Commodity" };
   }
-  if (id === "legacy_scheduled_scan") {
-    return { id, label: "Legacy Scheduled Scan" };
+  if (id.endsWith("_observation")) {
+    return { id, label: label.replace(/\s+Observation$/i, "") || laneLabelFromId(id.replace(/_observation$/, "")) };
   }
   return { id, label: label || laneLabelFromId(id) };
 }
@@ -333,11 +345,11 @@ export function getPositionLaneDescriptor(position: TrackedPosition | SuggestedT
     source?.strategy_label ||
     source?.ai_commodity_bucket ||
     source?.cohort_id ||
-    "unlabeled";
+    "source_missing";
   const rawPlaybookLabel =
     source?.playbook_label ||
     source?.strategy_label ||
-    (scheduledLegacy ? "Legacy Scheduled Scan" : null) ||
+    (scheduledLegacy ? "Historical Import" : null) ||
     (rawPlaybookId === COMMODITY_PLAYBOOK_ID ? "AI Commodity" : null) ||
     laneLabelFromId(String(rawPlaybookId));
   const lane = canonicalLaneDescriptor(String(rawPlaybookId), rawPlaybookLabel);
@@ -375,10 +387,10 @@ export function positionLaneFilterLabel(laneFilter: string, options: PositionLan
 }
 
 export function laneMixSummary(options: PositionLaneOption[]): string {
-  if (!options.length) return "Lane mix: none.";
+  if (!options.length) return "Source mix: none.";
   const visible = options.slice(0, 3).map((option) => `${option.label} ${option.count}`);
   const remainder = options.length - visible.length;
-  return `Lane mix: ${visible.join(" / ")}${remainder > 0 ? ` / +${remainder} more` : ""}.`;
+  return `Source mix: ${visible.join(" / ")}${remainder > 0 ? ` / +${remainder} more` : ""}.`;
 }
 
 export function renderPositionLaneCell(position: TrackedPosition | SuggestedTrade) {

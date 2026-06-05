@@ -59,6 +59,11 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Set up uv
         uses: astral-sh/setup-uv@v5
 
@@ -68,8 +73,8 @@ jobs:
       - name: Check Python dependency integrity
         run: uv run --locked python -m pip check
 
-      - name: Verify route parity docs
-        run: uv run --locked python scripts/generate_route_parity.py --check
+      - name: Verify generated docs and contracts
+        run: npm run verify:docs
 
       - name: Run backend tests
         run: uv run --locked python -m unittest discover -s tests -p "test_*.py" -v
@@ -141,5 +146,40 @@ jobs:
       - name: Typecheck frontend
         run: npm run verify:typecheck
 
+      - name: Run frontend node tests
+        run: npm run verify:node
+
       - name: Build frontend
         run: npm run build
+
+  e2e-proof-gates:
+    needs:
+      - backend-tests
+      - daytrading-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install Python dependencies
+        run: uv sync --locked
+
+      - name: Run AI commodity no-write accuracy gate
+        run: npm run verify:accuracy:no-write
+
+      - name: Run profit-loop dry e2e gate
+        run: npm run verify:profit-loop:dry

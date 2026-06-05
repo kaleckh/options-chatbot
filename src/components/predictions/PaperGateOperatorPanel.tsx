@@ -76,7 +76,7 @@ function ValidationRows({ rows }: { rows: PaperGateValidationRow[] }) {
       {rows.slice(0, 6).map((row, index) => (
         <div key={`${row.candidate_key || row.contract_symbol || index}`} className="rounded-md border border-border bg-bg-3 px-3 py-2">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-xs font-semibold text-text-1">{candidateLabel(row) || "Unlabeled candidate"}</div>
+            <div className="text-xs font-semibold text-text-1">{candidateLabel(row) || "Source missing"}</div>
             <div className="font-mono text-[11px] uppercase text-text-3">
               {fmtUpperLabel(row.validation_outcome)}
             </div>

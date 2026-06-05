@@ -451,6 +451,7 @@ def test_validation_disposition_splits_paper_proof_and_blocked(
             "fill_status": "not_filled_auto_track_skipped",
             "fill_outcome": "no_fill",
             "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+            "auto_track_skip_reason": "proof_gate_detail_kept_for_operator_audit",
         },
     ]
     fill_attempts.write_text("\n".join(json.dumps(row) for row in fill_rows) + "\n", encoding="utf8")
@@ -464,6 +465,9 @@ def test_validation_disposition_splits_paper_proof_and_blocked(
 
     assert outcomes == {"SPY": "paper_only", "QQQ": "proof_ineligible", "IWM": "blocked"}
     assert report["summary"]["outcome_counts"] == {"blocked": 1, "paper_only": 1, "proof_ineligible": 1}
+    assert next(row for row in report["candidates"] if row["ticker"] == "QQQ")[
+        "auto_track_skip_reason"
+    ] == "proof_gate_detail_kept_for_operator_audit"
 
 
 class DailyAllLanesAuditTests(unittest.TestCase):

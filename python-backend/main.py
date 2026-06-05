@@ -401,6 +401,7 @@ def _compact_validation_row(row: dict[str, Any]) -> dict[str, Any]:
         "fill_outcome": row.get("fill_outcome"),
         "fill_outcome_reason": row.get("fill_outcome_reason"),
         "auto_track_outcome": row.get("auto_track_outcome"),
+        "auto_track_skip_reason": row.get("auto_track_skip_reason"),
         "auto_track_position_id": row.get("auto_track_position_id"),
         "position_link_status": row.get("position_link_status"),
         "realized_pnl_status": row.get("realized_pnl_status"),

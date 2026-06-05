@@ -419,6 +419,7 @@ def build_validation_disposition_report(
                 "fill_outcome": fill_attempt.get("fill_outcome") if fill_attempt else None,
                 "fill_outcome_reason": fill_attempt.get("fill_outcome_reason") if fill_attempt else None,
                 "auto_track_outcome": fill_attempt.get("auto_track_outcome") if fill_attempt else None,
+                "auto_track_skip_reason": fill_attempt.get("auto_track_skip_reason") if fill_attempt else None,
                 "auto_track_position_id": fill_attempt.get("auto_track_position_id") if fill_attempt else None,
                 "recent_cohort_circuit_breaker": row.get("recent_cohort_circuit_breaker"),
             }

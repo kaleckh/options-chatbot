@@ -7,7 +7,16 @@ export function fmtMoney(value?: number | null, digits: number = 2): string {
 
 export function fmtPct(value?: number | null, digits: number = 1): string {
   if (value == null || Number.isNaN(value)) return "\u2014";
-  return `${value >= 0 ? "+" : ""}${value.toFixed(digits)}%`;
+  const absoluteValue = Math.abs(value);
+  const roundedMagnitude = Number(absoluteValue.toFixed(digits));
+  const sign = value > 0 ? "+" : value < 0 ? "-" : "";
+
+  if (absoluteValue > 0 && roundedMagnitude === 0) {
+    const threshold = 1 / 10 ** digits;
+    return `${sign}<${threshold.toFixed(digits)}%`;
+  }
+
+  return `${sign}${absoluteValue.toFixed(digits)}%`;
 }
 
 export function fmtDate(value?: string | null): string {
