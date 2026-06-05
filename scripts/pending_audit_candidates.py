@@ -448,13 +448,16 @@ def build_validation_disposition_report(
 
 
 def _candidate_scan_date_for_disposition(row: dict[str, Any]) -> str:
-    validation = _norm_text(row.get("validation_recorded_at_utc"))
-    if validation:
-        return validation[:10]
+    explicit = _norm_text(row.get("scan_date"))
+    if explicit:
+        return explicit[:10]
     audit = _norm_text(row.get("audit_generated_at_utc"))
     if audit:
         return audit[:10]
-    return _norm_text(row.get("queue_recorded_at_utc"))[:10]
+    queued = _norm_text(row.get("queue_recorded_at_utc"))
+    if queued:
+        return queued[:10]
+    return _norm_text(row.get("validation_recorded_at_utc"))[:10]
 
 
 def write_validation_disposition_report(

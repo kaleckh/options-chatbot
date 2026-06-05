@@ -165,6 +165,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
         self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
         self.options_profit_state_dir = os.path.join(self._tmp.name, "options_profit")
+        self.forward_tracking_dir = os.path.join(self._tmp.name, "forward_tracking")
+        self.profitability_lab_dir = os.path.join(self._tmp.name, "profitability_lab")
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
         mds.reset_cache_stats()
@@ -180,6 +182,8 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
                     "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
                     "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
+                    "OPTIONS_FORWARD_TRACKING_DIR": self.forward_tracking_dir,
+                    "OPTIONS_PROFITABILITY_LAB_DIR": self.profitability_lab_dir,
                     "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
                     "OPTIONS_RUN_MODE": "test",
                 },
@@ -226,7 +230,202 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertIn("put", payload["active_incumbents"]["SPY"])
         self.assertTrue(payload["active_incumbents"]["SPY"]["call"]["candidate_id"].startswith("SPY__call__"))
         self.assertTrue(payload["active_incumbents"]["QQQ"]["put"]["candidate_id"].startswith("QQQ__put__"))
+        self.assertEqual(
+            payload["paper_gate_operator_workflow"]["primary_state"],
+            "paper_gate_artifacts_missing",
+        )
         self.assertFalse(Path(self.options_profit_state_dir).exists())
+
+    def test_options_profit_status_endpoint_overlays_paper_gate_operator_workflow(self):
+        paper_dir = Path(self.profitability_lab_dir) / "regular-options-paper-shortlist"
+        forward_dir = Path(self.forward_tracking_dir)
+        paper_dir.mkdir(parents=True, exist_ok=True)
+        forward_dir.mkdir(parents=True, exist_ok=True)
+
+        (paper_dir / "latest.json").write_text(
+            json.dumps(
+                {
+                    "report_id": "regular_options_paper_shortlist",
+                    "generated_at_utc": "2026-06-04T18:00:00Z",
+                    "summary": {
+                        "release_gate_status": "paper_review_candidates_available",
+                        "eligible_count": 1,
+                        "invariant_violation_count": 0,
+                        "live_policy_change": False,
+                    },
+                    "eligible_paper_review_candidates": [
+                        {
+                            "symbol": "AAPL",
+                            "playbook_id": "swing",
+                            "bridge_status": "fresh_executable_tier_a_paper_shortlist_candidate",
+                            "matched_tier_a_lanes": ["swing"],
+                            "blockers": [],
+                            "match_type": "lane_signature",
+                            "guardrail_decision": "clear",
+                            "fresh_executable_quote_window": True,
+                        }
+                    ],
+                    "fresh_scan_non_eligible_preview": [],
+                    "proof_policy": {
+                        "readback_is_not": "scanner promotion or broker action",
+                    },
+                }
+            ),
+            encoding="utf8",
+        )
+        (forward_dir / "pending_scan_candidate_validation_latest.json").write_text(
+            json.dumps(
+                {
+                    "report_id": "pending_scan_candidate_validation_disposition",
+                    "generated_at_utc": "2026-06-04T18:01:00Z",
+                    "summary": {
+                        "candidate_count": 2,
+                        "outcome_counts": {"proof_ineligible": 1, "no_longer_matched": 1},
+                    },
+                    "candidates": [
+                        {
+                            "candidate_key": "AAPL|swing",
+                            "ticker": "AAPL",
+                            "playbook_id": "swing",
+                            "direction": "call",
+                            "expiry": "2026-06-26",
+                            "contract_symbol": "AAPL260626C00200000",
+                            "outcome": "proof_ineligible",
+                            "outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                            "fill_attempt_status": "logged",
+                            "fill_status": "not_filled_auto_track_skipped",
+                            "fill_outcome": "no_fill",
+                            "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                        },
+                        {
+                            "candidate_key": "MSFT|swing",
+                            "ticker": "MSFT",
+                            "playbook_id": "swing",
+                            "outcome": "no_longer_matched",
+                            "outcome_reason": "candidate_not_returned_by_market_hours_validation_scan",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf8",
+        )
+        (forward_dir / "regular_options_fresh_evidence_loop_latest.json").write_text(
+            json.dumps(
+                {
+                    "report_id": "regular_options_fresh_evidence_loop",
+                    "generated_at_utc": "2026-06-04T18:02:00Z",
+                    "summary": {
+                        "candidate_count": 2,
+                        "promotion_discussion_ready_count": 0,
+                        "live_policy_change": False,
+                    },
+                    "candidates": [
+                        {
+                            "candidate_key": "AAPL|swing",
+                            "ticker": "AAPL",
+                            "playbook_id": "swing",
+                            "validation_outcome": "proof_ineligible",
+                            "entry_evidence_status": "fresh_executable_exact_entry",
+                            "fill_attempt_status": "logged",
+                            "fill_status": "not_filled_auto_track_skipped",
+                            "fill_outcome": "no_fill",
+                            "fill_outcome_reason": "auto_track_skipped_or_missing_fill_price",
+                            "position_link_status": "no_tracked_or_suggested_link",
+                            "realized_pnl_status": "no_position_link",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf8",
+        )
+        (forward_dir / "current_policy_circuit_breaker_latest.json").write_text(
+            json.dumps(
+                {
+                    "report_id": "current_policy_circuit_breaker",
+                    "generated_at_utc": "2026-06-04T18:03:00Z",
+                    "summary": {
+                        "breaker_active": True,
+                        "paper_validation_only_lane_count": 1,
+                        "live_policy_change": False,
+                    },
+                    "lane_routes": [
+                        {
+                            "lane_id": "short_term",
+                            "route_status": "paper_validation_only",
+                            "route_reason": "recovery_gates_failed",
+                            "recovery_gate_failures": ["fresh_current_policy_rows"],
+                            "lane_deleted": False,
+                            "live_policy_change": False,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf8",
+        )
+
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+        workflow = response.json()["paper_gate_operator_workflow"]
+
+        self.assertEqual(workflow["primary_state"], "paper_review_candidates_available")
+        self.assertFalse(workflow["live_policy_change"])
+        self.assertEqual(workflow["summary"]["eligible_count"], 1)
+        self.assertEqual(workflow["summary"]["no_fill_or_auto_track_skipped_count"], 1)
+        self.assertEqual(
+            workflow["summary"]["pending_outcome_counts"],
+            {"proof_ineligible": 1, "no_longer_matched": 1},
+        )
+        bridge_row = workflow["paper_shortlist"]["eligible_rows"][0]
+        self.assertEqual(bridge_row["matched_tier_a_lanes"], ["swing"])
+        self.assertEqual(bridge_row["blockers"], [])
+        no_fill_row = workflow["no_fill_and_auto_track"]["rows"][0]
+        self.assertIn("no executable fill price", no_fill_row["fill_discipline_explanation"])
+        self.assertEqual(
+            workflow["current_policy_circuit_breaker"]["lane_routes"][0]["route_status"],
+            "paper_validation_only",
+        )
+
+    def test_options_profit_status_endpoint_keeps_invariant_bad_paper_gate_fail_closed(self):
+        paper_dir = Path(self.profitability_lab_dir) / "regular-options-paper-shortlist"
+        forward_dir = Path(self.forward_tracking_dir)
+        paper_dir.mkdir(parents=True, exist_ok=True)
+        forward_dir.mkdir(parents=True, exist_ok=True)
+
+        (paper_dir / "latest.json").write_text(
+            json.dumps(
+                {
+                    "report_id": "regular_options_paper_shortlist",
+                    "summary": {
+                        "release_gate_status": "blocked_invariant_violations",
+                        "eligible_count": 1,
+                        "invariant_violation_count": 1,
+                        "live_policy_change": False,
+                    },
+                    "eligible_paper_review_candidates": [{"symbol": "AAPL", "playbook_id": "swing"}],
+                }
+            ),
+            encoding="utf8",
+        )
+        (forward_dir / "pending_scan_candidate_validation_latest.json").write_text(
+            json.dumps({"summary": {"candidate_count": 0, "outcome_counts": {}}, "candidates": []}),
+            encoding="utf8",
+        )
+        (forward_dir / "regular_options_fresh_evidence_loop_latest.json").write_text(
+            json.dumps({"summary": {"candidate_count": 0, "live_policy_change": False}, "candidates": []}),
+            encoding="utf8",
+        )
+        (forward_dir / "current_policy_circuit_breaker_latest.json").write_text(
+            json.dumps({"summary": {"breaker_active": False, "live_policy_change": False}, "lane_routes": []}),
+            encoding="utf8",
+        )
+
+        response = self.client.get("/api/options-profit/status")
+        self.assertEqual(response.status_code, 200)
+        workflow = response.json()["paper_gate_operator_workflow"]
+
+        self.assertEqual(workflow["primary_state"], "paper_gate_invariant_violations")
+        self.assertEqual(workflow["summary"]["eligible_count"], 1)
+        self.assertEqual(workflow["summary"]["invariant_violation_count"], 1)
 
     def test_supervised_scan_request_defaults_portfolio_caps_on(self):
         captured: dict[str, object] = {}

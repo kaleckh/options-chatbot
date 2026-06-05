@@ -287,6 +287,295 @@ def _read_latest_options_profit_decision(state_dir: Path) -> dict[str, Any] | No
     return None
 
 
+def _forward_tracking_dir() -> Path:
+    override = os.getenv("OPTIONS_FORWARD_TRACKING_DIR")
+    if override:
+        return Path(override).resolve()
+    return Path(ROOT_DIR) / "data" / "forward-tracking"
+
+
+def _profitability_lab_dir() -> Path:
+    override = os.getenv("OPTIONS_PROFITABILITY_LAB_DIR")
+    if override:
+        return Path(override).resolve()
+    return Path(ROOT_DIR) / "data" / "profitability-lab"
+
+
+def _operator_artifact_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path(ROOT_DIR).resolve())).replace("\\", "/")
+    except Exception:
+        return str(path)
+
+
+def _read_operator_artifact(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    ref: dict[str, Any] = {
+        "path": _operator_artifact_path(path),
+        "available": False,
+    }
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        ref["error"] = "missing_artifact"
+        return {}, ref
+    except Exception as exc:
+        ref["error"] = f"unreadable_artifact:{type(exc).__name__}"
+        return {}, ref
+    if not isinstance(payload, dict):
+        ref["error"] = "artifact_not_object"
+        return {}, ref
+    ref["available"] = True
+    ref["generated_at_utc"] = payload.get("generated_at_utc") or payload.get("generated_at")
+    ref["report_id"] = payload.get("report_id")
+    return payload, ref
+
+
+def _as_str_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item or "").strip()]
+
+
+def _compact_bridge_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "symbol": row.get("symbol") or row.get("ticker"),
+        "playbook_id": row.get("playbook_id") or row.get("lane_id"),
+        "bridge_status": row.get("bridge_status"),
+        "blockers": _as_str_list(row.get("blockers")),
+        "matched_tier_a_lanes": _as_str_list(row.get("matched_tier_a_lanes")),
+        "match_type": row.get("match_type"),
+        "guardrail_decision": row.get("guardrail_decision"),
+        "fresh_executable_quote_window": bool(row.get("fresh_executable_quote_window")),
+    }
+
+
+def _fill_discipline_explanation(row: dict[str, Any]) -> str:
+    outcome = str(row.get("validation_outcome") or row.get("outcome") or "").lower()
+    fill_status = str(row.get("fill_status") or "").lower()
+    fill_outcome = str(row.get("fill_outcome") or "").lower()
+    fill_attempt_status = str(row.get("fill_attempt_status") or "").lower()
+    outcome_reason = str(row.get("validation_outcome_reason") or row.get("outcome_reason") or "").strip()
+    fill_reason = str(row.get("fill_outcome_reason") or "").strip()
+    auto_track = str(row.get("auto_track_outcome") or "").lower()
+
+    if outcome == "no_longer_matched":
+        return (
+            "The candidate did not return in the market-hours validation scan, so there is no "
+            "fresh executable entry to track."
+        )
+    if fill_attempt_status == "missing" or (not fill_status and not fill_outcome):
+        return "No fill attempt was logged, so the row cannot prove an executable entry."
+    if "not_filled" in fill_status or fill_outcome == "no_fill":
+        if "missing_fill_price" in fill_reason or "auto_track_skipped" in fill_reason:
+            return (
+                "A fill attempt was logged, but no executable fill price was captured; "
+                "auto-track stayed skipped."
+            )
+        return f"A fill attempt was logged as no-fill: {fill_reason or outcome_reason or 'no executable fill evidence'}."
+    if auto_track in {"created", "created_or_existing"}:
+        return "Auto-track produced a tracked row; exact realized exit P&L is still required before promotion discussion."
+    if "duplicate" in auto_track:
+        return "Auto-track found an existing row instead of opening a new tracked row; exact realized exit P&L is still required."
+    if outcome == "paper_only":
+        return "The circuit breaker routed this lane to paper validation only; no live policy action is allowed."
+    if outcome == "proof_ineligible":
+        return f"The validation row is proof-ineligible: {outcome_reason or fill_reason or 'missing proof-grade evidence'}."
+    return outcome_reason or fill_reason or "No fill-discipline detail was recorded for this row."
+
+
+def _compact_validation_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "candidate_key": row.get("candidate_key"),
+        "ticker": row.get("ticker"),
+        "playbook_id": row.get("playbook_id"),
+        "direction": row.get("direction"),
+        "expiry": row.get("expiry"),
+        "contract_symbol": row.get("contract_symbol"),
+        "short_contract_symbol": row.get("short_contract_symbol"),
+        "validation_outcome": row.get("validation_outcome") or row.get("outcome"),
+        "validation_outcome_reason": row.get("validation_outcome_reason") or row.get("outcome_reason"),
+        "candidate_status": row.get("candidate_status"),
+        "entry_evidence_status": row.get("entry_evidence_status"),
+        "fill_attempt_status": row.get("fill_attempt_status"),
+        "fill_status": row.get("fill_status"),
+        "fill_outcome": row.get("fill_outcome"),
+        "fill_outcome_reason": row.get("fill_outcome_reason"),
+        "auto_track_outcome": row.get("auto_track_outcome"),
+        "auto_track_position_id": row.get("auto_track_position_id"),
+        "position_link_status": row.get("position_link_status"),
+        "realized_pnl_status": row.get("realized_pnl_status"),
+        "promotion_discussion_ready": bool(row.get("promotion_discussion_ready")),
+        "fill_discipline_explanation": _fill_discipline_explanation(row),
+    }
+
+
+def _build_paper_gate_operator_workflow() -> dict[str, Any]:
+    forward_dir = _forward_tracking_dir()
+    profitability_dir = _profitability_lab_dir()
+    paper_shortlist, paper_ref = _read_operator_artifact(
+        profitability_dir / "regular-options-paper-shortlist" / "latest.json"
+    )
+    fresh_loop, fresh_ref = _read_operator_artifact(
+        forward_dir / "regular_options_fresh_evidence_loop_latest.json"
+    )
+    pending_validation, pending_ref = _read_operator_artifact(
+        forward_dir / "pending_scan_candidate_validation_latest.json"
+    )
+    circuit_breaker, breaker_ref = _read_operator_artifact(
+        forward_dir / "current_policy_circuit_breaker_latest.json"
+    )
+
+    paper_summary = dict(paper_shortlist.get("summary") or {})
+    fresh_summary = dict(fresh_loop.get("summary") or {})
+    pending_summary = dict(pending_validation.get("summary") or {})
+    breaker_summary = dict(circuit_breaker.get("summary") or {})
+
+    eligible_rows = [
+        _compact_bridge_row(row)
+        for row in list(paper_shortlist.get("eligible_paper_review_candidates") or [])[:10]
+        if isinstance(row, dict)
+    ]
+    bridge_preview_rows = [
+        _compact_bridge_row(row)
+        for row in list(paper_shortlist.get("fresh_scan_non_eligible_preview") or [])[:10]
+        if isinstance(row, dict)
+    ]
+    pending_candidates = [
+        row for row in list(pending_validation.get("candidates") or []) if isinstance(row, dict)
+    ]
+    fresh_candidates = [
+        row for row in list(fresh_loop.get("candidates") or []) if isinstance(row, dict)
+    ]
+    pending_rows = [
+        _compact_validation_row(row)
+        for row in pending_candidates[:12]
+    ]
+    fresh_rows = [
+        _compact_validation_row(row)
+        for row in fresh_candidates[:12]
+    ]
+    no_fill_source_rows = fresh_candidates or pending_candidates
+    all_no_fill_rows = [
+        row
+        for row in no_fill_source_rows
+        if row.get("fill_status") == "not_filled_auto_track_skipped"
+        or row.get("fill_outcome") == "no_fill"
+        or row.get("fill_attempt_status") == "missing"
+        or (
+            not row.get("fill_status")
+            and not row.get("fill_outcome")
+            and not row.get("fill_attempt_status")
+        )
+    ]
+    no_fill_rows = [
+        _compact_validation_row(row)
+        for row in all_no_fill_rows[:12]
+    ]
+    route_rows = [
+        {
+            "lane_id": row.get("lane_id"),
+            "route_status": row.get("route_status"),
+            "route_reason": row.get("route_reason"),
+            "recovery_gate_failures": _as_str_list(row.get("recovery_gate_failures")),
+            "lane_deleted": bool(row.get("lane_deleted")),
+            "live_policy_change": bool(row.get("live_policy_change")),
+        }
+        for row in list(circuit_breaker.get("lane_routes") or [])[:6]
+        if isinstance(row, dict)
+    ]
+
+    release_gate_status = str(paper_summary.get("release_gate_status") or "artifact_missing")
+    eligible_count = int(paper_summary.get("eligible_count") or 0)
+    invariant_violation_count = int(paper_summary.get("invariant_violation_count") or 0)
+    artifacts_available = all(
+        bool(ref.get("available"))
+        for ref in (paper_ref, fresh_ref, pending_ref, breaker_ref)
+    )
+    if not artifacts_available:
+        primary_state = "paper_gate_artifacts_missing"
+        operator_message = "Paper-gate artifacts are missing or unreadable; treat the scanner as paper-review-only."
+    elif (
+        release_gate_status == "paper_review_candidates_available"
+        and eligible_count > 0
+        and invariant_violation_count == 0
+    ):
+        primary_state = "paper_review_candidates_available"
+        operator_message = "Fresh Tier A paper-review candidates are available for supervised review only."
+    elif release_gate_status == "blocked_invariant_violations" or invariant_violation_count > 0:
+        primary_state = "paper_gate_invariant_violations"
+        operator_message = "Paper-gate invariants are violated; treat the scanner as paper-review-only."
+    else:
+        primary_state = "no_paper_shortlist_candidates"
+        operator_message = "No fresh executable Tier A bridge candidates are currently eligible."
+
+    live_policy_change = any(
+        bool(summary.get("live_policy_change"))
+        for summary in (paper_summary, fresh_summary, breaker_summary)
+    )
+
+    return {
+        "report_id": "regular_options_paper_gate_operator_workflow",
+        "status": "paper_gate_operator_workflow_readback",
+        "generated_at_utc": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "primary_state": primary_state,
+        "operator_message": operator_message,
+        "live_policy_change": live_policy_change,
+        "artifacts": {
+            "paper_shortlist": paper_ref,
+            "fresh_evidence_loop": fresh_ref,
+            "pending_validation": pending_ref,
+            "current_policy_circuit_breaker": breaker_ref,
+        },
+        "summary": {
+            "release_gate_status": release_gate_status,
+            "eligible_count": eligible_count,
+            "invariant_violation_count": invariant_violation_count,
+            "pending_candidate_count": int(pending_summary.get("candidate_count") or 0),
+            "pending_outcome_counts": dict(pending_summary.get("outcome_counts") or {}),
+            "fresh_candidate_count": int(fresh_summary.get("candidate_count") or 0),
+            "promotion_discussion_ready_count": int(fresh_summary.get("promotion_discussion_ready_count") or 0),
+            "no_fill_or_auto_track_skipped_count": len(all_no_fill_rows),
+            "paper_validation_only_lane_count": int(
+                breaker_summary.get("paper_validation_only_lane_count") or 0
+            ),
+            "breaker_active": bool(breaker_summary.get("breaker_active")),
+        },
+        "paper_shortlist": {
+            "eligible_rows": eligible_rows,
+            "non_eligible_preview": bridge_preview_rows,
+            "proof_policy": dict(paper_shortlist.get("proof_policy") or {}),
+        },
+        "pending_validation": {
+            "rows": pending_rows,
+            "summary": pending_summary,
+        },
+        "fresh_evidence_loop": {
+            "rows": fresh_rows,
+            "summary": fresh_summary,
+            "evidence_boundary": dict(fresh_loop.get("evidence_boundary") or {}),
+        },
+        "no_fill_and_auto_track": {
+            "rows": no_fill_rows,
+            "operator_rule": (
+                "No-fill, missing fill-attempt, duplicate, and skipped auto-track states are "
+                "fill-discipline evidence only; they are not trade recommendations or broker fills."
+            ),
+        },
+        "current_policy_circuit_breaker": {
+            "summary": breaker_summary,
+            "lane_routes": route_rows,
+        },
+        "operator_policy": {
+            "readback_is": "Trading Desk paper-gate visibility for supervised regular-options review.",
+            "readback_is_not": "trade recommendation, broker action, scanner promotion, proof-bar change, auth change, or DB mutation.",
+            "paper_review_language": (
+                "Rows shown here are paper-review-only until fresh executable entry, verified linkage, "
+                "and exact realized OPRA/NBBO exit P&L all pass."
+            ),
+        },
+    }
+
+
 def _read_only_options_profit_status() -> dict[str, Any]:
     state_dir = _options_profit_state_dir()
     status_payload = _read_json_artifact(state_dir / "status.json") or {}
@@ -299,7 +588,9 @@ def _read_only_options_profit_status() -> dict[str, Any]:
         live_profile_payload=live_profile,
         decision_payload=decision_payload,
     )
-    return _with_current_tracked_positions_health(status_view)
+    status_view = _with_current_tracked_positions_health(status_view)
+    status_view["paper_gate_operator_workflow"] = _build_paper_gate_operator_workflow()
+    return status_view
 
 
 def _runtime_database_url_configured(repository: Any) -> bool:

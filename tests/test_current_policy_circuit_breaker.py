@@ -185,6 +185,46 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
                 "paper_validation_only",
             )
 
+    def test_circuit_breaker_disposition_uses_candidate_scan_date(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            queue = Path(temp_dir) / "pending.jsonl"
+            fill_attempts = Path(temp_dir) / "fills.jsonl"
+            candidate = {
+                "audit_generated_at_utc": "2026-06-04T16:00:00Z",
+                "candidate_key": "2026-06-04|short_term|SPY|call|2026-06-26|||760.0|780.0",
+                "candidate_status": "pending_live_validation",
+                "tracking_approved_lane": True,
+                "position_tracking_mode": "auto_track",
+                "playbook_id": "short_term",
+                "ticker": "SPY",
+                "direction": "call",
+                "expiry": "2026-06-26",
+                "long_strike": 760.0,
+                "short_strike": 780.0,
+            }
+            queue.write_text(json.dumps(candidate) + "\n", encoding="utf8")
+            circuit = breaker.build_report(
+                cohort_health=_cohort(),
+                point_in_time=_point_in_time(),
+                paper_monitor=_monitor(),
+            )
+
+            pending.append_circuit_breaker_validation_rows(
+                [candidate],
+                queue_file=queue,
+                playbook_id="short_term",
+                circuit_breaker=circuit,
+                recorded_at_utc="2026-06-05T00:05:00Z",
+            )
+            disposition = pending.build_validation_disposition_report(
+                queue_file=queue,
+                fill_attempt_file=fill_attempts,
+                scan_date="2026-06-04",
+            )
+
+            self.assertEqual(disposition["summary"]["outcome_counts"], {"paper_only": 1})
+            self.assertEqual(disposition["candidates"][0]["validation_recorded_at_utc"], "2026-06-05T00:05:00Z")
+
     def test_missing_circuit_breaker_fails_closed_before_auto_track_validation(self) -> None:
         with TemporaryDirectory() as temp_dir:
             queue = Path(temp_dir) / "pending.jsonl"

@@ -4,6 +4,7 @@ import { memo, useMemo } from "react";
 import { RefreshCw } from "lucide-react";
 import FinTable from "@/components/ui/FinTable";
 import Button from "@/components/ui/Button";
+import { OperatorSessionPanel } from "@/components/predictions/OperatorSessionPanel";
 import { ScannerEvidencePanel } from "@/components/predictions/ScannerEvidencePanel";
 import { ScannerPickRecordForm } from "@/components/predictions/ScannerPickRecordForm";
 import {
@@ -253,6 +254,8 @@ export const ScannerTab = memo(function ScannerTab({
           </Button>
         </div>
       </div>
+
+      <OperatorSessionPanel onUnlocked={onRefresh} />
 
       <ScannerEvidencePanel
         useRecommendedPolicy={useRecommendedPolicy}

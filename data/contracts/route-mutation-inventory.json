@@ -179,6 +179,11 @@
     },
     {
       "absolute_url": false,
+      "browser_path": "/api/operator/session",
+      "source_path": "src/components/predictions/OperatorSessionPanel.tsx"
+    },
+    {
+      "absolute_url": false,
       "browser_path": "/api/options-profit/status",
       "source_path": "src/components/predictions/useScannerSurface.ts"
     },

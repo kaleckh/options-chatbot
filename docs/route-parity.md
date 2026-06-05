@@ -203,6 +203,7 @@ Active client components fetch these mounted browser API routes through Next, no
 - `/api/backtest/forward-evidence` from `src/components/predictions/useScannerSurface.ts`
 - `/api/backtest/summary` from `src/components/strategy/StrategyView.tsx`
 - `/api/changelog` from `src/components/strategy/StrategyView.tsx`
+- `/api/operator/session` from `src/components/predictions/OperatorSessionPanel.tsx`
 - `/api/options-profit/status` from `src/components/predictions/useScannerSurface.ts`
 - `/api/positions` from `src/components/predictions/PredictionsView.tsx`
 - `/api/positions` from `src/components/predictions/useTradingDeskRecords.ts`

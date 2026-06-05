@@ -16,8 +16,10 @@ test("ScannerTab delegates scanner evidence and record form rendering", () => {
   assert.ok(lineCount < 350, `ScannerTab.tsx should stay below 350 lines, found ${lineCount}`);
   assert.match(scannerTab, /ScannerEvidencePanel/);
   assert.match(scannerTab, /ScannerPickRecordForm/);
+  assert.match(scannerTab, /OperatorSessionPanel/);
   assert.match(scannerTab, /<ScannerEvidencePanel/);
   assert.match(scannerTab, /<ScannerPickRecordForm/);
+  assert.match(scannerTab, /<OperatorSessionPanel/);
   assert.doesNotMatch(scannerTab, /Options Truth Health/);
   assert.doesNotMatch(scannerTab, /Contract And Quote Provenance/);
 });
@@ -37,6 +39,7 @@ test("ScannerEvidencePanel owns scanner evidence copy without mutations", () => 
 
   assert.match(evidencePanel, /Evidence & guardrails/);
   assert.match(evidencePanel, /Options Truth Health/);
+  assert.match(evidencePanel, /PaperGateOperatorPanel/);
   assert.match(evidencePanel, /Replay-Backed Policy State/);
   assert.match(evidencePanel, /Tracked DB/);
   assert.doesNotMatch(evidencePanel, /fetchWithTimeout/);
@@ -62,4 +65,32 @@ test("ScannerPickRecordForm owns selected-pick form copy without route behavior"
   assert.doesNotMatch(recordForm, /\/api\/scan/);
   assert.doesNotMatch(recordForm, /\/api\/positions/);
   assert.doesNotMatch(recordForm, /\/api\/suggested-trades/);
+});
+
+test("PaperGateOperatorPanel renders paper workflow facts without route behavior", () => {
+  const panel = readRepoFile("src/components/predictions/PaperGateOperatorPanel.tsx");
+
+  assert.match(panel, /Paper Gate Operator Readback/);
+  assert.match(panel, /paper-review-only/);
+  assert.match(panel, /Matched Tier A lanes/);
+  assert.match(panel, /No-Fill \/ Skipped Auto-Track/);
+  assert.match(panel, /fill_discipline_explanation/);
+  assert.doesNotMatch(panel, /fetchWithTimeout/);
+  assert.doesNotMatch(panel, /readJsonResponseOrThrow/);
+  assert.doesNotMatch(panel, /tradingDeskMutationHeaders/);
+  assert.doesNotMatch(panel, /\/api\/scan/);
+  assert.doesNotMatch(panel, /\/api\/positions/);
+});
+
+test("OperatorSessionPanel owns local unlock without persisting the private token", () => {
+  const panel = readRepoFile("src/components/predictions/OperatorSessionPanel.tsx");
+
+  assert.match(panel, /\/api\/operator\/session/);
+  assert.match(panel, /method: "POST"/);
+  assert.match(panel, /options_local_operator_session|Operator session opened|Local Operator/);
+  assert.match(panel, /setToken\(""\)/);
+  assert.doesNotMatch(panel, /localStorage/);
+  assert.doesNotMatch(panel, /sessionStorage/);
+  assert.doesNotMatch(panel, /document\.cookie/);
+  assert.doesNotMatch(panel, /x-options-operator-token/);
 });

@@ -100,6 +100,7 @@ Auth verification map:
   - passive generic read; response lifecycle headers identify `strategy_profile_files` / `read` / `risk_settings`
 - `GET /api/options-profit/status`
   - read-only options-profit status; not a proof owner or row creation path
+  - overlays `paper_gate_operator_workflow` for Trading Desk paper-gate visibility, sourced from the paper-shortlist, fresh-evidence-loop, pending-validation, and current-policy circuit-breaker artifacts
   - response lifecycle headers identify `options_profit_state_artifacts` / `read` / `options_profit_status` while preserving backend timing headers
 
 ### Predictions
@@ -120,6 +121,7 @@ FastAPI also exposes `DELETE /api/predictions/{pred_id}`, but there is no matchi
 - `POST /api/operator/session`
   - Next-only local operator unlock; accepts the server-only `OPTIONS_LOCAL_OPERATOR_TOKEN` in the request body and sets an HttpOnly SameSite=Strict session cookie
   - response lifecycle headers identify `local_operator_session_cookie` / `session_unlock` / `operator_session`
+  - `src/components/predictions/OperatorSessionPanel.tsx` is the browser affordance for opening this local session without storing the token client-side
 
 ### Tracked Positions
 

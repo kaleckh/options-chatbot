@@ -1,6 +1,7 @@
 "use client";
 
 import MetricCard from "@/components/ui/MetricCard";
+import { PaperGateOperatorPanel } from "@/components/predictions/PaperGateOperatorPanel";
 import {
   fmtCompactLabel,
   fmtDate,
@@ -262,6 +263,8 @@ export function ScannerEvidencePanel({
             )}
           </div>
         )}
+
+        <PaperGateOperatorPanel workflow={optionsProfitStatus?.paper_gate_operator_workflow} />
 
         {policy && (
           <div className="bg-bg-2 border border-border rounded-lg p-4 space-y-4">

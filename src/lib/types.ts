@@ -454,6 +454,109 @@ export interface OptionsProfitCandidateRanking {
   [key: string]: unknown;
 }
 
+export interface PaperGateArtifactRef {
+  path?: string | null;
+  available?: boolean;
+  generated_at_utc?: string | null;
+  report_id?: string | null;
+  error?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PaperGateBridgeRow {
+  symbol?: string | null;
+  playbook_id?: string | null;
+  bridge_status?: string | null;
+  blockers?: string[];
+  matched_tier_a_lanes?: string[];
+  match_type?: string | null;
+  guardrail_decision?: string | null;
+  fresh_executable_quote_window?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PaperGateValidationRow {
+  candidate_key?: string | null;
+  ticker?: string | null;
+  playbook_id?: string | null;
+  direction?: string | null;
+  expiry?: string | null;
+  contract_symbol?: string | null;
+  short_contract_symbol?: string | null;
+  validation_outcome?: string | null;
+  validation_outcome_reason?: string | null;
+  candidate_status?: string | null;
+  entry_evidence_status?: string | null;
+  fill_attempt_status?: string | null;
+  fill_status?: string | null;
+  fill_outcome?: string | null;
+  fill_outcome_reason?: string | null;
+  auto_track_outcome?: string | null;
+  auto_track_position_id?: number | null;
+  position_link_status?: string | null;
+  realized_pnl_status?: string | null;
+  promotion_discussion_ready?: boolean;
+  fill_discipline_explanation?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PaperGateOperatorWorkflow {
+  report_id?: string | null;
+  status?: string | null;
+  generated_at_utc?: string | null;
+  primary_state?: string | null;
+  operator_message?: string | null;
+  live_policy_change?: boolean;
+  artifacts?: Record<string, PaperGateArtifactRef>;
+  summary?: {
+    release_gate_status?: string | null;
+    eligible_count?: number | null;
+    invariant_violation_count?: number | null;
+    pending_candidate_count?: number | null;
+    pending_outcome_counts?: Record<string, number>;
+    fresh_candidate_count?: number | null;
+    promotion_discussion_ready_count?: number | null;
+    no_fill_or_auto_track_skipped_count?: number | null;
+    paper_validation_only_lane_count?: number | null;
+    breaker_active?: boolean;
+    [key: string]: unknown;
+  };
+  paper_shortlist?: {
+    eligible_rows?: PaperGateBridgeRow[];
+    non_eligible_preview?: PaperGateBridgeRow[];
+    proof_policy?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  pending_validation?: {
+    rows?: PaperGateValidationRow[];
+    summary?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  fresh_evidence_loop?: {
+    rows?: PaperGateValidationRow[];
+    summary?: Record<string, unknown>;
+    evidence_boundary?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  no_fill_and_auto_track?: {
+    rows?: PaperGateValidationRow[];
+    operator_rule?: string | null;
+    [key: string]: unknown;
+  };
+  current_policy_circuit_breaker?: {
+    summary?: Record<string, unknown>;
+    lane_routes?: Record<string, unknown>[];
+    [key: string]: unknown;
+  };
+  operator_policy?: {
+    readback_is?: string | null;
+    readback_is_not?: string | null;
+    paper_review_language?: string | null;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export interface OptionsProfitStatus {
   generated_at?: string | null;
   daily_truth_refresh?: {
@@ -506,6 +609,7 @@ export interface OptionsProfitStatus {
   last_decision?: Record<string, unknown> | null;
   blockers?: Array<string | OptionsProfitGateBlocker>;
   candidate_rankings?: OptionsProfitCandidateRanking[];
+  paper_gate_operator_workflow?: PaperGateOperatorWorkflow | null;
   [key: string]: unknown;
 }
 

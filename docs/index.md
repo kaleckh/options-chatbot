@@ -140,6 +140,8 @@ These are the living docs for the current worktree:
   - generated paper-shortlist release gate for fresh executable Tier A lane matches, with bridge blockers and live-prohibited states
 - `docs/regular-options-fresh-evidence-loop.md`
   - generated pending-candidate to fill-attempt/tracked-link/exact-realized-P&L readback for the regular options paper gate
+- `docs/regular-options-operator-workflow.md`
+  - Trading Desk operator workflow for local unlock, paper-gate bridge status, pending validation outcomes, and no-fill/skipped auto-track explanations
 - `docs/regular-options-repair-attempts.md`
   - generated exact-repair attempt memory/readback for regular-options replay gaps, including exact-date versus lookahead-only proof posture
 - `docs/regular-options-symbol-sleeves.md`
@@ -200,42 +202,44 @@ Read in this order:
 7. `src/components/predictions/TrackedPositionsTab.tsx`
 8. `src/components/predictions/TrackedStocksTab.tsx`
 9. `src/components/predictions/ScannerTab.tsx`
-10. `src/components/predictions/ScannerEvidencePanel.tsx`
-11. `src/components/predictions/ScannerPickRecordForm.tsx`
-12. `src/components/predictions/SuggestedTradesTab.tsx`
-13. `src/components/predictions/trackedPositionUtils.tsx`
-14. `src/components/predictions/tradingDeskCells.tsx`
-15. `src/components/predictions/tradingDeskFormat.ts`
-16. `src/components/ui/FinTable.tsx`
-17. `src/components/strategy/StrategyView.tsx`
-18. `src/lib/client-json.ts`
-19. `src/lib/python-bridge.ts`
-20. `src/lib/backend/*`
-21. `python-backend/main.py`
-22. `python-backend/backend_route_context.py`
-23. `python-backend/profile_routes.py`
-24. `python-backend/predictions_routes.py`
-25. `python-backend/tools_routes.py`
-26. `python-backend/proof_summary_service.py`
-27. `python-backend/replay_profit_service.py`
-28. `python-backend/repository_contracts.py`
-29. `python-backend/repository_parity.py`
-30. `python-backend/trading_desk_api_models.py`
-31. `src/lib/trading-desk/apiContracts.ts`
-32. `src/lib/trading-desk/apiResponseValidation.ts`
-33. `src/lib/generated/proofEvidenceContract.ts`
-34. `src/lib/trading-desk/proofContract.ts`
-35. `src/lib/trading-desk/positionEvidence.ts`
-36. `scripts/generate_trading_desk_schema_bridge.py`
-37. `scripts/generate_proof_evidence_contract.py`
-38. `scripts/generate_storage_ownership_map.py`
-39. `src/lib/route-lifecycle/routeContracts.ts`
-40. `python-backend/local_db_hardening.py`
-41. `python-backend/repository_migrations.py`
-42. `python-backend/repository_constraints.py`
-43. `python-backend/repository_indexes.py`
-44. `options_chatbot.py`
-45. `wfo_optimizer.py`
+10. `src/components/predictions/OperatorSessionPanel.tsx`
+11. `src/components/predictions/ScannerEvidencePanel.tsx`
+12. `src/components/predictions/PaperGateOperatorPanel.tsx`
+13. `src/components/predictions/ScannerPickRecordForm.tsx`
+14. `src/components/predictions/SuggestedTradesTab.tsx`
+15. `src/components/predictions/trackedPositionUtils.tsx`
+16. `src/components/predictions/tradingDeskCells.tsx`
+17. `src/components/predictions/tradingDeskFormat.ts`
+18. `src/components/ui/FinTable.tsx`
+19. `src/components/strategy/StrategyView.tsx`
+20. `src/lib/client-json.ts`
+21. `src/lib/python-bridge.ts`
+22. `src/lib/backend/*`
+23. `python-backend/main.py`
+24. `python-backend/backend_route_context.py`
+25. `python-backend/profile_routes.py`
+26. `python-backend/predictions_routes.py`
+27. `python-backend/tools_routes.py`
+28. `python-backend/proof_summary_service.py`
+29. `python-backend/replay_profit_service.py`
+30. `python-backend/repository_contracts.py`
+31. `python-backend/repository_parity.py`
+32. `python-backend/trading_desk_api_models.py`
+33. `src/lib/trading-desk/apiContracts.ts`
+34. `src/lib/trading-desk/apiResponseValidation.ts`
+35. `src/lib/generated/proofEvidenceContract.ts`
+36. `src/lib/trading-desk/proofContract.ts`
+37. `src/lib/trading-desk/positionEvidence.ts`
+38. `scripts/generate_trading_desk_schema_bridge.py`
+39. `scripts/generate_proof_evidence_contract.py`
+40. `scripts/generate_storage_ownership_map.py`
+41. `src/lib/route-lifecycle/routeContracts.ts`
+42. `python-backend/local_db_hardening.py`
+43. `python-backend/repository_migrations.py`
+44. `python-backend/repository_constraints.py`
+45. `python-backend/repository_indexes.py`
+46. `options_chatbot.py`
+47. `wfo_optimizer.py`
 
 ## Snapshot Warnings
 
