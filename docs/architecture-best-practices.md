@@ -98,6 +98,6 @@ Before a remediation point is claimed complete, answer:
 
 ## Non-Goals
 
-This doc does not replace generated route inventory, storage ownership maps, mutation inventory, the remediation loop map, memory graph artifacts, generated artifact governance, final closure pack, or proof/source contracts.
+This doc does not replace generated route inventory, storage ownership maps, mutation inventory, the remediation loop map, memory graph artifacts, generated artifact governance, stale-artifact governance, final closure pack, or proof/source contracts.
 
 This doc does not authorize code refactors, schema changes, proof loosening, scanner threshold changes, route payload changes, auth changes, DB behavior changes, or sidecar-lane expansion by itself.

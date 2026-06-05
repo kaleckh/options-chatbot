@@ -16,6 +16,7 @@
     "raw_exact_without_proof_flags",
     "manual_broker_exact_visible_not_proof",
     "top_level_research_backfill_marker",
+    "top_level_research_only_marker",
     "source_snapshot_research_backfill_marker",
     "migrated_historical_paper",
     "stale_live_proof_flag_missing_gates",
@@ -28,21 +29,21 @@
     "mark_exit_closed"
   ],
   "proof_case_counts": {
-    "total_cases": 15,
+    "total_cases": 16,
     "open_rows": 1,
-    "closed_rows": 14,
-    "raw_exact_contract_closed_count": 14,
+    "closed_rows": 15,
+    "raw_exact_contract_closed_count": 15,
     "production_proof_rows": 2,
     "open_production_proof_rows": 1,
     "closed_production_proof_rows": 1,
     "proof_grade_exact_contract_closed_count": 1,
-    "non_proof_closed_position_count": 13
+    "non_proof_closed_position_count": 14
   },
   "proof_summary_tracked_positions": {
     "available": true,
     "open_count": 1,
-    "closed_count": 14,
-    "raw_exact_contract_closed_count": 14,
+    "closed_count": 15,
+    "raw_exact_contract_closed_count": 15,
     "proof_grade_exact_contract_closed_count": 1,
     "exact_contract_closed_count": 1
   },
@@ -69,9 +70,9 @@
     },
     "closed": {
       "tracked": {
-        "count": 14,
-        "priced_count": 13,
-        "wins": 13,
+        "count": 15,
+        "priced_count": 14,
+        "wins": 14,
         "losses": 0,
         "flat": 0,
         "net_pnl_usd": null,
@@ -89,9 +90,9 @@
     },
     "all": {
       "tracked": {
-        "count": 15,
-        "priced_count": 13,
-        "wins": 13,
+        "count": 16,
+        "priced_count": 14,
+        "wins": 14,
         "losses": 0,
         "flat": 0,
         "net_pnl_usd": null,
@@ -120,15 +121,15 @@
     "negative_sum_pct": 0,
     "net_realized_pnl_usd": 30.0,
     "gross_realized_pnl_usd": 30.0,
-    "non_proof_closed_position_count": 13
+    "non_proof_closed_position_count": 14
   },
   "options_profit_status_overlay": {
     "runtime_snapshot_source": "positions_repository_profit_status_snapshot",
     "open_position_count": 1,
-    "total_closed_position_count": 14,
+    "total_closed_position_count": 15,
     "closed_position_count": 1,
     "exact_contract_closed_count": 1,
-    "non_proof_closed_position_count": 13,
+    "non_proof_closed_position_count": 14,
     "net_profit_factor": 999.0,
     "avg_net_pnl_pct": 30.0,
     "realized_profitability_ready": true
