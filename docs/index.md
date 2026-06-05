@@ -144,6 +144,8 @@ These are the living docs for the current worktree:
   - Trading Desk operator workflow for local unlock, paper-gate bridge status, pending validation outcomes, and no-fill/skipped auto-track explanations
 - `docs/regular-options-repair-attempts.md`
   - generated exact-repair attempt memory/readback for regular-options replay gaps, including exact-date versus lookahead-only proof posture
+- `docs/regular-options-repair-burndown.md`
+  - generated exact repair burn-down that ranks unexhausted exact-date targets, separates replay-required rows, and excludes exhausted/lookahead-only loops from active import work
 - `docs/regular-options-symbol-sleeves.md`
   - generated per-symbol sleeve matrix for regular supervised options, separating lane-symbol keep/watch/quarantine/rejected/needs-paper status from proof evidence class
 - `docs/regular-guardrail-starvation-audit.md`

@@ -105,7 +105,9 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
             sleeves = root / "sleeves.json"
             current_policy = root / "current-policy.json"
             starvation = root / "starvation.json"
+            repair_attempts = root / "repair-attempts.json"
             googl_replay = root / "googl-replay.json"
+            repair_attempts.write_text(json.dumps({"latest_attempts": [], "summary": {"latest_attempt_count": 0}}), encoding="utf8")
             googl_replay.write_text(
                 json.dumps(
                     {
@@ -280,6 +282,7 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
                 symbol_sleeves_path=sleeves,
                 current_policy_path=current_policy,
                 guardrail_starvation_path=starvation,
+                repair_attempts_path=repair_attempts,
             )
 
         self.assertEqual(report["status"], "research_paper_capture_queue")
@@ -332,6 +335,8 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
             sleeves = root / "sleeves.json"
             current_policy = root / "current-policy.json"
             starvation = root / "starvation.json"
+            repair_attempts = root / "repair-attempts.json"
+            repair_attempts.write_text(json.dumps({"latest_attempts": [], "summary": {"latest_attempt_count": 0}}), encoding="utf8")
             sleeves.write_text(
                 json.dumps(
                     {
@@ -420,6 +425,7 @@ class RegularOptionsProfitCaptureQueueTests(unittest.TestCase):
                 symbol_sleeves_path=sleeves,
                 current_policy_path=current_policy,
                 guardrail_starvation_path=starvation,
+                repair_attempts_path=repair_attempts,
             )
 
         self.assertEqual(report["summary"]["tier_a_fresh_match_bridge_count"], 0)

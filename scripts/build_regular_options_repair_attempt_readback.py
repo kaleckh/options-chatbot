@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from collections import Counter
@@ -12,6 +13,14 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+
+from scripts.import_missing_replay_quotes_from_thetadata import _finalized_attempts, _initial_attempts  # noqa: E402
+from scripts.regular_options_repair_targets import (  # noqa: E402
+    expand_items,
+    missing_items_from_run_paths,
+    original_target_key,
+    target_filters,
+)
 
 
 DEFAULT_IMPORT_OUTPUT_DIR = ROOT / "data" / "options-validation" / "thetadata-nbbo"
@@ -42,6 +51,15 @@ def _rel(path: Path | str | None) -> str | None:
 def _load_json(path: Path) -> dict[str, Any]:
     payload = json.loads(path.read_text(encoding="utf8"))
     return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_path(path_value: Any) -> Path | None:
+    if not path_value:
+        return None
+    path = Path(str(path_value))
+    if not path.is_absolute():
+        path = ROOT / path
+    return path
 
 
 def _default_summary_paths(import_output_dir: Path = DEFAULT_IMPORT_OUTPUT_DIR) -> list[Path]:
@@ -95,6 +113,161 @@ def _flatten_attempts(summary_path: Path, payload: dict[str, Any]) -> list[dict[
                 "errors": list(attempt.get("errors") or []),
             }
             rows.append(row)
+    return rows
+
+
+def _csv_counts(csv_path: Path | None) -> dict[tuple[str, str], int]:
+    if csv_path is None or not csv_path.exists():
+        return {}
+    counts: dict[tuple[str, str], int] = Counter()
+    try:
+        with csv_path.open("r", encoding="utf8", newline="") as handle:
+            for row in csv.DictReader(handle):
+                contract = str(row.get("contract_symbol") or "").upper()
+                as_of = str(row.get("as_of_utc") or "")[:10]
+                if contract and as_of:
+                    counts[(contract, as_of)] += 1
+    except Exception:
+        return {}
+    return dict(counts)
+
+
+def _legacy_source_label(payload: dict[str, Any]) -> str:
+    import_result = payload.get("import_result") if isinstance(payload.get("import_result"), dict) else {}
+    return str(payload.get("source") or import_result.get("source_label") or "thetadata_opra_nbbo_1m")
+
+
+def _legacy_run_paths(payload: dict[str, Any]) -> list[Path]:
+    paths: list[Path] = []
+    for value in payload.get("input_run_paths") or []:
+        path = _resolve_path(value)
+        if path is not None and path.exists():
+            paths.append(path)
+    return paths
+
+
+def _legacy_filter_sets(payload: dict[str, Any]) -> dict[str, set[str]]:
+    raw = payload.get("target_filters") if isinstance(payload.get("target_filters"), dict) else {}
+    filters = target_filters(
+        tickers=[str(value) for value in raw.get("tickers") or []],
+        contract_symbols=[str(value) for value in raw.get("contract_symbols") or []],
+        quote_dates=[str(value) for value in raw.get("quote_dates") or []],
+    )
+    return {
+        "tickers": set(filters["tickers"]),
+        "contract_symbols": set(filters["contract_symbols"]),
+        "quote_dates": set(filters["quote_dates"]),
+    }
+
+
+def _legacy_request_dates(base_items: list[dict[str, Any]], payload: dict[str, Any]) -> dict[tuple[str, str], list[str]]:
+    request_dates: dict[tuple[str, str], set[str]] = {}
+    expanded = expand_items(base_items, lookahead_calendar_days=int(payload.get("lookahead_calendar_days") or 0))
+    for item in expanded:
+        key = original_target_key(item)
+        quote_date = item.get("quote_date")
+        request_dates.setdefault(key, set()).add(quote_date.isoformat() if hasattr(quote_date, "isoformat") else str(quote_date))
+    return {key: sorted(values) for key, values in request_dates.items()}
+
+
+def _flatten_legacy_attempts(summary_path: Path, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    if payload.get("repair_attempts"):
+        return []
+    run_paths = _legacy_run_paths(payload)
+    if not run_paths:
+        return []
+    filters = _legacy_filter_sets(payload)
+    try:
+        base_items = missing_items_from_run_paths(
+            run_paths,
+            tickers=filters["tickers"],
+            contract_symbols=filters["contract_symbols"],
+            quote_dates=filters["quote_dates"],
+        )
+    except Exception:
+        return []
+    attempts_by_key = _initial_attempts(base_items, source_label=_legacy_source_label(payload))
+    request_dates_by_key = _legacy_request_dates(base_items, payload)
+    counts = _csv_counts(_resolve_path(payload.get("csv_path")))
+    rows_by_contract = {
+        str(contract).upper(): int(count or 0)
+        for contract, count in (payload.get("rows_by_contract") or {}).items()
+    }
+    rows_by_date = {str(date)[:10]: int(count or 0) for date, count in (payload.get("rows_by_date") or {}).items()}
+    errors = [str(error) for error in payload.get("errors") or []]
+
+    for key, attempt in attempts_by_key.items():
+        missing_quote_date, contract_symbol = key
+        contract = str(contract_symbol or "").upper()
+        attempt["request_dates_attempted"] = request_dates_by_key.get(key, [])
+        attempt["errors"] = [error for error in errors if contract in error]
+        if counts:
+            for (row_contract, row_date), count in counts.items():
+                if row_contract != contract:
+                    continue
+                attempt["total_row_count"] += int(count)
+                attempt["available_quote_dates"] = sorted(
+                    set([*attempt.get("available_quote_dates", []), row_date])
+                )
+                if row_date == str(missing_quote_date)[:10]:
+                    attempt["exact_date_row_count"] += int(count)
+                elif row_date > str(missing_quote_date)[:10]:
+                    attempt["lookahead_row_count"] += int(count)
+        elif rows_by_contract.get(contract):
+            total_count = rows_by_contract.get(contract, 0)
+            aggregate_counts_are_contract_scoped = len(attempts_by_key) == 1 and set(rows_by_contract) == {contract}
+            if aggregate_counts_are_contract_scoped:
+                exact_count = min(rows_by_date.get(str(missing_quote_date)[:10], 0), total_count)
+                attempt["exact_date_row_count"] = exact_count
+                attempt["lookahead_row_count"] = max(0, total_count - exact_count)
+                attempt["available_quote_dates"] = sorted(
+                    date for date, count in rows_by_date.items() if int(count or 0) > 0
+                )
+            else:
+                attempt["lookahead_row_count"] = total_count
+                attempt["legacy_aggregate_date_counts_unsafe"] = True
+            attempt["total_row_count"] = total_count
+
+    finalized = _finalized_attempts(
+        attempts_by_key,
+        plan_only=bool(payload.get("plan_only")),
+        import_performed=bool(payload.get("import_result")),
+    )
+    rows: list[dict[str, Any]] = []
+    for attempt in finalized:
+        for key in attempt.get("repair_attempt_keys") or [attempt.get("repair_attempt_key")]:
+            if not key:
+                continue
+            parts = _key_parts(str(key))
+            rows.append(
+                {
+                    "repair_attempt_key": str(key),
+                    **parts,
+                    "summary_path": _rel(summary_path),
+                    "summary_generated_at_utc": str(payload.get("generated_at_utc") or ""),
+                    "dry_run": bool(payload.get("dry_run")),
+                    "plan_only": bool(payload.get("plan_only")),
+                    "write_artifacts": bool(payload.get("write_artifacts", True)),
+                    "legacy_inferred": True,
+                    "source_label": attempt.get("source_label") or _legacy_source_label(payload),
+                    "outcome": attempt.get("outcome"),
+                    "proof_repair_status": attempt.get("proof_repair_status"),
+                    "exact_missing_date_status": attempt.get("exact_missing_date_status"),
+                    "exact_date_row_count": int(attempt.get("exact_date_row_count") or 0),
+                    "lookahead_row_count": int(attempt.get("lookahead_row_count") or 0),
+                    "total_row_count": int(attempt.get("total_row_count") or 0),
+                    "request_dates_attempted": list(attempt.get("request_dates_attempted") or []),
+                    "available_quote_dates": list(attempt.get("available_quote_dates") or []),
+                    "first_available_after_missing_date": attempt.get("first_available_after_missing_date"),
+                    "current_source_exhausted_for_exact_date": bool(
+                        attempt.get("current_source_exhausted_for_exact_date")
+                    ),
+                    "legacy_aggregate_date_counts_unsafe": bool(
+                        attempt.get("legacy_aggregate_date_counts_unsafe")
+                    ),
+                    "errors": list(attempt.get("errors") or []),
+                }
+            )
     return rows
 
 
@@ -155,7 +328,15 @@ def build_readback(summary_paths: list[Path] | None = None) -> dict[str, Any]:
         entry["generated_at_utc"] = payload.get("generated_at_utc")
         entry["repair_attempt_count"] = len(payload.get("repair_attempts") or [])
         inputs.append(entry)
-        attempts.extend(_flatten_attempts(path, payload))
+        flattened = _flatten_attempts(path, payload)
+        if flattened:
+            attempts.extend(flattened)
+        else:
+            legacy_attempts = _flatten_legacy_attempts(path, payload)
+            if legacy_attempts:
+                entry["repair_attempt_count"] = len(legacy_attempts)
+                entry["legacy_inferred_attempt_count"] = len(legacy_attempts)
+                attempts.extend(legacy_attempts)
 
     latest_rows = _latest_attempts(attempts)
     return {
