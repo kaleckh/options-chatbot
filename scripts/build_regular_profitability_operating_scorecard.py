@@ -24,6 +24,10 @@ DEFAULT_AI_COMMODITY_PROGRESS = ROOT / "data" / "ai-commodity-infra" / "progress
 DEFAULT_ENTRY_FILTER_MONITOR = ROOT / "data" / "forward-tracking" / "current_policy_entry_filter_paper_monitor_latest.json"
 DEFAULT_ENTRY_FILTER_WALKFORWARD = ROOT / "data" / "forward-tracking" / "current_policy_entry_filter_walkforward_latest.json"
 DEFAULT_PROFIT_CAPTURE_QUEUE = ROOT / "data" / "profitability-lab" / "regular-options-profit-capture-queue" / "latest.json"
+DEFAULT_PAPER_SHORTLIST = ROOT / "data" / "profitability-lab" / "regular-options-paper-shortlist" / "latest.json"
+DEFAULT_FRESH_EVIDENCE_LOOP = ROOT / "data" / "forward-tracking" / "regular_options_fresh_evidence_loop_latest.json"
+DEFAULT_CURRENT_POLICY_CIRCUIT_BREAKER = ROOT / "data" / "forward-tracking" / "current_policy_circuit_breaker_latest.json"
+DEFAULT_REPAIR_BURNDOWN = ROOT / "data" / "profitability-lab" / "regular-options-repair-burndown" / "latest.json"
 
 
 def _utc_now_iso() -> str:
@@ -50,12 +54,20 @@ def _first_present(*values: Any) -> Any:
 def _load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {"available": False, "path": str(path), "missing": True}
-    payload = json.loads(path.read_text(encoding="utf8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf8"))
+    except Exception as exc:
+        return {
+            "available": False,
+            "path": str(path),
+            "missing": True,
+            "error": f"unreadable:{type(exc).__name__}:{exc}",
+        }
     if isinstance(payload, dict):
         payload.setdefault("available", True)
         payload.setdefault("path", str(path))
         return payload
-    return {"available": False, "path": str(path), "error": "json_root_not_object"}
+    return {"available": False, "path": str(path), "missing": True, "error": "json_root_not_object"}
 
 
 def _delta(after: Any, before: Any) -> float | None:
@@ -335,6 +347,230 @@ def _summarize_profit_capture_queue(payload: dict[str, Any]) -> dict[str, Any]:
         "fresh_scan_matches": [row for row in compact_fresh if row],
         "blocked_but_interesting": [row for row in compact_blocked if row],
         "live_policy_change": bool(payload.get("live_policy_change")),
+    }
+
+
+def _summarize_paper_shortlist(payload: dict[str, Any]) -> dict[str, Any]:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "release_gate_status": "missing",
+            "eligible_count": 0,
+            "invariant_violation_count": 0,
+            "source_queue_rows": 0,
+            "fresh_bridge_status_counts": {},
+            "fresh_bridge_blocker_counts": {},
+            "selection_readiness_counts": {},
+            "live_policy_change": False,
+        }
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": payload.get("status") or "unknown",
+        "release_gate_status": summary.get("release_gate_status") or "unknown",
+        "eligible_count": int(summary.get("eligible_count") or 0),
+        "invariant_violation_count": int(summary.get("invariant_violation_count") or 0),
+        "source_queue_rows": int(summary.get("source_queue_rows") or 0),
+        "source_queue_status": summary.get("source_queue_status"),
+        "tier_counts": dict(summary.get("tier_counts") or {}),
+        "fresh_bridge_status_counts": dict(summary.get("fresh_bridge_status_counts") or {}),
+        "fresh_bridge_blocker_counts": dict(summary.get("fresh_bridge_blocker_counts") or {}),
+        "selection_readiness_counts": dict(summary.get("selection_readiness_counts") or {}),
+        "live_policy_change": bool(summary.get("live_policy_change") or payload.get("live_policy_change")),
+    }
+
+
+def _summarize_fresh_evidence_loop(payload: dict[str, Any]) -> dict[str, Any]:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "candidate_count": 0,
+            "validation_outcome_counts": {},
+            "entry_evidence_status_counts": {},
+            "realized_pnl_status_counts": {},
+            "no_longer_matched_count": 0,
+            "proof_ineligible_count": 0,
+            "linked_position_count": 0,
+            "exact_realized_pnl_count": 0,
+            "promotion_discussion_ready_count": 0,
+            "live_policy_change": False,
+        }
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": payload.get("status") or "unknown",
+        "candidate_count": int(summary.get("candidate_count") or 0),
+        "validation_outcome_counts": dict(summary.get("validation_outcome_counts") or {}),
+        "entry_evidence_status_counts": dict(summary.get("entry_evidence_status_counts") or {}),
+        "realized_pnl_status_counts": dict(summary.get("realized_pnl_status_counts") or {}),
+        "no_longer_matched_count": int(summary.get("no_longer_matched_count") or 0),
+        "proof_ineligible_count": int(summary.get("proof_ineligible_count") or 0),
+        "linked_position_count": int(summary.get("linked_position_count") or 0),
+        "exact_realized_pnl_count": int(summary.get("exact_realized_pnl_count") or 0),
+        "missing_realized_pnl_count": int(summary.get("missing_realized_pnl_count") or 0),
+        "stale_count": int(summary.get("stale_count") or 0),
+        "non_executable_count": int(summary.get("non_executable_count") or 0),
+        "promotion_discussion_ready_count": int(summary.get("promotion_discussion_ready_count") or 0),
+        "live_policy_change": bool(summary.get("live_policy_change") or payload.get("live_policy_change")),
+    }
+
+
+def _summarize_current_policy_circuit_breaker(payload: dict[str, Any]) -> dict[str, Any]:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "overall_status": "missing",
+            "route_status": "missing",
+            "breaker_active": False,
+            "paper_validation_only_lane_count": 0,
+            "recovery_review_required_lane_count": 0,
+            "recovery_gate_failures": ["missing"],
+            "live_policy_change": False,
+            "lane_deletion": False,
+        }
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "overall_status": summary.get("overall_status") or "unknown",
+        "route_status": summary.get("route_status") or "unknown",
+        "breaker_active": bool(summary.get("breaker_active")),
+        "affected_lane_count": int(summary.get("affected_lane_count") or 0),
+        "paper_validation_only_lane_count": int(summary.get("paper_validation_only_lane_count") or 0),
+        "recovery_review_required_lane_count": int(summary.get("recovery_review_required_lane_count") or 0),
+        "recovery_gate_failed_count": int(summary.get("recovery_gate_failed_count") or 0),
+        "recovery_gate_failures": list(summary.get("recovery_gate_failures") or []),
+        "live_policy_change": bool(summary.get("live_policy_change") or payload.get("live_policy_change")),
+        "lane_deletion": bool(summary.get("lane_deletion")),
+    }
+
+
+def _summarize_repair_burndown(payload: dict[str, Any]) -> dict[str, Any]:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    if payload.get("missing"):
+        return {
+            "artifact_path": payload.get("path"),
+            "available": False,
+            "status": "missing",
+            "target_count": 0,
+            "active_exact_repair_target_count": 0,
+            "source_replay_required_target_count": 0,
+            "diagnostic_lookahead_only_target_count": 0,
+            "exhausted_current_source_target_count": 0,
+            "repair_attempt_memory_unavailable_count": 0,
+            "next_operator_step": "Build repair-attempt readback and repair burn-down before provider work.",
+            "live_policy_change": False,
+        }
+    return {
+        "artifact_path": payload.get("path"),
+        "available": True,
+        "generated_at_utc": payload.get("generated_at_utc"),
+        "status": payload.get("status") or "unknown",
+        "target_count": int(summary.get("target_count") or 0),
+        "active_exact_repair_target_count": int(summary.get("active_exact_repair_target_count") or 0),
+        "source_replay_required_target_count": int(summary.get("source_replay_required_target_count") or 0),
+        "diagnostic_lookahead_only_target_count": int(summary.get("diagnostic_lookahead_only_target_count") or 0),
+        "exhausted_current_source_target_count": int(summary.get("exhausted_current_source_target_count") or 0),
+        "repair_attempt_memory_unavailable_count": int(summary.get("repair_attempt_memory_unavailable_count") or 0),
+        "burndown_status_counts": dict(summary.get("burndown_status_counts") or {}),
+        "repair_actionability_counts": dict(summary.get("repair_actionability_counts") or {}),
+        "repair_attempt_latest_count": int(summary.get("repair_attempt_latest_count") or 0),
+        "next_operator_step": summary.get("next_operator_step"),
+        "live_policy_change": bool(summary.get("live_policy_change") or payload.get("live_policy_change")),
+    }
+
+
+def _paper_gate_readiness_status(
+    *,
+    paper_shortlist: dict[str, Any],
+    fresh_evidence_loop: dict[str, Any],
+    current_policy_circuit_breaker: dict[str, Any],
+    repair_burndown: dict[str, Any],
+) -> str:
+    if any(
+        summary.get("live_policy_change")
+        for summary in (paper_shortlist, fresh_evidence_loop, current_policy_circuit_breaker, repair_burndown)
+    ):
+        return "blocked_live_policy_change_detected"
+    if paper_shortlist.get("invariant_violation_count"):
+        return "blocked_paper_shortlist_invariants"
+    if repair_burndown.get("repair_attempt_memory_unavailable_count"):
+        return "blocked_repair_attempt_memory_unavailable"
+    if paper_shortlist.get("eligible_count") and fresh_evidence_loop.get("promotion_discussion_ready_count"):
+        return "paper_review_candidates_require_operator_review"
+    return "paper_only_no_live_release"
+
+
+def _summarize_paper_gate_readiness(
+    *,
+    paper_shortlist: dict[str, Any],
+    fresh_evidence_loop: dict[str, Any],
+    current_policy_circuit_breaker: dict[str, Any],
+    repair_burndown: dict[str, Any],
+    profit_capture_queue: dict[str, Any],
+) -> dict[str, Any]:
+    live_policy_change = any(
+        summary.get("live_policy_change")
+        for summary in (paper_shortlist, fresh_evidence_loop, current_policy_circuit_breaker, repair_burndown)
+    )
+    return {
+        "available": all(
+            summary.get("available")
+            for summary in (paper_shortlist, fresh_evidence_loop, current_policy_circuit_breaker, repair_burndown)
+        ),
+        "status": _paper_gate_readiness_status(
+            paper_shortlist=paper_shortlist,
+            fresh_evidence_loop=fresh_evidence_loop,
+            current_policy_circuit_breaker=current_policy_circuit_breaker,
+            repair_burndown=repair_burndown,
+        ),
+        "live_policy_change": live_policy_change,
+        "eligible_paper_review_candidate_count": int(paper_shortlist.get("eligible_count") or 0),
+        "paper_shortlist_release_gate_status": paper_shortlist.get("release_gate_status"),
+        "paper_shortlist_invariant_violation_count": int(paper_shortlist.get("invariant_violation_count") or 0),
+        "profit_capture_queue_rows": int(profit_capture_queue.get("queue_rows") or 0),
+        "profit_capture_tier_counts": dict(profit_capture_queue.get("tier_counts") or {}),
+        "selection_readiness_counts": dict(paper_shortlist.get("selection_readiness_counts") or {}),
+        "fresh_validation_candidate_count": int(fresh_evidence_loop.get("candidate_count") or 0),
+        "fresh_no_longer_matched_count": int(fresh_evidence_loop.get("no_longer_matched_count") or 0),
+        "fresh_proof_ineligible_count": int(fresh_evidence_loop.get("proof_ineligible_count") or 0),
+        "fresh_exact_realized_pnl_count": int(fresh_evidence_loop.get("exact_realized_pnl_count") or 0),
+        "promotion_discussion_ready_count": int(fresh_evidence_loop.get("promotion_discussion_ready_count") or 0),
+        "current_policy_route_status": current_policy_circuit_breaker.get("route_status"),
+        "paper_validation_only_lane_count": int(
+            current_policy_circuit_breaker.get("paper_validation_only_lane_count") or 0
+        ),
+        "recovery_review_required_lane_count": int(
+            current_policy_circuit_breaker.get("recovery_review_required_lane_count") or 0
+        ),
+        "recovery_gate_failures": list(current_policy_circuit_breaker.get("recovery_gate_failures") or []),
+        "repair_target_count": int(repair_burndown.get("target_count") or 0),
+        "active_exact_repair_target_count": int(repair_burndown.get("active_exact_repair_target_count") or 0),
+        "source_replay_required_target_count": int(repair_burndown.get("source_replay_required_target_count") or 0),
+        "diagnostic_lookahead_only_target_count": int(
+            repair_burndown.get("diagnostic_lookahead_only_target_count") or 0
+        ),
+        "exhausted_current_source_target_count": int(repair_burndown.get("exhausted_current_source_target_count") or 0),
+        "repair_attempt_memory_unavailable_count": int(
+            repair_burndown.get("repair_attempt_memory_unavailable_count") or 0
+        ),
+        "repair_next_operator_step": repair_burndown.get("next_operator_step"),
+        "artifact_paths": {
+            "paper_shortlist": paper_shortlist.get("artifact_path"),
+            "fresh_evidence_loop": fresh_evidence_loop.get("artifact_path"),
+            "current_policy_circuit_breaker": current_policy_circuit_breaker.get("artifact_path"),
+            "repair_burndown": repair_burndown.get("artifact_path"),
+        },
     }
 
 
@@ -801,6 +1037,7 @@ def _next_actions(
     entry_filter_monitor: dict[str, Any],
     entry_filter_walkforward: dict[str, Any],
     profit_capture_queue: dict[str, Any],
+    paper_gate_readiness: dict[str, Any],
     open_position_risk: dict[str, Any],
     suggested_trade_close_risk: dict[str, Any],
     api_performance: dict[str, Any],
@@ -884,6 +1121,27 @@ def _next_actions(
         actions.append(
             "Do not promote the entry-filter candidate; the all-regular-lanes walk-forward validation failed."
         )
+    if not paper_gate_readiness.get("available"):
+        actions.append(
+            "Rebuild paper-gate readbacks before answering whether a fresh regular-options row is eligible, blocked, paper-only, or live-prohibited."
+        )
+    else:
+        if not paper_gate_readiness.get("eligible_paper_review_candidate_count"):
+            actions.append(
+                "Keep the paper shortlist closed; there are no fresh executable Tier A lane matches eligible for paper review."
+            )
+        if paper_gate_readiness.get("paper_validation_only_lane_count"):
+            actions.append(
+                "Keep current-policy affected lanes on paper validation only until recovery gates pass with exact realized P&L evidence."
+            )
+        if paper_gate_readiness.get("source_replay_required_target_count"):
+            actions.append(
+                "Rerun source replays for exact-date repair-memory rows before treating any Tier B repair as graduated."
+            )
+        if paper_gate_readiness.get("active_exact_repair_target_count"):
+            actions.append(
+                "Use the exact repair burn-down for new provider checks; target only active unexhausted exact contract/date rows."
+            )
     if not profit_capture_queue.get("available"):
         actions.append(
             "Build the regular options profit capture queue before lowering proof bars or chasing hidden profitable sleeves."
@@ -961,6 +1219,10 @@ def build_scorecard(
     entry_filter_monitor_path: Path = DEFAULT_ENTRY_FILTER_MONITOR,
     entry_filter_walkforward_path: Path = DEFAULT_ENTRY_FILTER_WALKFORWARD,
     profit_capture_queue_path: Path = DEFAULT_PROFIT_CAPTURE_QUEUE,
+    paper_shortlist_path: Path = DEFAULT_PAPER_SHORTLIST,
+    fresh_evidence_loop_path: Path = DEFAULT_FRESH_EVIDENCE_LOOP,
+    current_policy_circuit_breaker_path: Path = DEFAULT_CURRENT_POLICY_CIRCUIT_BREAKER,
+    repair_burndown_path: Path = DEFAULT_REPAIR_BURNDOWN,
 ) -> dict[str, Any]:
     autoresearch = _summarize_autoresearch(_load_json(autoresearch_path))
     guardrails = _summarize_guardrails(_load_json(guardrails_path))
@@ -975,6 +1237,19 @@ def build_scorecard(
     entry_filter_monitor = _summarize_entry_filter_monitor(_load_json(entry_filter_monitor_path))
     entry_filter_walkforward = _summarize_entry_filter_walkforward(_load_json(entry_filter_walkforward_path))
     profit_capture_queue = _summarize_profit_capture_queue(_load_json(profit_capture_queue_path))
+    paper_shortlist = _summarize_paper_shortlist(_load_json(paper_shortlist_path))
+    fresh_evidence_loop = _summarize_fresh_evidence_loop(_load_json(fresh_evidence_loop_path))
+    current_policy_circuit_breaker = _summarize_current_policy_circuit_breaker(
+        _load_json(current_policy_circuit_breaker_path)
+    )
+    repair_burndown = _summarize_repair_burndown(_load_json(repair_burndown_path))
+    paper_gate_readiness = _summarize_paper_gate_readiness(
+        paper_shortlist=paper_shortlist,
+        fresh_evidence_loop=fresh_evidence_loop,
+        current_policy_circuit_breaker=current_policy_circuit_breaker,
+        repair_burndown=repair_burndown,
+        profit_capture_queue=profit_capture_queue,
+    )
     product_progress = bool(guardrails.get("visible_result") or negative_audit.get("visible_result"))
     proof_progress = bool(autoresearch.get("visible_result"))
     status = (
@@ -1003,6 +1278,11 @@ def build_scorecard(
         "entry_filter_paper_monitor": entry_filter_monitor,
         "entry_filter_walkforward": entry_filter_walkforward,
         "profit_capture_queue": profit_capture_queue,
+        "paper_gate_readiness": paper_gate_readiness,
+        "paper_shortlist": paper_shortlist,
+        "fresh_evidence_loop": fresh_evidence_loop,
+        "current_policy_circuit_breaker": current_policy_circuit_breaker,
+        "repair_burndown": repair_burndown,
         "next_actions": _next_actions(
             autoresearch=autoresearch,
             guardrails=guardrails,
@@ -1013,6 +1293,7 @@ def build_scorecard(
             entry_filter_monitor=entry_filter_monitor,
             entry_filter_walkforward=entry_filter_walkforward,
             profit_capture_queue=profit_capture_queue,
+            paper_gate_readiness=paper_gate_readiness,
             open_position_risk=open_position_risk,
             suggested_trade_close_risk=suggested_trade_close_risk,
             api_performance=api_performance,
@@ -1035,12 +1316,29 @@ def markdown_report(scorecard: dict[str, Any]) -> str:
     entry_filter = scorecard["entry_filter_paper_monitor"]
     entry_walkforward = scorecard["entry_filter_walkforward"]
     capture_queue = scorecard["profit_capture_queue"]
+    paper_gate = scorecard["paper_gate_readiness"]
     lines = [
         "# Active Options Operating Scorecard",
         "",
         f"- Status: `{scorecard['status']}`",
         f"- Product profitability progress visible: `{scorecard['product_profitability_progress_visible']}`",
         f"- Proof-grade profitability progress visible: `{scorecard['proof_grade_profitability_progress_visible']}`",
+        "",
+        "## Profitability Paper Gates",
+        "",
+        f"- Status: `{paper_gate.get('status')}`",
+        f"- Eligible paper-review candidates: `{paper_gate.get('eligible_paper_review_candidate_count')}`",
+        f"- Paper shortlist release gate: `{paper_gate.get('paper_shortlist_release_gate_status')}`",
+        f"- Invariant violations: `{paper_gate.get('paper_shortlist_invariant_violation_count')}`",
+        f"- Profit-capture queue rows / tiers: `{paper_gate.get('profit_capture_queue_rows')}` / `{paper_gate.get('profit_capture_tier_counts')}`",
+        f"- Selection readiness: `{paper_gate.get('selection_readiness_counts')}`",
+        f"- Fresh validation candidates / no-longer-matched / proof-ineligible: `{paper_gate.get('fresh_validation_candidate_count')}` / `{paper_gate.get('fresh_no_longer_matched_count')}` / `{paper_gate.get('fresh_proof_ineligible_count')}`",
+        f"- Exact realized P&L / promotion-ready rows: `{paper_gate.get('fresh_exact_realized_pnl_count')}` / `{paper_gate.get('promotion_discussion_ready_count')}`",
+        f"- Current-policy route / paper-only lanes: `{paper_gate.get('current_policy_route_status')}` / `{paper_gate.get('paper_validation_only_lane_count')}`",
+        f"- Recovery gate failures: `{paper_gate.get('recovery_gate_failures')}`",
+        f"- Repair targets active / source replay / diagnostic / exhausted: `{paper_gate.get('active_exact_repair_target_count')}` / `{paper_gate.get('source_replay_required_target_count')}` / `{paper_gate.get('diagnostic_lookahead_only_target_count')}` / `{paper_gate.get('exhausted_current_source_target_count')}`",
+        f"- Repair next step: `{paper_gate.get('repair_next_operator_step')}`",
+        f"- Live policy change: `{paper_gate.get('live_policy_change')}`",
         "",
         "## Trading Desk Guardrails",
         "",
@@ -1206,6 +1504,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--entry-filter-monitor", type=Path, default=DEFAULT_ENTRY_FILTER_MONITOR)
     parser.add_argument("--entry-filter-walkforward", type=Path, default=DEFAULT_ENTRY_FILTER_WALKFORWARD)
     parser.add_argument("--profit-capture-queue", type=Path, default=DEFAULT_PROFIT_CAPTURE_QUEUE)
+    parser.add_argument("--paper-shortlist", type=Path, default=DEFAULT_PAPER_SHORTLIST)
+    parser.add_argument("--fresh-evidence-loop", type=Path, default=DEFAULT_FRESH_EVIDENCE_LOOP)
+    parser.add_argument("--current-policy-circuit-breaker", type=Path, default=DEFAULT_CURRENT_POLICY_CIRCUIT_BREAKER)
+    parser.add_argument("--repair-burndown", type=Path, default=DEFAULT_REPAIR_BURNDOWN)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--doc-path", type=Path, default=DEFAULT_DOC)
     parser.add_argument("--no-write", action="store_true")
@@ -1225,6 +1527,10 @@ def main(argv: list[str] | None = None) -> int:
         entry_filter_monitor_path=args.entry_filter_monitor,
         entry_filter_walkforward_path=args.entry_filter_walkforward,
         profit_capture_queue_path=args.profit_capture_queue,
+        paper_shortlist_path=args.paper_shortlist,
+        fresh_evidence_loop_path=args.fresh_evidence_loop,
+        current_policy_circuit_breaker_path=args.current_policy_circuit_breaker,
+        repair_burndown_path=args.repair_burndown,
     )
     payload: dict[str, Any] = {"scorecard": scorecard}
     if not args.no_write:

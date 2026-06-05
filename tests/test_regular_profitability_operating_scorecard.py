@@ -1,8 +1,15 @@
 from __future__ import annotations
 
+import tempfile
+import unittest
 from pathlib import Path
 
-from scripts.build_regular_profitability_operating_scorecard import build_scorecard
+from scripts.build_regular_profitability_operating_scorecard import (
+    _load_json,
+    _paper_gate_readiness_status,
+    _summarize_paper_shortlist,
+    build_scorecard,
+)
 
 
 def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path):
@@ -562,6 +569,124 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         """,
         encoding="utf8",
     )
+    paper_shortlist = tmp_path / "paper-shortlist.json"
+    paper_shortlist.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T04:10:00Z",
+          "status": "paper_shortlist_readback",
+          "summary": {
+            "release_gate_status": "no_paper_shortlist_candidates",
+            "eligible_count": 0,
+            "invariant_violation_count": 0,
+            "source_queue_rows": 3,
+            "source_queue_status": "research_paper_capture_queue",
+            "tier_counts": {
+              "tier_a_clean_exact_capture": 1,
+              "tier_b_profitable_watch_repair": 2
+            },
+            "fresh_bridge_status_counts": {"not_bridge_eligible": 2},
+            "fresh_bridge_blocker_counts": {"no_tier_a_lane_match": 2},
+            "selection_readiness_counts": {
+              "paper_review_candidate": 1,
+              "watch_repair_only": 2,
+              "historical_signature_only": 2
+            },
+            "live_policy_change": false
+          }
+        }
+        """,
+        encoding="utf8",
+    )
+    fresh_loop = tmp_path / "fresh-loop.json"
+    fresh_loop.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T04:15:00Z",
+          "status": "fresh_evidence_loop_readback",
+          "summary": {
+            "candidate_count": 4,
+            "validation_outcome_counts": {
+              "no_longer_matched": 3,
+              "proof_ineligible": 1
+            },
+            "entry_evidence_status_counts": {
+              "fill_attempt_missing": 3,
+              "fresh_executable_exact_entry": 1
+            },
+            "realized_pnl_status_counts": {"no_position_link": 4},
+            "no_longer_matched_count": 3,
+            "proof_ineligible_count": 1,
+            "linked_position_count": 0,
+            "exact_realized_pnl_count": 0,
+            "missing_realized_pnl_count": 0,
+            "stale_count": 0,
+            "non_executable_count": 0,
+            "promotion_discussion_ready_count": 0,
+            "live_policy_change": false
+          }
+        }
+        """,
+        encoding="utf8",
+    )
+    circuit_breaker = tmp_path / "circuit-breaker.json"
+    circuit_breaker.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T04:20:00Z",
+          "summary": {
+            "overall_status": "paper_only_recent_week_break",
+            "route_status": "paper_validation_only",
+            "breaker_active": true,
+            "affected_lane_count": 2,
+            "paper_validation_only_lane_count": 2,
+            "recovery_review_required_lane_count": 0,
+            "recovery_gate_failed_count": 6,
+            "recovery_gate_failures": [
+              "recent_cohort_recovered",
+              "fresh_current_policy_rows",
+              "fresh_champion_matched_rows",
+              "trusted_exact_realized_pnl_rows",
+              "point_in_time_replay_pass",
+              "paper_monitor_pass"
+            ],
+            "live_policy_change": false,
+            "lane_deletion": false
+          }
+        }
+        """,
+        encoding="utf8",
+    )
+    repair_burndown = tmp_path / "repair-burndown.json"
+    repair_burndown.write_text(
+        """
+        {
+          "generated_at_utc": "2026-06-02T04:25:00Z",
+          "status": "repair_burndown_ready",
+          "live_policy_change": false,
+          "summary": {
+            "target_count": 8,
+            "active_exact_repair_target_count": 2,
+            "source_replay_required_target_count": 1,
+            "diagnostic_lookahead_only_target_count": 3,
+            "exhausted_current_source_target_count": 2,
+            "repair_attempt_memory_unavailable_count": 0,
+            "burndown_status_counts": {
+              "active_unattempted_exact_repair": 2,
+              "source_replay_required_before_graduation": 1,
+              "diagnostic_lookahead_only_not_exact_proof": 3,
+              "excluded_current_source_exhausted": 2
+            },
+            "repair_actionability_counts": {
+              "needs_status_or_forward_validation_after_repair": 2
+            },
+            "repair_attempt_latest_count": 10,
+            "next_operator_step": "Rerun source replay before more imports."
+          }
+        }
+        """,
+        encoding="utf8",
+    )
 
     scorecard = build_scorecard(
         autoresearch_path=autoresearch,
@@ -577,6 +702,10 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
         entry_filter_monitor_path=entry_filter_monitor,
         entry_filter_walkforward_path=entry_filter_walkforward,
         profit_capture_queue_path=profit_capture_queue,
+        paper_shortlist_path=paper_shortlist,
+        fresh_evidence_loop_path=fresh_loop,
+        current_policy_circuit_breaker_path=circuit_breaker,
+        repair_burndown_path=repair_burndown,
     )
 
     assert scorecard["scope"] == "active_options_operating_scorecard"
@@ -606,6 +735,26 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
     assert scorecard["profit_capture_queue"]["quarantine_queue_count"] == 2
     assert scorecard["profit_capture_queue"]["top_watch_repair"][0]["symbol"] == "GOOGL"
     assert scorecard["profit_capture_queue"]["live_policy_change"] is False
+    assert scorecard["paper_gate_readiness"]["status"] == "paper_only_no_live_release"
+    assert scorecard["paper_gate_readiness"]["eligible_paper_review_candidate_count"] == 0
+    assert scorecard["paper_gate_readiness"]["paper_shortlist_release_gate_status"] == "no_paper_shortlist_candidates"
+    assert scorecard["paper_gate_readiness"]["paper_shortlist_invariant_violation_count"] == 0
+    assert scorecard["paper_gate_readiness"]["fresh_validation_candidate_count"] == 4
+    assert scorecard["paper_gate_readiness"]["fresh_no_longer_matched_count"] == 3
+    assert scorecard["paper_gate_readiness"]["fresh_proof_ineligible_count"] == 1
+    assert scorecard["paper_gate_readiness"]["promotion_discussion_ready_count"] == 0
+    assert scorecard["paper_gate_readiness"]["current_policy_route_status"] == "paper_validation_only"
+    assert scorecard["paper_gate_readiness"]["paper_validation_only_lane_count"] == 2
+    assert scorecard["paper_gate_readiness"]["repair_target_count"] == 8
+    assert scorecard["paper_gate_readiness"]["active_exact_repair_target_count"] == 2
+    assert scorecard["paper_gate_readiness"]["source_replay_required_target_count"] == 1
+    assert scorecard["paper_gate_readiness"]["diagnostic_lookahead_only_target_count"] == 3
+    assert scorecard["paper_gate_readiness"]["exhausted_current_source_target_count"] == 2
+    assert scorecard["paper_gate_readiness"]["live_policy_change"] is False
+    assert scorecard["paper_shortlist"]["eligible_count"] == 0
+    assert scorecard["fresh_evidence_loop"]["candidate_count"] == 4
+    assert scorecard["current_policy_circuit_breaker"]["breaker_active"] is True
+    assert scorecard["repair_burndown"]["target_count"] == 8
     assert scorecard["open_position_risk"]["open_rows"] == 48
     assert scorecard["open_position_risk"]["review_required_count"] == 1
     assert scorecard["open_position_risk"]["executable_close_ready_count"] == 0
@@ -636,7 +785,85 @@ def test_scorecard_marks_product_progress_but_keeps_proof_blocked(tmp_path: Path
     assert any("short-term fill-degradation entry filter paper-only" in action for action in scorecard["next_actions"])
     assert any("all-lane walk-forward rejects the broad fill>=15 rule" in action for action in scorecard["next_actions"])
     assert any("profit capture queue" in action for action in scorecard["next_actions"])
+    assert any("paper shortlist closed" in action for action in scorecard["next_actions"])
+    assert any("paper validation only" in action for action in scorecard["next_actions"])
+    assert any("Rerun source replays" in action for action in scorecard["next_actions"])
+    assert any("exact repair burn-down" in action for action in scorecard["next_actions"])
     assert any("Tier C matches" in action for action in scorecard["next_actions"])
     assert any("profitable-looking candidates blocked" in action for action in scorecard["next_actions"])
     assert any("AI commodity production filters locked" in action for action in scorecard["next_actions"])
     assert any("AI commodity exact OPRA capture failure" in action for action in scorecard["next_actions"])
+
+
+class RegularProfitabilityOperatingScorecardTests(unittest.TestCase):
+    def test_scorecard_marks_product_progress_but_keeps_proof_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            test_scorecard_marks_product_progress_but_keeps_proof_blocked(Path(temp_dir))
+
+    def test_unreadable_paper_gate_json_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir) / "paper-shortlist.json"
+            source.write_text("{not json", encoding="utf8")
+
+            summary = _summarize_paper_shortlist(_load_json(source))
+
+        self.assertFalse(summary["available"])
+        self.assertEqual(summary["status"], "missing")
+        self.assertEqual(summary["release_gate_status"], "missing")
+        self.assertEqual(summary["eligible_count"], 0)
+
+    def test_paper_gate_readiness_status_precedence(self) -> None:
+        def status(
+            *,
+            paper_shortlist: dict | None = None,
+            fresh_evidence_loop: dict | None = None,
+            current_policy_circuit_breaker: dict | None = None,
+            repair_burndown: dict | None = None,
+        ) -> str:
+            return _paper_gate_readiness_status(
+                paper_shortlist={
+                    "eligible_count": 0,
+                    "invariant_violation_count": 0,
+                    **(paper_shortlist or {}),
+                },
+                fresh_evidence_loop={
+                    "promotion_discussion_ready_count": 0,
+                    **(fresh_evidence_loop or {}),
+                },
+                current_policy_circuit_breaker=current_policy_circuit_breaker or {},
+                repair_burndown={
+                    "repair_attempt_memory_unavailable_count": 0,
+                    **(repair_burndown or {}),
+                },
+            )
+
+        self.assertEqual(
+            status(
+                paper_shortlist={"invariant_violation_count": 1},
+                fresh_evidence_loop={"live_policy_change": True},
+                repair_burndown={"repair_attempt_memory_unavailable_count": 1},
+            ),
+            "blocked_live_policy_change_detected",
+        )
+        self.assertEqual(
+            status(
+                paper_shortlist={"invariant_violation_count": 1},
+                repair_burndown={"repair_attempt_memory_unavailable_count": 1},
+            ),
+            "blocked_paper_shortlist_invariants",
+        )
+        self.assertEqual(
+            status(repair_burndown={"repair_attempt_memory_unavailable_count": 1}),
+            "blocked_repair_attempt_memory_unavailable",
+        )
+        self.assertEqual(
+            status(
+                paper_shortlist={"eligible_count": 1},
+                fresh_evidence_loop={"promotion_discussion_ready_count": 1},
+            ),
+            "paper_review_candidates_require_operator_review",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

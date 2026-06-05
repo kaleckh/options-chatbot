@@ -133,7 +133,7 @@ These are the living docs for the current worktree:
 - `docs/trading-desk-legacy-missed-close-audit-2026-06-01.md`
   - focused read-only audit of legacy rows 26/39/44 and whether they imply a current auto-close bug
 - `docs/regular-options-operating-scorecard.md`
-  - active options scorecard separating visible Trading Desk profitability progress, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
+  - active options scorecard separating visible Trading Desk profitability progress, paper-gate readiness, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
 - `docs/regular-options-profit-capture-queue.md`
   - generated research/paper capture queue that tiers profitable regular-options symbol/lane evidence, fresh scan signature matches, evidence-repair priorities, and quarantine/do-not-chase rows without changing scanner policy
 - `docs/regular-options-paper-shortlist.md`

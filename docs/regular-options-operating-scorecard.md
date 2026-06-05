@@ -4,6 +4,22 @@
 - Product profitability progress visible: `True`
 - Proof-grade profitability progress visible: `False`
 
+## Profitability Paper Gates
+
+- Status: `paper_only_no_live_release`
+- Eligible paper-review candidates: `0`
+- Paper shortlist release gate: `no_paper_shortlist_candidates`
+- Invariant violations: `0`
+- Profit-capture queue rows / tiers: `97` / `{'tier_a_clean_exact_capture': 15, 'tier_b_profitable_watch_repair': 82}`
+- Selection readiness: `{'blocked_guardrail_only': 9, 'do_not_chase': 173, 'historical_signature_only': 6, 'paper_review_candidate': 15, 'watch_repair_only': 82}`
+- Fresh validation candidates / no-longer-matched / proof-ineligible: `20` / `15` / `5`
+- Exact realized P&L / promotion-ready rows: `0` / `0`
+- Current-policy route / paper-only lanes: `paper_validation_only` / `2`
+- Recovery gate failures: `['recent_cohort_recovered', 'fresh_current_policy_rows', 'fresh_champion_matched_rows', 'trusted_exact_realized_pnl_rows', 'point_in_time_replay_pass', 'paper_monitor_pass']`
+- Repair targets active / source replay / diagnostic / exhausted: `11` / `5` / `32` / `97`
+- Repair next step: `Rerun source replay for rows with exact-date repair memory before importing more data.`
+- Live policy change: `False`
+
 ## Trading Desk Guardrails
 
 - Baseline avg/median/negative-rate: `5.21%` / `-1.58%` / `50.4%`
@@ -123,6 +139,10 @@
 - Inspect guardrail-blocked candidate rows before loosening promoted Trading Desk entry guardrails.
 - Keep the short-term fill-degradation entry filter paper-only; the forward monitor is still collecting fresh rows.
 - Keep the fill-degradation entry filter lane-scoped and paper-only; all-lane walk-forward rejects the broad fill>=15 rule and the frozen short-term rule is still mixed on historical folds.
+- Keep the paper shortlist closed; there are no fresh executable Tier A lane matches eligible for paper review.
+- Keep current-policy affected lanes on paper validation only until recovery gates pass with exact realized P&L evidence.
+- Rerun source replays for exact-date repair-memory rows before treating any Tier B repair as graduated.
+- Use the exact repair burn-down for new provider checks; target only active unexhausted exact contract/date rows.
 - Use the profit capture queue to repair high-priority unresolved profitable watch sleeves before treating them as clean proof.
 - Review fresh profit-capture signature matches as paper/research candidates only; do not treat Tier C matches as proof-grade recommendations.
 - Keep blocked profitable-looking candidates blocked; inspect their guardrail reasons rather than loosening scanner policy from queue visibility alone.

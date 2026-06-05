@@ -80,6 +80,14 @@ Replay readbacks, policy, proof predicates, and profit-cycle state have separate
 Use the sprint goal and current readbacks before changing paper-gate eligibility or operator workflow.
 
 - `profitability_paper_gate_goal`: Profitability paper-gate goal - `docs/autoresearch/profitability-paper-gate-goal.md`. Running the paper-gate sprint backlog end to end.
+- `regular_options_operating_scorecard_doc`: Regular options operating scorecard - `docs/regular-options-operating-scorecard.md`. Answering whether profitability progress is visible and whether proof remains blocked.
+- `regular_options_profit_capture_queue_doc`: Regular options profit-capture queue - `docs/regular-options-profit-capture-queue.md`. Finding Tier A, Tier B, fresh-match, blocked, quarantine, and repair queue rows.
+- `regular_options_paper_shortlist_doc`: Regular options paper shortlist - `docs/regular-options-paper-shortlist.md`. Checking fresh executable Tier A paper-review eligibility.
+- `regular_options_fresh_evidence_loop_doc`: Regular options fresh evidence loop - `docs/regular-options-fresh-evidence-loop.md`. Checking pending validation, fill-attempt evidence, tracked linkage, and exact realized P&L readiness.
+- `current_policy_circuit_breaker_doc`: Current-policy circuit breaker - `docs/current-policy-circuit-breaker.md`. Checking paper-validation-only lane routes after recent cohort breaks.
+- `regular_options_operator_workflow_doc`: Regular options operator workflow - `docs/regular-options-operator-workflow.md`. Checking scanner evidence drawer and local operator-session workflow semantics.
+- `regular_options_repair_attempts_doc`: Regular options repair attempts - `docs/regular-options-repair-attempts.md`. Checking keyed exact-repair memory and lookahead/current-source-exhausted outcomes.
+- `regular_options_repair_burndown_doc`: Regular options repair burn-down - `docs/regular-options-repair-burndown.md`. Choosing active exact repair targets and avoiding repeated exhausted provider loops.
 - `next_steps`: Next steps - `docs/NEXT_STEPS.md`. Checking active blockers and current commands.
 - `project_context`: Project context - `docs/PROJECT_CONTEXT.md`. Checking product scope, lane boundaries, and proof posture.
 - `decisions`: Decisions - `docs/DECISIONS.md`. Checking durable decisions.
@@ -188,6 +196,21 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `project_context` | `doc` | `docs/PROJECT_CONTEXT.md` | Current product scope, lane boundaries, and architecture summary. |
 | `next_steps` | `doc` | `docs/NEXT_STEPS.md` | Active blockers, commands, and next actions. |
 | `profitability_paper_gate_goal` | `doc` | `docs/autoresearch/profitability-paper-gate-goal.md` | Six-sprint goal prompt for the profitability paper-gate operator workflow. |
+| `regular_options_operating_scorecard_doc` | `generated_artifact` | `docs/regular-options-operating-scorecard.md` | Generated active options scorecard with paper-gate readiness counts. |
+| `regular_options_operating_scorecard_generator` | `script` | `scripts/build_regular_profitability_operating_scorecard.py` | Builds the active operating scorecard from profitability, paper-gate, and risk readbacks. |
+| `regular_options_profit_capture_queue_doc` | `generated_artifact` | `docs/regular-options-profit-capture-queue.md` | Generated paper/research visibility layer for profitable regular-options evidence. |
+| `regular_options_profit_capture_queue_generator` | `script` | `scripts/build_regular_options_profit_capture_queue.py` | Builds the profit-capture queue without lowering scanner proof bars. |
+| `regular_options_paper_shortlist_doc` | `generated_artifact` | `docs/regular-options-paper-shortlist.md` | Generated paper-review release gate for fresh executable Tier A lane matches. |
+| `regular_options_paper_shortlist_generator` | `script` | `scripts/build_regular_options_paper_shortlist.py` | Builds the strict fail-closed paper shortlist readback. |
+| `regular_options_fresh_evidence_loop_doc` | `generated_artifact` | `docs/regular-options-fresh-evidence-loop.md` | Generated fresh exact-evidence loop readback for paper-gate candidates. |
+| `regular_options_fresh_evidence_loop_generator` | `script` | `scripts/build_regular_options_fresh_evidence_loop.py` | Builds the fresh evidence loop without changing scanner or broker behavior. |
+| `current_policy_circuit_breaker_doc` | `generated_artifact` | `docs/current-policy-circuit-breaker.md` | Generated readback that routes affected current-policy lanes to paper validation only. |
+| `current_policy_circuit_breaker_generator` | `script` | `scripts/build_current_policy_circuit_breaker.py` | Builds the fail-closed current-policy circuit breaker. |
+| `regular_options_operator_workflow_doc` | `doc` | `docs/regular-options-operator-workflow.md` | Operator workflow for viewing paper-gate state without implying trade recommendations. |
+| `regular_options_repair_attempts_doc` | `generated_artifact` | `docs/regular-options-repair-attempts.md` | Generated repair-attempt memory readback for exact missing contract/date provider checks. |
+| `regular_options_repair_attempts_generator` | `script` | `scripts/build_regular_options_repair_attempt_readback.py` | Builds conservative repair-attempt memory without turning lookahead or unsafe aggregate rows into proof. |
+| `regular_options_repair_burndown_doc` | `generated_artifact` | `docs/regular-options-repair-burndown.md` | Generated exact repair burn-down that separates active, source-replay, diagnostic, and exhausted targets. |
+| `regular_options_repair_burndown_generator` | `script` | `scripts/build_regular_options_repair_burndown.py` | Builds the fail-closed exact repair burn-down from the queue and repair-attempt memory. |
 | `decisions` | `doc` | `docs/DECISIONS.md` | Durable product and technical decisions. |
 | `worklog` | `doc` | `docs/WORKLOG.md` | Dated summaries of meaningful local work. |
 | `architecture_overview` | `doc` | `docs/architecture-overview.md` | Current system map and subsystem ownership. |
@@ -351,6 +374,21 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `replay_profit_service` | `read_after` | `wfo_optimizer` | Replay service assembles readbacks from replay engine outputs. |
 | `profitability_paper_gate_goal` | `implements` | `next_steps` | Goal prompt turns the active paper-gate sprint backlog into an end-to-end runbook. |
 | `profitability_paper_gate_goal` | `bounded_by` | `decisions` | Paper-gate sprint work must preserve durable profitability bridge decisions. |
+| `regular_options_operating_scorecard_generator` | `generates` | `regular_options_operating_scorecard_doc` | Scorecard generator emits the active options operating scorecard. |
+| `regular_options_operating_scorecard_generator` | `consumes` | `regular_options_profit_capture_queue_doc` | Scorecard reads the profit-capture queue for paper-gate readiness counts. |
+| `regular_options_operating_scorecard_generator` | `consumes` | `regular_options_paper_shortlist_doc` | Scorecard reads the paper shortlist release-gate state. |
+| `regular_options_operating_scorecard_generator` | `consumes` | `regular_options_fresh_evidence_loop_doc` | Scorecard reads fresh validation and exact realized P&L readiness. |
+| `regular_options_operating_scorecard_generator` | `consumes` | `current_policy_circuit_breaker_doc` | Scorecard reads paper-validation-only lane routes. |
+| `regular_options_operating_scorecard_generator` | `consumes` | `regular_options_repair_burndown_doc` | Scorecard reads active/source-replay/diagnostic/exhausted exact repair counts. |
+| `regular_options_profit_capture_queue_generator` | `generates` | `regular_options_profit_capture_queue_doc` | Profit-capture queue generator emits the queue report. |
+| `regular_options_paper_shortlist_generator` | `generates` | `regular_options_paper_shortlist_doc` | Paper shortlist generator emits the paper-review release gate. |
+| `regular_options_fresh_evidence_loop_generator` | `generates` | `regular_options_fresh_evidence_loop_doc` | Fresh evidence generator emits the validation and exact-P&L readback. |
+| `current_policy_circuit_breaker_generator` | `generates` | `current_policy_circuit_breaker_doc` | Circuit breaker generator emits paper-validation-only lane routes. |
+| `regular_options_repair_attempts_generator` | `generates` | `regular_options_repair_attempts_doc` | Repair-attempt generator emits keyed provider repair memory. |
+| `regular_options_repair_burndown_generator` | `generates` | `regular_options_repair_burndown_doc` | Repair burn-down generator emits the exact repair target report. |
+| `regular_options_repair_burndown_generator` | `consumes` | `regular_options_profit_capture_queue_doc` | Repair burn-down reads the profit-capture repair queue. |
+| `regular_options_repair_burndown_generator` | `consumes` | `regular_options_repair_attempts_doc` | Repair burn-down reads repair-attempt memory before provider commands are active. |
+| `profitability_paper_gate_goal` | `points_to` | `regular_options_operating_scorecard_doc` | Sprint 6 adds paper-gate readiness counts to the scorecard. |
 | `repository_doc` | `owns` | `repository_contracts_code` | Repository doc maps structural repository capability contracts. |
 | `record_parity_doc` | `documents` | `positions_repository` | Parity doc separates tracked-position and suggested-trade row semantics. |
 | `record_parity_doc` | `documents` | `suggested_trades_repository` | Parity doc separates suggested paper ideas from tracked production rows. |

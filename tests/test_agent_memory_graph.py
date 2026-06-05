@@ -54,6 +54,21 @@ class AgentMemoryGraphTests(unittest.TestCase):
             "proof_invariant_generator",
             "scanner_doc",
             "replay_profit_doc",
+            "regular_options_operating_scorecard_doc",
+            "regular_options_operating_scorecard_generator",
+            "regular_options_profit_capture_queue_doc",
+            "regular_options_profit_capture_queue_generator",
+            "regular_options_paper_shortlist_doc",
+            "regular_options_paper_shortlist_generator",
+            "regular_options_fresh_evidence_loop_doc",
+            "regular_options_fresh_evidence_loop_generator",
+            "current_policy_circuit_breaker_doc",
+            "current_policy_circuit_breaker_generator",
+            "regular_options_operator_workflow_doc",
+            "regular_options_repair_attempts_doc",
+            "regular_options_repair_attempts_generator",
+            "regular_options_repair_burndown_doc",
+            "regular_options_repair_burndown_generator",
             "repository_doc",
             "fintable",
             "ai_commodity_runner",
@@ -101,6 +116,20 @@ class AgentMemoryGraphTests(unittest.TestCase):
             ("proof_generator", "generates", "proof_generated_ts"),
             ("proof_invariant_generator", "generates", "proof_invariant_doc"),
             ("memory_graph_doc", "does_not_replace", "route_parity_doc"),
+            ("regular_options_operating_scorecard_generator", "generates", "regular_options_operating_scorecard_doc"),
+            ("regular_options_operating_scorecard_generator", "consumes", "regular_options_profit_capture_queue_doc"),
+            ("regular_options_operating_scorecard_generator", "consumes", "regular_options_paper_shortlist_doc"),
+            ("regular_options_operating_scorecard_generator", "consumes", "regular_options_fresh_evidence_loop_doc"),
+            ("regular_options_operating_scorecard_generator", "consumes", "current_policy_circuit_breaker_doc"),
+            ("regular_options_operating_scorecard_generator", "consumes", "regular_options_repair_burndown_doc"),
+            ("regular_options_profit_capture_queue_generator", "generates", "regular_options_profit_capture_queue_doc"),
+            ("regular_options_paper_shortlist_generator", "generates", "regular_options_paper_shortlist_doc"),
+            ("regular_options_fresh_evidence_loop_generator", "generates", "regular_options_fresh_evidence_loop_doc"),
+            ("current_policy_circuit_breaker_generator", "generates", "current_policy_circuit_breaker_doc"),
+            ("regular_options_repair_attempts_generator", "generates", "regular_options_repair_attempts_doc"),
+            ("regular_options_repair_burndown_generator", "generates", "regular_options_repair_burndown_doc"),
+            ("regular_options_repair_burndown_generator", "consumes", "regular_options_profit_capture_queue_doc"),
+            ("regular_options_repair_burndown_generator", "consumes", "regular_options_repair_attempts_doc"),
         ]:
             self.assertIn(edge_key, edge_keys)
 
@@ -111,6 +140,7 @@ class AgentMemoryGraphTests(unittest.TestCase):
             "proof_evidence",
             "scanner_creation",
             "replay_profit",
+            "profitability_paper_gates",
             "db_repositories",
             "frontend_trading_desk",
             "generated_artifacts",
@@ -119,6 +149,8 @@ class AgentMemoryGraphTests(unittest.TestCase):
         ]:
             self.assertIn(playbook_id, playbooks)
             self.assertGreaterEqual(len(playbooks[playbook_id]["nodes"]), 3)
+        self.assertIn("regular_options_operating_scorecard_doc", playbooks["profitability_paper_gates"]["nodes"])
+        self.assertIn("regular_options_repair_burndown_doc", playbooks["profitability_paper_gates"]["nodes"])
 
     def test_living_docs_link_the_memory_graph(self):
         for path in [
