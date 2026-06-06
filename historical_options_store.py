@@ -332,7 +332,7 @@ def _quote_price_with_mode(row: dict[str, Any], *, allow_last_price: bool) -> tu
     bid = row.get("bid")
     ask = row.get("ask")
     last = row.get("last")
-    if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
+    if bid is not None and ask is not None and bid >= 0 and ask > 0 and ask >= bid:
         return round((bid + ask) / 2.0, 4), "mid"
     if allow_last_price and last is not None and last > 0:
         return round(last, 4), "last"
@@ -343,7 +343,7 @@ def _valid_quote_sql_clause(alias: str = "q", *, allow_last_price: bool = True) 
     prefix = f"{alias}." if alias else ""
     bid_ask_clause = (
         f"({prefix}bid IS NOT NULL AND {prefix}ask IS NOT NULL "
-        f"AND {prefix}bid > 0 AND {prefix}ask > 0 AND {prefix}ask >= {prefix}bid)"
+        f"AND {prefix}bid >= 0 AND {prefix}ask > 0 AND {prefix}ask >= {prefix}bid)"
     )
     if allow_last_price:
         return f"({bid_ask_clause} OR ({prefix}last IS NOT NULL AND {prefix}last > 0))"

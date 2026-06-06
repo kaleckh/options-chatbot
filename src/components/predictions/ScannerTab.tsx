@@ -90,6 +90,7 @@ type ScannerTabProps = {
   notes: string;
   takingTrade: boolean;
   savingSuggestedTrade: boolean;
+  submittingAlpacaPaperOrder: boolean;
   onRefresh: () => void;
   onPolicyModeChange: (value: boolean) => void;
   onPlaybookChange: (value: string) => void;
@@ -101,6 +102,7 @@ type ScannerTabProps = {
   onNotesChange: (value: string) => void;
   onSubmit: () => void;
   onSubmitSuggested: () => void;
+  onSubmitAlpacaPaper: () => void;
 };
 
 export const ScannerTab = memo(function ScannerTab({
@@ -126,6 +128,7 @@ export const ScannerTab = memo(function ScannerTab({
   notes,
   takingTrade,
   savingSuggestedTrade,
+  submittingAlpacaPaperOrder,
   onRefresh,
   onPolicyModeChange,
   onPlaybookChange,
@@ -137,6 +140,7 @@ export const ScannerTab = memo(function ScannerTab({
   onNotesChange,
   onSubmit,
   onSubmitSuggested,
+  onSubmitAlpacaPaper,
 }: ScannerTabProps) {
   const promotionStatus = String(
     policy?.scan_policy.promotion_status || policy?.promotion_status || "watch"
@@ -282,12 +286,14 @@ export const ScannerTab = memo(function ScannerTab({
         notes={notes}
         takingTrade={takingTrade}
         savingSuggestedTrade={savingSuggestedTrade}
+        submittingAlpacaPaperOrder={submittingAlpacaPaperOrder}
         onCancel={onCancel}
         onFillPriceChange={onFillPriceChange}
         onContractsChange={onContractsChange}
         onNotesChange={onNotesChange}
         onSubmit={onSubmit}
         onSubmitSuggested={onSubmitSuggested}
+        onSubmitAlpacaPaper={onSubmitAlpacaPaper}
       />
 
       {picks.length === 0 && !loading ? (

@@ -29,7 +29,28 @@ except Exception:
     def is_us_equity_market_day(value: date) -> bool:
         return value.weekday() < 5
 
-from scripts.pending_audit_candidates import append_pending_candidate_rows
+from scripts.pending_audit_candidates import (
+    DUPLICATE_EXACT_SPREAD_PAPER_STATUS,
+    append_pending_candidate_rows,
+)
+from scripts.candidate_lifecycle import (
+    STATUS_DIAGNOSTIC_UNAPPROVED_LANE,
+    STATUS_PENDING_LIVE_VALIDATION,
+)
+from scripts.lane_profitability_gate import DEFAULT_LANE_GATE_REPORT, lane_gate_report_health, load_lane_gate_report
+from scripts.lane_profitability_gate import (
+    LANE_GATE_DIAGNOSTIC_STATUS,
+    LANE_GATE_PAPER_ONLY_STATUS,
+    LANE_GATE_PROBATION_PAPER_STATUS,
+)
+from scripts.lane_promotion_state import (
+    DEFAULT_LANE_PROMOTION_REPORT,
+    LANE_PROMOTION_DIAGNOSTIC_STATUS,
+    LANE_PROMOTION_PAPER_EVIDENCE_STATUS,
+    LANE_PROMOTION_PAPER_ONLY_STATUS,
+    lane_promotion_report_health,
+    load_lane_promotion_report,
+)
 
 
 def _parse_date(value: str | None) -> date:
@@ -105,17 +126,85 @@ def _run_audit() -> int:
 def _queue_candidates(payload: dict[str, object] | None, *, dry_run: bool = False) -> dict[str, object] | None:
     if not payload:
         return None
+    lane_gate_report = load_lane_gate_report(DEFAULT_LANE_GATE_REPORT)
+    lane_gate_health = lane_gate_report_health(lane_gate_report)
+    lane_gate_loaded = lane_gate_report is not None
+    lane_gate_usable = bool(lane_gate_health.get("usable"))
+    lane_promotion_report = load_lane_promotion_report(DEFAULT_LANE_PROMOTION_REPORT)
+    lane_promotion_health = lane_promotion_report_health(lane_promotion_report)
+    lane_promotion_loaded = lane_promotion_report is not None
+    lane_promotion_usable = bool(lane_promotion_health.get("usable"))
     if dry_run:
         from scripts.pending_audit_candidates import build_pending_candidate_rows
 
-        rows = build_pending_candidate_rows(payload)
+        rows = build_pending_candidate_rows(
+            payload,
+            lane_gate_report=lane_gate_report,
+            require_fresh_lane_gate_report=True,
+            lane_promotion_report=lane_promotion_report,
+            require_fresh_lane_promotion_state=True,
+        )
         return {
             "selected_clear_candidates": len(rows),
             "queued_new_candidates": 0,
             "duplicate_candidates": 0,
+            STATUS_PENDING_LIVE_VALIDATION: sum(
+                1 for row in rows if row.get("candidate_status") == STATUS_PENDING_LIVE_VALIDATION
+            ),
+            STATUS_DIAGNOSTIC_UNAPPROVED_LANE: sum(
+                1 for row in rows if row.get("candidate_status") == STATUS_DIAGNOSTIC_UNAPPROVED_LANE
+            ),
+            LANE_GATE_DIAGNOSTIC_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_GATE_DIAGNOSTIC_STATUS
+            ),
+            LANE_GATE_PAPER_ONLY_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_GATE_PAPER_ONLY_STATUS
+            ),
+            LANE_GATE_PROBATION_PAPER_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_GATE_PROBATION_PAPER_STATUS
+            ),
+            LANE_PROMOTION_DIAGNOSTIC_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_DIAGNOSTIC_STATUS
+            ),
+            LANE_PROMOTION_PAPER_ONLY_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_PAPER_ONLY_STATUS
+            ),
+            LANE_PROMOTION_PAPER_EVIDENCE_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_PAPER_EVIDENCE_STATUS
+            ),
+            DUPLICATE_EXACT_SPREAD_PAPER_STATUS: sum(
+                1 for row in rows if row.get("candidate_status") == DUPLICATE_EXACT_SPREAD_PAPER_STATUS
+            ),
             "dry_run": True,
+            "lane_profitability_gate_loaded": lane_gate_loaded,
+            "lane_profitability_gate_usable": lane_gate_usable,
+            "lane_profitability_gate_fail_closed": not lane_gate_usable,
+            "lane_profitability_gate_fail_reason": lane_gate_health.get("reason") if not lane_gate_usable else None,
+            "lane_profitability_gate_health": lane_gate_health,
+            "lane_promotion_state_loaded": lane_promotion_loaded,
+            "lane_promotion_state_usable": lane_promotion_usable,
+            "lane_promotion_state_fail_closed": not lane_promotion_usable,
+            "lane_promotion_state_fail_reason": lane_promotion_health.get("reason") if not lane_promotion_usable else None,
+            "lane_promotion_state_health": lane_promotion_health,
         }
-    return append_pending_candidate_rows(payload)
+    summary = append_pending_candidate_rows(
+        payload,
+        lane_gate_report=lane_gate_report,
+        require_fresh_lane_gate_report=True,
+        lane_promotion_report=lane_promotion_report,
+        require_fresh_lane_promotion_state=True,
+    )
+    summary["lane_profitability_gate_loaded"] = lane_gate_loaded
+    summary["lane_profitability_gate_usable"] = lane_gate_usable
+    summary["lane_profitability_gate_fail_closed"] = not lane_gate_usable
+    summary["lane_profitability_gate_fail_reason"] = lane_gate_health.get("reason") if not lane_gate_usable else None
+    summary["lane_profitability_gate_health"] = lane_gate_health
+    summary["lane_promotion_state_loaded"] = lane_promotion_loaded
+    summary["lane_promotion_state_usable"] = lane_promotion_usable
+    summary["lane_promotion_state_fail_closed"] = not lane_promotion_usable
+    summary["lane_promotion_state_fail_reason"] = lane_promotion_health.get("reason") if not lane_promotion_usable else None
+    summary["lane_promotion_state_health"] = lane_promotion_health
+    return summary
 
 
 def _print_queue_summary(prefix: str, summary: dict[str, object] | None) -> None:
@@ -124,8 +213,23 @@ def _print_queue_summary(prefix: str, summary: dict[str, object] | None) -> None
     print(
         f"{prefix} selected_clear_candidates={summary.get('selected_clear_candidates')} "
         f"queued_new={summary.get('queued_new_candidates')} "
-        f"pending_live_validation={summary.get('pending_live_validation')} "
-        f"diagnostic_only={summary.get('diagnostic_only_unapproved_lane')}"
+        f"pending_live_validation={summary.get(STATUS_PENDING_LIVE_VALIDATION)} "
+        f"diagnostic_only={summary.get(STATUS_DIAGNOSTIC_UNAPPROVED_LANE)} "
+        f"lane_gate_diagnostic={summary.get(LANE_GATE_DIAGNOSTIC_STATUS, 0)} "
+        f"lane_gate_paper={summary.get(LANE_GATE_PAPER_ONLY_STATUS, 0)} "
+        f"lane_gate_probation={summary.get(LANE_GATE_PROBATION_PAPER_STATUS, 0)} "
+        f"lane_promotion_diagnostic={summary.get(LANE_PROMOTION_DIAGNOSTIC_STATUS, 0)} "
+        f"lane_promotion_paper={summary.get(LANE_PROMOTION_PAPER_ONLY_STATUS, 0)} "
+        f"lane_promotion_paper_evidence={summary.get(LANE_PROMOTION_PAPER_EVIDENCE_STATUS, 0)} "
+        f"duplicate_exact_spread_paper={summary.get(DUPLICATE_EXACT_SPREAD_PAPER_STATUS, 0)} "
+        f"lane_gate_loaded={summary.get('lane_profitability_gate_loaded')} "
+        f"lane_gate_usable={summary.get('lane_profitability_gate_usable')} "
+        f"lane_gate_fail_closed={summary.get('lane_profitability_gate_fail_closed')} "
+        f"lane_gate_fail_reason={summary.get('lane_profitability_gate_fail_reason')} "
+        f"lane_promotion_loaded={summary.get('lane_promotion_state_loaded')} "
+        f"lane_promotion_usable={summary.get('lane_promotion_state_usable')} "
+        f"lane_promotion_fail_closed={summary.get('lane_promotion_state_fail_closed')} "
+        f"lane_promotion_fail_reason={summary.get('lane_promotion_state_fail_reason')}"
     )
 
 

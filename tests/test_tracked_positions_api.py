@@ -29,6 +29,9 @@ import positions_service as psvc
 from proof_contract import PROOF_SOURCE_FIELDS
 from options_algorithm_fixtures import (
     FrozenDateTime,
+    build_fresh_lane_gate_report,
+    build_fresh_lane_promotion_report,
+    build_fresh_open_risk_report,
     build_options_algorithm_fixture_bundle,
     build_scanner_origin_forward_event,
     build_scanner_origin_proof_scan_pick,
@@ -589,6 +592,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
     def test_create_scanner_origin_position_accepts_matching_archived_lineage(self):
         scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
         archived_event = build_scanner_origin_forward_event(scan_pick)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
 
         with (
             patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]) as list_events,
@@ -596,6 +600,18 @@ class TrackedPositionsApiTests(unittest.TestCase):
                 self.backend,
                 "apply_playbook_guardrails",
                 return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(),
             ),
             patch.object(
                 self.backend,
@@ -625,6 +641,38 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(position["source_scan_event_key"], scan_pick["source_scan_event_key"])
         self.assertEqual(list_events.call_args.kwargs["source_label"], self.backend.ARCHIVED_FORWARD_SOURCE_LABEL)
         self.assertEqual(list_events.call_args.kwargs["tickers"], [scan_pick["ticker"]])
+
+    def test_scanner_origin_create_rejects_paper_probation_lane(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(
+                    playbook_id,
+                    promotion_state="paper_probation",
+                ),
+            ),
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            self.backend._validate_scanner_origin_create(
+                scan_pick,
+                positions_repository=MemoryTrackedPositionsRepository(),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("lane_promotion_state", ctx.exception.detail["reasons"][0])
 
     def test_create_scanner_origin_position_rejects_mutated_archived_lineage_fields(self):
         baseline_pick = build_scanner_origin_proof_scan_pick(self.bundle)
@@ -686,6 +734,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
         archived_event = build_scanner_origin_forward_event(scan_pick)
         repository = MemoryTrackedPositionsRepository()
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
 
         with (
             patch.object(self.backend, "POSITIONS_REPOSITORY", repository),
@@ -694,6 +743,18 @@ class TrackedPositionsApiTests(unittest.TestCase):
                 self.backend,
                 "apply_playbook_guardrails",
                 return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(),
             ),
         ):
             response = self.client.post(
@@ -709,6 +770,39 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("entry_execution_price_mismatch", response.text)
         self.assertEqual(repository.list_positions("open"), [])
+
+    def test_scanner_origin_create_rejects_blocked_open_risk_governor(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
+
+        with (
+            patch.object(self.backend, "_verify_source_scan_lineage", return_value=True),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(blocked=True),
+            ),
+            self.assertRaises(HTTPException) as ctx,
+        ):
+            self.backend._validate_scanner_origin_create(
+                scan_pick,
+                positions_repository=MemoryTrackedPositionsRepository(),
+            )
+
+        self.assertEqual(ctx.exception.status_code, 409)
+        self.assertIn("open_position_risk_live_exact_negative_open_risk", ctx.exception.detail["reasons"])
 
     def test_review_rejects_invalid_position_ids(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

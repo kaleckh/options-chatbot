@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from scripts import audit_zero_pick_days_all_lanes as all_lanes
@@ -48,6 +51,7 @@ def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: object) -> None:
                 "exact_candidate_count": 1,
                 "would_track_pick_count": 1,
                 "duplicate_pick_count": 0,
+                "no_exact_reason_counts": {"no_exact_option_quotes_for_date": 2},
             },
             "parameters": {"playbook": args.playbook},
             "discovery": {},
@@ -82,7 +86,63 @@ def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: object) -> None:
     ]
     assert audit["summary"]["completed_lane_count"] == 2
     assert audit["summary"]["signal_candidate_count"] == 4
+    assert audit["summary"]["no_exact_reason_counts"] == {"no_exact_option_quotes_for_date": 4}
     assert [lane["status"] for lane in audit["lanes"]] == ["completed", "completed"]
+
+
+def test_quote_store_coverage_marks_missing_requested_market_dates() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp) / "options_history.db"
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                """
+                CREATE TABLE import_batches (
+                    id INTEGER PRIMARY KEY,
+                    source_label TEXT NOT NULL,
+                    data_trust TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE option_quote_snapshots (
+                    quote_date_et TEXT NOT NULL,
+                    quote_minute_et INTEGER NOT NULL,
+                    snapshot_kind TEXT NOT NULL,
+                    underlying TEXT NOT NULL,
+                    source_batch_id INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "INSERT INTO import_batches (id, source_label, data_trust) VALUES (1, 'thetadata_opra_nbbo_1m', 'trusted')"
+            )
+            conn.execute(
+                """
+                INSERT INTO option_quote_snapshots
+                    (quote_date_et, quote_minute_et, snapshot_kind, underlying, source_batch_id)
+                VALUES ('2026-05-22', 610, 'intraday', 'SPY', 1)
+                """
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        args = argparse.Namespace(
+            date_from="2026-05-22",
+            date_to="2026-05-26",
+            truth_lane=single_lane.wfo.IMPORTED_TRUTH_SOURCE,
+            source_labels="thetadata_opra_nbbo_1m",
+            historical_options_db=str(db_path),
+            allow_research_data=False,
+        )
+
+        coverage = all_lanes.quote_store_coverage(args)
+
+    assert coverage["status"] == "checked"
+    assert coverage["market_date_count"] == 2
+    assert coverage["covered_date_count"] == 1
+    assert coverage["missing_dates"] == ["2026-05-26"]
 
 
 class ZeroPickAllLanesAuditTests(unittest.TestCase):
@@ -94,3 +154,6 @@ class ZeroPickAllLanesAuditTests(unittest.TestCase):
 
     def test_all_lanes_audit_invokes_requested_lanes(self) -> None:
         test_all_lanes_audit_invokes_requested_lanes(_MonkeyPatch(self))
+
+    def test_quote_store_coverage_marks_missing_requested_market_dates(self) -> None:
+        test_quote_store_coverage_marks_missing_requested_market_dates()

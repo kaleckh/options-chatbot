@@ -119,7 +119,7 @@ test("FinTable mobile cards use explicit title, subtitle, priority, and hidden c
 
 test("production FinTable usages declare explicit mobile card contracts", () => {
   const usages = findProductionFinTableUsages();
-  assert.equal(usages.length, 11);
+  assert.equal(usages.length, 12);
 
   const missing = usages.flatMap((usage) => {
     const missingProps = REQUIRED_MOBILE_CONTRACT_PROPS.filter((prop) => !usage.props.has(prop));

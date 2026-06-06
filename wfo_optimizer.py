@@ -98,6 +98,7 @@ from options_execution import (
     has_two_sided_quote,
     long_option_pnl,
     quote_midpoint,
+    safe_float,
 )
 
 PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK = "bullish_pullback_observation"
@@ -230,8 +231,10 @@ def _resolve_imported_execution_price(
     ask: Any = None,
     last: Any = None,
     slippage_pct: float = 0.0,
+    allow_zero_bid_quote: bool = False,
 ) -> dict[str, Any]:
     normalized_lane = _normalize_requested_pricing_lane(requested_pricing_lane)
+    normalized_side = str(side or "").strip().lower()
     fallback_reason: Optional[str] = None
     if normalized_lane == "mid" and has_two_sided_quote(bid=bid, ask=ask):
         midpoint = quote_midpoint(bid=bid, ask=ask)
@@ -244,6 +247,31 @@ def _resolve_imported_execution_price(
             }
     if normalized_lane == "mid":
         fallback_reason = "mid_requires_two_sided_quote"
+    bid_value = safe_float(bid)
+    ask_value = safe_float(ask)
+    if (
+        allow_zero_bid_quote
+        and normalized_side in {"entry", "exit"}
+        and bid_value is not None
+        and ask_value is not None
+        and bid_value >= 0
+        and ask_value > 0
+        and ask_value >= bid_value
+    ):
+        raw_execution_price = ask_value if normalized_side == "entry" else bid_value
+        slippage = float(slippage_pct or 0.0) / 100.0
+        if normalized_side == "entry":
+            adjusted = float(raw_execution_price) * (1.0 + slippage)
+            execution_basis = "ask"
+        else:
+            adjusted = float(raw_execution_price) * max(0.0, 1.0 - slippage)
+            execution_basis = "bid"
+        return {
+            "execution_price": round(max(adjusted, 0.0), 4),
+            "execution_basis": execution_basis,
+            "effective_pricing_lane": "pessimistic" if fallback_reason else normalized_lane,
+            "pricing_lane_fallback_reason": fallback_reason,
+        }
     execution = executable_option_price(
         side=side,
         bid=bid,
@@ -7325,11 +7353,13 @@ def _simulate_spread_outcome_imported(
             side="exit", requested_pricing_lane=requested_pricing_lane,
             bid=long_quote.bid, ask=long_quote.ask, last=long_quote.last,
             slippage_pct=exit_slippage_pct,
+            allow_zero_bid_quote=True,
         )
         short_exit_exec = _resolve_imported_execution_price(
             side="entry", requested_pricing_lane=requested_pricing_lane,  # buying back short = "entry" side pricing
             bid=short_quote.bid, ask=short_quote.ask, last=short_quote.last,
             slippage_pct=exit_slippage_pct,
+            allow_zero_bid_quote=True,
         )
         long_now = float(long_exit_exec.get("execution_price") or 0.0)
         short_now = float(short_exit_exec.get("execution_price") or 0.0)
@@ -7709,6 +7739,7 @@ def _simulate_trade_outcome_imported(
             ask=quote.ask,
             last=quote.last,
             slippage_pct=exit_slippage_pct,
+            allow_zero_bid_quote=True,
         )
         opt_now = float(exit_execution.get("execution_price") or 0.0)
         exit_fill_basis = f"historical_{exit_execution.get('execution_basis') or quote.price_basis}"

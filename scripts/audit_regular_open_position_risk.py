@@ -22,6 +22,8 @@ from scripts.audit_trading_desk_negative_trade_decisions import _record_class, _
 
 
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
+OPEN_RISK_GOVERNOR_PASS = "open_risk_governor_pass"
+OPEN_RISK_GOVERNOR_BLOCKED = "open_risk_governor_blocked"
 REGULAR_SUPERVISED_LANES = {
     "short_term",
     "swing",
@@ -127,6 +129,10 @@ def _actionable_next_step(action_bucket: str) -> str:
     return "monitor"
 
 
+def _is_live_exact_row(row: dict[str, Any]) -> bool:
+    return _record_class(row) == "live_exact_tracked"
+
+
 def _actionable_position_detail(row: dict[str, Any], *, now: datetime, stale_hours: float) -> dict[str, Any]:
     review = _latest_review(row)
     action_bucket = _action_bucket(row)
@@ -175,6 +181,74 @@ def _group_counts(rows: list[dict[str, Any]], key_fn) -> dict[str, dict[str, Any
     return {key: _summarize(items) for key, items in sorted(grouped.items())}
 
 
+def _build_open_risk_governor(
+    open_rows: list[dict[str, Any]],
+    *,
+    now: datetime,
+    stale_hours: float,
+) -> dict[str, Any]:
+    live_exact_rows = [row for row in open_rows if _is_live_exact_row(row)]
+    live_exact_negative = [row for row in live_exact_rows if (pnl_pct(row) is not None and pnl_pct(row) < 0)]
+    live_exact_close_ready = [
+        row for row in live_exact_rows if _action_bucket(row) == "stored_executable_sell"
+    ]
+    live_exact_review_blocked = [
+        row
+        for row in live_exact_rows
+        if _evidence_bucket(row, now=now, stale_hours=stale_hours)
+        in {
+            "missing_review",
+            "stale_executable_review",
+            "stale_mark_or_non_executable_review",
+            "stale_unpriced_review",
+            "fresh_mark_or_non_executable_review",
+            "fresh_unpriced_review",
+        }
+    ]
+    blockers: list[str] = []
+    if live_exact_negative:
+        blockers.append("live_exact_negative_open_risk")
+    if live_exact_close_ready:
+        blockers.append("live_exact_executable_close_ready")
+    if live_exact_review_blocked:
+        blockers.append("live_exact_review_stale_missing_or_non_executable")
+    status = OPEN_RISK_GOVERNOR_BLOCKED if blockers else OPEN_RISK_GOVERNOR_PASS
+    details = [
+        _actionable_position_detail(row, now=now, stale_hours=stale_hours)
+        for row in sorted(
+            live_exact_negative + live_exact_close_ready + live_exact_review_blocked,
+            key=lambda item: (
+                _safe_float(item.get("id")) or 0.0,
+                item.get("ticker") or "",
+            ),
+        )
+    ]
+    return {
+        "status": status,
+        "live_entry_allowed": status == OPEN_RISK_GOVERNOR_PASS,
+        "blockers": blockers,
+        "live_exact_open_count": len(live_exact_rows),
+        "live_exact_negative_count": len(live_exact_negative),
+        "live_exact_executable_close_ready_count": len(live_exact_close_ready),
+        "live_exact_review_blocked_count": len(live_exact_review_blocked),
+        "live_exact_review_blocked_ids": [row.get("id") for row in live_exact_review_blocked],
+        "live_exact_negative_ids": [row.get("id") for row in live_exact_negative],
+        "live_exact_executable_close_ready_ids": [row.get("id") for row in live_exact_close_ready],
+        "governor_details": details,
+        "next_safe_actions": [
+            "do_not_open_new_scanner_origin_rows_until_governor_passes"
+            if status == OPEN_RISK_GOVERNOR_BLOCKED
+            else "open_risk_governor_clear_for_promotion_checks",
+            "refresh_open_position_reviews_with_live_executable_quotes",
+            "resolve_executable_sell_or_negative_live_exact_rows_before_live_validation",
+        ]
+        if status == OPEN_RISK_GOVERNOR_BLOCKED
+        else ["continue_monitoring_open_risk_before_each_promotion_readback"],
+        "read_only": True,
+        "live_policy_change": False,
+    }
+
+
 def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> dict[str, Any]:
     now = datetime.now(UTC)
     open_rows = [
@@ -192,6 +266,7 @@ def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> di
     ]
     negative = [row for row in open_rows if (pnl_pct(row) is not None and pnl_pct(row) < 0)]
     top_negative = sorted(negative, key=lambda row: pnl_pct(row) or 0.0)[:20]
+    governor = _build_open_risk_governor(open_rows, now=now, stale_hours=stale_hours)
     return {
         "generated_at_utc": _utc_now_iso(),
         "scope": "regular_supervised_open_positions_read_only",
@@ -203,6 +278,7 @@ def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> di
         "evidence_counts": dict(sorted(evidence_counts.items())),
         "action_counts": dict(sorted(action_counts.items())),
         "actionable_position_ids": [row.get("id") for row in actionable],
+        "open_risk_governor": governor,
         "actionable_positions": [
             _actionable_position_detail(row, now=now, stale_hours=stale_hours)
             for row in actionable
@@ -259,6 +335,7 @@ def main(argv: list[str] | None = None) -> int:
                     "evidence_counts": report["evidence_counts"],
                     "action_counts": report["action_counts"],
                     "actionable_position_ids": report["actionable_position_ids"],
+                    "open_risk_governor": report["open_risk_governor"],
                     "actionable_positions": report["actionable_positions"],
                     "top_negative_open_positions": report["top_negative_open_positions"][:10],
                     "artifacts": artifacts,

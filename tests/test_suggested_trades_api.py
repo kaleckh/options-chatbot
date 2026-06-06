@@ -28,6 +28,9 @@ import positions_service as psvc
 from positions_repository import UnavailableTrackedPositionsRepository
 from options_algorithm_fixtures import (
     FrozenDateTime,
+    build_fresh_lane_gate_report,
+    build_fresh_lane_promotion_report,
+    build_fresh_open_risk_report,
     build_options_algorithm_fixture_bundle,
     build_scanner_origin_forward_event,
     build_scanner_origin_proof_scan_pick,
@@ -286,6 +289,7 @@ class SuggestedTradesApiTests(unittest.TestCase):
     def test_create_scanner_origin_suggested_trade_accepts_matching_archived_lineage(self):
         scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
         archived_event = build_scanner_origin_forward_event(scan_pick)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
 
         with (
             patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
@@ -293,6 +297,18 @@ class SuggestedTradesApiTests(unittest.TestCase):
                 self.backend,
                 "apply_playbook_guardrails",
                 return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(),
             ),
         ):
             response = self.client.post(
@@ -314,6 +330,44 @@ class SuggestedTradesApiTests(unittest.TestCase):
             trade["source_pick_snapshot"]["source_scan_event_key"],
             scan_pick["source_scan_event_key"],
         )
+
+    def test_create_scanner_origin_suggested_trade_rejects_paper_probation_lane(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        archived_event = build_scanner_origin_forward_event(scan_pick)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
+
+        with (
+            patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id, promotion_state="paper_probation"),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(),
+            ),
+        ):
+            response = self.client.post(
+                "/api/suggested-trades",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": scan_pick["entry_execution_price"],
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("lane_promotion_state", str(response.json()["detail"]))
 
     def test_create_scanner_origin_suggested_trade_rejects_mutated_archived_lineage_fields(self):
         baseline_pick = build_scanner_origin_proof_scan_pick(self.bundle)

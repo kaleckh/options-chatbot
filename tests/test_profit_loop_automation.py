@@ -9,6 +9,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from profit_loop_automation import (
+    ACTIVE_PROFIT_LOOP_TRUTH_LANE,
+    DEFAULT_TRUTH_HOLDOUT_SCAN_PLAYBOOK,
     _load_local_env,
     _proof_context,
     _capture_validation_baseline,
@@ -492,6 +494,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         raw_command = run_json_mock.call_args_list[1].args[0]
         self.assertNotIn("--record-frozen-cohorts", raw_command)
         self.assertNotIn("--cohort-id", raw_command)
+        self.assertIn(DEFAULT_TRUTH_HOLDOUT_SCAN_PLAYBOOK, raw_command)
         self.assertEqual(raw_command.count("--watchlist-symbol"), 2)
         self.assertIn("SPY", raw_command)
         self.assertIn("QQQ", raw_command)
@@ -632,6 +635,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             "allowed_truth_staleness_business_days": 3,
         }
         with patch("profit_loop_automation._env_flag", return_value=True), \
+             patch("profit_loop_automation.ACTIVE_PROFIT_LOOP_TRUTH_LANE", "historical_imported_daily"), \
              patch("profit_loop_automation._resolve_daily_truth_import_manifest", return_value=(str(manifest_path), "env")), \
              patch("profit_loop_automation._load_manifest_entries", return_value=[{"source": "qqq_options", "input": "C:/tmp/qqq_options.parquet"}]), \
              patch("profit_loop_automation._daily_truth_entries_needing_import", return_value=([], {"latest_quote_at_utc": "2025-12-15T00:00:00Z"})), \
@@ -675,6 +679,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         missing_manifest = self.state_dir / "missing-manifest.json"
 
         with patch("profit_loop_automation._env_flag", return_value=True), \
+             patch("profit_loop_automation.ACTIVE_PROFIT_LOOP_TRUTH_LANE", "historical_imported_daily"), \
              patch(
                  "profit_loop_automation._resolve_daily_truth_import_manifest",
                  return_value=(str(missing_manifest), "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"),
@@ -726,6 +731,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             clear=False,
         ), \
              patch("profit_loop_automation._env_flag", return_value=True), \
+             patch("profit_loop_automation.ACTIVE_PROFIT_LOOP_TRUTH_LANE", "historical_imported_daily"), \
              patch(
                  "profit_loop_automation._resolve_daily_truth_import_manifest",
                  return_value=(str(manifest_path), "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"),
@@ -1097,7 +1103,7 @@ class ProfitLoopAutomationTests(unittest.TestCase):
         replay_fingerprint = _validation_fingerprint(
             commit_sha=proof_context["commit_sha"],
             env_hash=proof_context["env_hash"],
-            truth_lane="historical_imported_daily",
+            truth_lane=ACTIVE_PROFIT_LOOP_TRUTH_LANE,
             playbook="broad",
             blocker_class="replay_matrix_suspicious",
             pricing_spec="matrix",
@@ -1953,6 +1959,50 @@ class ProfitLoopAutomationTests(unittest.TestCase):
             result["consistency"]["ledger_run_ids"],
             ["health-1", "holdout-1", "validation-1"],
         )
+
+    def test_canary_treats_empty_validation_queue_as_healthy_idle_step(self):
+        refresh_result = {"status": "artifact_refreshed", "commands": ["run_historical_backtest ..."]}
+        health = {
+            "automation_id": "hourly-operational-health",
+            "snapshot": {"run_id": "health-1", "loop_execution_status": "healthy", "evidence_complete": True},
+        }
+        holdout = {
+            "automation_id": "daily-truth-holdout",
+            "snapshot": {"run_id": "holdout-1", "loop_execution_status": "healthy", "evidence_complete": True},
+        }
+        validation = {
+            "automation_id": "daily-profit-validation",
+            "action": "queue_empty",
+            "snapshot": {
+                "run_id": "validation-1",
+                "verdict": "queue-empty",
+                "loop_execution_status": "idle",
+                "profitability_verdict": "unproven",
+                "evidence_complete": False,
+            },
+            "issues": [],
+        }
+        before_events = [{"automation_id": "seed", "run_id": "seed-1"}]
+        after_events = before_events + [
+            {"automation_id": "hourly-operational-health", "run_id": "health-1", "verdict": "healthy"},
+            {"automation_id": "daily-truth-holdout", "run_id": "holdout-1", "verdict": "recorded"},
+            {"automation_id": "daily-profit-validation", "run_id": "validation-1", "verdict": "queue-empty"},
+        ]
+        state = load_profit_loop_state(self.state_dir)
+        state["latest_operational_health"] = {"run_id": "health-1"}
+        state["latest_truth_holdout"] = {"run_id": "holdout-1"}
+        state["latest_profit_validation"] = {"run_id": "validation-1"}
+
+        with patch("profit_loop_automation._require_daily_truth_refresh", return_value=refresh_result), \
+             patch("profit_loop_automation.run_operational_health", return_value=health), \
+             patch("profit_loop_automation.run_truth_holdout", return_value=holdout), \
+             patch("profit_loop_automation.prepare_profit_validation", return_value=validation), \
+             patch("profit_loop_automation.load_profit_loop_state", return_value=state), \
+             patch("profit_loop_automation.list_run_ledger_events", side_effect=[before_events, after_events]):
+            result = run_profit_loop_canary(state_dir=self.state_dir, dry_run=False)
+
+        self.assertEqual(result["exit_code"], 0)
+        self.assertEqual(result["step_health"]["unhealthy_automation_ids"], [])
 
     def test_canary_returns_exit_code_two_when_degraded_steps_have_high_issues(self):
         refresh_result = {"status": "artifact_refreshed", "commands": ["run_historical_backtest ..."]}

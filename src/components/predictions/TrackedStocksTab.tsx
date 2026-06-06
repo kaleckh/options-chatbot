@@ -5,6 +5,22 @@ import { RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { TableSkeleton } from "@/components/ui/Skeleton";
 import { fmtDate, fmtPct, metricToneClass } from "@/components/predictions/tradingDeskFormat";
+import { getLatestRecommendation } from "@/components/predictions/tradingDeskCells";
+import {
+  getPositionLaneDescriptor,
+  getSignalGivenDateValue,
+  getTradeDateFilterValue,
+  latestDateValue,
+} from "@/components/predictions/trackedPositionUtils";
+import {
+  getCloseNowPnlPct,
+  getRealizedPnlPct,
+  isRealizedPnlClosedPosition,
+  isProductionProofPosition,
+  isResearchLearningPosition,
+  positionQualityPnlPct,
+} from "@/lib/trading-desk/positionEvidence";
+import type { TrackedPosition } from "@/lib/types";
 
 export type TrackedStockSummary = {
   ticker: string;
@@ -26,6 +42,98 @@ export type TrackedStockSummary = {
   statusLabel: string;
   laneLabels: string[];
 };
+
+export function buildTrackedStockSummaries(
+  openPositions: TrackedPosition[],
+  closedPositions: TrackedPosition[]
+): TrackedStockSummary[] {
+  const summaryByTicker = new globalThis.Map<string, {
+    ticker: string;
+    positions: TrackedPosition[];
+    lanes: Set<string>;
+    latestSignalDate: string | null;
+    latestTradeDate: string | null;
+  }>();
+
+  for (const position of [...openPositions, ...closedPositions]) {
+    const ticker = String(position.ticker || "").trim().toUpperCase();
+    if (!ticker) continue;
+    const existing = summaryByTicker.get(ticker) ?? {
+      ticker,
+      positions: [],
+      lanes: new Set<string>(),
+      latestSignalDate: null,
+      latestTradeDate: null,
+    };
+    existing.positions.push(position);
+    existing.lanes.add(getPositionLaneDescriptor(position).label);
+    existing.latestSignalDate = latestDateValue(existing.latestSignalDate, getSignalGivenDateValue(position));
+    existing.latestTradeDate = latestDateValue(existing.latestTradeDate, getTradeDateFilterValue(position));
+    summaryByTicker.set(ticker, existing);
+  }
+
+  return Array.from(summaryByTicker.values())
+    .map((item) => {
+      const openPositionsForTicker = item.positions.filter((position) => position.status === "open");
+      const closedPositionsForTicker = item.positions.filter((position) => position.status === "closed");
+      const openRecommendations = openPositionsForTicker.map((position) => getLatestRecommendation(position));
+      const realizedClosedPositions = closedPositionsForTicker.filter(isRealizedPnlClosedPosition);
+      const openPnlValues = openPositionsForTicker
+        .map(getCloseNowPnlPct)
+        .filter((value): value is number => value != null && !Number.isNaN(value));
+      const realizedPnlValues = realizedClosedPositions
+        .map(getRealizedPnlPct)
+        .filter((value): value is number => value != null && !Number.isNaN(value));
+      const pnlValues = item.positions
+        .map(positionQualityPnlPct)
+        .filter((value): value is number => value != null && !Number.isNaN(value));
+      const openRows = openPositionsForTicker.length;
+      const closedRows = closedPositionsForTicker.length;
+      const closeNowCount = openRecommendations.filter((value) => value === "SELL").length;
+      const holdCount = openRecommendations.filter((value) => value === "HOLD").length;
+      const statusLabel =
+        closeNowCount > 0
+          ? `${closeNowCount} close now`
+          : holdCount > 0
+            ? `${holdCount} hold`
+            : openRows > 0
+              ? `${openRows} open`
+              : "No open trades";
+
+      return {
+        ticker: item.ticker,
+        totalRows: item.positions.length,
+        openRows,
+        closedRows,
+        liveExactRows: item.positions.filter(isProductionProofPosition).length,
+        researchRows: item.positions.filter(isResearchLearningPosition).length,
+        realizedRows: realizedClosedPositions.length,
+        unpricedClosedRows: Math.max(closedRows - realizedClosedPositions.length, 0),
+        closeNowCount,
+        holdCount,
+        waitingCount: Math.max(openRows - closeNowCount - holdCount, 0),
+        openPnlPct: openPnlValues.length > 0
+          ? openPnlValues.reduce((sum, value) => sum + value, 0) / openPnlValues.length
+          : null,
+        realizedPnlPct: realizedPnlValues.length > 0
+          ? realizedPnlValues.reduce((sum, value) => sum + value, 0) / realizedPnlValues.length
+          : null,
+        avgPnlPct: pnlValues.length > 0
+          ? pnlValues.reduce((sum, value) => sum + value, 0) / pnlValues.length
+          : null,
+        latestSignalDate: item.latestSignalDate,
+        latestTradeDate: item.latestTradeDate,
+        statusLabel,
+        laneLabels: Array.from(item.lanes).sort((a, b) => a.localeCompare(b)),
+      };
+    })
+    .sort((a, b) =>
+      b.closeNowCount - a.closeNowCount ||
+      b.openRows - a.openRows ||
+      (a.openPnlPct ?? 0) - (b.openPnlPct ?? 0) ||
+      a.ticker.localeCompare(b.ticker)
+    );
+}
 
 type TrackedStocksTabProps = {
   summaries: TrackedStockSummary[];

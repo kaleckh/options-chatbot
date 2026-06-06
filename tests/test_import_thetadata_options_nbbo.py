@@ -105,6 +105,42 @@ class ImportThetaDataOptionsNbboTests(unittest.TestCase):
 
         self.assertIsNone(row)
 
+    def test_normalize_theta_quote_row_accepts_zero_bid_positive_ask_quote(self):
+        row = _normalize_theta_quote_row(
+            {
+                "expiration": "2026-06-19",
+                "strike": 55.0,
+                "right": "call",
+                "timestamp": "2026-05-15T15:55:00.000",
+                "bid": 0.0,
+                "ask": 0.05,
+            },
+            underlying="FCX",
+            trade_date=date(2026, 5, 15),
+        )
+
+        self.assertIsNotNone(row)
+        assert row is not None
+        self.assertEqual(row["contract_symbol"], "FCX260619C00055000")
+        self.assertEqual(row["bid"], "0")
+        self.assertEqual(row["ask"], "0.05")
+
+    def test_normalize_theta_quote_row_rejects_zero_ask_quote(self):
+        row = _normalize_theta_quote_row(
+            {
+                "expiration": "2026-06-19",
+                "strike": 55.0,
+                "right": "call",
+                "timestamp": "2026-05-15T15:55:00.000",
+                "bid": 0.0,
+                "ask": 0.0,
+            },
+            underlying="FCX",
+            trade_date=date(2026, 5, 15),
+        )
+
+        self.assertIsNone(row)
+
     def test_build_thetadata_nbbo_import_fetches_and_filters_rows(self):
         session = _FakeSession(
             [

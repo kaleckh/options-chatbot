@@ -39,8 +39,10 @@ test("Trading Desk active and visible tab ids are separate typed catalogs", () =
   const tabs = loadTsModule("src/components/predictions/tradingDeskTabs.ts");
 
   assert.ok(tabs.TRADING_DESK_CONTENT_TAB_IDS.includes("positions"));
+  assert.ok(tabs.TRADING_DESK_CONTENT_TAB_IDS.includes("paper-track"));
   assert.ok(!tabs.TRADING_DESK_CONTENT_TAB_IDS.includes("closed-trades"));
   assert.ok(tabs.TRADING_DESK_VISIBLE_TAB_IDS.includes("closed-trades"));
+  assert.ok(tabs.TRADING_DESK_VISIBLE_TAB_IDS.includes("paper-track"));
   assert.deepEqual(
     plain(tabs.resolveTradingDeskVisibleTab("closed-trades")),
     { activeSubTab: "positions", positionsView: "closed" }
@@ -48,6 +50,10 @@ test("Trading Desk active and visible tab ids are separate typed catalogs", () =
   assert.deepEqual(
     plain(tabs.resolveTradingDeskVisibleTab("positions")),
     { activeSubTab: "positions", positionsView: "open" }
+  );
+  assert.deepEqual(
+    plain(tabs.resolveTradingDeskVisibleTab("paper-track")),
+    { activeSubTab: "paper-track" }
   );
   assert.equal(tabs.toTradingDeskVisibleTabId("positions", "closed"), "closed-trades");
   assert.equal(tabs.toTradingDeskVisibleTabId("positions", "open"), "positions");
@@ -61,6 +67,7 @@ test("Trading Desk legacy analytics ids exclude current scanner and paper workfl
   assert.equal(tabs.isLegacyPredictionTabId("sectors"), true);
   assert.equal(tabs.isLegacyPredictionTabId("scanner"), false);
   assert.equal(tabs.isLegacyPredictionTabId("suggestions"), false);
+  assert.equal(tabs.isLegacyPredictionTabId("paper-track"), false);
 });
 
 test("PredictionsView consumes typed Trading Desk tab ids", () => {
@@ -71,6 +78,7 @@ test("PredictionsView consumes typed Trading Desk tab ids", () => {
   assert.match(source, /toTradingDeskVisibleTabId\(activeSubTab, positionsView\)/);
   assert.match(source, /resolveTradingDeskVisibleTab\(tabId\)/);
   assert.match(source, /isLegacyPredictionTabId\(activeSubTab\)/);
+  assert.match(source, /TrackedPaperPositionsTab/);
   assert.doesNotMatch(source, /LEGACY_PREDICTION_TABS\s*=\s*new Set/);
   assert.doesNotMatch(source, /useState\("positions"\)/);
 });

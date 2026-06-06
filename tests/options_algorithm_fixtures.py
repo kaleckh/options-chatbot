@@ -75,6 +75,85 @@ def make_history(
     )
 
 
+def _fresh_generated_at() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def build_fresh_lane_gate_report(
+    playbook_id: str = "short_term",
+    *,
+    auto_track_allowed: bool = True,
+    self_guardrails: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return {
+        "generated_at_utc": _fresh_generated_at(),
+        "summary": {
+            "mark_unpriced_count": 0,
+            "tracked_row_count": 0,
+            "tracked_rows_with_stored_pnl": 0,
+        },
+        "lane_gates": {
+            playbook_id: {
+                "status": "pass" if auto_track_allowed else "fail",
+                "auto_track_allowed": auto_track_allowed,
+                "blockers": [] if auto_track_allowed else ["profit_factor_below_lane_gate"],
+                "self_guardrails": self_guardrails or {},
+            }
+        },
+    }
+
+
+def build_fresh_lane_promotion_report(
+    playbook_id: str = "short_term",
+    *,
+    promotion_state: str = "live_validation",
+) -> dict[str, Any]:
+    promoted = promotion_state in {"live_validation", "auto_track"}
+    return {
+        "report_id": "regular_options_lane_promotion_state",
+        "generated_at_utc": _fresh_generated_at(),
+        "summary": {"live_policy_change": False},
+        "lane_states": {
+            playbook_id: {
+                "playbook_id": playbook_id,
+                "promotion_state": promotion_state,
+                "candidate_status_reason": (
+                    "lane_promotion_state_allows_live_validation"
+                    if promoted
+                    else "promotion_requires_fresh_walk_forward_paper_and_risk_gates"
+                ),
+                "failed_promotion_gates": [] if promoted else ["fresh_paper_cohort"],
+                "blockers": [] if promoted else ["fresh_paper_cohort_insufficient"],
+            }
+        },
+    }
+
+
+def build_fresh_open_risk_report(*, blocked: bool = False) -> dict[str, Any]:
+    blockers = ["live_exact_negative_open_risk"] if blocked else []
+    return {
+        "generated_at_utc": _fresh_generated_at(),
+        "scope": "regular_supervised_open_positions_read_only",
+        "read_only": True,
+        "summary": {"rows": 0, "negative": 0, "priced_or_marked": 0},
+        "by_record_class": {"live_exact_tracked": {"rows": 0, "negative": 0}},
+        "top_negative_open_positions": [],
+        "open_risk_governor": {
+            "status": "open_risk_governor_blocked" if blocked else "open_risk_governor_pass",
+            "live_entry_allowed": not blocked,
+            "blockers": blockers,
+            "live_exact_open_count": 1 if blocked else 0,
+            "live_exact_negative_count": 1 if blocked else 0,
+            "live_exact_negative_ids": [537] if blocked else [],
+            "live_exact_executable_close_ready_count": 0,
+            "live_exact_review_blocked_count": 0,
+            "governor_details": [],
+            "read_only": True,
+            "live_policy_change": False,
+        },
+    }
+
+
 def make_option_frame(symbol: str, expiry: str, option_type: str, spot: float, illiquid: bool = False) -> pd.DataFrame:
     strikes = [round(spot - 10.0, 2), round(spot - 5.0, 2), round(spot, 2), round(spot + 5.0, 2), round(spot + 10.0, 2)]
     rows: list[dict[str, Any]] = []

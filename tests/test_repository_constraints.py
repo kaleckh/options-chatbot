@@ -246,6 +246,65 @@ class RepositoryConstraintTests(unittest.TestCase):
             audit["violations"],
         )
 
+    def test_constraint_audit_reports_closed_sqlite_trade_missing_realized_pnl(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = os.path.join(tmpdir, "suggested.db")
+            repo = SQLiteSuggestedTradesRepository(db_path)
+            self.assertTrue(repo.init_schema())
+
+            with closing(sqlite3.connect(db_path)) as conn:
+                conn.execute(
+                    """
+                    INSERT INTO suggested_trades (
+                        id,
+                        status,
+                        ticker,
+                        direction,
+                        strike,
+                        expiry,
+                        contracts,
+                        entry_option_price,
+                        entry_execution_price,
+                        entry_fee_total_usd,
+                        filled_at,
+                        stop_loss_pct,
+                        profit_target_pct,
+                        time_exit_day,
+                        source_pick_snapshot,
+                        closed_at,
+                        exit_reason
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        1,
+                        "closed",
+                        "SPY",
+                        "call",
+                        740.0,
+                        "2026-06-19",
+                        1,
+                        4.0,
+                        4.0,
+                        1.3,
+                        "2026-06-04T10:00:00Z",
+                        90.0,
+                        150.0,
+                        5,
+                        "{}",
+                        "2026-06-05T10:00:00Z",
+                        "test_closed_without_pnl",
+                    ),
+                )
+                conn.commit()
+
+            audit = audit_sqlite_suggested_trades(db_path)
+
+        self.assertEqual(audit["status"], "violations_found")
+        self.assertIn(
+            {"constraint_id": "suggested_trades_closed_missing_realized_pnl", "count": 1},
+            audit["violations"],
+        )
+
     def test_postgres_constraint_audit_skips_without_database_url(self):
         audit = audit_postgres_tracked_positions(None)
 

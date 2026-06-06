@@ -69,6 +69,7 @@ SOURCE_INPUTS_BY_GENERATOR = {
         "python-backend/trading_desk_api_models.py",
     ),
     "scripts/generate_proof_evidence_contract.py": ("data/contracts/proof-evidence-contract.json",),
+    "scripts/candidate_lifecycle.py": ("scripts/candidate_lifecycle.py",),
     "scripts/generate_proof_invariant_table.py": ("data/contracts/proof-invariant-cases.json",),
     "scripts/generate_legacy_lane_boundaries.py": (
         "data/contracts/route-mutation-inventory.json",
@@ -82,6 +83,12 @@ SOURCE_INPUTS_BY_GENERATOR = {
     "scripts/generate_remediation_loop_map.py": (
         "docs/WORKLOG.md",
         "docs/architecture-best-practices.md",
+    ),
+    "scripts/generate_project_pathway_registry.py": (
+        "scripts/generate_project_pathway_registry.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/index.md",
+        "docs/NEXT_STEPS.md",
     ),
     "scripts/generate_agent_memory_graph.py": (
         "docs/architecture-best-practices.md",
@@ -115,10 +122,12 @@ OWNER_DOCS_BY_GENERATOR = {
     "scripts/generate_storage_ownership_map.py": ("docs/storage-ownership-map.md", "docs/api-and-storage.md"),
     "scripts/generate_trading_desk_schema_bridge.py": ("docs/trading-desk-schema-bridge.md", "docs/typescript-api-contracts.md", "docs/trading-desk-api-models.md"),
     "scripts/generate_proof_evidence_contract.py": ("docs/proof-evidence-contract.md",),
+    "scripts/candidate_lifecycle.py": ("docs/candidate-lifecycle-contract.md", "docs/scanner-creation-safety-contract.md"),
     "scripts/generate_proof_invariant_table.py": ("docs/proof-invariant-table.md", "docs/proof-evidence-contract.md"),
     "scripts/generate_legacy_lane_boundaries.py": ("docs/legacy-lane-boundaries.md", "docs/PROJECT_CONTEXT.md"),
     "scripts/generate_ai_commodity_isolation.py": ("docs/ai-commodity-isolation.md", "docs/PROJECT_CONTEXT.md"),
     "scripts/generate_remediation_loop_map.py": ("docs/remediation-loop-map.md", "docs/architecture-best-practices.md"),
+    "scripts/generate_project_pathway_registry.py": ("docs/project-operating-map.md", "docs/PROJECT_CONTEXT.md", "docs/NEXT_STEPS.md"),
     "scripts/generate_agent_memory_graph.py": ("docs/agent-memory-graph.md", "docs/index.md"),
     GENERATOR: ("docs/generated-artifact-governance.md", "docs/living-docs-hygiene.md"),
     "scripts/generate_final_remediation_closure_pack.py": ("docs/final-remediation-closure-pack.md", "docs/remediation-loop-map.md"),

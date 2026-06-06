@@ -1,5 +1,6 @@
 export const TRADING_DESK_CONTENT_TAB_IDS = [
   "positions",
+  "paper-track",
   "tracked-stocks",
   "scanner",
   "suggestions",
@@ -15,6 +16,7 @@ export type TradingDeskSubTabId = (typeof TRADING_DESK_CONTENT_TAB_IDS)[number];
 export const TRADING_DESK_VISIBLE_TAB_IDS = [
   "positions",
   "closed-trades",
+  "paper-track",
   "tracked-stocks",
   "scanner",
   "suggestions",

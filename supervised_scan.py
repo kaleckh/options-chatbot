@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import inspect
 import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -17,6 +18,7 @@ from ai_commodity_universe import (
 from lane_universe_manifest import lane_universe_symbols
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
+    IMPORTED_TRUTH_SOURCE,
     _classify_trade_against_live_policy,
     build_live_options_trade_policy,
     build_playbook_exit_audit,
@@ -26,7 +28,7 @@ from wfo_optimizer import (
 
 _ET = ZoneInfo("America/New_York")
 ROOT = Path(__file__).resolve().parent
-LIVE_SCAN_TRUTH_LANE = IMPORTED_DAILY_TRUTH_SOURCE
+LIVE_SCAN_TRUTH_LANE = IMPORTED_TRUTH_SOURCE
 SCAN_FUNNEL_DROP_KEYS = (
     "min_history",
     "history_or_liquidity",
@@ -525,6 +527,8 @@ SCAN_PLAYBOOKS: dict[str, dict[str, Any]] = {
         "allowed_strategy_types": ["vertical_spread"],
         "min_quality_score": 70.0,
         "max_debit_pct_of_width": 55.0,
+        "max_fill_degradation_vs_mid_pct": 6.0,
+        "max_worst_leg_bid_ask_spread_pct": 2.0,
         "calibration_playbook": "broad",
         "max_concurrent_positions": 2,
         "max_correlated_index_positions": 2,
@@ -1160,6 +1164,43 @@ def _record_source(record: dict[str, Any]) -> dict[str, Any]:
     return dict(source) if isinstance(source, dict) else {}
 
 
+def _tracked_position_is_research_backfill(position: dict[str, Any]) -> bool:
+    source = _record_source(position)
+    identity_fields = (
+        "backfill_audit_id",
+        "backfill_signature",
+        "position_migration_id",
+        "position_migrated_at_utc",
+        "historical_position_lifecycle",
+        "historical_position_exit_snapshot",
+        "historical_position_migration_as_of",
+    )
+    if any(position.get(field) for field in identity_fields):
+        return True
+    if any(source.get(field) for field in identity_fields):
+        return True
+    if source.get("research_only") is True:
+        return True
+    if str(source.get("production_filter_action") or "").strip().lower() == "research_backfill_not_live_production":
+        return True
+    if str(source.get("source_separation") or "").strip().lower() == "historical_selection_not_live_production":
+        return True
+    return False
+
+
+def _position_realized_pnl_usd(position: dict[str, Any]) -> float | None:
+    for field in ("net_pnl_usd", "gross_pnl_usd"):
+        value = _safe_float(position.get(field))
+        if value is not None:
+            return value
+    entry = _safe_float(position.get("entry_execution_price") or position.get("entry_option_price"))
+    exit_price = _safe_float(position.get("exit_execution_price") or position.get("exit_option_price"))
+    contracts = int(float(position.get("contracts") or 1))
+    if entry is None or entry <= 0 or exit_price is None:
+        return None
+    return round((exit_price - entry) * contracts * 100.0, 2)
+
+
 def _nested_mapping(record: dict[str, Any], key: str) -> dict[str, Any]:
     value = record.get(key)
     return value if isinstance(value, dict) else {}
@@ -1509,7 +1550,10 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
     context: dict[str, Any] = {
         "available": True,
         "open_positions": 0,
+        "raw_open_positions": 0,
+        "research_backfill_open_positions_ignored": 0,
         "opened_today": 0,
+        "research_backfill_opened_today_ignored": 0,
         "ticker_counts": {},
         "sector_counts": {},
         "regime_counts": {},
@@ -1531,16 +1575,22 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
         return context
 
     try:
-        open_positions = positions_repository.list_positions("open")
+        raw_open_positions = list(positions_repository.list_positions("open") or [])
         try:
-            all_positions = positions_repository.list_positions(None)
+            all_positions = list(positions_repository.list_positions(None) or [])
         except Exception:
-            all_positions = list(open_positions)
+            all_positions = list(raw_open_positions)
     except Exception as exc:
         context["available"] = False
         context["warnings"].append(f"Could not load tracked positions for guardrails: {exc}")
         return context
 
+    ignored_open_positions = [
+        position for position in raw_open_positions if _tracked_position_is_research_backfill(dict(position))
+    ]
+    open_positions = [
+        position for position in raw_open_positions if not _tracked_position_is_research_backfill(dict(position))
+    ]
     ticker_counts: dict[str, int] = {}
     sector_counts: dict[str, int] = {}
     regime_counts: dict[str, int] = {}
@@ -1555,10 +1605,14 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
     open_executable_loss_usd = 0.0
     open_executable_review_count = 0
     open_stale_or_unpriced_review_count = 0
+    ignored_opened_today = 0
 
     for position in list(all_positions or []):
         filled_at = _et_date(_parse_iso_datetime(position.get("filled_at")))
         if filled_at and filled_at.date() == today_et:
+            if _tracked_position_is_research_backfill(dict(position)):
+                ignored_opened_today += 1
+                continue
             opened_today += 1
 
     for position in open_positions:
@@ -1604,24 +1658,33 @@ def load_open_position_context(positions_repository: Any) -> dict[str, Any]:
             else:
                 open_stale_or_unpriced_review_count += 1
 
-    # Query realized P&L for daily/weekly loss limits
     daily_realized_pnl_usd = 0.0
     weekly_realized_pnl_usd = 0.0
-    try:
-        now_et = datetime.now(_ET)
-        today_open = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
-        weekday = today_open.weekday()
-        monday_open = today_open - timedelta(days=weekday)
-        if hasattr(positions_repository, "get_realized_pnl_since"):
-            daily_realized_pnl_usd = positions_repository.get_realized_pnl_since(today_open)
-            weekly_realized_pnl_usd = positions_repository.get_realized_pnl_since(monday_open)
-    except Exception:
-        pass
+    today_open = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    weekday = today_open.weekday()
+    monday_open = today_open - timedelta(days=weekday)
+    for position in list(all_positions or []):
+        if _tracked_position_is_research_backfill(dict(position)):
+            continue
+        closed_at = _parse_iso_datetime(position.get("closed_at"))
+        if closed_at is None:
+            continue
+        realized_pnl = _position_realized_pnl_usd(dict(position))
+        if realized_pnl is None:
+            continue
+        closed_at_et = closed_at.astimezone(_ET)
+        if closed_at_et >= today_open:
+            daily_realized_pnl_usd += realized_pnl
+        if closed_at_et >= monday_open:
+            weekly_realized_pnl_usd += realized_pnl
 
     context.update(
         {
             "open_positions": len(open_positions),
+            "raw_open_positions": len(raw_open_positions),
+            "research_backfill_open_positions_ignored": len(ignored_open_positions),
             "opened_today": opened_today,
+            "research_backfill_opened_today_ignored": ignored_opened_today,
             "ticker_counts": ticker_counts,
             "sector_counts": sector_counts,
             "regime_counts": regime_counts,
@@ -1949,7 +2012,7 @@ def annotate_pick_with_guardrails(
         blocked.append(f"{playbook['label']} only surfaces high-convexity setups rated speculative on the risk/upside scale.")
 
     if enforce_portfolio_caps and playbook.get("block_same_ticker") and ticker and int(ticker_counts.get(ticker, 0) or 0) > 0:
-        cautions.append(f"An open tracked position already exists in {ticker}.")
+        blocked.append(f"An open tracked position already exists in {ticker}.")
 
     spread_signature = vertical_spread_signature(annotated)
     if (
@@ -1957,13 +2020,13 @@ def annotate_pick_with_guardrails(
         and spread_signature is not None
         and int(vertical_spread_signature_counts.get(repr(spread_signature), 0) or 0) > 0
     ):
-        cautions.append("An open tracked position already has this exact vertical spread.")
+        blocked.append("An open tracked position already has this exact vertical spread.")
 
     correlation_size_mult = 1.0
     if enforce_portfolio_caps:
         max_new_positions_per_day = int(playbook.get("max_new_positions_per_day", 2) or 2)
         if opened_today >= max_new_positions_per_day:
-            cautions.append(
+            blocked.append(
                 f"Playbook daily cap reached: {opened_today} new position(s) already opened today against a {max_new_positions_per_day}-position limit."
             )
         elif opened_today == max_new_positions_per_day - 1 and max_new_positions_per_day > 1:
@@ -1972,14 +2035,14 @@ def annotate_pick_with_guardrails(
         max_sector_open_positions = int(playbook.get("max_sector_open_positions", 1) or 1)
         current_sector_count = int(sector_counts.get(sector, 0) or 0) if sector else 0
         if sector and current_sector_count >= max_sector_open_positions:
-            cautions.append(f"Sector cap reached for {sector}: {current_sector_count} open position(s) against a {max_sector_open_positions}-position limit.")
+            blocked.append(f"Sector cap reached for {sector}: {current_sector_count} open position(s) against a {max_sector_open_positions}-position limit.")
         elif sector and current_sector_count == max_sector_open_positions - 1 and max_sector_open_positions > 1:
             cautions.append(f"{sector} is one trade away from the current sector cap.")
 
         max_regime_open_positions = int(playbook.get("max_regime_open_positions", 2) or 2)
         current_regime_count = int(regime_counts.get(market_regime, 0) or 0) if market_regime else 0
         if market_regime and market_regime != "unknown" and current_regime_count >= max_regime_open_positions:
-            cautions.append(
+            blocked.append(
                 f"Regime cap reached for {market_regime}: {current_regime_count} open position(s) against a {max_regime_open_positions}-position limit."
             )
         elif (
@@ -1999,9 +2062,9 @@ def annotate_pick_with_guardrails(
         daily_limit_usd = account_size * daily_loss_limit_pct / 100.0
         weekly_limit_usd = account_size * weekly_loss_limit_pct / 100.0
         if daily_realized_pnl < 0 and abs(daily_realized_pnl) >= daily_limit_usd:
-            cautions.append(f"Daily loss limit reached: ${abs(daily_realized_pnl):.2f} lost today against ${daily_limit_usd:.2f} cap ({daily_loss_limit_pct}%).")
+            blocked.append(f"Daily loss limit reached: ${abs(daily_realized_pnl):.2f} lost today against ${daily_limit_usd:.2f} cap ({daily_loss_limit_pct}%).")
         if weekly_realized_pnl < 0 and abs(weekly_realized_pnl) >= weekly_limit_usd:
-            cautions.append(f"Weekly loss limit reached: ${abs(weekly_realized_pnl):.2f} lost this week against ${weekly_limit_usd:.2f} cap ({weekly_loss_limit_pct}%).")
+            blocked.append(f"Weekly loss limit reached: ${abs(weekly_realized_pnl):.2f} lost this week against ${weekly_limit_usd:.2f} cap ({weekly_loss_limit_pct}%).")
 
         # --- Open executable drawdown ---
         open_executable_loss = float(exposure.get("open_executable_loss_usd", 0.0) or 0.0)
@@ -2015,7 +2078,7 @@ def annotate_pick_with_guardrails(
         annotated["open_executable_loss_usd"] = round(open_executable_loss, 2)
         annotated["max_open_executable_drawdown_pct"] = open_drawdown_cap_pct
         if open_executable_loss > 0 and open_executable_loss >= open_drawdown_cap_usd:
-            cautions.append(
+            blocked.append(
                 f"Open executable drawdown is ${open_executable_loss:.2f} "
                 f"({open_drawdown_pct:.1f}% of account), at or above the "
                 f"{playbook['label']} cap of ${open_drawdown_cap_usd:.2f} ({open_drawdown_cap_pct}%)."
@@ -2029,13 +2092,13 @@ def annotate_pick_with_guardrails(
         if cost_risk is not None and max_position_cost_risk_pct > 0:
             position_cap_usd = account_size * max_position_cost_risk_pct / 100.0
             if cost_risk > position_cap_usd:
-                cautions.append(
+                blocked.append(
                     f"Position cost risk ${cost_risk:.2f} exceeds the playbook per-position cap ${position_cap_usd:.2f} ({max_position_cost_risk_pct}%)."
                 )
         if cost_risk is not None and max_portfolio_cost_risk_pct > 0:
             portfolio_cap_usd = account_size * max_portfolio_cost_risk_pct / 100.0
             if open_cost_risk + cost_risk > portfolio_cap_usd:
-                cautions.append(
+                blocked.append(
                     f"Portfolio cost risk would be ${open_cost_risk + cost_risk:.2f}, above the playbook cap ${portfolio_cap_usd:.2f} ({max_portfolio_cost_risk_pct}%)."
                 )
 
@@ -2043,13 +2106,13 @@ def annotate_pick_with_guardrails(
         max_concurrent = int(playbook.get("max_concurrent_positions", 3) or 3)
         total_open = int(exposure.get("open_positions", 0) or 0)
         if total_open >= max_concurrent:
-            cautions.append(f"Max concurrent positions ({max_concurrent}) reached: {total_open} position(s) currently open.")
+            blocked.append(f"Max concurrent positions ({max_concurrent}) reached: {total_open} position(s) currently open.")
 
         # --- Correlated index positions ---
         max_correlated = int(playbook.get("max_correlated_index_positions", 1) or 1)
         correlated_count = int(exposure.get("correlated_index_count", 0) or 0)
         if ticker in CORRELATED_INDEXES and correlated_count >= max_correlated:
-            cautions.append(f"Correlated index limit ({max_correlated}) reached: {correlated_count} index position(s) already open across {', '.join(sorted(CORRELATED_INDEXES))}.")
+            blocked.append(f"Correlated index limit ({max_correlated}) reached: {correlated_count} index position(s) already open across {', '.join(sorted(CORRELATED_INDEXES))}.")
 
         # Correlation guard: reduce size when same sector + same direction is already concentrated
         sector_direction_counts = dict(exposure.get("sector_direction_counts") or {})
@@ -2069,8 +2132,57 @@ def annotate_pick_with_guardrails(
             float(annotated.get("position_size_mult", 1.0)) * correlation_size_mult, 3
         )
 
-    guardrail_decision = "blocked" if blocked else ("caution" if cautions else "clear")
     policy_decision = str(annotated.get("trade_policy_decision") or "").strip().lower()
+    lane_profitability_gate: dict[str, Any] | None = None
+    lane_promotion_state_gate: dict[str, Any] | None = None
+    if os.getenv("OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE", "").strip() == "1":
+        try:
+            from scripts.lane_profitability_gate import (
+                DEFAULT_LANE_GATE_REPORT,
+                candidate_gate_decision,
+                load_lane_gate_report,
+            )
+            from scripts.lane_promotion_state import (
+                DEFAULT_LANE_PROMOTION_REPORT,
+                candidate_promotion_decision,
+                load_lane_promotion_report,
+            )
+
+            lane_profitability_gate = candidate_gate_decision(
+                playbook_id=playbook["id"],
+                candidate=annotated,
+                report=load_lane_gate_report(DEFAULT_LANE_GATE_REPORT),
+                require_fresh_report=True,
+                probation_paper_only=False,
+                require_present_self_guardrail_metrics=True,
+            )
+            if not lane_profitability_gate.get("allowed"):
+                reason = str(
+                    lane_profitability_gate.get("candidate_status_reason")
+                    or "lane_profitability_gate_blocked_candidate"
+                )
+                blocked.append(f"Lane profitability gate blocked candidate: {reason}.")
+            else:
+                lane_promotion_state_gate = candidate_promotion_decision(
+                    playbook_id=playbook["id"],
+                    report=load_lane_promotion_report(DEFAULT_LANE_PROMOTION_REPORT),
+                    require_fresh_report=True,
+                )
+                if not lane_promotion_state_gate.get("allowed"):
+                    reason = str(
+                        lane_promotion_state_gate.get("candidate_status_reason")
+                        or "lane_promotion_state_blocked_candidate"
+                    )
+                    blocked.append(f"Lane promotion state blocked candidate: {reason}.")
+        except Exception as exc:
+            lane_profitability_gate = {
+                "allowed": False,
+                "candidate_status_reason": "lane_profitability_gate_error",
+                "error": str(exc),
+            }
+            blocked.append(f"Lane profitability gate failed closed: {exc}.")
+
+    guardrail_decision = "blocked" if blocked else ("caution" if cautions else "clear")
     if guardrail_decision == "blocked":
         suggested_size_tier = "blocked"
         suggested_size_reason = "Do not add this trade while the current playbook guardrails are blocking it."
@@ -2091,6 +2203,41 @@ def annotate_pick_with_guardrails(
     annotated["playbook_label"] = playbook["label"]
     annotated["guardrail_decision"] = guardrail_decision
     annotated["guardrail_reasons"] = blocked if blocked else cautions
+    if lane_profitability_gate is not None:
+        annotated["lane_profitability_gate"] = {
+            "allowed": bool(lane_profitability_gate.get("allowed")),
+            "candidate_status": lane_profitability_gate.get("candidate_status"),
+            "candidate_status_reason": lane_profitability_gate.get("candidate_status_reason"),
+            "lane_gate_status": lane_profitability_gate.get("lane_gate_status"),
+            "lane_gate_blockers": list(lane_profitability_gate.get("lane_gate_blockers") or []),
+            "lane_gate_report_health": lane_profitability_gate.get("lane_gate_report_health"),
+            "candidate_debit_pct_of_width": lane_profitability_gate.get("candidate_debit_pct_of_width"),
+            "max_debit_pct_of_width": lane_profitability_gate.get("max_debit_pct_of_width"),
+            "candidate_fill_degradation_vs_mid_pct": lane_profitability_gate.get(
+                "candidate_fill_degradation_vs_mid_pct"
+            ),
+            "max_fill_degradation_vs_mid_pct": lane_profitability_gate.get("max_fill_degradation_vs_mid_pct"),
+            "candidate_worst_leg_bid_ask_spread_pct": lane_profitability_gate.get(
+                "candidate_worst_leg_bid_ask_spread_pct"
+            ),
+            "max_worst_leg_bid_ask_spread_pct": lane_profitability_gate.get("max_worst_leg_bid_ask_spread_pct"),
+            "probation_allowed": bool(lane_profitability_gate.get("probation_allowed")),
+        }
+    if lane_promotion_state_gate is not None:
+        lane_promotion_state = (
+            lane_promotion_state_gate.get("lane_promotion_state")
+            if isinstance(lane_promotion_state_gate.get("lane_promotion_state"), dict)
+            else {}
+        )
+        annotated["lane_promotion_state"] = {
+            "allowed": bool(lane_promotion_state_gate.get("allowed")),
+            "candidate_status": lane_promotion_state_gate.get("candidate_status"),
+            "candidate_status_reason": lane_promotion_state_gate.get("candidate_status_reason"),
+            "promotion_state": lane_promotion_state.get("promotion_state"),
+            "failed_promotion_gates": list(lane_promotion_state.get("failed_promotion_gates") or []),
+            "blockers": list(lane_promotion_state.get("blockers") or []),
+            "lane_promotion_report_health": lane_promotion_state_gate.get("lane_promotion_report_health"),
+        }
     annotated["suggested_size_tier"] = suggested_size_tier
     annotated["suggested_size_reason"] = suggested_size_reason
     annotated["portfolio_caps_enforced"] = bool(enforce_portfolio_caps)

@@ -242,6 +242,40 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
         self.assertEqual(row["realized_pnl"]["baseline_pnl_pct"], 0.0)
         self.assertTrue(row["promotion_discussion_ready"])
 
+    def test_paper_probation_candidate_routes_to_exact_evidence_bridge(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            queue = root / "pending.jsonl"
+            fills = root / "fills.jsonl"
+            stop_grid = root / "stop-grid.json"
+            queue.write_text(
+                json.dumps(
+                    _candidate(
+                        "DIA",
+                        status="pending_paper_exact_evidence",
+                        playbook_id="volatility_expansion_observation",
+                    )
+                )
+                + "\n",
+                encoding="utf8",
+            )
+            fills.write_text("", encoding="utf8")
+            stop_grid.write_text(json.dumps({"rows": []}), encoding="utf8")
+
+            report = evidence_loop.build_report(
+                queue_file=queue,
+                fill_attempt_file=fills,
+                stop_grid_path=stop_grid,
+            )
+
+        row = report["candidates"][0]
+        self.assertEqual(row["validation_outcome"], "paper_only")
+        self.assertEqual(row["evidence_bridge_status"], "paper_probation_exact_entry_required")
+        self.assertIn("fresh_executable_exact_opra_nbbo_entry", row["required_next_evidence"])
+        self.assertEqual(row["promotion_gate_context"], "no_lane_promotion_state_payload")
+        self.assertFalse(row["promotion_discussion_ready"])
+        self.assertEqual(report["summary"]["paper_probation_bridge_count"], 1)
+
     def test_entry_vocabulary_rejects_plain_mid_and_space_separated_non_executable(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -282,6 +316,8 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
                 "validation_outcome_counts": {"no_longer_matched": 1, "proof_ineligible": 1},
                 "entry_evidence_status_counts": {"stale": 1, "non_executable": 1},
                 "realized_pnl_status_counts": {"no_position_link": 2},
+                "evidence_bridge_status_counts": {"non_executable_entry_blocked": 2},
+                "promotion_gate_context_counts": {"legacy_pre_promotion_state_gate": 2},
                 "no_longer_matched_count": 1,
                 "proof_ineligible_count": 1,
                 "linked_position_count": 0,
@@ -290,6 +326,10 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
                 "stale_count": 1,
                 "non_executable_count": 1,
                 "promotion_discussion_ready_count": 0,
+                "paper_probation_bridge_count": 0,
+                "exact_exit_bridge_count": 0,
+                "non_executable_bridge_count": 2,
+                "legacy_pre_promotion_state_gate_count": 2,
                 "live_policy_change": False,
             },
             "candidates": [],

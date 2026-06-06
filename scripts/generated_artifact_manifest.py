@@ -69,6 +69,24 @@ GENERATED_ARTIFACTS = (
         runtime_use_false=False,
     ),
     GeneratedArtifact(
+        path="data/contracts/candidate-lifecycle-contract.json",
+        command="contracts:candidate-lifecycle",
+        generator="scripts/candidate_lifecycle.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/candidate-lifecycle-contract.md",
+        command="contracts:candidate-lifecycle",
+        generator="scripts/candidate_lifecycle.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="src/lib/generated/candidateLifecycleContract.ts",
+        command="contracts:candidate-lifecycle",
+        generator="scripts/candidate_lifecycle.py",
+        artifact_type="typescript",
+    ),
+    GeneratedArtifact(
         path="docs/proof-invariant-table.md",
         command="docs:proof-invariant-table",
         generator="scripts/generate_proof_invariant_table.py",
@@ -108,6 +126,18 @@ GENERATED_ARTIFACTS = (
         path="data/contracts/remediation-loop-map.json",
         command="docs:remediation-loop-map",
         generator="scripts/generate_remediation_loop_map.py",
+        artifact_type="json",
+    ),
+    GeneratedArtifact(
+        path="docs/project-operating-map.md",
+        command="docs:project-pathway-registry",
+        generator="scripts/generate_project_pathway_registry.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/project-pathway-registry.json",
+        command="docs:project-pathway-registry",
+        generator="scripts/generate_project_pathway_registry.py",
         artifact_type="json",
     ),
     GeneratedArtifact(

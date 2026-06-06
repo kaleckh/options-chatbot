@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
-import { RefreshCw, Timer, CheckCircle, BarChart3, DollarSign, Map, BriefcaseBusiness, Clipboard, type LucideIcon } from "lucide-react";
+import { RefreshCw, Timer, CheckCircle, BarChart3, DollarSign, Map, BriefcaseBusiness, Clipboard, LineChart, type LucideIcon } from "lucide-react";
 import MetricCard from "@/components/ui/MetricCard";
 import Button from "@/components/ui/Button";
 import { MetricGridSkeleton, TableSkeleton } from "@/components/ui/Skeleton";
@@ -17,18 +17,17 @@ import {
   SimTab,
 } from "@/components/predictions/legacy-tabs";
 import {
+  buildTrackedStockSummaries,
   TrackedStocksTab,
-  type TrackedStockSummary,
 } from "@/components/predictions/TrackedStocksTab";
+import {
+  TrackedPaperPositionsTab,
+  isAlpacaPaperTrackedPosition,
+} from "@/components/predictions/TrackedPaperPositionsTab";
 import { TrackedPositionsTab } from "@/components/predictions/TrackedPositionsTab";
 import { CloseTradeModal } from "@/components/predictions/CloseTradeModal";
-import { getLatestRecommendation } from "@/components/predictions/tradingDeskCells";
 import {
   buildContractSignature,
-  getPositionLaneDescriptor,
-  getSignalGivenDateValue,
-  getTradeDateFilterValue,
-  latestDateValue,
 } from "@/components/predictions/trackedPositionUtils";
 import { useTradingDeskCloseDialogs } from "@/components/predictions/useTradingDeskCloseDialogs";
 import { useScannerSurface } from "@/components/predictions/useScannerSurface";
@@ -46,14 +45,6 @@ import type {
   CreateTrackedPositionRequest,
   CreateTrackedPositionResponse,
 } from "@/lib/trading-desk/apiContracts";
-import {
-  getCloseNowPnlPct,
-  getRealizedPnlPct,
-  isRealizedPnlClosedPosition,
-  isProductionProofPosition,
-  isResearchLearningPosition,
-  positionQualityPnlPct,
-} from "@/lib/trading-desk/positionEvidence";
 import { tradingDeskMutationHeaders } from "@/lib/trading-desk/mutationIntent";
 import {
   isLegacyPredictionTabId,
@@ -83,99 +74,6 @@ const ScannerTab = dynamic(
   { loading: () => <TableSkeleton rows={6} /> }
 );
 
-function buildTrackedStockSummaries(
-  openPositions: TrackedPosition[],
-  closedPositions: TrackedPosition[]
-): TrackedStockSummary[] {
-  const summaryByTicker = new globalThis.Map<string, {
-    ticker: string;
-    positions: TrackedPosition[];
-    lanes: Set<string>;
-    latestSignalDate: string | null;
-    latestTradeDate: string | null;
-  }>();
-
-  for (const position of [...openPositions, ...closedPositions]) {
-    const ticker = String(position.ticker || "").trim().toUpperCase();
-    if (!ticker) continue;
-    const existing = summaryByTicker.get(ticker) ?? {
-      ticker,
-      positions: [],
-      lanes: new Set<string>(),
-      latestSignalDate: null,
-      latestTradeDate: null,
-    };
-    existing.positions.push(position);
-    existing.lanes.add(getPositionLaneDescriptor(position).label);
-    existing.latestSignalDate = latestDateValue(existing.latestSignalDate, getSignalGivenDateValue(position));
-    existing.latestTradeDate = latestDateValue(existing.latestTradeDate, getTradeDateFilterValue(position));
-    summaryByTicker.set(ticker, existing);
-  }
-
-  return Array.from(summaryByTicker.values())
-    .map((item) => {
-      const openPositionsForTicker = item.positions.filter((position) => position.status === "open");
-      const closedPositionsForTicker = item.positions.filter((position) => position.status === "closed");
-      const openRows = openPositionsForTicker.length;
-      const closedRows = closedPositionsForTicker.length;
-      const realizedClosedPositions = closedPositionsForTicker.filter(isRealizedPnlClosedPosition);
-      const openPnlValues = openPositionsForTicker
-        .map(getCloseNowPnlPct)
-        .filter((value): value is number => value != null && !Number.isNaN(value));
-      const realizedPnlValues = realizedClosedPositions
-        .map(getRealizedPnlPct)
-        .filter((value): value is number => value != null && !Number.isNaN(value));
-      const pnlValues = item.positions
-        .map(positionQualityPnlPct)
-        .filter((value): value is number => value != null && !Number.isNaN(value));
-      const openRecommendations = openPositionsForTicker
-        .map((position) => getLatestRecommendation(position));
-      const closeNowCount = openRecommendations.filter((value) => value === "SELL").length;
-      const holdCount = openRecommendations.filter((value) => value === "HOLD").length;
-      const statusLabel =
-        closeNowCount > 0
-          ? `${closeNowCount} close now`
-          : holdCount > 0
-            ? `${holdCount} hold`
-            : openRows > 0
-              ? `${openRows} open`
-              : "No open trades";
-
-      return {
-        ticker: item.ticker,
-        totalRows: item.positions.length,
-        openRows,
-        closedRows,
-        liveExactRows: item.positions.filter(isProductionProofPosition).length,
-        researchRows: item.positions.filter(isResearchLearningPosition).length,
-        realizedRows: realizedClosedPositions.length,
-        unpricedClosedRows: Math.max(closedRows - realizedClosedPositions.length, 0),
-        closeNowCount,
-        holdCount,
-        waitingCount: Math.max(openRows - closeNowCount - holdCount, 0),
-        openPnlPct: openPnlValues.length > 0
-          ? openPnlValues.reduce((sum, value) => sum + value, 0) / openPnlValues.length
-          : null,
-        realizedPnlPct: realizedPnlValues.length > 0
-          ? realizedPnlValues.reduce((sum, value) => sum + value, 0) / realizedPnlValues.length
-          : null,
-        avgPnlPct: pnlValues.length > 0
-          ? pnlValues.reduce((sum, value) => sum + value, 0) / pnlValues.length
-          : null,
-        latestSignalDate: item.latestSignalDate,
-        latestTradeDate: item.latestTradeDate,
-        statusLabel,
-        laneLabels: Array.from(item.lanes).sort((a, b) => a.localeCompare(b)),
-      };
-    })
-    .sort((a, b) =>
-      b.closeNowCount - a.closeNowCount ||
-      b.openRows - a.openRows ||
-      (a.openPnlPct ?? 0) - (b.openPnlPct ?? 0) ||
-      a.ticker.localeCompare(b.ticker)
-    );
-}
-
 export default function PredictionsView() {
   const [predictions, setPredictions] = useState<Prediction[]>([]);
   const [sectors, setSectors] = useState<SectorSentiment[]>([]);
@@ -192,6 +90,7 @@ export default function PredictionsView() {
   const [takeNotes, setTakeNotes] = useState("");
   const [takingTrade, setTakingTrade] = useState(false);
   const [savingSuggestedTrade, setSavingSuggestedTrade] = useState(false);
+  const [submittingAlpacaPaperOrder, setSubmittingAlpacaPaperOrder] = useState(false);
   const [showLegacyTabs, setShowLegacyTabs] = useState(false);
   const [positionsView, setPositionsView] = useState<TradingDeskPositionsView>("open");
   const [suggestedTradesView, setSuggestedTradesView] = useState<TradingDeskPositionsView>("open");
@@ -356,14 +255,15 @@ export default function PredictionsView() {
   }, [activeSubTab, refreshScannerSurface]);
 
   useEffect(() => {
-    if (loading || !["positions", "tracked-stocks"].includes(activeSubTab) || positionsLoaded) return;
+    if (loading || !["positions", "tracked-stocks", "paper-track"].includes(activeSubTab) || positionsLoaded) return;
     void fetchPositions();
   }, [activeSubTab, fetchPositions, loading, positionsLoaded]);
 
   useEffect(() => {
     const needsClosedPositions =
       (activeSubTab === "positions" && positionsView === "closed") ||
-      activeSubTab === "tracked-stocks";
+      activeSubTab === "tracked-stocks" ||
+      activeSubTab === "paper-track";
     if (!needsClosedPositions || closedPositionsLoaded) return;
     void fetchClosedPositionsPage();
   }, [activeSubTab, closedPositionsLoaded, fetchClosedPositionsPage, positionsView]);
@@ -386,7 +286,7 @@ export default function PredictionsView() {
   }, [activeSubTab, showLegacyTabs]);
 
   useEffect(() => {
-    if (!["positions", "tracked-stocks"].includes(activeSubTab)) return;
+    if (!["positions", "tracked-stocks", "paper-track"].includes(activeSubTab)) return;
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === "hidden") return;
       void fetchPositions();
@@ -472,6 +372,56 @@ export default function PredictionsView() {
     });
   };
 
+  const submitAlpacaPaperTrade = async () => {
+    if (!selectedPick) return;
+    if (Number(contracts) !== 1) {
+      toast.error("Alpaca paper orders are capped at exactly 1 contract.");
+      return;
+    }
+    const nextSignature = buildContractSignature({
+      ...selectedPick,
+      source_pick_snapshot: selectedPick,
+    });
+    const existingOpenPosition = openPositions.find((position) => buildContractSignature(position) === nextSignature);
+    if (existingOpenPosition) {
+      setActiveSubTab(isAlpacaPaperTrackedPosition(existingOpenPosition) ? "paper-track" : "positions");
+      setPositionsView("open");
+      toast.error("That contract is already open in tracked positions.");
+      return;
+    }
+    await guard(async () => {
+      setSubmittingAlpacaPaperOrder(true);
+      try {
+        const payload: CreateTrackedPositionRequest = {
+          scan_pick: selectedPick,
+          fill_price: Number(fillPrice),
+          contracts: 1,
+          notes: takeNotes || undefined,
+          creation_mode: "scanner",
+          execute_alpaca_paper: true,
+        };
+        const res = await fetchWithTimeout("/api/positions", {
+          method: "POST",
+          headers: tradingDeskMutationHeaders("create_tracked_position"),
+          body: JSON.stringify(payload),
+        }, "Submit Alpaca paper order");
+        const data = await readJsonResponseOrThrow<CreateTrackedPositionResponse>(res, "Submit Alpaca paper order");
+        if (data.position) {
+          mergeTrackedPosition(data.position as TrackedPosition);
+        }
+        cancelTakeTrade();
+        setPositionsView("open");
+        setActiveSubTab("paper-track");
+        const orderStatus = String(data.position?.source_pick_snapshot?.alpaca_paper_order?.status || "submitted").replaceAll("_", " ");
+        toast.success(data.duplicate ? "Open tracked position already exists." : `Alpaca paper order ${orderStatus}.`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to submit Alpaca paper order.");
+      } finally {
+        setSubmittingAlpacaPaperOrder(false);
+      }
+    });
+  };
+
   const submitSuggestedTrade = async () => {
     if (!selectedPick) return;
     const nextSignature = buildContractSignature({
@@ -553,6 +503,10 @@ export default function PredictionsView() {
     () => buildTrackedStockSummaries(openPositions, closedPositions),
     [closedPositions, openPositions]
   );
+  const paperTrackedPositions = useMemo(
+    () => [...openPositions, ...closedPositions].filter(isAlpacaPaperTrackedPosition),
+    [closedPositions, openPositions]
+  );
   const trackedStockCount = trackedStockSummaries.length;
   const closedPositionCountLabel = closedPositionsLoaded
     ? `Closed (${closedPositions.length}${closedPositionsHasMore ? "+" : ""})`
@@ -561,10 +515,15 @@ export default function PredictionsView() {
     closedPositionsLoaded && closedPositionsHasMore
       ? `Tracked Stocks (${trackedStockCount}+)`
       : `Tracked Stocks (${trackedStockCount})`;
+  const paperTrackedCountLabel =
+    closedPositionsLoaded && closedPositionsHasMore
+      ? `Paper Track (${paperTrackedPositions.length}+)`
+      : `Paper Track (${paperTrackedPositions.length})`;
 
   const PRIMARY_SUB_TABS = [
     { id: "positions", label: `Open (${openPositions.length})`, icon: BriefcaseBusiness },
     { id: "closed-trades", label: closedPositionCountLabel, icon: CheckCircle },
+    { id: "paper-track", label: paperTrackedCountLabel, icon: LineChart },
     { id: "tracked-stocks", label: trackedStockCountLabel, icon: Map },
   ] as const satisfies readonly TradingDeskTabButton[];
   const LEGACY_SUB_TABS = [
@@ -798,6 +757,7 @@ export default function PredictionsView() {
             notes={takeNotes}
             takingTrade={takingTrade}
             savingSuggestedTrade={savingSuggestedTrade}
+            submittingAlpacaPaperOrder={submittingAlpacaPaperOrder}
             onRefresh={() => void refreshScannerSurface(true)}
             onPolicyModeChange={setUseRecommendedPolicy}
             onPlaybookChange={setScanPlaybook}
@@ -809,6 +769,7 @@ export default function PredictionsView() {
             onNotesChange={setTakeNotes}
             onSubmit={() => void submitTakeTrade()}
             onSubmitSuggested={() => void submitSuggestedTrade()}
+            onSubmitAlpacaPaper={() => void submitAlpacaPaperTrade()}
           />
         )}
         {activeSubTab === "suggestions" && (
@@ -843,6 +804,21 @@ export default function PredictionsView() {
             closedRowsLoaded={closedPositionsLoaded}
             closedRowsHasMore={closedPositionsHasMore}
             onRefresh={() => void fetchPositions({ notify: true, review: "force" })}
+          />
+        )}
+        {activeSubTab === "paper-track" && (
+          <TrackedPaperPositionsTab
+            openPositions={openPositions}
+            closedPositions={closedPositions}
+            loading={positionsLoading}
+            error={positionsError}
+            closedRowsLoaded={closedPositionsLoaded}
+            closedRowsHasMore={closedPositionsHasMore}
+            onRefresh={() => void fetchPositions({
+              notify: true,
+              review: "force",
+              includeClosed: true,
+            })}
           />
         )}
         {activeSubTab === "positions" && (

@@ -32,6 +32,45 @@ from historical_options_fixtures import (
 from options_algorithm_fixtures import FrozenDateTime
 
 
+class ImportedExecutionPriceTests(unittest.TestCase):
+    def test_zero_bid_exit_requires_explicit_historical_close_mode(self):
+        blocked = wfo._resolve_imported_execution_price(
+            side="exit",
+            requested_pricing_lane="pessimistic",
+            bid=0.0,
+            ask=0.25,
+            last=None,
+        )
+
+        self.assertIsNone(blocked["execution_price"])
+
+        priced = wfo._resolve_imported_execution_price(
+            side="exit",
+            requested_pricing_lane="pessimistic",
+            bid=0.0,
+            ask=0.25,
+            last=None,
+            allow_zero_bid_quote=True,
+        )
+
+        self.assertEqual(priced["execution_price"], 0.0)
+        self.assertEqual(priced["execution_basis"], "bid")
+        self.assertEqual(priced["effective_pricing_lane"], "pessimistic")
+
+    def test_zero_bid_short_buyback_uses_ask_in_historical_close_mode(self):
+        priced = wfo._resolve_imported_execution_price(
+            side="entry",
+            requested_pricing_lane="pessimistic",
+            bid=0.0,
+            ask=1.2,
+            last=None,
+            allow_zero_bid_quote=True,
+        )
+
+        self.assertEqual(priced["execution_price"], 1.2)
+        self.assertEqual(priced["execution_basis"], "ask")
+
+
 class HistoricalTruthLaneTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

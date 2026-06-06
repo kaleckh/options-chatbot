@@ -142,6 +142,7 @@ npm run profit-loop:health
 npm run profit-loop:holdout
 npm run profit-loop:validate
 npm run profit-loop:canary
+npm run options:audit:data-integrity
 npm run accuracy:report
 npm run verify:accuracy:no-write
 ```

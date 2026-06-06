@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,11 +16,38 @@ from supervised_scan import (
     scan_playbook_fresh_live_validation_enabled,
     scan_playbook_position_tracking_mode,
 )
+from scripts.candidate_lifecycle import (
+    STATUS_DIAGNOSTIC_UNAPPROVED_LANE,
+    STATUS_LIVE_VALIDATION_ATTEMPTED,
+    STATUS_LIVE_VALIDATION_SCAN_FAILED,
+    STATUS_PAPER_CIRCUIT_BREAKER,
+    STATUS_PAPER_DUPLICATE_EXACT_SPREAD,
+    STATUS_PENDING_LIVE_VALIDATION,
+    is_diagnostic_only_status,
+    is_paper_only_status,
+    is_pending_validation_status,
+    is_validation_report_status,
+    validation_outcome_for_status,
+)
+from scripts.lane_profitability_gate import (
+    LANE_GATE_DIAGNOSTIC_STATUS,
+    LANE_GATE_PAPER_ONLY_STATUS,
+    LANE_GATE_PROBATION_PAPER_STATUS,
+    candidate_gate_decision,
+    paper_only_gate_row,
+)
+from scripts.lane_promotion_state import (
+    LANE_PROMOTION_DIAGNOSTIC_STATUS,
+    LANE_PROMOTION_PAPER_EVIDENCE_STATUS,
+    LANE_PROMOTION_PAPER_ONLY_STATUS,
+    candidate_promotion_decision,
+)
 
 DEFAULT_QUEUE_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidates.jsonl"
 DEFAULT_FILL_ATTEMPT_FILE = ROOT / "data" / "forward-tracking" / "fill_attempts.jsonl"
 DEFAULT_DISPOSITION_FILE = ROOT / "data" / "forward-tracking" / "pending_scan_candidate_validation_latest.json"
-PAPER_VALIDATION_CIRCUIT_STATUS = "paper_validation_only_circuit_breaker"
+PAPER_VALIDATION_CIRCUIT_STATUS = STATUS_PAPER_CIRCUIT_BREAKER
+DUPLICATE_EXACT_SPREAD_PAPER_STATUS = STATUS_PAPER_DUPLICATE_EXACT_SPREAD
 
 def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
@@ -134,6 +161,74 @@ def _candidate_identity_from_row(row: dict[str, Any]) -> str:
     )
 
 
+def _exact_spread_identity_from_row(row: dict[str, Any]) -> str:
+    selected = row.get("selected_spread") if isinstance(row.get("selected_spread"), dict) else {}
+    scan_date = _norm_text(row.get("scan_date") or row.get("audit_generated_at_utc") or row.get("queue_recorded_at_utc"))
+    parts = [
+        scan_date[:10],
+        _norm_text(row.get("ticker")).upper(),
+        _norm_text(row.get("direction") or row.get("type") or row.get("option_type")).lower(),
+        _norm_text(row.get("expiry") or selected.get("expiry"))[:10],
+        _norm_text(row.get("contract_symbol") or selected.get("long_contract_symbol")).upper(),
+        _norm_text(row.get("short_contract_symbol") or selected.get("short_contract_symbol")).upper(),
+        _norm_text(
+            row.get("long_strike")
+            if row.get("long_strike") is not None
+            else selected.get("long_strike")
+            if selected.get("long_strike") is not None
+            else row.get("strike")
+        ),
+        _norm_text(row.get("short_strike") if row.get("short_strike") is not None else selected.get("short_strike")),
+    ]
+    return "|".join(parts)
+
+
+def _duplicate_owner_rank(row: dict[str, Any]) -> tuple[int, str, str]:
+    status = _norm_text(row.get("candidate_status"))
+    if is_pending_validation_status(status):
+        rank = 0
+    elif is_paper_only_status(status):
+        rank = 1
+    elif is_diagnostic_only_status(status):
+        rank = 2
+    else:
+        rank = 3
+    return (
+        rank,
+        _norm_text(row.get("playbook_id")),
+        _norm_text(row.get("candidate_key")),
+    )
+
+
+def _apply_exact_spread_suppression(rows: list[dict[str, Any]]) -> None:
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        key = _exact_spread_identity_from_row(row)
+        if key.strip("|"):
+            grouped[key].append(row)
+
+    for exact_key, items in grouped.items():
+        if len(items) <= 1:
+            continue
+        owner = sorted(items, key=_duplicate_owner_rank)[0]
+        owner_key = _norm_text(owner.get("candidate_key"))
+        duplicate_playbooks = sorted({_norm_text(item.get("playbook_id")) for item in items if _norm_text(item.get("playbook_id"))})
+        for item in items:
+            item["exact_spread_group_key"] = exact_key
+            item["exact_spread_duplicate_group_size"] = len(items)
+            item["exact_spread_duplicate_playbooks"] = duplicate_playbooks
+            item["exact_spread_duplicate_owner_key"] = owner_key
+            if item is owner:
+                item["exact_spread_duplicate_owner"] = True
+                continue
+            item["exact_spread_duplicate_owner"] = False
+            status = _norm_text(item.get("candidate_status"))
+            if not (is_pending_validation_status(status) or is_paper_only_status(status)):
+                continue
+            item["candidate_status"] = DUPLICATE_EXACT_SPREAD_PAPER_STATUS
+            item["candidate_status_reason"] = "duplicate_exact_spread_suppressed_to_single_risk_slot"
+
+
 def latest_fill_attempt_rows(fill_attempt_file: Path = DEFAULT_FILL_ATTEMPT_FILE) -> dict[str, dict[str, Any]]:
     latest_by_key: dict[str, dict[str, Any]] = {}
     for row in _load_jsonl_rows(fill_attempt_file):
@@ -145,19 +240,72 @@ def latest_fill_attempt_rows(fill_attempt_file: Path = DEFAULT_FILL_ATTEMPT_FILE
     return latest_by_key
 
 
-def _candidate_status(playbook_id: str) -> tuple[str, str]:
+def _candidate_status(
+    playbook_id: str,
+    *,
+    pick: dict[str, Any] | None = None,
+    lane_gate_report: dict[str, Any] | None = None,
+    require_fresh_lane_gate_report: bool = False,
+    lane_promotion_report: dict[str, Any] | None = None,
+    require_fresh_lane_promotion_state: bool = False,
+) -> tuple[str, str, dict[str, Any] | None]:
+    if lane_gate_report is not None or require_fresh_lane_gate_report:
+        use_promotion_state = lane_promotion_report is not None or require_fresh_lane_promotion_state
+        gate_decision = candidate_gate_decision(
+            playbook_id=playbook_id,
+            candidate=pick,
+            report=lane_gate_report,
+            require_fresh_report=require_fresh_lane_gate_report,
+            probation_paper_only=not use_promotion_state,
+            require_present_self_guardrail_metrics=True,
+        )
+        if not gate_decision.get("allowed"):
+            return (
+                str(gate_decision.get("candidate_status") or LANE_GATE_DIAGNOSTIC_STATUS),
+                str(
+                    gate_decision.get("candidate_status_reason")
+                    or "lane_profitability_gate_blocked_candidate"
+                ),
+                gate_decision,
+            )
+        if use_promotion_state:
+            promotion_decision = candidate_promotion_decision(
+                playbook_id=playbook_id,
+                report=lane_promotion_report,
+                require_fresh_report=require_fresh_lane_promotion_state,
+            )
+            promotion_decision["lane_profitability_gate_decision"] = gate_decision
+            if not promotion_decision.get("allowed"):
+                return (
+                    str(promotion_decision.get("candidate_status") or LANE_PROMOTION_DIAGNOSTIC_STATUS),
+                    str(
+                        promotion_decision.get("candidate_status_reason")
+                        or "lane_promotion_state_blocked_candidate"
+                    ),
+                    promotion_decision,
+                )
     if scan_playbook_fresh_live_validation_enabled(playbook_id):
         return (
-            "pending_live_validation",
+            STATUS_PENDING_LIVE_VALIDATION,
             "clear_audit_candidate_requires_fresh_market_hours_opra_validation",
+            None,
         )
     return (
-        "diagnostic_only_unapproved_lane",
+        STATUS_DIAGNOSTIC_UNAPPROVED_LANE,
         "clear_audit_candidate_from_lane_not_enabled_for_fresh_live_validation",
+        None,
     )
 
 
-def build_pending_candidate_rows(report: dict[str, Any], *, recorded_at_utc: str | None = None) -> list[dict[str, Any]]:
+def build_pending_candidate_rows(
+    report: dict[str, Any],
+    *,
+    recorded_at_utc: str | None = None,
+    lane_gate_report: dict[str, Any] | None = None,
+    require_fresh_lane_gate_report: bool = False,
+    lane_promotion_report: dict[str, Any] | None = None,
+    require_fresh_lane_promotion_state: bool = False,
+) -> list[dict[str, Any]]:
     recorded_at = recorded_at_utc or _utc_now_iso()
     audit_generated = _norm_text(report.get("generated_at_utc"))
     scope = _norm_text(report.get("scope"))
@@ -176,7 +324,14 @@ def build_pending_candidate_rows(report: dict[str, Any], *, recorded_at_utc: str
                 continue
             if _norm_text(pick.get("guardrail_decision")).lower() != "clear":
                 continue
-            status, reason = _candidate_status(playbook_id)
+            status, reason, lane_gate_decision = _candidate_status(
+                playbook_id,
+                pick=pick,
+                lane_gate_report=lane_gate_report,
+                require_fresh_lane_gate_report=require_fresh_lane_gate_report,
+                lane_promotion_report=lane_promotion_report,
+                require_fresh_lane_promotion_state=require_fresh_lane_promotion_state,
+            )
             tracking_mode = scan_playbook_position_tracking_mode(playbook_id)
             tracking_approved = scan_playbook_allows_auto_track(playbook_id)
             candidate_key = _candidate_identity(
@@ -210,6 +365,8 @@ def build_pending_candidate_rows(report: dict[str, Any], *, recorded_at_utc: str
                     "entry_execution_price": pick.get("entry_execution_price"),
                     "entry_execution_basis": pick.get("entry_execution_basis"),
                     "debit_pct_of_width": pick.get("debit_pct_of_width"),
+                    "fill_degradation_vs_mid_pct": pick.get("fill_degradation_vs_mid_pct"),
+                    "worst_leg_bid_ask_spread_pct": pick.get("worst_leg_bid_ask_spread_pct"),
                     "quality_score": pick.get("quality_score"),
                     "guardrail_decision": pick.get("guardrail_decision"),
                     "guardrail_reasons": list(pick.get("guardrail_reasons") or []),
@@ -223,6 +380,48 @@ def build_pending_candidate_rows(report: dict[str, Any], *, recorded_at_utc: str
                     "source_pick_snapshot": pick,
                 }
             )
+            if lane_gate_decision is not None:
+                lane_profitability_decision = lane_gate_decision.get("lane_profitability_gate_decision")
+                if not isinstance(lane_profitability_decision, dict):
+                    lane_profitability_decision = lane_gate_decision
+                rows[-1]["lane_profitability_gate"] = {
+                    "allowed": bool(lane_profitability_decision.get("allowed")),
+                    "candidate_status_reason": lane_profitability_decision.get("candidate_status_reason"),
+                    "lane_gate_status": lane_profitability_decision.get("lane_gate_status"),
+                    "lane_gate_blockers": list(lane_profitability_decision.get("lane_gate_blockers") or []),
+                    "lane_gate_report_health": lane_profitability_decision.get("lane_gate_report_health"),
+                    "candidate_debit_pct_of_width": lane_profitability_decision.get("candidate_debit_pct_of_width"),
+                    "max_debit_pct_of_width": lane_profitability_decision.get("max_debit_pct_of_width"),
+                    "candidate_fill_degradation_vs_mid_pct": lane_profitability_decision.get(
+                        "candidate_fill_degradation_vs_mid_pct"
+                    ),
+                    "max_fill_degradation_vs_mid_pct": lane_profitability_decision.get("max_fill_degradation_vs_mid_pct"),
+                    "candidate_worst_leg_bid_ask_spread_pct": lane_profitability_decision.get(
+                        "candidate_worst_leg_bid_ask_spread_pct"
+                    ),
+                    "max_worst_leg_bid_ask_spread_pct": lane_profitability_decision.get(
+                        "max_worst_leg_bid_ask_spread_pct"
+                    ),
+                    "probation_allowed": bool(lane_profitability_decision.get("probation_allowed")),
+                }
+                if lane_gate_decision.get("lane_promotion_state") is not None or lane_gate_decision.get(
+                    "lane_promotion_report_health"
+                ) is not None:
+                    promotion_state = (
+                        lane_gate_decision.get("lane_promotion_state")
+                        if isinstance(lane_gate_decision.get("lane_promotion_state"), dict)
+                        else {}
+                    )
+                    rows[-1]["lane_promotion_state"] = {
+                        "allowed": bool(lane_gate_decision.get("allowed")),
+                        "candidate_status": lane_gate_decision.get("candidate_status"),
+                        "candidate_status_reason": lane_gate_decision.get("candidate_status_reason"),
+                        "promotion_state": promotion_state.get("promotion_state"),
+                        "failed_promotion_gates": list(promotion_state.get("failed_promotion_gates") or []),
+                        "blockers": list(promotion_state.get("blockers") or []),
+                        "lane_promotion_report_health": lane_gate_decision.get("lane_promotion_report_health"),
+                    }
+    _apply_exact_spread_suppression(rows)
     return rows
 
 
@@ -231,8 +430,19 @@ def append_pending_candidate_rows(
     *,
     queue_file: Path = DEFAULT_QUEUE_FILE,
     recorded_at_utc: str | None = None,
+    lane_gate_report: dict[str, Any] | None = None,
+    require_fresh_lane_gate_report: bool = False,
+    lane_promotion_report: dict[str, Any] | None = None,
+    require_fresh_lane_promotion_state: bool = False,
 ) -> dict[str, Any]:
-    rows = build_pending_candidate_rows(report, recorded_at_utc=recorded_at_utc)
+    rows = build_pending_candidate_rows(
+        report,
+        recorded_at_utc=recorded_at_utc,
+        lane_gate_report=lane_gate_report,
+        require_fresh_lane_gate_report=require_fresh_lane_gate_report,
+        lane_promotion_report=lane_promotion_report,
+        require_fresh_lane_promotion_state=require_fresh_lane_promotion_state,
+    )
     existing_keys = _iter_existing_keys(queue_file)
     new_rows = [row for row in rows if _norm_text(row.get("candidate_key")) not in existing_keys]
     if new_rows:
@@ -245,11 +455,30 @@ def append_pending_candidate_rows(
         "selected_clear_candidates": len(rows),
         "queued_new_candidates": len(new_rows),
         "duplicate_candidates": len(rows) - len(new_rows),
-        "pending_live_validation": sum(
-            1 for row in rows if row.get("candidate_status") == "pending_live_validation"
+        STATUS_PENDING_LIVE_VALIDATION: sum(
+            1 for row in rows if row.get("candidate_status") == STATUS_PENDING_LIVE_VALIDATION
         ),
-        "diagnostic_only_unapproved_lane": sum(
-            1 for row in rows if row.get("candidate_status") == "diagnostic_only_unapproved_lane"
+        STATUS_DIAGNOSTIC_UNAPPROVED_LANE: sum(
+            1 for row in rows if row.get("candidate_status") == STATUS_DIAGNOSTIC_UNAPPROVED_LANE
+        ),
+        LANE_GATE_DIAGNOSTIC_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == LANE_GATE_DIAGNOSTIC_STATUS
+        ),
+        LANE_GATE_PAPER_ONLY_STATUS: sum(1 for row in rows if row.get("candidate_status") == LANE_GATE_PAPER_ONLY_STATUS),
+        LANE_GATE_PROBATION_PAPER_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == LANE_GATE_PROBATION_PAPER_STATUS
+        ),
+        LANE_PROMOTION_DIAGNOSTIC_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_DIAGNOSTIC_STATUS
+        ),
+        LANE_PROMOTION_PAPER_ONLY_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_PAPER_ONLY_STATUS
+        ),
+        LANE_PROMOTION_PAPER_EVIDENCE_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == LANE_PROMOTION_PAPER_EVIDENCE_STATUS
+        ),
+        DUPLICATE_EXACT_SPREAD_PAPER_STATUS: sum(
+            1 for row in rows if row.get("candidate_status") == DUPLICATE_EXACT_SPREAD_PAPER_STATUS
         ),
     }
 
@@ -263,7 +492,7 @@ def append_validation_attempt_rows(
     recorded_at_utc: str | None = None,
 ) -> int:
     recorded_at = recorded_at_utc or _utc_now_iso()
-    status = "live_validation_attempted" if int(exit_code) == 0 else "live_validation_scan_failed"
+    status = STATUS_LIVE_VALIDATION_ATTEMPTED if int(exit_code) == 0 else STATUS_LIVE_VALIDATION_SCAN_FAILED
     appended = 0
     if not rows:
         return appended
@@ -347,17 +576,41 @@ def append_circuit_breaker_validation_rows(
     return appended
 
 
+def append_lane_profitability_gate_validation_rows(
+    rows: list[dict[str, Any]],
+    *,
+    queue_file: Path = DEFAULT_QUEUE_FILE,
+    decisions: dict[str, dict[str, Any]],
+    recorded_at_utc: str | None = None,
+) -> int:
+    recorded_at = recorded_at_utc or _utc_now_iso()
+    appended = 0
+    if not rows:
+        return appended
+    queue_file.parent.mkdir(parents=True, exist_ok=True)
+    with queue_file.open("a", encoding="utf8") as handle:
+        for row in rows:
+            key = _norm_text(row.get("candidate_key")) or _candidate_identity_from_row(row)
+            decision = decisions.get(key)
+            if not decision:
+                continue
+            handle.write(
+                json.dumps(
+                    paper_only_gate_row(row, decision=decision, recorded_at_utc=recorded_at),
+                    sort_keys=True,
+                )
+                + "\n"
+            )
+            appended += 1
+    return appended
+
+
 def _validation_outcome(row: dict[str, Any], fill_attempt: dict[str, Any] | None) -> tuple[str, str]:
     status = _norm_text(row.get("candidate_status"))
-    if status == "live_validation_scan_failed":
-        return "blocked", "validation_scan_failed"
-    if status == PAPER_VALIDATION_CIRCUIT_STATUS:
-        return (
-            "paper_only",
-            _norm_text(row.get("candidate_status_reason"))
-            or "recent_cohort_circuit_breaker_routes_lane_to_paper_validation_only",
-        )
-    if status != "live_validation_attempted":
+    status_outcome = validation_outcome_for_status(status, row.get("candidate_status_reason"))
+    if status_outcome is not None:
+        return status_outcome
+    if status != STATUS_LIVE_VALIDATION_ATTEMPTED:
         return "no_longer_matched", "candidate_has_not_completed_live_validation"
     if fill_attempt is None:
         return "no_longer_matched", "candidate_not_returned_by_market_hours_validation_scan"
@@ -391,7 +644,7 @@ def build_validation_disposition_report(
     candidates = []
     for row in latest_candidate_rows(queue_file):
         status = _norm_text(row.get("candidate_status"))
-        if status not in {"live_validation_attempted", "live_validation_scan_failed", PAPER_VALIDATION_CIRCUIT_STATUS}:
+        if not is_validation_report_status(status):
             continue
         if scan_date and _candidate_scan_date_for_disposition(row) != scan_date:
             continue
@@ -422,6 +675,11 @@ def build_validation_disposition_report(
                 "auto_track_skip_reason": fill_attempt.get("auto_track_skip_reason") if fill_attempt else None,
                 "auto_track_position_id": fill_attempt.get("auto_track_position_id") if fill_attempt else None,
                 "recent_cohort_circuit_breaker": row.get("recent_cohort_circuit_breaker"),
+                "lane_profitability_gate": row.get("lane_profitability_gate"),
+                "lane_promotion_state": row.get("lane_promotion_state"),
+                "exact_spread_group_key": row.get("exact_spread_group_key"),
+                "exact_spread_duplicate_owner_key": row.get("exact_spread_duplicate_owner_key"),
+                "exact_spread_duplicate_owner": row.get("exact_spread_duplicate_owner"),
             }
         )
     counts = Counter(str(item["outcome"]) for item in candidates)

@@ -35,7 +35,7 @@ def _load_local_env(root_dir: Path = ROOT_DIR) -> list[str]:
 _ENV_FILES_LOADED = _load_local_env(ROOT_DIR)
 
 from forward_options_ledger import summarize_forward_holdout
-from historical_options_store import DAILY_SNAPSHOT_KIND, HistoricalOptionsStore
+from historical_options_store import DAILY_SNAPSHOT_KIND, INTRADAY_SNAPSHOT_KIND, HistoricalOptionsStore
 from options_profit_gate import DEFAULT_MAX_TRUSTED_TRUTH_STALENESS_BUSINESS_DAYS, evaluate_claim_readiness, evaluate_measurement_gate
 from profit_loop_shared_state import (
     _infer_loop_execution_status,
@@ -65,10 +65,13 @@ from profit_loop_shared_state import (
 )
 from wfo_optimizer import (
     IMPORTED_DAILY_TRUTH_SOURCE,
+    IMPORTED_TRUTH_SOURCE,
     run_historical_backtest,
 )
 
 
+ACTIVE_PROFIT_LOOP_TRUTH_LANE = IMPORTED_TRUTH_SOURCE
+DEFAULT_TRUTH_HOLDOUT_SCAN_PLAYBOOK = "quality90_debit55_canary"
 DAILY_TRUTH_AUTO_REFRESH_ENV = "OPTIONS_DAILY_TRUTH_AUTO_REFRESH"
 DAILY_TRUTH_IMPORT_MANIFEST_ENV = "OPTIONS_DAILY_TRUTH_IMPORT_MANIFEST"
 LEGACY_DAILY_TRUTH_IMPORT_MANIFEST_ENV = "HISTORICAL_OPTIONS_IMPORT_MANIFEST"
@@ -298,7 +301,7 @@ def _base_proof_fingerprint(
     *,
     commit_sha: str,
     env_hash: str,
-    truth_lane: str = IMPORTED_DAILY_TRUTH_SOURCE,
+    truth_lane: str = ACTIVE_PROFIT_LOOP_TRUTH_LANE,
     playbook: str = "broad",
 ) -> str:
     encoded = json.dumps(
@@ -667,6 +670,7 @@ def _run_daily_truth_artifact_refresh(
     iv_adj: float,
     pricing_lane: str,
     playbook: str,
+    truth_lane: str = IMPORTED_DAILY_TRUTH_SOURCE,
     repo_root: Path = ROOT_DIR,
     heartbeat: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -684,6 +688,8 @@ def _run_daily_truth_artifact_refresh(
         str(pricing_lane),
         "--playbook",
         str(playbook),
+        "--truth-lane",
+        str(truth_lane),
         "--json",
     ]
     return _run_json_command(
@@ -733,6 +739,77 @@ def _refresh_daily_truth(
             "status": "disabled",
             "commands": [],
         }
+    historical_db_path = str(os.getenv("HISTORICAL_OPTIONS_DB_PATH") or "").strip() or None
+    active_truth_lane = str(ACTIVE_PROFIT_LOOP_TRUTH_LANE or IMPORTED_DAILY_TRUTH_SOURCE).strip().lower()
+    if active_truth_lane != IMPORTED_DAILY_TRUTH_SOURCE:
+        artifact_command = (
+            f"python profit_loop_automation.py daily-truth-refresh-artifact --truth-lane {active_truth_lane}"
+            f" --pricing-lane {refresh_config['pricing_lane']}"
+            f" --lookback-years {refresh_config['lookback_years']}"
+            f" --n-picks {refresh_config['n_picks']}"
+            f" --iv-adj {refresh_config['iv_adj']}"
+            f" --playbook {refresh_config['playbook']}"
+        )
+        try:
+            artifact_result, artifact_record = _run_daily_truth_artifact_refresh(
+                lookback_years=int(refresh_config["lookback_years"]),
+                n_picks=int(refresh_config["n_picks"]),
+                iv_adj=float(refresh_config["iv_adj"]),
+                pricing_lane=str(refresh_config["pricing_lane"]),
+                playbook=str(refresh_config["playbook"]),
+                truth_lane=active_truth_lane,
+                repo_root=repo_root,
+            )
+            if artifact_result.get("error"):
+                raise ProfitLoopAutomationError(str(artifact_result.get("error")))
+        except Exception as exc:
+            return {
+                **base_result,
+                "status": "failed",
+                "stage": "artifact_refresh",
+                "truth_lane": active_truth_lane,
+                "error": str(exc),
+                "commands": [artifact_command],
+            }
+        snapshot_kind = INTRADAY_SNAPSHOT_KIND if active_truth_lane == IMPORTED_TRUTH_SOURCE else DAILY_SNAPSHOT_KIND
+        store_summary = _current_daily_truth_store(historical_db_path) if snapshot_kind == DAILY_SNAPSHOT_KIND else HistoricalOptionsStore(historical_db_path).snapshot_summary(snapshot_kind, trusted_only=True)
+        if store_summary:
+            store_summary["data_trust"] = "trusted"
+        return {
+            **base_result,
+            "status": "artifact_refreshed",
+            "truth_lane": active_truth_lane,
+            "commands": [artifact_record.get("command")],
+            "import_required_entry_count": 0,
+            "imported_entry_sources": [],
+            "import_summary": {
+                "mode": "artifact_only",
+                "db_path": historical_db_path,
+                "total_imported_rows": 0,
+                "total_duplicate_rows": 0,
+                "total_rejected_rows": 0,
+                "trusted_snapshot_summaries": {
+                    snapshot_kind: store_summary,
+                },
+            },
+            "artifact_refresh": {
+                "result_path": artifact_result.get("result_path"),
+                "truth_source": artifact_result.get("truth_source"),
+                "total_trades": artifact_result.get("total_trades"),
+                "profit_factor": artifact_result.get("profit_factor"),
+                "quote_coverage_pct": artifact_result.get("quote_coverage_pct"),
+                "calendar_source": ((artifact_result.get("calendar_summary") or {}).get("source")),
+            },
+            "source_freshness": {
+                "trusted_truth_horizon": _parse_date(store_summary.get("latest_quote_at_utc")).isoformat()
+                if store_summary and _parse_date(store_summary.get("latest_quote_at_utc"))
+                else None,
+                "truth_staleness_business_days": _business_days_stale(
+                    _parse_date(store_summary.get("latest_quote_at_utc")) if store_summary else None,
+                    _utc_now().date(),
+                ),
+            },
+        }
     if not manifest_path:
         return {
             **base_result,
@@ -740,7 +817,6 @@ def _refresh_daily_truth(
             "commands": [],
         }
 
-    historical_db_path = str(os.getenv("HISTORICAL_OPTIONS_DB_PATH") or "").strip() or None
     if not str(manifest_path).startswith(("http://", "https://")) and not Path(manifest_path).exists():
         return {
             **base_result,
@@ -877,6 +953,7 @@ def _refresh_daily_truth(
             iv_adj=float(refresh_config["iv_adj"]),
             pricing_lane=str(refresh_config["pricing_lane"]),
             playbook=str(refresh_config["playbook"]),
+            truth_lane=IMPORTED_DAILY_TRUTH_SOURCE,
             repo_root=repo_root,
         )
         if artifact_result.get("error"):
@@ -1298,7 +1375,7 @@ def _validation_proof_plan(issue: dict[str, Any] | None) -> dict[str, Any]:
         "needs_replay_matrix": needs_replay,
         "needs_holdout": needs_holdout,
         "playbook": "broad",
-        "truth_lane": IMPORTED_DAILY_TRUTH_SOURCE,
+        "truth_lane": ACTIVE_PROFIT_LOOP_TRUTH_LANE,
         "pricing_spec": "matrix" if needs_replay else "targeted",
     }
 
@@ -1332,7 +1409,7 @@ def _build_validation_comparison_spec(
     return {
         "playbook": str(resolved_plan.get("playbook") or resolved_refresh.get("playbook") or "broad"),
         "truth_lane": str(
-            resolved_plan.get("truth_lane") or resolved_refresh.get("truth_lane") or IMPORTED_DAILY_TRUTH_SOURCE
+            resolved_plan.get("truth_lane") or resolved_refresh.get("truth_lane") or ACTIVE_PROFIT_LOOP_TRUTH_LANE
         ),
         "pricing_lane": str(resolved_refresh.get("pricing_lane") or DEFAULT_DAILY_TRUTH_REFRESH_PRICING_LANE),
         "lookback_years": int(resolved_refresh.get("lookback_years") or DEFAULT_DAILY_TRUTH_REFRESH_LOOKBACK_YEARS),
@@ -1428,7 +1505,7 @@ def _resolution_prerequisite_blockers(
     expected_fingerprint = _validation_fingerprint(
         commit_sha=str(expected_context.get("commit_sha") or ""),
         env_hash=str(expected_context.get("env_hash") or ""),
-        truth_lane=str(proof_plan.get("truth_lane") or IMPORTED_DAILY_TRUTH_SOURCE),
+        truth_lane=str(proof_plan.get("truth_lane") or ACTIVE_PROFIT_LOOP_TRUTH_LANE),
         playbook=str(proof_plan.get("playbook") or "broad"),
         blocker_class=str(proof_plan.get("blocker_class") or "storage"),
         pricing_spec=str(proof_plan.get("pricing_spec") or "targeted"),
@@ -1655,7 +1732,7 @@ def _replay_matrix_assessment(replay_cases: list[dict[str, Any]]) -> dict[str, A
     }
 
 
-def _baseline_replay_matrix(*, playbook: str = "broad", truth_lane: str = IMPORTED_DAILY_TRUTH_SOURCE) -> list[dict[str, Any]]:
+def _baseline_replay_matrix(*, playbook: str = "broad", truth_lane: str = ACTIVE_PROFIT_LOOP_TRUTH_LANE) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for case in VALIDATION_REPLAY_CASES:
         output = run_historical_backtest(
@@ -1881,8 +1958,8 @@ def run_operational_health(
     _auto_resolved = auto_resolve_seeded_issues(
         state,
         forward_events_count=_count_forward_events(state_dir),
-        live_truth_lane=IMPORTED_DAILY_TRUTH_SOURCE,
-        policy_truth_source=IMPORTED_DAILY_TRUTH_SOURCE,
+        live_truth_lane=ACTIVE_PROFIT_LOOP_TRUTH_LANE,
+        policy_truth_source=ACTIVE_PROFIT_LOOP_TRUTH_LANE,
     )
     if _auto_resolved:
         save_profit_loop_state(state, state_dir=state_dir)
@@ -1904,7 +1981,14 @@ def run_operational_health(
     issues: list[dict[str, Any]] = []
 
     if dry_run:
-        smoke_payload = {"mode": "dry_run", "scan_truth_lane": IMPORTED_DAILY_TRUTH_SOURCE}
+        smoke_payload = {
+            "mode": "dry_run",
+            "scan_truth_lane": ACTIVE_PROFIT_LOOP_TRUTH_LANE,
+            "requested_policy_truth_lane": ACTIVE_PROFIT_LOOP_TRUTH_LANE,
+            "live_policy_truth_source": ACTIVE_PROFIT_LOOP_TRUTH_LANE,
+            "live_policy_error": None,
+            "live_policy_promotion_status": "dry_run",
+        }
         smoke_record = {"command": "python scripts/options_algorithm_smoke.py --fixture", "passed": True}
         test_record = {"command": "python -m unittest ...", "passed": True, "stdout": "", "stderr": ""}
     else:
@@ -2230,6 +2314,11 @@ def run_truth_holdout(
                     "guardrails": 0,
                     "exceptions": 0,
                 },
+                "symbol_diagnostics": {
+                    "dry_run": {
+                        "not_evaluated": True,
+                    }
+                },
             },
         }
         policy_record = {
@@ -2249,11 +2338,11 @@ def run_truth_holdout(
                 sys.executable,
                 "scripts/record_options_forward_truth.py",
                 "--source",
-                f"{label_prefix}_policy_gated_broad_holdout",
+                f"{label_prefix}_policy_gated_regular_holdout",
                 "--playbook",
-                "broad",
+                DEFAULT_TRUTH_HOLDOUT_SCAN_PLAYBOOK,
                 "--truth-lane",
-                IMPORTED_DAILY_TRUTH_SOURCE,
+                ACTIVE_PROFIT_LOOP_TRUTH_LANE,
                 "--n-picks",
                 "1",
                 "--use-recommended-policy",
@@ -2274,11 +2363,11 @@ def run_truth_holdout(
                     sys.executable,
                     "scripts/record_options_forward_truth.py",
                     "--source",
-                    f"{label_prefix}_raw_broad_holdout",
+                    f"{label_prefix}_raw_regular_holdout",
                     "--playbook",
-                    "broad",
+                    DEFAULT_TRUTH_HOLDOUT_SCAN_PLAYBOOK,
                     "--truth-lane",
-                    IMPORTED_DAILY_TRUTH_SOURCE,
+                    ACTIVE_PROFIT_LOOP_TRUTH_LANE,
                     "--n-picks",
                     "1",
                     "--use-recommended-policy",
@@ -3134,11 +3223,12 @@ def _canary_step_issues(step: dict[str, Any], snapshot: dict[str, Any]) -> list[
     return issues
 
 
-def _canary_step_health(step: dict[str, Any]) -> dict[str, Any]:
+def _canary_step_health(step: dict[str, Any], *, dry_run: bool = False) -> dict[str, Any]:
     automation_id = str(step.get("automation_id") or "unknown").strip() or "unknown"
     snapshot = dict(step.get("snapshot") or {})
     status = str(snapshot.get("loop_execution_status") or "").strip().lower()
-    verdict = str(snapshot.get("profitability_verdict") or "").strip().lower()
+    step_verdict = str(snapshot.get("verdict") or "").strip().lower()
+    profitability_verdict = str(snapshot.get("profitability_verdict") or "").strip().lower()
     issues = _canary_step_issues(step, snapshot)
     high_issue_ids = [
         str(issue.get("issue_id") or issue.get("code") or "high-severity-issue").strip()
@@ -3150,14 +3240,22 @@ def _canary_step_health(step: dict[str, Any]) -> dict[str, Any]:
         reasons.append("loop_execution_status_blocked")
     if status == "degraded" and high_issue_ids:
         reasons.append("degraded_with_unresolved_high_severity_issue")
-    if snapshot.get("evidence_complete") is False:
+    evidence_incomplete_allowed = (
+        bool(dry_run)
+        or (
+            automation_id == "daily-profit-validation"
+            and status == "idle"
+            and step_verdict == "queue-empty"
+        )
+    )
+    if snapshot.get("evidence_complete") is False and not evidence_incomplete_allowed:
         reasons.append("evidence_incomplete")
-    if verdict in {"regressed", "inconclusive"}:
-        reasons.append(f"profitability_verdict_{verdict}")
+    if profitability_verdict in {"regressed", "inconclusive"}:
+        reasons.append(f"profitability_verdict_{profitability_verdict}")
     return {
         "automation_id": automation_id,
         "loop_execution_status": status or None,
-        "profitability_verdict": verdict or None,
+        "profitability_verdict": profitability_verdict or None,
         "evidence_complete": snapshot.get("evidence_complete"),
         "unresolved_high_issue_ids": high_issue_ids,
         "unhealthy": bool(reasons),
@@ -3242,7 +3340,7 @@ def run_profit_loop_canary(
         "ledger_run_ids": ledger_run_ids,
         "raw_ledger_run_ids": [str(item.get("run_id") or "") for item in new_events],
     }
-    step_health_items = [_canary_step_health(step) for step in [health, holdout, validation]]
+    step_health_items = [_canary_step_health(step, dry_run=bool(dry_run)) for step in [health, holdout, validation]]
     step_health = {
         "unhealthy_step_count": sum(1 for item in step_health_items if item["unhealthy"]),
         "unhealthy_automation_ids": [

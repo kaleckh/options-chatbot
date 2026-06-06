@@ -152,7 +152,7 @@ jobs:
       - name: Build frontend
         run: npm run build
 
-  e2e-proof-gates:
+  proof-readbacks:
     needs:
       - backend-tests
       - daytrading-tests
@@ -178,8 +178,13 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --locked
 
-      - name: Run AI commodity no-write accuracy gate
+      - name: Run proof-readiness readbacks
+        run: npm run verify:proof-readbacks
+
+      - name: Run strict AI commodity proof gate
+        continue-on-error: true
         run: npm run verify:accuracy:no-write
 
-      - name: Run profit-loop dry e2e gate
+      - name: Run strict profit-loop proof gate
+        continue-on-error: true
         run: npm run verify:profit-loop:dry

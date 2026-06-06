@@ -88,6 +88,12 @@ from forward_options_ledger import (
 )
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
+from alpaca_paper_trading import (
+    AlpacaPaperTradingError,
+    apply_alpaca_order_result_to_position_payload,
+    record_alpaca_position_link_event,
+    submit_alpaca_paper_order,
+)
 from proof_contract import (
     row_counts_as_production_proof as _row_counts_as_production_proof,
     row_counts_as_proof_grade_exact_closed as _row_counts_as_proof_grade_exact_closed,
@@ -1233,6 +1239,96 @@ def _require_scanner_creation_flags(scan_pick: dict[str, Any], *, stage: str) ->
         )
 
 
+def _require_scanner_origin_lane_promotion(scan_pick: dict[str, Any]) -> None:
+    playbook_id = _pick_playbook_id(scan_pick)
+    try:
+        from scripts.lane_profitability_gate import (
+            DEFAULT_LANE_GATE_REPORT,
+            candidate_gate_decision,
+            load_lane_gate_report,
+        )
+        from scripts.lane_promotion_state import (
+            DEFAULT_LANE_PROMOTION_REPORT,
+            candidate_promotion_decision,
+            load_lane_promotion_report,
+        )
+    except Exception as exc:
+        _blocked_create(
+            "Scanner-origin position creation requires usable lane profitability and promotion gates.",
+            reasons=[f"lane_gate_import_error:{exc}"],
+        )
+
+    try:
+        lane_gate_decision = candidate_gate_decision(
+            playbook_id=playbook_id,
+            candidate=scan_pick,
+            report=load_lane_gate_report(DEFAULT_LANE_GATE_REPORT),
+            require_fresh_report=True,
+            probation_paper_only=False,
+            require_present_self_guardrail_metrics=True,
+        )
+    except Exception as exc:
+        _blocked_create(
+            "Scanner-origin position creation requires a usable lane profitability gate.",
+            reasons=[f"lane_profitability_gate:{exc}"],
+        )
+    if not bool(lane_gate_decision.get("allowed")):
+        _blocked_create(
+            "Scanner-origin position creation is blocked by the lane profitability gate.",
+            reasons=[
+                f"lane_profitability_gate:{lane_gate_decision.get('candidate_status_reason') or 'candidate_blocked'}"
+            ],
+        )
+
+    try:
+        lane_promotion_decision = candidate_promotion_decision(
+            playbook_id=playbook_id,
+            report=load_lane_promotion_report(DEFAULT_LANE_PROMOTION_REPORT),
+            require_fresh_report=True,
+        )
+    except Exception as exc:
+        _blocked_create(
+            "Scanner-origin position creation requires a usable lane promotion-state report.",
+            reasons=[f"lane_promotion_state:{exc}"],
+        )
+    if not bool(lane_promotion_decision.get("allowed")):
+        _blocked_create(
+            "Scanner-origin position creation is blocked by the lane promotion state.",
+            reasons=[
+                f"lane_promotion_state:{lane_promotion_decision.get('candidate_status_reason') or 'candidate_blocked'}"
+            ],
+        )
+
+
+def _require_scanner_origin_open_risk_clear() -> None:
+    try:
+        from scripts.regular_open_risk_governor import (
+            DEFAULT_OPEN_RISK_REPORT,
+            load_regular_open_risk_report,
+            regular_open_risk_entry_blockers,
+        )
+    except Exception as exc:
+        _blocked_create(
+            "Scanner-origin position creation requires a usable open-risk governor.",
+            reasons=[f"open_position_risk_import_error:{exc}"],
+        )
+
+    try:
+        blockers = regular_open_risk_entry_blockers(
+            load_regular_open_risk_report(DEFAULT_OPEN_RISK_REPORT)
+        )
+    except Exception as exc:
+        _blocked_create(
+            "Scanner-origin position creation requires a usable open-risk governor.",
+            reasons=[f"open_position_risk_report_unusable:{exc}"],
+        )
+    if blockers:
+        _blocked_create(
+            "Scanner-origin position creation is blocked by current live-exact open risk.",
+            reasons=blockers,
+        )
+
+
 def _validate_scanner_origin_create(
     scan_pick: dict[str, Any],
     *,
@@ -1268,6 +1364,8 @@ def _validate_scanner_origin_create(
             reasons=list(rerun_pick.get("guardrail_reasons") or ["guardrail_blocked"]),
         )
     _require_scanner_creation_flags(rerun_pick, stage="current")
+    _require_scanner_origin_lane_promotion(rerun_pick)
+    _require_scanner_origin_open_risk_clear()
     return rerun_pick, lineage_verified
 
 
@@ -2557,6 +2655,17 @@ async def create_position_endpoint(body: dict[str, Any]):
         body = parse_create_trading_desk_record_body(body)
         scan_pick = body.get("scan_pick") or {}
         mode = _creation_mode(body, scan_pick)
+        execute_alpaca_paper = _parse_bool_param(
+            body.get("execute_alpaca_paper"),
+            "execute_alpaca_paper",
+            default=False,
+        )
+        contracts = _parse_positive_int(body.get("contracts"), "contracts")
+        if execute_alpaca_paper:
+            if mode != "scanner":
+                raise HTTPException(400, "Alpaca paper execution requires scanner-origin exact-contract picks.")
+            if contracts != 1:
+                raise HTTPException(400, "Alpaca paper execution is capped at exactly 1 contract per trade.")
         source_scan_lineage_verified = _verify_source_scan_lineage(scan_pick)
         if mode == "scanner":
             scan_pick, source_scan_lineage_verified = _validate_scanner_origin_create(
@@ -2566,7 +2675,7 @@ async def create_position_endpoint(body: dict[str, Any]):
         payload = build_position_payload(
             scan_pick=scan_pick,
             fill_price=_parse_positive_price(body.get("fill_price"), "fill_price"),
-            contracts=_parse_positive_int(body.get("contracts"), "contracts"),
+            contracts=contracts,
             filled_at=body.get("filled_at"),
             notes=_parse_optional_string(body.get("notes"), "notes"),
             require_proof_eligible=mode == "scanner",
@@ -2585,7 +2694,23 @@ async def create_position_endpoint(body: dict[str, Any]):
                     positions=[existing_position],
                 ),
             }
+        alpaca_order_result: dict[str, Any] | None = None
+        if execute_alpaca_paper:
+            try:
+                alpaca_order_result = await _run_in_worker(submit_alpaca_paper_order, payload)
+            except AlpacaPaperTradingError as exc:
+                raise HTTPException(status_code=exc.status_code, detail=exc.public_payload())
+            payload = apply_alpaca_order_result_to_position_payload(payload, alpaca_order_result)
         position = POSITIONS_REPOSITORY.create_position(payload)
+        if alpaca_order_result is not None:
+            try:
+                await _run_in_worker(
+                    record_alpaca_position_link_event,
+                    position=position,
+                    order_result=alpaca_order_result,
+                )
+            except Exception:
+                pass
         position_event_persistence: dict[str, Any]
         try:
             recording_result = await _run_in_worker(

@@ -16,6 +16,14 @@ if str(ROOT) not in sys.path:
 
 from scripts import pending_audit_candidates as pending  # noqa: E402
 from scripts import replay_short_term_filter_point_in_time as point_in_time  # noqa: E402
+from scripts.candidate_lifecycle import (  # noqa: E402
+    STATUS_LIVE_VALIDATION_ATTEMPTED,
+    STATUS_LIVE_VALIDATION_SCAN_FAILED,
+    STATUS_PENDING_LIVE_VALIDATION,
+    candidate_status_spec,
+    fresh_evidence_loop_outcome_for_status,
+    is_paper_only_status,
+)
 
 
 REPORT_ID = "regular_options_fresh_evidence_loop"
@@ -27,6 +35,12 @@ EXACT_EXIT_BASES = {
     "live_spread_bid_ask",
     "auto_sell_review",
 }
+
+BRIDGE_READY = "promotion_discussion_ready"
+BRIDGE_PAPER_ENTRY_REQUIRED = "paper_probation_exact_entry_required"
+BRIDGE_EXACT_EXIT_REQUIRED = "exact_exit_pnl_required"
+BRIDGE_NON_EXECUTABLE_ENTRY = "non_executable_entry_blocked"
+BRIDGE_NOT_CANDIDATE = "not_evidence_bridge_candidate"
 
 
 def _utc_now() -> str:
@@ -231,11 +245,84 @@ def _loop_outcome(row: dict[str, Any], disposition: dict[str, Any] | None) -> tu
     status = _norm(row.get("candidate_status"))
     if disposition:
         return _norm(disposition.get("outcome")), _norm(disposition.get("outcome_reason"))
-    if status == "pending_live_validation":
-        return "pending_validation", "candidate_waiting_for_market_hours_validation"
-    if status == "diagnostic_only_unapproved_lane":
-        return "paper_only", "candidate_lane_is_diagnostic_only"
+    status_outcome = fresh_evidence_loop_outcome_for_status(status, row.get("candidate_status_reason"))
+    if status_outcome is not None:
+        return status_outcome
     return status or "unknown", _norm(row.get("candidate_status_reason"))
+
+
+def _has_contract_identity(candidate: dict[str, Any]) -> bool:
+    return bool(_norm(candidate.get("contract_symbol")) or _norm(candidate.get("short_contract_symbol")))
+
+
+def _promotion_gate_context(candidate: dict[str, Any]) -> str:
+    if isinstance(candidate.get("lane_promotion_state"), dict):
+        return "current_lane_promotion_state_payload"
+    status = _norm(candidate.get("candidate_status"))
+    if status in {
+        STATUS_PENDING_LIVE_VALIDATION,
+        STATUS_LIVE_VALIDATION_ATTEMPTED,
+        STATUS_LIVE_VALIDATION_SCAN_FAILED,
+    }:
+        return "legacy_pre_promotion_state_gate"
+    return "no_lane_promotion_state_payload"
+
+
+def _evidence_bridge(
+    *,
+    candidate: dict[str, Any],
+    validation_outcome: str,
+    entry_status: str,
+    realized_status: str,
+    position_id: int | None,
+    promotion_ready: bool,
+) -> dict[str, Any]:
+    status = _norm(candidate.get("candidate_status"))
+    spec = candidate_status_spec(status)
+    paper_only = is_paper_only_status(status)
+    blockers: list[str] = []
+    required_next_evidence: list[str] = []
+    if promotion_ready:
+        bridge_status = BRIDGE_READY
+    elif paper_only:
+        bridge_status = BRIDGE_PAPER_ENTRY_REQUIRED
+        if not _has_contract_identity(candidate):
+            blockers.append("exact_contract_identity_missing")
+        if entry_status != "fresh_executable_exact_entry":
+            required_next_evidence.append("fresh_executable_exact_opra_nbbo_entry")
+        required_next_evidence.append("paper_only_validation_disposition")
+        required_next_evidence.append("tracked_or_suggested_link_after_explicit_paper_review_only")
+        required_next_evidence.append("trusted_exact_exit_realized_pnl_after_close")
+    elif validation_outcome in {"created", "duplicate"} and entry_status == "fresh_executable_exact_entry":
+        bridge_status = BRIDGE_EXACT_EXIT_REQUIRED
+        required_next_evidence.append("trusted_exact_exit_realized_pnl_after_close")
+        if realized_status == "missing_exact_exit_evidence":
+            blockers.append("exact_exit_evidence_missing")
+        elif realized_status == "missing_realized_pnl":
+            blockers.append("realized_pnl_missing")
+        elif realized_status == "no_position_link":
+            blockers.append("position_link_missing")
+    elif entry_status in {"stale", "non_executable", "fill_attempt_missing"}:
+        bridge_status = BRIDGE_NON_EXECUTABLE_ENTRY
+        blockers.append(f"entry_status:{entry_status}")
+        required_next_evidence.append("fresh_executable_exact_opra_nbbo_entry")
+    else:
+        bridge_status = BRIDGE_NOT_CANDIDATE
+    return {
+        "status": bridge_status,
+        "candidate_status_phase": spec.phase if spec else None,
+        "candidate_status_family": spec.family if spec else None,
+        "paper_only": paper_only,
+        "live_policy_change": False,
+        "position_id": position_id,
+        "blockers": blockers,
+        "required_next_evidence": required_next_evidence,
+        "prohibited_actions": [
+            "do_not_create_live_row_from_bridge_status",
+            "do_not_submit_broker_order_from_bridge_status",
+            "do_not_count_midpoint_stale_eod_or_manual_evidence",
+        ],
+    }
 
 
 def build_report(
@@ -271,10 +358,20 @@ def build_report(
             and entry_status == "fresh_executable_exact_entry"
             and realized_status == "exact_realized_pnl_available"
         )
+        evidence_bridge = _evidence_bridge(
+            candidate=candidate,
+            validation_outcome=outcome,
+            entry_status=entry_status,
+            realized_status=realized_status,
+            position_id=position_id,
+            promotion_ready=promotion_ready,
+        )
         row = {
             "candidate_key": key,
             "scan_date": _norm(candidate.get("audit_generated_at_utc") or candidate.get("queue_recorded_at_utc"))[:10],
             "candidate_status": candidate.get("candidate_status"),
+            "promotion_gate_context": _promotion_gate_context(candidate),
+            "lane_promotion_state": candidate.get("lane_promotion_state"),
             "validation_outcome": outcome,
             "validation_outcome_reason": outcome_reason,
             "playbook_id": candidate.get("playbook_id"),
@@ -293,6 +390,10 @@ def build_report(
             "auto_track_position_id": position_id,
             "realized_pnl_status": realized_status,
             "realized_pnl": realized,
+            "evidence_bridge": evidence_bridge,
+            "evidence_bridge_status": evidence_bridge["status"],
+            "evidence_bridge_blockers": evidence_bridge["blockers"],
+            "required_next_evidence": evidence_bridge["required_next_evidence"],
             "promotion_discussion_ready": promotion_ready,
             "live_policy_change": False,
         }
@@ -302,12 +403,16 @@ def build_report(
     entry_counts = Counter(str(row["entry_evidence_status"]) for row in rows)
     realized_counts = Counter(str(row["realized_pnl_status"]) for row in rows)
     status_counts = Counter(str(row["candidate_status"]) for row in rows)
+    bridge_counts = Counter(str(row["evidence_bridge_status"]) for row in rows)
+    promotion_context_counts = Counter(str(row["promotion_gate_context"]) for row in rows)
     summary = {
         "candidate_count": len(rows),
         "validation_outcome_counts": dict(sorted(outcome_counts.items())),
         "candidate_status_counts": dict(sorted(status_counts.items())),
         "entry_evidence_status_counts": dict(sorted(entry_counts.items())),
         "realized_pnl_status_counts": dict(sorted(realized_counts.items())),
+        "evidence_bridge_status_counts": dict(sorted(bridge_counts.items())),
+        "promotion_gate_context_counts": dict(sorted(promotion_context_counts.items())),
         "linked_position_count": sum(1 for row in rows if row["auto_track_position_id"] is not None),
         "exact_realized_pnl_count": realized_counts.get("exact_realized_pnl_available", 0),
         "missing_realized_pnl_count": realized_counts.get("missing_realized_pnl", 0),
@@ -316,6 +421,10 @@ def build_report(
         "stale_count": entry_counts.get("stale", 0),
         "non_executable_count": entry_counts.get("non_executable", 0),
         "promotion_discussion_ready_count": sum(1 for row in rows if row["promotion_discussion_ready"]),
+        "paper_probation_bridge_count": bridge_counts.get(BRIDGE_PAPER_ENTRY_REQUIRED, 0),
+        "exact_exit_bridge_count": bridge_counts.get(BRIDGE_EXACT_EXIT_REQUIRED, 0),
+        "non_executable_bridge_count": bridge_counts.get(BRIDGE_NON_EXECUTABLE_ENTRY, 0),
+        "legacy_pre_promotion_state_gate_count": promotion_context_counts.get("legacy_pre_promotion_state_gate", 0),
         "live_policy_change": False,
     }
     return {
@@ -334,6 +443,11 @@ def build_report(
                 "tracked/suggested row linkage without proof semantic merging",
                 "exact OPRA/NBBO realized exit P&L",
                 "live_policy_change=false",
+            ],
+            "paper_probation_bridge_requires": [
+                "fresh executable exact OPRA/NBBO entry captured during a quote window",
+                "paper-only validation disposition until lane promotion clears",
+                "trusted exact exit realized P&L before promotion discussion",
             ],
         },
         "inputs": {
@@ -376,6 +490,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Validation outcomes: `{json.dumps(summary['validation_outcome_counts'], sort_keys=True)}`.",
         f"- Entry evidence statuses: `{json.dumps(summary['entry_evidence_status_counts'], sort_keys=True)}`.",
         f"- Realized P&L statuses: `{json.dumps(summary['realized_pnl_status_counts'], sort_keys=True)}`.",
+        f"- Evidence bridge statuses: `{json.dumps(summary['evidence_bridge_status_counts'], sort_keys=True)}`.",
+        f"- Promotion gate contexts: `{json.dumps(summary['promotion_gate_context_counts'], sort_keys=True)}`.",
         f"- No-longer-matched: `{summary['no_longer_matched_count']}`.",
         f"- Proof-ineligible: `{summary['proof_ineligible_count']}`.",
         f"- Linked positions: `{summary['linked_position_count']}`.",
@@ -384,6 +500,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Stale entry evidence: `{summary['stale_count']}`.",
         f"- Non-executable entry evidence: `{summary['non_executable_count']}`.",
         f"- Promotion discussion ready: `{summary['promotion_discussion_ready_count']}`.",
+        f"- Paper/probation bridge rows: `{summary['paper_probation_bridge_count']}`.",
+        f"- Exact-exit bridge rows: `{summary['exact_exit_bridge_count']}`.",
+        f"- Legacy pre-promotion rows: `{summary['legacy_pre_promotion_state_gate_count']}`.",
         f"- Live policy change: `{summary['live_policy_change']}`.",
         "",
         "## Evidence Boundary",
@@ -392,11 +511,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         "- Entry evidence status describes scanner quote/limit evidence only; it is not a fill, position, or broker execution status.",
         "- `created` and `duplicate` validation outcomes are still paper/tracked linkage states, not broker fills.",
         "- Missing, stale, non-executable, proof-ineligible, and no-longer-matched rows remain blocked from promotion.",
+        "- Paper/probation bridge rows collect exact evidence only; they are not live validation, auto-track, or broker instructions.",
         "",
         "## Candidate Readback",
         "",
-        "| Date | Lane | Ticker | Outcome | Entry Evidence | P&L Status | Position | Ready | Reason |",
-        "|---|---|---|---|---|---|---:|---|---|",
+        "| Date | Lane | Ticker | Outcome | Entry Evidence | P&L Status | Bridge | Position | Ready | Reason |",
+        "|---|---|---|---|---|---|---|---:|---|---|",
     ]
     for row in report.get("candidates") or []:
         lines.append(
@@ -409,6 +529,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                     _fmt(row.get("validation_outcome")),
                     _fmt(row.get("entry_evidence_status")),
                     _fmt(row.get("realized_pnl_status")),
+                    _fmt(row.get("evidence_bridge_status")),
                     _fmt(row.get("auto_track_position_id")),
                     _fmt(row.get("promotion_discussion_ready")),
                     _fmt(row.get("validation_outcome_reason")),

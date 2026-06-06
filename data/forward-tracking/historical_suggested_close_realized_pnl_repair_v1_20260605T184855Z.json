@@ -1,0 +1,634 @@
+{
+  "repair_id": "historical_suggested_close_realized_pnl_repair_v1",
+  "apply": true,
+  "audit_ids": [
+    "all_lanes_zero_pick_current_algo_v1",
+    "main_lane_zero_pick_current_algo_v1"
+  ],
+  "as_of_date": "2026-06-05",
+  "position_count": 485,
+  "summary": {
+    "simulated_no_executable_suggested_close": 56,
+    "simulated_sell": 429,
+    "skipped_already_has_realized_due_only_missing": 402,
+    "remaining_missing_realized_no_executable_sell": 34,
+    "updated": 27
+  },
+  "changed_examples": [
+    {
+      "id": 535,
+      "ticker": "DIA",
+      "playbook_id": "volatility_expansion_observation",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-29",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 7.86,
+      "new_gross_pnl_pct": 48.4279,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 526,
+      "ticker": "DIA",
+      "playbook_id": "range_breakout_observation",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-29",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 7.86,
+      "new_gross_pnl_pct": 48.4279,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 433,
+      "ticker": "PM",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_stop_loss",
+      "new_exit_execution_price": 0.0,
+      "new_gross_pnl_pct": -100.0,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 428,
+      "ticker": "PM",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-28T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_stop_loss",
+      "new_exit_execution_price": 0.0,
+      "new_gross_pnl_pct": -100.0,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 427,
+      "ticker": "NVDA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-28T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_stop_loss",
+      "new_exit_execution_price": 0.37,
+      "new_gross_pnl_pct": -93.0809,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 426,
+      "ticker": "SPY",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 9.23,
+      "new_gross_pnl_pct": 17.5048,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 425,
+      "ticker": "IWM",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 7.79,
+      "new_gross_pnl_pct": 84.619,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 424,
+      "ticker": "DIA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 8.8,
+      "new_gross_pnl_pct": 61.5865,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 423,
+      "ticker": "QQQ",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 12.37,
+      "new_gross_pnl_pct": 32.2217,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 422,
+      "ticker": "COIN",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-29",
+      "new_exit_reason": "historical_suggested_stop_loss",
+      "new_exit_execution_price": 0.32,
+      "new_gross_pnl_pct": -94.7216,
+      "first_unpriced_sell": {
+        "review_date": "2026-05-27",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "COIN260605C00230000"
+      }
+    },
+    {
+      "id": 421,
+      "ticker": "NVDA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-27T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_stop_loss",
+      "new_exit_execution_price": 0.51,
+      "new_gross_pnl_pct": -92.4945,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 419,
+      "ticker": "SPY",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-26T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 8.83,
+      "new_gross_pnl_pct": 0.3295,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 416,
+      "ticker": "NVDA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-26T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 1.37,
+      "new_gross_pnl_pct": -83.3232,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 412,
+      "ticker": "DIA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-26T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 8.82,
+      "new_gross_pnl_pct": 44.2237,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 411,
+      "ticker": "XLK",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-26T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 5.75,
+      "new_gross_pnl_pct": 22.7321,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 410,
+      "ticker": "NVDA",
+      "playbook_id": "swing",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-26T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-26",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 2.26,
+      "new_gross_pnl_pct": -69.4904,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 85,
+      "ticker": "SLB",
+      "playbook_id": "bullish_pullback_observation",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-29",
+      "new_exit_reason": "historical_suggested_time_exit",
+      "new_exit_execution_price": 0.82,
+      "new_gross_pnl_pct": -53.633,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 516,
+      "ticker": "DIA",
+      "playbook_id": "tracked_winner_observation",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_profit_harvest",
+      "new_exit_execution_price": 10.32,
+      "new_gross_pnl_pct": 53.7659,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 515,
+      "ticker": "SPY",
+      "playbook_id": "tracked_winner_observation",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-29",
+      "new_exit_reason": "historical_suggested_profit_harvest",
+      "new_exit_execution_price": 6.72,
+      "new_gross_pnl_pct": 53.2672,
+      "first_unpriced_sell": null
+    },
+    {
+      "id": 114,
+      "ticker": "DIA",
+      "playbook_id": "tracked_winner_primary",
+      "old_status": "closed",
+      "old_closed_at": "2026-05-29T13:55:00-06:00",
+      "old_exit_execution_price": null,
+      "old_gross_pnl_pct": null,
+      "new_review_date": "2026-05-27",
+      "new_exit_reason": "historical_suggested_profit_harvest",
+      "new_exit_execution_price": 10.32,
+      "new_gross_pnl_pct": 53.7659,
+      "first_unpriced_sell": null
+    }
+  ],
+  "unchanged_examples": [],
+  "unresolved_examples": [
+    {
+      "id": 282,
+      "ticker": "DIA",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "DIA260529C00507500",
+        "missing_short_contract_symbol": "DIA260529C00515000"
+      }
+    },
+    {
+      "id": 281,
+      "ticker": "SLB",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "SLB260529C00057000",
+        "missing_short_contract_symbol": "SLB260529C00059000"
+      }
+    },
+    {
+      "id": 280,
+      "ticker": "V",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "V260529C00330000",
+        "missing_short_contract_symbol": "V260529C00345000"
+      }
+    },
+    {
+      "id": 279,
+      "ticker": "DIA",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "DIA260529C00499000",
+        "missing_short_contract_symbol": "DIA260529C00508000"
+      }
+    },
+    {
+      "id": 278,
+      "ticker": "V",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "V260529C00330000",
+        "missing_short_contract_symbol": "V260529C00345000"
+      }
+    },
+    {
+      "id": 277,
+      "ticker": "MSFT",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "MSFT260527C00425000",
+        "missing_short_contract_symbol": "MSFT260527C00442500"
+      }
+    },
+    {
+      "id": 276,
+      "ticker": "PM",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "PM260529C00190000",
+        "missing_short_contract_symbol": "PM260529C00200000"
+      }
+    },
+    {
+      "id": 431,
+      "ticker": "PM",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "swing",
+      "status": "closed",
+      "closed_at": "2026-05-28T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-28",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "PM260605C00207500"
+      }
+    },
+    {
+      "id": 274,
+      "ticker": "PM",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "PM260529C00192500",
+        "missing_short_contract_symbol": "PM260529C00202500"
+      }
+    },
+    {
+      "id": 271,
+      "ticker": "PM",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "short_term",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "PM260529C00190000",
+        "missing_short_contract_symbol": "PM260529C00200000"
+      }
+    },
+    {
+      "id": 534,
+      "ticker": "SPY",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "volatility_expansion_observation",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "SPY260529C00743000",
+        "missing_short_contract_symbol": "SPY260529C00759000"
+      }
+    },
+    {
+      "id": 533,
+      "ticker": "IWM",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "volatility_expansion_observation",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "IWM260529C00281000",
+        "missing_short_contract_symbol": "IWM260529C00290000"
+      }
+    },
+    {
+      "id": 532,
+      "ticker": "QQQ",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "volatility_expansion_observation",
+      "status": "closed",
+      "closed_at": "2026-05-26T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-26",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": "QQQ260529C00712000",
+        "missing_short_contract_symbol": "QQQ260529C00733000"
+      }
+    },
+    {
+      "id": 487,
+      "ticker": "TSLA",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "bullish_momentum",
+      "status": "closed",
+      "closed_at": "2026-05-22T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-22",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "TSLA260529C00490000"
+      }
+    },
+    {
+      "id": 415,
+      "ticker": "TSLA",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "swing",
+      "status": "closed",
+      "closed_at": "2026-05-22T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-22",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "TSLA260529C00490000"
+      }
+    },
+    {
+      "id": 513,
+      "ticker": "GOOGL",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "tracked_winner_observation",
+      "status": "closed",
+      "closed_at": "2026-05-29T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-29",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "GOOGL260612C00435000"
+      }
+    },
+    {
+      "id": 511,
+      "ticker": "GOOGL",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "tracked_winner_observation",
+      "status": "closed",
+      "closed_at": "2026-05-27T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-27",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "GOOGL260612C00440000"
+      }
+    },
+    {
+      "id": 81,
+      "ticker": "SBUX",
+      "audit_id": "main_lane_zero_pick_current_algo_v1",
+      "playbook_id": "bullish_pullback_observation",
+      "status": "closed",
+      "closed_at": "2026-05-27T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-27",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "SBUX260612C00116000"
+      }
+    },
+    {
+      "id": 509,
+      "ticker": "GOOGL",
+      "audit_id": "all_lanes_zero_pick_current_algo_v1",
+      "playbook_id": "tracked_winner_observation",
+      "status": "closed",
+      "closed_at": "2026-05-27T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-27",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "GOOGL260612C00445000"
+      }
+    },
+    {
+      "id": 78,
+      "ticker": "C",
+      "audit_id": "main_lane_zero_pick_current_algo_v1",
+      "playbook_id": "bullish_pullback_observation",
+      "status": "closed",
+      "closed_at": "2026-05-22T13:55:00-06:00",
+      "exit_reason": "historical_backfill_time_exit_elapsed",
+      "first_unpriced_sell": {
+        "review_date": "2026-05-22",
+        "reason": "historical_suggested_time_exit_unpriced",
+        "unpriced_reason": "missing_exit_quote_for_leg",
+        "missing_long_contract_symbol": null,
+        "missing_short_contract_symbol": "C260605C00144000"
+      }
+    }
+  ],
+  "backup_path": "C:\\Users\\kalec\\options-chatbot\\data\\tracked_positions.pre-historical_suggested_close_realized_pnl_repair_v1-20260605-124843.json",
+  "source_labels": [
+    "thetadata_opra_nbbo_1m"
+  ],
+  "historical_options_db": "C:\\Users\\kalec\\options-chatbot\\data\\options-validation\\options_history.db",
+  "generated_at_utc": "2026-06-05T18:48:55Z"
+}

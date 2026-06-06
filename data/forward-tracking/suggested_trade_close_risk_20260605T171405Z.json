@@ -1,0 +1,85 @@
+{
+  "action_counts": {
+    "no_stored_review": 1
+  },
+  "attention_trade_ids": [
+    138
+  ],
+  "attention_trades": [
+    {
+      "action_bucket": "no_stored_review",
+      "current_option_price": null,
+      "current_pnl_pct": null,
+      "evidence_bucket": "missing_review",
+      "exit_execution_basis": null,
+      "exit_execution_price": null,
+      "first_warning": null,
+      "id": 138,
+      "lane": "legacy_unlabeled",
+      "last_reviewed_at": null,
+      "mark_pnl_pct": null,
+      "next_safe_action": "refresh_explicit_suggested_trade_review_before_using_close_or_pnl_state",
+      "price_trigger_ok": false,
+      "pricing_source": null,
+      "pricing_state": null,
+      "profit_target_pct": 100.0,
+      "reason": null,
+      "recommendation": null,
+      "record_class": "suggested_trade",
+      "status": "open",
+      "stop_loss_pct": 50.0,
+      "ticker": "AAA",
+      "warning_count": 0
+    }
+  ],
+  "by_lane": {
+    "legacy_unlabeled": {
+      "avg_pnl_pct": null,
+      "median_pnl_pct": null,
+      "negative": 0,
+      "positive_or_flat": 0,
+      "priced_or_marked": 0,
+      "rows": 1
+    }
+  },
+  "by_record_class": {
+    "suggested_trade": {
+      "avg_pnl_pct": null,
+      "median_pnl_pct": null,
+      "negative": 0,
+      "positive_or_flat": 0,
+      "priced_or_marked": 0,
+      "rows": 1
+    }
+  },
+  "close_risk_trade_ids": [],
+  "closed_summary": {
+    "avg_pnl_pct": 25.21,
+    "median_pnl_pct": 25.21,
+    "negative": 0,
+    "positive_or_flat": 1,
+    "priced_or_marked": 1,
+    "rows": 1
+  },
+  "db_path": "C:\\Users\\kalec\\options-chatbot\\chat_history.db",
+  "evidence_counts": {
+    "missing_review": 1
+  },
+  "generated_at_utc": "2026-06-05T17:14:05Z",
+  "load_error": null,
+  "read_only": true,
+  "scope": "suggested_trades_close_risk_read_only",
+  "stale_or_missing_review_trade_ids": [
+    138
+  ],
+  "stale_review_hours": 24.0,
+  "storage_available": true,
+  "summary": {
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "negative": 0,
+    "positive_or_flat": 0,
+    "priced_or_marked": 0,
+    "rows": 1
+  }
+}

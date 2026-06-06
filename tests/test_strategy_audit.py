@@ -3064,7 +3064,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertFalse(result["watch_picks"][0]["managed_eligible"])
         self.assertEqual(result["watch_picks"][0]["managed_block_reason"], "promotion_class:research_bootstrap")
 
-    def test_guardrails_warn_duplicate_open_vertical_spread(self):
+    def test_guardrails_block_duplicate_open_vertical_spread(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3116,7 +3116,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=True,
         )
 
-        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
         self.assertIn("exact vertical spread", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
         self.assertIn("vertical_spread_signature_counts", result["exposure_snapshot"])
 
@@ -3171,7 +3171,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(ranked["guardrail_reasons"], [])
         self.assertFalse(result["exposure_snapshot"]["portfolio_caps_enforced"])
 
-    def test_guardrails_keep_portfolio_caution_candidates_visible(self):
+    def test_guardrails_keep_portfolio_cap_breaches_visible_but_blocked(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3215,12 +3215,12 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=False,
         )
 
-        self.assertEqual(len(result["ranked_picks"]), 1)
-        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
+        self.assertEqual(len(result["ranked_picks"]), 0)
         self.assertEqual(len(result["all_ranked_picks"]), 1)
-        self.assertEqual(result["all_ranked_picks"][0]["guardrail_decision"], "caution")
+        self.assertEqual(result["all_ranked_picks"][0]["guardrail_decision"], "blocked")
+        self.assertIn("Max concurrent positions", " ".join(result["all_ranked_picks"][0]["guardrail_reasons"]))
 
-    def test_run_supervised_scan_returns_portfolio_caution_picks(self):
+    def test_run_supervised_scan_keeps_blocked_portfolio_cap_picks_in_audit(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3264,10 +3264,10 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             use_recommended_policy=False,
         )
 
-        self.assertEqual(len(result["picks"]), 1)
-        self.assertEqual(len(result["ranked_picks"]), 1)
+        self.assertEqual(len(result["picks"]), 0)
+        self.assertEqual(len(result["ranked_picks"]), 0)
         self.assertEqual(len(result["candidate_audit_picks"]), 1)
-        self.assertEqual(result["candidate_audit_picks"][0]["guardrail_decision"], "caution")
+        self.assertEqual(result["candidate_audit_picks"][0]["guardrail_decision"], "blocked")
 
     def test_guardrails_count_positions_opened_today_even_if_closed(self):
         class _AvailablePositionsRepo:
@@ -3295,7 +3295,91 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         self.assertEqual(exposure["open_positions"], 0)
         self.assertEqual(exposure["opened_today"], 1)
 
-    def test_guardrails_warn_open_executable_drawdown_over_cap(self):
+    def test_guardrails_ignore_research_backfill_rows_in_live_exposure(self):
+        now = _RealDateTime.now(ss._ET)
+
+        live_open = {
+            "status": "open",
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-06-19",
+            "strike": 740.0,
+            "contracts": 1,
+            "entry_option_price": 4.0,
+            "entry_execution_price": 4.0,
+            "filled_at": now.isoformat(),
+            "source_pick_snapshot": {"sector": "Index ETF", "market_regime": "bullish"},
+            "latest_review": {
+                "reviewed_at": now.isoformat(),
+                "exit_execution_price": 3.5,
+                "exit_execution_basis": "spread_bid_ask_exact",
+                "net_pnl_usd": -50.0,
+                "metrics_snapshot": {"price_trigger_ok": True},
+            },
+        }
+        research_open = {
+            **live_open,
+            "ticker": "QQQ",
+            "source_pick_snapshot": {
+                "backfill_audit_id": "main_lane_zero_pick_current_algo_v1",
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+            },
+            "latest_review": {
+                "reviewed_at": now.isoformat(),
+                "exit_execution_price": 1.0,
+                "exit_execution_basis": "spread_bid_ask_exact",
+                "net_pnl_usd": -999.0,
+                "metrics_snapshot": {"price_trigger_ok": True},
+            },
+        }
+        live_closed = {
+            "status": "closed",
+            "ticker": "DIA",
+            "direction": "call",
+            "expiry": "2026-06-19",
+            "strike": 500.0,
+            "contracts": 1,
+            "entry_option_price": 2.0,
+            "entry_execution_price": 2.0,
+            "filled_at": now.isoformat(),
+            "closed_at": now.isoformat(),
+            "net_pnl_usd": -25.0,
+            "source_pick_snapshot": {"sector": "Index ETF", "market_regime": "bullish"},
+        }
+        research_closed = {
+            **live_closed,
+            "ticker": "IWM",
+            "net_pnl_usd": -500.0,
+            "source_pick_snapshot": {
+                "backfill_audit_id": "main_lane_zero_pick_current_algo_v1",
+                "sector": "Index ETF",
+                "market_regime": "bullish",
+            },
+        }
+
+        class _AvailablePositionsRepo:
+            is_available = True
+
+            def list_positions(self, status: str | None = "open"):
+                if status == "open":
+                    return [live_open, research_open]
+                return [live_open, research_open, live_closed, research_closed]
+
+        exposure = ss.load_open_position_context(_AvailablePositionsRepo())
+
+        self.assertEqual(exposure["raw_open_positions"], 2)
+        self.assertEqual(exposure["open_positions"], 1)
+        self.assertEqual(exposure["research_backfill_open_positions_ignored"], 1)
+        self.assertEqual(exposure["opened_today"], 2)
+        self.assertEqual(exposure["research_backfill_opened_today_ignored"], 2)
+        self.assertEqual(exposure["ticker_counts"], {"SPY": 1})
+        self.assertEqual(exposure["correlated_index_count"], 1)
+        self.assertEqual(exposure["open_executable_loss_usd"], 50.0)
+        self.assertEqual(exposure["daily_realized_pnl_usd"], -25.0)
+        self.assertEqual(exposure["weekly_realized_pnl_usd"], -25.0)
+
+    def test_guardrails_block_open_executable_drawdown_over_cap(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3352,11 +3436,11 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
         )
 
         ranked = result["ranked_picks"][0]
-        self.assertEqual(ranked["guardrail_decision"], "caution")
+        self.assertEqual(ranked["guardrail_decision"], "blocked")
         self.assertIn("Open executable drawdown", " ".join(ranked["guardrail_reasons"]))
         self.assertEqual(result["exposure_snapshot"]["open_executable_loss_usd"], 125.0)
 
-    def test_guardrails_warn_position_cost_risk_over_cap(self):
+    def test_guardrails_block_position_cost_risk_over_cap(self):
         class _AvailablePositionsRepo:
             is_available = True
 
@@ -3388,7 +3472,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             include_blocked=True,
         )
 
-        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "caution")
+        self.assertEqual(result["ranked_picks"][0]["guardrail_decision"], "blocked")
         self.assertIn("Position cost risk", " ".join(result["ranked_picks"][0]["guardrail_reasons"]))
 
     def test_quality90_debit55_canary_blocks_expensive_spreads(self):

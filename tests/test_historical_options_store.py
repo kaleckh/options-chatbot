@@ -1,3 +1,4 @@
+import csv
 import os
 import sqlite3
 import sys
@@ -146,6 +147,32 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         )
         self.assertIsNotNone(exact)
         self.assertEqual(exact.contract_symbol, quote.contract_symbol)
+
+    def test_exact_quote_lookup_accepts_zero_bid_positive_ask_nbbo(self):
+        zero_bid_path = os.path.join(self._tmp.name, "zero_bid_snapshots.csv")
+        with open(self.csv_path, "r", encoding="utf8", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+            fieldnames = list(rows[0].keys())
+        target = rows[0]
+        target["bid"] = "0"
+        target["ask"] = "0.2"
+        with open(zero_bid_path, "w", encoding="utf8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerow(target)
+
+        import_historical_option_snapshots(zero_bid_path, "lab_intraday", db_path=self.db_path)
+        store = HistoricalOptionsStore(self.db_path)
+        quote = store.get_exact_quote(
+            quote_date_et=self.histories["SPY"].index[0].date(),
+            contract_symbol=target["contract_symbol"],
+        )
+
+        self.assertIsNotNone(quote)
+        assert quote is not None
+        self.assertEqual(quote.bid, 0.0)
+        self.assertEqual(quote.ask, 0.2)
+        self.assertEqual(quote.price, 0.1)
 
     def test_replay_quote_lookups_reuse_store_cache(self):
         import_historical_option_snapshots(self.csv_path, "lab_intraday", db_path=self.db_path)

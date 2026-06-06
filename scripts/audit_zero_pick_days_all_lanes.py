@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,105 @@ def _split_csv(value: str | None) -> list[str]:
     if not value:
         return []
     return [item.strip().lower() for item in str(value).replace(";", ",").split(",") if item.strip()]
+
+
+def _parse_iso_date(value: str) -> date:
+    return date.fromisoformat(str(value)[:10])
+
+
+def _market_dates_between(start: date, end: date) -> list[str]:
+    days: list[str] = []
+    current = start
+    while current <= end:
+        if single_lane_audit.is_us_equity_market_day(current):
+            days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
+
+
+def quote_store_coverage(args: argparse.Namespace) -> dict[str, Any]:
+    if not getattr(args, "date_from", None) or not getattr(args, "date_to", None):
+        return {
+            "status": "not_checked_no_explicit_date_range",
+            "reason": "pass --date-from and --date-to to audit quote-store coverage",
+        }
+
+    start = _parse_iso_date(args.date_from)
+    end = _parse_iso_date(args.date_to)
+    requested_dates = _market_dates_between(start, end) if start <= end else []
+    source_labels = [
+        item.strip()
+        for item in str(args.source_labels or "").replace(";", ",").split(",")
+        if item.strip()
+    ]
+    db_path = Path(str(args.historical_options_db)).expanduser()
+    coverage: dict[str, Any] = {
+        "status": "checked",
+        "historical_options_db": str(db_path),
+        "source_labels": source_labels,
+        "trusted_only": not bool(args.allow_research_data),
+        "snapshot_kind": single_lane_audit.wfo._imported_snapshot_kind(args.truth_lane),
+        "requested_market_dates": requested_dates,
+        "market_date_count": len(requested_dates),
+        "covered_date_count": 0,
+        "missing_dates": list(requested_dates),
+        "dates": [],
+    }
+    if not requested_dates:
+        return coverage
+    if not db_path.exists():
+        coverage["status"] = "db_missing"
+        return coverage
+
+    date_placeholders = ",".join("?" for _ in requested_dates)
+    source_filter = ""
+    params: list[Any] = [coverage["snapshot_kind"], *requested_dates]
+    if source_labels:
+        source_filter = f" AND b.source_label IN ({','.join('?' for _ in source_labels)})"
+        params.extend(source_labels)
+    trust_filter = " AND b.data_trust = 'trusted'" if coverage["trusted_only"] else ""
+    query = f"""
+        SELECT q.quote_date_et,
+               COUNT(*) AS row_count,
+               COUNT(DISTINCT q.underlying) AS underlying_count,
+               MIN(q.quote_minute_et) AS min_quote_minute_et,
+               MAX(q.quote_minute_et) AS max_quote_minute_et
+        FROM option_quote_snapshots q
+        JOIN import_batches b ON b.id = q.source_batch_id
+        WHERE q.snapshot_kind = ?
+          AND q.quote_date_et IN ({date_placeholders})
+          {source_filter}
+          {trust_filter}
+        GROUP BY q.quote_date_et
+        ORDER BY q.quote_date_et
+    """
+    conn: sqlite3.Connection | None = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        rows = [dict(row) for row in conn.execute(query, params).fetchall()]
+    except sqlite3.Error as exc:
+        coverage["status"] = "coverage_query_failed"
+        coverage["error"] = str(exc)
+        return coverage
+    finally:
+        if conn is not None:
+            conn.close()
+
+    covered = {str(row["quote_date_et"]) for row in rows if int(row.get("row_count") or 0) > 0}
+    coverage["covered_date_count"] = len(covered)
+    coverage["missing_dates"] = [day for day in requested_dates if day not in covered]
+    coverage["dates"] = [
+        {
+            "date": str(row["quote_date_et"]),
+            "row_count": int(row.get("row_count") or 0),
+            "underlying_count": int(row.get("underlying_count") or 0),
+            "min_quote_minute_et": row.get("min_quote_minute_et"),
+            "max_quote_minute_et": row.get("max_quote_minute_et"),
+        }
+        for row in rows
+    ]
+    return coverage
 
 
 def selected_playbook_ids(args: argparse.Namespace) -> list[str]:
@@ -66,6 +166,7 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
     lanes: list[dict[str, Any]] = []
     status_counts: Counter[str] = Counter()
     totals: Counter[str] = Counter()
+    no_exact_counts: Counter[str] = Counter()
 
     for playbook_id in playbook_ids:
         lane_started_at = _utc_now_iso()
@@ -85,6 +186,7 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
                 "ledger_sessions_recorded",
             ):
                 totals[key] += int(summary.get(key) or 0)
+            no_exact_counts.update({str(k): int(v or 0) for k, v in dict(summary.get("no_exact_reason_counts") or {}).items()})
             lane_report = {
                 "status": status,
                 "playbook": playbook_id,
@@ -129,10 +231,14 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
         "scan_rows_appended": int(totals.get("scan_rows_appended", 0)),
         "fill_attempt_rows_appended": int(totals.get("fill_attempt_rows_appended", 0)),
         "ledger_sessions_recorded": int(totals.get("ledger_sessions_recorded", 0)),
+        "no_exact_reason_counts": dict(no_exact_counts),
     }
+    quote_coverage = quote_store_coverage(args)
+    summary["quote_store_missing_date_count"] = len(quote_coverage.get("missing_dates") or [])
     return {
         "generated_at_utc": _utc_now_iso(),
         "summary": summary,
+        "quote_store_coverage": quote_coverage,
         "parameters": {
             "scope": args.scope,
             "playbooks": playbook_ids,
@@ -217,6 +323,15 @@ def main(argv: list[str] | None = None) -> int:
         f"would_track={summary['would_track_pick_count']} "
         f"duplicates={summary['duplicate_pick_count']}"
     )
+    if summary.get("no_exact_reason_counts"):
+        print(f"No-exact reasons: {summary['no_exact_reason_counts']}")
+    coverage = audit.get("quote_store_coverage") or {}
+    if coverage.get("status") == "checked":
+        print(
+            "Quote-store coverage: "
+            f"covered={coverage.get('covered_date_count', 0)}/{coverage.get('market_date_count', 0)} "
+            f"missing_dates={coverage.get('missing_dates') or []}"
+        )
     return 1 if args.fail_fast and summary["failed_lane_count"] else 0
 
 

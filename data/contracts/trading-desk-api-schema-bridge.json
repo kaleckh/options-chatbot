@@ -33,6 +33,10 @@
             "default": null,
             "title": "Creation Mode"
           },
+          "execute_alpaca_paper": {
+            "default": null,
+            "title": "Execute Alpaca Paper"
+          },
           "fill_price": {
             "default": null,
             "title": "Fill Price"

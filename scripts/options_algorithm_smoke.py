@@ -61,15 +61,19 @@ def _expectancy_loader_for_path(results_path: str):
 
 
 def _fixture_truth_store_db_path() -> str | None:
-    daily_result = wfo._load_json_file(wfo.OPTIONS_VALIDATION_DAILY_LATEST_FILE)
-    truth_store = dict((daily_result or {}).get("truth_store") or {})
-    candidate = str(truth_store.get("db_path") or "").strip()
-    if candidate and os.path.exists(candidate):
-        return candidate
-    summary = wfo._current_imported_store_summary(wfo.IMPORTED_DAILY_TRUTH_SOURCE)
-    candidate = str((summary or {}).get("db_path") or "").strip()
-    if candidate and os.path.exists(candidate):
-        return candidate
+    for truth_source, result_path in (
+        (wfo.IMPORTED_TRUTH_SOURCE, wfo.OPTIONS_VALIDATION_LATEST_FILE),
+        (wfo.IMPORTED_DAILY_TRUTH_SOURCE, wfo.OPTIONS_VALIDATION_DAILY_LATEST_FILE),
+    ):
+        result = wfo._load_json_file(result_path)
+        truth_store = dict((result or {}).get("truth_store") or {})
+        candidate = str(truth_store.get("db_path") or "").strip()
+        if candidate and os.path.exists(candidate):
+            return candidate
+        summary = wfo._current_imported_store_summary(truth_source)
+        candidate = str((summary or {}).get("db_path") or "").strip()
+        if candidate and os.path.exists(candidate):
+            return candidate
     return None
 
 
@@ -336,7 +340,7 @@ def _run_live_smoke(
                     lookback_years=lookback_years,
                     iv_adj=iv_adj,
                     min_trades=min_trades,
-                    policy_truth_lane=str(getattr(backend, "LIVE_SCAN_TRUTH_LANE", "historical_imported_daily")),
+                    policy_truth_lane=str(getattr(backend, "LIVE_SCAN_TRUTH_LANE", wfo.IMPORTED_TRUTH_SOURCE)),
                 )
             finally:
                 client.close()
@@ -399,7 +403,7 @@ def _run_fixture_smoke(
                         lookback_years=lookback_years,
                         iv_adj=iv_adj,
                         min_trades=min_trades,
-                        policy_truth_lane=str(getattr(backend, "LIVE_SCAN_TRUTH_LANE", "historical_imported_daily")),
+                        policy_truth_lane=str(getattr(backend, "LIVE_SCAN_TRUTH_LANE", wfo.IMPORTED_TRUTH_SOURCE)),
                     )
                     summary["forward_truth_runtime_db_path"] = str(Path(forward_ledger_path).resolve())
                     summary["fixture_truth_store_db_path"] = fixture_truth_store_db_path

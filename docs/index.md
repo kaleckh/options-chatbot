@@ -12,6 +12,10 @@ These are the living docs for the current worktree:
   - system map, subsystem ownership, and reading order
 - `docs/architecture-best-practices.md`
   - target architecture/readability rubric for future remediation loops
+- `docs/project-operating-map.md`
+  - generated visual operating model for the project pathways: data, candidates, evidence, profitability, promotion, and operator action
+- `data/contracts/project-pathway-registry.json`
+  - generated machine-readable project pathway registry
 - `docs/remediation-loop-map.md`
   - generated 44-point remediation handoff ledger for loop status, owner artifacts, planned points, and verification anchors
 - `data/contracts/remediation-loop-map.json`
@@ -64,6 +68,10 @@ These are the living docs for the current worktree:
   - test-only golden aggregate readbacks for proof-summary, options-profit metrics, grouped tracked/proof summaries, and replay-service assembly
 - `docs/scanner-creation-safety-contract.md`
   - canonical scanner pipeline stage map, scanner-origin creation, scheduled auto-track, and pending-validation safety rules
+- `docs/candidate-lifecycle-contract.md`
+  - generated canonical pending-candidate status and validation-outcome contract for all-lanes queueing, paper-only routes, diagnostics, and fresh-evidence readbacks
+- `data/contracts/candidate-lifecycle-contract.json`
+  - generated machine-readable candidate lifecycle status/outcome contract
 - `docs/replay-profit-contract.md`
   - canonical replay/profit ownership map for replay readbacks, scanner policy, proof/profit gates, and options-profit status
 - `docs/repository-contract.md`
@@ -80,6 +88,8 @@ These are the living docs for the current worktree:
   - generated machine-readable Trading Desk schema bridge
 - `src/lib/generated/proofEvidenceContract.ts`
   - generated frontend proof/evidence policy artifact
+- `src/lib/generated/candidateLifecycleContract.ts`
+  - generated frontend candidate lifecycle status/outcome artifact
 - `docs/local-db-hardening.md`
   - canonical local SQLite DB safety and read-only audit contract, implemented by `python-backend/local_db_hardening.py`
 - `docs/repository-migrations.md`
@@ -134,12 +144,16 @@ These are the living docs for the current worktree:
   - focused read-only audit of legacy rows 26/39/44 and whether they imply a current auto-close bug
 - `docs/regular-options-operating-scorecard.md`
   - active options scorecard separating visible Trading Desk profitability progress, paper-gate readiness, open/suggested close risk, starvation, API performance, proof-grade autoresearch readiness, and AI commodity OPRA proof status
+- `docs/project-operator-gateboard.md`
+  - current read-only operator gateboard showing whether the active blocker is data, candidate lifecycle, proof/evidence, profitability, promotion, or operator readiness
 - `docs/regular-options-profit-capture-queue.md`
   - generated research/paper capture queue that tiers profitable regular-options symbol/lane evidence, fresh scan signature matches, evidence-repair priorities, and quarantine/do-not-chase rows without changing scanner policy
 - `docs/regular-options-paper-shortlist.md`
   - generated paper-shortlist release gate for fresh executable Tier A lane matches, with bridge blockers and live-prohibited states
 - `docs/regular-options-fresh-evidence-loop.md`
   - generated pending-candidate to fill-attempt/tracked-link/exact-realized-P&L readback for the regular options paper gate
+- `docs/volatility-probation-reconciliation.md`
+  - generated readback separating legacy pre-promotion volatility rows from current paper/probation exact-evidence work and open-risk blockers
 - `docs/regular-options-operator-workflow.md`
   - Trading Desk operator workflow for local unlock, paper-gate bridge status, pending validation outcomes, and no-fill/skipped auto-track explanations
 - `docs/regular-options-repair-attempts.md`
@@ -150,6 +164,14 @@ These are the living docs for the current worktree:
   - generated per-symbol sleeve matrix for regular supervised options, separating lane-symbol keep/watch/quarantine/rejected/needs-paper status from proof evidence class
 - `docs/regular-guardrail-starvation-audit.md`
   - latest regular-lane live-scan guardrail starvation audit and upstream zero-candidate readback
+- `docs/missed-regular-picks-outcome-audit.md`
+  - latest missed regular selected-pick exact-contract outcome audit and lane profitability gate
+- `docs/missed-regular-picks-failure-modes.md`
+  - latest failure-mode readback for the May 22 through June 5 missed regular selected-pick audit, including lane earn-back policy and diagnostic guardrail candidates
+- `docs/missed-regular-picks-filter-matrix.md`
+  - latest frozen counterfactual filter matrix for the May 22 through June 5 missed regular selected-pick audit, including paper/probation and duplicate-spread suppression reads
+- `docs/lane-promotion-state.md`
+  - generated regular-options lane promotion-state readback, separating diagnostic, paper/probation, live-validation, and future auto-track states across all peer lanes
 - `docs/markdown-audit-2026-05-31.md`
   - latest Markdown placement audit, scope, and verification evidence
 - `docs/WORKLOG.md`
@@ -189,7 +211,7 @@ When routes, storage, proof-lane state, or active lane scope changes:
 1. Run `npm run docs:route-parity`.
 2. Update `docs/current-state.md`, `docs/NEXT_STEPS.md`, and `docs/PROJECT_CONTEXT.md` when proof-lane dates, blockers, or commands change.
 3. Update `docs/WORKLOG.md` with the evidence source and date.
-4. Run `npm run verify:docs` before handing off; it checks generated route parity, storage ownership, the Trading Desk schema bridge, the generated frontend proof/evidence artifact, the generated proof invariant table, lane-boundary and AI commodity isolation artifacts, the remediation loop map, the agent memory graph, generated artifact governance, the final remediation closure pack, and living-docs hygiene.
+4. Run `npm run verify:docs` before handing off; it checks generated route parity, storage ownership, the Trading Desk schema bridge, the generated frontend proof/evidence artifact, the generated candidate lifecycle artifact, the generated proof invariant table, lane-boundary and AI commodity isolation artifacts, the remediation loop map, the project pathway registry, the agent memory graph, generated artifact governance, the final remediation closure pack, and living-docs hygiene.
 
 ## Quick Orientation For A Senior Engineer
 
@@ -230,18 +252,20 @@ Read in this order:
 33. `src/lib/trading-desk/apiContracts.ts`
 34. `src/lib/trading-desk/apiResponseValidation.ts`
 35. `src/lib/generated/proofEvidenceContract.ts`
-36. `src/lib/trading-desk/proofContract.ts`
-37. `src/lib/trading-desk/positionEvidence.ts`
-38. `scripts/generate_trading_desk_schema_bridge.py`
-39. `scripts/generate_proof_evidence_contract.py`
-40. `scripts/generate_storage_ownership_map.py`
-41. `src/lib/route-lifecycle/routeContracts.ts`
-42. `python-backend/local_db_hardening.py`
-43. `python-backend/repository_migrations.py`
-44. `python-backend/repository_constraints.py`
-45. `python-backend/repository_indexes.py`
-46. `options_chatbot.py`
-47. `wfo_optimizer.py`
+36. `src/lib/generated/candidateLifecycleContract.ts`
+37. `src/lib/trading-desk/proofContract.ts`
+38. `src/lib/trading-desk/positionEvidence.ts`
+39. `scripts/generate_trading_desk_schema_bridge.py`
+40. `scripts/generate_proof_evidence_contract.py`
+41. `scripts/candidate_lifecycle.py`
+42. `scripts/generate_storage_ownership_map.py`
+43. `src/lib/route-lifecycle/routeContracts.ts`
+44. `python-backend/local_db_hardening.py`
+45. `python-backend/repository_migrations.py`
+46. `python-backend/repository_constraints.py`
+47. `python-backend/repository_indexes.py`
+48. `options_chatbot.py`
+49. `wfo_optimizer.py`
 
 ## Snapshot Warnings
 

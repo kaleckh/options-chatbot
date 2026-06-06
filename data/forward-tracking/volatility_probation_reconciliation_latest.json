@@ -1,0 +1,182 @@
+{
+  "generated_at_utc": "2026-06-06T07:21:56Z",
+  "inputs": {
+    "fresh_evidence_generated_at_utc": "2026-06-06T07:21:33Z",
+    "fresh_evidence_path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
+    "lane_promotion_generated_at_utc": "2026-06-06T07:21:44Z",
+    "lane_promotion_path": "data/forward-tracking/lane_promotion_state_latest.json",
+    "open_risk_generated_at_utc": "2026-06-06T07:21:23Z",
+    "open_risk_path": "data/forward-tracking/regular_open_position_risk_latest.json",
+    "queue_file": "data/forward-tracking/pending_scan_candidates.jsonl"
+  },
+  "lane_id": "volatility_expansion_observation",
+  "live_policy_change": false,
+  "read_only": true,
+  "reconciliation_rows": [
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-04|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00765000|743.0|765.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fresh_executable_exact_entry",
+      "evidence_bridge_status": "not_evidence_bridge_candidate",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-04",
+      "ticker": "QQQ",
+      "validation_outcome": "proof_ineligible"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-04|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00770000|743.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-04",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-04|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00770000|756.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-04",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-04|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fresh_executable_exact_entry",
+      "evidence_bridge_status": "not_evidence_bridge_candidate",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-04",
+      "ticker": "SPY",
+      "validation_outcome": "proof_ineligible"
+    },
+    {
+      "auto_track_position_id": 537,
+      "candidate_key": "2026-06-05|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00728000|QQQ260618C00750000|728.0|750.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fresh_executable_exact_entry",
+      "evidence_bridge_status": "exact_exit_pnl_required",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "missing_realized_pnl",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-05",
+      "ticker": "QQQ",
+      "validation_outcome": "created"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-05|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00740000|QQQ260618C00765000|740.0|765.0",
+      "candidate_status": "live_validation_attempted",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "legacy_pre_promotion_state_gate",
+      "scan_date": "2026-06-05",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0",
+      "candidate_status": "diagnostic_only_lane_profitability_gate",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "no_lane_promotion_state_payload",
+      "scan_date": "2026-06-05",
+      "ticker": "SPY",
+      "validation_outcome": "diagnostic_only"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00771000|756.0|771.0",
+      "candidate_status": "paper_validation_only_lane_profitability_gate",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "paper_probation_exact_entry_required",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "no_lane_promotion_state_payload",
+      "scan_date": "2026-06-05",
+      "ticker": "SPY",
+      "validation_outcome": "paper_only"
+    },
+    {
+      "auto_track_position_id": null,
+      "candidate_key": "2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0",
+      "candidate_status": "paper_validation_only_lane_profitability_gate",
+      "entry_evidence_status": "fill_attempt_missing",
+      "evidence_bridge_status": "paper_probation_exact_entry_required",
+      "lane_promotion_state_payload_present": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "reconciliation_context": "no_lane_promotion_state_payload",
+      "scan_date": "2026-06-05",
+      "ticker": "SPY",
+      "validation_outcome": "paper_only"
+    }
+  ],
+  "report_id": "volatility_probation_reconciliation",
+  "scope": "regular_options_volatility_probation_reconciliation",
+  "status": "paper_probation_blocked",
+  "summary": {
+    "context_counts": {
+      "legacy_pre_promotion_state_gate": 6,
+      "no_lane_promotion_state_payload": 3
+    },
+    "current_paper_probation_exact_evidence_pending_count": 0,
+    "fresh_evidence_candidate_count": 9,
+    "lane_blockers": [
+      "walk_forward_holdout_too_small_or_failed",
+      "fresh_paper_cohort_insufficient",
+      "current_live_exact_risk_governor_blocked"
+    ],
+    "lane_candidate_status": "pending_paper_exact_evidence",
+    "lane_failed_promotion_gates": [
+      "walk_forward_holdout_depth",
+      "fresh_paper_cohort",
+      "current_live_exact_risk_clear"
+    ],
+    "lane_promotion_state": "paper_probation",
+    "legacy_pre_promotion_state_gate_count": 6,
+    "live_exact_negative_ids": [
+      537
+    ],
+    "open_risk_governor_blockers": [
+      "live_exact_negative_open_risk"
+    ],
+    "open_risk_governor_status": "open_risk_governor_blocked",
+    "prohibited_actions": [
+      "do_not_count_legacy_pre_promotion_rows_as_current_paper_proof",
+      "do_not_run_live_validation_for_paper_probation_candidates",
+      "do_not_create_scanner_origin_rows_until_open_risk_governor_passes"
+    ],
+    "promotion_discussion_ready_excluding_legacy_count": 0,
+    "queue_candidate_count": 9,
+    "reconciled_candidate_count": 9
+  }
+}

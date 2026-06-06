@@ -337,6 +337,9 @@ def repair(args: argparse.Namespace) -> dict[str, Any]:
                     }
                 )
             continue
+        if args.only_missing_realized and not missing_realized:
+            counters["skipped_already_has_realized_due_only_missing"] += 1
+            continue
         if not _needs_update(position, repair_result):
             counters["already_correct"] += 1
             if len(unchanged) < int(args.example_limit):
@@ -409,6 +412,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--source-labels", default=",".join(DEFAULT_SOURCE_LABELS))
     parser.add_argument("--pricing-lane", default="pessimistic", choices=["pessimistic", "mid"])
     parser.add_argument("--trusted-only", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument(
+        "--only-missing-realized",
+        action="store_true",
+        help="Repair only closed rows that are missing stored exit/P&L fields.",
+    )
     parser.add_argument("--example-limit", type=int, default=25)
     return parser.parse_args()
 

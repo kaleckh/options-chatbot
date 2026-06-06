@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from local_env import load_local_env  # noqa: E402
 from historical_options_store import (  # noqa: E402
     DAILY_SNAPSHOT_KIND,
     HistoricalOptionsStore,
@@ -21,6 +23,7 @@ from historical_options_store import (  # noqa: E402
 )
 
 
+ENV_FILES_LOADED = load_local_env(ROOT)
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "paid-data-readiness"
 DEFAULT_REQUIRED_UNDERLYINGS = ("SPY", "QQQ", "DIA", "XLK", "GOOGL", "NVDA")
 
@@ -429,6 +432,8 @@ def build_paid_data_readiness_audit(
     audit = {
         "generated_at": _utc_now_iso(),
         "db_path": str(db),
+        "historical_options_db_env": os.getenv("HISTORICAL_OPTIONS_DB_PATH"),
+        "env_files_loaded": list(ENV_FILES_LOADED),
         "snapshot_kind": snapshot_kind,
         "source_labels_required": required_source_labels,
         "playbook": (
@@ -564,6 +569,8 @@ def main() -> int:
         "latest": written.get("latest"),
         "status": audit["status"],
         "blocker": audit["blocker"],
+        "db_path": audit["db_path"],
+        "historical_options_db_env": audit["historical_options_db_env"],
         "snapshot_kind": audit["snapshot_kind"],
         "source_labels_required": audit["source_labels_required"],
         "playbook": audit["playbook"],

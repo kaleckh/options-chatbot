@@ -1,0 +1,4645 @@
+{
+  "generated_at_utc": "2026-06-06T07:21:44Z",
+  "input_health": {
+    "current_policy_circuit_breaker_loaded": true,
+    "filter_matrix_loaded": true,
+    "fresh_evidence_loop_loaded": true,
+    "lane_profitability_gate": {
+      "age_hours": 11.7732,
+      "generated_at_utc": "2026-06-05T19:35:21Z",
+      "latest_intraday_quote_date": "2026-06-04",
+      "mark_unpriced_count": 0,
+      "max_age_hours": 36.0,
+      "reason": "lane_profitability_gate_report_fresh",
+      "tracked_row_count": 4,
+      "tracked_rows_with_stored_pnl": 4,
+      "usable": true
+    },
+    "open_risk_governor": {
+      "blockers": [
+        "live_exact_negative_open_risk"
+      ],
+      "live_entry_allowed": false,
+      "status": "open_risk_governor_blocked"
+    },
+    "open_risk_loaded": true,
+    "open_risk_report": {
+      "age_hours": 0.006,
+      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "governor_blockers": [
+        "live_exact_negative_open_risk"
+      ],
+      "governor_status": "open_risk_governor_blocked",
+      "max_age_hours": 24.0,
+      "reason": "open_risk_report_fresh",
+      "usable": true
+    }
+  },
+  "inputs": {
+    "circuit_breaker_generated_at_utc": "2026-06-04T23:46:17Z",
+    "filter_matrix_generated_at_utc": "2026-06-05T22:10:15Z",
+    "fresh_evidence_generated_at_utc": "2026-06-06T07:21:33Z",
+    "lane_gate_report_generated_at_utc": "2026-06-05T19:35:21Z",
+    "open_risk_generated_at_utc": "2026-06-06T07:21:23Z"
+  },
+  "lane_state_rows": [
+    {
+      "blockers": [
+        "lane_outside_regular_auto_track_scope",
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_outside_regular_auto_track_scope",
+      "failed_promotion_gates": [
+        "regular_auto_track_scope",
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": false,
+      "gates": [
+        {
+          "blocker": "lane_outside_regular_auto_track_scope",
+          "current": {
+            "fresh_live_validation_enabled": false,
+            "tracking_mode": "disabled"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": false,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "ai_commodity_infra_observation",
+      "playbook_label": "AI Commodity Infra",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "disabled"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "bearish_defensive",
+      "playbook_label": "Bearish Defensive",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "bearish_index_put_observation",
+      "playbook_label": "Bearish Index Put Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -48.45,
+            "lane_gate_present": true,
+            "priced": 16,
+            "profit_factor": 0.1,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -48.45,
+        "loser_count": 14,
+        "priced": 16,
+        "profit_factor": 0.1,
+        "winner_count": 2
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "bullish_momentum",
+      "playbook_label": "Bullish Momentum",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked",
+        "recent_cohort_circuit_breaker_active"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear",
+        "recent_cohort_circuit_breaker_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -22.81,
+            "lane_gate_present": true,
+            "priced": 15,
+            "profit_factor": 0.29,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "blocker": "recent_cohort_circuit_breaker_active",
+          "current": {
+            "route_reason": "recovery_gates_failed",
+            "route_status": "paper_validation_only"
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": false,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -22.81,
+        "loser_count": 10,
+        "priced": 15,
+        "profit_factor": 0.29,
+        "winner_count": 5
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "bullish_pullback_observation",
+      "playbook_label": "Bullish Pullback",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 2,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 2,
+        "no_longer_matched_count": 2,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "quality90_debit55_canary",
+      "playbook_label": "Quality90 Debit55 Canary",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 5,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 2,
+        "no_longer_matched_count": 0,
+        "paper_only_count": 3,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 2
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "range_breakout_observation",
+      "playbook_label": "Range Breakout Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "regular_bearish_put_primary",
+      "playbook_label": "Regular Bearish Put",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked",
+        "recent_cohort_circuit_breaker_active"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear",
+        "recent_cohort_circuit_breaker_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 0,
+        "no_longer_matched_count": 0,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -18.93,
+            "lane_gate_present": true,
+            "priced": 54,
+            "profit_factor": 0.28,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "blocker": "recent_cohort_circuit_breaker_active",
+          "current": {
+            "route_reason": "recovery_gates_failed",
+            "route_status": "paper_validation_only"
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": false,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -18.93,
+        "loser_count": 36,
+        "priced": 54,
+        "profit_factor": 0.28,
+        "winner_count": 18
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "short_term",
+      "playbook_label": "Short-Term",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -12.62,
+            "lane_gate_present": true,
+            "priced": 8,
+            "profit_factor": 0.12,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -12.62,
+        "loser_count": 6,
+        "priced": 8,
+        "profit_factor": 0.12,
+        "winner_count": 2
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "speculative",
+      "playbook_label": "Speculative",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 15,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 10,
+        "no_longer_matched_count": 9,
+        "paper_only_count": 3,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 1
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -14.31,
+            "lane_gate_present": true,
+            "priced": 49,
+            "profit_factor": 0.3,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -14.31,
+        "loser_count": 34,
+        "priced": 49,
+        "profit_factor": 0.3,
+        "winner_count": 15
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "swing",
+      "playbook_label": "Swing",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 1,
+        "no_longer_matched_count": 1,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -9.19,
+            "lane_gate_present": true,
+            "priced": 20,
+            "profit_factor": 0.46,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -9.19,
+        "loser_count": 12,
+        "priced": 20,
+        "profit_factor": 0.46,
+        "winner_count": 8
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "tracked_winner_observation",
+      "playbook_label": "Tracked Winner Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 1,
+        "no_longer_matched_count": 1,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -9.19,
+            "lane_gate_present": true,
+            "priced": 20,
+            "profit_factor": 0.46,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -9.19,
+        "loser_count": 12,
+        "priced": 20,
+        "profit_factor": 0.46,
+        "winner_count": 8
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "tracked_winner_primary",
+      "playbook_label": "Tracked Winner",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    {
+      "blockers": [
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "pending_paper_exact_evidence",
+      "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
+      "failed_promotion_gates": [
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 9,
+        "created_or_duplicate_count": 1,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 6,
+        "no_longer_matched_count": 3,
+        "paper_only_count": 2,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 2
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "current": {
+            "avg_net_pnl_pct": 6.75,
+            "lane_gate_present": true,
+            "priced": 24,
+            "profit_factor": 1.72,
+            "status": "candidate_flow_allowed_with_self_guardrails"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": true,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 1,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": 6.75,
+        "loser_count": 12,
+        "priced": 24,
+        "profit_factor": 1.72,
+        "winner_count": 12
+      },
+      "lane_gate_status": "candidate_flow_allowed_with_self_guardrails",
+      "live_policy_change": false,
+      "playbook_id": "volatility_expansion_observation",
+      "playbook_label": "Volatility Expansion Observation",
+      "promotion_state": "paper_probation",
+      "tracking_mode": "auto_track"
+    }
+  ],
+  "lane_states": {
+    "ai_commodity_infra_observation": {
+      "blockers": [
+        "lane_outside_regular_auto_track_scope",
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_outside_regular_auto_track_scope",
+      "failed_promotion_gates": [
+        "regular_auto_track_scope",
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": false,
+      "gates": [
+        {
+          "blocker": "lane_outside_regular_auto_track_scope",
+          "current": {
+            "fresh_live_validation_enabled": false,
+            "tracking_mode": "disabled"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": false,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "ai_commodity_infra_observation",
+      "playbook_label": "AI Commodity Infra",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "disabled"
+    },
+    "bearish_defensive": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "bearish_defensive",
+      "playbook_label": "Bearish Defensive",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "bearish_index_put_observation": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "bearish_index_put_observation",
+      "playbook_label": "Bearish Index Put Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "bullish_momentum": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -48.45,
+            "lane_gate_present": true,
+            "priced": 16,
+            "profit_factor": 0.1,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -48.45,
+        "loser_count": 14,
+        "priced": 16,
+        "profit_factor": 0.1,
+        "winner_count": 2
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "bullish_momentum",
+      "playbook_label": "Bullish Momentum",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "bullish_pullback_observation": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked",
+        "recent_cohort_circuit_breaker_active"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear",
+        "recent_cohort_circuit_breaker_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -22.81,
+            "lane_gate_present": true,
+            "priced": 15,
+            "profit_factor": 0.29,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "blocker": "recent_cohort_circuit_breaker_active",
+          "current": {
+            "route_reason": "recovery_gates_failed",
+            "route_status": "paper_validation_only"
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": false,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -22.81,
+        "loser_count": 10,
+        "priced": 15,
+        "profit_factor": 0.29,
+        "winner_count": 5
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "bullish_pullback_observation",
+      "playbook_label": "Bullish Pullback",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "quality90_debit55_canary": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 2,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 2,
+        "no_longer_matched_count": 2,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "quality90_debit55_canary",
+      "playbook_label": "Quality90 Debit55 Canary",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "range_breakout_observation": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 5,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 2,
+        "no_longer_matched_count": 0,
+        "paper_only_count": 3,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 2
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "range_breakout_observation",
+      "playbook_label": "Range Breakout Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "regular_bearish_put_primary": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": null,
+            "lane_gate_present": false,
+            "priced": null,
+            "profit_factor": null,
+            "status": ""
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": null,
+        "loser_count": null,
+        "priced": null,
+        "profit_factor": null,
+        "winner_count": null
+      },
+      "lane_gate_status": null,
+      "live_policy_change": false,
+      "playbook_id": "regular_bearish_put_primary",
+      "playbook_label": "Regular Bearish Put",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "short_term": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked",
+        "recent_cohort_circuit_breaker_active"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear",
+        "recent_cohort_circuit_breaker_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 0,
+        "no_longer_matched_count": 0,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -18.93,
+            "lane_gate_present": true,
+            "priced": 54,
+            "profit_factor": 0.28,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "blocker": "recent_cohort_circuit_breaker_active",
+          "current": {
+            "route_reason": "recovery_gates_failed",
+            "route_status": "paper_validation_only"
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": false,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -18.93,
+        "loser_count": 36,
+        "priced": 54,
+        "profit_factor": 0.28,
+        "winner_count": 18
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "short_term",
+      "playbook_label": "Short-Term",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "speculative": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {},
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -12.62,
+            "lane_gate_present": true,
+            "priced": 8,
+            "profit_factor": 0.12,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -12.62,
+        "loser_count": 6,
+        "priced": 8,
+        "profit_factor": 0.12,
+        "winner_count": 2
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "speculative",
+      "playbook_label": "Speculative",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "swing": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 15,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 10,
+        "no_longer_matched_count": 9,
+        "paper_only_count": 3,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 1
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -14.31,
+            "lane_gate_present": true,
+            "priced": 49,
+            "profit_factor": 0.3,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -14.31,
+        "loser_count": 34,
+        "priced": 49,
+        "profit_factor": 0.3,
+        "winner_count": 15
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "swing",
+      "playbook_label": "Swing",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "tracked_winner_observation": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 1,
+        "no_longer_matched_count": 1,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -9.19,
+            "lane_gate_present": true,
+            "priced": 20,
+            "profit_factor": 0.46,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -9.19,
+        "loser_count": 12,
+        "priced": 20,
+        "profit_factor": 0.46,
+        "winner_count": 8
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "tracked_winner_observation",
+      "playbook_label": "Tracked Winner Observation",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "tracked_winner_primary": {
+      "blockers": [
+        "lane_not_profitable_enough_for_probation",
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "failed_promotion_gates": [
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 1,
+        "created_or_duplicate_count": 0,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 1,
+        "no_longer_matched_count": 1,
+        "paper_only_count": 0,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 0
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "blocker": "lane_not_profitable_enough_for_probation",
+          "current": {
+            "avg_net_pnl_pct": -9.19,
+            "lane_gate_present": true,
+            "priced": 20,
+            "profit_factor": 0.46,
+            "status": "diagnostic_only_unprofitable_lane"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": false,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": -9.19,
+        "loser_count": 12,
+        "priced": 20,
+        "profit_factor": 0.46,
+        "winner_count": 8
+      },
+      "lane_gate_status": "diagnostic_only_unprofitable_lane",
+      "live_policy_change": false,
+      "playbook_id": "tracked_winner_primary",
+      "playbook_label": "Tracked Winner",
+      "promotion_state": "diagnostic",
+      "tracking_mode": "auto_track"
+    },
+    "volatility_expansion_observation": {
+      "blockers": [
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "candidate_status": "pending_paper_exact_evidence",
+      "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
+      "failed_promotion_gates": [
+        "walk_forward_holdout_depth",
+        "fresh_paper_cohort",
+        "current_live_exact_risk_clear"
+      ],
+      "fresh_evidence": {
+        "candidate_count": 9,
+        "created_or_duplicate_count": 1,
+        "exact_realized_pnl_count": 0,
+        "fresh_executable_exact_entry_count": 0,
+        "legacy_pre_promotion_state_gate_count": 6,
+        "no_longer_matched_count": 3,
+        "paper_only_count": 2,
+        "promotion_ready_count": 0,
+        "proof_ineligible_count": 2
+      },
+      "fresh_live_validation_enabled": true,
+      "gates": [
+        {
+          "current": {
+            "fresh_live_validation_enabled": true,
+            "tracking_mode": "auto_track"
+          },
+          "gate": "regular_auto_track_scope",
+          "label": "Regular auto-track scope",
+          "passed": true,
+          "target": "regular auto_track lane with fresh validation enabled"
+        },
+        {
+          "current": "lane_profitability_gate_report_fresh",
+          "gate": "lane_profitability_report_clean",
+          "label": "Lane profitability report clean",
+          "passed": true,
+          "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
+        },
+        {
+          "current": {
+            "avg_net_pnl_pct": 6.75,
+            "lane_gate_present": true,
+            "priced": 24,
+            "profit_factor": 1.72,
+            "status": "candidate_flow_allowed_with_self_guardrails"
+          },
+          "gate": "profitable_lane_gate",
+          "label": "Profitable lane gate",
+          "passed": true,
+          "target": "lane row present, profitable, and auto_track_allowed=true"
+        },
+        {
+          "current": "current_lane_gate_self_guardrails",
+          "gate": "entry_time_only_rule",
+          "label": "Entry-time-only rule",
+          "passed": true,
+          "target": "promotion filter uses entry-time-known inputs only"
+        },
+        {
+          "blocker": "walk_forward_holdout_too_small_or_failed",
+          "current": {
+            "later_date_profit_factor": 3.48,
+            "later_date_rows": 2,
+            "survives_later_date_split": true
+          },
+          "gate": "walk_forward_holdout_depth",
+          "label": "Walk-forward holdout depth",
+          "passed": false,
+          "target": {
+            "min_later_date_rows": 10,
+            "survives_later_date_split": true
+          }
+        },
+        {
+          "blocker": "fresh_paper_cohort_insufficient",
+          "current": {
+            "exact_realized_pnl_count": 0,
+            "fresh_executable_exact_entry_count": 0,
+            "promotion_ready_count": 0
+          },
+          "gate": "fresh_paper_cohort",
+          "label": "Fresh paper cohort",
+          "passed": false,
+          "target": {
+            "min_exact_realized_pnl_count": 20,
+            "min_promotion_ready_count": 10
+          }
+        },
+        {
+          "blocker": "current_live_exact_risk_governor_blocked",
+          "current": {
+            "global_live_exact_negative_count": 1,
+            "lane_live_exact_negative_count": 1,
+            "open_risk_governor_blockers": [
+              "live_exact_negative_open_risk"
+            ],
+            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_report_health": {
+              "age_hours": 0.006,
+              "generated_at_utc": "2026-06-06T07:21:23Z",
+              "governor_blockers": [
+                "live_exact_negative_open_risk"
+              ],
+              "governor_status": "open_risk_governor_blocked",
+              "max_age_hours": 24.0,
+              "reason": "open_risk_report_fresh",
+              "usable": true
+            },
+            "open_risk_report_present": true
+          },
+          "gate": "current_live_exact_risk_clear",
+          "label": "Current live-exact risk clear",
+          "passed": false,
+          "target": {
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_status": "open_risk_governor_pass",
+            "open_risk_report": "fresh"
+          }
+        },
+        {
+          "current": {
+            "route_reason": null,
+            "route_status": null
+          },
+          "gate": "recent_cohort_circuit_breaker_clear",
+          "label": "Recent cohort circuit breaker clear",
+          "passed": true,
+          "target": "lane is not routed to paper_validation_only by the recent-cohort breaker"
+        },
+        {
+          "current": "active_in_pending_candidate_queue",
+          "gate": "duplicate_spread_suppression_active",
+          "label": "Duplicate spread suppression active",
+          "passed": true,
+          "target": "exact duplicate spreads are suppressed to one deterministic risk owner"
+        },
+        {
+          "current": false,
+          "gate": "live_policy_change_false",
+          "label": "No live policy change",
+          "passed": true,
+          "target": false
+        }
+      ],
+      "lane_gate_metrics": {
+        "avg_net_pnl_pct": 6.75,
+        "loser_count": 12,
+        "priced": 24,
+        "profit_factor": 1.72,
+        "winner_count": 12
+      },
+      "lane_gate_status": "candidate_flow_allowed_with_self_guardrails",
+      "live_policy_change": false,
+      "playbook_id": "volatility_expansion_observation",
+      "playbook_label": "Volatility Expansion Observation",
+      "promotion_state": "paper_probation",
+      "tracking_mode": "auto_track"
+    }
+  },
+  "policy": {
+    "auto_track_requires": [
+      "live_validation state",
+      "separate explicit release review before broker/live tracking semantics change"
+    ],
+    "default_for_profitable_historical_lane": "paper_probation",
+    "live_validation_requires": [
+      "clean lane profitability report",
+      "profitable lane gate",
+      "entry-time-only rule",
+      "at least 10 later-date walk-forward rows",
+      "at least 20 fresh exact realized P&L rows",
+      "at least 10 promotion-ready fresh rows",
+      "zero unresolved live-exact negative open-risk rows",
+      "no active lane-specific recent-cohort circuit breaker",
+      "duplicate exact-spread suppression active"
+    ],
+    "states": [
+      "diagnostic",
+      "paper_probation",
+      "live_validation",
+      "auto_track"
+    ]
+  },
+  "report_id": "regular_options_lane_promotion_state",
+  "scope": "regular_options_lane_promotion_state",
+  "status": "lane_promotion_state_readback",
+  "summary": {
+    "auto_track_lane_count": 0,
+    "candidate_status_counts": {
+      "diagnostic_only_lane_promotion_state": 13,
+      "pending_paper_exact_evidence": 1
+    },
+    "diagnostic_lane_count": 13,
+    "global_live_exact_negative_count": 1,
+    "lane_count": 14,
+    "live_policy_change": false,
+    "live_validation_lane_count": 0,
+    "open_risk_governor_blockers": [
+      "live_exact_negative_open_risk"
+    ],
+    "open_risk_governor_status": "open_risk_governor_blocked",
+    "paper_probation_lane_count": 1,
+    "state_counts": {
+      "diagnostic": 13,
+      "paper_probation": 1
+    }
+  }
+}

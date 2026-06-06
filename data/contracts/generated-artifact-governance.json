@@ -324,6 +324,99 @@
       "verify_docs_covered": true
     },
     {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/candidate_lifecycle.py --check",
+      "generator": "scripts/candidate_lifecycle.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_candidate_lifecycle_contract_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "contracts:candidate-lifecycle",
+      "owner_docs": [
+        "docs/candidate-lifecycle-contract.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "data/contracts/candidate-lifecycle-contract.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/candidate_lifecycle.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run contracts:candidate-lifecycle. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/candidate_lifecycle.py --check",
+      "generator": "scripts/candidate_lifecycle.py",
+      "hand_edit_allowed": false,
+      "id": "docs_candidate_lifecycle_contract_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "contracts:candidate-lifecycle",
+      "owner_docs": [
+        "docs/candidate-lifecycle-contract.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "docs/candidate-lifecycle-contract.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/candidate_lifecycle.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run contracts:candidate-lifecycle. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "typescript",
+      "check_command": "uv run --locked python scripts/candidate_lifecycle.py --check",
+      "generator": "scripts/candidate_lifecycle.py",
+      "hand_edit_allowed": false,
+      "id": "src_lib_generated_candidatelifecyclecontract_ts",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "contracts:candidate-lifecycle",
+      "owner_docs": [
+        "docs/candidate-lifecycle-contract.md",
+        "docs/scanner-creation-safety-contract.md"
+      ],
+      "path": "src/lib/generated/candidateLifecycleContract.ts",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/candidate_lifecycle.py"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run contracts:candidate-lifecycle. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
       "artifact_type": "markdown",
       "check_command": "uv run --locked python scripts/generate_proof_invariant_table.py --check",
       "generator": "scripts/generate_proof_invariant_table.py",
@@ -544,6 +637,76 @@
       "source_of_truth_for_runtime": false,
       "source_of_truth_role": "derived snapshot from generator source inputs",
       "stale_action": "Do not hand-edit; run npm run docs:remediation-loop-map. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_project_pathway_registry.py --check",
+      "generator": "scripts/generate_project_pathway_registry.py",
+      "hand_edit_allowed": false,
+      "id": "docs_project_operating_map_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:project-pathway-registry",
+      "owner_docs": [
+        "docs/project-operating-map.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "path": "docs/project-operating-map.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generate_project_pathway_registry.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/index.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:project-pathway-registry. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_project_pathway_registry.py --check",
+      "generator": "scripts/generate_project_pathway_registry.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_project_pathway_registry_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:project-pathway-registry",
+      "owner_docs": [
+        "docs/project-operating-map.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "path": "data/contracts/project-pathway-registry.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generate_project_pathway_registry.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/index.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:project-pathway-registry. Trust the source inputs and generator over stale output.",
       "stale_detection": "owner generator --check in npm run verify:docs",
       "trust_role": "machine_readable_check",
       "verify_docs_covered": true
@@ -779,6 +942,9 @@
     "package.json"
   ],
   "supporting_source_inputs": {
+    "scripts/candidate_lifecycle.py": [
+      "scripts/candidate_lifecycle.py"
+    ],
     "scripts/generate_agent_memory_graph.py": [
       "docs/architecture-best-practices.md",
       "docs/index.md"
@@ -818,6 +984,12 @@
     "scripts/generate_legacy_lane_boundaries.py": [
       "data/contracts/route-mutation-inventory.json",
       "docs/PROJECT_CONTEXT.md"
+    ],
+    "scripts/generate_project_pathway_registry.py": [
+      "scripts/generate_project_pathway_registry.py",
+      "docs/PROJECT_CONTEXT.md",
+      "docs/index.md",
+      "docs/NEXT_STEPS.md"
     ],
     "scripts/generate_proof_evidence_contract.py": [
       "data/contracts/proof-evidence-contract.json"

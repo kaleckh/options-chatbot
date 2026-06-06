@@ -1,0 +1,141 @@
+{
+  "action_counts": {
+    "hold_or_positive": 8,
+    "negative_mark_hold_or_unknown": 4,
+    "stored_non_executable_sell": 1
+  },
+  "actionable_position_ids": [
+    104
+  ],
+  "actionable_positions": [
+    {
+      "action_bucket": "stored_non_executable_sell",
+      "current_option_price": 0.075,
+      "current_pnl_pct": null,
+      "evidence_bucket": "fresh_unpriced_review",
+      "exit_execution_basis": null,
+      "exit_execution_price": null,
+      "first_warning": "Using display-only spread marks because one or both legs are missing a live executable bid/ask quote.",
+      "id": 104,
+      "lane": "bullish_pullback_observation",
+      "last_reviewed_at": "2026-06-04T22:00:31.863810-06:00",
+      "mark_pnl_pct": null,
+      "next_safe_action": "do_not_auto_close_from_display_only_mark_rerun_explicit_review_during_fresh_executable_quote_window",
+      "price_trigger_ok": false,
+      "pricing_source": "spread_display_only",
+      "pricing_state": "priced_display_only_last",
+      "reason": "Indicator exit triggered: tech_score collapsed 68% (72 -> 23)",
+      "recommendation": "SELL",
+      "record_class": "main_zero_pick_research_backfill",
+      "status": "open",
+      "ticker": "SBUX",
+      "warning_count": 1
+    }
+  ],
+  "by_lane": {
+    "bullish_pullback_observation": {
+      "avg_pnl_pct": 3.19,
+      "median_pnl_pct": 12.17,
+      "negative": 3,
+      "positive_or_flat": 6,
+      "priced_or_marked": 9,
+      "rows": 10
+    },
+    "swing": {
+      "avg_pnl_pct": -8.74,
+      "median_pnl_pct": 29.29,
+      "negative": 1,
+      "positive_or_flat": 2,
+      "priced_or_marked": 3,
+      "rows": 3
+    }
+  },
+  "by_record_class": {
+    "all_lanes_zero_pick_research_backfill": {
+      "avg_pnl_pct": -8.74,
+      "median_pnl_pct": 29.29,
+      "negative": 1,
+      "positive_or_flat": 2,
+      "priced_or_marked": 3,
+      "rows": 3
+    },
+    "live_exact_tracked": {
+      "avg_pnl_pct": 43.69,
+      "median_pnl_pct": 43.69,
+      "negative": 0,
+      "positive_or_flat": 1,
+      "priced_or_marked": 1,
+      "rows": 1
+    },
+    "main_zero_pick_research_backfill": {
+      "avg_pnl_pct": -1.87,
+      "median_pnl_pct": 6.74,
+      "negative": 3,
+      "positive_or_flat": 5,
+      "priced_or_marked": 8,
+      "rows": 9
+    }
+  },
+  "evidence_counts": {
+    "fresh_executable_review": 12,
+    "fresh_unpriced_review": 1
+  },
+  "generated_at_utc": "2026-06-05T07:38:23Z",
+  "read_only": true,
+  "scope": "regular_supervised_open_positions_read_only",
+  "stale_review_hours": 24.0,
+  "summary": {
+    "avg_pnl_pct": 0.21,
+    "median_pnl_pct": 13.7,
+    "negative": 4,
+    "positive_or_flat": 8,
+    "priced_or_marked": 12,
+    "rows": 13
+  },
+  "top_negative_open_positions": [
+    {
+      "action_bucket": "negative_mark_hold_or_unknown",
+      "evidence_bucket": "fresh_executable_review",
+      "id": 438,
+      "lane": "swing",
+      "last_reviewed_at": "2026-06-04T22:00:07.694892-06:00",
+      "latest_recommendation": "HOLD",
+      "pnl_pct": -87.12,
+      "record_class": "all_lanes_zero_pick_research_backfill",
+      "ticker": "V"
+    },
+    {
+      "action_bucket": "negative_mark_hold_or_unknown",
+      "evidence_bucket": "fresh_executable_review",
+      "id": 99,
+      "lane": "bullish_pullback_observation",
+      "last_reviewed_at": "2026-06-04T22:00:38.294318-06:00",
+      "latest_recommendation": "HOLD",
+      "pnl_pct": -61.44,
+      "record_class": "main_zero_pick_research_backfill",
+      "ticker": "AMZN"
+    },
+    {
+      "action_bucket": "negative_mark_hold_or_unknown",
+      "evidence_bucket": "fresh_executable_review",
+      "id": 103,
+      "lane": "bullish_pullback_observation",
+      "last_reviewed_at": "2026-06-04T22:00:31.934432-06:00",
+      "latest_recommendation": "HOLD",
+      "pnl_pct": -17.29,
+      "record_class": "main_zero_pick_research_backfill",
+      "ticker": "QQQ"
+    },
+    {
+      "action_bucket": "negative_mark_hold_or_unknown",
+      "evidence_bucket": "fresh_executable_review",
+      "id": 106,
+      "lane": "bullish_pullback_observation",
+      "last_reviewed_at": "2026-06-04T22:00:26.080254-06:00",
+      "latest_recommendation": "HOLD",
+      "pnl_pct": -2.47,
+      "record_class": "main_zero_pick_research_backfill",
+      "ticker": "QQQ"
+    }
+  ]
+}

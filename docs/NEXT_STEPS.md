@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-05
+Last updated: 2026-06-06
 
 ## Documentation Hygiene
 
@@ -8,10 +8,73 @@ Current read:
 - global agent behavior rules live in `C:\Users\kalec\AGENTS.md` and `C:\Users\kalec\CLAUDE.md`
 - repo-specific agent startup and evidence rules live in `AGENTS.md`
 - living-doc ownership, generated-artifact, and source-of-truth hygiene rules live in `docs/living-docs-hygiene.md`
-- `npm run verify:docs` now runs generated artifact checks, the final remediation closure pack check, and `scripts/check_living_docs_hygiene.py`
+- project orientation now starts with the generated pathway map at `docs/project-operating-map.md` and machine-readable registry at `data/contracts/project-pathway-registry.json`
+- current "where are we blocked?" readback lives in `docs/project-operator-gateboard.md` and `data/forward-tracking/project_operator_gateboard_latest.json`
+- `npm run verify:docs` now runs generated artifact checks, including the candidate lifecycle contract, the final remediation closure pack check, and `scripts/check_living_docs_hygiene.py`
 - latest Markdown placement audit: `docs/markdown-audit-2026-05-31.md`
 
 1. When adding new Markdown, update `docs/index.md` only for living docs or reports that change the current decision surface. Keep generated research reports beside their source artifacts under `data/` or `research_runs/`.
+
+## Project Operating Map And Gateboard
+
+Current read:
+- `scripts/generate_project_pathway_registry.py` owns the stable six-pathway model: Data, Candidate, Evidence, Profitability, Promotion, and Operator.
+- `npm run docs:project-pathway-registry` writes `docs/project-operating-map.md` and `data/contracts/project-pathway-registry.json`; `npm run verify:docs` checks these generated artifacts for drift.
+- `npm run options:gateboard` writes the current read-only gateboard at `docs/project-operator-gateboard.md` and `data/forward-tracking/project_operator_gateboard_latest.json`.
+- latest gateboard status is `safe_blocked_no_live_release`: Data Path `pass`, Candidate Path `pass`, Evidence Path `blocked`, Profitability Path `blocked`, Promotion Path `blocked`, Operator Path `blocked`.
+- latest gateboard data/profit split: repository integrity is clean (`0` hard violations, `0` diagnostics), candidate lifecycle is visible (`34` fresh candidates), but fresh exact realized P&L is `0`, promotion-ready rows are `0`, broad untracked missed-pick economics are `206` rows / `70` winners / `136` losers / PF `0.34` / avg `-15.28%`, lane state is `13` diagnostic / `1` paper-probation / `0` live-validation / `0` auto-track, open-risk governor is blocked by live-exact QQQ `id=537`, suggested-trade review has attention on `id=138`, and paper-shortlist eligible count is `0`.
+- latest no-chase manifest is `no_chase_active`: do not open live/auto-track rows from blocked readbacks, do not chase paper or historical signatures without a fresh exact bridge, and do not use stale/midpoint/EOD/manual/display-only marks as proof.
+
+1. Before answering "is data good?", "why no picks?", "what are we blocked on?", or "what next?", run:
+
+```powershell
+npm run options:gateboard
+```
+
+2. Treat the gateboard as readback only. If it says Data Path is blocked, repair data integrity first. If Data passes but Profitability, Evidence, or Promotion is blocked, do not describe that as a data issue or a live-pick permission.
+
+3. For the volatility lane specifically, run:
+
+```powershell
+npm run options:audit:volatility-probation
+```
+
+Current read: `paper_probation_blocked`, `6` legacy pre-promotion volatility rows, `0` current paper exact pending rows, `0` promotion-ready rows excluding legacy, and `open_risk_governor_blocked` on live-exact QQQ `id=537`.
+
+## CI And Verification
+
+Current read:
+- `npm run verify:ci:local` runs dependency integrity, generated docs/contracts, lint, typecheck, frontend node suites, full Python tests, day-trading/Polymarket sidecar tests, smoke, and build.
+- `npm run verify:e2e:local` now runs `verify:ci:local` plus non-strict proof-readiness readbacks through `npm run verify:proof-readbacks`; this is the passable local CI-equivalent command for regular-options PR work.
+- `npm run verify:e2e:strict`, `npm run verify:accuracy:no-write`, and `npm run verify:profit-loop:dry` remain explicit strict proof-readiness diagnostics. Current strict blockers are documented evidence blockers, not code-test regressions: AI commodity still has `alpaca_opra_daily_snapshot` shared quote dates at `3` / `100`. The regular profit-loop truth-lane and forward-holdout blockers were repaired on 2026-06-05; fresh dry and non-dry strict canaries pass with the active `historical_imported` intraday truth lane.
+
+1. Keep strict proof-readiness gates visible in CI readbacks, but do not make them required blockers for regular-options PRs until their owned evidence blockers are repaired or the PR explicitly targets that gate.
+
+## Data Integrity Gate
+
+Current read:
+- `npm run options:audit:data-integrity` is the strict Trading Desk repository data-integrity gate. It runs `scripts/audit_repository_constraints.py --strict --json` after loading local env, so Postgres is audited when `DATABASE_URL` is configured in `.env.local`.
+- latest strict readback is `pass_or_skipped`: SQLite suggested trades `pass`, Postgres tracked positions `pass`, hard violations `0`, and diagnostics `0`.
+- the June 5 repair backed up and fixed local SQLite suggested trade `id=137`, repaired the first `27` Postgres historical research/backfill rows with missing realized P&L, imported missing late-day trusted ThetaData OPRA/NBBO close clusters, then repaired the remaining `34` diagnostics (`24` missing late-day quote rows plus `10` exact zero-bid close rows). Backup artifacts include `data/chat_history.pre-data-integrity-repair-20260605T124724Z.db`, `data/tracked_positions.pre-historical_suggested_close_realized_pnl_repair_v1-20260605-124843.json`, `data/tracked_positions.pre-historical_suggested_close_realized_pnl_repair_v1-20260605-132525.json`, and `data/tracked_positions.pre-historical_suggested_close_realized_pnl_repair_v1-20260605-133431.json`; latest repair report: `data/forward-tracking/historical_suggested_close_realized_pnl_repair_v1_latest.json`.
+- the hard blocker was false missing/non-executable handling for exact `bid=0, ask>0` OPRA/NBBO rows. Those rows now remain in the importer/store and can price historical close/mark paths side-aware at long bid and short ask. They still do not count as clean executable coverage for paid-data readiness or live entry quality.
+- `supervised_scan.load_open_position_context()` now ignores explicitly identified research/backfill rows in live exposure and realized-loss math while reporting raw and ignored counts, so historical paper inventory cannot contaminate auto-track decisions.
+
+1. Run this gate after any repository, scanner creation, tracked-position, suggested-trade, historical repair, or data-import change:
+
+```powershell
+npm run options:audit:data-integrity
+```
+
+2. Treat any `violations_found` status or any unexpected diagnostics as a project-wide blocker before trusting picks, P&L, exposure, or dashboards. `pass_or_skipped` with both stores at `pass` is the clean local state.
+
+3. If future diagnostics appear, import the exact missing exit-leg OPRA/NBBO quotes for the listed contract/date pairs, then rerun:
+
+```powershell
+uv run --locked python scripts\repair_historical_backfill_realized_pnl.py --as-of-date 2026-06-05 --only-missing-realized --apply
+npm run options:audit:data-integrity
+```
+
+Do not fill rows from midpoint, last trade, daily/EOD, stale marks, or display-only reviews.
 
 ## Architecture And Auth Hardening
 
@@ -44,22 +107,33 @@ Current read:
 
 Current read:
 - scanner creation safety semantics are versioned at `data/contracts/scanner-creation-safety-contract.json` and explained in `docs/scanner-creation-safety-contract.md`
+- candidate lifecycle status/outcome semantics are generated by `scripts/candidate_lifecycle.py` at `data/contracts/candidate-lifecycle-contract.json`, `docs/candidate-lifecycle-contract.md`, and `src/lib/generated/candidateLifecycleContract.ts`; `npm run verify:docs` checks the generated artifacts for drift
 - regular playbooks now carry `fresh_live_validation_enabled`, `position_tracking_mode`, and `proof_scope` metadata; every regular supervised options playbook defaults to `position_tracking_mode=auto_track`, while AI Commodity remains separate with scanner/tracked-position tracking disabled
 - browser/API/scheduled production scans default to portfolio caps on; caps-off production scan requests are rejected unless marked diagnostic or explicitly allowed
 - scheduled auto-track requires the environment kill switch to be on, `market_open_at_run=true`, a regular auto-track playbook, `exposure_snapshot.available=true`, `exposure_snapshot.portfolio_caps_enforced=true`, and per-pick creation metadata with no `creation_blockers`
 - scanner-origin tracked-position and suggested-trade creation requires verified archived forward-scan lineage, caps-enforced source scan state, source `creation_eligible=true`, a current guardrail rerun that still has caps-enforced `creation_eligible=true` and no blockers, and proof-eligible exact-contract evidence
 - explicit `manual_paper` and `manual_broker` creation modes remain available for research/backfill or broker/manual rows, but those rows do not become production proof without exact OPRA/NBBO evidence and verified lineage
-- portfolio guardrails still include existing-position exposure, max concurrent positions, cost-risk, open executable drawdown, and correlated-index exposure, but these surface as visible cautions/sizing notes rather than hard blockers for otherwise proof-eligible trades
+- portfolio guardrails include existing-position exposure, max concurrent positions, cost-risk, open executable drawdown, daily/weekly loss, sector/regime caps, and correlated-index exposure. When portfolio caps are enforced, breached caps are hard blockers for auto-track and scanner-origin creation; near-cap notes and sizing reductions may remain visible cautions.
 - side-aware zero-bid replay now stores entry/exit quote evidence plus stable hashes so replay rows can be audited without relying on implicit quote reconstruction
 - the June 4 pending-candidate validation did log live OPRA SPY/QQQ spreads, but auto-track skipped them with `research_backfill_not_live_proof` because the proof contract treated generic `research` calibration labels as backfill identity; that false-positive marker is fixed, and a read-only reproduction against a June 4 SPY spread now classifies it as `live_scan_exact_contract`
 - future fill-attempt rows now preserve detailed `auto_track_skip_reason` values for creation blockers, missing fill price, and proof-gate exceptions; the pending-validation disposition report and `/api/options-profit/status` compact rows surface that reason instead of collapsing proof failures to only `auto_track_skipped_or_missing_fill_price`
+- optional Alpaca paper execution now runs through the existing scanner-origin tracked-position creation gate, is disabled unless `OPTIONS_ALPACA_PAPER_TRADING_ENABLED=1` and paper credentials are configured, submits exactly `1` contract/order to the Alpaca paper endpoint, appends submit/fill/link events to `data/forward-tracking/alpaca_paper_order_events.jsonl`, and stores broker-paper metadata under `source_pick_snapshot.alpaca_paper_order` without counting paper broker fills as production OPRA/NBBO proof
 - local scheduler audit on 2026-06-05 confirmed `OptionsScanPicks` and `OptionsScanPicksSafetyNet` are enabled for weekdays at `11:00` and `11:30` Mountain time, last exited `0` on 2026-06-04, and are next scheduled for 2026-06-05; `OptionsRegimeObservationLanes` is also enabled for weekdays at `11:45`, but its 2026-06-04 run exited `1` after the core daily audit because the worktree contained merge-conflict text at that time. Current code has no conflict markers and `scripts/run_regime_observation_lanes.py --dry-run` enumerates the four configured observation playbooks.
+- the May 26 through June 4 regular-options historical exact-quote gap is repaired in local `data/options-validation/options_history.db`: import batch `1928` added `3,265,791` trusted intraday ThetaData OPRA/NBBO rows for all `59` regular symbols at `10:10`-`10:25` ET, with `0` duplicates and `0` rejects. The all-lanes audit now emits quote-store coverage so local data gaps are explicit. The report-only missed-pick rerun through June 5 completed `13` / `13` regular playbooks, found `405` signals, `389` exact candidates, `206` would-track selections, removed the old `no_exact_option_quotes_for_date` blocker, and reported quote-store coverage `9` / `10` market days with only `2026-06-05` missing. June 5 itself was not a valid full-session no-pick audit at repair time because the run happened before market/historical data availability.
+- the missed-pick outcome audit now gates regular lane promotion. `scripts/audit_missed_regular_picks_outcomes.py` priced `210` raw missed rows with trusted intraday exact-contract marks through `2026-06-04`, found `4` tracked rows with stored P&L and `206` untracked rows with `70` winners / `136` losers, avg net `-15.28%`, median `-11.5%`, profit factor `0.34`, and `-$16,314.00` one-spread net dollars. `scripts/analyze_missed_regular_picks_failure_modes.py` confirms the read is `clean_for_failure_analysis`, not a remaining quote/P&L blocker, and classifies the result as `data_clean_strategy_unprofitable`: `37` rows were `<= -50%`, `15` were `<= -80%`, seven lanes remain diagnostic-only, XLK/SPY/TSLA/IWM are the largest damage clusters, and debit `>=45%` of width plus DTE `>=36` are retest-required diagnostic guardrail candidates. `scripts/analyze_missed_regular_picks_filter_matrix.py` adds the frozen counterfactual matrix: only `volatility_expansion_observation` passes lane promotion (`24` rows, PF `1.72`, avg `+6.75%`), and lane gate plus self-guardrails keeps `10` rows at PF `84.9`, avg `+34.87%`, and later-date split pass, but loses `61` historical winners. `scripts/lane_promotion_state.py` now turns those reads plus fresh evidence, open risk, and circuit-breaker state into the shared promotion artifact: current state is `13` diagnostic lanes, `1` paper/probation lane, `0` live-validation lanes, `0` auto-track lanes, and `1` unresolved current live-exact negative open row. Passed lanes therefore route to paper/probation, not live validation. The daily all-lanes safety net loads a fresh gate and fresh promotion-state report before queueing and routes clear candidates to diagnostics or paper/probation if either report is missing, malformed, future-dated, missing `generated_at_utc`, stale, has unpriced rows, has incomplete tracked P&L, lacks lane rows, lacks walk-forward/fresh-paper depth, has unresolved live-exact negative risk, or is under a lane-specific circuit breaker; exact duplicate spreads selected by multiple lanes are suppressed to one risk owner. Pending validation rechecks the same gates before any auto-track rerun, writes paper-only rows for blocked/probation candidates, and fails closed if either report is unusable. Scanner validation reruns enforce them with `OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE=1`.
+- the June 5 end-to-end rerun after the lane gate, stale-report check, volatility execution caps, and hard portfolio cap blockers completed with `14` / `14` playbooks, `0` candidates, `0` queued rows, `0` pending validations, and `lane_gate_usable=True`. A direct market-hours volatility validation scan with auto-track and portfolio caps enabled reviewed `12` open positions, created `0` positions, and returned `No picks today`.
+- the June 5 live exact QQQ row (`id=537`, `volatility_expansion_observation`) remains open under the existing stop policy and is currently a fresh executable negative mark (`-39.86%` in the latest open-risk readback). The fix prevents additional auto-track entries while exposure/drawdown/cost caps are breached; it does not auto-close this existing row or change stop policy.
+- the regular profit-loop data path is back on the trusted intraday lane: `.env.local` now points `HISTORICAL_OPTIONS_DB_PATH` at `data/options-validation/options_history.db`, paid-readiness audits load local env and print the effective DB path, live scan/profit-loop policy uses `historical_imported`, daily truth refresh rebuilds the active intraday artifact, and strict dry plus non-dry canaries pass. The latest non-dry strict canary rebuilt `data/options-validation/runs/20260605_022559_broad_intraday.json`, saw `20,048,707` trusted intraday rows through `2026-06-04`, recorded forward holdout candidate flow through `quality90_debit55_canary`, and ended with no open profit-loop issues.
 
-1. During the next market-hours scan, rerun `scripts/validate_pending_scan_candidates.py` or the scheduled safety-net path so fresh candidates are revalidated with the fixed proof/backfill marker; then verify regular auto-track lanes can create rows after fresh executable evidence, while blocked/stale/unpriced/proof-ineligible rows receive explicit validation dispositions with detailed `auto_track_skip_reason` values when creation is skipped.
+1. During the next market-hours scan, rerun `npm run options:audit:lane-promotion-state`, `npm run options:audit:all-lanes`, and `npm run options:validate:pending-candidates` with the lane gate present. Expect losing lanes to route to diagnostic dispositions, passed lanes to route to paper/probation dispositions, duplicate exact spreads to suppress to one risk owner, and no live validation or auto-track until the promotion-state report shows enough walk-forward depth, fresh exact realized paper rows, and clean current live-exact risk.
 
-2. Confirm the next `OptionsRegimeObservationLanes` scheduled run exits `0` in `data/forward-tracking/observation_lanes_log.txt`; if it fails again, repair that candidate-lane scheduler before relying on side-lane daily coverage.
+2. For the first live Alpaca paper submission, configure only paper credentials and `OPTIONS_ALPACA_PAPER_TRADING_ENABLED=1`, keep the base URL on `https://paper-api.alpaca.markets/v2`, submit a single proof-eligible scanner pick through the archive-gated Live Scan form, then verify the new Paper Track row, event ledger, order status, and tracked-position entry basis before repeating.
 
-3. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
+3. After the June 5 market session and provider historical window are available, import/capture June 5 trusted intraday OPRA/NBBO rows, rerun `npm run options:audit:missed-outcomes`, then rerun `npm run options:audit:missed-failures` before treating that day as a real zero-pick day or changing scanner policy.
+
+4. Confirm the next `OptionsRegimeObservationLanes` scheduled run exits `0` in `data/forward-tracking/observation_lanes_log.txt`; if it fails again, repair that candidate-lane scheduler before relying on side-lane daily coverage.
+
+5. Rerun the point-in-time scanner candidate replay after new regular candidate/outcome rows mature, and add minute-level OPRA/NBBO stop/target/profit-harvest replay before promoting any exit rule.
 
 ## Frontend Makeover Follow-Up
 
@@ -102,7 +176,7 @@ Current read:
 - `POST /api/positions/review` is still state-changing: it saves reviews and can auto-close executable `SELL` recommendations
 - closed-position realized P&L is now canonicalized from entry/exit execution prices when an exit price exists, and create-time pre-closed rows preserve gross/net P&L columns
 - local tracked-position audit after the repair: `87` closed rows, `75` priced rows with canonical realized P&L, and `12` historical lifecycle-only closed rows with no trusted exit quote and therefore no assigned P&L; backup: `data/tracked_positions.pre-realized-pnl-repair-20260531T184725Z.json`
-- open-position risk audit now writes `data/forward-tracking/regular_open_position_risk_latest.json` and feeds the regular operating scorecard. Current read: `48` open regular rows, `47` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, and `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX).
+- open-position risk audit now writes `data/forward-tracking/regular_open_position_risk_latest.json` and feeds the regular operating scorecard. Current read: `12` open regular rows, `11` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX), and one live exact volatility row (`id=537`, QQQ) with a fresh executable negative mark still under the stored stop policy.
 - suggested-trade close-risk audit now writes `data/forward-tracking/suggested_trade_close_risk_latest.json` and feeds the regular operating scorecard. Current read: `1` open suggested trade (`id=138`, AAA), `0` executable close-ready rows, `0` non-executable close-risk rows, and `1` stale/missing-review row. Refresh explicit review before relying on suggested-trade P&L or close state.
 - Postgres tracked-position requests now reuse successful connections through a small in-process pool in `python-backend/positions_repository.py`; failed requests roll back and discard the connection before the next request.
 - FastAPI responses now include `x-python-backend-duration-ms` so local Trading Desk/API checks can compare route latency before and after payload or query changes.
@@ -120,6 +194,7 @@ Current read:
 - read-only API performance audit script `scripts/audit_trading_desk_api_performance.py` writes `data/forward-tracking/trading_desk_api_performance_latest.json` and now feeds the active operating scorecard. Latest full local route run against fresh temporary Next `3013` and backend `8113`: `11` / `11` probes succeeded, frontend max elapsed `230.6 ms`, frontend payload total `321,783` bytes, backend max duration header `49.1 ms`, open tracked positions are down to `139,603` backend bytes / `139,105` Next bytes, and the first `100` compact closed tracked positions remain the largest measured payload at `171,667` backend bytes / `170,715` Next bytes.
 - `/api/options-profit/status` now overlays the current tracked-position health check from the same runtime repository used by `/api/positions`, instead of trusting the stale `data/options-profit/status.json` tracked-DB sub-check. The route uses a narrow tracked-position profit-status snapshot rather than loading full position rows; current-code FastAPI TestClient evidence reports tracked positions available with `48` open rows, `488` total closed rows, and `1` proof-eligible realized closed row while preserving the stored options-profit gate state as `blocked`.
 - scanner evidence-drawer browser QA is complete on temporary Next `3014` and backend `8114`: desktop `1440x1000` and mobile `390x844` expanded `Evidence & guardrails`, reported `0` console/page errors, no page-level horizontal overflow, and visually confirmed `TRACKED DB READY`.
+- Paper Track now has its own primary Trading Desk tab for Alpaca paper-linked tracked positions, with a selected-position SVG P&L timeline that separates executable exit P&L, paper mark values, and closed realized exits.
 
 1. Use the default Current Policy Closed Trades view for product iteration and operator review. Switch to Realized P&L when intentionally inspecting raw historical/backfill outcomes; switch to Truth-grade only when making live-production accuracy claims; switch to historical paper, lifecycle-only, unpriced, learned-away, or legacy filters when auditing research/backfill data quality.
 
@@ -151,6 +226,22 @@ Current artifacts:
 - guardrail starvation report: `docs/regular-guardrail-starvation-audit.md`
 - daily all-lanes audit safety net script: `scripts/ensure_daily_all_lanes_audit_ran.py`
 - daily all-lanes audit command: `npm run options:audit:all-lanes`
+- missed regular picks outcome audit script: `scripts/audit_missed_regular_picks_outcomes.py`
+- missed regular picks outcome audit command: `npm run options:audit:missed-outcomes`
+- missed regular picks outcome latest JSON: `data/forward-tracking/missed_regular_picks_outcome_latest.json`
+- missed regular picks outcome report: `docs/missed-regular-picks-outcome-audit.md`
+- missed regular picks failure-mode audit script: `scripts/analyze_missed_regular_picks_failure_modes.py`
+- missed regular picks failure-mode audit command: `npm run options:audit:missed-failures`
+- missed regular picks failure-mode latest JSON: `data/forward-tracking/missed_regular_picks_failure_modes_latest.json`
+- missed regular picks failure-mode report: `docs/missed-regular-picks-failure-modes.md`
+- missed regular picks filter matrix script: `scripts/analyze_missed_regular_picks_filter_matrix.py`
+- missed regular picks filter matrix command: `npm run options:audit:missed-filter-matrix`
+- missed regular picks filter matrix latest JSON: `data/forward-tracking/missed_regular_picks_filter_matrix_latest.json`
+- missed regular picks filter matrix report: `docs/missed-regular-picks-filter-matrix.md`
+- lane promotion state script: `scripts/lane_promotion_state.py`
+- lane promotion state command: `npm run options:audit:lane-promotion-state`
+- lane promotion state latest JSON: `data/forward-tracking/lane_promotion_state_latest.json`
+- lane promotion state report: `docs/lane-promotion-state.md`
 - pending selected-candidate queue: `data/forward-tracking/pending_scan_candidates.jsonl`
 - pending candidate live validator: `scripts/validate_pending_scan_candidates.py`
 - pending candidate live validator command: `npm run options:validate:pending-candidates`
@@ -233,6 +324,7 @@ Current read:
 - promoted combined kept subset: `130` rows, `116` priced, `29` negative, `87` positive/flat, average P&L `53.08%`, median P&L `46.4%`
 - current-policy closed-row replay: `488` closed rows audited, `400` current-policy scope rows, raw realized scope `355` priced at avg `+4.87%`, median `-6.53%`, negative rate `51.8%`; `would_take_today` has `112` priced rows at avg `+53.54%`, median `+50.6%`, negative rate `25.9%`; `blocked_by_current_policy` has `274` rows / `243` priced at avg `-17.56%`, median `-30.41%`, negative rate `63.8%`
 - current-policy cohort health: overall current-policy rows are still positive (`112` priced, avg `+53.54%`, median `+50.6%`), but the showable edge is concentrated in `2026-04` (`70` priced, avg `+81.17%`, median `+71.82%`, `8.6%` negative rate). Recent `2026-05` degraded to avg `+7.49%`, median `-4.6%`, `54.8%` negative rate, and latest week `2026-W21` is avg `-82.06%`, median `-83.61%`, `100.0%` negative rate. Current state is `paper_only_recent_week_break`.
+- missed-pick outcome gate: the May 22 through June 5 report-only all-lanes selected set is not profitable as a whole, and the companion failure-mode audit says the data status is `clean_for_failure_analysis`. The latest outcome audit has `210` fully priced rows, including `4` already tracked rows with stored P&L and `206` untracked priced rows; the untracked slice has `70` winners, `136` losers, avg net `-15.28%`, median `-11.5%`, PF `0.34`, and `-$16,314.00` one-spread net dollars. The failure-mode read adds `37` rows `<= -50%`, `15` rows `<= -80%`, largest damage clusters in XLK/SPY/TSLA/IWM, debit `>=45%` of width at PF `0.06`, and DTE `>=36` at PF `0.16`. `bullish_momentum`, `bullish_pullback_observation`, `short_term`, `speculative`, `swing`, `tracked_winner_observation`, and `tracked_winner_primary` are diagnostic-only until a fresh exact-contract outcome audit proves otherwise. `volatility_expansion_observation` is the only lane currently allowed into candidate flow, and only after self-guardrails block SPY/IWM and debit above `45%` of width.
 - scanner guardrails now block debit over `45%` of width, fill degradation `>=20%`, worst-leg bid/ask spread `>=20%`, lane-specific ticker quarantines, Bullish Pullback non-keep tickers, and Bullish Pullback `ret5 < -2`
 - fill-attempt logs now persist fill-discipline snapshots with selected spread evidence, leg bid/ask/mids, spread mid/entry debit, fill degradation versus mid, top alternatives, and quote freshness. These are paper/review forensics only; they do not change scanner gates, broker action, or proof promotion.
 - momentum-chase blocking is rejected for now because it removed too many winners in the all-row replay
@@ -255,7 +347,7 @@ Current read:
 - scoped WMT dry-run result: with `--ticker WMT --lookahead-calendar-days 5 --start-time 09:30:00 --end-time 16:00:00 --interval 1m --dry-run --json`, ThetaData returned `3` normalized rows for `WMT260402C00138000` on lookahead date `2026-03-27`, while `WMT260402C00140000` on `2026-03-25` and `WMT260402C00139000` / `WMT260402C00138000` on `2026-03-26` remained no-match. No CSV, summary, DB import, source replay, or queue rebuild was written from this dry-run.
 - legacy rows `26`, `39`, and `44` were audited directly. All three diagnose as `stale_or_non_autoclosing_review_path`, and `current_action_required_count=0`; preserve them as historical stale-policy diagnostics, not a current auto-close bug or global exit-policy change.
 - latest guardrail-starvation audit completed `14` / `14` supervised playbooks, included AI Commodity, and audited every configured ticker scope with default `watchlist_size=59`. It returned `13` read-only diagnostics after-hours: `6` clear pending candidates across Swing, Volatility Expansion, and Quality90 canary, plus `7` blocked candidates across Short Term, Speculative, Bullish Momentum, and Range Breakout. The `6` clear regular auto-track rows are queued as `pending_live_validation`, not dropped and not positions. Status is `guardrail_starvation_detected`, led by direction filters (`109`), momentum (`99`), option liquidity (`94`), history/liquidity (`54`), and tech score (`33`).
-- latest open-position risk audit reports `48` open regular rows, `47` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, and `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX). Do not auto-close that row from the display-only mark; rerun explicit review during a fresh executable quote window or close only with separate executable evidence.
+- latest open-position risk audit reports `12` open regular rows, `11` fresh executable reviews, `1` fresh unpriced review, `0` executable close-ready rows, and `1` review-required non-executable display-only `SELL` row (`id=104`, SBUX). It also shows the live exact QQQ volatility row (`id=537`) as a fresh executable negative HOLD under the stored stop policy. Do not auto-close display-only marks; rerun explicit review during a fresh executable quote window or close only with separate executable evidence.
 - the open Trading Desk row for that class of state now shows `Review quote` rather than `Close now` unless the stored `SELL` review includes executable exit evidence.
 - latest suggested-trade close-risk audit reports `1` open suggested trade (`id=138`, AAA) with no stored review. There are `0` close-risk suggested rows and `0` executable close-ready suggested rows; refresh explicit review before relying on that paper-idea P&L or close state.
 - the Paper Ideas row for that class of state now shows `Review needed`, increments `Needs Review`, and keeps `Close-ready` at `0` unless the latest suggested-trade review has executable `SELL` evidence.
@@ -386,7 +478,7 @@ Current read:
 - daily/EOD artifacts remain research-only and are not counted toward the proof target
 - the `234` stack comes from `sleeve_pf59_coverage_a_refill_v1` plus the latest `lane_a_chain_native_ret20_4_stop200_time75_rerun4_v1`
 - latest Lane A read: `155` exact trades, `137` unpriced candidates, `53.1%` quote coverage, PF `3.59`, avg `+42.34%`, 5%/side stress PF `2.65`
-- latest Lane A classifier read: `111` missing exact leg/date items still classify as provider no-match exact contracts in the trusted local store, but a raw ThetaData probe found all `111` exact short-leg rows at `15:55` with `bid=0` and `ask>0`; the current importer/classifier drops them because it requires `bid > 0`
+- latest Lane A classifier read: `111` missing exact leg/date items still classify as provider no-match exact contracts in the trusted local store, but a raw ThetaData probe found all `111` exact short-leg rows at `15:55` with `bid=0` and `ask>0`; before the June 5 zero-bid repair, the importer/classifier dropped them because it required `bid > 0`
 - side-aware Lane A zero-bid replay: `data/profitability-lab/side-aware-zero-bid/latest_lane_a_side_aware_zero_bid.json` priced `126` of `127` missing-exit candidates in conservative long-bid/short-ask mode; `118` priced rows used at least one zero-bid exit quote, the side-aware rows alone were PF `0.11` and avg `-66.59%`, and combined Lane A falls to `281` priced trades at PF `0.85`, avg `-6.51%`, and `96.2%` coverage. Midpoint zero-bid mode is also weak at combined PF `1.11`, avg `+3.79%`.
 - contrarian count scan: existing trusted intraday artifacts can reach a raw `300+` exact-priced scenario only by adding low-coverage research artifacts, especially older `tracked_winner_chain_native_qqq_time80_research` artifacts; a current trusted-intraday rerun now makes that scout explicit at `102` strict-new exact trades over the current stack, PF `1.36`, `51.8%` coverage, and `95` unpriced candidates, so it is not production-clean evidence
 - latest tracked-winner classifier read: `77` missing exact leg/date items classify as provider no-match exact contracts with same-expiry chain rows present
@@ -479,11 +571,12 @@ Current full active-universe exact-contract status:
 - latest defensive refill exact-fill attempt: `data/options-validation/thetadata-nbbo/thetadata_exact_missing_intraday_20260530T000025Z.json`
 - zero-pick all-lanes current-algorithm audit script: `scripts/audit_zero_pick_days_all_lanes.py`
 - zero-pick all-lanes current-algorithm audit report: `data/forward-tracking/all_lanes_zero_pick_current_algo_audit_latest.json`
-- zero-pick all-lanes latest applied status: `14` / `14` supervised scan lanes completed with `425` exact historical research/backfill picks appended to the forward scan/fill logs.
+- zero-pick all-lanes latest report-only repair status: the 2026-06-05 missed-pick rerun excluded AI commodity, completed `13` / `13` regular scan lanes, found `405` signal candidates, `389` exact historical candidates, and `206` would-track selections with `apply=false`, `0` scan rows appended, no `no_exact_option_quotes_for_date` blocker, and quote-store coverage `9` / `10` market days with only `2026-06-05` missing before session data existed.
+- zero-pick all-lanes latest applied status: the 2026-05-31 applied run completed `14` / `14` supervised scan lanes and appended `425` exact historical research/backfill picks to the forward scan/fill logs.
 - zero-pick all-lanes paper-position migration report: `data/forward-tracking/all_lanes_zero_pick_position_migration_v1_latest.json`
 - zero-pick all-lanes paper-position migration status: `425` historical paper positions created; after suggested-close P&L repair, `400` are closed and `25` are open as of `2026-05-31`; all `425` scan rows and fill-attempt rows are linked to tracked position IDs. Lane counts are `short_term=159`, `swing=157`, `bullish_momentum=51`, `tracked_winner_observation=35`, `tracked_winner_primary=12`, `volatility_expansion_observation=10`, and `range_breakout_observation=1`.
 - historical suggested-close P&L repair report: `data/forward-tracking/historical_suggested_close_realized_pnl_repair_v1_latest.json`
-- historical suggested-close P&L repair status: `98` tracked rows updated across two passes to first executable historical suggested close, final dry-run idempotence reported `369` already-correct executable suggested closes, and `61` closed backfill rows remain missing realized P&L because no trusted exact exit-leg quote was available (`54` all-lanes rows and `7` legacy single-lane rows). Do not synthesize these unresolved exits from midpoint, last trade, daily/EOD, or stale marks.
+- historical suggested-close P&L repair status: the June 5 safe missing-only repairs updated the first `27` rows, imported missing late-day exact OPRA/NBBO close clusters, then repaired the remaining `34` diagnostics (`24` missing quote rows and `10` zero-bid close rows). Final strict repository audit now reports `0` hard violations and `0` diagnostics. Do not synthesize future unresolved exits from midpoint, last trade, daily/EOD, or stale marks.
 - zero-pick explicit single-lane diagnostic script: `scripts/audit_zero_pick_days_current_main_lane.py`
 - zero-pick explicit single-lane diagnostic report: `data/forward-tracking/main_lane_zero_pick_current_algo_audit_latest.json`
 - zero-pick paper-position migration script: `scripts/migrate_main_lane_backfills_to_positions.py`

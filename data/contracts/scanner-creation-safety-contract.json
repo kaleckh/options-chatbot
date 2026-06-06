@@ -154,7 +154,30 @@
       "current_creation_eligible_not_true",
       "guardrail_blocked",
       "portfolio_caps_not_enforced",
-      "candidate_execution_label"
+      "candidate_execution_label",
+      "lane_gate_import_error",
+      "lane_profitability_gate",
+      "lane_promotion_state",
+      "open_position_risk_report_unusable",
+      "open_position_risk_import_error",
+      "open_position_risk_live_exact_negative_open_risk",
+      "open_position_risk_live_exact_executable_close_ready",
+      "open_position_risk_live_exact_review_stale_missing_or_non_executable",
+      "open_position_risk_governor_blocked"
+    ],
+    "portfolioCapBreachBlockers": [
+      "same_ticker_open",
+      "same_exact_vertical_spread_open",
+      "playbook_daily_cap_reached",
+      "sector_cap_reached",
+      "regime_cap_reached",
+      "daily_loss_limit_reached",
+      "weekly_loss_limit_reached",
+      "open_executable_drawdown_cap_reached",
+      "position_cost_risk_cap_exceeded",
+      "portfolio_cost_risk_cap_exceeded",
+      "max_concurrent_positions_reached",
+      "correlated_index_limit_reached"
     ]
   },
   "scheduledAutoTrack": {
@@ -163,6 +186,11 @@
       "exposure_snapshot.available",
       "exposure_snapshot.portfolio_caps_enforced",
       "playbook.id"
+    ],
+    "requiredPromotionArtifacts": [
+      "data/forward-tracking/missed_regular_picks_outcome_latest.json",
+      "data/forward-tracking/lane_promotion_state_latest.json",
+      "data/forward-tracking/regular_open_position_risk_latest.json"
     ],
     "requiredPickFields": [
       "creation_eligible",
@@ -179,7 +207,17 @@
       "portfolio_caps_not_enforced",
       "creation_eligible_not_true",
       "guardrail_blocked",
-      "candidate_execution_label"
+      "candidate_execution_label",
+      "lane_profitability_gate_report_unusable",
+      "lane_promotion_state_report_unusable",
+      "open_position_risk_report_unusable",
+      "open_position_risk_import_error",
+      "lane_profitability_gate_blocked",
+      "lane_promotion_state_blocked",
+      "open_position_risk_live_exact_negative_open_risk",
+      "open_position_risk_live_exact_executable_close_ready",
+      "open_position_risk_live_exact_review_stale_missing_or_non_executable",
+      "open_position_risk_governor_blocked"
     ],
     "fillAttemptAuditFields": [
       "market_open_at_run",
@@ -198,9 +236,12 @@
   "pendingValidation": {
     "statuses": [
       "pending_live_validation",
+      "pending_paper_exact_evidence",
       "diagnostic_only_unapproved_lane",
       "live_validation_attempted",
-      "live_validation_scan_failed"
+      "live_validation_scan_failed",
+      "paper_exact_evidence_attempted",
+      "paper_exact_evidence_scan_failed"
     ],
     "outcomes": [
       "created",

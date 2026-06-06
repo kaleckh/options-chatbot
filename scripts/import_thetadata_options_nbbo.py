@@ -170,7 +170,7 @@ def _normalize_theta_quote_row(row: dict[str, Any], *, underlying: str, trade_da
     ask = _safe_float(row.get("ask"))
     if expiration_raw is None or right_raw is None or strike is None:
         return None
-    if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
+    if bid is None or ask is None or bid < 0 or ask <= 0 or ask < bid:
         return None
 
     expiration = date.fromisoformat(str(expiration_raw)[:10])

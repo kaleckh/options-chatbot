@@ -45,6 +45,13 @@ LOG_FILE = LOG_DIR / "scan_picks.jsonl"
 FILL_ATTEMPT_LOG_FILE = LOG_DIR / "fill_attempts.jsonl"
 LIQUIDITY_NEAR_MISS_LOG_FILE = LOG_DIR / "liquidity_near_misses.jsonl"
 
+_LANE_GATE_ENFORCEMENT_ENV = "OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE"
+
+
+def _force_lane_gate_for_auto_track() -> None:
+    if _env_flag_enabled("OPTIONS_SCAN_AUTO_TRACK", True):
+        os.environ[_LANE_GATE_ENFORCEMENT_ENV] = "1"
+
 
 def _is_market_closed(run_at: datetime) -> bool:
     return not is_us_equity_market_day(run_at.date())
@@ -264,6 +271,106 @@ def _safe_scan_playbook_fresh_live_validation_enabled(playbook_id: str) -> bool:
         return False
 
 
+def _scan_lane_gate_blockers(scan_result: dict[str, Any]) -> list[str]:
+    playbook_id = str((scan_result.get("playbook") or {}).get("id") or "").strip()
+    if not playbook_id:
+        return ["lane_profitability_gate:missing_playbook"]
+
+    try:
+        from scripts.lane_profitability_gate import (
+            DEFAULT_LANE_GATE_REPORT,
+            candidate_gate_decision,
+            lane_gate_report_health,
+            load_lane_gate_report,
+        )
+        from scripts.lane_promotion_state import (
+            DEFAULT_LANE_PROMOTION_REPORT,
+            candidate_promotion_decision,
+            lane_promotion_report_health,
+            load_lane_promotion_report,
+        )
+    except Exception as exc:
+        return [f"lane_profitability_gate_import_error:{exc}"]
+
+    try:
+        lane_gate_report = load_lane_gate_report(DEFAULT_LANE_GATE_REPORT)
+        lane_gate_health = lane_gate_report_health(lane_gate_report)
+    except Exception as exc:
+        return [f"lane_profitability_gate_report_unusable:{exc}"]
+    blockers: list[str] = []
+    if not bool(lane_gate_health.get("usable")):
+        blockers.append(
+            "lane_profitability_gate_report_unusable:"
+            f"{lane_gate_health.get('reason') or 'unknown'}"
+        )
+
+    try:
+        lane_promotion_report = load_lane_promotion_report(DEFAULT_LANE_PROMOTION_REPORT)
+        lane_promotion_health = lane_promotion_report_health(lane_promotion_report)
+    except Exception as exc:
+        return [f"lane_promotion_state_report_unusable:{exc}"]
+    if not bool(lane_promotion_health.get("usable")):
+        blockers.append(
+            "lane_promotion_state_report_unusable:"
+            f"{lane_promotion_health.get('reason') or 'unknown'}"
+        )
+
+    if blockers:
+        return list(dict.fromkeys(blockers))
+
+    picks = [pick for pick in list(scan_result.get("picks") or []) if isinstance(pick, dict)]
+    for pick in picks or [{}]:
+        try:
+            gate_decision = candidate_gate_decision(
+                playbook_id=playbook_id,
+                candidate=pick,
+                report=lane_gate_report,
+                require_fresh_report=True,
+                probation_paper_only=False,
+                require_present_self_guardrail_metrics=True,
+            )
+        except Exception as exc:
+            blockers.append(f"lane_profitability_gate_blocked:{exc}")
+            continue
+        if not bool(gate_decision.get("allowed")):
+            blockers.append(
+                "lane_profitability_gate_blocked:"
+                f"{gate_decision.get('candidate_status_reason') or 'candidate_blocked'}"
+            )
+            continue
+        try:
+            promotion_decision = candidate_promotion_decision(
+                playbook_id=playbook_id,
+                report=lane_promotion_report,
+                require_fresh_report=True,
+            )
+        except Exception as exc:
+            blockers.append(f"lane_promotion_state_blocked:{exc}")
+            continue
+        if not bool(promotion_decision.get("allowed")):
+            blockers.append(
+                "lane_promotion_state_blocked:"
+                f"{promotion_decision.get('candidate_status_reason') or 'candidate_blocked'}"
+            )
+
+    return list(dict.fromkeys(blockers))
+
+
+def _scan_open_risk_blockers() -> list[str]:
+    try:
+        from scripts.regular_open_risk_governor import (
+            DEFAULT_OPEN_RISK_REPORT,
+            load_regular_open_risk_report,
+            regular_open_risk_entry_blockers,
+        )
+    except Exception as exc:
+        return [f"open_position_risk_import_error:{exc}"]
+    try:
+        return regular_open_risk_entry_blockers(load_regular_open_risk_report(DEFAULT_OPEN_RISK_REPORT))
+    except Exception as exc:
+        return [f"open_position_risk_report_unusable:{exc}"]
+
+
 def _scan_auto_track_blockers(scan_result: dict[str, Any]) -> list[str]:
     blockers: list[str] = []
     if not _env_flag_enabled("OPTIONS_SCAN_AUTO_TRACK", True):
@@ -281,6 +388,8 @@ def _scan_auto_track_blockers(scan_result: dict[str, Any]) -> list[str]:
             blockers.append("exposure_snapshot_unavailable")
         if exposure.get("portfolio_caps_enforced") is not True:
             blockers.append("portfolio_caps_not_enforced")
+    blockers.extend(_scan_lane_gate_blockers(scan_result))
+    blockers.extend(_scan_open_risk_blockers())
     return list(dict.fromkeys(blockers))
 
 
@@ -1182,6 +1291,7 @@ def main() -> int:
         return 0
 
     load_local_env(ROOT)
+    _force_lane_gate_for_auto_track()
 
     import market_data_service as mds
     mds._MEMORY_CACHE.clear()

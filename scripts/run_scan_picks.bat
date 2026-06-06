@@ -2,6 +2,7 @@
 cd /d C:\Users\kalec\options-chatbot
 set OPTIONS_SCAN_PLAYBOOK=bullish_pullback_observation
 set OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS=1
+set OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE=1
 C:\Python312\python.exe scripts\log_scan_picks.py >> data\forward-tracking\scan_log.txt 2>&1
 C:\Python312\python.exe scripts\ensure_daily_all_lanes_audit_ran.py --force >> data\forward-tracking\daily_all_lanes_audit_log.txt 2>&1
 echo. >> data\forward-tracking\daily_all_lanes_audit_log.txt

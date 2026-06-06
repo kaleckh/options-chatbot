@@ -74,6 +74,9 @@ def _run_scan(playbook: str) -> int:
         return 2
     env = os.environ.copy()
     env["OPTIONS_SCAN_PLAYBOOK"] = playbook
+    env["OPTIONS_SCAN_AUTO_TRACK"] = "1"
+    env["OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS"] = "1"
+    env["OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE"] = "1"
     completed = subprocess.run(
         [sys.executable, str(LOG_SCAN_SCRIPT)],
         cwd=str(ROOT),

@@ -1,0 +1,242 @@
+{
+  "edges": [
+    {
+      "from": "data_path",
+      "label": "trusted data enables candidate queueing",
+      "to": "candidate_path"
+    },
+    {
+      "from": "candidate_path",
+      "label": "candidate rows need fresh/proof evidence",
+      "to": "evidence_path"
+    },
+    {
+      "from": "evidence_path",
+      "label": "exact evidence prices outcomes",
+      "to": "profitability_path"
+    },
+    {
+      "from": "profitability_path",
+      "label": "lane economics feed permissions",
+      "to": "promotion_path"
+    },
+    {
+      "from": "promotion_path",
+      "label": "permissions become current operator state",
+      "to": "operator_path"
+    },
+    {
+      "from": "operator_path",
+      "label": "operator actions may trigger data repair or refresh",
+      "to": "data_path"
+    }
+  ],
+  "generated_by": "scripts/generate_project_pathway_registry.py",
+  "non_goals": [
+    "change scanner policy",
+    "create trades",
+    "submit broker orders",
+    "lower proof bars",
+    "replace source owner docs",
+    "govern volatile research outputs"
+  ],
+  "pathways": [
+    {
+      "failure_mode": "Bad data makes every downstream pick, P&L, and blocker suspect.",
+      "gates": [
+        "Closed production/unclassified tracked rows must have realized P&L.",
+        "Closed suggested trades must have stored exit/P&L.",
+        "Historical repairs must use trusted exact OPRA/NBBO quotes.",
+        "Daily/EOD, midpoint, stale, last-trade, or display marks are not production proof."
+      ],
+      "id": "data_path",
+      "label": "Data Path",
+      "owner_docs": [
+        "docs/repository-constraints.md",
+        "docs/storage-ownership-map.md",
+        "docs/paid-options-data-import-checklist.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "owner_scripts": [
+        "scripts/audit_repository_constraints.py",
+        "scripts/import_thetadata_options_nbbo.py",
+        "scripts/audit_paid_data_readiness.py",
+        "scripts/repair_historical_backfill_realized_pnl.py"
+      ],
+      "plain_english": "This path proves the raw material is usable before anyone argues about picks.",
+      "primary_artifacts": [
+        "data/options-validation/options_history.db",
+        "chat_history.db",
+        "DATABASE_URL",
+        "data/forward-tracking/historical_suggested_close_realized_pnl_repair_v1_latest.json"
+      ],
+      "question": "Can we trust the market data, repositories, and P&L fields?"
+    },
+    {
+      "failure_mode": "Selected candidates can vanish or be mislabeled if queue/lifecycle status handling drifts.",
+      "gates": [
+        "All supervised lanes must be audited for no-pick explanations.",
+        "Clear candidates are queued, not silently dropped.",
+        "Candidate statuses must come from the lifecycle contract.",
+        "Pending validation reruns must use portfolio caps and current lane gates."
+      ],
+      "id": "candidate_path",
+      "label": "Candidate Path",
+      "owner_docs": [
+        "docs/scanner-creation-safety-contract.md",
+        "docs/candidate-lifecycle-contract.md",
+        "docs/regular-guardrail-starvation-audit.md"
+      ],
+      "owner_scripts": [
+        "scripts/ensure_daily_all_lanes_audit_ran.py",
+        "scripts/pending_audit_candidates.py",
+        "scripts/validate_pending_scan_candidates.py",
+        "scripts/candidate_lifecycle.py"
+      ],
+      "plain_english": "This path turns scanner output into queued, diagnostic, paper-only, or validation-attempted candidate rows.",
+      "primary_artifacts": [
+        "data/forward-tracking/regular_guardrail_starvation_latest.json",
+        "data/forward-tracking/pending_scan_candidates.jsonl",
+        "data/forward-tracking/pending_scan_candidate_validation_latest.json",
+        "data/contracts/candidate-lifecycle-contract.json"
+      ],
+      "question": "Did the scanner find a possible regular-options trade, and what is its lifecycle state?"
+    },
+    {
+      "failure_mode": "A row can look profitable while still being proof-ineligible or paper-only.",
+      "gates": [
+        "Production proof requires fresh live scanner exact-contract evidence and verified lineage.",
+        "Exact realized P&L requires trusted exit evidence.",
+        "Broker paper fills and research/backfill rows do not become production proof.",
+        "Fresh evidence loop must reconcile candidate, fill attempt, tracked link, and exact realized P&L."
+      ],
+      "id": "evidence_path",
+      "label": "Evidence Path",
+      "owner_docs": [
+        "docs/proof-evidence-contract.md",
+        "docs/proof-invariant-table.md",
+        "docs/regular-options-fresh-evidence-loop.md"
+      ],
+      "owner_scripts": [
+        "scripts/generate_proof_evidence_contract.py",
+        "scripts/generate_proof_invariant_table.py",
+        "scripts/build_regular_options_fresh_evidence_loop.py",
+        "scripts/log_scan_picks.py"
+      ],
+      "plain_english": "This path separates fresh executable OPRA/NBBO evidence from research, paper, stale, midpoint, and lifecycle-only rows.",
+      "primary_artifacts": [
+        "data/contracts/proof-evidence-contract.json",
+        "src/lib/generated/proofEvidenceContract.ts",
+        "data/forward-tracking/fill_attempts.jsonl",
+        "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json"
+      ],
+      "question": "Is the quote/proof exact enough to support a claim or a tracked row?"
+    },
+    {
+      "failure_mode": "Clean data can still prove the strategy is losing.",
+      "gates": [
+        "Lanes need enough exact priced rows, positive average net P&L, and profit factor.",
+        "Unprofitable or undersampled lanes remain diagnostic-only.",
+        "Profitable historical pockets start as paper/probation, not live release.",
+        "Counterfactual filters must be entry-time-only and survive later-date/OOS checks."
+      ],
+      "id": "profitability_path",
+      "label": "Profitability Path",
+      "owner_docs": [
+        "docs/missed-regular-picks-outcome-audit.md",
+        "docs/missed-regular-picks-failure-modes.md",
+        "docs/missed-regular-picks-filter-matrix.md",
+        "docs/regular-options-operating-scorecard.md"
+      ],
+      "owner_scripts": [
+        "scripts/audit_missed_regular_picks_outcomes.py",
+        "scripts/analyze_missed_regular_picks_failure_modes.py",
+        "scripts/analyze_missed_regular_picks_filter_matrix.py",
+        "scripts/build_regular_profitability_operating_scorecard.py"
+      ],
+      "plain_english": "This path prices selected candidates and converts broad scanner enthusiasm into lane-level evidence.",
+      "primary_artifacts": [
+        "data/forward-tracking/missed_regular_picks_outcome_latest.json",
+        "data/forward-tracking/missed_regular_picks_failure_modes_latest.json",
+        "data/forward-tracking/missed_regular_picks_filter_matrix_latest.json",
+        "data/profitability-lab/regular-options-operating-scorecard/latest.json"
+      ],
+      "question": "Is a lane profitable enough to deserve more than diagnostics?"
+    },
+    {
+      "failure_mode": "A historically promising lane can be promoted too early without fresh forward/risk evidence.",
+      "gates": [
+        "Lanes move diagnostic -> paper_probation -> live_validation -> auto_track.",
+        "Live validation needs clean lane profitability, walk-forward depth, fresh exact paper rows, and clean current risk.",
+        "Auto-track remains reserved for explicit later release review.",
+        "Recent broken cohorts route to paper validation only."
+      ],
+      "id": "promotion_path",
+      "label": "Promotion Path",
+      "owner_docs": [
+        "docs/lane-promotion-state.md",
+        "docs/current-policy-circuit-breaker.md",
+        "docs/current-policy-entry-filter-walkforward.md",
+        "docs/current-policy-entry-filter-paper-monitor.md"
+      ],
+      "owner_scripts": [
+        "scripts/lane_promotion_state.py",
+        "scripts/build_current_policy_circuit_breaker.py",
+        "scripts/validate_current_policy_entry_filter_walkforward.py",
+        "scripts/monitor_current_policy_entry_filter_paper.py"
+      ],
+      "plain_english": "This path turns profitability, walk-forward, fresh-paper, risk, and circuit-breaker evidence into lane permissions.",
+      "primary_artifacts": [
+        "data/forward-tracking/lane_promotion_state_latest.json",
+        "data/forward-tracking/current_policy_circuit_breaker_latest.json",
+        "data/forward-tracking/current_policy_entry_filter_walkforward_latest.json",
+        "data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.json"
+      ],
+      "question": "What is each lane allowed to do today?"
+    },
+    {
+      "failure_mode": "The project becomes technically correct but impossible to hold in your head.",
+      "gates": [
+        "Gateboard is read-only and summarizes current state.",
+        "Operator next actions must preserve proof bars and lane promotion gates.",
+        "Docs index and worklog must point future agents to the right pathway owner."
+      ],
+      "id": "operator_path",
+      "label": "Operator Path",
+      "owner_docs": [
+        "docs/project-operating-map.md",
+        "docs/project-operator-gateboard.md",
+        "docs/regular-options-operator-workflow.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "owner_scripts": [
+        "scripts/generate_project_pathway_registry.py",
+        "scripts/build_project_operator_gateboard.py",
+        "scripts/build_regular_profitability_operating_scorecard.py"
+      ],
+      "plain_english": "This path turns many artifacts into one current readback and a small set of next actions.",
+      "primary_artifacts": [
+        "data/contracts/project-pathway-registry.json",
+        "data/forward-tracking/project_operator_gateboard_latest.json",
+        "docs/project-operator-gateboard.md",
+        "docs/regular-options-operating-scorecard.md"
+      ],
+      "question": "What should a human or future agent look at next?"
+    }
+  ],
+  "purpose": "Human-readable operating model for the active options project pathways.",
+  "report_id": "project_pathway_registry",
+  "runtime_use": false,
+  "version": 1,
+  "visual_model": {
+    "active_scope": "regular supervised options plus separate AI commodity proof lane",
+    "short_form": [
+      "Data first.",
+      "Candidates second.",
+      "Evidence third.",
+      "Profitability fourth.",
+      "Promotion fifth.",
+      "Operator action last."
+    ]
+  }
+}

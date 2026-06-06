@@ -7,7 +7,7 @@ This file, `docs/repository-constraints.md`, is the semantic owner for Trading D
 | Layer | Owns | Current examples |
 | --- | --- | --- |
 | DB-enforced | Primitive relational safety that is already true for future writes without historical cleanup. | Primary keys, required columns, review foreign keys, migration-ledger primary key and checksum guard. |
-| API/service-enforced | Request and payload shape before rows are persisted. | Positive `fill_price`, positive `contracts`, valid option fields, nonnegative manual close price, open-only review and close operations. |
+| API/service-enforced | Request and payload shape before rows are persisted. | Positive `fill_price`, positive `contracts`, valid option fields, nonnegative manual close price, open-only review and close operations, close payloads that can persist canonical exit/P&L fields. |
 | Proof-contract-owned | Trading proof truth that depends on source evidence, lineage, OPRA/freshness, research/backfill markers, and trusted exits. | `proof_eligible`, `proof_class`, live exact proof, manual exact evidence, truth-grade closed-row eligibility. |
 | Deferred | Useful DB constraints that need an existing-row audit or a SQLite table rebuild before enforcement. | Status/direction `CHECK`s, positive numeric `CHECK`s, unique open-contract constraints, JSON-shape constraints, closed-row coherence constraints. |
 
@@ -30,6 +30,7 @@ This file, `docs/repository-constraints.md`, is the semantic owner for Trading D
 - `contracts`, `entry_option_price`, `strike`, `stop_loss_pct`, `profit_target_pct`, and `time_exit_day` are positive.
 - manual close `exit_price` is finite and nonnegative; zero remains valid for worthless executable exits.
 - review and close operations require the row to be open.
+- closed suggested-trade and tracked-position write paths must persist canonical exit execution price and gross/net realized P&L whenever an executable close exists.
 
 ## Proof Boundary
 
@@ -61,7 +62,9 @@ SQLite table-level `CHECK` constraints require a table rebuild for existing stor
 
 ## Read-Only Audit
 
-Use `scripts/audit_repository_constraints.py --json` to inspect the current stores without mutating rows. Missing Postgres configuration is reported as skipped rather than falling back to SQLite. AI commodity artifacts, `historical_options_store.py`, and `data/options-validation/options_history.db` are outside this Trading Desk repository constraint contract.
+Use `npm run options:audit:data-integrity` for the strict project gate, or `scripts/audit_repository_constraints.py --json` for a direct read-only inspection. The CLI loads local env before resolving `DATABASE_URL`, so a normal local run audits Postgres instead of silently skipping it. Missing Postgres configuration is still reported as skipped rather than falling back to SQLite. AI commodity artifacts, `historical_options_store.py`, and `data/options-validation/options_history.db` are outside this Trading Desk repository constraint contract.
+
+Strict mode exits nonzero only for hard violations. Research/backfill tracked rows that are closed but still missing realized P&L because the exact executable exit leg quote is absent are diagnostics: they must remain visible, unpriced, and excluded from live proof/exposure math, but they do not fail strict mode. The June 5 zero-bid repair cleared the prior diagnostics by retaining exact `bid=0, ask>0` OPRA/NBBO rows and pricing historical close/mark paths side-aware at long bid and short ask. Current June 5 readback is `pass_or_skipped`: SQLite suggested trades `pass`, Postgres tracked positions `pass`, hard violations `0`, and diagnostics `0`.
 
 ## Constraint Audit Behavior Matrix
 
@@ -70,8 +73,13 @@ Use `scripts/audit_repository_constraints.py --json` to inspect the current stor
 | Clean initialized SQLite suggested store | Audit returns `pass` with no violations. | `tests/test_repository_constraints.py` |
 | Missing SQLite suggested store | Audit returns `skipped` and does not create the file. | `tests/test_repository_constraints.py` |
 | Dirty SQLite suggested rows | Audit returns `violations_found` for status, direction, ticker, positive-number, nonnegative-number, review recommendation, and review numeric checks. | `tests/test_repository_constraints.py` |
+| Closed SQLite suggested trade missing stored exit/P&L | Audit returns `violations_found` under `suggested_trades_closed_missing_realized_pnl`. | `tests/test_repository_constraints.py` |
 | Orphan suggested review | Audit reports the orphan without repairing it. | `tests/test_repository_constraints.py` |
 | Missing Postgres configuration | Audit returns `skipped`; tracked positions do not fall back to SQLite. | `tests/test_repository_constraints.py` |
+| Closed production tracked row missing realized P&L | Audit returns `violations_found` under `tracked_positions_closed_production_missing_realized_pnl`. | `scripts/audit_repository_constraints.py` |
+| Closed unclassified tracked row missing realized P&L | Audit returns `violations_found` under `tracked_positions_closed_unclassified_missing_realized_pnl`. | `scripts/audit_repository_constraints.py` |
+| Closed research/backfill tracked row missing exact exit quote | Audit returns `pass_with_diagnostics`; strict mode does not fail, and the row stays unpriced/quarantined. | `scripts/audit_repository_constraints.py` |
+| Strict mode with diagnostics only | `--strict` exits `0`; diagnostics must still be read and repaired only with trusted exact evidence. | `scripts/audit_repository_constraints.py` |
 | Deferred candidates | They remain audit/readiness targets, not active DB `CHECK` constraints. | `tests/test_repository_constraints.py` |
 | Proof truth | Production proof and truth-grade semantics stay in the proof contract, not SQL. | `tests/test_repository_constraints.py` |
 

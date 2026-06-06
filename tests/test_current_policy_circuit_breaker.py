@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -231,6 +232,28 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
             fill_attempts = Path(temp_dir) / "fills.jsonl"
             disposition = Path(temp_dir) / "disposition.json"
             missing_breaker = Path(temp_dir) / "missing-breaker.json"
+            lane_gate = Path(temp_dir) / "lane-gate.json"
+            lane_gate.write_text(
+                json.dumps(
+                    {
+                        "generated_at_utc": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+                        "summary": {
+                            "mark_unpriced_count": 0,
+                            "tracked_row_count": 0,
+                            "tracked_rows_with_stored_pnl": 0,
+                        },
+                        "lane_gates": {
+                            "short_term": {
+                                "status": "candidate_flow_allowed_with_self_guardrails",
+                                "auto_track_allowed": True,
+                                "blockers": [],
+                                "self_guardrails": {},
+                            }
+                        }
+                    }
+                ),
+                encoding="utf8",
+            )
             candidate = {
                 "audit_generated_at_utc": "2026-06-04T16:00:00Z",
                 "candidate_key": "2026-06-04|short_term|SPY|call|2026-06-26|||760.0|780.0",
@@ -263,6 +286,9 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
                         str(disposition),
                         "--circuit-breaker",
                         str(missing_breaker),
+                        "--lane-gate-report",
+                        str(lane_gate),
+                        "--ignore-lane-profitability-gate",
                     ]
                 )
 

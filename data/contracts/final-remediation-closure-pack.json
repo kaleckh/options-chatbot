@@ -56,7 +56,7 @@
       ".next/**",
       "*.db, *.db-wal, *.db-shm"
     ],
-    "governed_artifact_count": 22,
+    "governed_artifact_count": 27,
     "hand_editable_artifacts": [],
     "missing_closure_artifacts": [],
     "runtime_generated_artifacts": [

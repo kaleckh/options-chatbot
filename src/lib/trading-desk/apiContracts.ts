@@ -98,6 +98,7 @@ export type CreateTrackedPositionRequest = {
   filled_at?: string | null;
   notes?: string | null;
   creation_mode?: "scanner" | "manual_paper" | "manual_broker" | string | null;
+  execute_alpaca_paper?: boolean | null;
 };
 
 export type CreateSuggestedTradeRequest = {

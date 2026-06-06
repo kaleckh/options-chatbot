@@ -3,7 +3,7 @@ import tempfile
 import types
 import unittest
 from contextlib import redirect_stdout
-from datetime import datetime
+from datetime import UTC, datetime
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -80,6 +80,59 @@ def _make_pick(ticker: str, *, debit: float) -> dict:
         "short_strike": 520.0,
         "net_debit": debit,
         "expiry": "2026-05-15",
+    }
+
+
+def _fresh_generated_at() -> str:
+    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
+def _lane_gate_report(
+    playbook_id: str = "short_term",
+    *,
+    auto_track_allowed: bool = True,
+    self_guardrails: dict | None = None,
+) -> dict:
+    return {
+        "generated_at_utc": _fresh_generated_at(),
+        "summary": {
+            "mark_unpriced_count": 0,
+            "tracked_row_count": 0,
+            "tracked_rows_with_stored_pnl": 0,
+        },
+        "lane_gates": {
+            playbook_id: {
+                "status": "pass" if auto_track_allowed else "fail",
+                "auto_track_allowed": auto_track_allowed,
+                "blockers": [] if auto_track_allowed else ["profit_factor_below_lane_gate"],
+                "self_guardrails": self_guardrails or {},
+            }
+        },
+    }
+
+
+def _lane_promotion_report(
+    playbook_id: str = "short_term",
+    *,
+    promotion_state: str = "live_validation",
+) -> dict:
+    return {
+        "report_id": "regular_options_lane_promotion_state",
+        "generated_at_utc": _fresh_generated_at(),
+        "summary": {"live_policy_change": False},
+        "lane_states": {
+            playbook_id: {
+                "playbook_id": playbook_id,
+                "promotion_state": promotion_state,
+                "candidate_status_reason": (
+                    "lane_promotion_state_allows_live_validation"
+                    if promotion_state in {"live_validation", "auto_track"}
+                    else "promotion_requires_fresh_walk_forward_paper_and_risk_gates"
+                ),
+                "failed_promotion_gates": [] if promotion_state in {"live_validation", "auto_track"} else ["fresh_paper_cohort"],
+                "blockers": [] if promotion_state in {"live_validation", "auto_track"} else ["fresh_paper_cohort_insufficient"],
+            }
+        },
     }
 
 
@@ -424,15 +477,67 @@ class LogScanPicksTests(unittest.TestCase):
         self.assertEqual(record["production_filter_action"], "preserve_filters_until_exact_replay_unlock")
 
     def test_scan_allows_auto_track_defaults_regular_control_playbooks_to_tracking(self):
-        self.assertTrue(
-            log_scan_picks._scan_allows_auto_track(
+        with (
+            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=_lane_gate_report("quality90_debit55_canary")),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=_lane_promotion_report("quality90_debit55_canary"),
+            ),
+            patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
+        ):
+            self.assertTrue(
+                log_scan_picks._scan_allows_auto_track(
+                    {
+                        "playbook": {"id": "quality90_debit55_canary", "observation_only": True},
+                        "market_open_at_run": True,
+                        "picks": [_make_pick("SPY", debit=5.0)],
+                        "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                    }
+                )
+            )
+
+    def test_scan_allows_auto_track_fails_closed_when_lane_reports_missing(self):
+        with (
+            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=None),
+            patch("scripts.lane_promotion_state.load_lane_promotion_report", return_value=None),
+            patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
+        ):
+            blockers = log_scan_picks._scan_auto_track_blockers(
                 {
-                    "playbook": {"id": "quality90_debit55_canary", "observation_only": True},
+                    "playbook": {"id": "short_term"},
                     "market_open_at_run": True,
                     "picks": [_make_pick("SPY", debit=5.0)],
                     "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
                 }
             )
+
+        self.assertIn("lane_profitability_gate_report_unusable:lane_profitability_gate_report_missing", blockers)
+        self.assertIn("lane_promotion_state_report_unusable:lane_promotion_state_report_missing", blockers)
+
+    def test_scan_allows_auto_track_blocks_paper_probation_promotion_state(self):
+        with (
+            patch("scripts.lane_profitability_gate.load_lane_gate_report", return_value=_lane_gate_report("volatility_expansion_observation")),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=_lane_promotion_report(
+                    "volatility_expansion_observation",
+                    promotion_state="paper_probation",
+                ),
+            ),
+            patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
+        ):
+            blockers = log_scan_picks._scan_auto_track_blockers(
+                {
+                    "playbook": {"id": "volatility_expansion_observation"},
+                    "market_open_at_run": True,
+                    "picks": [_make_pick("QQQ", debit=5.0)],
+                    "exposure_snapshot": {"available": True, "portfolio_caps_enforced": True},
+                }
+            )
+
+        self.assertIn(
+            "lane_promotion_state_blocked:promotion_requires_fresh_walk_forward_paper_and_risk_gates",
+            blockers,
         )
 
     def test_scan_allows_auto_track_honors_env_kill_switch(self):
@@ -1015,6 +1120,8 @@ class LogScanPicksTests(unittest.TestCase):
                         },
                     },
                 ),
+                patch.object(log_scan_picks, "_scan_lane_gate_blockers", return_value=[]),
+                patch.object(log_scan_picks, "_scan_open_risk_blockers", return_value=[]),
                 patch.object(log_scan_picks, "review_open_positions", return_value=[]) as review_open_positions,
                 patch.object(
                     log_scan_picks,

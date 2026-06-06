@@ -41,7 +41,10 @@ Scanner-origin creates must fail closed unless all of these are true:
 6. The current rerun pick still has `portfolio_caps_enforced=true`.
 7. The current rerun pick still has `creation_eligible=true`.
 8. The current rerun pick still has no `creation_blockers`.
-9. The final payload is proof-eligible under `docs/proof-evidence-contract.md`.
+9. A fresh lane profitability gate report allows the candidate for live validation or auto-track.
+10. A fresh lane promotion-state report has the playbook in `live_validation` or `auto_track`.
+11. A fresh regular open-risk report has `open_risk_governor.status=open_risk_governor_pass`.
+12. The final payload is proof-eligible under `docs/proof-evidence-contract.md`.
 
 Scheduled auto-track must fail closed unless all of these are true:
 
@@ -51,8 +54,13 @@ Scheduled auto-track must fail closed unless all of these are true:
 4. `exposure_snapshot.available` is exactly `true`.
 5. `exposure_snapshot.portfolio_caps_enforced` is exactly `true`.
 6. The pick has `creation_eligible=true`, no `creation_blockers`, and is not guardrail-blocked.
+7. `data/forward-tracking/missed_regular_picks_outcome_latest.json` is fresh, usable, and passes the candidate through the lane profitability gate.
+8. `data/forward-tracking/lane_promotion_state_latest.json` is fresh, usable, and places the playbook in `live_validation` or `auto_track`.
+9. `data/forward-tracking/regular_open_position_risk_latest.json` is fresh, usable, and its open-risk governor passes with no live-exact negative, executable-close-ready, or stale/missing/non-executable live-exact review blockers.
 
-Unknown market-open state, missing exposure state, caps-off scans, unavailable exposure, diagnostic-only lanes, blocked guardrails, unpriced/fallback execution labels, and proof-ineligible rows are not creation events. They remain diagnostics or validation dispositions.
+Unknown market-open state, missing exposure state, caps-off scans, unavailable exposure, stale or unusable lane gate artifacts, stale or blocked open-risk governor artifacts, diagnostic-only lanes, paper-probation lanes, blocked guardrails, unpriced/fallback execution labels, and proof-ineligible rows are not creation events. They remain diagnostics, paper-exact-evidence work, or validation dispositions.
+
+When portfolio caps are enforced, breached caps are guardrail blockers, not auto-track sizing notes. The blocker family includes same-ticker or same-spread exposure, playbook daily caps, sector/regime caps, daily/weekly loss limits, open executable drawdown, position and portfolio cost-risk, max concurrent positions, and correlated-index caps. Near-cap notes and correlation size reductions can remain cautions only while the cap has not been breached.
 
 AI commodity uses the separate proof scope `ai_commodity_separate`; its generated isolation owner is `docs/ai-commodity-isolation.md`. The `ai_commodity_infra_observation` playbook must keep `position_tracking_mode=disabled`, `scan_playbook_allows_auto_track(...) == false`, and `fresh_live_validation_enabled=false`, so visible AI commodity scan diagnostics do not become Trading Desk auto-track or scanner-origin creation events.
 
@@ -66,6 +74,7 @@ Scanner-origin creates compare the submitted `scan_pick` against the archived fo
 - Scanner-origin route validation: `python-backend/main.py`
 - Proof-eligible payload creation: `python-backend/positions_service.py`
 - Scheduled auto-track gate and fill-attempt audit rows: `scripts/log_scan_picks.py`
+- Regular open-risk entry governor: `scripts/audit_regular_open_position_risk.py`, `scripts/regular_open_risk_governor.py`
 - Pending candidate queue and disposition report: `scripts/pending_audit_candidates.py`
 - Market-hours validation runner: `scripts/validate_pending_scan_candidates.py`
 - Browser and API types: `src/lib/types.ts`
@@ -83,3 +92,5 @@ Every validation-attempted pending candidate should end in one of the contract o
 - `proof_ineligible`
 
 This keeps selected candidates visible even when they cannot become tracked positions.
+
+Paper/probation candidates may use `pending_paper_exact_evidence`, `paper_exact_evidence_attempted`, and `paper_exact_evidence_scan_failed` to collect exact OPRA/NBBO paper evidence. Those statuses do not invoke scheduled live validation, do not submit broker orders, and do not create scanner-origin tracked or suggested rows.

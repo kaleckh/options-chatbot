@@ -54,7 +54,11 @@ class EnsureScanPicksRanTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertEqual(run.call_args.kwargs["cwd"], str(root))
-            self.assertEqual(run.call_args.kwargs["env"]["OPTIONS_SCAN_PLAYBOOK"], "short_term")
+            child_env = run.call_args.kwargs["env"]
+            self.assertEqual(child_env["OPTIONS_SCAN_PLAYBOOK"], "short_term")
+            self.assertEqual(child_env["OPTIONS_SCAN_AUTO_TRACK"], "1")
+            self.assertEqual(child_env["OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS"], "1")
+            self.assertEqual(child_env["OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE"], "1")
 
 
 if __name__ == "__main__":

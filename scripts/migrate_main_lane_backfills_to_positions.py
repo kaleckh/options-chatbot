@@ -210,6 +210,7 @@ def _spread_exit_snapshot(
         ask=long_quote.ask,
         last=long_quote.last,
         slippage_pct=0.0,
+        allow_zero_bid_quote=True,
     )
     short_exec = _resolve_imported_execution_price(
         side="entry",
@@ -218,6 +219,7 @@ def _spread_exit_snapshot(
         ask=short_quote.ask,
         last=short_quote.last,
         slippage_pct=0.0,
+        allow_zero_bid_quote=True,
     )
     long_price = _safe_float(long_exec.get("execution_price"))
     short_price = _safe_float(short_exec.get("execution_price"))

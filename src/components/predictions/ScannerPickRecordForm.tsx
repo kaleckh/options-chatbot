@@ -24,12 +24,14 @@ type ScannerPickRecordFormProps = {
   notes: string;
   takingTrade: boolean;
   savingSuggestedTrade: boolean;
+  submittingAlpacaPaperOrder: boolean;
   onCancel: () => void;
   onFillPriceChange: (value: string) => void;
   onContractsChange: (value: string) => void;
   onNotesChange: (value: string) => void;
   onSubmit: () => void;
   onSubmitSuggested: () => void;
+  onSubmitAlpacaPaper: () => void;
 };
 
 export function ScannerPickRecordForm({
@@ -41,12 +43,14 @@ export function ScannerPickRecordForm({
   notes,
   takingTrade,
   savingSuggestedTrade,
+  submittingAlpacaPaperOrder,
   onCancel,
   onFillPriceChange,
   onContractsChange,
   onNotesChange,
   onSubmit,
   onSubmitSuggested,
+  onSubmitAlpacaPaper,
 }: ScannerPickRecordFormProps) {
   if (!selectedPick) return null;
 
@@ -182,12 +186,21 @@ export function ScannerPickRecordForm({
       <div className="text-xs text-text-3">
         Eligible scheduled scanner picks are auto-tracked. Use this form for manual corrections or trades you actually placed outside the scheduled run.
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="primary"
           size="sm"
+          loading={submittingAlpacaPaperOrder}
+          disabled={selectedPick.guardrail_decision === "blocked" || takingTrade || savingSuggestedTrade}
+          onClick={onSubmitAlpacaPaper}
+        >
+          Submit 1 Paper Contract
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           loading={takingTrade}
-          disabled={selectedPick.guardrail_decision === "blocked" || savingSuggestedTrade}
+          disabled={selectedPick.guardrail_decision === "blocked" || savingSuggestedTrade || submittingAlpacaPaperOrder}
           onClick={onSubmit}
         >
           Save Real Tracked Position
@@ -196,7 +209,7 @@ export function ScannerPickRecordForm({
           variant="secondary"
           size="sm"
           loading={savingSuggestedTrade}
-          disabled={takingTrade}
+          disabled={takingTrade || submittingAlpacaPaperOrder}
           onClick={onSubmitSuggested}
         >
           Save Paper Idea

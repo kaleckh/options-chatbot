@@ -12,7 +12,7 @@
 - Invariant violations: `0`
 - Profit-capture queue rows / tiers: `97` / `{'tier_a_clean_exact_capture': 15, 'tier_b_profitable_watch_repair': 82}`
 - Selection readiness: `{'blocked_guardrail_only': 9, 'do_not_chase': 173, 'historical_signature_only': 6, 'paper_review_candidate': 15, 'watch_repair_only': 82}`
-- Fresh validation candidates / no-longer-matched / proof-ineligible: `20` / `15` / `5`
+- Fresh validation candidates / no-longer-matched / proof-ineligible: `34` / `16` / `5`
 - Exact realized P&L / promotion-ready rows: `0` / `0`
 - Current-policy route / paper-only lanes: `paper_validation_only` / `2`
 - Recovery gate failures: `['recent_cohort_recovered', 'fresh_current_policy_rows', 'fresh_champion_matched_rows', 'trusted_exact_realized_pnl_rows', 'point_in_time_replay_pass', 'paper_monitor_pass']`
@@ -72,18 +72,18 @@
 
 ## Live Scan Starvation
 
-- Status: `guardrail_starvation_detected`
+- Status: `upstream_zero_candidate_scan_pressure`
 - Playbooks completed/requested: `14` / `14`
-- Candidate/returned totals: `15` / `15`
-- Guardrail starvation playbooks: `['short_term', 'speculative', 'bullish_momentum', 'tracked_winner_primary', 'quality90_debit55_canary', 'tracked_winner_observation']`
-- Zero-candidate playbooks: `5`
-- Leading drops: `[{'count': 109, 'value': 'direction_filter'}, {'count': 99, 'value': 'momentum'}, {'count': 92, 'value': 'option_liquidity'}, {'count': 54, 'value': 'history_or_liquidity'}, {'count': 33, 'value': 'tech_score'}, {'count': 0, 'value': 'min_history'}, {'count': 0, 'value': 'signal_index'}, {'count': 0, 'value': 'direction_score'}]`
+- Candidate/returned totals: `0` / `0`
+- Guardrail starvation playbooks: `[]`
+- Zero-candidate playbooks: `14`
+- Leading drops: `[{'count': 106, 'value': 'momentum'}, {'count': 102, 'value': 'direction_filter'}, {'count': 84, 'value': 'option_liquidity'}, {'count': 55, 'value': 'history_or_liquidity'}, {'count': 29, 'value': 'tech_score'}, {'count': 20, 'value': 'direction_score'}, {'count': 6, 'value': 'ev_floor'}, {'count': 0, 'value': 'min_history'}]`
 
 ## Open Position Risk
 
-- Open regular rows: `48`
-- Evidence counts: `{'fresh_executable_review': 47, 'fresh_unpriced_review': 1}`
-- Action counts: `{'hold_or_positive': 32, 'negative_mark_hold_or_unknown': 15, 'stored_non_executable_sell': 1}`
+- Open regular rows: `12`
+- Evidence counts: `{'fresh_executable_review': 11, 'fresh_unpriced_review': 1}`
+- Action counts: `{'hold_or_positive': 1, 'negative_mark_hold_or_unknown': 10, 'stored_non_executable_sell': 1}`
 - Actionable open IDs: `[104]`
 - Executable close-ready rows: `0`
 - Review-required non-executable rows: `1`
@@ -136,7 +136,7 @@
 - Do not close open rows from display-only marks; rerun explicit review during a fresh executable quote window for non-executable SELL or below-stop mark rows.
 - Refresh stale or missing suggested-trade reviews before relying on suggested-trade P&L or close state.
 - Treat legacy rows 26/39/44 as historical stale-policy diagnostics, not a broad current exit-policy change.
-- Inspect guardrail-blocked candidate rows before loosening promoted Trading Desk entry guardrails.
+- Do not loosen promoted Trading Desk entry guardrails for the current no-pick state; investigate upstream scan/data/liquidity drops.
 - Keep the short-term fill-degradation entry filter paper-only; the forward monitor is still collecting fresh rows.
 - Keep the fill-degradation entry filter lane-scoped and paper-only; all-lane walk-forward rejects the broad fill>=15 rule and the frozen short-term rule is still mixed on historical folds.
 - Keep the paper shortlist closed; there are no fresh executable Tier A lane matches eligible for paper review.

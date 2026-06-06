@@ -65,8 +65,10 @@ test("ScannerPickRecordForm owns selected-pick form copy without route behavior"
   const recordForm = readRepoFile("src/components/predictions/ScannerPickRecordForm.tsx");
 
   assert.match(recordForm, /Save Real Tracked Position/);
+  assert.match(recordForm, /Submit 1 Paper Contract/);
   assert.match(recordForm, /Save Paper Idea/);
   assert.match(recordForm, /Eligible scheduled scanner picks are auto-tracked/);
+  assert.match(recordForm, /submittingAlpacaPaperOrder/);
   assert.match(recordForm, /selectedPick\.guardrail_decision === "blocked" \|\| savingSuggestedTrade/);
   assert.doesNotMatch(recordForm, /fetchWithTimeout/);
   assert.doesNotMatch(recordForm, /readJsonResponseOrThrow/);

@@ -155,6 +155,30 @@ export interface ScanPick {
   worst_leg_bid_ask_spread_pct?: number | null;
   worst_leg_spread_pct?: number | null;
   entry_quote_snapshot?: EntryQuoteSnapshot | null;
+  alpaca_paper_order?: AlpacaPaperOrderMetadata | null;
+  broker_execution_mode?: string | null;
+  paper_broker?: string | null;
+}
+
+export interface AlpacaPaperOrderMetadata {
+  provider?: "alpaca" | string | null;
+  environment?: "paper" | string | null;
+  client_order_id?: string | null;
+  order_id?: string | null;
+  status?: string | null;
+  symbol?: string | null;
+  order_class?: string | null;
+  type?: string | null;
+  qty?: string | number | null;
+  limit_price?: string | number | null;
+  filled_qty?: string | number | null;
+  filled_avg_price?: string | number | null;
+  submitted_at?: string | null;
+  filled_at?: string | null;
+  canceled_at?: string | null;
+  event_ledger_path?: string | null;
+  proof_gate_class_before_order?: string | null;
+  [key: string]: unknown;
 }
 
 export interface EntryQuoteLeg {

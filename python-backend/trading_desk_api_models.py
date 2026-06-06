@@ -20,6 +20,7 @@ class CreateTradingDeskRecordBody(TradingDeskRequestModel):
     filled_at: Any = None
     notes: Any = None
     creation_mode: Any = None
+    execute_alpaca_paper: Any = None
 
 
 class ReviewTradingDeskRecordsBody(TradingDeskRequestModel):
