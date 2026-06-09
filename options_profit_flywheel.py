@@ -29,6 +29,7 @@ from options_profit_state import (
     write_live_profile,
     write_status,
 )
+from forward_options_ledger import list_forward_scan_pick_events
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -148,6 +149,23 @@ def _composite_objective_score(forward_metrics: dict[str, Any], tracked_metrics:
     return round((forward_avg * 0.6) + ((forward_pf - 1.0) * 25.0) + (tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
 
 
+def _tracked_objective_score(tracked_metrics: dict[str, Any]) -> float:
+    tracked_avg = _preferred_metric(
+        tracked_metrics,
+        "net_realized_pnl_pct",
+        "avg_net_pnl_pct",
+        "avg_pnl_pct",
+    )
+    tracked_pf = _score_profit_factor(
+        _preferred_metric(
+            tracked_metrics,
+            "net_profit_factor",
+            "profit_factor",
+        )
+    )
+    return round((tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
+
+
 def _candidate_is_side_level(candidate: dict[str, Any]) -> bool:
     symbol = str(candidate.get("symbol") or "").strip().upper()
     symbols = [
@@ -197,6 +215,18 @@ def _candidate_direction(candidate: dict[str, Any]) -> Optional[str]:
     return None
 
 
+def _candidate_cohort_id(candidate: dict[str, Any]) -> Optional[str]:
+    cohort_id = str(candidate.get("cohort_id") or "").strip()
+    if cohort_id:
+        return cohort_id
+    candidate_id = str(candidate.get("candidate_id") or "").strip()
+    parts = candidate_id.split("__")
+    if len(parts) >= 3:
+        parsed = "__".join(parts[2:]).strip()
+        return parsed or None
+    return None
+
+
 def _load_json_path(path_value: Any) -> Optional[dict[str, Any]]:
     path_text = str(path_value or "").strip()
     if not path_text:
@@ -221,7 +251,7 @@ def _extract_replay_gate(candidate: dict[str, Any]) -> dict[str, Any]:
         return explicit_gate
 
     research_manifest = _load_json_path(candidate.get("research_manifest_path"))
-    research_policy = _load_json_path(candidate.get("policy_path"))
+    research_policy = _load_json_path(candidate.get("policy_path") or candidate.get("replay_policy_path"))
     research_result = _load_json_path(candidate.get("replay_result_path"))
 
     if research_policy:
@@ -255,10 +285,100 @@ def _extract_replay_gate(candidate: dict[str, Any]) -> dict[str, Any]:
     return {}
 
 
-def _extract_objective_metrics(candidate: dict[str, Any]) -> dict[str, Any]:
+def _event_direction(event: dict[str, Any]) -> Optional[str]:
+    return _normalize_direction(
+        event.get("direction")
+        or event.get("option_type")
+        or event.get("type")
+    )
+
+
+def _candidate_forward_metrics(
+    candidate: dict[str, Any],
+    *,
+    forward_events: list[dict[str, Any]] | None = None,
+    recorded_before_utc: str | None = None,
+) -> dict[str, Any]:
+    symbol = _candidate_symbol(candidate)
+    direction = _candidate_direction(candidate)
+    cohort_id = _candidate_cohort_id(candidate)
+    if not symbol or not direction or not cohort_id:
+        return {}
+
+    if forward_events is None:
+        try:
+            forward_events = list_forward_scan_pick_events(
+                eligible_only=True,
+                cohort_id=cohort_id,
+                tickers=[symbol],
+                recorded_before_utc=recorded_before_utc,
+            )
+        except Exception:
+            forward_events = []
+
+    matched: list[dict[str, Any]] = []
+    candidate_id = str(candidate.get("candidate_id") or "").strip()
+    for event in list(forward_events or []):
+        event_symbol = str(event.get("ticker") or "").strip().upper()
+        event_cohort = str(
+            event.get("cohort_id")
+            or event.get("profit_candidate_id")
+            or event.get("policy_artifact_id")
+            or event.get("candidate_id")
+            or ""
+        ).strip()
+        if event_symbol != symbol or _event_direction(event) != direction:
+            continue
+        if event_cohort not in {cohort_id, candidate_id}:
+            continue
+        matched.append(dict(event))
+
+    net_pnls = [
+        value
+        for value in (_safe_float(event.get("net_pnl_pct")) for event in matched)
+        if value is not None
+    ]
+    if not net_pnls:
+        net_pnls = [
+            value
+            for value in (_safe_float(event.get("gross_pnl_pct")) for event in matched)
+            if value is not None
+        ]
+    positive = sum(value for value in net_pnls if value > 0)
+    negative = abs(sum(value for value in net_pnls if value < 0))
+    profit_factor = round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None)
+    return {
+        "eligible_trade_count": len(matched),
+        "priced_trade_count": len(net_pnls),
+        "avg_pnl_pct": round(sum(net_pnls) / len(net_pnls), 4) if net_pnls else None,
+        "avg_net_pnl_pct": round(sum(net_pnls) / len(net_pnls), 4) if net_pnls else None,
+        "profit_factor": profit_factor,
+        "net_profit_factor": profit_factor,
+    }
+
+
+def _extract_objective_metrics(
+    candidate: dict[str, Any],
+    *,
+    closed_positions: list[dict[str, Any]] | None = None,
+    forward_events: list[dict[str, Any]] | None = None,
+    recorded_before_utc: str | None = None,
+) -> dict[str, Any]:
     evaluation = dict(candidate.get("evaluation") or {})
     forward_metrics = dict(evaluation.get("forward_exact_contract") or {})
     tracked_metrics = dict(evaluation.get("tracked_realized") or {})
+    if not forward_metrics:
+        forward_metrics = _candidate_forward_metrics(
+            candidate,
+            forward_events=forward_events,
+            recorded_before_utc=recorded_before_utc,
+        )
+    if not tracked_metrics and closed_positions is not None:
+        symbol = _candidate_symbol(candidate)
+        direction = _candidate_direction(candidate)
+        candidate_id = str(candidate.get("candidate_id") or "").strip()
+        if symbol and direction and candidate_id:
+            tracked_metrics = _candidate_position_metrics(symbol, direction, candidate_id, closed_positions)
     return {
         "forward_exact_contract": forward_metrics,
         "tracked_realized": tracked_metrics,
@@ -416,9 +536,18 @@ def _candidate_is_eligible(
     symbol: str,
     direction: str,
     incumbent_metrics: dict[str, Any],
+    *,
+    closed_positions: list[dict[str, Any]] | None = None,
+    forward_events: list[dict[str, Any]] | None = None,
+    recorded_before_utc: str | None = None,
 ) -> tuple[bool, list[str], dict[str, Any]]:
     replay_gate = _extract_replay_gate(candidate)
-    objective_metrics = _extract_objective_metrics(candidate)
+    objective_metrics = _extract_objective_metrics(
+        candidate,
+        closed_positions=closed_positions,
+        forward_events=forward_events,
+        recorded_before_utc=recorded_before_utc,
+    )
     blockers: list[str] = []
 
     if not _candidate_is_side_level(candidate):
@@ -447,6 +576,10 @@ def _candidate_is_eligible(
 def _best_candidates(
     candidates: list[dict[str, Any]],
     incumbents: dict[str, Any],
+    *,
+    closed_positions: list[dict[str, Any]] | None = None,
+    forward_events: list[dict[str, Any]] | None = None,
+    recorded_before_utc: str | None = None,
 ) -> list[dict[str, Any]]:
     ranked: list[dict[str, Any]] = []
     for symbol in TARGET_SYMBOLS:
@@ -456,7 +589,15 @@ def _best_candidates(
             for candidate in candidates:
                 if _candidate_symbol(candidate) != symbol or _candidate_direction(candidate) != direction:
                     continue
-                eligible, blockers, details = _candidate_is_eligible(candidate, symbol, direction, incumbent_metrics)
+                eligible, blockers, details = _candidate_is_eligible(
+                    candidate,
+                    symbol,
+                    direction,
+                    incumbent_metrics,
+                    closed_positions=closed_positions,
+                    forward_events=forward_events,
+                    recorded_before_utc=recorded_before_utc,
+                )
                 candidate_summary = {
                     "candidate_id": str(candidate.get("candidate_id") or "").strip(),
                     "symbol": symbol,
@@ -729,11 +870,23 @@ def _maybe_finalize_or_rollback_canaries(
             canary = dict(symbol_state.get("canary") or {})
             if not canary:
                 continue
-            if gate.get("state") != "healthy":
+            gate_state = str(gate.get("state") or "").strip().lower()
+            if gate_state in {"pending_truth", "degraded-watch"}:
+                actions.append(
+                    {
+                        "action": "canary_hold",
+                        "symbol": symbol,
+                        "direction": direction,
+                        "candidate_id": str(canary.get("candidate_id") or "").strip(),
+                        "reason": f"measurement_gate_{gate_state}",
+                    }
+                )
+                continue
+            if gate_state != "healthy":
                 action = _rollback_canary(
                     symbol=symbol,
                     direction=direction,
-                    reason=f"measurement_gate_{gate.get('state')}",
+                    reason=f"measurement_gate_{gate_state or gate.get('state')}",
                     incumbents=current_incumbents,
                     live_profile=current_live_profile,
                 )
@@ -757,8 +910,8 @@ def _maybe_finalize_or_rollback_canaries(
                 )
                 continue
             baseline = dict(canary.get("baseline_objective") or {})
-            baseline_score = _safe_float(baseline.get("objective_score")) or 0.0
-            observed_score = _composite_objective_score({}, observed)
+            baseline_score = _tracked_objective_score(dict(baseline.get("tracked_realized") or {}))
+            observed_score = _tracked_objective_score(observed)
             if observed_score <= baseline_score:
                 action = _rollback_canary(
                     symbol=symbol,
@@ -816,7 +969,18 @@ def run_options_profit_cycle(
     candidate_rankings: list[dict[str, Any]] = []
     if gate.get("state") == "healthy":
         candidates = list_candidate_manifests()
-        candidate_rankings = _best_candidates(candidates, incumbents)
+        gate_forward_events = (
+            list(gate.get("eligible_forward_evidence") or [])
+            if "eligible_forward_evidence" in gate
+            else None
+        )
+        candidate_rankings = _best_candidates(
+            candidates,
+            incumbents,
+            closed_positions=closed_positions,
+            forward_events=gate_forward_events,
+            recorded_before_utc=recorded_before_utc,
+        )
         current_canary = _current_canary_map(incumbents)
         eligible_choices = [
             item

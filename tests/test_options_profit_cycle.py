@@ -79,6 +79,95 @@ class OptionsProfitCycleTests(unittest.TestCase):
         row.update(overrides)
         return row
 
+    def _write_promoted_replay_policy(self) -> str:
+        path = Path(self._tmp.name) / "promoted_replay_policy.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "promotion_status": "promote",
+                    "overall": {
+                        "profit_factor": 2.0,
+                        "directional_accuracy_pct": 72.0,
+                    },
+                    "source": {"quote_coverage_pct": 99.0},
+                    "stability": {
+                        "overall_status": "promote",
+                        "quality_bar": {"min_trades": 25},
+                    },
+                },
+                indent=2,
+            ),
+            encoding="utf8",
+        )
+        return str(path)
+
+    def _forward_event(
+        self,
+        *,
+        ticker: str = "SPY",
+        direction: str = "call",
+        cohort_id: str = "broad_ev7",
+        net_pnl_pct: float = 5.0,
+    ) -> dict:
+        return {
+            "ticker": ticker,
+            "direction": direction,
+            "option_type": direction,
+            "cohort_id": cohort_id,
+            "evidence_class": "live_production",
+            "eligibility_status": "eligible",
+            "net_pnl_pct": net_pnl_pct,
+        }
+
+    def _install_canary(
+        self,
+        *,
+        candidate_id: str = "SPY__call__broad_ev7",
+        baseline_objective: dict | None = None,
+        required_outcomes: int = 1,
+    ) -> None:
+        ensure_options_profit_state()
+        live_profile = load_live_profile_state(refresh=True)
+        live_profile["symbols"]["SPY"]["call"].update(
+            {
+                "candidate_id": candidate_id,
+                "cohort_id": "broad_ev7",
+                "mode": "canary",
+                "status": "candidate",
+                "source": "test_canary",
+            }
+        )
+        save_live_profile_state(live_profile)
+
+        incumbents = load_incumbents_state()
+        incumbents["symbols"]["SPY"]["call"] = {
+            "symbol": "SPY",
+            "direction": "call",
+            "active": dict(live_profile["symbols"]["SPY"]["call"]),
+            "previous": {
+                "symbol": "SPY",
+                "direction": "call",
+                "candidate_id": "SPY__call__baseline_broad_control",
+                "cohort_id": "baseline_broad_control",
+                "base_profile": "index",
+                "overrides": {},
+                "manifest_source": None,
+                "source": "bootstrap_default",
+                "mode": "incumbent",
+                "status": "incumbent",
+                "applied_at": "2026-04-01T00:00:00Z",
+            },
+            "canary": {
+                "candidate_id": candidate_id,
+                "symbol": "SPY",
+                "direction": "call",
+                "required_outcomes": required_outcomes,
+                "baseline_objective": baseline_objective or {"objective_score": -100.0},
+            },
+            "objective": {"objective_score": 0.0},
+        }
+        save_incumbents_state(incumbents)
+
     def test_candidate_position_metrics_fee_aware_fallback_for_missing_net_pnl(self):
         metrics = _candidate_position_metrics(
             "SPY",
@@ -268,6 +357,134 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertEqual(ranking["direction"], "put")
         self.assertFalse(ranking["eligible"])
         self.assertIn("shadow_only_side", ranking["blockers"])
+
+    def test_profit_cycle_derives_candidate_evaluation_from_policy_forward_and_positions(self):
+        candidate_id = "SPY__call__broad_ev7"
+        candidate = {
+            "candidate_id": candidate_id,
+            "symbol": "SPY",
+            "direction": "call",
+            "cohort_id": "broad_ev7",
+            "base_profile": "index",
+            "overrides": {"entry": {"min_tech_score": 72.0}},
+            "replay_policy_path": self._write_promoted_replay_policy(),
+        }
+        forward_events = [
+            self._forward_event(cohort_id="broad_ev7", net_pnl_pct=5.0)
+            for _ in range(30)
+        ]
+        closed_positions = [
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol=f"SPY260417C005{i:05d}",
+                net_pnl_pct=5.0,
+            )
+            for i in range(10)
+        ]
+        healthy_gate = {
+            "state": "healthy",
+            "blockers": [],
+            "checks": {},
+            "eligible_forward_evidence": forward_events,
+        }
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value=healthy_gate), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[candidate]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=closed_positions):
+            apply_result = run_options_profit_cycle()
+
+        self.assertEqual(apply_result["decision"]["action"], "apply_candidates")
+        ranking = apply_result["status"]["candidate_rankings"][0]
+        self.assertTrue(ranking["eligible"])
+        self.assertNotIn("replay_gate_failed", ranking["blockers"])
+        self.assertNotIn("insufficient_exact_forward_support", ranking["blockers"])
+        self.assertNotIn("missing_tracked_realized_support", ranking["blockers"])
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value=healthy_gate), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=closed_positions):
+            finalize_result = run_options_profit_cycle()
+
+        self.assertTrue(any(action.get("action") == "finalize_canary" for action in finalize_result["canary_actions"]))
+        refreshed_status = load_profit_status()
+        self.assertIsNone(refreshed_status["current_canary"]["SPY"]["call"])
+        self.assertEqual(refreshed_status["active_incumbents"]["SPY"]["call"]["candidate_id"], candidate_id)
+
+    def test_canary_pending_truth_holds_instead_of_rolling_back(self):
+        candidate_id = "SPY__call__broad_ev7"
+        self._install_canary(candidate_id=candidate_id, required_outcomes=1)
+        closed_positions = [
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol="SPY260417C00500000",
+                net_pnl_pct=15.0,
+            )
+        ]
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "pending_truth", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=closed_positions):
+            result = run_options_profit_cycle()
+
+        self.assertTrue(any(action.get("action") == "canary_hold" for action in result["canary_actions"]))
+        self.assertFalse(any(action.get("action") == "rollback_canary" for action in result["canary_actions"]))
+        refreshed_status = load_profit_status()
+        self.assertEqual(refreshed_status["current_canary"]["SPY"]["call"]["candidate_id"], candidate_id)
+        self.assertEqual(refreshed_status["active_incumbents"]["SPY"]["call"]["mode"], "canary")
+
+    def test_canary_compares_tracked_only_scores_when_observed_forward_metrics_are_absent(self):
+        candidate_id = "SPY__call__broad_ev7"
+        self._install_canary(
+            candidate_id=candidate_id,
+            required_outcomes=2,
+            baseline_objective={
+                "forward_exact_contract": {
+                    "eligible_trade_count": 30,
+                    "avg_net_pnl_pct": 10.0,
+                    "net_profit_factor": 5.0,
+                },
+                "tracked_realized": {
+                    "closed_position_count": 10,
+                    "avg_net_pnl_pct": -5.0,
+                    "net_profit_factor": 0.5,
+                },
+                "objective_score": 94.0,
+            },
+        )
+        closed_positions = [
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol="SPY260417C00500000",
+                net_pnl_pct=15.0,
+            ),
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol="SPY260417C00510000",
+                net_pnl_pct=-5.0,
+            ),
+        ]
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=closed_positions):
+            result = run_options_profit_cycle()
+
+        self.assertTrue(any(action.get("action") == "finalize_canary" for action in result["canary_actions"]))
+        self.assertFalse(any(action.get("action") == "rollback_canary" for action in result["canary_actions"]))
+        refreshed_status = load_profit_status()
+        self.assertIsNone(refreshed_status["current_canary"]["SPY"]["call"])
 
     def test_profit_cycle_clears_legacy_symbol_canary_before_pending_evaluation(self):
         state_root = Path(self.state_dir)
