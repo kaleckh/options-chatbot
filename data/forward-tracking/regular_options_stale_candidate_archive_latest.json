@@ -1,0 +1,560 @@
+{
+  "archived_candidates": [
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-02|swing|QQQ|call|2026-06-26|QQQ260626C00750000|QQQ260626C00780000|750.0|780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260626C00750000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-02|swing|QQQ|call|2026-06-26|QQQ260626C00750000|QQQ260626C00780000|750.0|780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-02",
+      "short_contract_symbol": "QQQ260626C00780000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-02|swing|QQQ|call|2026-06-26||||775.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": null,
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-02|swing|QQQ|call|2026-06-26||||775.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-02",
+      "short_contract_symbol": null,
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-02|swing|SPY|call|2026-06-26|SPY260626C00762000|SPY260626C00780000|762.0|780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260626C00762000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-02|swing|SPY|call|2026-06-26|SPY260626C00762000|SPY260626C00780000|762.0|780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-02",
+      "short_contract_symbol": "SPY260626C00780000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-02|swing|SPY|call|2026-06-26||||780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": null,
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-02|swing|SPY|call|2026-06-26||||780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-02",
+      "short_contract_symbol": null,
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-03|swing|QQQ|call|2026-06-26|QQQ260626C00745000|QQQ260626C00780000|745.0|780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260626C00745000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-03|swing|QQQ|call|2026-06-26|QQQ260626C00745000|QQQ260626C00780000|745.0|780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-03",
+      "short_contract_symbol": "QQQ260626C00780000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-03|swing|SPY|call|2026-06-26|SPY260626C00757000|SPY260626C00775000|757.0|775.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260626C00757000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-03|swing|SPY|call|2026-06-26|SPY260626C00757000|SPY260626C00775000|757.0|775.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-03",
+      "short_contract_symbol": "SPY260626C00775000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-03|tracked_winner_observation|SPY|call|2026-07-02|SPY260702C00757000|SPY260702C00780000|757.0|780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260702C00757000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-07-02",
+      "fill_attempt_status": "missing",
+      "lane_id": "tracked_winner_observation",
+      "ledger_key": "fresh:2026-06-03|tracked_winner_observation|SPY|call|2026-07-02|SPY260702C00757000|SPY260702C00780000|757.0|780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-03",
+      "short_contract_symbol": "SPY260702C00780000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-03|tracked_winner_primary|SPY|call|2026-07-02|SPY260702C00757000|SPY260702C00780000|757.0|780.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260702C00757000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-07-02",
+      "fill_attempt_status": "missing",
+      "lane_id": "tracked_winner_primary",
+      "ledger_key": "fresh:2026-06-03|tracked_winner_primary|SPY|call|2026-07-02|SPY260702C00757000|SPY260702C00780000|757.0|780.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-03",
+      "short_contract_symbol": "SPY260702C00780000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|quality90_debit55_canary|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00770000|743.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260618C00743000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-18",
+      "fill_attempt_status": "missing",
+      "lane_id": "quality90_debit55_canary",
+      "ledger_key": "fresh:2026-06-04|quality90_debit55_canary|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00770000|743.0|770.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "QQQ260618C00770000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|quality90_debit55_canary|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00770000|756.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260618C00756000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-18",
+      "fill_attempt_status": "missing",
+      "lane_id": "quality90_debit55_canary",
+      "ledger_key": "fresh:2026-06-04|quality90_debit55_canary|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00770000|756.0|770.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "SPY260618C00770000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|swing|QQQ|call|2026-06-26|QQQ260626C00745000|QQQ260626C00775000|745.0|775.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260626C00745000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-04|swing|QQQ|call|2026-06-26|QQQ260626C00745000|QQQ260626C00775000|745.0|775.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "QQQ260626C00775000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|swing|SPY|call|2026-06-26|SPY260626C00756000|SPY260626C00770000|756.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260626C00756000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-04|swing|SPY|call|2026-06-26|SPY260626C00756000|SPY260626C00770000|756.0|770.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "SPY260626C00770000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|swing|SPY|call|2026-06-26|SPY260626C00758000|SPY260626C00775000|758.0|775.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260626C00758000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-26",
+      "fill_attempt_status": "missing",
+      "lane_id": "swing",
+      "ledger_key": "fresh:2026-06-04|swing|SPY|call|2026-06-26|SPY260626C00758000|SPY260626C00775000|758.0|775.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "SPY260626C00775000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00770000|743.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260618C00743000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-18",
+      "fill_attempt_status": "missing",
+      "lane_id": "volatility_expansion_observation",
+      "ledger_key": "fresh:2026-06-04|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00743000|QQQ260618C00770000|743.0|770.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "QQQ260618C00770000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-04|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00770000|756.0|770.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "SPY260618C00756000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-18",
+      "fill_attempt_status": "missing",
+      "lane_id": "volatility_expansion_observation",
+      "ledger_key": "fresh:2026-06-04|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00770000|756.0|770.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-04",
+      "short_contract_symbol": "SPY260618C00770000",
+      "ticker": "SPY",
+      "validation_outcome": "no_longer_matched"
+    },
+    {
+      "action_reason": "candidate_not_returned_by_market_hours_validation_scan",
+      "archive_status": "archived_no_longer_matched_candidate",
+      "blockers": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "candidate_not_returned_by_market_hours_validation_scan"
+      ],
+      "candidate_key": "2026-06-05|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00740000|QQQ260618C00765000|740.0|765.0",
+      "candidate_status": "live_validation_attempted",
+      "contract_symbol": "QQQ260618C00740000",
+      "direction": "call",
+      "entry_evidence_status": "fill_attempt_missing",
+      "expiry": "2026-06-18",
+      "fill_attempt_status": "missing",
+      "lane_id": "volatility_expansion_observation",
+      "ledger_key": "fresh:2026-06-05|volatility_expansion_observation|QQQ|call|2026-06-18|QQQ260618C00740000|QQQ260618C00765000|740.0|765.0",
+      "operator_next_step": "Archive as no-longer-matched read-only evidence; require a fresh executable exact match before reconsidering.",
+      "position_link_status": "no_tracked_or_suggested_link",
+      "production_proof_ready": false,
+      "promotion_discussion_ready": false,
+      "realized_pnl_status": "no_position_link",
+      "required_next_evidence": [
+        "fresh_executable_exact_opra_nbbo_entry"
+      ],
+      "scan_date": "2026-06-05",
+      "short_contract_symbol": "QQQ260618C00765000",
+      "ticker": "QQQ",
+      "validation_outcome": "no_longer_matched"
+    }
+  ],
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-stale-candidate-archive.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_stale_candidate_archive_20260608T024134Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_stale_candidate_archive_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_stale_candidate_archive_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_stale_candidate_archive_20260608T024134Z.md"
+  },
+  "generated_at_utc": "2026-06-08T02:41:34Z",
+  "inputs": {
+    "regular_options_candidate_outcome_ledger": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T08:03:23Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_stale_candidate_archive",
+    "do_not_submit_broker_order_from_stale_candidate_archive",
+    "do_not_mutate_database_from_stale_candidate_archive",
+    "do_not_change_scanner_policy_from_stale_candidate_archive",
+    "do_not_change_lane_promotion_from_stale_candidate_archive",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_stale_candidate_archive",
+    "do_not_chase_no_longer_matched_candidates_without_fresh_executable_match"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_create_live_row_from_stale_candidate_archive",
+      "do_not_submit_broker_order_from_stale_candidate_archive",
+      "do_not_mutate_database_from_stale_candidate_archive",
+      "do_not_change_scanner_policy_from_stale_candidate_archive",
+      "do_not_change_lane_promotion_from_stale_candidate_archive",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_stale_candidate_archive",
+      "do_not_chase_no_longer_matched_candidates_without_fresh_executable_match"
+    ],
+    "readback_is": "read-only archive record for no-longer-matched regular-options candidates",
+    "readback_is_not": "scanner policy change, DB mutation, live trade, broker order, or production proof",
+    "trusted_proof_standard": "archived stale candidates require fresh executable exact OPRA/NBBO scanner matches before any new evidence path"
+  },
+  "read_only": true,
+  "report_id": "regular_options_stale_candidate_archive",
+  "schema_version": 1,
+  "scope": "regular_options_read_only_stale_candidate_archive",
+  "status": "stale_candidate_archive_readback",
+  "summary": {
+    "archive_complete": true,
+    "archive_exception_count": 0,
+    "archive_status_counts": {
+      "archived_no_longer_matched_candidate": 16
+    },
+    "archived_no_longer_matched_candidate_count": 16,
+    "blockers": [
+      "fresh_executable_match_required_for_reactivation"
+    ],
+    "lane_counts": {
+      "quality90_debit55_canary": 2,
+      "swing": 9,
+      "tracked_winner_observation": 1,
+      "tracked_winner_primary": 1,
+      "volatility_expansion_observation": 3
+    },
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "next_evidence_action_count": 0,
+    "overall_status": "stale_candidates_archived",
+    "production_proof_ready_count": 0,
+    "promotion_ready": false,
+    "source_wait_or_archive_count": 16,
+    "ticker_counts": {
+      "QQQ": 7,
+      "SPY": 9
+    }
+  }
+}

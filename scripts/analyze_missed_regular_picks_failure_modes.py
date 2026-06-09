@@ -16,6 +16,10 @@ if ROOT_TEXT not in sys.path:
     sys.path.insert(0, ROOT_TEXT)
 
 from scripts import audit_missed_regular_picks_outcomes as outcome_audit
+from scripts.quote_evidence_readback import (  # noqa: E402
+    non_production_research_policy,
+    quote_evidence_readback,
+)
 
 
 DEFAULT_INPUT_REPORT = ROOT / "data" / "forward-tracking" / "missed_regular_picks_outcome_latest.json"
@@ -49,6 +53,28 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object at {path}")
     return payload
+
+
+def _source_evidence_policy(
+    outcome_report: dict[str, Any],
+    *,
+    record_class: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    inputs = outcome_report.get("inputs") if isinstance(outcome_report.get("inputs"), dict) else {}
+    quote_evidence = inputs.get("quote_evidence") if isinstance(inputs.get("quote_evidence"), dict) else {}
+    if not quote_evidence:
+        quote_evidence = quote_evidence_readback(
+            snapshot_kind="intraday",
+            source_labels=inputs.get("source_labels") or [],
+            trusted_only=inputs.get("trusted_only"),
+        )
+    evidence_policy = inputs.get("evidence_policy") if isinstance(inputs.get("evidence_policy"), dict) else {}
+    if not evidence_policy:
+        evidence_policy = non_production_research_policy(
+            record_class=record_class,
+            quote_evidence=quote_evidence,
+        )
+    return quote_evidence, evidence_policy
 
 
 def _safe_float(value: Any) -> float | None:
@@ -322,6 +348,10 @@ def build_failure_report(
     untracked_rows = [row for row in rows if not _is_tracked(row)]
     lane_decisions = _lane_decisions(outcome_report)
     summary = outcome_report.get("summary") if isinstance(outcome_report.get("summary"), dict) else {}
+    quote_evidence, evidence_policy = _source_evidence_policy(
+        outcome_report,
+        record_class="missed_regular_pick_failure_mode_readback",
+    )
     mark_unpriced_count = int(summary.get("mark_unpriced_count") or (len(rows) - sum(1 for row in rows if _is_priced(row))))
     mark_coverage_count = int(summary.get("mark_coverage_count") or sum(1 for row in rows if _is_priced(row)))
     tracked_rows_with_stored_pnl = int(summary.get("tracked_rows_with_stored_pnl") or 0)
@@ -355,6 +385,8 @@ def build_failure_report(
             "mark_coverage_count": mark_coverage_count,
             "mark_unpriced_count": mark_unpriced_count,
             "tracked_rows_with_stored_pnl": tracked_rows_with_stored_pnl,
+            "quote_evidence_class": quote_evidence.get("quote_evidence_class"),
+            "row_evidence_group": evidence_policy.get("evidence_group"),
         },
         "data_quality": {
             "raw_rows": len(rows),
@@ -424,6 +456,8 @@ def build_failure_report(
         },
         "boundary": {
             "evidence_class": "historical_research_exact_contract_marks",
+            "quote_evidence": quote_evidence,
+            "evidence_policy": evidence_policy,
             "production_claim": False,
             "broker_fill_claim": False,
             "allowed_use": "routing_gate_design_and_forward_paper_validation",
@@ -433,6 +467,9 @@ def build_failure_report(
 
 def render_markdown(report: dict[str, Any]) -> str:
     data = report.get("data_quality") or {}
+    boundary = report.get("boundary") or {}
+    quote_evidence = boundary.get("quote_evidence") or {}
+    evidence_policy = boundary.get("evidence_policy") or {}
     untracked = (report.get("overall_metrics") or {}).get("untracked") or {}
     loss_tail = report.get("loss_tail") or {}
     guardrails = report.get("pre_entry_guardrail_candidates") or report.get("guardrail_candidates") or {}
@@ -446,6 +483,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Data status: `{data.get('data_status') or data.get('data_read')}`",
         f"- Rows: `{data.get('raw_rows')}` total, `{data.get('tracked_rows')}` tracked, `{data.get('untracked_rows')}` untracked",
         f"- Mark coverage: `{data.get('mark_coverage_count')}` priced / `{data.get('mark_unpriced_count')}` unpriced",
+        f"- Quote evidence class: `{quote_evidence.get('quote_evidence_class')}`",
+        f"- Row evidence group: `{evidence_policy.get('evidence_group')}`",
+        f"- Production proof claim: `{boundary.get('production_claim')}`",
         f"- Tracked P&L complete: `{data.get('tracked_pnl_complete')}`",
         "",
         "## Verdict",
@@ -655,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         payload = {
             "data_quality": report["data_quality"],
+            "boundary": report["boundary"],
             "overall_metrics": report["overall_metrics"],
             "loss_tail": report["loss_tail"],
             "lane_decisions": report["lane_decisions"],

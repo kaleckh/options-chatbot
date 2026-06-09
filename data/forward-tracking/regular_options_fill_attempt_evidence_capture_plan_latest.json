@@ -1,0 +1,245 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-fill-attempt-evidence-capture-plan.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260608T013710Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260608T013710Z.md"
+  },
+  "evidence_boundary": {
+    "operator_rule": "A row may only move out of this plan after a fresh selection window creates durable fill-attempt evidence and the candidate ledger is rerun.",
+    "prohibited_actions": [
+      "do_not_create_live_row_from_fill_attempt_evidence_capture_plan",
+      "do_not_submit_broker_order_from_fill_attempt_evidence_capture_plan",
+      "do_not_mutate_trading_row_database_from_fill_attempt_evidence_capture_plan",
+      "do_not_backfill_broker_fills_from_fill_attempt_evidence_capture_plan",
+      "do_not_change_scanner_policy_from_fill_attempt_evidence_capture_plan",
+      "do_not_change_stop_policy_from_fill_attempt_evidence_capture_plan",
+      "do_not_change_sizing_from_fill_attempt_evidence_capture_plan",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_fill_attempt_evidence_capture_plan",
+      "do_not_promote_fill_attempt_plan_to_production_proof"
+    ],
+    "readback_is": "read-only row plan for missing fill-attempt evidence in regular supervised options",
+    "readback_is_not": "broker action, trading-row DB mutation, scanner-policy change, stop/sizing change, proof-bar change, or lane promotion"
+  },
+  "generated_at_utc": "2026-06-08T01:37:10Z",
+  "inputs": {
+    "candidate_ledger": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T08:03:23Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+      "status": "loaded"
+    },
+    "fill_attempts": {
+      "error": null,
+      "exists": true,
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+      "row_count": 497,
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [
+    {
+      "action": "execute_fill_attempt_evidence_capture_plan",
+      "count": 4,
+      "operator_next_step": "Rerun only the fresh selection/validation path for rows still selected; require durable fill-attempt logging and rerun the candidate ledger before any promotion discussion.",
+      "priority": 7,
+      "reason": "fresh_candidates_need_durable_fill_attempt_evidence"
+    }
+  ],
+  "plan_rows": [
+    {
+      "action": "capture_durable_fill_attempt_on_fresh_selection",
+      "blocking_reasons": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "lane_not_profitable_enough_for_live_validation"
+      ],
+      "candidate_key": "2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0",
+      "candidate_status": "diagnostic_only_lane_profitability_gate",
+      "capture_status": "missing",
+      "direction": "call",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "expiry": "2026-06-12",
+      "lane_id": "short_term",
+      "latest_fill_outcome": null,
+      "latest_fill_status": null,
+      "latest_logged_at": null,
+      "ledger_key": "fresh:2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0",
+      "long_contract_symbol": "QQQ260612C00728000",
+      "market_window_required": true,
+      "matching_fill_attempt_count": 0,
+      "operator_next_step": "During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot.",
+      "priority": 7,
+      "required_evidence": [
+        "fresh_candidate_still_selected",
+        "durable_fill_attempt_jsonl_row",
+        "proof_live_opra_exact_contract_entry_snapshot",
+        "fill_discipline_snapshot",
+        "keep_diagnostic_or_paper_only_until_lane_profitability_gate_passes"
+      ],
+      "scan_date": "2026-06-05",
+      "short_contract_symbol": "QQQ260612C00744000",
+      "source_entry_evidence_status": "fill_attempt_missing",
+      "source_fill_attempt_status": "missing",
+      "ticker": "QQQ",
+      "validation_outcome": "diagnostic_only"
+    },
+    {
+      "action": "capture_durable_fill_attempt_on_fresh_selection",
+      "blocking_reasons": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "lane_not_profitable_enough_for_live_validation"
+      ],
+      "candidate_key": "2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0",
+      "candidate_status": "diagnostic_only_lane_profitability_gate",
+      "capture_status": "missing",
+      "direction": "call",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "expiry": "2026-06-26",
+      "lane_id": "swing",
+      "latest_fill_outcome": null,
+      "latest_fill_status": null,
+      "latest_logged_at": null,
+      "ledger_key": "fresh:2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0",
+      "long_contract_symbol": "QQQ260626C00730000",
+      "market_window_required": true,
+      "matching_fill_attempt_count": 0,
+      "operator_next_step": "During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot.",
+      "priority": 7,
+      "required_evidence": [
+        "fresh_candidate_still_selected",
+        "durable_fill_attempt_jsonl_row",
+        "proof_live_opra_exact_contract_entry_snapshot",
+        "fill_discipline_snapshot",
+        "keep_diagnostic_or_paper_only_until_lane_profitability_gate_passes"
+      ],
+      "scan_date": "2026-06-05",
+      "short_contract_symbol": "QQQ260626C00750000",
+      "source_entry_evidence_status": "fill_attempt_missing",
+      "source_fill_attempt_status": "missing",
+      "ticker": "QQQ",
+      "validation_outcome": "diagnostic_only"
+    },
+    {
+      "action": "capture_durable_fill_attempt_on_fresh_selection",
+      "blocking_reasons": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "lane_not_profitable_enough_for_live_validation"
+      ],
+      "candidate_key": "2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0",
+      "candidate_status": "diagnostic_only_lane_profitability_gate",
+      "capture_status": "missing",
+      "direction": "call",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "expiry": "2026-06-26",
+      "lane_id": "swing",
+      "latest_fill_outcome": null,
+      "latest_fill_status": null,
+      "latest_logged_at": null,
+      "ledger_key": "fresh:2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0",
+      "long_contract_symbol": "SPY260626C00752000",
+      "market_window_required": true,
+      "matching_fill_attempt_count": 0,
+      "operator_next_step": "During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot.",
+      "priority": 7,
+      "required_evidence": [
+        "fresh_candidate_still_selected",
+        "durable_fill_attempt_jsonl_row",
+        "proof_live_opra_exact_contract_entry_snapshot",
+        "fill_discipline_snapshot",
+        "keep_diagnostic_or_paper_only_until_lane_profitability_gate_passes"
+      ],
+      "scan_date": "2026-06-05",
+      "short_contract_symbol": "SPY260626C00770000",
+      "source_entry_evidence_status": "fill_attempt_missing",
+      "source_fill_attempt_status": "missing",
+      "ticker": "SPY",
+      "validation_outcome": "diagnostic_only"
+    },
+    {
+      "action": "capture_durable_fill_attempt_on_fresh_selection",
+      "blocking_reasons": [
+        "entry_status:fill_attempt_missing",
+        "no_fill_attempt_logged",
+        "lane_self_guardrail_blocked_negative_ticker_cluster"
+      ],
+      "candidate_key": "2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0",
+      "candidate_status": "diagnostic_only_lane_profitability_gate",
+      "capture_status": "missing",
+      "direction": "call",
+      "evidence_bridge_status": "non_executable_entry_blocked",
+      "expiry": "2026-06-18",
+      "lane_id": "volatility_expansion_observation",
+      "latest_fill_outcome": null,
+      "latest_fill_status": null,
+      "latest_logged_at": null,
+      "ledger_key": "fresh:2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0",
+      "long_contract_symbol": "SPY260618C00751000",
+      "market_window_required": true,
+      "matching_fill_attempt_count": 0,
+      "operator_next_step": "During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot.",
+      "priority": 7,
+      "required_evidence": [
+        "fresh_candidate_still_selected",
+        "durable_fill_attempt_jsonl_row",
+        "proof_live_opra_exact_contract_entry_snapshot",
+        "fill_discipline_snapshot"
+      ],
+      "scan_date": "2026-06-05",
+      "short_contract_symbol": "SPY260618C00763000",
+      "source_entry_evidence_status": "fill_attempt_missing",
+      "source_fill_attempt_status": "missing",
+      "ticker": "SPY",
+      "validation_outcome": "diagnostic_only"
+    }
+  ],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_fill_attempt_evidence_capture_plan",
+    "do_not_submit_broker_order_from_fill_attempt_evidence_capture_plan",
+    "do_not_mutate_trading_row_database_from_fill_attempt_evidence_capture_plan",
+    "do_not_backfill_broker_fills_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_scanner_policy_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_stop_policy_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_sizing_from_fill_attempt_evidence_capture_plan",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_fill_attempt_evidence_capture_plan",
+    "do_not_promote_fill_attempt_plan_to_production_proof"
+  ],
+  "read_only": true,
+  "report_id": "regular_options_fill_attempt_evidence_capture_plan",
+  "schema_version": 1,
+  "scope": "regular_options_fill_attempt_evidence_capture_plan_read_only",
+  "status": "fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection",
+  "summary": {
+    "lane_counts": {
+      "short_term": 1,
+      "swing": 2,
+      "volatility_expansion_observation": 1
+    },
+    "ledger_stale_fill_attempt_logged_count": 0,
+    "live_policy_change": false,
+    "market_window_required_count": 4,
+    "missing_fill_attempt_evidence_count": 4,
+    "missing_required_inputs": [],
+    "operator_plan_status": "ready_for_fresh_selection_capture",
+    "overall_status": "fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection",
+    "plan_row_count": 4,
+    "readback_status": "fill_attempt_evidence_capture_plan_readback",
+    "scan_dates": [
+      "2026-06-05"
+    ],
+    "source_candidate_ledger_generated_at_utc": "2026-06-06T08:03:23Z",
+    "source_candidate_ledger_operating_status": "ledger_live_entry_blocked_collect_evidence",
+    "source_candidate_ledger_status": "candidate_outcome_ledger_readback",
+    "source_fill_attempt_rows": 497,
+    "source_missing_fill_attempt_action_count": 4,
+    "ticker_counts": {
+      "QQQ": 2,
+      "SPY": 2
+    }
+  }
+}

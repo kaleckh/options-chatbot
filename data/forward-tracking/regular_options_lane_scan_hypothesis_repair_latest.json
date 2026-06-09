@@ -1,0 +1,426 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-lane-scan-hypothesis-repair.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_scan_hypothesis_repair_20260608T022814Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_scan_hypothesis_repair_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_scan_hypothesis_repair_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_scan_hypothesis_repair_20260608T022814Z.md"
+  },
+  "generated_at_utc": "2026-06-08T02:28:14Z",
+  "inputs": {
+    "all_lanes_zero_pick_audit": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T07:30:37Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\all_lanes_zero_pick_current_algo_audit_latest.json",
+      "status": "loaded"
+    },
+    "lane_outcome_replay": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_outcome_replay_latest.json",
+      "status": "loaded"
+    },
+    "lane_promotion_state": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+      "status": "loaded"
+    },
+    "regular_options_symbol_sleeves": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T18:49:34Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-symbol-sleeves\\latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [
+    {
+      "action": "collect_proof_only_lane_scan_retest_rows",
+      "count": 2,
+      "operator_next_step": "Collect fresh exact intraday quote coverage and forward paper rows; do not promote or tune from thin samples.",
+      "priority": 7,
+      "reason": "no_signal_lanes_have_predeclared_proof_only_replacement_candidates"
+    },
+    {
+      "action": "draft_causal_hypothesis_for_no_signal_lane_without_tuning",
+      "count": 2,
+      "operator_next_step": "Use design/evidence records to predeclare a causal diagnostic replacement, or keep the lane no-chase.",
+      "priority": 7,
+      "reason": "no_signal_lanes_lack_predeclared_replacement_candidate"
+    }
+  ],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_lane_scan_hypothesis_repair",
+    "do_not_submit_broker_order_from_lane_scan_hypothesis_repair",
+    "do_not_mutate_database_from_lane_scan_hypothesis_repair",
+    "do_not_change_scanner_policy_from_lane_scan_hypothesis_repair",
+    "do_not_tune_threshold_symbol_expiry_or_window_from_zero_signal_sample",
+    "do_not_change_stop_policy_from_lane_scan_hypothesis_repair",
+    "do_not_change_sizing_from_lane_scan_hypothesis_repair",
+    "do_not_change_lane_promotion_from_lane_scan_hypothesis_repair",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_scan_hypothesis_repair",
+    "do_not_synthesize_pnl_for_no_signal_lanes"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_create_live_row_from_lane_scan_hypothesis_repair",
+      "do_not_submit_broker_order_from_lane_scan_hypothesis_repair",
+      "do_not_mutate_database_from_lane_scan_hypothesis_repair",
+      "do_not_change_scanner_policy_from_lane_scan_hypothesis_repair",
+      "do_not_tune_threshold_symbol_expiry_or_window_from_zero_signal_sample",
+      "do_not_change_stop_policy_from_lane_scan_hypothesis_repair",
+      "do_not_change_sizing_from_lane_scan_hypothesis_repair",
+      "do_not_change_lane_promotion_from_lane_scan_hypothesis_repair",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_scan_hypothesis_repair",
+      "do_not_synthesize_pnl_for_no_signal_lanes"
+    ],
+    "readback_is": "read-only proof-only diagnostic plan for no-signal regular-options lane scan hypotheses",
+    "readback_is_not": "scanner tuning, broker recommendation, DB mutation, lane promotion, or production proof",
+    "trusted_proof_standard": "production proof requires trusted intraday exact-contract OPRA/NBBO entry, exit, fill, and executable P&L"
+  },
+  "read_only": true,
+  "repair_rows": [
+    {
+      "blockers": [
+        "fresh_exact_scan_retest_rows_missing",
+        "true_lane_outcome_pnl_rows_missing",
+        "predeclared_replacement_candidate_missing"
+      ],
+      "dominant_signal_reject_reason": "playbook_filter",
+      "fresh_exact_scan_retest_row_count": 0,
+      "lane": "bearish_defensive",
+      "operator_next_step": "Draft a causal replacement hypothesis from lane design evidence or keep the lane diagnostic; do not loosen thresholds, symbols, expiries, or windows from this zero-signal sample.",
+      "outcome_status": "no_signal_candidates_in_monthly_window",
+      "predeclared_replacement_candidate_count": 0,
+      "predeclared_replacement_candidates": [],
+      "production_proof_ready_candidate_count": 0,
+      "promotion_context": {
+        "blockers": [
+          "current_live_exact_risk_clear",
+          "current_live_exact_risk_governor_blocked",
+          "fresh_paper_cohort",
+          "fresh_paper_cohort_insufficient",
+          "lane_not_profitable_enough_for_probation",
+          "profitable_lane_gate",
+          "walk_forward_holdout_depth",
+          "walk_forward_holdout_too_small_or_failed"
+        ],
+        "candidate_status": "diagnostic_only_lane_promotion_state",
+        "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+        "fresh_evidence": {},
+        "promotion_state": "diagnostic",
+        "tracking_mode": "auto_track"
+      },
+      "repair_status": "causal_replacement_hypothesis_missing",
+      "signal_reject_reason_counts": {
+        "date_missing_from_spy_history": 1,
+        "direction_score": 14,
+        "missing_price_history": 9,
+        "playbook_filter": 210,
+        "signal": 104,
+        "tech_score": 105,
+        "underlying_liquidity": 89
+      },
+      "true_lane_outcome_pnl_row_count": 0,
+      "zero_pick_date_count": 10,
+      "zero_pick_exact_candidate_count": 0,
+      "zero_pick_signal_candidate_count": 0,
+      "zero_pick_would_track_pick_count": 0
+    },
+    {
+      "blockers": [
+        "fresh_exact_scan_retest_rows_missing",
+        "true_lane_outcome_pnl_rows_missing"
+      ],
+      "dominant_signal_reject_reason": "playbook_filter",
+      "fresh_exact_scan_retest_row_count": 0,
+      "lane": "bearish_index_put_observation",
+      "operator_next_step": "Collect proof-only exact intraday quote coverage and forward paper scan rows for the predeclared replacement candidate; do not tune scanner filters from the zero-signal sample.",
+      "outcome_status": "no_signal_candidates_in_monthly_window",
+      "predeclared_replacement_candidate_count": 1,
+      "predeclared_replacement_candidates": [
+        {
+          "avg_pnl": 0.0,
+          "blockers": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "candidate_count": 24,
+          "evidence_class": "trusted_intraday_unresolved",
+          "exact_trusted_priced_trades": 0,
+          "executable_exit_pnl": null,
+          "lane_family": "bearish_index_put_observation",
+          "lane_id": "bearish_index_put_observation_chain_native_timeexit_all_sleeves",
+          "next_step": "Collect exact replay rows or forward paper logs before ranking this symbol-lane pair.",
+          "production_proof_ready": false,
+          "profit_factor": 0.0,
+          "proof_status": "proof_only_collecting_not_production_proof",
+          "quote_coverage": 0.0,
+          "reason_codes": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "rolling_oos_status": "watch",
+          "sample_status": "none",
+          "sleeve_id": "bearish_index_put_observation_chain_native_timeexit_all_sleeves:QQQ",
+          "source_artifacts": [
+            "data/options-validation/runs/20260602_105039_bearish_index_put_observation_chain_native_timeexit_all_sleeves_intraday.json"
+          ],
+          "status": "needs-paper",
+          "strategy_logic_id": "bearish_index_put_observation_chain_native_timeexit_all_sleeves",
+          "symbol": "QQQ",
+          "unresolved_rows": 24
+        }
+      ],
+      "production_proof_ready_candidate_count": 0,
+      "promotion_context": {
+        "blockers": [
+          "current_live_exact_risk_clear",
+          "current_live_exact_risk_governor_blocked",
+          "fresh_paper_cohort",
+          "fresh_paper_cohort_insufficient",
+          "lane_not_profitable_enough_for_probation",
+          "profitable_lane_gate",
+          "walk_forward_holdout_depth",
+          "walk_forward_holdout_too_small_or_failed"
+        ],
+        "candidate_status": "diagnostic_only_lane_promotion_state",
+        "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+        "fresh_evidence": {},
+        "promotion_state": "diagnostic",
+        "tracking_mode": "auto_track"
+      },
+      "repair_status": "predeclared_proof_only_candidate_found",
+      "signal_reject_reason_counts": {
+        "date_missing_from_spy_history": 1,
+        "playbook_filter": 31,
+        "signal": 5
+      },
+      "true_lane_outcome_pnl_row_count": 0,
+      "zero_pick_date_count": 10,
+      "zero_pick_exact_candidate_count": 0,
+      "zero_pick_signal_candidate_count": 0,
+      "zero_pick_would_track_pick_count": 0
+    },
+    {
+      "blockers": [
+        "fresh_exact_scan_retest_rows_missing",
+        "true_lane_outcome_pnl_rows_missing",
+        "predeclared_replacement_candidate_missing"
+      ],
+      "dominant_signal_reject_reason": "playbook_filter",
+      "fresh_exact_scan_retest_row_count": 0,
+      "lane": "quality90_debit55_canary",
+      "operator_next_step": "Draft a causal replacement hypothesis from lane design evidence or keep the lane diagnostic; do not loosen thresholds, symbols, expiries, or windows from this zero-signal sample.",
+      "outcome_status": "no_signal_candidates_in_monthly_window",
+      "predeclared_replacement_candidate_count": 0,
+      "predeclared_replacement_candidates": [],
+      "production_proof_ready_candidate_count": 0,
+      "promotion_context": {
+        "blockers": [
+          "current_live_exact_risk_clear",
+          "current_live_exact_risk_governor_blocked",
+          "fresh_paper_cohort",
+          "fresh_paper_cohort_insufficient",
+          "lane_not_profitable_enough_for_probation",
+          "profitable_lane_gate",
+          "walk_forward_holdout_depth",
+          "walk_forward_holdout_too_small_or_failed"
+        ],
+        "candidate_status": "diagnostic_only_lane_promotion_state",
+        "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+        "fresh_evidence": {
+          "candidate_count": 2,
+          "created_or_duplicate_count": 0,
+          "exact_realized_pnl_count": 0,
+          "fresh_executable_exact_entry_count": 0,
+          "legacy_pre_promotion_state_gate_count": 2,
+          "no_longer_matched_count": 2,
+          "paper_only_count": 0,
+          "promotion_ready_count": 0,
+          "proof_ineligible_count": 0
+        },
+        "promotion_state": "diagnostic",
+        "tracking_mode": "auto_track"
+      },
+      "repair_status": "causal_replacement_hypothesis_missing",
+      "signal_reject_reason_counts": {
+        "date_missing_from_spy_history": 1,
+        "playbook_filter": 16,
+        "signal": 2
+      },
+      "true_lane_outcome_pnl_row_count": 0,
+      "zero_pick_date_count": 10,
+      "zero_pick_exact_candidate_count": 0,
+      "zero_pick_signal_candidate_count": 0,
+      "zero_pick_would_track_pick_count": 0
+    },
+    {
+      "blockers": [
+        "fresh_exact_scan_retest_rows_missing",
+        "true_lane_outcome_pnl_rows_missing"
+      ],
+      "dominant_signal_reject_reason": "playbook_filter",
+      "fresh_exact_scan_retest_row_count": 0,
+      "lane": "range_breakout_observation",
+      "operator_next_step": "Collect proof-only exact intraday quote coverage and forward paper scan rows for the predeclared replacement candidate; do not tune scanner filters from the zero-signal sample.",
+      "outcome_status": "no_signal_candidates_in_monthly_window",
+      "predeclared_replacement_candidate_count": 2,
+      "predeclared_replacement_candidates": [
+        {
+          "avg_pnl": 0.0,
+          "blockers": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "candidate_count": 2,
+          "evidence_class": "trusted_intraday_unresolved",
+          "exact_trusted_priced_trades": 0,
+          "executable_exit_pnl": null,
+          "lane_family": "range_breakout_observation",
+          "lane_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves",
+          "next_step": "Collect exact replay rows or forward paper logs before ranking this symbol-lane pair.",
+          "production_proof_ready": false,
+          "profit_factor": 0.0,
+          "proof_status": "proof_only_collecting_not_production_proof",
+          "quote_coverage": 0.0,
+          "reason_codes": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "rolling_oos_status": "watch",
+          "sample_status": "none",
+          "sleeve_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves:QQQ",
+          "source_artifacts": [
+            "data/options-validation/runs/20260602_105118_range_breakout_observation_chain_native_put_timeexit_all_sleeves_intraday.json"
+          ],
+          "status": "needs-paper",
+          "strategy_logic_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves",
+          "symbol": "QQQ",
+          "unresolved_rows": 2
+        },
+        {
+          "avg_pnl": 0.0,
+          "blockers": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "candidate_count": 2,
+          "evidence_class": "trusted_intraday_unresolved",
+          "exact_trusted_priced_trades": 0,
+          "executable_exit_pnl": null,
+          "lane_family": "range_breakout_observation",
+          "lane_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves",
+          "next_step": "Collect exact replay rows or forward paper logs before ranking this symbol-lane pair.",
+          "production_proof_ready": false,
+          "profit_factor": 0.0,
+          "proof_status": "proof_only_collecting_not_production_proof",
+          "quote_coverage": 0.0,
+          "reason_codes": [
+            "evidence_class:trusted_intraday_unresolved",
+            "quote_coverage_below_97_5",
+            "sample_status:none",
+            "trading_desk_guardrail_negative_concentration",
+            "unresolved_rows_remain"
+          ],
+          "rolling_oos_status": "watch",
+          "sample_status": "none",
+          "sleeve_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves:SPY",
+          "source_artifacts": [
+            "data/options-validation/runs/20260602_105118_range_breakout_observation_chain_native_put_timeexit_all_sleeves_intraday.json"
+          ],
+          "status": "needs-paper",
+          "strategy_logic_id": "range_breakout_observation_chain_native_put_timeexit_all_sleeves",
+          "symbol": "SPY",
+          "unresolved_rows": 2
+        }
+      ],
+      "production_proof_ready_candidate_count": 0,
+      "promotion_context": {
+        "blockers": [
+          "current_live_exact_risk_clear",
+          "current_live_exact_risk_governor_blocked",
+          "fresh_paper_cohort",
+          "fresh_paper_cohort_insufficient",
+          "lane_not_profitable_enough_for_probation",
+          "profitable_lane_gate",
+          "walk_forward_holdout_depth",
+          "walk_forward_holdout_too_small_or_failed"
+        ],
+        "candidate_status": "diagnostic_only_lane_promotion_state",
+        "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+        "fresh_evidence": {
+          "candidate_count": 5,
+          "created_or_duplicate_count": 0,
+          "exact_realized_pnl_count": 0,
+          "fresh_executable_exact_entry_count": 0,
+          "legacy_pre_promotion_state_gate_count": 2,
+          "no_longer_matched_count": 0,
+          "paper_only_count": 3,
+          "promotion_ready_count": 0,
+          "proof_ineligible_count": 2
+        },
+        "promotion_state": "diagnostic",
+        "tracking_mode": "auto_track"
+      },
+      "repair_status": "predeclared_proof_only_candidate_found",
+      "signal_reject_reason_counts": {
+        "date_missing_from_spy_history": 1,
+        "playbook_filter": 29,
+        "signal": 3
+      },
+      "true_lane_outcome_pnl_row_count": 0,
+      "zero_pick_date_count": 9,
+      "zero_pick_exact_candidate_count": 0,
+      "zero_pick_signal_candidate_count": 0,
+      "zero_pick_would_track_pick_count": 0
+    }
+  ],
+  "report_id": "regular_options_lane_scan_hypothesis_repair",
+  "schema_version": 1,
+  "scope": "regular_options_read_only_lane_scan_hypothesis_repair",
+  "status": "lane_scan_hypothesis_repair_readback",
+  "summary": {
+    "blockers": [
+      "fresh_exact_scan_retest_rows_missing",
+      "some_no_signal_lanes_lack_predeclared_replacement_candidate",
+      "true_lane_outcome_pnl_rows_missing"
+    ],
+    "fresh_exact_scan_retest_row_count": 0,
+    "live_policy_change": false,
+    "missing_replacement_candidate_lane_count": 2,
+    "missing_required_inputs": [],
+    "next_evidence_action_count": 2,
+    "overall_status": "lane_scan_hypothesis_repair_built_collecting",
+    "predeclared_candidate_lane_count": 2,
+    "predeclared_replacement_candidate_count": 3,
+    "promotion_ready": false,
+    "proof_ready_replacement_candidate_count": 0,
+    "repair_status_counts": {
+      "causal_replacement_hypothesis_missing": 2,
+      "predeclared_proof_only_candidate_found": 2
+    },
+    "target_no_signal_lane_count": 4,
+    "true_lane_outcome_pnl_row_count": 0
+  }
+}

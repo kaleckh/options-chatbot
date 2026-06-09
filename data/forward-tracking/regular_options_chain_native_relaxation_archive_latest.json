@@ -1,0 +1,311 @@
+{
+  "archived_branches": [
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_current_branch",
+      "avg_net_pnl_pct": -27.93,
+      "branch_id": "current_chain_native_filters|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 4,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.0,
+      "promotion_ready": false,
+      "relaxation_kind": "current",
+      "rows": 4,
+      "scenario_id": "current_chain_native_filters",
+      "sum_net_pnl_usd": -1705.25,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 0.0,
+      "winner_count": 0
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -27.93,
+      "branch_id": "relax_entry_liquidity_caps_only|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 4,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.0,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "relax_entry_liquidity_caps_only",
+      "sum_net_pnl_usd": -1705.25,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 0.0,
+      "winner_count": 0
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -27.93,
+      "branch_id": "relax_prior_quote_continuity_only|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 4,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.0,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "relax_prior_quote_continuity_only",
+      "sum_net_pnl_usd": -1705.25,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 0.0,
+      "winner_count": 0
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -24.92,
+      "branch_id": "relax_debit_cap_only|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 4,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.0,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "relax_debit_cap_only",
+      "sum_net_pnl_usd": -1603.0,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 0.0,
+      "winner_count": 0
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -20.22,
+      "branch_id": "combined_broad_entry_relaxation|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 3,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.18,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "combined_broad_entry_relaxation",
+      "sum_net_pnl_usd": -1247.5,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 25.0,
+      "winner_count": 1
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -20.22,
+      "branch_id": "relax_width_cap_only|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 3,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.18,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "relax_width_cap_only",
+      "sum_net_pnl_usd": -1247.5,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 25.0,
+      "winner_count": 1
+    },
+    {
+      "archive_reason": "negative_exact_exit_pnl_and_profit_factor_below_one",
+      "archive_status": "archived_negative_chain_native_relaxation_branch",
+      "avg_net_pnl_pct": -9.26,
+      "branch_id": "widen_dte_window_only|regular_bearish_put_primary|2026-05-22",
+      "loser_count": 3,
+      "median_net_pnl_pct": -18.85,
+      "priced": 4,
+      "profit_factor": 0.62,
+      "promotion_ready": false,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "widen_dte_window_only",
+      "sum_net_pnl_usd": -1154.0,
+      "target_dates": [
+        "2026-05-22"
+      ],
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ],
+      "target_tickers": [
+        "COIN",
+        "DIS",
+        "META",
+        "SBUX"
+      ],
+      "unpriced": 0,
+      "win_rate_pct": 25.0,
+      "winner_count": 1
+    }
+  ],
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-chain-native-relaxation-archive.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_chain_native_relaxation_archive_20260608T030347Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_chain_native_relaxation_archive_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_chain_native_relaxation_archive_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_chain_native_relaxation_archive_20260608T030347Z.md"
+  },
+  "generated_at_utc": "2026-06-08T03:03:47Z",
+  "inputs": {
+    "chain_native_exit_outcome_replay": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:44Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_chain_native_exit_outcome_replay_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "non_archived_branches": [],
+  "prohibited_actions": [
+    "do_not_delete_chain_native_scenarios_from_archive",
+    "do_not_change_scanner_policy_from_chain_native_archive",
+    "do_not_change_contract_selection_policy_from_chain_native_archive",
+    "do_not_change_lane_promotion_from_chain_native_archive",
+    "do_not_submit_broker_order_from_chain_native_archive",
+    "do_not_mutate_database_from_chain_native_archive",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_chain_native_archive",
+    "do_not_promote_negative_chain_native_replay_to_paper_or_live_proof"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_delete_chain_native_scenarios_from_archive",
+      "do_not_change_scanner_policy_from_chain_native_archive",
+      "do_not_change_contract_selection_policy_from_chain_native_archive",
+      "do_not_change_lane_promotion_from_chain_native_archive",
+      "do_not_submit_broker_order_from_chain_native_archive",
+      "do_not_mutate_database_from_chain_native_archive",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_chain_native_archive",
+      "do_not_promote_negative_chain_native_replay_to_paper_or_live_proof"
+    ],
+    "readback_is": "read-only archive of exact-priced negative chain-native current and relaxation branches",
+    "readback_is_not": "scenario deletion, scanner policy change, contract-selection change, lane promotion, broker action, DB mutation, or proof-bar reduction",
+    "trusted_proof_standard": "trusted intraday exact-contract OPRA/NBBO exit evidence remains required before archiving profitability claims"
+  },
+  "read_only": true,
+  "report_id": "regular_options_chain_native_relaxation_archive",
+  "schema_version": 1,
+  "scope": "regular_options_chain_native_relaxation_branch_archive",
+  "source_next_evidence_queue": [
+    {
+      "action": "archive_negative_chain_native_relaxation_branch",
+      "count": 1,
+      "operator_next_step": "Record this frozen relaxation target as a diagnostic dead end unless a new predeclared hypothesis changes the evidence.",
+      "priority": 5,
+      "reason": "relaxed_chain_native_exit_outcome_not_profitable_on_exact_replay"
+    }
+  ],
+  "status": "chain_native_relaxation_archive_readback",
+  "summary": {
+    "archive_complete": true,
+    "archive_requested_by_exit_outcome_replay": true,
+    "archived_negative_branch_count": 7,
+    "archived_negative_current_scenario_count": 1,
+    "archived_negative_relaxed_scenario_count": 6,
+    "best_relaxed_scenario": {
+      "avg_net_pnl_pct": -9.26,
+      "avg_net_pnl_usd": -288.5,
+      "loser_count": 3,
+      "max_net_pnl_pct": 61.57,
+      "median_net_pnl_pct": -18.85,
+      "min_net_pnl_pct": -60.9,
+      "priced": 4,
+      "profit_factor": 0.62,
+      "relaxation_kind": "relaxed",
+      "rows": 4,
+      "scenario_id": "widen_dte_window_only",
+      "sum_net_pnl_usd": -1154.0,
+      "unpriced": 0,
+      "win_rate_pct": 25.0,
+      "winner_count": 1
+    },
+    "branch_scenario_count": 7,
+    "current_scenario_count": 1,
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "negative_branch_count": 7,
+    "negative_current_scenario_count": 1,
+    "negative_relaxed_scenario_count": 6,
+    "overall_status": "negative_chain_native_branches_archived",
+    "relaxed_scenario_count": 6,
+    "source_exit_outcome_status": "chain_native_exit_outcome_replay_exact_pnl_available_diagnostic_only",
+    "source_ready_for_archive": true,
+    "unarchived_branch_ids": [],
+    "unarchived_negative_branch_count": 0,
+    "unarchived_negative_current_scenario_count": 0,
+    "unarchived_negative_relaxed_scenario_count": 0
+  }
+}

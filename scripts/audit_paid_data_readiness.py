@@ -21,6 +21,7 @@ from historical_options_store import (  # noqa: E402
     TRUSTED_DATA_TRUST,
     load_import_batches,
 )
+from scripts.quote_evidence_readback import quote_evidence_readback  # noqa: E402
 
 
 ENV_FILES_LOADED = load_local_env(ROOT)
@@ -111,9 +112,15 @@ def _source_filtered_snapshot_summary(
     underlyings: Sequence[str] | str | None = None,
 ) -> dict[str, Any]:
     if not db_path.exists():
+        quote_evidence = quote_evidence_readback(
+            snapshot_kind=snapshot_kind,
+            source_labels=source_labels,
+            trusted_only=trusted_only,
+        )
         return {
             "db_path": str(db_path),
             "snapshot_kind": snapshot_kind,
+            "quote_evidence": quote_evidence,
             "quote_count": 0,
             "batch_count": 0,
             "earliest_quote_at_utc": None,
@@ -165,6 +172,13 @@ def _source_filtered_snapshot_summary(
     return {
         "db_path": str(db_path),
         "snapshot_kind": snapshot_kind,
+        "quote_evidence": quote_evidence_readback(
+            snapshot_kind=snapshot_kind,
+            source_labels=[item for item in str((row["source_labels"] if row else "") or "").split(",") if item],
+            trust_levels=[item for item in str((row["trust_levels"] if row else "") or "").split(",") if item],
+            dataset_kinds=[item for item in str((row["dataset_kinds"] if row else "") or "").split(",") if item],
+            trusted_only=trusted_only,
+        ),
         "quote_count": int((row["quote_count"] if row else 0) or 0),
         "batch_count": int((row["batch_count"] if row else 0) or 0),
         "earliest_quote_at_utc": str((row["earliest_quote_at_utc"] if row else None) or "") or None,
@@ -380,6 +394,14 @@ def build_paid_data_readiness_audit(
         if required_source_labels
         else store.snapshot_summary(snapshot_kind, trusted_only=trusted_only)
     )
+    if "quote_evidence" not in summary:
+        summary["quote_evidence"] = quote_evidence_readback(
+            snapshot_kind=snapshot_kind,
+            source_labels=summary.get("source_labels") or required_source_labels,
+            trust_levels=summary.get("trust_levels") or ([TRUSTED_DATA_TRUST] if trusted_only else []),
+            dataset_kinds=summary.get("dataset_kinds") or [],
+            trusted_only=trusted_only,
+        )
     available = [str(item).upper() for item in summary.get("available_underlyings") or []]
     missing_required = [symbol for symbol in required if symbol not in available]
     health = _query_underlying_health(
@@ -435,6 +457,7 @@ def build_paid_data_readiness_audit(
         "historical_options_db_env": os.getenv("HISTORICAL_OPTIONS_DB_PATH"),
         "env_files_loaded": list(ENV_FILES_LOADED),
         "snapshot_kind": snapshot_kind,
+        "quote_evidence": summary.get("quote_evidence"),
         "source_labels_required": required_source_labels,
         "playbook": (
             {
@@ -572,6 +595,7 @@ def main() -> int:
         "db_path": audit["db_path"],
         "historical_options_db_env": audit["historical_options_db_env"],
         "snapshot_kind": audit["snapshot_kind"],
+        "quote_evidence": audit["quote_evidence"],
         "source_labels_required": audit["source_labels_required"],
         "playbook": audit["playbook"],
         "required_underlyings": audit["required_underlyings"],

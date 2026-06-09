@@ -1,0 +1,127 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-suggested-trade-review-plan.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260608T013710Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260608T013710Z.md"
+  },
+  "evidence_boundary": {
+    "operator_rule": "Suggested-trade close or P&L conclusions require a fresh explicit review before use in the monthly profitability loop.",
+    "prohibited_actions": [
+      "do_not_create_live_row_from_suggested_trade_review_plan",
+      "do_not_submit_broker_order_from_suggested_trade_review_plan",
+      "do_not_mutate_suggested_trade_database_from_suggested_trade_review_plan",
+      "do_not_auto_close_from_stale_display_or_missing_review_marks",
+      "do_not_count_suggested_trades_as_production_proof",
+      "do_not_change_scanner_policy_from_suggested_trade_review_plan",
+      "do_not_change_stop_policy_from_suggested_trade_review_plan",
+      "do_not_change_sizing_from_suggested_trade_review_plan",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_suggested_trade_review_plan",
+      "do_not_promote_suggested_trade_review_plan_to_production_proof"
+    ],
+    "readback_is": "read-only suggested-trade review plan for regular supervised options paper ideas",
+    "readback_is_not": "broker action, auto-close instruction, suggested-trade DB mutation, production proof, scanner-policy change, stop/sizing change, proof-bar change, or lane promotion"
+  },
+  "generated_at_utc": "2026-06-08T01:37:10Z",
+  "inputs": {
+    "suggested_trade_close_risk": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T17:28:57Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\suggested_trade_close_risk_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [
+    {
+      "action": "execute_suggested_trade_review_plan",
+      "count": 1,
+      "operator_next_step": "Use the row plan during the next fresh executable quote window; do not auto-close or rely on paper-idea P&L from stale, missing, display-only, or non-executable marks.",
+      "priority": 1,
+      "reason": "suggested_trade_attention_rows_need_fresh_explicit_review"
+    }
+  ],
+  "plan_rows": [
+    {
+      "action": "refresh_missing_suggested_trade_review",
+      "action_bucket": "no_stored_review",
+      "current_pnl_pct": null,
+      "evidence_bucket": "missing_review",
+      "exit_execution_basis": null,
+      "exit_execution_price": null,
+      "first_warning": null,
+      "lane": "legacy_unlabeled",
+      "last_reviewed_at": null,
+      "mark_pnl_pct": null,
+      "market_window_required": true,
+      "operator_next_step": "During the next fresh executable quote window, refresh this paper idea's explicit review, then rerun the suggested close-risk, candidate-ledger, and monthly profitability readbacks.",
+      "price_trigger_ok": false,
+      "pricing_source": null,
+      "pricing_state": null,
+      "priority": 1,
+      "profit_target_pct": 100.0,
+      "reason": null,
+      "recommendation": null,
+      "record_class": "suggested_trade",
+      "required_evidence": [
+        "fresh_explicit_suggested_trade_review",
+        "candidate_outcome_ledger_rerun",
+        "monthly_profitability_audit_rerun",
+        "stored_review_snapshot"
+      ],
+      "resolution_status": "market_window_required_missing_suggested_trade_review",
+      "source_next_safe_action": "refresh_explicit_suggested_trade_review_before_using_close_or_pnl_state",
+      "status": "open",
+      "stop_loss_pct": 50.0,
+      "suggested_trade_id": 138,
+      "ticker": "AAA"
+    }
+  ],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_suggested_trade_review_plan",
+    "do_not_submit_broker_order_from_suggested_trade_review_plan",
+    "do_not_mutate_suggested_trade_database_from_suggested_trade_review_plan",
+    "do_not_auto_close_from_stale_display_or_missing_review_marks",
+    "do_not_count_suggested_trades_as_production_proof",
+    "do_not_change_scanner_policy_from_suggested_trade_review_plan",
+    "do_not_change_stop_policy_from_suggested_trade_review_plan",
+    "do_not_change_sizing_from_suggested_trade_review_plan",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_suggested_trade_review_plan",
+    "do_not_promote_suggested_trade_review_plan_to_production_proof"
+  ],
+  "read_only": true,
+  "report_id": "regular_options_suggested_trade_review_plan",
+  "schema_version": 1,
+  "scope": "regular_options_suggested_trade_review_plan_read_only",
+  "status": "suggested_trade_review_plan_ready_blocked_for_market_window",
+  "summary": {
+    "action_counts": {
+      "refresh_missing_suggested_trade_review": 1
+    },
+    "attention_trade_count": 1,
+    "close_risk_trade_count": 0,
+    "executable_close_ready_count": 0,
+    "live_policy_change": false,
+    "market_window_required_count": 1,
+    "missing_required_inputs": [],
+    "missing_review_count": 1,
+    "non_executable_close_risk_count": 0,
+    "open_suggested_trade_rows": 1,
+    "operator_plan_status": "ready_for_fresh_suggested_trade_review_window",
+    "overall_status": "suggested_trade_review_plan_ready_blocked_for_market_window",
+    "plan_row_count": 1,
+    "priced_or_marked_count": 0,
+    "readback_status": "suggested_trade_review_plan_readback",
+    "source_action_counts": {
+      "no_stored_review": 1
+    },
+    "source_evidence_counts": {
+      "missing_review": 1
+    },
+    "source_suggested_trade_generated_at_utc": "2026-06-05T17:28:57Z",
+    "stale_or_missing_review_trade_count": 1,
+    "stale_review_count": 0
+  }
+}

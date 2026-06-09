@@ -16,6 +16,7 @@ if str(ROOT) not in sys.path:
 from supervised_scan import get_scan_playbook, get_scan_playbooks
 
 from scripts import audit_zero_pick_days_current_main_lane as single_lane_audit
+from scripts.quote_evidence_readback import quote_evidence_readback
 
 
 ALL_LANES_AUDIT_ID = "all_lanes_zero_pick_current_algo_v1"
@@ -68,6 +69,12 @@ def quote_store_coverage(args: argparse.Namespace) -> dict[str, Any]:
         "source_labels": source_labels,
         "trusted_only": not bool(args.allow_research_data),
         "snapshot_kind": single_lane_audit.wfo._imported_snapshot_kind(args.truth_lane),
+        "quote_evidence": quote_evidence_readback(
+            snapshot_kind=single_lane_audit.wfo._imported_snapshot_kind(args.truth_lane),
+            source_labels=source_labels,
+            truth_lane=args.truth_lane,
+            trusted_only=not bool(args.allow_research_data),
+        ),
         "requested_market_dates": requested_dates,
         "market_date_count": len(requested_dates),
         "covered_date_count": 0,
@@ -235,6 +242,13 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
     }
     quote_coverage = quote_store_coverage(args)
     summary["quote_store_missing_date_count"] = len(quote_coverage.get("missing_dates") or [])
+    quote_evidence = quote_coverage.get("quote_evidence") or quote_evidence_readback(
+        snapshot_kind=single_lane_audit.wfo._imported_snapshot_kind(args.truth_lane),
+        source_labels=args.source_labels,
+        truth_lane=args.truth_lane,
+        trusted_only=not bool(args.allow_research_data),
+    )
+    summary["quote_evidence_class"] = quote_evidence.get("quote_evidence_class")
     return {
         "generated_at_utc": _utc_now_iso(),
         "summary": summary,
@@ -250,6 +264,9 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
                 for item in str(args.source_labels or "").replace(";", ",").split(",")
                 if item.strip()
             ],
+            "quote_evidence": quote_evidence,
+            "row_evidence_group": "research_backfill",
+            "production_proof": False,
             "trusted_only": not bool(args.allow_research_data),
             "n_picks": int(args.n_picks),
             "lookback_years": int(args.lookback_years),
@@ -327,11 +344,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"No-exact reasons: {summary['no_exact_reason_counts']}")
     coverage = audit.get("quote_store_coverage") or {}
     if coverage.get("status") == "checked":
+        coverage_quote = coverage.get("quote_evidence") or {}
         print(
             "Quote-store coverage: "
             f"covered={coverage.get('covered_date_count', 0)}/{coverage.get('market_date_count', 0)} "
-            f"missing_dates={coverage.get('missing_dates') or []}"
+            f"missing_dates={coverage.get('missing_dates') or []} "
+            f"quote_evidence_class={coverage_quote.get('quote_evidence_class')}"
         )
+    parameters = audit.get("parameters") or {}
+    param_quote = parameters.get("quote_evidence") or {}
+    print(
+        "Evidence boundary: "
+        f"row_evidence_group={parameters.get('row_evidence_group')} "
+        f"production_proof={parameters.get('production_proof')} "
+        f"quote_evidence_class={param_quote.get('quote_evidence_class')}"
+    )
     return 1 if args.fail_fast and summary["failed_lane_count"] else 0
 
 

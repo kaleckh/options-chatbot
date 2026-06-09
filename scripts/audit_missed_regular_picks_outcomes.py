@@ -22,6 +22,7 @@ for candidate in (ROOT, BACKEND_DIR):
 
 from local_env import load_local_env
 from positions_repository import create_positions_repository
+from scripts.quote_evidence_readback import non_production_research_policy, quote_evidence_readback
 
 
 DEFAULT_INPUT_CSV = ROOT / "data" / "forward-tracking" / "missed_regular_picks_20260522_20260605_report_only.csv"
@@ -273,6 +274,7 @@ def conservative_mark(
     source_labels: list[str],
     trusted_only: bool,
     fee_total_usd: float,
+    quote_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     entry = _safe_float(row.get("net_debit") or row.get("entry_execution_price"))
     if entry is None or entry <= 0:
@@ -296,6 +298,11 @@ def conservative_mark(
     net_pnl_usd = gross_pnl_usd - fee_total_usd
     return {
         "priced": True,
+        "production_proof": False,
+        "evidence_group": "research_backfill",
+        "quote_evidence_class": quote_evidence.get("quote_evidence_class"),
+        "quote_evidence_label": quote_evidence.get("quote_evidence_label"),
+        "production_proof_source_eligible": quote_evidence.get("production_proof_source_eligible"),
         "entry_debit": round(entry, 4),
         "exit_credit": round(exit_credit, 4),
         "quote_date": quote.get("quote_date_et"),
@@ -538,6 +545,15 @@ def build_report(
         latest_quote_date = _latest_intraday_date(conn)
         if not latest_quote_date:
             raise RuntimeError("No intraday quotes found in options history DB.")
+        quote_evidence = quote_evidence_readback(
+            snapshot_kind="intraday",
+            source_labels=source_labels,
+            trusted_only=trusted_only,
+        )
+        evidence_policy = non_production_research_policy(
+            record_class="missed_regular_pick_research_mark",
+            quote_evidence=quote_evidence,
+        )
         outcome_rows: list[dict[str, Any]] = []
         for row in input_rows:
             row = dict(row)
@@ -551,6 +567,7 @@ def build_report(
                 source_labels=source_labels,
                 trusted_only=trusted_only,
                 fee_total_usd=fee_total_usd,
+                quote_evidence=quote_evidence,
             )
             tracked = []
             for position in matches:
@@ -620,6 +637,8 @@ def build_report(
             "options_db": _rel(options_db),
             "source_labels": source_labels,
             "trusted_only": trusted_only,
+            "quote_evidence": quote_evidence,
+            "evidence_policy": evidence_policy,
             "latest_intraday_quote_date": latest_quote_date,
             "position_store": position_store,
             "fee_total_usd": fee_total_usd,
@@ -672,6 +691,7 @@ def _top_rows(rows: list[dict[str, Any]], *, reverse: bool, limit: int = 15) -> 
                 "net_pnl_pct": row.get("mark", {}).get("net_pnl_pct"),
                 "net_pnl_usd": row.get("mark", {}).get("net_pnl_usd"),
                 "quote_date": row.get("mark", {}).get("quote_date"),
+                "quote_evidence_class": row.get("mark", {}).get("quote_evidence_class"),
             }
         )
     return output
@@ -688,6 +708,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Already tracked rows: `{summary.get('tracked_row_count')}`",
         f"- Untracked missed rows: `{summary.get('untracked_row_count')}`",
         f"- Conservative mark coverage: `{summary.get('mark_coverage_count')}` rows",
+        f"- Mark quote evidence class: `{((report.get('inputs') or {}).get('quote_evidence') or {}).get('quote_evidence_class')}`",
+        f"- Row evidence group: `{((report.get('inputs') or {}).get('evidence_policy') or {}).get('evidence_group')}`",
         f"- Latest intraday quote date: `{(report.get('inputs') or {}).get('latest_intraday_quote_date')}`",
         "",
         "## Untracked Mark",
@@ -736,6 +758,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Boundary",
             "",
             "- This is historical/research mark evidence, not broker fills.",
+            "- `quote_evidence_class` describes the quote source used for the mark; it does not make the historical missed-pick row production proof.",
             "- Lane gates are allowed to route candidates into validation only when the lane has enough exact rows, positive average net P&L, and profit factor above threshold.",
             "- Profitable lanes still carry self-guardrails learned from negative clusters.",
             "",
@@ -821,6 +844,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         payload = {
             "summary": report["summary"],
+            "quote_evidence": report["inputs"]["quote_evidence"],
+            "evidence_policy": report["inputs"]["evidence_policy"],
             "untracked_rows_conservative_mark": report["metrics"]["untracked_rows_conservative_mark"],
             "lane_gate_rows": [
                 {

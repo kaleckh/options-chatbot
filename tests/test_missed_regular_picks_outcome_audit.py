@@ -141,6 +141,11 @@ def test_outcome_audit_builds_lane_gates_from_untracked_conservative_marks() -> 
     assert report["summary"]["raw_row_count"] == 6
     assert report["summary"]["tracked_row_count"] == 1
     assert report["summary"]["untracked_row_count"] == 5
+    assert report["inputs"]["quote_evidence"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
+    assert report["inputs"]["evidence_policy"]["evidence_group"] == "research_backfill"
+    assert report["inputs"]["evidence_policy"]["production_proof"] is False
+    assert report["rows"][0]["mark"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
+    assert report["rows"][0]["mark"]["production_proof"] is False
     assert report["lane_gates"]["profitable_lane"]["auto_track_allowed"] is True
     assert report["lane_gates"]["bad_lane"]["auto_track_allowed"] is False
     assert "profit_factor_below_lane_gate" in report["lane_gates"]["bad_lane"]["blockers"]

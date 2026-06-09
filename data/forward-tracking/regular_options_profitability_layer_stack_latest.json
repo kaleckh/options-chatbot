@@ -1,0 +1,1679 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-profitability-layer-stack.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260608T051542Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260608T051542Z.md"
+  },
+  "blocked_or_collecting_layers": [
+    {
+      "gate_status": "blocked",
+      "layer": 1,
+      "next_action": "Use the ledger queue from priority 0 downward.",
+      "primary_blockers": [
+        "open_risk_governor_blocked",
+        "no_exact_realized_pnl_rows"
+      ],
+      "slug": "candidate_outcome_ledger",
+      "title": "Unified candidate outcome ledger"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 2,
+      "next_action": "Collect fresh exact paper entries and exact realized exits, then rebuild the fresh-evidence loop.",
+      "primary_blockers": [
+        "no_fresh_exact_realized_pnl",
+        "paper_probation_exact_entry_required"
+      ],
+      "slug": "fresh_exact_paper_cohort",
+      "title": "Fresh exact paper cohort"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 4,
+      "next_action": "Create/link paper review rows for fresh exact entries; do not count them as live proof.",
+      "primary_blockers": [
+        "paper_review_rows_need_create_or_link"
+      ],
+      "slug": "paper_review_create_link_workflow",
+      "title": "Paper-review create/link workflow"
+    },
+    {
+      "gate_status": "blocked",
+      "layer": 7,
+      "next_action": "Collect current volatility paper exact evidence and clear open-risk before promotion discussion.",
+      "primary_blockers": [
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "slug": "volatility_paper_probation_current_cohort",
+      "title": "Volatility paper/probation current cohort"
+    },
+    {
+      "gate_status": "blocked",
+      "layer": 8,
+      "next_action": "Resolve open-risk governor and exact-exit evidence before any new live validation.",
+      "primary_blockers": [
+        "live_exact_negative_open_risk",
+        "exact_exit_evidence_required"
+      ],
+      "slug": "open_risk_exact_exit_hygiene",
+      "title": "Resolve open-risk exact-exit hygiene"
+    },
+    {
+      "gate_status": "blocked",
+      "layer": 12,
+      "next_action": "Keep anti-overfit controls active; require later-date and fresh-paper gates before promotion.",
+      "primary_blockers": [
+        "recent_cohort_recovered",
+        "fresh_current_policy_rows",
+        "fresh_champion_matched_rows",
+        "trusted_exact_realized_pnl_rows",
+        "point_in_time_replay_pass",
+        "paper_monitor_pass"
+      ],
+      "slug": "anti_overfit_controls",
+      "title": "Anti-overfit controls"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 14,
+      "next_action": "Watch Tier A clean exact rows until a fresh executable lane-signature bridge appears.",
+      "primary_blockers": [
+        "no_paper_shortlist_candidates",
+        "no_tier_a_fresh_match_bridge"
+      ],
+      "slug": "tier_a_bridge_watchlist",
+      "title": "Tier A bridge watchlist"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 15,
+      "next_action": "Run source replays before more provider imports or any repair graduation.",
+      "primary_blockers": [
+        "source_replay_required_targets"
+      ],
+      "slug": "source_replay_repair_burndown",
+      "title": "Source-replay repair burn-down"
+    },
+    {
+      "gate_status": "blocked",
+      "layer": 16,
+      "next_action": "Regenerate lane promotion, circuit-breaker, and guardrail-starvation readbacks before candidate routing.",
+      "primary_blockers": [
+        "no_live_validation_lanes",
+        "open_risk_governor_blocked"
+      ],
+      "slug": "lane_lab_freshness_reconciler",
+      "title": "Lane-lab freshness reconciler"
+    },
+    {
+      "gate_status": "blocked",
+      "layer": 17,
+      "next_action": "Use portfolio replay as throttle evidence; do not treat count success as quality success.",
+      "primary_blockers": [
+        "bullish_pullback_core:unpriced_candidates_3",
+        "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5",
+        "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137",
+        "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch",
+        "lane_a:conservative_zero_bid_pf_0.85_below_1_3",
+        "lane_a:conservative_zero_bid_unpriced_11",
+        "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0",
+        "paper_shadow_fill_evidence_pending"
+      ],
+      "slug": "portfolio_throttle_replay",
+      "title": "Portfolio throttle replay"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 18,
+      "next_action": "Use the sizing replay as research readback only; resolve open risk and collect fresh exact sizing evidence before any size-tier change.",
+      "primary_blockers": [
+        "fresh_exact_realized_sizing_evidence_required",
+        "historical_research_backfill_rows_are_not_production_sizing_proof",
+        "open_risk_governor_blocks_sizing",
+        "sizing_change_requires_separate_promotion_gate"
+      ],
+      "slug": "risk_budget_sizing_replay",
+      "title": "Risk-budget sizing replay"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 19,
+      "next_action": "Use the structure-specific harness as diagnostic readback; collect true executable entry/fill/exit P&L before any structure-specific promotion claim.",
+      "primary_blockers": [
+        "single_leg_or_other_multileg_samples_missing"
+      ],
+      "slug": "structure_specific_multileg_harness",
+      "title": "Structure-specific multi-leg harness"
+    },
+    {
+      "gate_status": "collecting",
+      "layer": 20,
+      "next_action": "Use the event data spine as diagnostic readback; collect durable event annotations and true executable post-event P&L before event-sensitive lane changes.",
+      "primary_blockers": [
+        "event_calendar_annotations_missing",
+        "post_event_vol_crush_replay_rows_missing",
+        "true_event_executable_pnl_rows_missing"
+      ],
+      "slug": "event_data_spine_post_event_vol_crush",
+      "title": "Event data spine / post-event vol crush"
+    }
+  ],
+  "fill_attempt_summary": {
+    "auto_tracked_count": 1,
+    "candidate_shown_count": 12,
+    "fill_discipline_snapshot_count": 1,
+    "fill_status_counts": {
+      "auto_tracked": 1,
+      "not_filled_auto_track_skipped": 6,
+      "not_submitted_auto_track_disabled": 3,
+      "skipped_observation_only": 2
+    },
+    "latest_candidate": {
+      "auto_track_position_id": 537,
+      "fill_outcome": "paper_fill_recorded",
+      "fill_status": "auto_tracked",
+      "logged_at": "2026-06-05T08:43:31.310396",
+      "playbook_id": "volatility_expansion_observation",
+      "ticker": "QQQ"
+    },
+    "paper_fill_recorded_count": 1,
+    "proof_live_exact_count": 10,
+    "row_count": 497,
+    "selected_spread_count": 12,
+    "strategy_type_counts": {
+      "vertical_spread": 12
+    },
+    "top_alternative_count": 12
+  },
+  "generated_at_utc": "2026-06-08T05:15:42Z",
+  "inputs": {
+    "candidate_ledger": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T08:03:23Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+      "status": "loaded"
+    },
+    "current_policy_circuit_breaker": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T23:46:17Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.json",
+      "status": "loaded"
+    },
+    "current_policy_stop_grid": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-02T14:05:32Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_historical_stop_grid_latest.json",
+      "status": "loaded"
+    },
+    "entry_filter_paper_monitor": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T21:43:39Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.json",
+      "status": "loaded"
+    },
+    "entry_filter_point_in_time": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T21:43:39Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_latest.json",
+      "status": "loaded"
+    },
+    "entry_filter_walkforward": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-02T05:53:20Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_walkforward_latest.json",
+      "status": "loaded"
+    },
+    "event_data_spine": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T02:06:02Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_event_data_spine_latest.json",
+      "status": "loaded"
+    },
+    "execution_alternative_replay_coverage": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T05:00:52Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_coverage_latest.json",
+      "status": "loaded"
+    },
+    "execution_alternative_replay_readiness": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_readiness_latest.json",
+      "status": "loaded"
+    },
+    "fill_attempts": {
+      "error": null,
+      "exists": true,
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+      "row_count": 497,
+      "status": "loaded"
+    },
+    "fresh_evidence_loop": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:33Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
+      "status": "loaded"
+    },
+    "guardrail_starvation": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T18:59:48Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
+      "status": "loaded"
+    },
+    "lane_promotion_state": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+      "status": "loaded"
+    },
+    "minute_exit_replay_readiness": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T05:01:14Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_replay_readiness_latest.json",
+      "status": "loaded"
+    },
+    "missed_picks_failure_modes": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T21:03:55Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
+      "status": "loaded"
+    },
+    "missed_picks_filter_matrix": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T22:10:15Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
+      "status": "loaded"
+    },
+    "missed_picks_outcome": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T19:35:21Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
+      "status": "loaded"
+    },
+    "multilane_portfolio": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T21:43:39Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-multilane\\latest.json",
+      "status": "loaded"
+    },
+    "open_risk": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
+      "status": "loaded"
+    },
+    "overfit_rule_archive": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_latest.json",
+      "status": "loaded"
+    },
+    "paper_shortlist": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T23:05:21Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
+      "status": "loaded"
+    },
+    "profit_capture_queue": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T01:06:55Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
+      "status": "loaded"
+    },
+    "repair_attempts": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T01:06:45Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-repair-attempts\\latest.json",
+      "status": "loaded"
+    },
+    "repair_burndown": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T01:14:06Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-repair-burndown\\latest.json",
+      "status": "loaded"
+    },
+    "risk_budget_sizing_replay": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.json",
+      "status": "loaded"
+    },
+    "structure_specific_harness": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T05:15:31Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_structure_specific_harness_latest.json",
+      "status": "loaded"
+    },
+    "suggested_close_risk": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T17:28:57Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\suggested_trade_close_risk_latest.json",
+      "status": "loaded"
+    },
+    "symbol_sleeves": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-04T18:49:34Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-symbol-sleeves\\latest.json",
+      "status": "loaded"
+    },
+    "volatility_probation": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:56Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\volatility_probation_reconciliation_latest.json",
+      "status": "loaded"
+    }
+  },
+  "layers": [
+    {
+      "category": "evidence_control_plane",
+      "gate_status": "blocked",
+      "implementation_status": "built",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "key": "candidate_ledger",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 1,
+      "live_policy_change": false,
+      "metrics": {
+        "action_counts": {
+          "capture_missing_fill_attempt_evidence": 4,
+          "capture_paper_only_exact_entry": 8,
+          "collect_exact_exit_evidence": 1,
+          "create_or_link_paper_review_row": 5,
+          "refresh_open_position_executable_review": 1,
+          "refresh_suggested_trade_review": 1,
+          "repair_historical_evidence": 39,
+          "resolve_open_risk_governor": 1,
+          "respect_guardrail_or_lane_mismatch": 9,
+          "wait_for_fresh_executable_tier_a_bridge": 21,
+          "wait_for_fresh_match_or_archive_candidate": 16
+        },
+        "ledger_row_count": 106,
+        "operating_status": "ledger_live_entry_blocked_collect_evidence"
+      },
+      "next_action": "Use the ledger queue from priority 0 downward.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_candidate_outcome_ledger.py"
+      ],
+      "primary_blockers": [
+        "open_risk_governor_blocked",
+        "no_exact_realized_pnl_rows"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "candidate_outcome_ledger",
+      "title": "Unified candidate outcome ledger"
+    },
+    {
+      "category": "paper_evidence",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "key": "fresh_evidence_loop",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "key": "lane_promotion_state",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 2,
+      "live_policy_change": false,
+      "metrics": {
+        "exact_exit_bridge_count": 1,
+        "exact_realized_pnl_count": 0,
+        "fresh_candidate_count": 34,
+        "paper_probation_bridge_count": 8
+      },
+      "next_action": "Collect fresh exact paper entries and exact realized exits, then rebuild the fresh-evidence loop.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_fresh_evidence_loop.py"
+      ],
+      "primary_blockers": [
+        "no_fresh_exact_realized_pnl",
+        "paper_probation_exact_entry_required"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "fresh_exact_paper_cohort",
+      "title": "Fresh exact paper cohort"
+    },
+    {
+      "category": "paper_evidence",
+      "gate_status": "ready",
+      "implementation_status": "built",
+      "input_artifacts": [
+        {
+          "generated_at_utc": null,
+          "key": "fill_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+          "row_count": 497,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "key": "fresh_evidence_loop",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 3,
+      "live_policy_change": false,
+      "metrics": {
+        "auto_tracked_count": 1,
+        "candidate_shown_count": 12,
+        "fill_discipline_snapshot_count": 1,
+        "fill_status_counts": {
+          "auto_tracked": 1,
+          "not_filled_auto_track_skipped": 6,
+          "not_submitted_auto_track_disabled": 3,
+          "skipped_observation_only": 2
+        },
+        "latest_candidate": {
+          "auto_track_position_id": 537,
+          "fill_outcome": "paper_fill_recorded",
+          "fill_status": "auto_tracked",
+          "logged_at": "2026-06-05T08:43:31.310396",
+          "playbook_id": "volatility_expansion_observation",
+          "ticker": "QQQ"
+        },
+        "paper_fill_recorded_count": 1,
+        "proof_live_exact_count": 10,
+        "row_count": 497,
+        "selected_spread_count": 12,
+        "strategy_type_counts": {
+          "vertical_spread": 12
+        },
+        "top_alternative_count": 12
+      },
+      "next_action": "Keep durable fill-attempt logging enabled for every paper/live-validation candidate.",
+      "owner_commands": [
+        "npm run options:log",
+        "npm run options:validate:pending-candidates"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "paper_only_fill_attempt_logging",
+      "title": "Paper-only fill-attempt logging"
+    },
+    {
+      "category": "operator_workflow",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "key": "candidate_ledger",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T23:05:21Z",
+          "key": "paper_shortlist",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 4,
+      "live_policy_change": false,
+      "metrics": {
+        "create_or_link_rows": 5,
+        "paper_shortlist_eligible_count": 0
+      },
+      "next_action": "Create/link paper review rows for fresh exact entries; do not count them as live proof.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_candidate_outcome_ledger.py"
+      ],
+      "primary_blockers": [
+        "paper_review_rows_need_create_or_link"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "paper_review_create_link_workflow",
+      "title": "Paper-review create/link workflow"
+    },
+    {
+      "category": "execution_quality",
+      "gate_status": "ready",
+      "implementation_status": "built",
+      "input_artifacts": [
+        {
+          "generated_at_utc": null,
+          "key": "fill_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+          "row_count": 497,
+          "status": "loaded"
+        }
+      ],
+      "layer": 5,
+      "live_policy_change": false,
+      "metrics": {
+        "auto_tracked_count": 1,
+        "candidate_shown_count": 12,
+        "fill_discipline_snapshot_count": 1,
+        "fill_status_counts": {
+          "auto_tracked": 1,
+          "not_filled_auto_track_skipped": 6,
+          "not_submitted_auto_track_disabled": 3,
+          "skipped_observation_only": 2
+        },
+        "latest_candidate": {
+          "auto_track_position_id": 537,
+          "fill_outcome": "paper_fill_recorded",
+          "fill_status": "auto_tracked",
+          "logged_at": "2026-06-05T08:43:31.310396",
+          "playbook_id": "volatility_expansion_observation",
+          "ticker": "QQQ"
+        },
+        "paper_fill_recorded_count": 1,
+        "proof_live_exact_count": 10,
+        "row_count": 497,
+        "selected_spread_count": 12,
+        "strategy_type_counts": {
+          "vertical_spread": 12
+        },
+        "top_alternative_count": 12
+      },
+      "next_action": "Preserve fill-degradation, top alternatives, and leg-spread fields in every fill-attempt row.",
+      "owner_commands": [
+        "npm run options:log"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "fill_discipline_paper_log",
+      "title": "Fill-discipline paper log"
+    },
+    {
+      "category": "operator_workflow",
+      "gate_status": "ready",
+      "implementation_status": "built",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "key": "candidate_ledger",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 6,
+      "live_policy_change": false,
+      "metrics": {
+        "action_counts": {
+          "capture_missing_fill_attempt_evidence": 4,
+          "capture_paper_only_exact_entry": 8,
+          "collect_exact_exit_evidence": 1,
+          "create_or_link_paper_review_row": 5,
+          "refresh_open_position_executable_review": 1,
+          "refresh_suggested_trade_review": 1,
+          "repair_historical_evidence": 39,
+          "resolve_open_risk_governor": 1,
+          "respect_guardrail_or_lane_mismatch": 9,
+          "wait_for_fresh_executable_tier_a_bridge": 21,
+          "wait_for_fresh_match_or_archive_candidate": 16
+        },
+        "queue_action_count": 11
+      },
+      "next_action": "Use `docs/regular-options-candidate-outcome-ledger.md` as the operator queue.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_candidate_outcome_ledger.py"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "operator_next_evidence_queue",
+      "title": "Operator next-evidence queue"
+    },
+    {
+      "category": "lane_promotion",
+      "gate_status": "blocked",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T07:21:56Z",
+          "key": "volatility_probation",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\volatility_probation_reconciliation_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "key": "lane_promotion_state",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 7,
+      "live_policy_change": false,
+      "metrics": {
+        "current_paper_probation_exact_evidence_pending_count": 0,
+        "lane_blockers": [
+          "walk_forward_holdout_too_small_or_failed",
+          "fresh_paper_cohort_insufficient",
+          "current_live_exact_risk_governor_blocked"
+        ],
+        "lane_promotion_state": "paper_probation",
+        "promotion_discussion_ready_excluding_legacy_count": 0
+      },
+      "next_action": "Collect current volatility paper exact evidence and clear open-risk before promotion discussion.",
+      "owner_commands": [
+        "npm run options:audit:volatility-probation",
+        "npm run options:audit:lane-promotion-state"
+      ],
+      "primary_blockers": [
+        "walk_forward_holdout_too_small_or_failed",
+        "fresh_paper_cohort_insufficient",
+        "current_live_exact_risk_governor_blocked"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "volatility_paper_probation_current_cohort",
+      "title": "Volatility paper/probation current cohort"
+    },
+    {
+      "category": "risk_and_exit",
+      "gate_status": "blocked",
+      "implementation_status": "built_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "key": "open_risk",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "key": "candidate_ledger",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 8,
+      "live_policy_change": false,
+      "metrics": {
+        "collect_exact_exit_rows": 1,
+        "live_entry_allowed": false,
+        "live_exact_negative_ids": [
+          537
+        ],
+        "open_risk_status": "open_risk_governor_blocked"
+      },
+      "next_action": "Resolve open-risk governor and exact-exit evidence before any new live validation.",
+      "owner_commands": [
+        "uv run --locked python scripts/audit_regular_open_position_risk.py"
+      ],
+      "primary_blockers": [
+        "live_exact_negative_open_risk",
+        "exact_exit_evidence_required"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "open_risk_exact_exit_hygiene",
+      "title": "Resolve open-risk exact-exit hygiene"
+    },
+    {
+      "category": "execution_quality",
+      "gate_status": "ready",
+      "implementation_status": "built_replay_coverage_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": null,
+          "key": "fill_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+          "row_count": 497,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T01:37:29Z",
+          "key": "execution_alternative_replay_readiness",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_readiness_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T05:00:52Z",
+          "key": "execution_alternative_replay_coverage",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_coverage_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T01:06:55Z",
+          "key": "profit_capture_queue",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 9,
+      "live_policy_change": false,
+      "metrics": {
+        "alternative_exit_quote_coverage_status": "full",
+        "candidate_shown_count": 12,
+        "contract_replacement_seed_count": 12,
+        "coverage_status": "execution_alternative_replay_coverage_ready",
+        "liquidity_first_replay_engine_status": "read_only_side_aware_engine_partial",
+        "missing_entry_quote_demand_count": 0,
+        "missing_exit_quote_demand_count": 0,
+        "missing_quote_demand_count": 0,
+        "quote_demand_manifest_status": "no_missing_quote_demands",
+        "quote_demand_usage_counts": {},
+        "readiness_status": "execution_alternative_replay_readiness_readback",
+        "top_alternative_logged_row_count": 12,
+        "top_spread_entry_quote_coverage_status": "full",
+        "top_spread_exit_quote_coverage_status": "full",
+        "top_spread_replay_seed_count": 12,
+        "true_top_spread_replay_pnl_count": 12
+      },
+      "next_action": "Use the execution-alternative quote-demand manifest to import/query missing trusted OPRA/NBBO alternative entry and exit quotes, then rerun side-aware coverage before changing selection.",
+      "owner_commands": [
+        "npm run options:replay:execution-alternatives",
+        "npm run options:replay:execution-alternative-coverage",
+        "uv run --locked python scripts/build_regular_options_profit_capture_queue.py"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "top_spread_alternative_replay",
+      "title": "Top-spread alternative replay / liquidity-first v2"
+    },
+    {
+      "category": "execution_quality",
+      "gate_status": "ready",
+      "implementation_status": "built_replay_coverage_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": null,
+          "key": "fill_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+          "row_count": 497,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T01:37:29Z",
+          "key": "execution_alternative_replay_readiness",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_readiness_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T05:00:52Z",
+          "key": "execution_alternative_replay_coverage",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_coverage_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T18:49:34Z",
+          "key": "symbol_sleeves",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-symbol-sleeves\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 10,
+      "live_policy_change": false,
+      "metrics": {
+        "alternative_exit_quote_coverage_status": "full",
+        "candidate_shown_count": 12,
+        "contract_replacement_entry_quote_coverage_status": "full",
+        "contract_replacement_exit_quote_coverage_status": "full",
+        "contract_replacement_replay_engine_status": "read_only_side_aware_engine_partial",
+        "contract_replacement_seed_count": 12,
+        "coverage_status": "execution_alternative_replay_coverage_ready",
+        "missing_entry_quote_demand_count": 0,
+        "missing_exit_quote_demand_count": 0,
+        "missing_quote_demand_count": 0,
+        "quote_demand_manifest_status": "no_missing_quote_demands",
+        "quote_demand_usage_counts": {},
+        "readiness_status": "execution_alternative_replay_readiness_readback",
+        "replacement_alternative_logged_row_count": 12,
+        "true_contract_replacement_pnl_count": 12
+      },
+      "next_action": "Use the execution-alternative quote-demand manifest to import/query missing trusted OPRA/NBBO replacement entry and exit quotes, then rerun side-aware coverage before contract-selection changes.",
+      "owner_commands": [
+        "npm run options:replay:execution-alternatives",
+        "npm run options:replay:execution-alternative-coverage",
+        "uv run --locked python scripts/build_regular_options_symbol_sleeves.py"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "contract_replacement_exit_survivability",
+      "title": "Contract replacement for exit survivability"
+    },
+    {
+      "category": "risk_and_exit",
+      "gate_status": "ready",
+      "implementation_status": "built_replay_coverage_ready",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-02T14:05:32Z",
+          "key": "current_policy_stop_grid",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_historical_stop_grid_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T05:01:14Z",
+          "key": "minute_exit_replay_readiness",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_replay_readiness_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "key": "open_risk",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 11,
+      "live_policy_change": false,
+      "metrics": {
+        "daily_stop_grid_available": true,
+        "entry_seed_ready_count": 12,
+        "minute_exit_decision_counts": {
+          "hold_for_current_open_risk_review": 1,
+          "reject_production_use_without_fill_or_position_link": 11
+        },
+        "minute_exit_replay_engine_status": "read_only_side_aware_engine_partial",
+        "minute_level_replay_artifact": "minute_exit_replay_readiness_readback",
+        "minute_quote_coverage_status": "full",
+        "minute_readiness_overall_status": "minute_exit_replay_coverage_ready",
+        "open_risk_status": "open_risk_governor_blocked",
+        "position_linked_true_minute_exit_pnl_count": 1,
+        "position_seed_ready_count": 1,
+        "true_minute_exit_pnl_count": 12
+      },
+      "next_action": "Use the minute-exit readiness queue to build exact OPRA/NBBO minute quote coverage and replay before stop/exit policy changes.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_minute_exit_replay_readiness.py",
+        "uv run --locked python scripts/replay_current_policy_historical_stop_grid.py"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "minute_level_exit_quote_deterioration",
+      "title": "Minute-level exit / quote-deterioration replay"
+    },
+    {
+      "category": "validation",
+      "gate_status": "blocked",
+      "implementation_status": "built_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-05T22:10:15Z",
+          "key": "missed_picks_filter_matrix",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-08T01:37:29Z",
+          "key": "overfit_rule_archive",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-02T05:53:20Z",
+          "key": "entry_filter_walkforward",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_walkforward_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T21:43:39Z",
+          "key": "entry_filter_point_in_time",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\short_term_filter_point_in_time_replay_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T21:43:39Z",
+          "key": "entry_filter_paper_monitor",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T23:46:17Z",
+          "key": "current_policy_circuit_breaker",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 12,
+      "live_policy_change": false,
+      "metrics": {
+        "archived_reject_overfit_rule_count": 10,
+        "circuit_breaker_status": "paper_only_recent_week_break",
+        "filter_matrix_priced_untracked_rows": 206,
+        "overfit_archive_status": "overfit_rules_archived",
+        "paper_monitor_status": "collecting",
+        "point_in_time_status": "paper_only_collecting",
+        "unarchived_reject_overfit_rule_count": 0
+      },
+      "next_action": "Keep anti-overfit controls active; require later-date and fresh-paper gates before promotion.",
+      "owner_commands": [
+        "npm run options:audit:missed-filter-matrix",
+        "uv run --locked python scripts/build_regular_options_overfit_rule_archive.py",
+        "uv run --locked python scripts/validate_current_policy_entry_filter_walkforward.py",
+        "npm run options:replay:short-term-filter"
+      ],
+      "primary_blockers": [
+        "recent_cohort_recovered",
+        "fresh_current_policy_rows",
+        "fresh_champion_matched_rows",
+        "trusted_exact_realized_pnl_rows",
+        "point_in_time_replay_pass",
+        "paper_monitor_pass"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "anti_overfit_controls",
+      "title": "Anti-overfit controls"
+    },
+    {
+      "category": "validation",
+      "gate_status": "ready",
+      "implementation_status": "built",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-05T19:35:21Z",
+          "key": "missed_picks_outcome",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T21:03:55Z",
+          "key": "missed_picks_failure_modes",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T22:10:15Z",
+          "key": "missed_picks_filter_matrix",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 13,
+      "live_policy_change": false,
+      "metrics": {
+        "data_status": {
+          "conclusions": [
+            "The hard quote blocker is not the reason for this result when data_status is clean_for_failure_analysis.",
+            "The missed rows are fully priced with trusted intraday exact-contract marks before lane/filter conclusions are drawn.",
+            "Lane equality is rejected: blocked lanes stay diagnostic-only until they earn back."
+          ],
+          "status": "data_clean_strategy_unprofitable"
+        },
+        "priced_untracked_rows": 206,
+        "source_mark_unpriced_count": 0
+      },
+      "next_action": "Use missed-pick outcome and failure-mode readbacks before retesting rejected filters.",
+      "owner_commands": [
+        "npm run options:audit:missed-outcomes",
+        "npm run options:audit:missed-failures"
+      ],
+      "primary_blockers": [],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "rejected_near_miss_outcome_replay",
+      "title": "Rejected near-miss outcome replay"
+    },
+    {
+      "category": "paper_evidence",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-05T01:06:55Z",
+          "key": "profit_capture_queue",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T23:05:21Z",
+          "key": "paper_shortlist",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 14,
+      "live_policy_change": false,
+      "metrics": {
+        "paper_review_candidates": 15,
+        "paper_shortlist_eligible_count": 0,
+        "tier_a_fresh_match_bridge_count": 0
+      },
+      "next_action": "Watch Tier A clean exact rows until a fresh executable lane-signature bridge appears.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_profit_capture_queue.py",
+        "uv run --locked python scripts/build_regular_options_paper_shortlist.py"
+      ],
+      "primary_blockers": [
+        "no_paper_shortlist_candidates",
+        "no_tier_a_fresh_match_bridge"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "tier_a_bridge_watchlist",
+      "title": "Tier A bridge watchlist"
+    },
+    {
+      "category": "data_repair",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-05T01:14:06Z",
+          "key": "repair_burndown",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-repair-burndown\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T01:06:45Z",
+          "key": "repair_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-repair-attempts\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T01:06:55Z",
+          "key": "profit_capture_queue",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 15,
+      "live_policy_change": false,
+      "metrics": {
+        "active_unattempted_exact_targets": null,
+        "diagnostic_lookahead_targets": null,
+        "exhausted_targets": null,
+        "source_replay_required_targets": 5
+      },
+      "next_action": "Run source replays before more provider imports or any repair graduation.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_repair_burndown.py"
+      ],
+      "primary_blockers": [
+        "source_replay_required_targets"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "source_replay_repair_burndown",
+      "title": "Source-replay repair burn-down"
+    },
+    {
+      "category": "lane_promotion",
+      "gate_status": "blocked",
+      "implementation_status": "built_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "key": "lane_promotion_state",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T23:46:17Z",
+          "key": "current_policy_circuit_breaker",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T18:59:48Z",
+          "key": "guardrail_starvation",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 16,
+      "live_policy_change": false,
+      "metrics": {
+        "diagnostic_lane_count": 13,
+        "lane_count": 14,
+        "live_validation_lane_count": 0,
+        "open_risk_governor_status": "open_risk_governor_blocked",
+        "paper_probation_lane_count": 1
+      },
+      "next_action": "Regenerate lane promotion, circuit-breaker, and guardrail-starvation readbacks before candidate routing.",
+      "owner_commands": [
+        "npm run options:audit:lane-promotion-state",
+        "npm run options:audit:all-lanes"
+      ],
+      "primary_blockers": [
+        "no_live_validation_lanes",
+        "open_risk_governor_blocked"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "lane_lab_freshness_reconciler",
+      "title": "Lane-lab freshness reconciler"
+    },
+    {
+      "category": "risk_and_sizing",
+      "gate_status": "blocked",
+      "implementation_status": "built_blocked",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-04T21:43:39Z",
+          "key": "multilane_portfolio",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-multilane\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "key": "open_risk",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 17,
+      "live_policy_change": false,
+      "metrics": {
+        "combined_portfolio": {
+          "by_family": {
+            "bullish_pullback_observation": 234
+          },
+          "by_lane": {
+            "bullish_pullback_core": 130,
+            "lane_a_chain_native_ret20_4_stop200_time75": 104
+          },
+          "duplicate_group_count": 51,
+          "metrics": {
+            "avg_pnl_pct": 26.76,
+            "exact_trade_count": 234,
+            "gap_to_200": 0,
+            "gross_loss": 5379.25,
+            "gross_win": 11640.94,
+            "loss_trade_count": 87,
+            "profit_factor": 2.16,
+            "win_rate_pct": 62.4,
+            "win_trade_count": 146
+          },
+          "selected_trade_count": 234,
+          "suppressed_duplicate_trade_count": 51
+        },
+        "lane_status_counts": {
+          "blocked_or_empty": 2,
+          "count_candidate": 2,
+          "daily_research_only": 5,
+          "intraday_scout": 8
+        },
+        "quality_gate_status": "quality_pending"
+      },
+      "next_action": "Use portfolio replay as throttle evidence; do not treat count success as quality success.",
+      "owner_commands": [
+        "uv run --locked python scripts/run_regular_options_multilane_portfolio.py"
+      ],
+      "primary_blockers": [
+        "bullish_pullback_core:unpriced_candidates_3",
+        "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5",
+        "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137",
+        "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch",
+        "lane_a:conservative_zero_bid_pf_0.85_below_1_3",
+        "lane_a:conservative_zero_bid_unpriced_11",
+        "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0",
+        "paper_shadow_fill_evidence_pending"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "portfolio_throttle_replay",
+      "title": "Portfolio throttle replay"
+    },
+    {
+      "category": "risk_and_sizing",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-08T01:37:29Z",
+          "key": "risk_budget_sizing_replay",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "key": "open_risk",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-04T21:43:39Z",
+          "key": "multilane_portfolio",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-multilane\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "key": "candidate_ledger",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 18,
+      "live_policy_change": false,
+      "metrics": {
+        "baseline_net_pnl_usd": -16314.0,
+        "best_research_net_pnl_usd": 972.3,
+        "best_research_profit_factor": 1.84,
+        "best_research_scenario_id": "paper_shadow_only",
+        "live_entry_allowed": false,
+        "open_risk_status": "open_risk_governor_blocked",
+        "positive_research_scenario_count": 2,
+        "quality_gate_status": "quality_pending",
+        "sizing_replay_status": "sizing_replay_built_open_risk_blocked",
+        "source_row_count": 206
+      },
+      "next_action": "Use the sizing replay as research readback only; resolve open risk and collect fresh exact sizing evidence before any size-tier change.",
+      "owner_commands": [
+        "uv run --locked python scripts/build_regular_options_risk_budget_sizing_replay.py",
+        "uv run --locked python scripts/run_regular_options_multilane_portfolio.py",
+        "uv run --locked python scripts/audit_regular_open_position_risk.py"
+      ],
+      "primary_blockers": [
+        "fresh_exact_realized_sizing_evidence_required",
+        "historical_research_backfill_rows_are_not_production_sizing_proof",
+        "open_risk_governor_blocks_sizing",
+        "sizing_change_requires_separate_promotion_gate"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "risk_budget_sizing_replay",
+      "title": "Risk-budget sizing replay"
+    },
+    {
+      "category": "strategy_structure",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-08T05:15:31Z",
+          "key": "structure_specific_harness",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_structure_specific_harness_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": null,
+          "key": "fill_attempts",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\fill_attempts.jsonl",
+          "row_count": 497,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "key": "fresh_evidence_loop",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 19,
+      "live_policy_change": false,
+      "metrics": {
+        "blockers": [
+          "single_leg_or_other_multileg_samples_missing"
+        ],
+        "candidate_shown_count": 12,
+        "harness_row_count": 1,
+        "paper_fill_recorded_count": 1,
+        "proof_live_exact_entry_count": 10,
+        "strategy_type_counts": {
+          "vertical_spread": 12
+        },
+        "structure_bucket_counts": {
+          "multi_leg_other": 0,
+          "single_leg": 0,
+          "unknown": 0,
+          "vertical_spread": 12
+        },
+        "structure_harness_status": "structure_specific_harness_built_collecting",
+        "true_structure_specific_pnl_count": 12
+      },
+      "next_action": "Use the structure-specific harness as diagnostic readback; collect true executable entry/fill/exit P&L before any structure-specific promotion claim.",
+      "owner_commands": [
+        "npm run options:replay:structure-specific-harness",
+        "npm run options:log",
+        "uv run --locked python scripts/build_regular_options_fresh_evidence_loop.py"
+      ],
+      "primary_blockers": [
+        "single_leg_or_other_multileg_samples_missing"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "structure_specific_multileg_harness",
+      "title": "Structure-specific multi-leg harness"
+    },
+    {
+      "category": "event_research",
+      "gate_status": "collecting",
+      "implementation_status": "built_collecting",
+      "input_artifacts": [
+        {
+          "generated_at_utc": "2026-06-08T02:06:02Z",
+          "key": "event_data_spine",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_event_data_spine_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T18:59:48Z",
+          "key": "guardrail_starvation",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
+          "row_count": null,
+          "status": "loaded"
+        },
+        {
+          "generated_at_utc": "2026-06-05T01:06:55Z",
+          "key": "profit_capture_queue",
+          "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
+          "row_count": null,
+          "status": "loaded"
+        }
+      ],
+      "layer": 20,
+      "live_policy_change": false,
+      "metrics": {
+        "candidate_shown_count": 12,
+        "event_annotation_count": 0,
+        "event_annotation_field_counts": {},
+        "event_data_spine_status": "event_data_spine_built_collecting",
+        "event_spine_blockers": [
+          "event_calendar_annotations_missing",
+          "post_event_vol_crush_replay_rows_missing",
+          "true_event_executable_pnl_rows_missing"
+        ],
+        "guardrail_starvation_status": "upstream_zero_candidate_scan_pressure",
+        "missing_event_annotation_count": 12,
+        "post_event_vol_crush_replay_pnl_count": 0,
+        "profit_capture_queue_rows": 97,
+        "true_event_replay_pnl_count": 0,
+        "unique_ticker_count": 3
+      },
+      "next_action": "Use the event data spine as diagnostic readback; collect durable event annotations and true executable post-event P&L before event-sensitive lane changes.",
+      "owner_commands": [
+        "npm run options:replay:event-data-spine",
+        "npm run options:audit:all-lanes",
+        "uv run --locked python scripts/build_regular_options_profit_capture_queue.py"
+      ],
+      "primary_blockers": [
+        "event_calendar_annotations_missing",
+        "post_event_vol_crush_replay_rows_missing",
+        "true_event_executable_pnl_rows_missing"
+      ],
+      "prohibited_actions": [
+        "do_not_create_live_row_from_profitability_layer_stack",
+        "do_not_submit_broker_order_from_profitability_layer_stack",
+        "do_not_change_scanner_policy_from_profitability_layer_stack",
+        "do_not_change_stop_policy_from_profitability_layer_stack",
+        "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+      ],
+      "read_only": true,
+      "slug": "event_data_spine_post_event_vol_crush",
+      "title": "Event data spine / post-event vol crush"
+    }
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_create_live_row_from_profitability_layer_stack",
+      "do_not_submit_broker_order_from_profitability_layer_stack",
+      "do_not_change_scanner_policy_from_profitability_layer_stack",
+      "do_not_change_stop_policy_from_profitability_layer_stack",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_profitability_layer_stack",
+      "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
+    ],
+    "readback_is": "20-layer profitability iteration control plane for regular supervised options",
+    "readback_is_not": "live-release approval, broker recommendation, scanner policy change, stop-policy change, sizing change, or proof-bar reduction",
+    "trusted_proof_standard": "fresh executable exact OPRA/NBBO entry evidence plus exact executable exit realized-P&L evidence"
+  },
+  "read_only": true,
+  "report_id": "regular_options_profitability_layer_stack",
+  "schema_version": 1,
+  "scope": "regular_options_profitability_all_20_layers",
+  "status": "profitability_layer_stack_readback",
+  "summary": {
+    "blocked_or_collecting_layer_count": 13,
+    "candidate_ledger_status": "ledger_live_entry_blocked_collect_evidence",
+    "category_counts": {
+      "data_repair": 1,
+      "event_research": 1,
+      "evidence_control_plane": 1,
+      "execution_quality": 3,
+      "lane_promotion": 2,
+      "operator_workflow": 2,
+      "paper_evidence": 3,
+      "risk_and_exit": 2,
+      "risk_and_sizing": 2,
+      "strategy_structure": 1,
+      "validation": 2
+    },
+    "expected_layer_count": 20,
+    "gate_status_counts": {
+      "blocked": 6,
+      "collecting": 7,
+      "ready": 7
+    },
+    "implementation_status_counts": {
+      "built": 5,
+      "built_blocked": 4,
+      "built_collecting": 8,
+      "built_replay_coverage_blocked": 2,
+      "built_replay_coverage_ready": 1
+    },
+    "layer_count": 20,
+    "live_policy_change": false,
+    "open_risk_status": "open_risk_governor_blocked",
+    "overall_status": "all_20_layers_wired_live_blocked_collect_evidence",
+    "wired_layer_count": 20
+  }
+}

@@ -20,12 +20,67 @@ from exact_contract_accounting import is_exact_contract_resolution, trade_contra
 from ai_commodity_universe import (
     ai_commodity_scan_tickers,
 )
+from scripts.quote_evidence_readback import non_production_research_policy, quote_evidence_readback
 
 DEFAULT_TRACKED_DB = ROOT / "data" / "tracked_positions.db"
 DEFAULT_HISTORICAL_RUN = ROOT / "data" / "options-validation" / "runs" / "latest_daily.json"
 DEFAULT_PAID_DATA_READINESS = ROOT / "data" / "profitability-lab" / "paid-data-readiness" / "latest.json"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "lane-lab"
 AI_COMMODITY_MIN_SHARED_QUOTE_DATES = 100
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    try:
+        return left.expanduser().resolve() == right.expanduser().resolve()
+    except OSError:
+        return left.expanduser() == right.expanduser()
+
+
+def lane_lab_evidence_policy(
+    *,
+    tracked_db: Path,
+    historical_run: Path,
+    readiness_path: Path,
+    readiness_payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    readiness_quote = (
+        readiness_payload.get("quote_evidence")
+        if isinstance(readiness_payload, dict) and isinstance(readiness_payload.get("quote_evidence"), dict)
+        else None
+    )
+    default_tracked_db = _same_path(Path(tracked_db), DEFAULT_TRACKED_DB)
+    default_historical_run = _same_path(Path(historical_run), DEFAULT_HISTORICAL_RUN)
+    quote_evidence = readiness_quote or quote_evidence_readback(
+        snapshot_kind="daily_eod" if default_historical_run else None,
+        source_label="historical_imported_daily" if default_historical_run else None,
+        trusted_only=None,
+    )
+    policy = non_production_research_policy(
+        record_class="lane_lab_research_readback",
+        quote_evidence=quote_evidence,
+    )
+    policy.update(
+        {
+            "source_quality": "legacy_research_only"
+            if default_tracked_db or default_historical_run
+            else "explicit_research_inputs",
+            "production_proof_eligible": False,
+            "allowed_use": "lane_design_and_research_planning_only",
+            "tracked_db_role": "legacy_paper_or_test_double" if default_tracked_db else "explicit_input",
+            "historical_run_role": "legacy_daily_replay_artifact" if default_historical_run else "explicit_input",
+            "readiness_source_role": "readiness_readback_not_row_proof",
+            "legacy_default_sources": {
+                "tracked_db": default_tracked_db,
+                "historical_run": default_historical_run,
+            },
+            "source_paths": {
+                "tracked_db": str(Path(tracked_db)),
+                "historical_run": str(Path(historical_run)),
+                "paid_data_readiness": str(Path(readiness_path)),
+            },
+        }
+    )
+    return policy
 
 
 def _utc_now() -> str:
@@ -959,6 +1014,12 @@ def build_lane_lab_report(
     lanes = lane_definitions()
     current_book = evaluate_current_paper_book(tracked_db)
     debit_control = evaluate_historical_debit_controls(historical_run)
+    evidence_policy = lane_lab_evidence_policy(
+        tracked_db=tracked_db,
+        historical_run=historical_run,
+        readiness_path=readiness_path,
+        readiness_payload=readiness_payload,
+    )
     lane_results = [
         _lane_result(
             lane,
@@ -1001,6 +1062,8 @@ def build_lane_lab_report(
             "historical_run": str(Path(historical_run)),
             "paid_data_readiness": str(Path(readiness_path)),
         },
+        "source_quality": evidence_policy.get("source_quality"),
+        "evidence_policy": evidence_policy,
         "current_paper_book": current_book,
         "historical_debit_control": debit_control,
         "lanes": lane_results,
@@ -1029,6 +1092,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Lanes: {report.get('lane_count')}",
         f"- First five: {', '.join(report.get('first_five_ids') or [])}",
         f"- Status counts: `{json.dumps(report.get('status_counts') or {}, sort_keys=True)}`",
+        f"- Source quality: `{(report.get('evidence_policy') or {}).get('source_quality')}`",
+        f"- Row evidence group: `{(report.get('evidence_policy') or {}).get('evidence_group')}`",
+        f"- Quote evidence class: `{((report.get('evidence_policy') or {}).get('quote_evidence') or {}).get('quote_evidence_class')}`",
+        f"- Production proof eligible: `{(report.get('evidence_policy') or {}).get('production_proof_eligible')}`",
         "",
         "## Current Paper Book",
     ]
@@ -1054,6 +1121,15 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append(
             f"| {lane.get('priority')} | `{lane.get('id')}` | {lane.get('tier')} | `{lane.get('status')}` | {result} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Evidence Boundary",
+            "",
+            "- Lane Lab rows are research/planning readbacks, not live broker fills or production proof.",
+            "- The quote evidence class labels the source quality of supporting readbacks; it does not promote legacy tracked DB or daily replay artifacts.",
+        ]
+    )
     lines.extend(["", "## Next Actions"])
     for action in report.get("next_actions") or []:
         lines.append(f"- {action}")
@@ -1129,6 +1205,8 @@ def main() -> int:
                     "lane_count": report["lane_count"],
                     "first_five_ids": report["first_five_ids"],
                     "status_counts": report["status_counts"],
+                    "source_quality": report["source_quality"],
+                    "evidence_policy": report["evidence_policy"],
                     "artifacts": report.get("artifacts"),
                     "next_actions": report["next_actions"],
                 },

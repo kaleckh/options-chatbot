@@ -1,0 +1,84 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-execution-alternative-quote-import-plan.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_quote_import_plan_20260608T050103Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_quote_import_plan_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_quote_import_plan_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_quote_import_plan_20260608T050103Z.md"
+  },
+  "command_groups": [],
+  "evidence_boundary": {
+    "operator_rule": "Dry-run commands may fetch and parse; write commands import quote evidence only and still require rerunning coverage before any P&L claim.",
+    "prohibited_actions": [
+      "do_not_create_live_row_from_execution_alternative_quote_import_plan",
+      "do_not_submit_broker_order_from_execution_alternative_quote_import_plan",
+      "do_not_mutate_trading_row_database_from_execution_alternative_quote_import_plan",
+      "do_not_change_scanner_policy_from_execution_alternative_quote_import_plan",
+      "do_not_change_contract_selection_policy_from_execution_alternative_quote_import_plan",
+      "do_not_change_stop_policy_from_execution_alternative_quote_import_plan",
+      "do_not_change_sizing_from_execution_alternative_quote_import_plan",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_execution_alternative_quote_import_plan",
+      "do_not_promote_quote_import_plan_to_production_proof"
+    ],
+    "readback_is": "read-only quote import/query coordination for execution-alternative replay gaps",
+    "readback_is_not": "scanner policy, contract-selection permission, broker action, trading-row DB mutation, stop/sizing change, or promotion proof"
+  },
+  "exact_contract_manifest": [],
+  "generated_at_utc": "2026-06-08T05:01:03Z",
+  "inputs": {
+    "execution_alternative_replay_coverage": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T05:00:52Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_execution_alternative_replay_coverage_latest.json",
+      "status": "loaded"
+    },
+    "importer": "scripts\\import_thetadata_options_nbbo.py",
+    "theta_url": "http://127.0.0.1:25503",
+    "timeout_seconds": 60
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_execution_alternative_quote_import_plan",
+    "do_not_submit_broker_order_from_execution_alternative_quote_import_plan",
+    "do_not_mutate_trading_row_database_from_execution_alternative_quote_import_plan",
+    "do_not_change_scanner_policy_from_execution_alternative_quote_import_plan",
+    "do_not_change_contract_selection_policy_from_execution_alternative_quote_import_plan",
+    "do_not_change_stop_policy_from_execution_alternative_quote_import_plan",
+    "do_not_change_sizing_from_execution_alternative_quote_import_plan",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_execution_alternative_quote_import_plan",
+    "do_not_promote_quote_import_plan_to_production_proof"
+  ],
+  "read_only": true,
+  "report_id": "regular_options_execution_alternative_quote_import_plan",
+  "schema_version": 1,
+  "scope": "regular_options_execution_alternative_quote_import_plan_read_only",
+  "status": "no_quote_demands_to_plan",
+  "summary": {
+    "command_group_count": 0,
+    "entry_quote_demand_count": 0,
+    "exact_contract_manifest_count": 0,
+    "exit_quote_demand_count": 0,
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "operator_command_status": "not_available",
+    "overall_status": "no_quote_demands_to_plan",
+    "phase_counts": {},
+    "quote_date_count": 0,
+    "quote_dates": [],
+    "quote_demand_count": 0,
+    "quote_import_plan_status": "no_quote_demands_to_plan",
+    "right_counts": {},
+    "source_coverage_generated_at_utc": "2026-06-08T05:00:52Z",
+    "source_coverage_status": "execution_alternative_replay_coverage_readback",
+    "source_missing_quote_demand_count": 0,
+    "source_quote_demand_manifest_status": "no_missing_quote_demands",
+    "theta_probe_status": "not_requested",
+    "underlying_count": 0,
+    "underlyings": [],
+    "unparsed_quote_demand_count": 0,
+    "usage_counts": {}
+  },
+  "unparsed_quote_demands": []
+}

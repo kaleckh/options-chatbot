@@ -1,0 +1,1522 @@
+{
+  "archived_lane_month_rows": [
+    {
+      "archive_key": "2026-03|bullish_pullback_observation|AA|2026-03-19|2026-04-27|AA260424C00062000|AA260424C00067000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-03-19",
+      "exit_date": "2026-04-27",
+      "exit_timestamp_utc": "2026-04-27T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "same_symbol_exit_date_probe_AA_COIN_2026-04-27_15:55_generated_rows=824_errors=0",
+        "exact_expiration_20260424_on_2026-04-27_AA_COIN_four_missing_legs_http_472"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-04-24",
+      "long_contract_symbol": "AA260424C00062000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-04-24",
+      "short_contract_symbol": "AA260424C00067000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-03",
+      "ticker": "AA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-03|bullish_pullback_observation|COIN|2026-03-24|2026-04-27|COIN260424C00210000|COIN260424C00225000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-03-24",
+      "exit_date": "2026-04-27",
+      "exit_timestamp_utc": "2026-04-27T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "same_symbol_exit_date_probe_AA_COIN_2026-04-27_15:55_generated_rows=824_errors=0",
+        "exact_expiration_20260424_on_2026-04-27_AA_COIN_four_missing_legs_http_472"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-04-24",
+      "long_contract_symbol": "COIN260424C00210000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-04-24",
+      "short_contract_symbol": "COIN260424C00225000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-03",
+      "ticker": "COIN",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-09|bullish_pullback_observation|TSLA|2025-09-02|2025-10-06|TSLA251003C00335000|TSLA251003C00365000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-09-02",
+      "exit_date": "2025-10-06",
+      "exit_timestamp_utc": "2025-10-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-09_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-03",
+      "long_contract_symbol": "TSLA251003C00335000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-03",
+      "short_contract_symbol": "TSLA251003C00365000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-09",
+      "ticker": "TSLA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-09|bullish_pullback_observation|GOOGL|2025-09-26|2025-11-03|GOOGL251031C00250000|GOOGL251031C00270000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-09-26",
+      "exit_date": "2025-11-03",
+      "exit_timestamp_utc": "2025-11-03T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-09_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-31",
+      "long_contract_symbol": "GOOGL251031C00250000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-31",
+      "short_contract_symbol": "GOOGL251031C00270000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-09",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-09|bullish_pullback_observation|PLTR|2025-09-30|2025-11-03|PLTR251031C00182500|PLTR251031C00200000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-09-30",
+      "exit_date": "2025-11-03",
+      "exit_timestamp_utc": "2025-11-03T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-09_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-31",
+      "long_contract_symbol": "PLTR251031C00182500",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-31",
+      "short_contract_symbol": "PLTR251031C00200000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-09",
+      "ticker": "PLTR",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-09|bullish_pullback_observation|QQQ|2025-09-30|2025-11-03|QQQ251031C00601000|QQQ251031C00620000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-09-30",
+      "exit_date": "2025-11-03",
+      "exit_timestamp_utc": "2025-11-03T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-09_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-31",
+      "long_contract_symbol": "QQQ251031C00601000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-31",
+      "short_contract_symbol": "QQQ251031C00620000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-09",
+      "ticker": "QQQ",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|bullish_pullback_observation|JPM|2025-10-06|2025-11-17|JPM251114C00310000|JPM251114C00330000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-06",
+      "exit_date": "2025-11-17",
+      "exit_timestamp_utc": "2025-11-17T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-10_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-14",
+      "long_contract_symbol": "JPM251114C00310000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-14",
+      "short_contract_symbol": "JPM251114C00330000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-10",
+      "ticker": "JPM",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|bullish_pullback_observation|LLY|2025-10-14|2025-11-24|LLY251121C00830000|LLY251121C00910000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-14",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-10_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "LLY251121C00830000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "LLY251121C00910000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-10",
+      "ticker": "LLY",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|bullish_pullback_observation|LLY|2025-10-16|2025-11-24|LLY251121C00840000|LLY251121C00920000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-16",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-10_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "LLY251121C00840000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "LLY251121C00920000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-10",
+      "ticker": "LLY",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|bullish_pullback_observation|CAT|2025-10-27|2025-12-01|CAT251128C00530000|CAT251128C00575000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-27",
+      "exit_date": "2025-12-01",
+      "exit_timestamp_utc": "2025-12-01T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-10_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-28",
+      "long_contract_symbol": "CAT251128C00530000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-28",
+      "short_contract_symbol": "CAT251128C00575000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-10",
+      "ticker": "CAT",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-11|bullish_pullback_observation|GOOGL|2025-11-10|2025-12-15|GOOGL251212C00285000|GOOGL251212C00310000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-11-10",
+      "exit_date": "2025-12-15",
+      "exit_timestamp_utc": "2025-12-15T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-11_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-12",
+      "long_contract_symbol": "GOOGL251212C00285000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-12",
+      "short_contract_symbol": "GOOGL251212C00310000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-11",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-11|bullish_pullback_observation|GOOGL|2025-11-19|2025-12-29|GOOGL251226C00295000|GOOGL251226C00320000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-11-19",
+      "exit_date": "2025-12-29",
+      "exit_timestamp_utc": "2025-12-29T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-11_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-26",
+      "long_contract_symbol": "GOOGL251226C00295000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-26",
+      "short_contract_symbol": "GOOGL251226C00320000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-11",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-12|bullish_pullback_observation|GOOGL|2025-12-15|2026-01-20|GOOGL260116C00315000|GOOGL260116C00345000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-12-15",
+      "exit_date": "2026-01-20",
+      "exit_timestamp_utc": "2026-01-20T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-12_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-01-16",
+      "long_contract_symbol": "GOOGL260116C00315000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 4,
+        "short_leg": 4
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-01-16",
+      "short_contract_symbol": "GOOGL260116C00345000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-12",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-12|bullish_pullback_observation|SLB|2025-12-26|2026-02-02|SLB260130C00039000|SLB260130C00042000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-12-26",
+      "exit_date": "2026-02-02",
+      "exit_timestamp_utc": "2026-02-02T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-12_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-01-30",
+      "long_contract_symbol": "SLB260130C00039000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-01-30",
+      "short_contract_symbol": "SLB260130C00042000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-12",
+      "ticker": "SLB",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-12|bullish_pullback_observation|SLB|2025-12-29|2026-02-09|SLB260206C00039000|SLB260206C00042000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-12-29",
+      "exit_date": "2026-02-09",
+      "exit_timestamp_utc": "2026-02-09T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-12_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-06",
+      "long_contract_symbol": "SLB260206C00039000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-06",
+      "short_contract_symbol": "SLB260206C00042000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-12",
+      "ticker": "SLB",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-12|bullish_pullback_observation|SLB|2025-12-30|2026-02-09|SLB260206C00039000|SLB260206C00042000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-12-30",
+      "exit_date": "2026-02-09",
+      "exit_timestamp_utc": "2026-02-09T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2025-12_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-06",
+      "long_contract_symbol": "SLB260206C00039000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-06",
+      "short_contract_symbol": "SLB260206C00042000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2025-12",
+      "ticker": "SLB",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-01|bullish_pullback_observation|AA|2026-01-02|2026-02-02|AA260130C00055000|AA260130C00060000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-01-02",
+      "exit_date": "2026-02-02",
+      "exit_timestamp_utc": "2026-02-02T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-01_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-01-30",
+      "long_contract_symbol": "AA260130C00055000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-01-30",
+      "short_contract_symbol": "AA260130C00060000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-01",
+      "ticker": "AA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-01|bullish_pullback_observation|FCX|2026-01-02|2026-02-09|FCX260206C00052000|FCX260206C00057000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-01-02",
+      "exit_date": "2026-02-09",
+      "exit_timestamp_utc": "2026-02-09T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-01_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-06",
+      "long_contract_symbol": "FCX260206C00052000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-06",
+      "short_contract_symbol": "FCX260206C00057000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-01",
+      "ticker": "FCX",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-01|bullish_pullback_observation|FCX|2026-01-05|2026-02-17|FCX260213C00054000|FCX260213C00059000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-01-05",
+      "exit_date": "2026-02-17",
+      "exit_timestamp_utc": "2026-02-17T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-01_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-13",
+      "long_contract_symbol": "FCX260213C00054000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 4,
+        "short_leg": 4
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-13",
+      "short_contract_symbol": "FCX260213C00059000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-01",
+      "ticker": "FCX",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-01|bullish_pullback_observation|PM|2026-01-09|2026-02-17|PM260213C00160000|PM260213C00175000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-01-09",
+      "exit_date": "2026-02-17",
+      "exit_timestamp_utc": "2026-02-17T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-01_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-13",
+      "long_contract_symbol": "PM260213C00160000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 4,
+        "short_leg": 4
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-13",
+      "short_contract_symbol": "PM260213C00175000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-01",
+      "ticker": "PM",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-01|bullish_pullback_observation|FCX|2026-01-23|2026-03-02|FCX260227C00061000|FCX260227C00066000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-01-23",
+      "exit_date": "2026-03-02",
+      "exit_timestamp_utc": "2026-03-02T20:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-01_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-02-27",
+      "long_contract_symbol": "FCX260227C00061000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-02-27",
+      "short_contract_symbol": "FCX260227C00066000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-01",
+      "ticker": "FCX",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-02|bullish_pullback_observation|OXY|2026-02-06|2026-03-09|OXY260306C00046000|OXY260306C00050000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-02-06",
+      "exit_date": "2026-03-09",
+      "exit_timestamp_utc": "2026-03-09T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-02_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-03-06",
+      "long_contract_symbol": "OXY260306C00046000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-03-06",
+      "short_contract_symbol": "OXY260306C00050000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-02",
+      "ticker": "OXY",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-02|bullish_pullback_observation|RTX|2026-02-06|2026-03-16|RTX260313C00200000|RTX260313C00215000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-02-06",
+      "exit_date": "2026-03-16",
+      "exit_timestamp_utc": "2026-03-16T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-02_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-03-13",
+      "long_contract_symbol": "RTX260313C00200000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-03-13",
+      "short_contract_symbol": "RTX260313C00215000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-02",
+      "ticker": "RTX",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-02|bullish_pullback_observation|RTX|2026-02-09|2026-03-16|RTX260313C00200000|RTX260313C00215000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-02-09",
+      "exit_date": "2026-03-16",
+      "exit_timestamp_utc": "2026-03-16T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-02_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-03-13",
+      "long_contract_symbol": "RTX260313C00200000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-03-13",
+      "short_contract_symbol": "RTX260313C00215000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-02",
+      "ticker": "RTX",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-02|bullish_pullback_observation|COP|2026-02-18|2026-03-30|COP260327C00112000|COP260327C00122000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-02-18",
+      "exit_date": "2026-03-30",
+      "exit_timestamp_utc": "2026-03-30T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-02_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-03-27",
+      "long_contract_symbol": "COP260327C00112000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-03-27",
+      "short_contract_symbol": "COP260327C00122000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-02",
+      "ticker": "COP",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2026-02|bullish_pullback_observation|COP|2026-02-26|2026-04-06|COP260402C00110000|COP260402C00120000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2026-02-26",
+      "exit_date": "2026-04-06",
+      "exit_timestamp_utc": "2026-04-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "port_25503_listening_process=2744",
+        "runbook_probe_QQQ_SPY_2026-05-21_10:27_generated_rows=530_errors=0",
+        "source_lane_month_2026-02_bullish_pullback_observation_missing_rows_are_exit_after_occ_expiration"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2026-04-02",
+      "long_contract_symbol": "COP260402C00110000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 4,
+        "short_leg": 4
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2026-04-02",
+      "short_contract_symbol": "COP260402C00120000",
+      "target_lane": "bullish_pullback_observation",
+      "target_month": "2026-02",
+      "ticker": "COP",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|DIA|2025-08-14|2025-09-22|DIA250919C00450000|DIA250919C00465000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-14",
+      "exit_date": "2025-09-22",
+      "exit_timestamp_utc": "2025-09-22T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-09-19",
+      "long_contract_symbol": "DIA250919C00450000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-09-19",
+      "short_contract_symbol": "DIA250919C00465000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "DIA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|SPY|2025-08-14|2025-09-22|SPY250919C00645000|SPY250919C00665000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-14",
+      "exit_date": "2025-09-22",
+      "exit_timestamp_utc": "2025-09-22T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-09-19",
+      "long_contract_symbol": "SPY250919C00645000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-09-19",
+      "short_contract_symbol": "SPY250919C00665000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "SPY",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|DIA|2025-08-18|2025-09-22|DIA250919C00451000|DIA250919C00465000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-18",
+      "exit_date": "2025-09-22",
+      "exit_timestamp_utc": "2025-09-22T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-09-19",
+      "long_contract_symbol": "DIA250919C00451000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-09-19",
+      "short_contract_symbol": "DIA250919C00465000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "DIA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|SPY|2025-08-18|2025-09-22|SPY250919C00646000|SPY250919C00665000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-18",
+      "exit_date": "2025-09-22",
+      "exit_timestamp_utc": "2025-09-22T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-09-19",
+      "long_contract_symbol": "SPY250919C00646000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-09-19",
+      "short_contract_symbol": "SPY250919C00665000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "SPY",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|NVDA|2025-08-27|2025-10-06|NVDA251003C00185000|NVDA251003C00200000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-27",
+      "exit_date": "2025-10-06",
+      "exit_timestamp_utc": "2025-10-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-03",
+      "long_contract_symbol": "NVDA251003C00185000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-03",
+      "short_contract_symbol": "NVDA251003C00200000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "NVDA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-08-27|2025-10-06|GOOGL251003C00205000|GOOGL251003C00220000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-27",
+      "exit_date": "2025-10-06",
+      "exit_timestamp_utc": "2025-10-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-03",
+      "long_contract_symbol": "GOOGL251003C00205000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-03",
+      "short_contract_symbol": "GOOGL251003C00220000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|NVDA|2025-08-28|2025-10-06|NVDA251003C00180000|NVDA251003C00195000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-28",
+      "exit_date": "2025-10-06",
+      "exit_timestamp_utc": "2025-10-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-03",
+      "long_contract_symbol": "NVDA251003C00180000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-03",
+      "short_contract_symbol": "NVDA251003C00195000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "NVDA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-08|tracked_winner_chain_native_research_all_sleeves|NVDA|2025-08-29|2025-10-06|NVDA251003C00180000|NVDA251003C00195000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-08-29",
+      "exit_date": "2025-10-06",
+      "exit_timestamp_utc": "2025-10-06T19:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-10-03",
+      "long_contract_symbol": "NVDA251003C00180000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-10-03",
+      "short_contract_symbol": "NVDA251003C00195000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-08",
+      "ticker": "NVDA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-20|2025-11-24|GOOGL251121C00257500|GOOGL251121C00275000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-20",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "GOOGL251121C00257500",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "GOOGL251121C00275000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-21|2025-11-24|GOOGL251121C00257500|GOOGL251121C00275000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-21",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "GOOGL251121C00257500",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "GOOGL251121C00275000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|DIA|2025-10-27|2025-12-01|DIA251128C00477000|DIA251128C00490000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-27",
+      "exit_date": "2025-12-01",
+      "exit_timestamp_utc": "2025-12-01T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-28",
+      "long_contract_symbol": "DIA251128C00477000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-28",
+      "short_contract_symbol": "DIA251128C00490000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "DIA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-27|2025-12-08|GOOGL251205C00265000|GOOGL251205C00290000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-27",
+      "exit_date": "2025-12-08",
+      "exit_timestamp_utc": "2025-12-08T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-05",
+      "long_contract_symbol": "GOOGL251205C00265000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-05",
+      "short_contract_symbol": "GOOGL251205C00290000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-29|2025-12-08|GOOGL251205C00270000|GOOGL251205C00290000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-29",
+      "exit_date": "2025-12-08",
+      "exit_timestamp_utc": "2025-12-08T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-05",
+      "long_contract_symbol": "GOOGL251205C00270000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-05",
+      "short_contract_symbol": "GOOGL251205C00290000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    }
+  ],
+  "artifacts": {
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_month_post_expiry_archive_20260609T022132Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_month_post_expiry_archive_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_month_post_expiry_archive_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_month_post_expiry_archive_20260609T022132Z.md"
+  },
+  "generated_at_utc": "2026-06-09T02:21:32Z",
+  "inputs": {
+    "feed_readiness_evidence": [
+      "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+      "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+    ],
+    "monthly_lane_exact_pnl": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-09T02:16:02Z",
+      "path": "data\\forward-tracking\\regular_options_monthly_lane_exact_pnl_20260609T021602Z.json",
+      "status": "loaded"
+    },
+    "previous_archive": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-09T02:00:28Z",
+      "loaded_archive_item_count": 34,
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_month_post_expiry_archive_latest.json",
+      "required": false,
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "newly_archived_lane_month_rows": [
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-20|2025-11-24|GOOGL251121C00257500|GOOGL251121C00275000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-20",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "GOOGL251121C00257500",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "GOOGL251121C00275000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-21|2025-11-24|GOOGL251121C00257500|GOOGL251121C00275000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-21",
+      "exit_date": "2025-11-24",
+      "exit_timestamp_utc": "2025-11-24T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-21",
+      "long_contract_symbol": "GOOGL251121C00257500",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-21",
+      "short_contract_symbol": "GOOGL251121C00275000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|DIA|2025-10-27|2025-12-01|DIA251128C00477000|DIA251128C00490000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-27",
+      "exit_date": "2025-12-01",
+      "exit_timestamp_utc": "2025-12-01T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-11-28",
+      "long_contract_symbol": "DIA251128C00477000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-11-28",
+      "short_contract_symbol": "DIA251128C00490000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "DIA",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-27|2025-12-08|GOOGL251205C00265000|GOOGL251205C00290000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-27",
+      "exit_date": "2025-12-08",
+      "exit_timestamp_utc": "2025-12-08T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-05",
+      "long_contract_symbol": "GOOGL251205C00265000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-05",
+      "short_contract_symbol": "GOOGL251205C00290000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    },
+    {
+      "archive_key": "2025-10|tracked_winner_chain_native_research_all_sleeves|GOOGL|2025-10-29|2025-12-08|GOOGL251205C00270000|GOOGL251205C00290000",
+      "archive_reason": "exit_date_after_contract_expiration",
+      "archive_status": "archived_lane_month_post_expiry_non_executable_exit",
+      "contract_leg_count": 2,
+      "entry_date": "2025-10-29",
+      "exit_date": "2025-12-08",
+      "exit_timestamp_utc": "2025-12-08T20:55:00Z",
+      "feed_readiness_evidence": [
+        "Get-NetTCPConnection LocalPort 25503 LISTEN process=2744",
+        "import_thetadata_options_nbbo dry_run generated_rows=530 errors=0 symbols=QQQ,SPY date=2026-05-21"
+      ],
+      "feed_readiness_status": "healthy",
+      "long_contract_expiration": "2025-12-05",
+      "long_contract_symbol": "GOOGL251205C00270000",
+      "missing_blockers": [
+        "missing_exit_long_quote",
+        "missing_exit_short_quote"
+      ],
+      "post_expiry_days": {
+        "long_leg": 3,
+        "short_leg": 3
+      },
+      "production_proof": false,
+      "promotion_ready": false,
+      "short_contract_expiration": "2025-12-05",
+      "short_contract_symbol": "GOOGL251205C00290000",
+      "target_lane": "tracked_winner_chain_native_research_all_sleeves",
+      "target_month": "2025-10",
+      "ticker": "GOOGL",
+      "true_executable_pnl_row": false
+    }
+  ],
+  "prohibited_actions": [
+    "do_not_create_trade_from_lane_month_post_expiry_archive",
+    "do_not_submit_broker_order_from_lane_month_post_expiry_archive",
+    "do_not_mutate_database_from_lane_month_post_expiry_archive",
+    "do_not_change_scanner_policy_from_lane_month_post_expiry_archive",
+    "do_not_change_contract_selection_policy_from_lane_month_post_expiry_archive",
+    "do_not_change_stop_or_sizing_from_lane_month_post_expiry_archive",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_month_post_expiry_archive",
+    "do_not_count_post_expiry_archive_as_production_proof"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_create_trade_from_lane_month_post_expiry_archive",
+      "do_not_submit_broker_order_from_lane_month_post_expiry_archive",
+      "do_not_mutate_database_from_lane_month_post_expiry_archive",
+      "do_not_change_scanner_policy_from_lane_month_post_expiry_archive",
+      "do_not_change_contract_selection_policy_from_lane_month_post_expiry_archive",
+      "do_not_change_stop_or_sizing_from_lane_month_post_expiry_archive",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_month_post_expiry_archive",
+      "do_not_count_post_expiry_archive_as_production_proof"
+    ],
+    "readback_is": "read-only archive of selected lane-month branches whose exact exit request is after contract expiration",
+    "readback_is_not": "production proof, true P&L, scanner policy, contract-selection policy, broker action, DB mutation, sizing, or stop policy",
+    "trusted_proof_standard": "future proof still requires trusted intraday exact-contract OPRA/NBBO bid/ask rows with executable entry/exit/fill P&L"
+  },
+  "read_only": true,
+  "report_id": "regular_options_lane_month_post_expiry_archive",
+  "schema_version": 1,
+  "scope": "regular_options_read_only_lane_month_post_expiry_archive",
+  "status": "lane_month_post_expiry_archive_readback",
+  "summary": {
+    "archive_limit": null,
+    "archived_contract_leg_count": 78,
+    "archived_post_expiry_row_count": 39,
+    "eligible_post_expiry_row_count": 5,
+    "feed_readiness_ready": true,
+    "feed_readiness_status": "healthy",
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "newly_archived_contract_leg_count": 10,
+    "newly_archived_post_expiry_row_count": 5,
+    "overall_status": "post_expiry_lane_month_branches_archived",
+    "previous_archived_post_expiry_row_count": 34,
+    "remaining_eligible_post_expiry_row_count": 0,
+    "source_missing_proof_count": 5,
+    "source_monthly_lane_status": "lane_month_exact_pnl_partial",
+    "source_target_lane": "tracked_winner_chain_native_research_all_sleeves",
+    "source_target_month": "2025-10",
+    "source_true_executable_lane_month_pnl_rows": 36
+  }
+}

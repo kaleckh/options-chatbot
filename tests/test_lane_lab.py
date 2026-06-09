@@ -12,10 +12,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.run_lane_lab import (  # noqa: E402
+    DEFAULT_HISTORICAL_RUN,
+    DEFAULT_TRACKED_DB,
     evaluate_ai_commodity_data_readiness,
     evaluate_current_paper_book,
     evaluate_data_readiness,
     evaluate_historical_debit_controls,
+    lane_lab_evidence_policy,
     lane_definitions,
     run_lane_lab,
 )
@@ -51,6 +54,21 @@ class LaneLabTests(unittest.TestCase):
             ],
         )
         self.assertIn("ai_commodity_infra_observation", lane_ids)
+
+    def test_default_lane_lab_sources_are_labeled_legacy_research_only(self):
+        policy = lane_lab_evidence_policy(
+            tracked_db=DEFAULT_TRACKED_DB,
+            historical_run=DEFAULT_HISTORICAL_RUN,
+            readiness_path=self.tmp / "missing-readiness.json",
+            readiness_payload=None,
+        )
+
+        self.assertEqual(policy["source_quality"], "legacy_research_only")
+        self.assertEqual(policy["evidence_group"], "research_backfill")
+        self.assertFalse(policy["production_proof_eligible"])
+        self.assertFalse(policy["production_proof"])
+        self.assertEqual(policy["quote_evidence"]["quote_evidence_class"], "trusted_daily_eod")
+        self.assertFalse(policy["quote_evidence"]["production_proof_source_eligible"])
 
     def test_current_paper_metrics_from_tracked_positions_db(self):
         db_path = self.tmp / "tracked_positions.db"
@@ -147,6 +165,9 @@ class LaneLabTests(unittest.TestCase):
         )
         lanes = {lane["id"]: lane for lane in report["lanes"]}
 
+        self.assertEqual(report["source_quality"], "explicit_research_inputs")
+        self.assertEqual(report["evidence_policy"]["evidence_group"], "research_backfill")
+        self.assertFalse(report["evidence_policy"]["production_proof_eligible"])
         self.assertEqual(lanes["xlf_financials"]["status"], "ready_for_paper_backtest")
         self.assertEqual(lanes["xlf_financials"]["metrics"]["required_symbols"], ["XLF"])
         self.assertEqual(lanes["kre_regional_bank_observation"]["status"], "blocked_missing_data")

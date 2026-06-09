@@ -7,7 +7,7 @@ This is read-only. It explains where the project is blocked without changing sca
 ## At A Glance
 
 - Overall status: `safe_blocked_no_live_release`
-- Generated at UTC: `2026-06-06T07:30:46Z`
+- Generated at UTC: `2026-06-08T15:40:25Z`
 - Primary message: Data is readable, but release is intentionally blocked in Evidence Path, Profitability Path, Promotion Path, Operator Path.
 
 ## Current Flow

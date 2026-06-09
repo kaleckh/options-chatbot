@@ -52,6 +52,23 @@ def _outcome_report() -> dict:
     rows.append(duplicate)
     return {
         "generated_at_utc": "2026-06-05T19:35:21Z",
+        "inputs": {
+            "source_labels": ["thetadata_opra_nbbo_1m"],
+            "trusted_only": True,
+            "quote_evidence": {
+                "quote_evidence_class": "trusted_intraday_opra_nbbo",
+                "quote_evidence_label": "Trusted intraday OPRA/NBBO",
+                "quote_snapshot_kind": "intraday",
+                "quote_data_trust": "trusted",
+                "production_proof_source_eligible": True,
+            },
+            "evidence_policy": {
+                "record_class": "missed_regular_pick_research_mark",
+                "evidence_group": "research_backfill",
+                "production_proof": False,
+                "research_learning": True,
+            },
+        },
         "summary": {
             "raw_row_count": len(rows),
             "tracked_row_count": 1,
@@ -92,6 +109,10 @@ def test_filter_matrix_reports_lane_gate_and_dedupe_scenarios() -> None:
     scenarios = {item["scenario_id"]: item for item in report["scenarios"]}
 
     assert report["summary"]["priced_untracked_rows"] == 5
+    assert report["summary"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
+    assert report["summary"]["row_evidence_group"] == "research_backfill"
+    assert report["boundary"]["production_claim"] is False
+    assert report["boundary"]["quote_evidence"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
     assert scenarios["baseline_all_untracked"]["kept_metrics"]["profit_factor"] < 1.0
     assert scenarios["current_lane_gate_self_guardrails"]["kept_metrics"]["profit_factor"] == 999.0
     assert scenarios["current_lane_gate_self_guardrails"]["lost_winner_count"] == 0
@@ -105,6 +126,8 @@ def test_filter_matrix_markdown_contains_policy_read() -> None:
 
     assert "## Matrix" in markdown
     assert "lane_gate_self_guardrails_plus_exact_spread_dedupe" in markdown
+    assert "Quote evidence class" in markdown
+    assert "Production proof claim" in markdown
     assert "not live-production permission" in markdown
 
 
