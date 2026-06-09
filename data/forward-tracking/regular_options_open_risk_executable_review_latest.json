@@ -1,0 +1,123 @@
+{
+  "report_id": "regular_options_open_risk_executable_review",
+  "schema_version": 1,
+  "generated_at_utc": "2026-06-08T16:36:01Z",
+  "read_only": true,
+  "scope": "regular_supervised_options_open_risk_read_only",
+  "status": "open_risk_executable_review_recorded",
+  "qualifying_outcome": "named_open_risk_reviewed_with_exact_current_executable_exit_evidence",
+  "position": {
+    "row_id": 537,
+    "lane": "volatility_expansion_observation",
+    "ticker": "QQQ",
+    "record_class": "live_exact_tracked",
+    "status": "open",
+    "strategy_type": "vertical_spread",
+    "contracts": 1,
+    "multiplier": 100,
+    "long_contract_symbol": "QQQ260618C00728000",
+    "short_contract_symbol": "QQQ260618C00750000",
+    "expiry": "2026-06-18",
+    "entry_execution_basis": "spread_ask_bid",
+    "entry_execution_price": 9.0405,
+    "entry_fee_total_usd": 1.3,
+    "prior_latest_reviewed_at": "2026-06-06T14:00:04.496347-06:00",
+    "prior_exit_execution_price": 3.784,
+    "prior_net_pnl_pct": -58.2639,
+    "prior_recommendation": "HOLD"
+  },
+  "theta_request": {
+    "source": "thetadata_opra_nbbo_1m",
+    "theta_url": "http://127.0.0.1:25503",
+    "endpoint": "/v3/option/history/quote",
+    "symbol": "QQQ",
+    "expiration": "20260618",
+    "date": "20260608",
+    "interval": "1m",
+    "start_time": "12:31",
+    "end_time": "12:34",
+    "right": "call",
+    "strike_range": 80,
+    "matched_exact_contract_rows": 8,
+    "request_url": "http://127.0.0.1:25503/v3/option/history/quote?symbol=QQQ&expiration=20260618&date=20260608&interval=1m&format=json&start_time=12%3A31&end_time=12%3A34&right=call&strike_range=80",
+    "readiness_note": "ThetaData current-day quote history required an exact expiration; wildcard expiration returned current-day parameter validation, not feed exhaustion."
+  },
+  "exact_quotes": {
+    "long_exit_leg": {
+      "contract_symbol": "QQQ260618C00728000",
+      "role": "long",
+      "exit_side": "sell_to_close",
+      "executable_price_side": "bid",
+      "as_of_et": "2026-06-08T12:34:00.000",
+      "as_of_utc": "2026-06-08T16:34:00Z",
+      "source": "thetadata_opra_nbbo_1m",
+      "bid": 8.43,
+      "ask": 8.49,
+      "bid_size": 20,
+      "ask_size": 35,
+      "bid_condition": 50,
+      "ask_condition": 50
+    },
+    "short_cover_leg": {
+      "contract_symbol": "QQQ260618C00750000",
+      "role": "short",
+      "exit_side": "buy_to_cover",
+      "executable_price_side": "ask",
+      "as_of_et": "2026-06-08T12:34:00.000",
+      "as_of_utc": "2026-06-08T16:34:00Z",
+      "source": "thetadata_opra_nbbo_1m",
+      "bid": 1.87,
+      "ask": 1.91,
+      "bid_size": 164,
+      "ask_size": 65,
+      "bid_condition": 50,
+      "ask_condition": 50
+    }
+  },
+  "executable_exit_calculation": {
+    "pricing_rule": "long option exit uses bid; short option cover uses ask",
+    "entry_execution_price": 9.0405,
+    "entry_execution_basis": "spread_ask_bid",
+    "long_exit_bid": 8.43,
+    "short_cover_ask": 1.91,
+    "exit_execution_price": 6.52,
+    "exit_execution_basis": "spread_bid_ask",
+    "contracts": 1,
+    "multiplier": 100,
+    "gross_pnl_usd": -252.05,
+    "fee_total_usd_assumption": 2.6,
+    "net_pnl_usd": -254.65,
+    "gross_pnl_pct": -27.8801,
+    "net_pnl_pct": -28.1677,
+    "slippage_assumption": "no additional slippage beyond executable bid/ask side pricing"
+  },
+  "decision": {
+    "recommendation": "HOLD",
+    "risk_decision": "hold_under_existing_stop_target_time_rules",
+    "open_risk_resolution": "not_resolved_current_loss_reviewed",
+    "configured_stop_loss_pct": 85.9,
+    "stop_exit_price": 1.2747,
+    "profit_target_pct": 150.0,
+    "target_exit_price": 22.6013,
+    "time_exit_day": 8,
+    "reason": "Exact executable exit value 6.52 is above the configured stop exit price 1.2747, below the profit target exit price 22.6013, and before the configured time-exit threshold. No close action is recorded here because broker orders and trading-row mutations are prohibited in this loop."
+  },
+  "evidence_boundary": {
+    "counts_as": "read-only current exact executable open-risk review",
+    "does_not_count_as": [
+      "production_proof",
+      "broker_fill",
+      "realized_pnl_row",
+      "lane_promotion",
+      "scanner_policy_change",
+      "stop_or_sizing_change"
+    ],
+    "prohibited_actions": [
+      "do_not_submit_broker_order_from_this_artifact",
+      "do_not_mutate_trading_row_database_from_this_artifact",
+      "do_not_count_as_true_realized_pnl",
+      "do_not_promote_lane_from_this_artifact",
+      "do_not_change_scanner_stops_sizing_or_proof_gates"
+    ]
+  }
+}

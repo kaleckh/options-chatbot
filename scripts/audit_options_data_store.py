@@ -3,11 +3,17 @@ from __future__ import annotations
 import argparse
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.quote_evidence_readback import quote_evidence_readback  # noqa: E402
+
 DEFAULT_DB_PATH = ROOT / "data" / "options-validation" / "options_history.db"
 
 
@@ -41,10 +47,40 @@ def _index_columns(conn: sqlite3.Connection, table: str) -> dict[str, list[str]]
     return indexes
 
 
+def _sqlite_readonly(path: Path) -> sqlite3.Connection:
+    return sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+
+
+def _root_placeholder_refused(path: Path) -> bool:
+    try:
+        resolved = path.resolve()
+    except OSError:
+        resolved = path
+    return resolved == (ROOT / "options_history.db").resolve() and path.exists() and path.stat().st_size == 0
+
+
+def _with_quote_evidence(row: dict[str, Any], *, snapshot_kind: str | None = None) -> dict[str, Any]:
+    output = dict(row)
+    output["quote_evidence"] = quote_evidence_readback(
+        snapshot_kind=snapshot_kind or row.get("snapshot_kind"),
+        data_trust=row.get("data_trust"),
+        dataset_kind=row.get("dataset_kind"),
+        source_label=row.get("source_label"),
+    )
+    return output
+
+
 def audit_options_db(db_path: Path) -> dict[str, Any]:
     if not db_path.exists():
-        return {"db_path": str(db_path), "exists": False}
-    conn = sqlite3.connect(db_path)
+        return {"db_path": str(db_path), "exists": False, "status": "db_missing"}
+    if _root_placeholder_refused(db_path):
+        return {
+            "db_path": str(db_path),
+            "exists": False,
+            "status": "root_placeholder_refused",
+            "reason": "The root options_history.db placeholder is not an active historical quote store.",
+        }
+    conn = _sqlite_readonly(db_path)
     try:
         conn.row_factory = sqlite3.Row
         quote_count = int(conn.execute("SELECT COUNT(*) FROM option_quote_snapshots").fetchone()[0])
@@ -63,7 +99,7 @@ def audit_options_db(db_path: Path) -> dict[str, Any]:
             ).fetchone()
         )
         source_batches = [
-            dict(row)
+            _with_quote_evidence(dict(row))
             for row in conn.execute(
                 """
                 SELECT
@@ -83,7 +119,7 @@ def audit_options_db(db_path: Path) -> dict[str, Any]:
             )
         ]
         quote_sources = [
-            dict(row)
+            _with_quote_evidence(dict(row), snapshot_kind=row["snapshot_kind"])
             for row in conn.execute(
                 """
                 SELECT
@@ -104,6 +140,7 @@ def audit_options_db(db_path: Path) -> dict[str, Any]:
         return {
             "db_path": str(db_path),
             "exists": True,
+            "status": "audited_readonly",
             "db_bytes": db_path.stat().st_size,
             "journal_mode": conn.execute("PRAGMA journal_mode").fetchone()[0],
             "page_count": conn.execute("PRAGMA page_count").fetchone()[0],
@@ -122,7 +159,7 @@ def audit_options_db(db_path: Path) -> dict[str, Any]:
         conn.close()
 
 
-def build_report(db_path: Path) -> dict[str, Any]:
+def build_report(db_path: Path, *, include_data_roots: bool = True) -> dict[str, Any]:
     data_roots = [
         ROOT / "data" / "options-validation",
         ROOT / "data" / "profitability-lab",
@@ -144,7 +181,8 @@ def build_report(db_path: Path) -> dict[str, Any]:
         recommendations.append("Keep run JSON under data/options-validation/runs and robustness reports under data/profitability-lab as reproducibility artifacts.")
     return {
         "db": db,
-        "data_roots": [_dir_summary(root) for root in data_roots],
+        "data_roots": [_dir_summary(root) for root in data_roots] if include_data_roots else [],
+        "data_roots_skipped": not include_data_roots,
         "recommendations": recommendations,
     }
 
@@ -152,10 +190,11 @@ def build_report(db_path: Path) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Audit options quote data storage and centralization.")
     parser.add_argument("--db-path", default=str(DEFAULT_DB_PATH))
+    parser.add_argument("--skip-data-roots", action="store_true")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
-    report = build_report(Path(args.db_path))
+    report = build_report(Path(args.db_path), include_data_roots=not bool(args.skip_data_roots))
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

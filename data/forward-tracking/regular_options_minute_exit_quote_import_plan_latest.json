@@ -1,0 +1,83 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-minute-exit-quote-import-plan.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_quote_import_plan_20260608T050123Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_quote_import_plan_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_quote_import_plan_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_quote_import_plan_20260608T050123Z.md"
+  },
+  "command_groups": [],
+  "evidence_boundary": {
+    "operator_rule": "Import commands collect quote evidence only; true minute-exit P&L requires a replay engine and exact quotes before any stop or promotion discussion.",
+    "prohibited_actions": [
+      "do_not_create_live_row_from_minute_exit_quote_import_plan",
+      "do_not_submit_broker_order_from_minute_exit_quote_import_plan",
+      "do_not_mutate_trading_row_database_from_minute_exit_quote_import_plan",
+      "do_not_change_scanner_policy_from_minute_exit_quote_import_plan",
+      "do_not_change_stop_policy_from_minute_exit_quote_import_plan",
+      "do_not_change_sizing_from_minute_exit_quote_import_plan",
+      "do_not_synthesize_minute_exit_pnl_from_import_plan",
+      "do_not_promote_minute_quote_import_plan_to_production_proof"
+    ],
+    "readback_is": "read-only import/query coordination for minute-level exact OPRA/NBBO exit quote coverage",
+    "readback_is_not": "minute-exit P&L, stop-policy permission, broker action, trading-row DB mutation, or production proof"
+  },
+  "exact_contract_manifest": [],
+  "generated_at_utc": "2026-06-08T05:01:23Z",
+  "inputs": {
+    "importer": "scripts\\import_thetadata_options_nbbo.py",
+    "minute_exit_replay_readiness": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T05:01:14Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_minute_exit_replay_readiness_latest.json",
+      "status": "loaded"
+    },
+    "theta_url": "http://127.0.0.1:25503",
+    "timeout_seconds": 60
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_minute_exit_quote_import_plan",
+    "do_not_submit_broker_order_from_minute_exit_quote_import_plan",
+    "do_not_mutate_trading_row_database_from_minute_exit_quote_import_plan",
+    "do_not_change_scanner_policy_from_minute_exit_quote_import_plan",
+    "do_not_change_stop_policy_from_minute_exit_quote_import_plan",
+    "do_not_change_sizing_from_minute_exit_quote_import_plan",
+    "do_not_synthesize_minute_exit_pnl_from_import_plan",
+    "do_not_promote_minute_quote_import_plan_to_production_proof"
+  ],
+  "read_only": true,
+  "report_id": "regular_options_minute_exit_quote_import_plan",
+  "schema_version": 1,
+  "scope": "regular_options_minute_exit_quote_import_plan_read_only",
+  "status": "no_minute_exit_quote_seeds_to_plan",
+  "summary": {
+    "command_group_count": 0,
+    "entry_only_quote_demand_count": 0,
+    "exact_contract_manifest_count": 0,
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "operator_command_status": "not_available",
+    "overall_status": "no_minute_exit_quote_seeds_to_plan",
+    "position_linked_quote_demand_count": 0,
+    "quote_date_count": 0,
+    "quote_dates": [],
+    "quote_demand_count": 0,
+    "replay_pnl_status": "available_in_source_readiness",
+    "source_entry_seed_ready_count": 12,
+    "source_minute_exit_replay_engine_status": "read_only_side_aware_engine_partial",
+    "source_minute_quote_coverage_status": "full",
+    "source_open_risk_status": "open_risk_governor_blocked",
+    "source_overall_status": "minute_exit_replay_coverage_ready",
+    "source_position_seed_ready_count": 1,
+    "source_readiness_generated_at_utc": "2026-06-08T05:01:14Z",
+    "source_readiness_status": "minute_exit_replay_readiness_readback",
+    "source_true_minute_exit_pnl_count": 12,
+    "underlying_count": 0,
+    "underlyings": [],
+    "unparsed_quote_demand_count": 0
+  },
+  "unparsed_quote_demands": []
+}

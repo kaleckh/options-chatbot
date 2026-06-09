@@ -82,6 +82,8 @@ class PaidDataReadinessAuditTests(unittest.TestCase):
         self.assertEqual(audit["thin_required_underlyings"], [])
         self.assertGreaterEqual(audit["shared_required_quote_dates"]["count"], 10)
         self.assertEqual(audit["source_labels_required"], [])
+        self.assertEqual(audit["quote_evidence"]["quote_evidence_class"], "trusted_daily_eod")
+        self.assertFalse(audit["quote_evidence"]["production_proof_source_eligible"])
         self.assertGreater(audit["required_underlying_health"]["SPY"]["quote_rows"], 0)
         self.assertEqual(audit["required_underlying_health"]["SPY"]["executable_quote_pct"], 100.0)
         self.assertEqual(
@@ -132,6 +134,7 @@ class PaidDataReadinessAuditTests(unittest.TestCase):
         self.assertEqual(audit["status"], "not_ready")
         self.assertEqual(audit["blocker"], "low_executable_quote_coverage")
         self.assertEqual(audit["low_executable_required_underlyings"], ["SPY"])
+        self.assertEqual(audit["quote_evidence"]["quote_evidence_class"], "unknown")
         self.assertGreater(audit["required_underlying_health"]["SPY"]["missing_bid_ask_rows"], 0)
 
     def test_audit_does_not_count_zero_bid_quotes_as_executable(self):
@@ -183,6 +186,8 @@ class PaidDataReadinessAuditTests(unittest.TestCase):
         self.assertEqual(audit["available_underlyings"], ["SPY"])
         self.assertEqual(audit["missing_required_underlyings"], ["QQQ"])
         self.assertEqual(audit["summary"]["source_labels"], ["alpaca_opra_daily_snapshot"])
+        self.assertEqual(audit["quote_evidence"]["quote_evidence_class"], "trusted_daily_eod")
+        self.assertFalse(audit["quote_evidence"]["production_proof_source_eligible"])
 
     def test_audit_can_derive_scope_from_replay_playbook(self):
         self._import_daily("SPY", length=14, start=500.0, source_label="alpaca_opra_daily_snapshot")
@@ -260,6 +265,7 @@ class PaidDataReadinessAuditTests(unittest.TestCase):
         self.assertEqual(payload["blocker"], None)
         self.assertEqual(payload["required_underlyings"], ["SPY"])
         self.assertEqual(payload["missing_required_underlyings"], [])
+        self.assertEqual(payload["quote_evidence"]["quote_evidence_class"], "trusted_daily_eod")
 
 
 if __name__ == "__main__":

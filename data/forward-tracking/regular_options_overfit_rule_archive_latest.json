@@ -1,0 +1,281 @@
+{
+  "archived_rules": [
+    {
+      "archive_reason": "later_date_holdout_not_passed",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -7.32,
+      "avoided_lte_minus_50": 19,
+      "blocked_count": 101,
+      "classification_blockers": [
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 105,
+      "later_date_rows": 22,
+      "lost_winner_count": 15,
+      "profit_factor": 0.66,
+      "promotion_ready": false,
+      "scenario_id": "no_primary_damage_tickers",
+      "source_status": "diagnostic_retest_required",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "later_date_holdout_not_passed",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -11.72,
+      "avoided_lte_minus_50": 11,
+      "blocked_count": 37,
+      "classification_blockers": [
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 169,
+      "later_date_rows": 38,
+      "lost_winner_count": 8,
+      "profit_factor": 0.44,
+      "promotion_ready": false,
+      "scenario_id": "no_debit_gte_45",
+      "source_status": "diagnostic_retest_required",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "later_date_holdout_not_passed",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -13.88,
+      "avoided_lte_minus_50": 6,
+      "blocked_count": 19,
+      "classification_blockers": [
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 187,
+      "later_date_rows": 36,
+      "lost_winner_count": 5,
+      "profit_factor": 0.37,
+      "promotion_ready": false,
+      "scenario_id": "no_dte_gte_36",
+      "source_status": "diagnostic_retest_required",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "later_date_holdout_not_passed",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -15.28,
+      "avoided_lte_minus_50": 0,
+      "blocked_count": 0,
+      "classification_blockers": [
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive"
+      ],
+      "entry_time_only": true,
+      "kept_count": 206,
+      "later_date_rows": 43,
+      "lost_winner_count": 0,
+      "profit_factor": 0.34,
+      "promotion_ready": false,
+      "scenario_id": "baseline_all_untracked",
+      "source_status": "baseline_readback",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "source_status_is_overfit_warning",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": 9.9,
+      "avoided_lte_minus_50": 33,
+      "blocked_count": 129,
+      "classification_blockers": [
+        "overfit_status",
+        "later_date_holdout_not_passed",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 77,
+      "later_date_rows": 16,
+      "lost_winner_count": 17,
+      "profit_factor": 2.12,
+      "promotion_ready": false,
+      "scenario_id": "no_extended_damage_tickers",
+      "source_status": "overfit_warning",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "winner_damage_exceeds_deep_losses_avoided",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": 34.87,
+      "avoided_lte_minus_50": 37,
+      "blocked_count": 196,
+      "classification_blockers": [
+        "winner_damage_exceeds_deep_losses_avoided",
+        "thin_later_date_holdout",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 10,
+      "later_date_rows": 2,
+      "lost_winner_count": 61,
+      "profit_factor": 84.9,
+      "promotion_ready": false,
+      "scenario_id": "current_lane_gate_self_guardrails",
+      "source_status": "active_safety_gate_paper_probation",
+      "survives_later_date_split": true
+    },
+    {
+      "archive_reason": "winner_damage_exceeds_deep_losses_avoided",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": 34.87,
+      "avoided_lte_minus_50": 37,
+      "blocked_count": 196,
+      "classification_blockers": [
+        "winner_damage_exceeds_deep_losses_avoided",
+        "thin_later_date_holdout",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 10,
+      "later_date_rows": 2,
+      "lost_winner_count": 61,
+      "profit_factor": 84.9,
+      "promotion_ready": false,
+      "scenario_id": "lane_gate_self_guardrails_plus_exact_spread_dedupe",
+      "source_status": "recommended_paper_shadow_policy_candidate",
+      "survives_later_date_split": true
+    },
+    {
+      "archive_reason": "winner_damage_exceeds_deep_losses_avoided",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": 6.75,
+      "avoided_lte_minus_50": 35,
+      "blocked_count": 182,
+      "classification_blockers": [
+        "winner_damage_exceeds_deep_losses_avoided",
+        "thin_later_date_holdout",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 24,
+      "later_date_rows": 4,
+      "lost_winner_count": 58,
+      "profit_factor": 1.72,
+      "promotion_ready": false,
+      "scenario_id": "current_lane_gate_allowlist",
+      "source_status": "active_safety_gate_paper_probation",
+      "survives_later_date_split": true
+    },
+    {
+      "archive_reason": "winner_damage_exceeds_deep_losses_avoided",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -2.75,
+      "avoided_lte_minus_50": 24,
+      "blocked_count": 130,
+      "classification_blockers": [
+        "winner_damage_exceeds_deep_losses_avoided",
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 76,
+      "later_date_rows": 16,
+      "lost_winner_count": 26,
+      "profit_factor": 0.86,
+      "promotion_ready": false,
+      "scenario_id": "primary_combo_no_debit45_dte36_damage_tickers",
+      "source_status": "diagnostic_retest_required",
+      "survives_later_date_split": false
+    },
+    {
+      "archive_reason": "winner_damage_exceeds_deep_losses_avoided",
+      "archive_status": "archived_rejected_rule",
+      "avg_net_pnl_pct": -15.44,
+      "avoided_lte_minus_50": 4,
+      "blocked_count": 27,
+      "classification_blockers": [
+        "winner_damage_exceeds_deep_losses_avoided",
+        "later_date_holdout_not_passed",
+        "profit_factor_below_paper_candidate_gate",
+        "average_net_pnl_not_positive",
+        "winner_damage_warning"
+      ],
+      "entry_time_only": true,
+      "kept_count": 179,
+      "later_date_rows": 37,
+      "lost_winner_count": 9,
+      "profit_factor": 0.34,
+      "promotion_ready": false,
+      "scenario_id": "exact_spread_dedupe_only",
+      "source_status": "immediate_suppression_candidate",
+      "survives_later_date_split": false
+    }
+  ],
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-overfit-rule-archive.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_20260608T013729Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_overfit_rule_archive_20260608T013729Z.md"
+  },
+  "generated_at_utc": "2026-06-08T01:37:29Z",
+  "inputs": {
+    "missed_picks_filter_matrix": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T22:10:15Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "non_archived_rules": [],
+  "prohibited_actions": [
+    "do_not_delete_filter_matrix_scenarios_from_overfit_rule_archive",
+    "do_not_change_scanner_policy_from_overfit_rule_archive",
+    "do_not_change_lane_promotion_from_overfit_rule_archive",
+    "do_not_submit_broker_order_from_overfit_rule_archive",
+    "do_not_mutate_database_from_overfit_rule_archive",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_overfit_rule_archive",
+    "do_not_promote_rejected_rules_to_paper_or_live_proof"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_delete_filter_matrix_scenarios_from_overfit_rule_archive",
+      "do_not_change_scanner_policy_from_overfit_rule_archive",
+      "do_not_change_lane_promotion_from_overfit_rule_archive",
+      "do_not_submit_broker_order_from_overfit_rule_archive",
+      "do_not_mutate_database_from_overfit_rule_archive",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_overfit_rule_archive",
+      "do_not_promote_rejected_rules_to_paper_or_live_proof"
+    ],
+    "readback_is": "read-only archive of rejected candidate filter rules that failed overfit, holdout, or winner-damage checks",
+    "readback_is_not": "scenario deletion, scanner policy change, lane promotion, broker action, DB mutation, or proof-bar reduction",
+    "trusted_proof_standard": "trusted intraday exact-contract OPRA/NBBO evidence remains required for proof claims"
+  },
+  "read_only": true,
+  "report_id": "regular_options_overfit_rule_archive",
+  "schema_version": 1,
+  "scope": "regular_options_rejected_candidate_rule_archive",
+  "status": "overfit_rule_archive_readback",
+  "summary": {
+    "archive_complete": true,
+    "archived_reject_overfit_rule_count": 10,
+    "candidate_rule_count": 10,
+    "diagnostic_retest_rule_count": 0,
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "overall_status": "overfit_rules_archived",
+    "paper_candidate_rule_count": 0,
+    "reject_overfit_rule_count": 10,
+    "unarchived_reject_overfit_rule_count": 0,
+    "unarchived_rule_ids": []
+  }
+}

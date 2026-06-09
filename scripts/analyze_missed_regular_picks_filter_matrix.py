@@ -16,6 +16,10 @@ if ROOT_TEXT not in sys.path:
     sys.path.insert(0, ROOT_TEXT)
 
 from scripts import audit_missed_regular_picks_outcomes as outcome_audit
+from scripts.quote_evidence_readback import (  # noqa: E402
+    non_production_research_policy,
+    quote_evidence_readback,
+)
 
 
 DEFAULT_INPUT_REPORT = ROOT / "data" / "forward-tracking" / "missed_regular_picks_outcome_latest.json"
@@ -65,6 +69,28 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"Expected JSON object at {path}")
     return payload
+
+
+def _source_evidence_policy(
+    outcome_report: dict[str, Any],
+    *,
+    record_class: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    inputs = outcome_report.get("inputs") if isinstance(outcome_report.get("inputs"), dict) else {}
+    quote_evidence = inputs.get("quote_evidence") if isinstance(inputs.get("quote_evidence"), dict) else {}
+    if not quote_evidence:
+        quote_evidence = quote_evidence_readback(
+            snapshot_kind="intraday",
+            source_labels=inputs.get("source_labels") or [],
+            trusted_only=inputs.get("trusted_only"),
+        )
+    evidence_policy = inputs.get("evidence_policy") if isinstance(inputs.get("evidence_policy"), dict) else {}
+    if not evidence_policy:
+        evidence_policy = non_production_research_policy(
+            record_class=record_class,
+            quote_evidence=quote_evidence,
+        )
+    return quote_evidence, evidence_policy
 
 
 def _norm_text(value: Any) -> str:
@@ -379,6 +405,10 @@ def build_filter_matrix_report(
         ),
     )
     summary = outcome_report.get("summary") if isinstance(outcome_report.get("summary"), dict) else {}
+    quote_evidence, evidence_policy = _source_evidence_policy(
+        outcome_report,
+        record_class="missed_regular_pick_filter_matrix_readback",
+    )
     return {
         "report_id": REPORT_ID,
         "generated_at_utc": _utc_now_iso(),
@@ -392,6 +422,8 @@ def build_filter_matrix_report(
             "source_tracked_rows_with_stored_pnl": summary.get("tracked_rows_with_stored_pnl"),
             "source_tracked_row_count": summary.get("tracked_row_count"),
             "later_date_holdout_dates": sorted(later_date_set),
+            "quote_evidence_class": quote_evidence.get("quote_evidence_class"),
+            "row_evidence_group": evidence_policy.get("evidence_group"),
         },
         "baseline_metrics": _metrics(untracked),
         "scenarios": scenarios,
@@ -422,6 +454,8 @@ def build_filter_matrix_report(
         },
         "boundary": {
             "evidence_class": "historical_research_exact_contract_marks",
+            "quote_evidence": quote_evidence,
+            "evidence_policy": evidence_policy,
             "production_claim": False,
             "broker_fill_claim": False,
             "allowed_use": "counterfactual_filter_design_and_forward_paper_validation",
@@ -431,6 +465,9 @@ def build_filter_matrix_report(
 
 def render_markdown(report: dict[str, Any]) -> str:
     baseline = report.get("baseline_metrics") or {}
+    boundary = report.get("boundary") or {}
+    quote_evidence = boundary.get("quote_evidence") or {}
+    evidence_policy = boundary.get("evidence_policy") or {}
     lines = [
         "# Missed Regular Picks Filter Matrix",
         "",
@@ -438,6 +475,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Source report: `{report.get('source_report')}`",
         f"- Source generated: `{report.get('source_generated_at_utc')}`",
         f"- Priced untracked rows: `{(report.get('summary') or {}).get('priced_untracked_rows')}`",
+        f"- Quote evidence class: `{quote_evidence.get('quote_evidence_class')}`",
+        f"- Row evidence group: `{evidence_policy.get('evidence_group')}`",
+        f"- Production proof claim: `{boundary.get('production_claim')}`",
         f"- Baseline PF: `{baseline.get('profit_factor')}`",
         f"- Baseline avg net P&L: `{baseline.get('avg_net_pnl_pct')}%`",
         f"- Later-date holdout dates: `{', '.join((report.get('summary') or {}).get('later_date_holdout_dates') or [])}`",
@@ -533,6 +573,7 @@ def main(argv: list[str] | None = None) -> int:
             json.dumps(
                 {
                     "summary": report["summary"],
+                    "boundary": report["boundary"],
                     "baseline_metrics": report["baseline_metrics"],
                     "ranked_scenarios_by_kept_profit_factor": report["ranked_scenarios_by_kept_profit_factor"],
                     "artifacts": report.get("artifacts"),

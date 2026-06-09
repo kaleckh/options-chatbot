@@ -37,6 +37,23 @@ def _outcome_report() -> dict:
     ]
     return {
         "generated_at_utc": "2026-06-05T19:35:21Z",
+        "inputs": {
+            "source_labels": ["thetadata_opra_nbbo_1m"],
+            "trusted_only": True,
+            "quote_evidence": {
+                "quote_evidence_class": "trusted_intraday_opra_nbbo",
+                "quote_evidence_label": "Trusted intraday OPRA/NBBO",
+                "quote_snapshot_kind": "intraday",
+                "quote_data_trust": "trusted",
+                "production_proof_source_eligible": True,
+            },
+            "evidence_policy": {
+                "record_class": "missed_regular_pick_research_mark",
+                "evidence_group": "research_backfill",
+                "production_proof": False,
+                "research_learning": True,
+            },
+        },
         "summary": {
             "raw_row_count": len(rows),
             "tracked_row_count": 1,
@@ -69,6 +86,10 @@ def test_failure_report_classifies_clean_data_and_unprofitable_strategy() -> Non
     report = failure.build_failure_report(_outcome_report(), min_cluster_rows=2)
 
     assert report["data_quality"]["data_status"] == "clean_for_failure_analysis"
+    assert report["summary"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
+    assert report["summary"]["row_evidence_group"] == "research_backfill"
+    assert report["boundary"]["production_claim"] is False
+    assert report["boundary"]["quote_evidence"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
     assert report["overall_read"]["status"] == "data_clean_strategy_unprofitable"
     assert report["earn_back_policy"]["diagnostic_to_probation_requires"]["min_exact_marked_rows"] == 30
     assert report["earn_back_policy"]["diagnostic_to_probation_requires"]["min_later_date_or_out_of_sample_rows"] == 10
@@ -90,6 +111,8 @@ def test_failure_report_markdown_contains_decisions_and_boundaries() -> None:
     assert "## Lane Decisions" in markdown
     assert "bad_lane" in markdown
     assert "good_lane" in markdown
+    assert "Quote evidence class" in markdown
+    assert "Production proof claim" in markdown
     assert "## Earn-Back Policy" in markdown
     assert "not broker execution evidence" in markdown
 

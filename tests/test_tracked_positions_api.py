@@ -461,6 +461,9 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(repository.offset, 0)
         self.assertEqual(payload["page"], {"limit": 100, "offset": 0, "returned": 1})
         self.assertEqual(position["source_pick_snapshot"]["debit_pct_of_width"], 50.0)
+        self.assertEqual(position["compact_evidence"]["evidence_group"], "historical_paper")
+        self.assertEqual(position["compact_evidence"]["quote_evidence_class"], "unknown")
+        self.assertFalse(position["compact_evidence"]["production_proof"])
         self.assertEqual(position["compact_evidence"]["migrated_paper"], True)
         self.assertEqual(position["compact_evidence"]["research_backfill"], True)
         self.assertLessEqual(len(position["notes"]), 96)
@@ -1170,9 +1173,72 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertNotIn("profitability_evidence_class", compact_snapshot)
         self.assertNotIn("production_filter_action", compact_snapshot)
         self.assertNotIn("source_separation", compact_snapshot)
-        self.assertEqual(compact_position["compact_evidence"], {"migrated_paper": True, "research_backfill": True})
+        compact_evidence = compact_position["compact_evidence"]
+        self.assertEqual(compact_evidence["evidence_group"], "historical_paper")
+        self.assertEqual(compact_evidence["quote_evidence_class"], "trusted_intraday_opra_nbbo")
+        self.assertFalse(compact_evidence["production_proof"])
+        self.assertEqual(compact_evidence["migrated_paper"], True)
+        self.assertEqual(compact_evidence["research_backfill"], True)
         self.assertNotIn("share_review_age_minutes", compact_position)
         self.assertNotIn("share_reviewed_at", compact_position)
+
+    def test_compact_live_exact_readback_keeps_research_calibration_out_of_backfill(self):
+        class Repository:
+            is_available = True
+
+            def list_positions(self, status="open", *args, **kwargs):
+                return [
+                    {
+                        "id": 321,
+                        "status": "open",
+                        "ticker": "SPY",
+                        "direction": "call",
+                        "contract_symbol": "SPY260619C00600000",
+                        "strike": 600.0,
+                        "expiry": "2026-06-19",
+                        "contracts": 1,
+                        "entry_option_price": 4.5,
+                        "entry_execution_price": 4.5,
+                        "entry_execution_basis": "ask",
+                        "filled_at": "2026-04-06T14:00:00Z",
+                        "stop_loss_pct": 90,
+                        "profit_target_pct": 100,
+                        "time_exit_day": 14,
+                        "source_scan_session_id": 55,
+                        "source_scan_event_key": "short_term:rank_1",
+                        "source_scan_run_id": "api_scan_20260406T100000Z",
+                        "source_scan_recorded_at_utc": "2026-04-06T14:00:00Z",
+                        "proof_eligible": True,
+                        "proof_class": "live_scan_exact_contract",
+                        "source_pick_snapshot": {
+                            "playbook_id": "short_term",
+                            "selection_source": "live_chain_exact_contract",
+                            "source_label": "alpaca_opra",
+                            "options_data_source": "alpaca_opra",
+                            "snapshot_kind": "intraday",
+                            "data_trust": "trusted",
+                            "quote_time_et": "2026-04-06T10:00:00-04:00",
+                            "quote_freshness_status": "fresh",
+                            "entry_execution_price": 4.5,
+                            "entry_execution_basis": "ask",
+                            "source_scan_lineage_verified": True,
+                            "pricing_evidence_class": "proof_live_opra_exact_contract",
+                            "profitability_evidence_class": "research_profitability_calibration",
+                            "source_separation": "pricing_proof_profitability_research",
+                            "promotion_class": "research_bootstrap",
+                        },
+                    }
+                ]
+
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", Repository()):
+            compact_response = self.client.get("/api/positions", params={"status": "open", "compact": 1})
+
+        self.assertEqual(compact_response.status_code, 200)
+        compact_evidence = compact_response.json()["positions"][0]["compact_evidence"]
+        self.assertEqual(compact_evidence["evidence_group"], "live_exact")
+        self.assertTrue(compact_evidence["production_proof"])
+        self.assertEqual(compact_evidence["quote_evidence_class"], "trusted_intraday_opra_nbbo")
+        self.assertNotIn("research_backfill", compact_evidence)
 
     def test_compact_closed_positions_omit_detail_only_fields(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)

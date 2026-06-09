@@ -1,0 +1,117 @@
+{
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-exact-candidate-selection-repair.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_exact_candidate_selection_repair_20260608T013743Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_exact_candidate_selection_repair_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_exact_candidate_selection_repair_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_exact_candidate_selection_repair_20260608T013743Z.md"
+  },
+  "generated_at_utc": "2026-06-08T01:37:43Z",
+  "inputs": {
+    "all_lanes_zero_pick_audit": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T07:30:37Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\all_lanes_zero_pick_current_algo_audit_latest.json",
+      "status": "loaded"
+    },
+    "lane_outcome_replay": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_outcome_replay_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "next_evidence_queue": [
+    {
+      "action": "build_chain_native_filter_relaxation_replay",
+      "count": 1,
+      "operator_next_step": "Replay the listed lane/date/ticker signal set with diagnostic chain-native filter attribution only.",
+      "priority": 4,
+      "reason": "no_chain_native_spread_passed_current_filters:1",
+      "target_lanes": [
+        "regular_bearish_put_primary"
+      ]
+    }
+  ],
+  "prohibited_actions": [
+    "do_not_create_live_row_from_exact_candidate_selection_repair",
+    "do_not_submit_broker_order_from_exact_candidate_selection_repair",
+    "do_not_mutate_database_from_exact_candidate_selection_repair",
+    "do_not_change_scanner_policy_from_exact_candidate_selection_repair",
+    "do_not_change_contract_selection_policy_from_exact_candidate_selection_repair",
+    "do_not_change_lane_promotion_from_exact_candidate_selection_repair",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_exact_candidate_selection_repair",
+    "do_not_synthesize_pnl_for_signal_only_rows"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_create_live_row_from_exact_candidate_selection_repair",
+      "do_not_submit_broker_order_from_exact_candidate_selection_repair",
+      "do_not_mutate_database_from_exact_candidate_selection_repair",
+      "do_not_change_scanner_policy_from_exact_candidate_selection_repair",
+      "do_not_change_contract_selection_policy_from_exact_candidate_selection_repair",
+      "do_not_change_lane_promotion_from_exact_candidate_selection_repair",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_exact_candidate_selection_repair",
+      "do_not_synthesize_pnl_for_signal_only_rows"
+    ],
+    "readback_is": "read-only repair target list for signal candidates that produced zero exact chain-native spread candidates",
+    "readback_is_not": "scanner policy, contract-selection policy, broker recommendation, DB mutation, lane promotion, or P&L proof",
+    "trusted_proof_standard": "future replay P&L requires exact OPRA/NBBO entry and exit bid/ask evidence; this report only targets missing exact-candidate selection"
+  },
+  "read_only": true,
+  "repair_targets": [
+    {
+      "disposition": "needs_replay_engine",
+      "exact_candidate_count": 0,
+      "exact_reject_reasons": {
+        "no_chain_native_spread_passed_current_filters": 4
+      },
+      "lane": "regular_bearish_put_primary",
+      "next_action": "build_chain_native_filter_relaxation_replay",
+      "operator_next_step": "Run a read-only chain-native filter relaxation replay for this lane/date/ticker set; do not change live contract selection until exact OPRA/NBBO and promotion gates pass.",
+      "primary_repair_reason": "no_chain_native_spread_passed_current_filters",
+      "scan_date": "2026-05-22",
+      "signal_candidate_count": 4,
+      "target_id": "regular_bearish_put_primary:2026-05-22",
+      "top_signal_tickers": [
+        "META",
+        "COIN",
+        "SBUX",
+        "DIS"
+      ],
+      "would_track_pick_count": 0
+    }
+  ],
+  "report_id": "regular_options_exact_candidate_selection_repair",
+  "schema_version": 1,
+  "scope": "regular_options_read_only_exact_candidate_selection_repair",
+  "status": "exact_candidate_selection_repair_readback",
+  "summary": {
+    "blockers": [
+      "chain_native_filter_relaxation_replay_missing",
+      "no_chain_native_spread_passed_current_filters"
+    ],
+    "exact_reject_reason_counts": {
+      "no_chain_native_spread_passed_current_filters": 4
+    },
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "next_evidence_action_count": 1,
+    "overall_status": "exact_candidate_selection_repair_targets_ready",
+    "promotion_ready": false,
+    "target_date_count": 1,
+    "target_exact_candidate_count": 0,
+    "target_lane_count": 1,
+    "target_signal_candidate_count": 4,
+    "target_would_track_count": 0,
+    "top_signal_tickers": [
+      "COIN",
+      "DIS",
+      "META",
+      "SBUX"
+    ]
+  }
+}

@@ -69,6 +69,74 @@ export const PROOF_EVIDENCE_CONTRACT = {
       }
     }
   },
+  "quoteEvidence": {
+    "classes": {
+      "trusted_intraday_opra_nbbo": {
+        "label": "Trusted intraday OPRA/NBBO",
+        "tone": "live",
+        "snapshotKind": "intraday",
+        "dataTrust": "trusted",
+        "productionProofSourceEligible": true,
+        "researchLearning": false
+      },
+      "trusted_daily_eod": {
+        "label": "Trusted daily/EOD, not production proof",
+        "tone": "warning",
+        "snapshotKind": "daily_eod",
+        "dataTrust": "trusted",
+        "productionProofSourceEligible": false,
+        "researchLearning": true
+      },
+      "research_eod": {
+        "label": "Research EOD only",
+        "tone": "warning",
+        "snapshotKind": "daily_eod",
+        "dataTrust": "research",
+        "productionProofSourceEligible": false,
+        "researchLearning": true
+      },
+      "synthetic_research": {
+        "label": "Synthetic research-only",
+        "tone": "warning",
+        "snapshotKind": "synthetic",
+        "dataTrust": "research",
+        "productionProofSourceEligible": false,
+        "researchLearning": true
+      },
+      "unknown": {
+        "label": "Unclassified source",
+        "tone": "muted",
+        "snapshotKind": null,
+        "dataTrust": null,
+        "productionProofSourceEligible": false,
+        "researchLearning": false
+      }
+    },
+    "trustedIntradayTokens": [
+      "alpaca_opra",
+      "historical_imported",
+      "opra",
+      "nbbo",
+      "thetadata",
+      "trusted_intraday"
+    ],
+    "dailyTokens": [
+      "alpaca_opra_daily_snapshot",
+      "daily",
+      "daily_eod",
+      "eod",
+      "historical_imported_daily"
+    ],
+    "syntheticTokens": [
+      "fixture",
+      "model",
+      "synthetic"
+    ],
+    "researchTrustTokens": [
+      "research"
+    ],
+    "unknownClass": "unknown"
+  },
   "researchBackfill": {
     "identityFields": [
       "backfill_audit_id",

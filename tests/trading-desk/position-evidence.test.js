@@ -336,6 +336,52 @@ test("compact evidence summary preserves closed-row provenance without bulky sou
   assert.equal(evidence.matchesClosedDataView(position, "truth_grade"), false);
 });
 
+test("current compact backend readback can classify live exact after display compaction", () => {
+  const position = closedPosition({
+    proof_eligible: true,
+    proof_class: "live_scan_exact_contract",
+    compact_evidence: {
+      proof_contract_version: proofContract.PROOF_EVIDENCE_CONTRACT_VERSION,
+      evidence_group: "live_exact",
+      production_proof: true,
+      quote_evidence_class: "trusted_intraday_opra_nbbo",
+      quote_evidence_label: "Trusted intraday OPRA/NBBO",
+      production_proof_source_eligible: true,
+    },
+    source_pick_snapshot: {
+      playbook_id: "short_term",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  const quote = evidence.getQuoteEvidenceDescriptor(position);
+  assert.equal(group.id, "live_exact");
+  assert.equal(group.productionProof, true);
+  assert.equal(evidence.isProductionProofPosition(position), true);
+  assert.equal(quote.id, "trusted_intraday_opra_nbbo");
+  assert.equal(quote.productionProofSourceEligible, true);
+});
+
+test("stale compact backend live labels do not promote proof", () => {
+  const position = closedPosition({
+    proof_eligible: true,
+    proof_class: "live_scan_exact_contract",
+    compact_evidence: {
+      proof_contract_version: proofContract.PROOF_EVIDENCE_CONTRACT_VERSION + 1,
+      evidence_group: "live_exact",
+      production_proof: true,
+    },
+    source_pick_snapshot: {
+      playbook_id: "short_term",
+    },
+  });
+
+  const group = evidence.getPositionEvidenceGroup(position);
+  assert.equal(group.id, "proof_ineligible");
+  assert.equal(group.productionProof, false);
+  assert.equal(evidence.isProductionProofPosition(position), false);
+});
+
 test("research backfill rows with trusted executable exits enter realized P&L but not truth-grade", () => {
   const position = closedPosition({
     proof_eligible: true,

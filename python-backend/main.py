@@ -95,6 +95,8 @@ from alpaca_paper_trading import (
     submit_alpaca_paper_order,
 )
 from proof_contract import (
+    classify_quote_evidence as _classify_quote_evidence,
+    classify_row_evidence as _classify_row_evidence,
     row_counts_as_production_proof as _row_counts_as_production_proof,
     row_counts_as_proof_grade_exact_closed as _row_counts_as_proof_grade_exact_closed,
     row_has_raw_exact_contract as _row_has_raw_exact_contract,
@@ -1539,6 +1541,14 @@ _COMPACT_CLOSED_LIST_DROP_KEYS = {
     "share_safe_exact_live",
     "share_safe_reason",
 }
+_COMPACT_EVIDENCE_EXPLICIT_BOOL_KEYS = {
+    "production_proof",
+    "truth_grade_closed",
+    "realized_pnl_closed",
+    "raw_exact_contract",
+    "research_learning",
+    "production_proof_source_eligible",
+}
 
 
 def _compact_source_pick_snapshot(
@@ -1586,36 +1596,33 @@ def _compact_source_pick_snapshot(
     return compact
 
 
-def _compact_position_evidence(row: dict[str, Any], source: dict[str, Any]) -> dict[str, bool]:
-    raw_values = [
-        row.get("proof_class"),
-        row.get("proof_class_reason"),
-        row.get("proof_ineligibility_reason"),
-        row.get("notes"),
-        source.get("pricing_evidence_class"),
-        source.get("profitability_evidence_class"),
-        source.get("production_filter_action"),
-        source.get("source_separation"),
-        source.get("promotion_class"),
-        source.get("selection_source"),
-        source.get("event_type"),
-        source.get("candidate_execution_label"),
-        source.get("backfill_audit_id"),
-        source.get("position_migration_id"),
-        source.get("market_data_source"),
-        source.get("status"),
-    ]
-    evidence_values = [str(value).strip().lower() for value in raw_values if str(value or "").strip()]
+def _compact_position_evidence(
+    row: dict[str, Any],
+    source: dict[str, Any],
+    *,
+    record_class: str = "tracked_position",
+) -> dict[str, Any]:
+    evidence_row = dict(row)
+    evidence_row["source_pick_snapshot"] = source
     compact = {
-        "migrated_paper": bool(source.get("position_migration_id") or source.get("position_migrated_at_utc")),
-        "research_backfill": bool(source.get("research_only")) or any(
-            any(token in value for token in ("backfill", "research", "historical_replay", "historical_selection"))
-            for value in evidence_values
+        **_classify_row_evidence(evidence_row, record_class=record_class),
+        **_classify_quote_evidence(evidence_row),
+        "migrated_paper": bool(
+            row.get("position_migration_id")
+            or row.get("position_migrated_at_utc")
+            or source.get("position_migration_id")
+            or source.get("position_migrated_at_utc")
         ),
-        "comparable_contract": bool(source.get("comparable_contract")),
-        "approximation_only": bool(source.get("approximation_only")),
+        "research_backfill": _row_has_research_backfill_marker(evidence_row),
+        "comparable_contract": bool(row.get("comparable_contract") or source.get("comparable_contract")),
+        "approximation_only": bool(row.get("approximation_only") or source.get("approximation_only")),
     }
-    return {key: value for key, value in compact.items() if value}
+    return {
+        key: value
+        for key, value in compact.items()
+        if value not in (None, "")
+        and (value is not False or key in _COMPACT_EVIDENCE_EXPLICIT_BOOL_KEYS)
+    }
 
 
 def _compact_latest_review(review: dict[str, Any]) -> dict[str, Any]:
@@ -1626,7 +1633,7 @@ def _compact_latest_review(review: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _compact_position_list_row(row: dict[str, Any]) -> dict[str, Any]:
+def _compact_position_list_row(row: dict[str, Any], *, record_class: str = "tracked_position") -> dict[str, Any]:
     compact = dict(row)
     is_closed = str(compact.get("status") or "").strip().lower() == "closed"
     for key in _COMPACT_LIST_DROP_KEYS:
@@ -1641,7 +1648,7 @@ def _compact_position_list_row(row: dict[str, Any]) -> dict[str, Any]:
         compact["notes"] = notes[:max_notes]
     source = compact.get("source_pick_snapshot")
     if isinstance(source, dict):
-        compact_evidence = _compact_position_evidence(compact, source)
+        compact_evidence = _compact_position_evidence(row, source, record_class=record_class)
         if compact_evidence:
             compact["compact_evidence"] = compact_evidence
         compact["source_pick_snapshot"] = _compact_source_pick_snapshot(
@@ -1655,8 +1662,12 @@ def _compact_position_list_row(row: dict[str, Any]) -> dict[str, Any]:
     return compact
 
 
-def _compact_position_list_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [_compact_position_list_row(row) for row in list(rows or [])]
+def _compact_position_list_rows(
+    rows: list[dict[str, Any]],
+    *,
+    record_class: str = "tracked_position",
+) -> list[dict[str, Any]]:
+    return [_compact_position_list_row(row, record_class=record_class) for row in list(rows or [])]
 
 
 def _scan_run_id() -> str:
@@ -2987,7 +2998,7 @@ async def list_suggested_trades_endpoint(
             SUGGESTED_TRADES_REPOSITORY.list_positions(query_status, limit=limit, offset=offset)
         )
         if compact:
-            trades = _compact_position_list_rows(trades)
+            trades = _compact_position_list_rows(trades, record_class="suggested_trade")
         page = _page_metadata(trades, limit, offset)
         if grouped:
             payload = _group_rows_by_status(trades)

@@ -87,6 +87,9 @@ def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: object) -> None:
     assert audit["summary"]["completed_lane_count"] == 2
     assert audit["summary"]["signal_candidate_count"] == 4
     assert audit["summary"]["no_exact_reason_counts"] == {"no_exact_option_quotes_for_date": 4}
+    assert audit["summary"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
+    assert audit["parameters"]["row_evidence_group"] == "research_backfill"
+    assert audit["parameters"]["production_proof"] is False
     assert [lane["status"] for lane in audit["lanes"]] == ["completed", "completed"]
 
 
@@ -143,6 +146,7 @@ def test_quote_store_coverage_marks_missing_requested_market_dates() -> None:
     assert coverage["market_date_count"] == 2
     assert coverage["covered_date_count"] == 1
     assert coverage["missing_dates"] == ["2026-05-26"]
+    assert coverage["quote_evidence"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
 
 
 class ZeroPickAllLanesAuditTests(unittest.TestCase):

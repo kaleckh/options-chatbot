@@ -1,0 +1,180 @@
+{
+  "archived_lanes": [
+    {
+      "archive_reason": "negative_sufficient_sample_lane",
+      "archive_status": "archived_quarantine_lane",
+      "avg_net_pnl_pct": -14.31,
+      "blockers": [
+        "average_net_pnl_not_positive",
+        "current_live_exact_risk_clear",
+        "current_live_exact_risk_governor_blocked",
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "lane_not_profitable_enough_for_probation",
+        "profit_factor_below_lane_gate",
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed"
+      ],
+      "disposition": "quarantine",
+      "lane": "swing",
+      "operator_next_step": "keep diagnostic/no-chase and require earn-back or a frozen entry-time retest",
+      "priced": 49,
+      "profit_factor": 0.3,
+      "promotion_ready": false,
+      "promotion_state": "diagnostic",
+      "rows": 49,
+      "source_decision": "diagnostic_only_until_earn_back"
+    },
+    {
+      "archive_reason": "negative_sufficient_sample_lane",
+      "archive_status": "archived_quarantine_lane",
+      "avg_net_pnl_pct": -18.93,
+      "blockers": [
+        "average_net_pnl_not_positive",
+        "current_live_exact_risk_clear",
+        "current_live_exact_risk_governor_blocked",
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "lane_not_profitable_enough_for_probation",
+        "profit_factor_below_lane_gate",
+        "profitable_lane_gate",
+        "recent_cohort_circuit_breaker_active",
+        "recent_cohort_circuit_breaker_clear",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed"
+      ],
+      "disposition": "quarantine",
+      "lane": "short_term",
+      "operator_next_step": "keep diagnostic/no-chase and require earn-back or a frozen entry-time retest",
+      "priced": 54,
+      "profit_factor": 0.28,
+      "promotion_ready": false,
+      "promotion_state": "diagnostic",
+      "rows": 54,
+      "source_decision": "diagnostic_only_until_earn_back"
+    },
+    {
+      "archive_reason": "severe_negative_average_pnl",
+      "archive_status": "archived_quarantine_lane",
+      "avg_net_pnl_pct": -22.81,
+      "blockers": [
+        "average_net_pnl_not_positive",
+        "current_live_exact_risk_clear",
+        "current_live_exact_risk_governor_blocked",
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "lane_not_profitable_enough_for_probation",
+        "profit_factor_below_lane_gate",
+        "profitable_lane_gate",
+        "recent_cohort_circuit_breaker_active",
+        "recent_cohort_circuit_breaker_clear",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed"
+      ],
+      "disposition": "quarantine",
+      "lane": "bullish_pullback_observation",
+      "operator_next_step": "keep diagnostic/no-chase and require earn-back or a frozen entry-time retest",
+      "priced": 15,
+      "profit_factor": 0.29,
+      "promotion_ready": false,
+      "promotion_state": "diagnostic",
+      "rows": 15,
+      "source_decision": "diagnostic_only_until_earn_back"
+    },
+    {
+      "archive_reason": "severe_negative_average_pnl",
+      "archive_status": "archived_quarantine_lane",
+      "avg_net_pnl_pct": -48.45,
+      "blockers": [
+        "average_net_pnl_not_positive",
+        "current_live_exact_risk_clear",
+        "current_live_exact_risk_governor_blocked",
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "lane_not_profitable_enough_for_probation",
+        "profit_factor_below_lane_gate",
+        "profitable_lane_gate",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed"
+      ],
+      "disposition": "quarantine",
+      "lane": "bullish_momentum",
+      "operator_next_step": "keep diagnostic/no-chase and require earn-back or a frozen entry-time retest",
+      "priced": 16,
+      "profit_factor": 0.1,
+      "promotion_ready": false,
+      "promotion_state": "diagnostic",
+      "rows": 16,
+      "source_decision": "diagnostic_only_until_earn_back"
+    }
+  ],
+  "artifacts": {
+    "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-lane-quarantine-archive.md",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_quarantine_archive_20260608T013729Z.json",
+    "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_quarantine_archive_latest.json",
+    "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_quarantine_archive_latest.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_quarantine_archive_20260608T013729Z.md"
+  },
+  "generated_at_utc": "2026-06-08T01:37:29Z",
+  "inputs": {
+    "lane_promotion_state": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
+      "status": "loaded"
+    },
+    "missed_picks_failure_modes": {
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-05T21:03:55Z",
+      "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
+      "status": "loaded"
+    }
+  },
+  "live_policy_change": false,
+  "prohibited_actions": [
+    "do_not_delete_or_disable_lanes_from_lane_quarantine_archive",
+    "do_not_change_scanner_policy_from_lane_quarantine_archive",
+    "do_not_change_lane_promotion_from_lane_quarantine_archive",
+    "do_not_submit_broker_order_from_lane_quarantine_archive",
+    "do_not_mutate_database_from_lane_quarantine_archive",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_quarantine_archive",
+    "do_not_promote_quarantined_lanes_to_paper_or_live_proof"
+  ],
+  "proof_policy": {
+    "prohibited_actions": [
+      "do_not_delete_or_disable_lanes_from_lane_quarantine_archive",
+      "do_not_change_scanner_policy_from_lane_quarantine_archive",
+      "do_not_change_lane_promotion_from_lane_quarantine_archive",
+      "do_not_submit_broker_order_from_lane_quarantine_archive",
+      "do_not_mutate_database_from_lane_quarantine_archive",
+      "do_not_lower_exact_opra_nbbo_proof_bar_from_lane_quarantine_archive",
+      "do_not_promote_quarantined_lanes_to_paper_or_live_proof"
+    ],
+    "readback_is": "read-only archive of monthly command-center lanes classified as quarantine by trusted exact outcome economics",
+    "readback_is_not": "lane deletion, scanner policy change, lane promotion change, broker action, DB mutation, or proof-bar reduction",
+    "trusted_proof_standard": "trusted intraday exact-contract OPRA/NBBO evidence remains required for proof claims"
+  },
+  "read_only": true,
+  "report_id": "regular_options_lane_quarantine_archive",
+  "schema_version": 1,
+  "scope": "regular_options_negative_lane_quarantine_archive",
+  "status": "lane_quarantine_archive_readback",
+  "summary": {
+    "archive_complete": true,
+    "archived_lane_ids": [
+      "bullish_momentum",
+      "bullish_pullback_observation",
+      "short_term",
+      "swing"
+    ],
+    "archived_quarantine_lane_count": 4,
+    "live_policy_change": false,
+    "missing_required_inputs": [],
+    "overall_status": "lane_quarantines_archived",
+    "quarantine_lane_count": 4,
+    "unarchived_quarantine_lane_count": 0
+  }
+}

@@ -1,7 +1,13 @@
 import type { SuggestedTrade, TrackedPosition } from "@/lib/types";
 import {
+  EVIDENCE_GROUPS,
   PRODUCTION_EVIDENCE_GROUP_IDS,
+  PROOF_EVIDENCE_CONTRACT_VERSION,
   PROOF_CLASSES,
+  QUOTE_EVIDENCE_CLASSES,
+  QUOTE_DAILY_TOKENS,
+  QUOTE_SYNTHETIC_TOKENS,
+  QUOTE_TRUSTED_INTRADAY_TOKENS,
   ENTRY_PRICE_FIELDS,
   PROOF_SOURCE_FIELDS,
   QUOTE_FRESHNESS_FIELDS,
@@ -45,6 +51,18 @@ export type PositionEvidenceGroup = {
   tone: PositionEvidenceTone;
   productionProof: boolean;
   researchLearning: boolean;
+};
+
+export type QuoteEvidenceDescriptor = {
+  id: string;
+  label: string;
+  detail: string;
+  tone: PositionEvidenceTone;
+  productionProofSourceEligible: boolean;
+  snapshotKind: string | null;
+  dataTrust: string | null;
+  sourceLabel: string | null;
+  datasetKind: string | null;
 };
 
 export type ClosedDataView =
@@ -140,6 +158,23 @@ export type CurrentPolicyCohortHealth = {
 const PRODUCTION_EVIDENCE_IDS = new Set<PositionEvidenceGroupId>(
   PRODUCTION_EVIDENCE_GROUP_IDS as readonly PositionEvidenceGroupId[]
 );
+const EVIDENCE_GROUP_RECORD = EVIDENCE_GROUPS as Record<
+  string,
+  {
+    label: string;
+    tone: PositionEvidenceTone;
+    productionProof: boolean;
+    researchLearning: boolean;
+  }
+>;
+const QUOTE_EVIDENCE_CLASS_RECORD = QUOTE_EVIDENCE_CLASSES as Record<
+  string,
+  {
+    label: string;
+    tone: PositionEvidenceTone;
+    productionProofSourceEligible: boolean;
+  }
+>;
 const CURRENT_POLICY_REPAIR_LANES = new Set([
   "short_term",
   "swing",
@@ -205,6 +240,50 @@ function compactEvidenceRecord(position: TrackedPosition | SuggestedTrade): Reco
 
 function nestedRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function compactContractVersionIsCurrent(compactEvidence: Record<string, unknown>): boolean {
+  return Number(compactEvidence.proof_contract_version) === PROOF_EVIDENCE_CONTRACT_VERSION;
+}
+
+function knownEvidenceGroupId(value: unknown): PositionEvidenceGroupId | null {
+  const id = normalizeEvidenceValue(value);
+  if (id && Object.prototype.hasOwnProperty.call(EVIDENCE_GROUP_RECORD, id)) {
+    return id as PositionEvidenceGroupId;
+  }
+  return null;
+}
+
+function descriptorForEvidenceGroup(id: PositionEvidenceGroupId, detail: string): PositionEvidenceDescriptor {
+  const group = EVIDENCE_GROUP_RECORD[id];
+  return {
+    id,
+    label: group?.label || id,
+    detail,
+    tone: group?.tone || "muted",
+  };
+}
+
+function compactEvidenceDescriptor(
+  position: TrackedPosition | SuggestedTrade,
+  compactEvidence: Record<string, unknown>
+): PositionEvidenceDescriptor | null {
+  if (!compactContractVersionIsCurrent(compactEvidence)) return null;
+  const id = knownEvidenceGroupId(compactEvidence.evidence_group);
+  if (!id) return null;
+  if (id !== "live_exact") return descriptorForEvidenceGroup(id, "Backend proof contract readback");
+  if (compactEvidence.production_proof === true) {
+    return descriptorForEvidenceGroup(id, "Backend proof contract readback");
+  }
+  if (hasLiveExactProductionProof(position)) {
+    return descriptorForEvidenceGroup(id, "Proof eligible scan row");
+  }
+  return {
+    id: "proof_ineligible",
+    label: "Proof ineligible",
+    detail: "Missing persisted live proof gate",
+    tone: "warning",
+  };
 }
 
 export function getCanonicalPolicyLane(position: TrackedPosition | SuggestedTrade): string {
@@ -672,11 +751,128 @@ function hasLiveExactProductionProof(position: TrackedPosition | SuggestedTrade)
   );
 }
 
+function firstQuoteEvidenceValue(
+  position: TrackedPosition | SuggestedTrade,
+  fields: readonly string[]
+): unknown {
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  for (const field of fields) {
+    if (source[field] != null && source[field] !== "") return source[field];
+    if (row[field] != null && row[field] !== "") return row[field];
+  }
+  return null;
+}
+
+function quoteEvidenceValues(position: TrackedPosition | SuggestedTrade): string[] {
+  const row = position as unknown as Record<string, unknown>;
+  const source = sourceEvidenceRecord(position);
+  const fields = [
+    "snapshot_kind",
+    "quote_snapshot_kind",
+    "dataset_kind",
+    "quote_dataset_kind",
+    "data_trust",
+    "quote_data_trust",
+    "source_label",
+    "truth_source",
+    "truth_lane",
+    "pricing_evidence_class",
+    "profitability_evidence_class",
+    "market_data_source",
+    "options_market_data_source",
+    "options_data_source",
+    "quote_source",
+    "data_source",
+  ];
+  return fields.flatMap((field) => [
+    normalizeEvidenceValue(row[field]),
+    normalizeEvidenceValue(source[field]),
+  ]).filter(Boolean);
+}
+
+function valuesIncludeToken(values: readonly string[], tokens: readonly string[]): boolean {
+  return values.some((value) => tokens.some((token) => value.includes(token)));
+}
+
+function inferQuoteEvidenceClass(position: TrackedPosition | SuggestedTrade): string {
+  const values = quoteEvidenceValues(position);
+  const snapshotKind = normalizeEvidenceValue(
+    firstQuoteEvidenceValue(position, ["snapshot_kind", "quote_snapshot_kind"])
+  );
+  const dataTrust = normalizeEvidenceValue(
+    firstQuoteEvidenceValue(position, ["data_trust", "quote_data_trust"])
+  );
+  const daily = ["daily", "daily_eod", "eod"].includes(snapshotKind) || valuesIncludeToken(values, QUOTE_DAILY_TOKENS);
+  const synthetic = dataTrust === "synthetic" || valuesIncludeToken(values, QUOTE_SYNTHETIC_TOKENS);
+  const trusted = dataTrust === "trusted" || !dataTrust;
+  if (synthetic) return "synthetic_research";
+  if (daily && dataTrust === "research") return "research_eod";
+  if (daily && trusted) return "trusted_daily_eod";
+  if (!daily && trusted && valuesIncludeToken(values, QUOTE_TRUSTED_INTRADAY_TOKENS)) {
+    return "trusted_intraday_opra_nbbo";
+  }
+  return "unknown";
+}
+
+export function getQuoteEvidenceDescriptor(position: TrackedPosition | SuggestedTrade): QuoteEvidenceDescriptor {
+  const compactEvidence = compactEvidenceRecord(position);
+  const compactClassId = normalizeEvidenceValue(compactEvidence.quote_evidence_class);
+  const classId = Object.prototype.hasOwnProperty.call(QUOTE_EVIDENCE_CLASS_RECORD, compactClassId)
+    ? compactClassId
+    : inferQuoteEvidenceClass(position);
+  const quoteClass = QUOTE_EVIDENCE_CLASS_RECORD[classId] || QUOTE_EVIDENCE_CLASS_RECORD.unknown;
+  const snapshotKind =
+    compactEvidence.quote_snapshot_kind == null
+      ? normalizeEvidenceValue(firstQuoteEvidenceValue(position, ["snapshot_kind", "quote_snapshot_kind"])) || null
+      : String(compactEvidence.quote_snapshot_kind);
+  const dataTrust =
+    compactEvidence.quote_data_trust == null
+      ? normalizeEvidenceValue(firstQuoteEvidenceValue(position, ["data_trust", "quote_data_trust"])) || null
+      : String(compactEvidence.quote_data_trust);
+  const sourceLabel =
+    compactEvidence.quote_source_label == null
+      ? String(
+          firstQuoteEvidenceValue(position, [
+            "source_label",
+            "proof_source_label",
+            "options_data_source",
+            "options_market_data_source",
+            "market_data_source",
+            "quote_source",
+            "data_source",
+            "truth_source",
+            "truth_lane",
+          ]) || ""
+        ).trim() || null
+      : String(compactEvidence.quote_source_label);
+  const datasetKind =
+    compactEvidence.quote_dataset_kind == null
+      ? normalizeEvidenceValue(firstQuoteEvidenceValue(position, ["dataset_kind", "quote_dataset_kind"])) || null
+      : String(compactEvidence.quote_dataset_kind);
+  const detailParts = [snapshotKind, dataTrust, sourceLabel].filter(Boolean);
+  return {
+    id: classId,
+    label: String(compactEvidence.quote_evidence_label || quoteClass?.label || classId),
+    detail: detailParts.length ? detailParts.join(" / ") : "Quote source readback",
+    tone: (compactEvidence.quote_evidence_tone as PositionEvidenceTone) || quoteClass?.tone || "muted",
+    productionProofSourceEligible: Boolean(
+      compactEvidence.production_proof_source_eligible ?? quoteClass?.productionProofSourceEligible
+    ),
+    snapshotKind,
+    dataTrust,
+    sourceLabel,
+    datasetKind,
+  };
+}
+
 export function getPositionEvidenceDescriptor(
   position: TrackedPosition | SuggestedTrade
 ): PositionEvidenceDescriptor {
   const source = position.source_pick_snapshot || null;
   const compactEvidence = compactEvidenceRecord(position);
+  const compactDescriptor = compactEvidenceDescriptor(position, compactEvidence);
+  if (compactDescriptor) return compactDescriptor;
   const proofClass = normalizeEvidenceValue(position.proof_class ?? source?.proof_class);
   const proofReason = compactEvidenceText(position.proof_class_reason || position.proof_ineligibility_reason);
   const evidenceValues = positionEvidenceValues(position);
