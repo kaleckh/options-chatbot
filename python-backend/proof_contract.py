@@ -15,10 +15,15 @@ def _load_contract() -> dict[str, Any]:
 
 
 PROOF_EVIDENCE_CONTRACT = _load_contract()
+PROOF_EVIDENCE_CONTRACT_VERSION = int(PROOF_EVIDENCE_CONTRACT["version"])
 PROOF_CLASSES = dict(PROOF_EVIDENCE_CONTRACT["proofClasses"])
+FRONTEND_GROUPS_CONTRACT = dict(PROOF_EVIDENCE_CONTRACT["frontendGroups"])
 RESEARCH_BACKFILL_CONTRACT = dict(PROOF_EVIDENCE_CONTRACT["researchBackfill"])
 ENTRY_PROOF_CONTRACT = dict(PROOF_EVIDENCE_CONTRACT["entryProof"])
 EXIT_BASIS_CONTRACT = dict(PROOF_EVIDENCE_CONTRACT["exitBasis"])
+QUOTE_EVIDENCE_CONTRACT = dict(PROOF_EVIDENCE_CONTRACT.get("quoteEvidence") or {})
+EVIDENCE_GROUPS = dict(FRONTEND_GROUPS_CONTRACT["groups"])
+QUOTE_EVIDENCE_CLASSES = dict(QUOTE_EVIDENCE_CONTRACT.get("classes") or {})
 
 LIVE_SCAN_EXACT_PROOF_CLASS = str(PROOF_CLASSES["liveScanExact"])
 MANUAL_BROKER_EXACT_PROOF_CLASS = str(PROOF_CLASSES["manualBrokerExact"])
@@ -44,6 +49,24 @@ UNTRUSTED_QUOTE_FRESHNESS_TOKENS = tuple(ENTRY_PROOF_CONTRACT["untrustedQuoteFre
 
 TRUSTED_EXIT_BASIS_TOKENS = tuple(EXIT_BASIS_CONTRACT["trustedTokens"])
 UNTRUSTED_EXIT_BASIS_TOKENS = tuple(EXIT_BASIS_CONTRACT["untrustedTokens"])
+QUOTE_TRUSTED_INTRADAY_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("trustedIntradayTokens") or ())
+QUOTE_DAILY_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("dailyTokens") or ())
+QUOTE_SYNTHETIC_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("syntheticTokens") or ())
+QUOTE_RESEARCH_TRUST_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("researchTrustTokens") or ())
+QUOTE_UNKNOWN_CLASS = str(QUOTE_EVIDENCE_CONTRACT.get("unknownClass") or "unknown")
+
+LIVE_EXACT_EVIDENCE_GROUP = "live_exact"
+MANUAL_EXACT_EVIDENCE_GROUP = "manual_exact"
+HISTORICAL_PAPER_EVIDENCE_GROUP = "historical_paper"
+RESEARCH_BACKFILL_EVIDENCE_GROUP = "research_backfill"
+LIFECYCLE_ONLY_EVIDENCE_GROUP = "lifecycle_only"
+PROOF_INELIGIBLE_EVIDENCE_GROUP = "proof_ineligible"
+LEGACY_UNCLASSIFIED_EVIDENCE_GROUP = "legacy_unclassified"
+
+TRUSTED_INTRADAY_OPRA_NBBO_QUOTE_CLASS = "trusted_intraday_opra_nbbo"
+TRUSTED_DAILY_EOD_QUOTE_CLASS = "trusted_daily_eod"
+RESEARCH_EOD_QUOTE_CLASS = "research_eod"
+SYNTHETIC_RESEARCH_QUOTE_CLASS = "synthetic_research"
 
 
 def _mapping(value: Any) -> dict[str, Any]:
@@ -88,6 +111,17 @@ def _first_value(row: dict[str, Any], source: dict[str, Any], *fields: str) -> A
     return None
 
 
+def _first_source_value(row: dict[str, Any], source: dict[str, Any], *fields: str) -> Any:
+    for field in fields:
+        value = source.get(field)
+        if value not in (None, ""):
+            return value
+        value = row.get(field)
+        if value not in (None, ""):
+            return value
+    return None
+
+
 def _has_any_value(row: dict[str, Any], source: dict[str, Any], *fields: str) -> bool:
     return _first_value(row, source, *fields) not in (None, "")
 
@@ -95,6 +129,39 @@ def _has_any_value(row: dict[str, Any], source: dict[str, Any], *fields: str) ->
 def _row_is_closed(row: dict[str, Any]) -> bool:
     row_mapping = _mapping(row)
     return _normalized(row_mapping.get("status")) == "closed" or bool(row_mapping.get("closed_at"))
+
+
+def _group_contract(group_id: str) -> dict[str, Any]:
+    return _mapping(EVIDENCE_GROUPS.get(group_id))
+
+
+def _quote_class_contract(class_id: str) -> dict[str, Any]:
+    return _mapping(QUOTE_EVIDENCE_CLASSES.get(class_id)) or _mapping(QUOTE_EVIDENCE_CLASSES.get(QUOTE_UNKNOWN_CLASS))
+
+
+def _has_lifecycle_only_exit(row: dict[str, Any]) -> bool:
+    row_mapping = _mapping(row)
+    review = _mapping(row_mapping.get("latest_review"))
+    return (
+        _row_is_closed(row_mapping)
+        and _finite_float(row_mapping.get("exit_execution_price")) is None
+        and _finite_float(row_mapping.get("exit_option_price")) is None
+        and _finite_float(review.get("exit_execution_price")) is None
+    )
+
+
+def _has_historical_paper_marker(row: dict[str, Any]) -> bool:
+    row_mapping = _mapping(row)
+    source = _source_snapshot(row_mapping)
+    return any(
+        value not in (None, "")
+        for value in (
+            row_mapping.get("position_migration_id"),
+            row_mapping.get("position_migrated_at_utc"),
+            source.get("position_migration_id"),
+            source.get("position_migrated_at_utc"),
+        )
+    )
 
 
 def _has_research_identity_marker(record: dict[str, Any]) -> bool:
@@ -309,3 +376,152 @@ def row_counts_as_proof_grade_exact_closed(row: dict[str, Any]) -> bool:
         and row_has_trusted_executable_exit(row_mapping)
         and row_has_calculable_realized_pnl(row_mapping)
     )
+
+
+def _row_evidence_group(row: dict[str, Any]) -> str:
+    row_mapping = _mapping(row)
+    source = _source_snapshot(row_mapping)
+    proof_class = _normalized(row_mapping.get("proof_class") or source.get("proof_class"))
+
+    if _has_lifecycle_only_exit(row_mapping):
+        return LIFECYCLE_ONLY_EVIDENCE_GROUP
+    if _has_historical_paper_marker(row_mapping):
+        return HISTORICAL_PAPER_EVIDENCE_GROUP
+    if row_has_research_backfill_marker(row_mapping):
+        return RESEARCH_BACKFILL_EVIDENCE_GROUP
+    if source.get("comparable_contract") or row_mapping.get("comparable_contract") or source.get("approximation_only"):
+        return PROOF_INELIGIBLE_EVIDENCE_GROUP
+    if proof_class == MANUAL_BROKER_EXACT_PROOF_CLASS:
+        return MANUAL_EXACT_EVIDENCE_GROUP
+    if proof_class == INELIGIBLE_PROOF_CLASS or row_mapping.get("proof_eligible") is False:
+        return PROOF_INELIGIBLE_EVIDENCE_GROUP
+    if proof_class == LIVE_SCAN_EXACT_PROOF_CLASS:
+        return (
+            LIVE_EXACT_EVIDENCE_GROUP
+            if row_counts_as_production_proof(row_mapping)
+            else PROOF_INELIGIBLE_EVIDENCE_GROUP
+        )
+    return LEGACY_UNCLASSIFIED_EVIDENCE_GROUP
+
+
+def classify_row_evidence(row: dict[str, Any], *, record_class: str = "tracked_position") -> dict[str, Any]:
+    row_mapping = _mapping(row)
+    group_id = _row_evidence_group(row_mapping)
+    group = _group_contract(group_id)
+    tracked_position = record_class == "tracked_position"
+    production_proof = bool(tracked_position and row_counts_as_production_proof(row_mapping))
+    truth_grade_closed = bool(tracked_position and row_counts_as_proof_grade_exact_closed(row_mapping))
+    realized_pnl_closed = bool(
+        tracked_position
+        and _row_is_closed(row_mapping)
+        and row_has_trusted_executable_exit(row_mapping)
+        and row_has_calculable_realized_pnl(row_mapping)
+    )
+    return {
+        "proof_contract_version": PROOF_EVIDENCE_CONTRACT_VERSION,
+        "record_class": record_class,
+        "evidence_group": group_id,
+        "evidence_label": str(group.get("label") or group_id),
+        "evidence_tone": str(group.get("tone") or "muted"),
+        "production_proof": production_proof,
+        "truth_grade_closed": truth_grade_closed,
+        "realized_pnl_closed": realized_pnl_closed,
+        "raw_exact_contract": row_has_raw_exact_contract(row_mapping),
+        "research_learning": bool(group.get("researchLearning")),
+    }
+
+
+def _quote_evidence_values(row: dict[str, Any], source: dict[str, Any]) -> list[str]:
+    fields = (
+        "snapshot_kind",
+        "quote_snapshot_kind",
+        "dataset_kind",
+        "quote_dataset_kind",
+        "data_trust",
+        "quote_data_trust",
+        "source_label",
+        "truth_source",
+        "truth_lane",
+        "pricing_evidence_class",
+        "profitability_evidence_class",
+        "market_data_source",
+        "options_market_data_source",
+        "options_data_source",
+        "quote_source",
+        "data_source",
+    )
+    values = [
+        _normalized(row.get(field))
+        for field in fields
+    ] + [
+        _normalized(source.get(field))
+        for field in fields
+    ]
+    return [value for value in values if value]
+
+
+def _values_have_any_token(values: list[str], tokens: tuple[str, ...]) -> bool:
+    return any(any(token in value for token in tokens) for value in values)
+
+
+def classify_quote_evidence(row: dict[str, Any]) -> dict[str, Any]:
+    row_mapping = _mapping(row)
+    source = _source_snapshot(row_mapping)
+    snapshot_kind = _normalized(
+        _first_source_value(row_mapping, source, "snapshot_kind", "quote_snapshot_kind")
+    )
+    data_trust = _normalized(_first_source_value(row_mapping, source, "data_trust", "quote_data_trust"))
+    dataset_kind = _normalized(
+        _first_source_value(row_mapping, source, "dataset_kind", "quote_dataset_kind")
+    )
+    source_label = str(
+        _first_source_value(
+            row_mapping,
+            source,
+            "source_label",
+            "proof_source_label",
+            "options_data_source",
+            "options_market_data_source",
+            "market_data_source",
+            "quote_source",
+            "data_source",
+            "truth_source",
+            "truth_lane",
+        )
+        or ""
+    ).strip()
+    values = _quote_evidence_values(row_mapping, source)
+    daily = snapshot_kind in {"daily", "daily_eod", "eod"} or _values_have_any_token(values, QUOTE_DAILY_TOKENS)
+    synthetic = data_trust == "synthetic" or _values_have_any_token(values, QUOTE_SYNTHETIC_TOKENS)
+    research = data_trust == "research" or _values_have_any_token(values, QUOTE_RESEARCH_TRUST_TOKENS)
+    trusted = data_trust == "trusted" or not data_trust
+    trusted_intraday = (
+        not daily
+        and trusted
+        and _values_have_any_token(values, QUOTE_TRUSTED_INTRADAY_TOKENS)
+    )
+
+    if synthetic:
+        class_id = SYNTHETIC_RESEARCH_QUOTE_CLASS
+    elif daily and research:
+        class_id = RESEARCH_EOD_QUOTE_CLASS
+    elif daily and trusted:
+        class_id = TRUSTED_DAILY_EOD_QUOTE_CLASS
+    elif trusted_intraday:
+        class_id = TRUSTED_INTRADAY_OPRA_NBBO_QUOTE_CLASS
+    else:
+        class_id = QUOTE_UNKNOWN_CLASS
+
+    quote_class = _quote_class_contract(class_id)
+    inferred_snapshot_kind = snapshot_kind or quote_class.get("snapshotKind")
+    inferred_data_trust = data_trust or quote_class.get("dataTrust")
+    return {
+        "quote_evidence_class": class_id,
+        "quote_evidence_label": str(quote_class.get("label") or class_id),
+        "quote_evidence_tone": str(quote_class.get("tone") or "muted"),
+        "quote_snapshot_kind": inferred_snapshot_kind,
+        "quote_data_trust": inferred_data_trust,
+        "quote_source_label": source_label or None,
+        "quote_dataset_kind": dataset_kind or None,
+        "production_proof_source_eligible": bool(quote_class.get("productionProofSourceEligible")),
+    }

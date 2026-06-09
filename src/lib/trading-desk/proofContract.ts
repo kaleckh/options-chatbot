@@ -10,6 +10,13 @@ export const PRODUCTION_EVIDENCE_GROUP_IDS: readonly string[] =
 export const EVIDENCE_GROUPS = PROOF_EVIDENCE_CONTRACT.frontendGroups.groups;
 export const EVIDENCE_DISPLAY_PRECEDENCE: readonly string[] =
   PROOF_EVIDENCE_CONTRACT.frontendGroups.displayPrecedence;
+export const QUOTE_EVIDENCE_CLASSES = PROOF_EVIDENCE_CONTRACT.quoteEvidence.classes;
+export const QUOTE_TRUSTED_INTRADAY_TOKENS: readonly string[] =
+  PROOF_EVIDENCE_CONTRACT.quoteEvidence.trustedIntradayTokens;
+export const QUOTE_DAILY_TOKENS: readonly string[] =
+  PROOF_EVIDENCE_CONTRACT.quoteEvidence.dailyTokens;
+export const QUOTE_SYNTHETIC_TOKENS: readonly string[] =
+  PROOF_EVIDENCE_CONTRACT.quoteEvidence.syntheticTokens;
 export const RESEARCH_BACKFILL_IDENTITY_FIELDS: readonly string[] =
   PROOF_EVIDENCE_CONTRACT.researchBackfill.identityFields;
 export const RESEARCH_BACKFILL_TOKENS: readonly string[] = PROOF_EVIDENCE_CONTRACT.researchBackfill.tokens;

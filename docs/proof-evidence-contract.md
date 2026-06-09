@@ -46,11 +46,30 @@ Display precedence is contract knowledge:
 
 Only `live_exact` is a production-proof display group. Historical paper, research backfill, lifecycle-only, and proof-ineligible rows remain research-learning surfaces. Manual exact rows are visible evidence but not production proof.
 
+## Quote Evidence Classes
+
+Trading Desk compact rows expose two derived evidence axes. `evidence_group` is the row proof/lifecycle group above. `quote_evidence_class` is the quote/source quality used to price or read back the row. These labels are read-time diagnostics derived from `data/contracts/proof-evidence-contract.json`; they are not durable DB authority and must not override backend proof predicates.
+
+| Quote evidence class | Meaning | Production-proof source eligible |
+| --- | --- | --- |
+| `trusted_intraday_opra_nbbo` | Trusted intraday OPRA/NBBO quote evidence, including the active regular intraday source. | Yes, but only when the row also clears all production-proof gates |
+| `trusted_daily_eod` | Trusted daily/EOD quote evidence. Useful for support and separate lanes, but below the regular browser production-proof bar. | No |
+| `research_eod` | Research daily/EOD evidence. | No |
+| `synthetic_research` | Synthetic, fixture, model, or research-only quote evidence. | No |
+| `unknown` | Source quality cannot be classified from the row/source snapshot. | No |
+
+`options_history.db` is storage, not proof quality. The same physical quote store can contain trusted intraday OPRA/NBBO rows, trusted daily/EOD rows, research rows, and synthetic or test artifacts. Audit scripts and UI readbacks must label the quote class from `snapshot_kind`, `data_trust`, `dataset_kind`, and source labels rather than assuming every row in the DB has the same proof meaning.
+
+Read-only audit and research reports use `scripts/quote_evidence_readback.py` to project the same quote classes outside the Trading Desk API. Those reports must keep quote-source quality separate from row-use policy: for example, a missed-pick mark can use `trusted_intraday_opra_nbbo` quotes while the marked missed-pick row remains `evidence_group=research_backfill` and `production_proof=false`.
+
 ## Implementation Anchors
 
 - Creation-time proof classification: `python-backend/positions_service.py`
 - Stored-row production-proof predicates: `python-backend/proof_contract.py`
 - Proof-summary and grouped tracked summaries: `python-backend/main.py`
+- Compact row evidence readbacks: `python-backend/proof_contract.py` and `python-backend/main.py`
+- Report quote-evidence readbacks: `scripts/quote_evidence_readback.py`
+- Storage and research report labels: `scripts/audit_options_data_store.py`, `scripts/audit_paid_data_readiness.py`, `scripts/audit_zero_pick_days_all_lanes.py`, `scripts/audit_missed_regular_picks_outcomes.py`, `scripts/analyze_missed_regular_picks_failure_modes.py`, `scripts/analyze_missed_regular_picks_filter_matrix.py`, and `scripts/run_lane_lab.py`
 - Profit gate and flywheel production metrics: `options_profit_gate.py` and `options_profit_flywheel.py`
 - UI projection and closed-view filtering: `src/lib/trading-desk/positionEvidence.ts`
 - Contract tests: `tests/test_proof_contract.py`, `tests/test_proof_invariant_cases.py`, `tests/test_golden_proof_replay_readbacks.py`, `tests/trading-desk/proof-invariants.test.js`, and `tests/trading-desk/position-evidence.test.js`

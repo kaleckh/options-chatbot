@@ -198,6 +198,56 @@ class ProofContractTests(unittest.TestCase):
             )
         )
 
+    def test_row_evidence_classifier_keeps_live_research_calibration_live_exact(self):
+        row = self._live_proof_row(
+            source_pick_snapshot={
+                "pricing_evidence_class": "proof_live_opra_exact_contract",
+                "profitability_evidence_class": "research_profitability_calibration",
+                "source_separation": "pricing_proof_profitability_research",
+                "promotion_class": "research_bootstrap",
+                "source_label": "alpaca_opra",
+                "snapshot_kind": "intraday",
+                "data_trust": "trusted",
+            }
+        )
+
+        self.assertFalse(contract.row_has_research_backfill_marker(row))
+        summary = contract.classify_row_evidence(row)
+        quote = contract.classify_quote_evidence(row)
+        self.assertEqual(summary["proof_contract_version"], contract.PROOF_EVIDENCE_CONTRACT_VERSION)
+        self.assertEqual(summary["evidence_group"], "live_exact")
+        self.assertTrue(summary["production_proof"])
+        self.assertTrue(summary["truth_grade_closed"])
+        self.assertEqual(quote["quote_evidence_class"], "trusted_intraday_opra_nbbo")
+        self.assertTrue(quote["production_proof_source_eligible"])
+
+    def test_quote_evidence_classifier_separates_daily_and_synthetic_sources(self):
+        trusted_daily = self._live_proof_row(
+            source_pick_snapshot={
+                "source_label": "alpaca_opra_daily_snapshot",
+                "snapshot_kind": "daily_eod",
+                "data_trust": "trusted",
+            }
+        )
+        research_daily = self._live_proof_row(
+            source_pick_snapshot={
+                "source_label": "onclickmedia_research_grade_eod_bidask",
+                "snapshot_kind": "daily_eod",
+                "data_trust": "research",
+            }
+        )
+        synthetic = self._live_proof_row(
+            source_pick_snapshot={
+                "truth_source": "synthetic_research",
+                "data_trust": "synthetic",
+            }
+        )
+
+        self.assertEqual(contract.classify_quote_evidence(trusted_daily)["quote_evidence_class"], "trusted_daily_eod")
+        self.assertFalse(contract.classify_quote_evidence(trusted_daily)["production_proof_source_eligible"])
+        self.assertEqual(contract.classify_quote_evidence(research_daily)["quote_evidence_class"], "research_eod")
+        self.assertEqual(contract.classify_quote_evidence(synthetic)["quote_evidence_class"], "synthetic_research")
+
 
 if __name__ == "__main__":
     unittest.main()

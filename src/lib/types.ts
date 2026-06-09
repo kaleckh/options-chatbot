@@ -733,6 +733,24 @@ export interface PositionReview {
 }
 
 export interface CompactPositionEvidence {
+  proof_contract_version?: number;
+  record_class?: "tracked_position" | "suggested_trade" | string;
+  evidence_group?: string;
+  evidence_label?: string;
+  evidence_tone?: string;
+  production_proof?: boolean;
+  truth_grade_closed?: boolean;
+  realized_pnl_closed?: boolean;
+  raw_exact_contract?: boolean;
+  research_learning?: boolean;
+  quote_evidence_class?: string;
+  quote_evidence_label?: string;
+  quote_evidence_tone?: string;
+  quote_snapshot_kind?: string | null;
+  quote_data_trust?: string | null;
+  quote_source_label?: string | null;
+  quote_dataset_kind?: string | null;
+  production_proof_source_eligible?: boolean;
   migrated_paper?: boolean;
   research_backfill?: boolean;
   comparable_contract?: boolean;
