@@ -19,7 +19,7 @@ MULTILANE_LATEST = ROOT / "data" / "profitability-lab" / "regular-options-multil
 OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-autoresearch"
 LEDGER_PATH = OUTPUT_DIR / "ledger.jsonl"
 
-EVALUATOR_VERSION = "regular-options-autoresearch-v1"
+EVALUATOR_VERSION = "regular-options-autoresearch-v2"
 TARGET_CLEAN_TRADES = 200
 COUNT_CANDIDATE_STATUSES = {"count_candidate", "portfolio_candidate"}
 
@@ -46,7 +46,15 @@ EVALUATOR_CONFIG: dict[str, Any] = {
     "production_extra_gates": PRODUCTION_EXTRA_GATES,
     "score_policy": {
         "score_is_zero_until_promotable_clean": True,
+        "progress_score_is_diagnostic_triage_only": True,
+        "progress_score_inputs": [
+            "promotable_clean_count",
+            "conservative_profit_factor",
+            "stress_5pct_profit_factor",
+            "zero_bid_exit_rate_pct",
+        ],
         "research_score_is_diagnostic_only": True,
+        "research_score_excludes_trade_count_and_quote_coverage": True,
         "side_aware_zero_bid_replay_is_required_when_lane_a_is_counted": True,
         "daily_eod_midpoint_or_unresolved_rows_do_not_count": True,
     },
@@ -299,10 +307,8 @@ def _research_score(metrics: dict[str, Any]) -> float:
     lane_a_pf = metrics.get("lane_a_conservative_profit_factor")
     lane_a_penalty = 100.0 if lane_a_pf is not None and _safe_float(lane_a_pf) < 1.0 else 0.0
     score = (
-        _safe_float(metrics.get("scout_count"))
-        + max(0.0, _safe_float(metrics.get("profit_factor")) - 1.0) * 50.0
+        max(0.0, _safe_float(metrics.get("profit_factor")) - 1.0) * 50.0
         + max(0.0, _safe_float(metrics.get("avg_pnl_pct")))
-        + _safe_float(metrics.get("effective_quote_coverage_pct"))
         + max(0.0, _safe_float(metrics.get("stress_5pct_profit_factor")) - 1.0) * 25.0
         - _safe_float(metrics.get("effective_unresolved_count")) * 3.0
         - _safe_float(metrics.get("zero_bid_exit_rate_pct"), 0.0) * 2.0
@@ -310,6 +316,30 @@ def _research_score(metrics: dict[str, Any]) -> float:
         - lane_a_penalty
     )
     return round(score, 2)
+
+
+def _progress_conservative_profit_factor(metrics: dict[str, Any]) -> float:
+    lane_a_pf = metrics.get("lane_a_conservative_profit_factor")
+    if lane_a_pf is not None:
+        return _safe_float(lane_a_pf)
+    return _safe_float(metrics.get("profit_factor"))
+
+
+def _progress_score(metrics: dict[str, Any]) -> float:
+    clean_count = _safe_float(metrics.get("promotable_clean_count"))
+    conservative_pf = _progress_conservative_profit_factor(metrics)
+    stress_pf = _safe_float(metrics.get("stress_5pct_profit_factor"))
+    zero_bid_rate = metrics.get("zero_bid_exit_rate_pct")
+
+    clean_component = min(clean_count / float(TARGET_CLEAN_TRADES), 1.0) * 40.0
+    pf_component = min(max(conservative_pf - 1.0, 0.0) / 0.5, 1.0) * 30.0
+    stress_component = min(max(stress_pf - 1.0, 0.0) / 0.25, 1.0) * 20.0
+    if zero_bid_rate is None:
+        zero_bid_component = 10.0 if not metrics.get("lane_a_is_counted") else 0.0
+    else:
+        parsed_zero_bid = _safe_float(zero_bid_rate, 50.0)
+        zero_bid_component = 10.0 if parsed_zero_bid <= 2.0 else max(0.0, 10.0 * (1.0 - (parsed_zero_bid / 50.0)))
+    return round(clean_component + pf_component + stress_component + zero_bid_component, 2)
 
 
 def build_scoreboard(
@@ -328,6 +358,7 @@ def build_scoreboard(
     metrics["promotable_clean_count"] = clean_count
     multiplier = _quality_multiplier(metrics) if historical_status == "promotable_clean" else 0.0
     score = round(clean_count * multiplier, 2) if historical_status == "promotable_clean" else 0.0
+    progress_score = _progress_score(metrics)
 
     scoreboard = {
         "generated_at_utc": generated_at_utc or _utc_now(),
@@ -338,6 +369,7 @@ def build_scoreboard(
         "status": historical_status,
         "production_status": production_status,
         "score": score,
+        "progress_score": progress_score,
         "research_score": _research_score(metrics),
         "quality_multiplier": multiplier,
         "metrics": metrics,
@@ -359,7 +391,7 @@ def _read(score: float, status: str, blockers: list[str], metrics: dict[str, Any
     if "lane_a_conservative_pf_below_1_30" in blockers:
         return "Blocked primarily by Lane A zero-bid survivability; do not count the 234 stack as clean."
     if score <= 0:
-        return "Blocked by frozen promotion gates; use research_score and blockers only for experiment triage."
+        return "Blocked by frozen promotion gates; use progress_score and blockers only for experiment triage."
     return "Scout evidence exists, but it is not promotable clean evidence."
 
 
@@ -370,6 +402,7 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
     zero_bid = metrics.get("zero_bid_exit_rate_pct")
     return (
         f"score: {_round(scoreboard.get('score')):.2f} "
+        f"progress_score: {_round(scoreboard.get('progress_score')):.2f} "
         f"research_score: {_round(scoreboard.get('research_score')):.2f} "
         f"status: {scoreboard.get('status')} "
         f"production_status: {scoreboard.get('production_status')} "
@@ -397,6 +430,7 @@ def _ledger_entry(scoreboard: dict[str, Any]) -> dict[str, Any]:
         "status": scoreboard.get("status"),
         "production_status": scoreboard.get("production_status"),
         "score": scoreboard.get("score"),
+        "progress_score": scoreboard.get("progress_score"),
         "research_score": scoreboard.get("research_score"),
         "clean_count": metrics.get("promotable_clean_count"),
         "scout_count": metrics.get("scout_count"),
@@ -438,6 +472,7 @@ def render_markdown(scoreboard: dict[str, Any]) -> str:
         f"- Historical clean status: `{scoreboard.get('status')}`",
         f"- Production status: `{scoreboard.get('production_status')}`",
         f"- Score: `{scoreboard.get('score')}`",
+        f"- Progress score: `{scoreboard.get('progress_score')}`",
         f"- Research score: `{scoreboard.get('research_score')}`",
         f"- Read: {scoreboard.get('read')}",
         "",

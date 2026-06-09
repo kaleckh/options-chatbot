@@ -24,15 +24,11 @@ from scripts import run_side_aware_zero_bid_replay as zero_bid_replay  # noqa: E
 
 OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-autoresearch" / "experiments"
 LANE_A_SOURCE_ID = "lane_a_chain_native_ret20_4_stop200_time75"
-DEFAULT_VARIANTS = [
-    "lane_a_goal_stop200_time75_shortbid10",
-    "lane_a_goal_stop200_time75_shortprior3_shortbid10_backfill",
-    "lane_a_goal_stop200_time75_liquidity_score_replacement",
-    "lane_a_goal_stop200_time75_tradability80",
-    "lane_a_goal_stop200_time75_shortbucket_memory45_backfill",
-    "lane_a_goal_stop200_time75_symbol_health90_backfill",
-    "lane_a_goal_stop200_time75_memory_combo_backfill",
-]
+DEFAULT_GOAL = (
+    "Rank explicitly supplied regular-options clean-proof variants by frozen promotion score "
+    "and diagnostic executable-P&L progress score."
+)
+DEFAULT_VARIANTS: list[str] = []
 
 
 def _utc_stamp() -> str:
@@ -200,6 +196,7 @@ def run_goal_experiments(
                 "robustness_path": str(robustness_path),
                 "side_aware_path": str(side_aware_path),
                 "score": scoreboard.get("score"),
+                "progress_score": scoreboard.get("progress_score"),
                 "research_score": scoreboard.get("research_score"),
                 "status": scoreboard.get("status"),
                 "promotion_blockers": scoreboard.get("promotion_blockers"),
@@ -218,11 +215,11 @@ def run_goal_experiments(
             }
         )
 
-    ranked = sorted(rows, key=lambda row: (float(row.get("score") or 0.0), float(row.get("research_score") or 0.0)), reverse=True)
+    ranked = sorted(rows, key=lambda row: (float(row.get("score") or 0.0), float(row.get("progress_score") or 0.0)), reverse=True)
     report = {
         "generated_at_utc": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "experiment_batch": stamp,
-        "goal": "Repair Lane A zero-bid survivability under the frozen regular-options autoresearch evaluator.",
+        "goal": DEFAULT_GOAL,
         "lookback_years": int(lookback_years),
         "append_ledger": bool(append_ledger),
         "write_global_latest": bool(write_global_latest),
@@ -251,6 +248,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     variants = args.variant or DEFAULT_VARIANTS
+    if not variants:
+        parser.error("No default variants are configured; pass --variant for a pre-registered clean-proof experiment.")
     report = run_goal_experiments(
         variants=variants,
         lookback_years=int(args.lookback_years),

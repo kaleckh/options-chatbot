@@ -9,24 +9,9 @@ from scripts import run_regular_options_goal_experiment as goal
 
 
 class RegularOptionsGoalExperimentTests(unittest.TestCase):
-    def test_default_variants_are_lane_a_survivability_experiments(self):
-        self.assertGreaterEqual(len(goal.DEFAULT_VARIANTS), 3)
-        self.assertTrue(all(item.startswith("lane_a_goal_") for item in goal.DEFAULT_VARIANTS))
-
-    def test_default_variants_include_causal_memory_experiments(self):
-        self.assertIn("lane_a_goal_stop200_time75_shortbucket_memory45_backfill", goal.DEFAULT_VARIANTS)
-        self.assertIn("lane_a_goal_stop200_time75_symbol_health90_backfill", goal.DEFAULT_VARIANTS)
-        by_id = {str(item["id"]): item for item in goal.next_round.VARIANTS}
-
-        short_bucket = by_id["lane_a_goal_stop200_time75_shortbucket_memory45_backfill"]["overrides"]
-        self.assertTrue(short_bucket["exit_quote_failure_memory_enabled"])
-        self.assertEqual(short_bucket["exit_quote_failure_scope"], "short_expiry_strike_bucket")
-        self.assertTrue(short_bucket["execution_backfill_enabled"])
-
-        symbol_health = by_id["lane_a_goal_stop200_time75_symbol_health90_backfill"]["overrides"]
-        self.assertTrue(symbol_health["symbol_health_memory_enabled"])
-        self.assertEqual(symbol_health["symbol_health_min_observations"], 3)
-        self.assertTrue(symbol_health["execution_backfill_enabled"])
+    def test_default_variants_retire_lane_a_survivability_batch(self):
+        self.assertEqual(goal.DEFAULT_VARIANTS, [])
+        self.assertNotIn("Lane A", goal.DEFAULT_GOAL)
 
     def test_patched_multilane_inputs_replaces_lane_a_artifacts_only(self):
         original_sources = [
@@ -67,10 +52,11 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
         }
         scoreboard = {
             "score": 0.0,
+            "progress_score": 1.0,
             "research_score": 1.0,
             "status": "scout_or_blocked",
             "promotion_blockers": [],
-            "score_line": "score: 0.00",
+            "score_line": "score: 0.00 progress_score: 1.00",
             "metrics": {},
         }
 
@@ -106,6 +92,73 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
         self.assertEqual(len(write_calls), 1)
         self.assertNotEqual(write_calls[0], goal.evaluator.OUTPUT_DIR)
         self.assertEqual(write_calls[0].name, "autoresearch-scoreboard")
+
+    def test_experiment_batch_ranks_by_score_then_progress_score(self):
+        rows = {
+            "count_proxy": {
+                "variant_id": "count_proxy",
+                "result_path": "count_proxy.json",
+                "description": "count only",
+                "candidate_trade_count": 300,
+                "exact_trade_count": 250,
+                "quote_coverage_pct": 99.0,
+            },
+            "pnl_progress": {
+                "variant_id": "pnl_progress",
+                "result_path": "pnl_progress.json",
+                "description": "pnl progress",
+                "candidate_trade_count": 180,
+                "exact_trade_count": 160,
+                "quote_coverage_pct": 90.0,
+            },
+        }
+
+        def fake_run_lane_variant(variant_id: str, *, lookback_years: int):
+            row = rows[variant_id]
+            return {"variants": [row]}, row
+
+        def fake_score_variant(*, variant_id, run_path, robustness_path, side_aware_path, hypothesis):
+            progress = 40.0 if variant_id == "pnl_progress" else 10.0
+            research = 10.0 if variant_id == "pnl_progress" else 100.0
+            return {
+                "score": 0.0,
+                "progress_score": progress,
+                "research_score": research,
+                "status": "scout_or_blocked",
+                "promotion_blockers": [],
+                "score_line": f"score: 0.00 progress_score: {progress:.2f}",
+                "metrics": {},
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            with patch.object(goal, "_run_lane_variant", side_effect=fake_run_lane_variant), patch.object(
+                goal,
+                "_run_robustness",
+                return_value=({"ok": True}, output_dir / "robustness.json"),
+            ), patch.object(
+                goal,
+                "_run_side_aware",
+                return_value=({"ok": True}, output_dir / "side-aware.json"),
+            ), patch.object(
+                goal,
+                "_score_variant",
+                side_effect=fake_score_variant,
+            ), patch.object(
+                goal.evaluator,
+                "write_outputs",
+                return_value={"latest_json": "latest.json"},
+            ):
+                report = goal.run_goal_experiments(
+                    variants=["count_proxy", "pnl_progress"],
+                    lookback_years=1,
+                    output_dir=output_dir,
+                    append_ledger=False,
+                )
+
+        self.assertEqual(report["best"]["variant_id"], "pnl_progress")
+        self.assertEqual(report["ranked"][0]["progress_score"], 40.0)
+        self.assertEqual(report["ranked"][1]["research_score"], 100.0)
 
 
 if __name__ == "__main__":

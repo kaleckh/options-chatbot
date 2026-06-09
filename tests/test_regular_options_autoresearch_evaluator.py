@@ -103,6 +103,36 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         self.assertIn("lane_a_conservative_pf_below_1_30", scoreboard["promotion_blockers"])
         self.assertIn("effective_unresolved_candidates_remain", scoreboard["promotion_blockers"])
         self.assertIn("score:", format_score_line(scoreboard))
+        self.assertIn("progress_score:", format_score_line(scoreboard))
+
+    def test_progress_score_ranks_conservative_pf_below_promotion_bar(self):
+        low_pf = _report(side_aware_pf=1.10, side_aware_unpriced=0)
+        high_pf = _report(side_aware_pf=1.40, side_aware_unpriced=0)
+        low_pf["combined_portfolio"]["metrics"]["profit_factor"] = 1.10
+        high_pf["combined_portfolio"]["metrics"]["profit_factor"] = 1.10
+
+        low = build_scoreboard(low_pf, experiment_id="low", hypothesis="low")
+        high = build_scoreboard(high_pf, experiment_id="high", hypothesis="high")
+
+        self.assertEqual(low["score"], 0.0)
+        self.assertEqual(high["score"], 0.0)
+        self.assertGreater(high["progress_score"], low["progress_score"])
+
+    def test_progress_score_does_not_reward_count_or_coverage_only_backfill(self):
+        baseline = _report(side_aware_pf=1.10, side_aware_unpriced=10)
+        backfilled = _report(side_aware_pf=1.10, side_aware_unpriced=0)
+        for report in (baseline, backfilled):
+            report["combined_portfolio"]["metrics"]["profit_factor"] = 1.10
+            report["combined_portfolio"]["metrics"]["exact_trade_count"] = 250
+        backfilled["lanes"][0]["metrics"]["candidate_trade_count"] = 150
+        backfilled["lanes"][0]["metrics"]["exact_trade_count"] = 150
+
+        baseline_scoreboard = build_scoreboard(baseline, experiment_id="baseline", hypothesis="same pnl")
+        backfilled_scoreboard = build_scoreboard(backfilled, experiment_id="backfilled", hypothesis="same pnl")
+
+        self.assertEqual(baseline_scoreboard["score"], 0.0)
+        self.assertEqual(backfilled_scoreboard["score"], 0.0)
+        self.assertEqual(backfilled_scoreboard["progress_score"], baseline_scoreboard["progress_score"])
 
     def test_promotable_clean_can_pass_historical_gates_but_not_paper_shadow(self):
         scoreboard = build_scoreboard(
@@ -160,6 +190,7 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         self.assertEqual(row["experiment_id"], "clean")
         self.assertEqual(row["evaluator_config_hash"], evaluator_config_hash())
         self.assertIn("score", row)
+        self.assertIn("progress_score", row)
         self.assertNotIn("metrics", row)
 
 

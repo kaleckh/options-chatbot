@@ -1,5 +1,11 @@
 # Decisions
 
+## 2026-06-09: Add Autoresearch Progress Score Without Relaxing Promotion Gates
+
+The regular-options autoresearch judge had a frozen all-or-nothing `score`: below the full promotion bar, every experiment scored `0.00`, so the goal harness fell back to proxy-heavy ranking. That let raw count and quote-coverage backfill look like progress even when executable-P&L economics did not improve.
+
+Durable decision: `scripts/evaluate_regular_options_autoresearch.py` is versioned to `regular-options-autoresearch-v2` with promotion gates and the all-or-nothing `score` unchanged. It now emits diagnostic `progress_score` from executable-P&L milestones only: promotable clean count after gates, conservative PF, 5%/side stress PF, and zero-bid exit rate. `progress_score` is triage-only and is not a promotion gate. `scripts/run_regular_options_goal_experiment.py` ranks experiment batches by `(score, progress_score)` and no longer ships retired Lane A default variants; operators must pass explicit pre-registered variants.
+
 ## 2026-06-09: Track Curated Latest Readbacks, Ignore Timestamped Run Snapshots
 
 The repo already uses checked `data/forward-tracking/*_latest.*` artifacts as curated current-state readbacks that living docs reference. The safe convention is to keep those curated `latest` files trackable when they are named by living docs or generated report docs, while leaving timestamped run snapshots as local evidence churn unless a specific historical record is intentionally promoted into docs.
