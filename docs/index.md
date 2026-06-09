@@ -108,6 +108,8 @@ These are the living docs for the current worktree:
   - active work scope and lane boundaries
 - `docs/NEXT_STEPS.md`
   - current time-gated commands and guardrails
+- `docs/thetadata-terminal-runbook.md`
+  - local ThetaTerminal v3 startup, readiness probe, and quote-import failure rules for regular supervised-options evidence loops
 - `docs/lane-lab-lanes.md`
   - lane registry, pass bars, and AI commodity lane placement
 - `docs/bullish-pullback-ticker-audit-2026-05-29.md`
@@ -152,6 +154,54 @@ These are the living docs for the current worktree:
   - generated paper-shortlist release gate for fresh executable Tier A lane matches, with bridge blockers and live-prohibited states
 - `docs/regular-options-fresh-evidence-loop.md`
   - generated pending-candidate to fill-attempt/tracked-link/exact-realized-P&L readback for the regular options paper gate
+- `docs/regular-options-candidate-outcome-ledger.md`
+  - generated unified next-evidence ledger across fresh candidates, paper shortlist, profit-capture queue, open-risk governor, and suggested-trade review blockers
+- `docs/regular-options-stale-candidate-archive.md`
+  - generated read-only archive for no-longer-matched fresh candidates so stale branches leave the monthly queue without creating trades or mutating scanner/DB state
+- `docs/regular-options-suggested-trade-review-plan.md`
+  - generated read-only row plan for suggested-trade attention rows so monthly profitability uses explicit review work instead of stale, missing, or display-only close state
+- `docs/regular-options-fill-attempt-evidence-capture-plan.md`
+  - generated read-only row plan for fresh candidates missing durable fill-attempt evidence, replacing the generic monthly fill-attempt bucket without creating trades or backfilling broker fills
+- `docs/regular-options-structure-specific-harness.md`
+  - generated read-only structure split for regular-options fill-attempt evidence, separating vertical, single-leg, and other multi-leg diagnostics without counting production proof until exact executable entry/fill/exit P&L exists
+- `docs/regular-options-event-data-spine.md`
+  - generated read-only event annotation and post-event vol-crush spine for regular-options candidate rows, separating missing event-calendar coverage from exact executable event P&L proof
+- `docs/regular-options-overfit-rule-archive.md`
+  - generated read-only archive for rejected/winner-damaging candidate filter rules so overfit branches are retired from the monthly next-evidence queue without changing scanner policy
+- `docs/regular-options-lane-quarantine-archive.md`
+  - generated read-only archive for quarantined negative regular-options lanes so already-retired lane branches leave the monthly disposition queue without changing scanner policy or lane promotion
+- `docs/regular-options-execution-alternative-replay-readiness.md`
+  - generated read-only readiness queue for future exact OPRA/NBBO top-spread and contract-replacement replay, separating logged alternative seeds from missing replay engines and exit quote coverage
+- `docs/regular-options-execution-alternative-replay-coverage.md`
+  - generated read-only exact OPRA/NBBO quote-coverage and side-aware replay availability report for logged top-spread and contract-replacement alternatives
+- `docs/regular-options-execution-alternative-quote-import-plan.md`
+  - generated read-only import/query plan that turns execution-alternative quote demands into grouped ThetaData commands and exact contract manifests without changing contract-selection policy
+- `docs/regular-options-open-risk-resolution-plan.md`
+  - generated read-only open-risk resolution review plan that turns live-exact and display-only open-risk blockers into row-specific fresh executable review work without broker, DB, scanner, stop, sizing, proof, or promotion changes
+- `docs/regular-options-risk-budget-sizing-replay.md`
+  - generated read-only risk-budget sizing replay over priced regular-options research/backfill rows, separating paper-shadow/tiered research P&L from live size-tier permission
+- `docs/regular-options-lane-outcome-replay.md`
+  - generated read-only lane-outcome coverage replay that separates active regular lanes with exact priced monthly outcomes from no-signal or no-exact-candidate lanes without synthesizing P&L
+- `docs/regular-options-lane-scan-hypothesis-repair.md`
+  - generated read-only proof-only repair plan for no-signal regular-options lanes, separating predeclared replacement candidates from lanes that still need causal hypotheses without scanner tuning
+- `docs/regular-options-exact-candidate-selection-repair.md`
+  - generated read-only exact-candidate selection repair target list for signal lanes that produced zero exact chain-native spread candidates
+- `docs/regular-options-chain-native-filter-relaxation-replay.md`
+  - generated read-only chain-native filter relaxation replay for exact-candidate repair targets, now surfacing trusted entry quote demands instead of changing contract-selection policy
+- `docs/regular-options-chain-native-exit-outcome-replay.md`
+  - generated read-only exact-exit outcome replay for selected chain-native diagnostic candidates, separating trusted OPRA/NBBO exit P&L from promotion permission
+- `docs/regular-options-chain-native-relaxation-archive.md`
+  - generated read-only archive for exact-priced negative chain-native relaxation branches so disproved branches leave the monthly next-evidence queue
+- `docs/regular-options-exhausted-contract-archive.md`
+  - generated read-only archive for exact contract/date repair targets where the current source repeatedly returned no exact OPRA/NBBO rows
+- `docs/regular-options-profitability-layer-stack.md`
+  - generated all-20 regular-options profitability iteration control plane, separating ready, collecting, blocked, replay-gap, and data-gap layers without changing scanner, broker, stop, sizing, or proof behavior
+- `docs/regular-options-minute-exit-replay-readiness.md`
+  - generated read-only readiness queue for future exact OPRA/NBBO minute-level exit replay, separating exact entry seeds, position-linked seeds, missing minute quote coverage, and missing replay-engine proof
+- `docs/regular-options-minute-exit-quote-import-plan.md`
+  - generated read-only import/query plan that turns minute-exit exact entry seeds into grouped ThetaData OPRA/NBBO minute quote commands without changing stops, scanner policy, sizing, broker behavior, proof bars, or promotion
+- `docs/monthly-all-lanes-profitability-audit.md`
+  - generated monthly all-lanes profitability command center that unifies lane economics, monthly drift, candidate-rule scoring, execution realism, portfolio risk, oracle replay gaps, and next-evidence actions without changing scanner, broker, stop, sizing, DB, proof, or promotion behavior
 - `docs/volatility-probation-reconciliation.md`
   - generated readback separating legacy pre-promotion volatility rows from current paper/probation exact-evidence work and open-risk blockers
 - `docs/regular-options-operator-workflow.md`
@@ -190,6 +240,8 @@ These are the living docs for the current worktree:
   - reusable multi-lane goal prompt for improving Trading Desk runtime, profitability, live-scan, proof, AI commodity, and architecture performance
 - `docs/autoresearch/profitability-paper-gate-goal.md`
   - reusable six-sprint goal prompt for finishing the profitability paper-gate operator workflow with six-subagent review gates
+- `docs/autoresearch/monthly-all-lanes-profitability-goal.md`
+  - reusable monthly `/goal` prompt for using the all-lanes profitability command center to drive regular-options lane profitability iteration without changing scanner, broker, proof, stop, sizing, DB, or promotion behavior
 - `docs/agent-worktree-hygiene.md`
   - agent branch, push, untracked-file, and clean-worktree rules
 
