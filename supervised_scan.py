@@ -2012,7 +2012,7 @@ def annotate_pick_with_guardrails(
         blocked.append(f"{playbook['label']} only surfaces high-convexity setups rated speculative on the risk/upside scale.")
 
     if enforce_portfolio_caps and playbook.get("block_same_ticker") and ticker and int(ticker_counts.get(ticker, 0) or 0) > 0:
-        blocked.append(f"An open tracked position already exists in {ticker}.")
+        cautions.append(f"An open tracked position already exists in {ticker}.")
 
     spread_signature = vertical_spread_signature(annotated)
     if (
@@ -2020,7 +2020,7 @@ def annotate_pick_with_guardrails(
         and spread_signature is not None
         and int(vertical_spread_signature_counts.get(repr(spread_signature), 0) or 0) > 0
     ):
-        blocked.append("An open tracked position already has this exact vertical spread.")
+        cautions.append("An open tracked position already has this exact vertical spread.")
 
     correlation_size_mult = 1.0
     if enforce_portfolio_caps:

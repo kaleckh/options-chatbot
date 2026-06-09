@@ -36,8 +36,12 @@ REGULAR_SUPERVISED_LANES = {
 }
 
 
+def _utc_iso(value: datetime) -> str:
+    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+
+
 def _utc_now_iso() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return _utc_iso(datetime.now(UTC))
 
 
 def _safe_float(value: Any) -> float | None:
@@ -63,6 +67,15 @@ def _parse_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _as_of_datetime(value: Any | None = None) -> datetime:
+    if value is None:
+        return datetime.now(UTC)
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        raise ValueError(f"Invalid --as-of timestamp: {value!r}")
+    return parsed
 
 
 def _latest_review(row: dict[str, Any]) -> dict[str, Any] | None:
@@ -249,8 +262,13 @@ def _build_open_risk_governor(
     }
 
 
-def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> dict[str, Any]:
-    now = datetime.now(UTC)
+def build_report(
+    rows: list[dict[str, Any]],
+    *,
+    stale_hours: float = 24.0,
+    as_of: datetime | str | None = None,
+) -> dict[str, Any]:
+    now = _as_of_datetime(as_of)
     open_rows = [
         row
         for row in rows
@@ -268,7 +286,7 @@ def build_report(rows: list[dict[str, Any]], *, stale_hours: float = 24.0) -> di
     top_negative = sorted(negative, key=lambda row: pnl_pct(row) or 0.0)[:20]
     governor = _build_open_risk_governor(open_rows, now=now, stale_hours=stale_hours)
     return {
-        "generated_at_utc": _utc_now_iso(),
+        "generated_at_utc": _utc_iso(now),
         "scope": "regular_supervised_open_positions_read_only",
         "read_only": True,
         "stale_review_hours": stale_hours,
@@ -316,11 +334,12 @@ def main(argv: list[str] | None = None) -> int:
         description="Read-only audit of open regular supervised tracked-position risk."
     )
     parser.add_argument("--stale-hours", type=float, default=24.0)
+    parser.add_argument("--as-of", help="ISO timestamp used for stale-review calculations.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--json", action="store_true", help="Print the full report JSON.")
     parser.add_argument("--no-write", action="store_true", help="Run without writing latest JSON artifacts.")
     args = parser.parse_args(argv)
-    report = build_report(load_positions(), stale_hours=args.stale_hours)
+    report = build_report(load_positions(), stale_hours=args.stale_hours, as_of=args.as_of)
     artifacts = None if args.no_write else write_outputs(report, output_dir=args.output_dir)
     if args.json:
         payload: dict[str, Any] = {"report": report}

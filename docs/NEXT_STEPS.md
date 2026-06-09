@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-08
+Last updated: 2026-06-09
 
 ## Documentation Hygiene
 
@@ -96,6 +96,7 @@ Current read:
 - `npm run verify:ci:local` runs dependency integrity, generated docs/contracts, lint, typecheck, frontend node suites, full Python tests, day-trading/Polymarket sidecar tests, smoke, and build.
 - `npm run verify:e2e:local` now runs `verify:ci:local` plus non-strict proof-readiness readbacks through `npm run verify:proof-readbacks`; this is the passable local CI-equivalent command for regular-options PR work.
 - `npm run verify:e2e:strict`, `npm run verify:accuracy:no-write`, and `npm run verify:profit-loop:dry` remain explicit strict proof-readiness diagnostics. Current strict blockers are documented evidence blockers, not code-test regressions: AI commodity still has `alpaca_opra_daily_snapshot` shared quote dates at `3` / `100`. The regular profit-loop truth-lane and forward-holdout blockers were repaired on 2026-06-05; fresh dry and non-dry strict canaries pass with the active `historical_imported` intraday truth lane.
+- Sprint 2 verification debt: isolate Python tests with per-test temp state dirs and env cleanup. The 2026-06-09 triage fixed the three root-cause failures called out in Sprint 1, but the broader cross-test state contamination class still needs a harness-level cleanup before treating one full-suite run as authoritative.
 
 1. Keep strict proof-readiness gates visible in CI readbacks, but do not make them required blockers for regular-options PRs until their owned evidence blockers are repaired or the PR explicitly targets that gate.
 

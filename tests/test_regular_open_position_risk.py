@@ -104,7 +104,8 @@ def test_open_risk_governor_blocks_live_exact_negative_rows_only():
                     "exit_execution_basis": None,
                 },
             },
-        ]
+        ],
+        as_of="2026-06-06T18:00:00Z",
     )
 
     governor = report["open_risk_governor"]
@@ -135,7 +136,8 @@ def test_open_risk_governor_blocks_live_exact_non_executable_review():
                     "exit_execution_basis": None,
                 },
             }
-        ]
+        ],
+        as_of="2026-06-06T18:00:00Z",
     )
 
     governor = report["open_risk_governor"]
