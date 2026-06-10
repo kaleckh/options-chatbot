@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-open-risk-resolution-plan.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_20260608T163037Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_20260610T061909Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_20260608T163037Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_open_risk_resolution_plan_20260610T061909Z.md"
   },
   "evidence_boundary": {
     "operator_rule": "Rows must be refreshed with fresh executable review evidence before using any close, P&L, live-entry, or promotion conclusion.",
@@ -22,91 +22,19 @@
     "readback_is": "read-only open-risk resolution review plan for regular supervised options",
     "readback_is_not": "broker action, auto-close instruction, trading-row DB mutation, scanner-policy change, stop/sizing change, proof-bar change, or lane promotion"
   },
-  "generated_at_utc": "2026-06-08T16:30:37Z",
+  "generated_at_utc": "2026-06-10T06:19:09Z",
   "inputs": {
     "regular_open_position_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "generated_at_utc": "2026-06-10T06:18:55Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "status": "loaded"
     }
   },
   "live_policy_change": false,
-  "next_evidence_queue": [
-    {
-      "action": "execute_open_risk_resolution_review_plan",
-      "count": 2,
-      "operator_next_step": "Use the row plan during the next fresh executable quote window; do not auto-close display-only marks and rerun monthly profitability after the open-risk audit refreshes.",
-      "priority": 0,
-      "reason": "open_risk_rows_need_fresh_executable_review_or_monitor_decision"
-    }
-  ],
-  "plan_rows": [
-    {
-      "action": "refresh_live_exact_negative_open_position_review",
-      "action_bucket": "negative_mark_hold_or_unknown",
-      "current_pnl_pct": -58.2639,
-      "evidence_bucket": "fresh_executable_review",
-      "exit_execution_basis": "spread_bid_ask",
-      "exit_execution_price": 3.784,
-      "first_warning": null,
-      "lane": "volatility_expansion_observation",
-      "last_reviewed_at": "2026-06-05T22:00:04.574135-06:00",
-      "mark_pnl_pct": -58.2639,
-      "operator_next_step": "During the next fresh executable quote window, refresh this position's explicit executable review, then rerun open-risk and monthly profitability readbacks before any live-validation decision.",
-      "price_trigger_ok": true,
-      "pricing_source": "spread_bid_ask_exact",
-      "pricing_state": "priced_spread_exact",
-      "priority": 0,
-      "reason": "Position remains inside the stop, target, and exit rules.",
-      "recommendation": "HOLD",
-      "record_class": "live_exact_tracked",
-      "required_evidence": [
-        "fresh_executable_open_position_review",
-        "open_risk_governor_rerun",
-        "monitor_or_close_decision_under_exit_rules"
-      ],
-      "resolution_status": "fresh_quote_monitor_or_close_decision_required",
-      "row_id": 537,
-      "source_next_safe_action": "monitor",
-      "sources": [
-        "open_risk_governor"
-      ],
-      "ticker": "QQQ"
-    },
-    {
-      "action": "refresh_display_only_sell_executable_review",
-      "action_bucket": "stored_non_executable_sell",
-      "current_pnl_pct": null,
-      "evidence_bucket": "fresh_unpriced_review",
-      "exit_execution_basis": null,
-      "exit_execution_price": null,
-      "first_warning": "Using display-only spread marks because one or both legs are missing a live executable bid/ask quote.",
-      "lane": "bullish_pullback_observation",
-      "last_reviewed_at": "2026-06-05T22:00:18.877624-06:00",
-      "mark_pnl_pct": null,
-      "operator_next_step": "During the next fresh executable quote window, refresh this position's explicit executable review, then rerun open-risk and monthly profitability readbacks before any live-validation decision.",
-      "price_trigger_ok": false,
-      "pricing_source": "spread_display_only",
-      "pricing_state": "priced_display_only_last",
-      "priority": 1,
-      "reason": "Time exit reached after 16 calendar day(s), versus a 16-day limit.",
-      "recommendation": "SELL",
-      "record_class": "main_zero_pick_research_backfill",
-      "required_evidence": [
-        "fresh_executable_open_position_review",
-        "spread_bid_ask_exact_or_explicit_unpriced_review"
-      ],
-      "resolution_status": "market_window_required_display_only_sell_review",
-      "row_id": 104,
-      "source_next_safe_action": "do_not_auto_close_from_display_only_mark_rerun_explicit_review_during_fresh_executable_quote_window",
-      "sources": [
-        "actionable_position"
-      ],
-      "ticker": "SBUX"
-    }
-  ],
+  "next_evidence_queue": [],
+  "plan_rows": [],
   "prohibited_actions": [
     "do_not_create_live_row_from_open_risk_resolution_plan",
     "do_not_submit_broker_order_from_open_risk_resolution_plan",
@@ -122,38 +50,33 @@
   "report_id": "regular_options_open_risk_resolution_plan",
   "schema_version": 1,
   "scope": "regular_options_open_risk_resolution_plan_read_only",
-  "status": "open_risk_resolution_plan_ready_blocked_for_market_window",
+  "status": "open_risk_resolution_plan_clear",
   "summary": {
-    "action_counts": {
-      "refresh_display_only_sell_executable_review": 1,
-      "refresh_live_exact_negative_open_position_review": 1
-    },
-    "display_only_sell_count": 1,
-    "live_entry_allowed": false,
+    "action_counts": {},
+    "display_only_sell_count": 0,
+    "live_entry_allowed": true,
     "live_exact_executable_close_ready_count": 0,
     "live_exact_negative_count": 1,
     "live_exact_negative_ids": [
       537
     ],
     "live_exact_open_count": 1,
-    "live_exact_plan_row_count": 1,
+    "live_exact_plan_row_count": 0,
     "live_exact_review_blocked_count": 0,
     "live_policy_change": false,
-    "market_window_required_count": 2,
+    "market_window_required_count": 0,
     "missing_required_inputs": [],
-    "open_position_avg_pnl_pct": -44.14,
-    "open_position_median_pnl_pct": -47.58,
-    "open_position_negative_count": 10,
-    "open_position_priced_or_marked_count": 11,
-    "open_position_row_count": 12,
-    "open_risk_blockers": [
-      "live_exact_negative_open_risk"
-    ],
-    "operator_plan_status": "ready_for_fresh_executable_review_window",
-    "overall_status": "open_risk_resolution_plan_ready_blocked_for_market_window",
-    "plan_row_count": 2,
+    "open_position_avg_pnl_pct": -54.51,
+    "open_position_median_pnl_pct": -57.66,
+    "open_position_negative_count": 5,
+    "open_position_priced_or_marked_count": 5,
+    "open_position_row_count": 5,
+    "open_risk_blockers": [],
+    "operator_plan_status": "no_rows_to_resolve",
+    "overall_status": "open_risk_resolution_plan_clear",
+    "plan_row_count": 0,
     "readback_status": "open_risk_resolution_plan_readback",
-    "source_open_risk_generated_at_utc": "2026-06-06T07:21:23Z",
-    "source_open_risk_status": "open_risk_governor_blocked"
+    "source_open_risk_generated_at_utc": "2026-06-10T06:18:55Z",
+    "source_open_risk_status": "open_risk_governor_pass"
   }
 }

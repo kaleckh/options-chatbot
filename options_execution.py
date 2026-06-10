@@ -153,7 +153,17 @@ def resolve_execution_price(
     last_value = safe_float(last)
     model_value = safe_float(model_price)
     manual_value = safe_float(manual_price)
-    two_sided = has_two_sided_quote(bid=bid_value, ask=ask_value)
+    quote_shape_valid = (
+        bid_value is not None
+        and ask_value is not None
+        and bid_value >= 0
+        and ask_value > 0
+        and ask_value >= bid_value
+    )
+    side_quote_available = (
+        (normalized_side == "entry" and ask_value is not None and ask_value > 0)
+        or (normalized_side == "exit" and bid_value is not None and bid_value > 0)
+    )
     raw_execution_price: Optional[float] = None
     execution_basis: Optional[str] = None
     executable = False
@@ -166,9 +176,13 @@ def resolve_execution_price(
         execution_basis = str(manual_basis or "manual").strip() or "manual"
         executable = True
         freshness = "observed"
-    elif two_sided and freshness in {"fresh", "observed"}:
-        raw_execution_price = ask_value if normalized_side == "entry" else bid_value
-        execution_basis = "ask" if normalized_side == "entry" else "bid"
+    elif quote_shape_valid and side_quote_available and freshness in {"fresh", "observed"}:
+        if normalized_side == "entry":
+            raw_execution_price = ask_value
+            execution_basis = "ask"
+        else:
+            raw_execution_price = bid_value
+            execution_basis = "bid"
         executable = raw_execution_price is not None and raw_execution_price > 0
     else:
         if freshness == "stale":

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-08T15:40:25Z",
+  "generated_at_utc": "2026-06-10T06:28:11Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -8,12 +8,12 @@
       "do_not_chase_paper_or_historical_signature_rows_without_fresh_exact_bridge",
       "do_not_use_stale_midpoint_eod_manual_or_display_only_marks_as_proof"
     ],
-    "reason_count": 6,
+    "reason_count": 5,
     "reasons": [
       {
         "evidence": {
-          "avg_net_pnl_pct": -15.28,
-          "profit_factor": 0.34,
+          "avg_net_pnl_pct": -16.54,
+          "profit_factor": 0.32,
           "untracked_rows": 206
         },
         "reason": "broad_missed_pick_economics_negative",
@@ -26,19 +26,6 @@
         },
         "reason": "no_live_validation_lanes",
         "severity": "block_live_validation"
-      },
-      {
-        "evidence": {
-          "blockers": [
-            "live_exact_negative_open_risk"
-          ],
-          "live_exact_negative_ids": [
-            537
-          ],
-          "status": "open_risk_governor_blocked"
-        },
-        "reason": "open_risk_governor_blocked_or_missing",
-        "severity": "block_new_scanner_origin_entries"
       },
       {
         "evidence": {
@@ -167,10 +154,10 @@
         "mark_unpriced_count=0",
         "tracked_pnl_complete=4/4",
         "untracked_rows=206",
-        "untracked_winners=70",
-        "untracked_losers=136",
-        "untracked_avg_net_pnl_pct=-15.28%",
-        "untracked_profit_factor=0.34",
+        "untracked_winners=72",
+        "untracked_losers=134",
+        "untracked_avg_net_pnl_pct=-16.54%",
+        "untracked_profit_factor=0.32",
         "lane_gate_allowed_count=1",
         "lane_gate_blocked_count=7"
       ],
@@ -199,7 +186,7 @@
         "live_validation_lane_count=0",
         "auto_track_lane_count=0",
         "global_live_exact_negative_count=1",
-        "open_risk_governor_status=open_risk_governor_blocked",
+        "open_risk_governor_status=open_risk_governor_pass",
         "live_policy_change=False"
       ],
       "headline": "No regular lane is live-validation or auto-track eligible.",
@@ -225,8 +212,8 @@
         "eligible_paper_review_candidates=0",
         "scorecard_status=visible_product_profitability_progress_but_proof_still_blocked",
         "paper_gate_status=paper_only_no_live_release",
-        "open_risk_governor_status=open_risk_governor_blocked",
-        "open_risk_governor_blockers=[\"live_exact_negative_open_risk\"]",
+        "open_risk_governor_status=open_risk_governor_pass",
+        "open_risk_governor_blockers=[]",
         "suggested_open_rows=1",
         "suggested_attention_trade_count=1",
         "ai_commodity_verified=False",
@@ -289,7 +276,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-06T07:21:33Z",
+      "generated_at_utc": "2026-06-10T06:27:23Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -297,7 +284,7 @@
     "lane_promotion_state": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "generated_at_utc": "2026-06-10T06:27:19Z",
       "path": "data/forward-tracking/lane_promotion_state_latest.json",
       "report_id": "regular_options_lane_promotion_state",
       "status": "lane_promotion_state_readback"
@@ -305,7 +292,7 @@
     "missed_regular_picks_outcome": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-05T19:35:21Z",
+      "generated_at_utc": "2026-06-10T06:27:05Z",
       "path": "data/forward-tracking/missed_regular_picks_outcome_latest.json",
       "report_id": "missed_regular_picks_outcome",
       "status": null
@@ -313,7 +300,7 @@
     "open_position_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "generated_at_utc": "2026-06-10T06:18:55Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "report_id": null,
       "status": null

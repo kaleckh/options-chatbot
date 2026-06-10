@@ -1,38 +1,38 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-risk-budget-sizing-replay.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_20260608T013729Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_20260610T062809Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_20260608T013729Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_20260610T062809Z.md"
   },
-  "generated_at_utc": "2026-06-08T01:37:29Z",
+  "generated_at_utc": "2026-06-10T06:28:09Z",
   "inputs": {
     "lane_promotion_state": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "generated_at_utc": "2026-06-10T06:27:19Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
       "status": "loaded"
     },
     "lane_quarantine_archive": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-07T19:08:29Z",
+      "generated_at_utc": "2026-06-08T01:37:29Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_lane_quarantine_archive_latest.json",
       "status": "loaded"
     },
     "missed_picks_failure_modes": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T21:03:55Z",
+      "generated_at_utc": "2026-06-10T06:27:17Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
       "status": "loaded"
     },
     "missed_picks_outcome": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T19:35:21Z",
+      "generated_at_utc": "2026-06-10T06:27:05Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
       "status": "loaded"
     },
@@ -46,12 +46,23 @@
     "open_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "generated_at_utc": "2026-06-10T06:18:55Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "status": "loaded"
     }
   },
   "lane_budget_table": [
+    {
+      "archive_status": "archived_quarantine_lane",
+      "baseline_avg_net_pnl_pct": -20.24,
+      "baseline_net_pnl_usd": -6331.95,
+      "baseline_profit_factor": 0.2,
+      "baseline_rows": 49,
+      "disposition": "quarantine",
+      "lane": "swing",
+      "paper_shadow_only_weight": 0.0,
+      "tiered_research_weight": 0.0
+    },
     {
       "archive_status": "archived_quarantine_lane",
       "baseline_avg_net_pnl_pct": -48.45,
@@ -60,17 +71,6 @@
       "baseline_rows": 16,
       "disposition": "quarantine",
       "lane": "bullish_momentum",
-      "paper_shadow_only_weight": 0.0,
-      "tiered_research_weight": 0.0
-    },
-    {
-      "archive_status": "archived_quarantine_lane",
-      "baseline_avg_net_pnl_pct": -14.31,
-      "baseline_net_pnl_usd": -3781.95,
-      "baseline_profit_factor": 0.28,
-      "baseline_rows": 49,
-      "disposition": "quarantine",
-      "lane": "swing",
       "paper_shadow_only_weight": 0.0,
       "tiered_research_weight": 0.0
     },
@@ -98,9 +98,9 @@
     },
     {
       "archive_status": null,
-      "baseline_avg_net_pnl_pct": -9.19,
-      "baseline_net_pnl_usd": -1027.65,
-      "baseline_profit_factor": 0.48,
+      "baseline_avg_net_pnl_pct": -8.43,
+      "baseline_net_pnl_usd": -972.65,
+      "baseline_profit_factor": 0.5,
       "baseline_rows": 20,
       "disposition": "retest",
       "lane": "tracked_winner_observation",
@@ -109,9 +109,9 @@
     },
     {
       "archive_status": null,
-      "baseline_avg_net_pnl_pct": -9.19,
-      "baseline_net_pnl_usd": -1027.65,
-      "baseline_profit_factor": 0.48,
+      "baseline_avg_net_pnl_pct": -8.43,
+      "baseline_net_pnl_usd": -972.65,
+      "baseline_profit_factor": 0.5,
       "baseline_rows": 20,
       "disposition": "retest",
       "lane": "tracked_winner_primary",
@@ -131,9 +131,9 @@
     },
     {
       "archive_status": null,
-      "baseline_avg_net_pnl_pct": 6.75,
-      "baseline_net_pnl_usd": 972.3,
-      "baseline_profit_factor": 1.84,
+      "baseline_avg_net_pnl_pct": 6.74,
+      "baseline_net_pnl_usd": 971.3,
+      "baseline_profit_factor": 1.83,
       "baseline_rows": 24,
       "disposition": "paper_shadow",
       "lane": "volatility_expansion_observation",
@@ -144,59 +144,37 @@
   "live_policy_change": false,
   "next_evidence_queue": [
     {
-      "action": "resolve_open_risk_for_sizing",
-      "count": 1,
-      "priority": 0,
-      "reason": "open_risk_governor_blocks_any_live_size_change"
+      "action": "collect_fresh_exact_sizing_evidence",
+      "count": 2,
+      "priority": 2,
+      "reason": "research_sizing_scenarios_need_forward_exact_realized_pnl"
     }
   ],
   "open_risk_governor": {
-    "blockers": [
-      "live_exact_negative_open_risk"
-    ],
-    "governor_details": [
-      {
-        "action_bucket": "negative_mark_hold_or_unknown",
-        "current_option_price": 4.265,
-        "current_pnl_pct": -58.2639,
-        "evidence_bucket": "fresh_executable_review",
-        "exit_execution_basis": "spread_bid_ask",
-        "exit_execution_price": 3.784,
-        "first_warning": null,
-        "id": 537,
-        "lane": "volatility_expansion_observation",
-        "last_reviewed_at": "2026-06-05T22:00:04.574135-06:00",
-        "mark_pnl_pct": -58.2639,
-        "next_safe_action": "monitor",
-        "price_trigger_ok": true,
-        "pricing_source": "spread_bid_ask_exact",
-        "pricing_state": "priced_spread_exact",
-        "reason": "Position remains inside the stop, target, and exit rules.",
-        "recommendation": "HOLD",
-        "record_class": "live_exact_tracked",
-        "status": "open",
-        "ticker": "QQQ",
-        "warning_count": 0
-      }
-    ],
-    "live_entry_allowed": false,
+    "blockers": [],
+    "governor_details": [],
+    "live_entry_allowed": true,
     "live_exact_executable_close_ready_count": 0,
     "live_exact_executable_close_ready_ids": [],
     "live_exact_negative_count": 1,
     "live_exact_negative_ids": [
       537
     ],
+    "live_exact_negative_resolved_hold_count": 1,
+    "live_exact_negative_resolved_hold_ids": [
+      537
+    ],
+    "live_exact_negative_unresolved_count": 0,
+    "live_exact_negative_unresolved_ids": [],
     "live_exact_open_count": 1,
     "live_exact_review_blocked_count": 0,
     "live_exact_review_blocked_ids": [],
     "live_policy_change": false,
     "next_safe_actions": [
-      "do_not_open_new_scanner_origin_rows_until_governor_passes",
-      "refresh_open_position_reviews_with_live_executable_quotes",
-      "resolve_executable_sell_or_negative_live_exact_rows_before_live_validation"
+      "continue_monitoring_open_risk_before_each_promotion_readback"
     ],
     "read_only": true,
-    "status": "open_risk_governor_blocked"
+    "status": "open_risk_governor_pass"
   },
   "prohibited_actions": [
     "do_not_change_live_size_tiers_from_risk_budget_sizing_replay",
@@ -225,17 +203,16 @@
   "report_id": "regular_options_risk_budget_sizing_replay",
   "scenarios": [
     {
-      "avg_net_pnl_pct": -15.28,
+      "avg_net_pnl_pct": -16.54,
       "blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
         "net_pnl_not_positive",
-        "open_risk_governor_blocks_sizing",
         "profit_factor_below_sizing_gate"
       ],
       "classification": "research_sizing_replay_only",
-      "gross_loss_abs_usd": 24882.2,
-      "gross_profit_usd": 8568.2,
+      "gross_loss_abs_usd": 27472.0,
+      "gross_profit_usd": 8717.0,
       "improvement_vs_baseline_usd": 0.0,
       "included_row_count": 206,
       "label": "One contract for every priced untracked missed selected row",
@@ -244,10 +221,10 @@
         "bullish_pullback_observation": -3698.45,
         "short_term": -3518.15,
         "speculative": -413.15,
-        "swing": -3781.95,
-        "tracked_winner_observation": -1027.65,
-        "tracked_winner_primary": -1027.65,
-        "volatility_expansion_observation": 972.3
+        "swing": -6331.95,
+        "tracked_winner_observation": -972.65,
+        "tracked_winner_primary": -972.65,
+        "volatility_expansion_observation": 971.3
       },
       "lane_risk_units": {
         "bullish_momentum": 16.0,
@@ -259,42 +236,43 @@
         "tracked_winner_primary": 20.0,
         "volatility_expansion_observation": 24.0
       },
-      "loser_count": 136,
-      "median_net_pnl_pct": -11.5,
+      "loser_count": 134,
+      "median_net_pnl_pct": -12.64,
       "monthly_net_pnl_usd": {
-        "2026-05": -4527.4,
-        "2026-06": -11786.6
+        "2026-05": -5176.4,
+        "2026-06": -13578.6
       },
-      "net_pnl_usd": -16314.0,
-      "profit_factor": 0.34,
+      "net_pnl_usd": -18755.0,
+      "no_loss_sample": false,
+      "profit_factor": 0.32,
+      "profit_factor_basis": "net_pnl_usd",
       "promotion_ready": false,
       "risk_unit_count": 206.0,
       "scenario_id": "baseline_one_contract_all_untracked",
       "source_row_count": 206,
-      "win_rate_pct": 33.98,
-      "winner_count": 70,
-      "worst_month_net_pnl_usd": -11786.6
+      "win_rate_pct": 34.95,
+      "winner_count": 72,
+      "worst_month_net_pnl_usd": -13578.6
     },
     {
-      "avg_net_pnl_pct": -4.26,
+      "avg_net_pnl_pct": -3.84,
       "blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
         "net_pnl_not_positive",
-        "open_risk_governor_blocks_sizing",
         "profit_factor_below_sizing_gate"
       ],
       "classification": "research_sizing_replay_only",
-      "gross_loss_abs_usd": 5560.9,
-      "gross_profit_usd": 4064.75,
-      "improvement_vs_baseline_usd": 14817.85,
+      "gross_loss_abs_usd": 5488.9,
+      "gross_profit_usd": 4101.75,
+      "improvement_vs_baseline_usd": 17367.85,
       "included_row_count": 72,
       "label": "Zero budget for archived/quarantined lanes; one unit for every other priced row",
       "lane_net_pnl_usd": {
         "speculative": -413.15,
-        "tracked_winner_observation": -1027.65,
-        "tracked_winner_primary": -1027.65,
-        "volatility_expansion_observation": 972.3
+        "tracked_winner_observation": -972.65,
+        "tracked_winner_primary": -972.65,
+        "volatility_expansion_observation": 971.3
       },
       "lane_risk_units": {
         "speculative": 8.0,
@@ -302,37 +280,38 @@
         "tracked_winner_primary": 20.0,
         "volatility_expansion_observation": 24.0
       },
-      "loser_count": 42,
-      "median_net_pnl_pct": -7.6,
+      "loser_count": 40,
+      "median_net_pnl_pct": -4.5,
       "monthly_net_pnl_usd": {
-        "2026-05": 1687.0,
-        "2026-06": -3183.15
+        "2026-05": 1797.0,
+        "2026-06": -3184.15
       },
-      "net_pnl_usd": -1496.15,
-      "profit_factor": 0.73,
+      "net_pnl_usd": -1387.15,
+      "no_loss_sample": false,
+      "profit_factor": 0.75,
+      "profit_factor_basis": "net_pnl_usd",
       "promotion_ready": false,
       "risk_unit_count": 72.0,
       "scenario_id": "quarantine_zero_weight",
       "source_row_count": 206,
-      "win_rate_pct": 41.67,
-      "winner_count": 30,
-      "worst_month_net_pnl_usd": -3183.15
+      "win_rate_pct": 44.44,
+      "winner_count": 32,
+      "worst_month_net_pnl_usd": -3184.15
     },
     {
-      "avg_net_pnl_pct": 6.75,
+      "avg_net_pnl_pct": 6.74,
       "blockers": [
         "fresh_exact_realized_sizing_evidence_required",
-        "historical_research_backfill_rows_are_not_production_sizing_proof",
-        "open_risk_governor_blocks_sizing"
+        "historical_research_backfill_rows_are_not_production_sizing_proof"
       ],
       "classification": "research_sizing_replay_only",
-      "gross_loss_abs_usd": 1164.0,
+      "gross_loss_abs_usd": 1165.0,
       "gross_profit_usd": 2136.3,
-      "improvement_vs_baseline_usd": 17286.3,
+      "improvement_vs_baseline_usd": 19726.3,
       "included_row_count": 24,
       "label": "One unit for paper-shadow/profitable-candidate lanes only",
       "lane_net_pnl_usd": {
-        "volatility_expansion_observation": 972.3
+        "volatility_expansion_observation": 971.3
       },
       "lane_risk_units": {
         "volatility_expansion_observation": 24.0
@@ -341,37 +320,38 @@
       "median_net_pnl_pct": 2.15,
       "monthly_net_pnl_usd": {
         "2026-05": 1026.55,
-        "2026-06": -54.25
+        "2026-06": -55.25
       },
-      "net_pnl_usd": 972.3,
-      "profit_factor": 1.84,
+      "net_pnl_usd": 971.3,
+      "no_loss_sample": false,
+      "profit_factor": 1.83,
+      "profit_factor_basis": "net_pnl_usd",
       "promotion_ready": false,
       "risk_unit_count": 24.0,
       "scenario_id": "paper_shadow_only",
       "source_row_count": 206,
       "win_rate_pct": 50.0,
       "winner_count": 12,
-      "worst_month_net_pnl_usd": -54.25
+      "worst_month_net_pnl_usd": -55.25
     },
     {
-      "avg_net_pnl_pct": 1.24,
+      "avg_net_pnl_pct": 1.45,
       "blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
-        "open_risk_governor_blocks_sizing",
         "profit_factor_below_sizing_gate"
       ],
       "classification": "research_sizing_replay_only",
-      "gross_loss_abs_usd": 2263.22,
-      "gross_profit_usd": 2618.41,
-      "improvement_vs_baseline_usd": 16669.19,
+      "gross_loss_abs_usd": 2245.97,
+      "gross_profit_usd": 2627.66,
+      "improvement_vs_baseline_usd": 19136.69,
       "included_row_count": 72,
       "label": "One unit for paper-shadow/profitable lanes, quarter unit for retest lanes, zero for quarantine/replay-missing lanes",
       "lane_net_pnl_usd": {
         "speculative": -103.29,
-        "tracked_winner_observation": -256.91,
-        "tracked_winner_primary": -256.91,
-        "volatility_expansion_observation": 972.3
+        "tracked_winner_observation": -243.16,
+        "tracked_winner_primary": -243.16,
+        "volatility_expansion_observation": 971.3
       },
       "lane_risk_units": {
         "speculative": 2.0,
@@ -379,74 +359,96 @@
         "tracked_winner_primary": 5.0,
         "volatility_expansion_observation": 24.0
       },
-      "loser_count": 42,
-      "median_net_pnl_pct": -7.6,
+      "loser_count": 40,
+      "median_net_pnl_pct": -4.5,
       "monthly_net_pnl_usd": {
-        "2026-05": 1191.66,
-        "2026-06": -836.47
+        "2026-05": 1219.16,
+        "2026-06": -837.47
       },
-      "net_pnl_usd": 355.19,
-      "profit_factor": 1.16,
+      "net_pnl_usd": 381.69,
+      "no_loss_sample": false,
+      "profit_factor": 1.17,
+      "profit_factor_basis": "net_pnl_usd",
       "promotion_ready": false,
       "risk_unit_count": 36.0,
       "scenario_id": "tiered_shadow_full_retest_quarter",
       "source_row_count": 206,
-      "win_rate_pct": 41.67,
-      "winner_count": 30,
-      "worst_month_net_pnl_usd": -836.47
+      "win_rate_pct": 44.44,
+      "winner_count": 32,
+      "worst_month_net_pnl_usd": -837.47
     },
     {
-      "avg_net_pnl_pct": null,
+      "avg_net_pnl_pct": -16.54,
       "blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
         "net_pnl_not_positive",
-        "open_risk_governor_blocks_sizing",
-        "profit_factor_below_sizing_gate",
-        "zero_new_risk_budget_due_to_governor"
+        "profit_factor_below_sizing_gate"
       ],
       "classification": "research_sizing_replay_only",
-      "gross_loss_abs_usd": 0.0,
-      "gross_profit_usd": 0.0,
-      "improvement_vs_baseline_usd": 16314.0,
-      "included_row_count": 0,
+      "gross_loss_abs_usd": 27472.0,
+      "gross_profit_usd": 8717.0,
+      "improvement_vs_baseline_usd": -0.0,
+      "included_row_count": 206,
       "label": "Current open-risk governor allows zero new live sizing while blocked",
-      "lane_net_pnl_usd": {},
-      "lane_risk_units": {},
-      "loser_count": 0,
-      "median_net_pnl_pct": null,
-      "monthly_net_pnl_usd": {},
-      "net_pnl_usd": 0.0,
-      "profit_factor": null,
+      "lane_net_pnl_usd": {
+        "bullish_momentum": -3819.3,
+        "bullish_pullback_observation": -3698.45,
+        "short_term": -3518.15,
+        "speculative": -413.15,
+        "swing": -6331.95,
+        "tracked_winner_observation": -972.65,
+        "tracked_winner_primary": -972.65,
+        "volatility_expansion_observation": 971.3
+      },
+      "lane_risk_units": {
+        "bullish_momentum": 16.0,
+        "bullish_pullback_observation": 15.0,
+        "short_term": 54.0,
+        "speculative": 8.0,
+        "swing": 49.0,
+        "tracked_winner_observation": 20.0,
+        "tracked_winner_primary": 20.0,
+        "volatility_expansion_observation": 24.0
+      },
+      "loser_count": 134,
+      "median_net_pnl_pct": -12.64,
+      "monthly_net_pnl_usd": {
+        "2026-05": -5176.4,
+        "2026-06": -13578.6
+      },
+      "net_pnl_usd": -18755.0,
+      "no_loss_sample": false,
+      "profit_factor": 0.32,
+      "profit_factor_basis": "net_pnl_usd",
       "promotion_ready": false,
-      "risk_unit_count": 0.0,
+      "risk_unit_count": 206.0,
       "scenario_id": "current_governor_zero_new_risk",
       "source_row_count": 206,
-      "win_rate_pct": null,
-      "winner_count": 0,
-      "worst_month_net_pnl_usd": null
+      "win_rate_pct": 34.95,
+      "winner_count": 72,
+      "worst_month_net_pnl_usd": -13578.6
     }
   ],
   "schema_version": 1,
   "scope": "regular_options_read_only_risk_budget_sizing_replay",
   "status": "risk_budget_sizing_replay_readback",
   "summary": {
-    "baseline_net_pnl_usd": -16314.0,
-    "best_research_net_pnl_usd": 972.3,
-    "best_research_profit_factor": 1.84,
+    "baseline_net_pnl_usd": -18755.0,
+    "best_research_net_pnl_usd": 971.3,
+    "best_research_profit_factor": 1.83,
     "best_research_risk_unit_count": 24.0,
     "best_research_scenario_id": "paper_shadow_only",
     "blockers": [
       "fresh_exact_realized_sizing_evidence_required",
       "historical_research_backfill_rows_are_not_production_sizing_proof",
-      "open_risk_governor_blocks_sizing",
       "sizing_change_requires_separate_promotion_gate"
     ],
-    "live_entry_allowed": false,
+    "live_entry_allowed": true,
     "live_policy_change": false,
     "missing_required_inputs": [],
-    "open_risk_status": "open_risk_governor_blocked",
-    "overall_status": "sizing_replay_built_open_risk_blocked",
+    "open_risk_status": "open_risk_governor_pass",
+    "overall_status": "sizing_replay_built_collect_fresh_exact_evidence",
     "positive_research_scenario_count": 2,
     "promotion_ready": false,
     "scenario_count": 5,

@@ -479,7 +479,6 @@ def build_lane_promotion_state(
         )
         lane_live_exact_negative = _live_exact_open_negative_count(open_risk, lane)
         risk_report_present = isinstance(open_risk, dict)
-        global_risk_clear = global_live_exact_negative == 0 if global_live_exact_negative is not None else False
         open_risk_governor_clear = (
             bool(open_risk_health.get("usable"))
             and open_risk_governor_status == OPEN_RISK_GOVERNOR_PASS
@@ -494,13 +493,12 @@ def build_lane_promotion_state(
             lane_fresh.get("exact_realized_pnl_count", 0) >= MIN_FRESH_EXACT_REALIZED_ROWS
             and lane_fresh.get("promotion_ready_count", 0) >= MIN_FRESH_PROMOTION_READY_ROWS
         )
-        risk_pass = (
-            risk_report_present
-            and bool(open_risk_health.get("usable"))
-            and global_risk_clear
-            and lane_live_exact_negative == 0
-            and open_risk_governor_clear
-        )
+        unresolved_live_exact_negative = open_risk_governor.get("live_exact_negative_unresolved_count")
+        if unresolved_live_exact_negative is None:
+            unresolved_live_exact_negative = 0 if open_risk_governor_clear else global_live_exact_negative
+        else:
+            unresolved_live_exact_negative = _safe_int(unresolved_live_exact_negative)
+        risk_pass = risk_report_present and bool(open_risk_health.get("usable")) and open_risk_governor_clear
 
         gates = [
             _gate(
@@ -579,12 +577,13 @@ def build_lane_promotion_state(
                     "open_risk_governor_blockers": open_risk_governor_blockers,
                     "global_live_exact_negative_count": global_live_exact_negative,
                     "lane_live_exact_negative_count": lane_live_exact_negative,
+                    "unresolved_live_exact_negative_count": unresolved_live_exact_negative,
                 },
                 {
                     "open_risk_report": "fresh",
                     "open_risk_governor_status": OPEN_RISK_GOVERNOR_PASS,
-                    "global_live_exact_negative_count": 0,
-                    "lane_live_exact_negative_count": 0,
+                    "open_risk_governor_blockers": [],
+                    "unresolved_live_exact_negative_count": 0,
                 },
                 "current_live_exact_risk_governor_blocked"
                 if bool(open_risk_health.get("usable"))

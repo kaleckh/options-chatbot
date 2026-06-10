@@ -56,6 +56,23 @@ def _parse_iso_date(value: str) -> date:
         raise argparse.ArgumentTypeError(f"Expected YYYY-MM-DD date, got {value!r}") from exc
 
 
+def _parse_theta_expiration(value: str | None) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    raw = str(value).strip()
+    if len(raw) == 8 and raw.isdigit():
+        try:
+            parsed = date(int(raw[:4]), int(raw[4:6]), int(raw[6:8]))
+        except ValueError as exc:
+            raise argparse.ArgumentTypeError(f"Expected valid YYYYMMDD expiration, got {value!r}") from exc
+        return parsed.strftime("%Y%m%d")
+    try:
+        parsed = date.fromisoformat(raw[:10])
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"Expected YYYYMMDD or YYYY-MM-DD expiration, got {value!r}") from exc
+    return parsed.strftime("%Y%m%d")
+
+
 def _parse_time(value: str) -> datetime_time:
     try:
         parsed = datetime_time.fromisoformat(str(value))
@@ -233,6 +250,7 @@ def build_thetadata_nbbo_import(
     end_time: str = "15:55:00",
     min_dte: int = 5,
     max_dte: int = 60,
+    expiration: str | None = None,
     strike_range: int | None = None,
     right: str = "both",
     sleep_seconds: float = 0.0,
@@ -253,7 +271,7 @@ def build_thetadata_nbbo_import(
             for trade_date in dates:
                 params: dict[str, Any] = {
                     "symbol": normalized_symbol,
-                    "expiration": "*",
+                    "expiration": expiration or "*",
                     "date": trade_date.strftime("%Y%m%d"),
                     "interval": interval,
                     "format": "json",
@@ -304,6 +322,7 @@ def build_thetadata_nbbo_import(
         "end_time": end_time,
         "symbols": symbols,
         "dates": [item.isoformat() for item in dates],
+        "expiration": expiration,
         "min_dte": int(min_dte),
         "max_dte": int(max_dte),
         "strike_range": strike_range,
@@ -331,6 +350,11 @@ def main() -> int:
     parser.add_argument("--end-time", default="15:55:00")
     parser.add_argument("--min-dte", type=int, default=5)
     parser.add_argument("--max-dte", type=int, default=60)
+    parser.add_argument(
+        "--expiration",
+        type=_parse_theta_expiration,
+        help="Optional exact option expiration for ThetaData v3 history requests, YYYYMMDD or YYYY-MM-DD.",
+    )
     parser.add_argument("--strike-range", type=int)
     parser.add_argument("--right", choices=("call", "put", "both"), default="both")
     parser.add_argument("--sleep-seconds", type=float, default=0.0)
@@ -362,6 +386,7 @@ def main() -> int:
         end_time=args.end_time,
         min_dte=int(args.min_dte),
         max_dte=int(args.max_dte),
+        expiration=args.expiration,
         strike_range=args.strike_range,
         right=args.right,
         sleep_seconds=float(args.sleep_seconds),

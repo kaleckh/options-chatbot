@@ -12,8 +12,8 @@ This report is generated from `scripts/build_volatility_probation_reconciliation
 - Legacy pre-promotion rows: `6`.
 - Current paper exact pending rows: `0`.
 - Promotion-ready excluding legacy: `0`.
-- Open-risk governor: `open_risk_governor_blocked`.
-- Open-risk blockers: `["live_exact_negative_open_risk"]`.
+- Open-risk governor: `open_risk_governor_pass`.
+- Open-risk blockers: `[]`.
 - Live exact negative ids: `[537]`.
 - Live policy change: `False`.
 

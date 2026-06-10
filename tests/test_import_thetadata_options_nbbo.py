@@ -11,6 +11,7 @@ from scripts.import_thetadata_options_nbbo import (  # noqa: E402
     _business_dates,
     _normalize_theta_quote_row,
     _occ_contract_symbol,
+    _parse_theta_expiration,
     build_thetadata_nbbo_import,
 )
 
@@ -64,6 +65,11 @@ class ImportThetaDataOptionsNbboTests(unittest.TestCase):
             _business_dates(date(2025, 1, 8), date(2025, 1, 10)),
             [date(2025, 1, 8), date(2025, 1, 10)],
         )
+
+    def test_parse_theta_expiration_accepts_iso_or_theta_format(self):
+        self.assertEqual(_parse_theta_expiration("20260618"), "20260618")
+        self.assertEqual(_parse_theta_expiration("2026-06-18"), "20260618")
+        self.assertIsNone(_parse_theta_expiration(None))
 
     def test_normalize_theta_quote_row_preserves_bid_ask_and_timestamp(self):
         row = _normalize_theta_quote_row(
@@ -181,6 +187,34 @@ class ImportThetaDataOptionsNbboTests(unittest.TestCase):
         self.assertEqual(session.calls[0]["params"]["expiration"], "*")
         self.assertEqual(session.calls[0]["params"]["interval"], "1m")
         self.assertEqual(session.calls[0]["params"]["start_time"], "15:55:00")
+
+    def test_build_thetadata_nbbo_import_uses_exact_expiration_when_provided(self):
+        session = _FakeSession(
+            [
+                {
+                    "symbol": "FCX",
+                    "expiration": "2026-06-19",
+                    "strike": 55.0,
+                    "right": "call",
+                    "timestamp": "2026-05-15T15:55:00.000",
+                    "bid": 1.2,
+                    "ask": 1.35,
+                }
+            ]
+        )
+
+        payload = build_thetadata_nbbo_import(
+            symbols=["FCX"],
+            dates=[date(2026, 5, 15)],
+            min_dte=5,
+            max_dte=60,
+            expiration="20260619",
+            session=session,
+        )
+
+        self.assertEqual(payload["expiration"], "20260619")
+        self.assertEqual(session.calls[0]["params"]["expiration"], "20260619")
+        self.assertEqual(payload["generated_rows"], 1)
 
 
 if __name__ == "__main__":

@@ -24,24 +24,24 @@ This report is generated from `scripts/lane_promotion_state.py`. It turns the re
 
 | Lane | State | Candidate status | PF | Avg P&L % | Fresh ready | Exact realized | Main blockers |
 |---|---:|---:|---:|---:|---:|---:|---|
-| ai_commodity_infra_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_outside_regular_auto_track_scope, lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| bearish_defensive | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| bearish_index_put_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| bullish_momentum | diagnostic | diagnostic_only_lane_promotion_state | 0.1 | -48.45 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| bullish_pullback_observation | diagnostic | diagnostic_only_lane_promotion_state | 0.29 | -22.81 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked, recent_cohort_circuit_breaker_active |
-| quality90_debit55_canary | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| range_breakout_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| regular_bearish_put_primary | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| short_term | diagnostic | diagnostic_only_lane_promotion_state | 0.28 | -18.93 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked, recent_cohort_circuit_breaker_active |
-| speculative | diagnostic | diagnostic_only_lane_promotion_state | 0.12 | -12.62 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| swing | diagnostic | diagnostic_only_lane_promotion_state | 0.3 | -14.31 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| tracked_winner_observation | diagnostic | diagnostic_only_lane_promotion_state | 0.46 | -9.19 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| tracked_winner_primary | diagnostic | diagnostic_only_lane_promotion_state | 0.46 | -9.19 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
-| volatility_expansion_observation | paper_probation | pending_paper_exact_evidence | 1.72 | 6.75 | 0 | 0 | walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, current_live_exact_risk_governor_blocked |
+| ai_commodity_infra_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_outside_regular_auto_track_scope, lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| bearish_defensive | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| bearish_index_put_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| bullish_momentum | diagnostic | diagnostic_only_lane_promotion_state | 0.04 | -48.45 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| bullish_pullback_observation | diagnostic | diagnostic_only_lane_promotion_state | 0.24 | -22.81 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, recent_cohort_circuit_breaker_active |
+| quality90_debit55_canary | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| range_breakout_observation | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| regular_bearish_put_primary | diagnostic | diagnostic_only_lane_promotion_state |  |  | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| short_term | diagnostic | diagnostic_only_lane_promotion_state | 0.33 | -18.93 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient, recent_cohort_circuit_breaker_active |
+| speculative | diagnostic | diagnostic_only_lane_promotion_state | 0.1 | -12.62 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| swing | diagnostic | diagnostic_only_lane_promotion_state | 0.2 | -20.24 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| tracked_winner_observation | diagnostic | diagnostic_only_lane_promotion_state | 0.5 | -8.43 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| tracked_winner_primary | diagnostic | diagnostic_only_lane_promotion_state | 0.5 | -8.43 | 0 | 0 | lane_not_profitable_enough_for_probation, walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
+| volatility_expansion_observation | paper_probation | pending_paper_exact_evidence | 1.83 | 6.74 | 0 | 0 | walk_forward_holdout_too_small_or_failed, fresh_paper_cohort_insufficient |
 
 ## Input Health
 
-- Lane profitability gate: `{"age_hours": 11.7732, "generated_at_utc": "2026-06-05T19:35:21Z", "latest_intraday_quote_date": "2026-06-04", "mark_unpriced_count": 0, "max_age_hours": 36.0, "reason": "lane_profitability_gate_report_fresh", "tracked_row_count": 4, "tracked_rows_with_stored_pnl": 4, "usable": true}`.
+- Lane profitability gate: `{"age_hours": 0.004, "generated_at_utc": "2026-06-10T06:27:05Z", "latest_intraday_quote_date": "2026-06-08", "mark_unpriced_count": 0, "max_age_hours": 36.0, "reason": "lane_profitability_gate_report_fresh", "tracked_row_count": 4, "tracked_rows_with_stored_pnl": 4, "usable": true}`.
 - Filter matrix loaded: `True`.
 - Fresh evidence loop loaded: `True`.
 - Open risk loaded: `True`.

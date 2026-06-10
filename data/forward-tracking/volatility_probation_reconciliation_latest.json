@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-06-06T07:21:56Z",
+  "generated_at_utc": "2026-06-10T06:27:21Z",
   "inputs": {
-    "fresh_evidence_generated_at_utc": "2026-06-06T07:21:33Z",
+    "fresh_evidence_generated_at_utc": "2026-06-10T06:26:36Z",
     "fresh_evidence_path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
-    "lane_promotion_generated_at_utc": "2026-06-06T07:21:44Z",
+    "lane_promotion_generated_at_utc": "2026-06-10T06:27:19Z",
     "lane_promotion_path": "data/forward-tracking/lane_promotion_state_latest.json",
-    "open_risk_generated_at_utc": "2026-06-06T07:21:23Z",
+    "open_risk_generated_at_utc": "2026-06-10T06:18:55Z",
     "open_risk_path": "data/forward-tracking/regular_open_position_risk_latest.json",
     "queue_file": "data/forward-tracking/pending_scan_candidates.jsonl"
   },
@@ -152,24 +152,20 @@
     "fresh_evidence_candidate_count": 9,
     "lane_blockers": [
       "walk_forward_holdout_too_small_or_failed",
-      "fresh_paper_cohort_insufficient",
-      "current_live_exact_risk_governor_blocked"
+      "fresh_paper_cohort_insufficient"
     ],
     "lane_candidate_status": "pending_paper_exact_evidence",
     "lane_failed_promotion_gates": [
       "walk_forward_holdout_depth",
-      "fresh_paper_cohort",
-      "current_live_exact_risk_clear"
+      "fresh_paper_cohort"
     ],
     "lane_promotion_state": "paper_probation",
     "legacy_pre_promotion_state_gate_count": 6,
     "live_exact_negative_ids": [
       537
     ],
-    "open_risk_governor_blockers": [
-      "live_exact_negative_open_risk"
-    ],
-    "open_risk_governor_status": "open_risk_governor_blocked",
+    "open_risk_governor_blockers": [],
+    "open_risk_governor_status": "open_risk_governor_pass",
     "prohibited_actions": [
       "do_not_count_legacy_pre_promotion_rows_as_current_paper_proof",
       "do_not_run_live_validation_for_paper_probation_candidates",

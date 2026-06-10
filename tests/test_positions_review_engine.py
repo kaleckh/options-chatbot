@@ -342,6 +342,31 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(result["quote_freshness_status"], "unknown")
         self.assertIn("unknown_quote_freshness", result["profitability_blockers"])
 
+    def test_executable_entry_can_use_ask_when_bid_is_zero(self):
+        result = oe.executable_option_price(
+            side="entry",
+            bid=0.0,
+            ask=0.34,
+            quote_freshness_status="fresh",
+        )
+
+        self.assertTrue(result["executable"])
+        self.assertEqual(result["execution_price"], 0.34)
+        self.assertEqual(result["execution_basis"], "ask")
+        self.assertEqual(result["profitability_blockers"], [])
+
+    def test_executable_exit_still_requires_positive_bid(self):
+        result = oe.executable_option_price(
+            side="exit",
+            bid=0.0,
+            ask=0.34,
+            quote_freshness_status="fresh",
+        )
+
+        self.assertFalse(result["executable"])
+        self.assertIsNone(result["execution_price"])
+        self.assertIn("missing_executable_exit_quote", result["profitability_blockers"])
+
     def test_vertical_spread_entry_stale_leg_overrides_fresh_aggregate_status(self):
         result = oe.executable_vertical_spread_entry(
             long_leg={"bid": 4.8, "ask": 5.0, "option_chain_status": "fresh"},

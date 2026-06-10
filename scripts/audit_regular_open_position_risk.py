@@ -146,6 +146,19 @@ def _is_live_exact_row(row: dict[str, Any]) -> bool:
     return _record_class(row) == "live_exact_tracked"
 
 
+def _live_exact_negative_is_resolved_hold(row: dict[str, Any], *, now: datetime, stale_hours: float) -> bool:
+    review = _latest_review(row)
+    if not isinstance(review, dict):
+        return False
+    return bool(
+        _action_bucket(row) == "negative_mark_hold_or_unknown"
+        and _evidence_bucket(row, now=now, stale_hours=stale_hours) == "fresh_executable_review"
+        and str(review.get("recommendation") or row.get("last_recommendation") or "").strip().upper() == "HOLD"
+        and _review_is_executable(review)
+        and bool(_metric(review, "price_trigger_ok"))
+    )
+
+
 def _actionable_position_detail(row: dict[str, Any], *, now: datetime, stale_hours: float) -> dict[str, Any]:
     review = _latest_review(row)
     action_bucket = _action_bucket(row)
@@ -202,6 +215,12 @@ def _build_open_risk_governor(
 ) -> dict[str, Any]:
     live_exact_rows = [row for row in open_rows if _is_live_exact_row(row)]
     live_exact_negative = [row for row in live_exact_rows if (pnl_pct(row) is not None and pnl_pct(row) < 0)]
+    live_exact_negative_resolved_hold = [
+        row for row in live_exact_negative if _live_exact_negative_is_resolved_hold(row, now=now, stale_hours=stale_hours)
+    ]
+    live_exact_negative_unresolved = [
+        row for row in live_exact_negative if row not in live_exact_negative_resolved_hold
+    ]
     live_exact_close_ready = [
         row for row in live_exact_rows if _action_bucket(row) == "stored_executable_sell"
     ]
@@ -219,7 +238,7 @@ def _build_open_risk_governor(
         }
     ]
     blockers: list[str] = []
-    if live_exact_negative:
+    if live_exact_negative_unresolved:
         blockers.append("live_exact_negative_open_risk")
     if live_exact_close_ready:
         blockers.append("live_exact_executable_close_ready")
@@ -229,7 +248,7 @@ def _build_open_risk_governor(
     details = [
         _actionable_position_detail(row, now=now, stale_hours=stale_hours)
         for row in sorted(
-            live_exact_negative + live_exact_close_ready + live_exact_review_blocked,
+            live_exact_negative_unresolved + live_exact_close_ready + live_exact_review_blocked,
             key=lambda item: (
                 _safe_float(item.get("id")) or 0.0,
                 item.get("ticker") or "",
@@ -242,10 +261,14 @@ def _build_open_risk_governor(
         "blockers": blockers,
         "live_exact_open_count": len(live_exact_rows),
         "live_exact_negative_count": len(live_exact_negative),
+        "live_exact_negative_resolved_hold_count": len(live_exact_negative_resolved_hold),
+        "live_exact_negative_unresolved_count": len(live_exact_negative_unresolved),
         "live_exact_executable_close_ready_count": len(live_exact_close_ready),
         "live_exact_review_blocked_count": len(live_exact_review_blocked),
         "live_exact_review_blocked_ids": [row.get("id") for row in live_exact_review_blocked],
         "live_exact_negative_ids": [row.get("id") for row in live_exact_negative],
+        "live_exact_negative_resolved_hold_ids": [row.get("id") for row in live_exact_negative_resolved_hold],
+        "live_exact_negative_unresolved_ids": [row.get("id") for row in live_exact_negative_unresolved],
         "live_exact_executable_close_ready_ids": [row.get("id") for row in live_exact_close_ready],
         "governor_details": details,
         "next_safe_actions": [

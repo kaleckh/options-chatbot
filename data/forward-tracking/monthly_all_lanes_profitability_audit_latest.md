@@ -6,12 +6,12 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 - Status: `monthly_profitability_readback`.
 - Overall status: `profitability_iteration_ready_blocked_for_promotion`.
-- Baseline PF / avg: `0.34` / `-15.28%`.
+- Baseline PF / avg: `0.32` / `-16.54%`.
 - Recent month: `2026-05` / `paper_only_recent_break`.
 - Execution realism: `ready`.
 - Risk/portfolio: `blocked`.
-- Promotion gate: `blocked` with `25` blockers.
-- Open-risk status / live entry allowed: `open_risk_governor_blocked` / `False`.
+- Promotion gate: `blocked` with `24` blockers.
+- Open-risk status / live entry allowed: `open_risk_governor_pass` / `True`.
 - Oracle ceiling: `not_available_replay_gap`.
 - Stale candidate archive: `stale_candidates_archived` / `built` / `{"archive_complete": true, "archive_exception_count": 0, "archived_no_longer_matched_candidate_count": 16, "lane_counts": {"quality90_debit55_canary": 2, "swing": 9, "tracked_winner_observation": 1, "tracked_winner_primary": 1, "volatility_expansion_observation": 3}, "production_proof_ready_count": 0, "source_wait_or_archive_count": 16, "ticker_counts": {"QQQ": 7, "SPY": 9}}`.
 - Candidate rules: `10` total, `0` paper candidates, `10` rejected/overfit.
@@ -23,26 +23,26 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 - Chain-native exit outcome replay: `chain_native_exit_outcome_replay_exact_pnl_available_diagnostic_only` / `built_collecting` / `{"best_relaxed_scenario": {"avg_net_pnl_pct": -9.26, "avg_net_pnl_usd": -288.5, "loser_count": 3, "max_net_pnl_pct": 61.57, "median_net_pnl_pct": -18.85, "min_net_pnl_pct": -60.9, "priced": 4, "profit_factor": 0.62, "relaxation_kind": "relaxed", "rows": 4, "scenario_id": "widen_dte_window_only", "sum_net_pnl_usd": -1154.0, "unpriced": 0, "win_rate_pct": 25.0, "winner_count": 1}, "current_selected_scenario_row_count": 4, "latest_intraday_quote_date": "2026-06-04", "missing_exit_quote_demand_count": 0, "priced_current_scenario_row_count": 4, "priced_relaxed_scenario_row_count": 24, "priced_scenario_row_count": 28, "relaxed_selected_scenario_row_count": 24, "selected_scenario_row_count": 28}`.
 - Execution-alternative quote import plan: `no_quote_demands_to_plan` / `built` / `{"command_group_count": 0, "entry_quote_demand_count": 0, "exact_contract_manifest_count": 0, "exit_quote_demand_count": 0, "operator_command_status": "not_available", "quote_dates": [], "source_coverage_status": "execution_alternative_replay_coverage_readback", "source_quote_demand_manifest_status": "no_missing_quote_demands", "underlyings": [], "unparsed_quote_demand_count": 0}`.
 - Minute-exit quote import plan: `no_minute_exit_quote_seeds_to_plan` / `built` / `{"command_group_count": 0, "entry_only_quote_demand_count": 0, "exact_contract_manifest_count": 0, "operator_command_status": "not_available", "position_linked_quote_demand_count": 0, "quote_dates": [], "replay_pnl_status": "available_in_source_readiness", "source_entry_seed_ready_count": 12, "source_minute_exit_replay_engine_status": "read_only_side_aware_engine_partial", "source_minute_quote_coverage_status": "full", "source_overall_status": "minute_exit_replay_coverage_ready", "source_position_seed_ready_count": 1, "source_readiness_status": "minute_exit_replay_readiness_readback", "source_true_minute_exit_pnl_count": 12, "underlyings": [], "unparsed_quote_demand_count": 0}`.
-- Open-risk resolution plan: `open_risk_resolution_plan_ready_blocked_for_market_window` / `built_collecting` / `{"action_counts": {"refresh_display_only_sell_executable_review": 1, "refresh_live_exact_negative_open_position_review": 1}, "display_only_sell_count": 1, "live_entry_allowed": false, "live_exact_negative_count": 1, "live_exact_negative_ids": [537], "live_exact_plan_row_count": 1, "market_window_required_count": 2, "open_position_avg_pnl_pct": -44.14, "open_position_median_pnl_pct": -47.58, "open_position_negative_count": 10, "open_position_row_count": 12, "operator_plan_status": "ready_for_fresh_executable_review_window", "plan_row_count": 2, "source_open_risk_status": "open_risk_governor_blocked"}`.
-- Fill-attempt evidence capture plan: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection` / `built_collecting` / `{"lane_counts": {"short_term": 1, "swing": 2, "volatility_expansion_observation": 1}, "ledger_stale_fill_attempt_logged_count": 0, "market_window_required_count": 4, "missing_fill_attempt_evidence_count": 4, "operator_plan_status": "ready_for_fresh_selection_capture", "plan_row_count": 4, "scan_dates": ["2026-06-05"], "source_candidate_ledger_operating_status": "ledger_live_entry_blocked_collect_evidence", "source_fill_attempt_rows": 497, "source_missing_fill_attempt_action_count": 4, "ticker_counts": {"QQQ": 2, "SPY": 2}}`.
+- Open-risk resolution plan: `open_risk_resolution_plan_clear` / `built` / `{"action_counts": {}, "display_only_sell_count": 0, "live_entry_allowed": true, "live_exact_negative_count": 1, "live_exact_negative_ids": [537], "live_exact_plan_row_count": 0, "market_window_required_count": 0, "open_position_avg_pnl_pct": -54.51, "open_position_median_pnl_pct": -57.66, "open_position_negative_count": 5, "open_position_row_count": 5, "operator_plan_status": "no_rows_to_resolve", "plan_row_count": 0, "source_open_risk_status": "open_risk_governor_pass"}`.
+- Fill-attempt evidence capture plan: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection` / `built_collecting` / `{"lane_counts": {"short_term": 1, "swing": 2, "volatility_expansion_observation": 1}, "ledger_stale_fill_attempt_logged_count": 0, "market_window_required_count": 4, "missing_fill_attempt_evidence_count": 4, "operator_plan_status": "ready_for_fresh_selection_capture", "plan_row_count": 4, "scan_dates": ["2026-06-05"], "source_candidate_ledger_operating_status": "ledger_collect_exact_evidence", "source_fill_attempt_rows": 497, "source_missing_fill_attempt_action_count": 4, "ticker_counts": {"QQQ": 2, "SPY": 2}}`.
 - Suggested-trade review plan: `suggested_trade_review_plan_ready_blocked_for_market_window` / `built_collecting` / `{"attention_trade_count": 1, "close_risk_trade_count": 0, "executable_close_ready_count": 0, "market_window_required_count": 1, "missing_review_count": 1, "non_executable_close_risk_count": 0, "open_suggested_trade_rows": 1, "operator_plan_status": "ready_for_fresh_suggested_trade_review_window", "plan_row_count": 1, "source_action_counts": {"no_stored_review": 1}, "source_evidence_counts": {"missing_review": 1}, "stale_or_missing_review_trade_count": 1, "stale_review_count": 0}`.
 - Quarantine archive: `4` archived, `0` unarchived.
 - Archived rejected rules: `10` archived, `0` unarchived.
-- Next evidence actions: `11`.
+- Next evidence actions: `10`.
 - Live policy change: `false`.
 
 ## Lane Leaderboard
 
 | Lane | Rows | PF | Avg Net | Median | Win Rate | Net USD | Decision |
 |---|---:|---:|---:|---:|---:|---:|---|
-| bullish_momentum | 16 | 0.1 | -48.45 | -54.84 | 12.5 | -3819.3 | diagnostic_only_until_earn_back |
-| bullish_pullback_observation | 15 | 0.29 | -22.81 | -24.1 | 33.3 | -3698.45 | diagnostic_only_until_earn_back |
-| short_term | 54 | 0.28 | -18.93 | -16.91 | 33.3 | -3518.15 | diagnostic_only_until_earn_back |
-| swing | 49 | 0.3 | -14.31 | -11.5 | 30.6 | -3781.95 | diagnostic_only_until_earn_back |
-| speculative | 8 | 0.12 | -12.62 | -15.53 | 25.0 | -413.15 | diagnostic_only_until_earn_back |
-| tracked_winner_primary | 20 | 0.46 | -9.19 | -8.7 | 40.0 | -1027.65 | diagnostic_only_until_earn_back |
-| tracked_winner_observation | 20 | 0.46 | -9.19 | -8.7 | 40.0 | -1027.65 | diagnostic_only_until_earn_back |
-| volatility_expansion_observation | 24 | 1.72 | 6.75 | 2.15 | 50.0 | 972.3 | probation_candidate_flow_with_self_guardrails |
+| bullish_momentum | 16 | 0.04 | -48.45 | -54.84 | 12.5 | -3819.3 | diagnostic_only_until_earn_back |
+| bullish_pullback_observation | 15 | 0.24 | -22.81 | -24.1 | 33.3 | -3698.45 | diagnostic_only_until_earn_back |
+| swing | 49 | 0.2 | -20.24 | -16.81 | 30.6 | -6331.95 | diagnostic_only_until_earn_back |
+| short_term | 54 | 0.33 | -18.93 | -16.91 | 33.3 | -3518.15 | diagnostic_only_until_earn_back |
+| speculative | 8 | 0.1 | -12.62 | -15.53 | 25.0 | -413.15 | diagnostic_only_until_earn_back |
+| tracked_winner_primary | 20 | 0.5 | -8.43 | -5.72 | 45.0 | -972.65 | diagnostic_only_until_earn_back |
+| tracked_winner_observation | 20 | 0.5 | -8.43 | -5.72 | 45.0 | -972.65 | diagnostic_only_until_earn_back |
+| volatility_expansion_observation | 24 | 1.83 | 6.74 | 2.15 | 50.0 | 971.3 | probation_candidate_flow_with_self_guardrails |
 
 ## Lane Dispositions
 
@@ -55,17 +55,17 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 |---|---|---|---:|---:|---:|---|---|---|
 | bearish_defensive | `needs_replay_engine` | `` |  |  |  | diagnostic | diagnostic_only_lane_promotion_state | build or refresh exact lane outcome replay before tuning or promotion discussion |
 | bearish_index_put_observation | `needs_replay_engine` | `` |  |  |  | diagnostic | diagnostic_only_lane_promotion_state | build or refresh exact lane outcome replay before tuning or promotion discussion |
-| bullish_momentum | `quarantine` | `archived_quarantine_lane` | 16 | 0.1 | -48.45 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
-| bullish_pullback_observation | `quarantine` | `archived_quarantine_lane` | 15 | 0.29 | -22.81 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
+| bullish_momentum | `quarantine` | `archived_quarantine_lane` | 16 | 0.04 | -48.45 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
+| bullish_pullback_observation | `quarantine` | `archived_quarantine_lane` | 15 | 0.24 | -22.81 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
 | quality90_debit55_canary | `needs_replay_engine` | `` |  |  |  | diagnostic | diagnostic_only_lane_promotion_state | build or refresh exact lane outcome replay before tuning or promotion discussion |
 | range_breakout_observation | `needs_replay_engine` | `` |  |  |  | diagnostic | diagnostic_only_lane_promotion_state | build or refresh exact lane outcome replay before tuning or promotion discussion |
 | regular_bearish_put_primary | `needs_replay_engine` | `` |  |  |  | diagnostic | diagnostic_only_lane_promotion_state | build or refresh exact lane outcome replay before tuning or promotion discussion |
-| short_term | `quarantine` | `archived_quarantine_lane` | 54 | 0.28 | -18.93 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
-| speculative | `retest` | `` | 8 | 0.12 | -12.62 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
-| swing | `quarantine` | `archived_quarantine_lane` | 49 | 0.3 | -14.31 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
-| tracked_winner_observation | `retest` | `` | 20 | 0.46 | -9.19 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
-| tracked_winner_primary | `retest` | `` | 20 | 0.46 | -9.19 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
-| volatility_expansion_observation | `paper_shadow` | `` | 24 | 1.72 | 6.75 | paper_probation | probation_candidate_flow_with_self_guardrails | collect fresh exact paper entries and exact realized exits before promotion |
+| short_term | `quarantine` | `archived_quarantine_lane` | 54 | 0.33 | -18.93 | diagnostic | diagnostic_only_until_earn_back | negative sufficiently sized lane should stay out of live validation until earn-back |
+| speculative | `retest` | `` | 8 | 0.1 | -12.62 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
+| swing | `quarantine` | `archived_quarantine_lane` | 49 | 0.2 | -20.24 | diagnostic | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
+| tracked_winner_observation | `retest` | `` | 20 | 0.5 | -8.43 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
+| tracked_winner_primary | `retest` | `` | 20 | 0.5 | -8.43 | diagnostic | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
+| volatility_expansion_observation | `paper_shadow` | `` | 24 | 1.83 | 6.74 | paper_probation | probation_candidate_flow_with_self_guardrails | collect fresh exact paper entries and exact realized exits before promotion |
 
 ## Stale Candidate Archive
 
@@ -173,26 +173,26 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 | Ticker Cluster | Rows | PF | Avg Net | Net USD |
 |---|---:|---:|---:|---:|
-| XLK | 31 | 0.02 | -37.43 | -6099.6 |
-| SPY | 39 | 0.15 | -12.59 | -2400.5 |
+| XLK | 31 | 0.01 | -37.43 | -6099.6 |
+| SPY | 39 | 0.22 | -11.03 | -2073.5 |
 | TSLA | 11 | 0.0 | -36.14 | -4086.7 |
-| IWM | 20 | 0.13 | -16.51 | -1251.2 |
+| IWM | 20 | 0.12 | -16.51 | -1251.2 |
 | AA | 5 | 0.0 | -58.93 | -935.95 |
-| AMZN | 4 | 0.08 | -61.01 | -1108.5 |
+| AMZN | 4 | 0.03 | -61.01 | -1108.5 |
 | PLD | 2 | 0.0 | -101.43 | -369.2 |
 | NVDA | 3 | 0.0 | -67.12 | -1357.2 |
 | FCX | 7 | 0.08 | -25.81 | -419.9 |
 | SLB | 3 | 0.0 | -58.47 | -312.25 |
 | BA | 2 | 0.0 | -79.67 | -580.4 |
-| SMCI | 2 | 0.0 | -36.28 | -162.8 |
+| QQQ | 21 | 0.57 | -4.66 | -1326.3 |
 
 | DTE Bucket | Rows | PF | Avg Net | Net USD |
 |---|---:|---:|---:|---:|
-| 36_plus | 19 | 0.16 | -29.05 | -5454.7 |
-| 6_10 | 61 | 0.28 | -18.04 | -3535.6 |
-| 11_20 | 55 | 0.39 | -14.32 | -4607.35 |
-| 21_35 | 66 | 0.46 | -10.29 | -2609.2 |
-| lte5 | 5 | 0.32 | -5.78 | -107.15 |
+| 36_plus | 19 | 0.12 | -29.05 | -5454.7 |
+| 11_20 | 55 | 0.24 | -19.36 | -6993.35 |
+| 6_10 | 61 | 0.37 | -18.04 | -3535.6 |
+| 21_35 | 66 | 0.57 | -10.03 | -2664.2 |
+| lte5 | 5 | 0.3 | -5.78 | -107.15 |
 
 - Fill degradation buckets: `not_available_in_missed_pick_failure_modes`.
 
@@ -200,16 +200,16 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 | Scenario | Classification | Archive | Kept | PF | Avg Net | Lost Winners | Avoided <= -50% | Later Rows | Later Pass | Blockers |
 |---|---|---|---:|---:|---:|---:|---:|---:|---|---|
-| current_lane_gate_self_guardrails | `reject_overfit` | `archived_rejected_rule` | 10 | 84.9 | 34.87 | 61 | 37 | 2 | True | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, winner_damage_warning |
-| lane_gate_self_guardrails_plus_exact_spread_dedupe | `reject_overfit` | `archived_rejected_rule` | 10 | 84.9 | 34.87 | 61 | 37 | 2 | True | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, winner_damage_warning |
-| no_extended_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 77 | 2.12 | 9.9 | 17 | 33 | 16 | False | overfit_status, later_date_holdout_not_passed, winner_damage_warning |
-| current_lane_gate_allowlist | `reject_overfit` | `archived_rejected_rule` | 24 | 1.72 | 6.75 | 58 | 35 | 4 | True | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, winner_damage_warning |
-| primary_combo_no_debit45_dte36_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 76 | 0.86 | -2.75 | 26 | 24 | 16 | False | winner_damage_exceeds_deep_losses_avoided, later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
-| no_primary_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 105 | 0.66 | -7.32 | 15 | 19 | 22 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
-| no_debit_gte_45 | `reject_overfit` | `archived_rejected_rule` | 169 | 0.44 | -11.72 | 8 | 11 | 38 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
-| no_dte_gte_36 | `reject_overfit` | `archived_rejected_rule` | 187 | 0.37 | -13.88 | 5 | 6 | 36 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
-| baseline_all_untracked | `reject_overfit` | `archived_rejected_rule` | 206 | 0.34 | -15.28 | 0 | 0 | 43 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive |
-| exact_spread_dedupe_only | `reject_overfit` | `archived_rejected_rule` | 179 | 0.34 | -15.44 | 9 | 4 | 37 | False | winner_damage_exceeds_deep_losses_avoided, later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
+| current_lane_gate_self_guardrails | `reject_overfit` | `archived_rejected_rule` | 10 | 69.14 | 34.87 | 63 | 41 | 2 | True | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, winner_damage_warning |
+| lane_gate_self_guardrails_plus_exact_spread_dedupe | `reject_overfit` | `archived_rejected_rule` | 10 | 69.14 | 34.87 | 63 | 41 | 2 | True | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, winner_damage_warning |
+| current_lane_gate_allowlist | `reject_overfit` | `archived_rejected_rule` | 24 | 1.83 | 6.74 | 60 | 39 | 4 | False | winner_damage_exceeds_deep_losses_avoided, thin_later_date_holdout, later_date_holdout_not_passed, winner_damage_warning |
+| primary_combo_no_debit45_dte36_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 76 | 1.06 | -3.69 | 28 | 27 | 16 | False | winner_damage_exceeds_deep_losses_avoided, later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
+| no_extended_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 77 | 1.0 | 5.73 | 21 | 33 | 16 | False | overfit_status, later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, winner_damage_warning |
+| no_primary_damage_tickers | `reject_overfit` | `archived_rejected_rule` | 105 | 0.6 | -10.37 | 19 | 19 | 22 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
+| no_debit_gte_45 | `reject_overfit` | `archived_rejected_rule` | 169 | 0.41 | -11.79 | 6 | 14 | 38 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
+| no_dte_gte_36 | `reject_overfit` | `archived_rejected_rule` | 187 | 0.37 | -15.27 | 5 | 6 | 36 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
+| baseline_all_untracked | `reject_overfit` | `archived_rejected_rule` | 206 | 0.32 | -16.54 | 0 | 0 | 43 | False | later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive |
+| exact_spread_dedupe_only | `reject_overfit` | `archived_rejected_rule` | 179 | 0.31 | -16.98 | 10 | 4 | 37 | False | winner_damage_exceeds_deep_losses_avoided, later_date_holdout_not_passed, profit_factor_below_paper_candidate_gate, average_net_pnl_not_positive, winner_damage_warning |
 
 ## Execution Realism
 
@@ -242,17 +242,15 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 ## Open-Risk Resolution Plan
 
-- Status: `open_risk_resolution_plan_ready_blocked_for_market_window` / `built_collecting`.
-- Source open-risk status: `open_risk_governor_blocked`.
-- Live entry allowed: `False`.
-- Plan rows / live exact / display-only SELL: `2` / `1` / `1`.
-- Open rows / negative rows: `12` / `10`.
-- Avg / median open P&L: `-44.14` / `-47.58`.
+- Status: `open_risk_resolution_plan_clear` / `built`.
+- Source open-risk status: `open_risk_governor_pass`.
+- Live entry allowed: `True`.
+- Plan rows / live exact / display-only SELL: `0` / `0` / `0`.
+- Open rows / negative rows: `5` / `5`.
+- Avg / median open P&L: `-54.51` / `-57.66`.
 
 | Priority | ID | Ticker | Lane | Class | Action | Status |
 |---:|---:|---|---|---|---|---|
-| 0 | 537 | QQQ | volatility_expansion_observation | live_exact_tracked | `refresh_live_exact_negative_open_position_review` | `fresh_quote_monitor_or_close_decision_required` |
-| 1 | 104 | SBUX | bullish_pullback_observation | main_zero_pick_research_backfill | `refresh_display_only_sell_executable_review` | `market_window_required_display_only_sell_review` |
 
 ## Suggested-Trade Review Plan
 
@@ -268,14 +266,14 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 ## Risk And Portfolio
 
-- Open-risk status: `open_risk_governor_blocked`.
-- Live entry allowed: `False`.
+- Open-risk status: `open_risk_governor_pass`.
+- Live entry allowed: `True`.
 - Live exact negative IDs: `[537]`.
 - Multilane quality status: `quality_pending`.
 - Risk-budget sizing status: `collecting` / `built_collecting`.
-- Risk-budget sizing best research scenario: `paper_shadow_only` / net `972.3` / PF `1.84`.
+- Risk-budget sizing best research scenario: `paper_shadow_only` / net `971.3` / PF `1.83`.
 - Zero-bid/liquidity blockers: `["bullish_pullback_core:unpriced_candidates_3", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0"]`.
-- Promotion blockers: `["open_risk_governor_blocked", "multilane:bullish_pullback_core:unpriced_candidates_3", "multilane:lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "multilane:lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "multilane:lane_a:conservative_zero_bid_pf_0.85_below_1_3", "multilane:lane_a:conservative_zero_bid_unpriced_11", "multilane:lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "multilane:paper_shadow_fill_evidence_pending", "bullish_pullback_core:unpriced_candidates_3", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "paper_shadow_fill_evidence_pending"]`.
+- Promotion blockers: `["multilane:bullish_pullback_core:unpriced_candidates_3", "multilane:lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "multilane:lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "multilane:lane_a:conservative_zero_bid_pf_0.85_below_1_3", "multilane:lane_a:conservative_zero_bid_unpriced_11", "multilane:lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "multilane:paper_shadow_fill_evidence_pending", "bullish_pullback_core:unpriced_candidates_3", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "paper_shadow_fill_evidence_pending"]`.
 
 ## Oracle Ceiling
 
@@ -286,7 +284,6 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 | Priority | Source | Action | Count | Reason |
 |---:|---|---|---:|---|
-| 0 | open_risk_resolution_plan | `execute_open_risk_resolution_review_plan` | 2 | open_risk_rows_need_fresh_executable_review_or_monitor_decision |
 | 1 | suggested_trade_review_plan | `execute_suggested_trade_review_plan` | 1 | suggested_trade_attention_rows_need_fresh_explicit_review |
 | 2 | candidate_outcome_ledger | `collect_exact_exit_evidence` | 1 | collect_exact_exit_evidence |
 | 4 | lane_disposition | `collect_paper_shadow_exact_evidence` | 1 | profitable_but_not_promotable_lane_needs_fresh_exact_paper_evidence |
@@ -302,7 +299,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 - Status: `blocked`.
 - Promotion ready: `False`.
-- Blockers: `["bullish_pullback_core:unpriced_candidates_3", "current_policy_circuit_breaker_active", "entry_filter_walkforward_not_passed", "fresh_exact_paper_rows_still_collecting", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:bullish_pullback_core:unpriced_candidates_3", "multilane:lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "multilane:lane_a:conservative_zero_bid_pf_0.85_below_1_3", "multilane:lane_a:conservative_zero_bid_unpriced_11", "multilane:lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "multilane:lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "multilane:lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:paper_shadow_fill_evidence_pending", "no_exact_realized_pnl_rows", "no_live_validation_lanes", "open_risk_governor_blocked", "paper_monitor_not_passed", "paper_shadow_fill_evidence_pending", "point_in_time_replay_not_passed", "profitability_layer_stack_blocked_or_collecting"]`.
+- Blockers: `["bullish_pullback_core:unpriced_candidates_3", "current_policy_circuit_breaker_active", "entry_filter_walkforward_not_passed", "fresh_exact_paper_rows_still_collecting", "lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "lane_a:conservative_zero_bid_pf_0.85_below_1_3", "lane_a:conservative_zero_bid_unpriced_11", "lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:bullish_pullback_core:unpriced_candidates_3", "multilane:lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", "multilane:lane_a:conservative_zero_bid_pf_0.85_below_1_3", "multilane:lane_a:conservative_zero_bid_unpriced_11", "multilane:lane_a_chain_native_ret20_4_stop200_time75:quote_coverage_53.1_below_97_5", "multilane:lane_a_chain_native_ret20_4_stop200_time75:rolling_oos_watch", "multilane:lane_a_chain_native_ret20_4_stop200_time75:unpriced_candidates_137", "multilane:paper_shadow_fill_evidence_pending", "no_exact_realized_pnl_rows", "no_live_validation_lanes", "paper_monitor_not_passed", "paper_shadow_fill_evidence_pending", "point_in_time_replay_not_passed", "profitability_layer_stack_blocked_or_collecting"]`.
 
 ## Boundary
 

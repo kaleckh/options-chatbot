@@ -5,7 +5,7 @@ This report is generated from `scripts/build_regular_options_fill_attempt_eviden
 ## Summary
 
 - Status: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection`.
-- Source ledger status: `ledger_live_entry_blocked_collect_evidence`.
+- Source ledger status: `ledger_collect_exact_evidence`.
 - Source fill-attempt rows: `497`.
 - Plan rows: `4`.
 - Missing fill-attempt evidence: `4`.

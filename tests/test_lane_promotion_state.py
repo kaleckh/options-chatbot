@@ -83,11 +83,17 @@ def _fresh_evidence(*, exact_rows: int = 0, ready_rows: int = 0, legacy: bool = 
     }
 
 
-def _open_risk(*, blocked: bool = False, missing_governor: bool = False) -> dict[str, object]:
+def _open_risk(
+    *,
+    blocked: bool = False,
+    missing_governor: bool = False,
+    resolved_negative_hold: bool = False,
+) -> dict[str, object]:
+    negative_count = 1 if blocked or resolved_negative_hold else 0
     payload: dict[str, object] = {
         "generated_at_utc": "2026-06-05T14:20:00Z",
         "scope": "regular_supervised_open_positions_read_only",
-        "by_record_class": {"live_exact_tracked": {"negative": 1 if blocked else 0}},
+        "by_record_class": {"live_exact_tracked": {"negative": negative_count}},
         "top_negative_open_positions": [
             {
                 "record_class": "live_exact_tracked",
@@ -95,7 +101,7 @@ def _open_risk(*, blocked: bool = False, missing_governor: bool = False) -> dict
                 "pnl_pct": -39.86,
             }
         ]
-        if blocked
+        if negative_count
         else [],
     }
     if not missing_governor:
@@ -103,7 +109,10 @@ def _open_risk(*, blocked: bool = False, missing_governor: bool = False) -> dict
             "status": "open_risk_governor_blocked" if blocked else "open_risk_governor_pass",
             "live_entry_allowed": not blocked,
             "blockers": ["live_exact_negative_open_risk"] if blocked else [],
-            "live_exact_negative_ids": [537] if blocked else [],
+            "live_exact_negative_ids": [537] if negative_count else [],
+            "live_exact_negative_resolved_hold_ids": [537] if resolved_negative_hold else [],
+            "live_exact_negative_unresolved_ids": [537] if blocked else [],
+            "live_exact_negative_unresolved_count": 1 if blocked else 0,
         }
     return payload
 
@@ -177,6 +186,24 @@ class LanePromotionStateTests(unittest.TestCase):
         self.assertEqual(volatility["promotion_state"], PROMOTION_STATE_PAPER_PROBATION)
         self.assertIn("open_risk_report_stale_or_unusable", volatility["blockers"])
         self.assertEqual(report["input_health"]["open_risk_report"]["reason"], "open_risk_report_missing_governor")
+
+    def test_resolved_negative_hold_does_not_fail_current_risk_gate(self) -> None:
+        report = build_lane_promotion_state(
+            lane_gate_report=_lane_gate_report(),
+            filter_matrix=_filter_matrix(later_rows=12),
+            fresh_evidence=_fresh_evidence(exact_rows=20, ready_rows=10),
+            open_risk=_open_risk(resolved_negative_hold=True),
+            circuit_breaker={"generated_at_utc": "2026-06-05T14:25:00Z", "lane_routes": []},
+            generated_at_utc="2026-06-05T14:30:00Z",
+            now_utc=NOW,
+        )
+
+        volatility = report["lane_states"]["volatility_expansion_observation"]
+        risk_gate = next(gate for gate in volatility["gates"] if gate["gate"] == "current_live_exact_risk_clear")
+        self.assertTrue(risk_gate["passed"])
+        self.assertEqual(risk_gate["current"]["global_live_exact_negative_count"], 1)
+        self.assertEqual(risk_gate["current"]["unresolved_live_exact_negative_count"], 0)
+        self.assertNotIn("current_live_exact_risk_governor_blocked", volatility["blockers"])
 
     def test_legacy_pre_promotion_fresh_rows_do_not_satisfy_paper_cohort(self) -> None:
         report = build_lane_promotion_state(

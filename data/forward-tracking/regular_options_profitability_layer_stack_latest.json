@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-profitability-layer-stack.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260608T051542Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260610T062810Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260608T051542Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_profitability_layer_stack_20260610T062810Z.md"
   },
   "blocked_or_collecting_layers": [
     {
@@ -12,7 +12,6 @@
       "layer": 1,
       "next_action": "Use the ledger queue from priority 0 downward.",
       "primary_blockers": [
-        "open_risk_governor_blocked",
         "no_exact_realized_pnl_rows"
       ],
       "slug": "candidate_outcome_ledger",
@@ -45,8 +44,7 @@
       "next_action": "Collect current volatility paper exact evidence and clear open-risk before promotion discussion.",
       "primary_blockers": [
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "slug": "volatility_paper_probation_current_cohort",
       "title": "Volatility paper/probation current cohort"
@@ -56,7 +54,6 @@
       "layer": 8,
       "next_action": "Resolve open-risk governor and exact-exit evidence before any new live validation.",
       "primary_blockers": [
-        "live_exact_negative_open_risk",
         "exact_exit_evidence_required"
       ],
       "slug": "open_risk_exact_exit_hygiene",
@@ -103,8 +100,7 @@
       "layer": 16,
       "next_action": "Regenerate lane promotion, circuit-breaker, and guardrail-starvation readbacks before candidate routing.",
       "primary_blockers": [
-        "no_live_validation_lanes",
-        "open_risk_governor_blocked"
+        "no_live_validation_lanes"
       ],
       "slug": "lane_lab_freshness_reconciler",
       "title": "Lane-lab freshness reconciler"
@@ -133,7 +129,6 @@
       "primary_blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
-        "open_risk_governor_blocks_sizing",
         "sizing_change_requires_separate_promotion_gate"
       ],
       "slug": "risk_budget_sizing_replay",
@@ -189,12 +184,12 @@
     },
     "top_alternative_count": 12
   },
-  "generated_at_utc": "2026-06-08T05:15:42Z",
+  "generated_at_utc": "2026-06-10T06:28:10Z",
   "inputs": {
     "candidate_ledger": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T08:03:23Z",
+      "generated_at_utc": "2026-06-10T06:27:23Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
       "status": "loaded"
     },
@@ -264,21 +259,21 @@
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:33Z",
+      "generated_at_utc": "2026-06-10T06:27:23Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "status": "loaded"
     },
     "guardrail_starvation": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T18:59:48Z",
+      "generated_at_utc": "2026-06-09T17:10:20Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
       "status": "loaded"
     },
     "lane_promotion_state": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:44Z",
+      "generated_at_utc": "2026-06-10T06:27:19Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
       "status": "loaded"
     },
@@ -292,21 +287,21 @@
     "missed_picks_failure_modes": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T21:03:55Z",
+      "generated_at_utc": "2026-06-10T06:27:17Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
       "status": "loaded"
     },
     "missed_picks_filter_matrix": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T22:10:15Z",
+      "generated_at_utc": "2026-06-10T06:27:17Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
       "status": "loaded"
     },
     "missed_picks_outcome": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-05T19:35:21Z",
+      "generated_at_utc": "2026-06-10T06:27:05Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
       "status": "loaded"
     },
@@ -320,7 +315,7 @@
     "open_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "generated_at_utc": "2026-06-10T06:18:55Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "status": "loaded"
     },
@@ -362,7 +357,7 @@
     "risk_budget_sizing_replay": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-08T01:37:29Z",
+      "generated_at_utc": "2026-06-10T06:28:09Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.json",
       "status": "loaded"
     },
@@ -390,7 +385,7 @@
     "volatility_probation": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:56Z",
+      "generated_at_utc": "2026-06-10T06:27:21Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\volatility_probation_reconciliation_latest.json",
       "status": "loaded"
     }
@@ -402,7 +397,7 @@
       "implementation_status": "built",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "candidate_ledger",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
           "row_count": null,
@@ -417,23 +412,20 @@
           "capture_paper_only_exact_entry": 8,
           "collect_exact_exit_evidence": 1,
           "create_or_link_paper_review_row": 5,
-          "refresh_open_position_executable_review": 1,
           "refresh_suggested_trade_review": 1,
           "repair_historical_evidence": 39,
-          "resolve_open_risk_governor": 1,
           "respect_guardrail_or_lane_mismatch": 9,
           "wait_for_fresh_executable_tier_a_bridge": 21,
           "wait_for_fresh_match_or_archive_candidate": 16
         },
-        "ledger_row_count": 106,
-        "operating_status": "ledger_live_entry_blocked_collect_evidence"
+        "ledger_row_count": 104,
+        "operating_status": "ledger_collect_exact_evidence"
       },
       "next_action": "Use the ledger queue from priority 0 downward.",
       "owner_commands": [
         "uv run --locked python scripts/build_regular_options_candidate_outcome_ledger.py"
       ],
       "primary_blockers": [
-        "open_risk_governor_blocked",
         "no_exact_realized_pnl_rows"
       ],
       "prohibited_actions": [
@@ -454,14 +446,14 @@
       "implementation_status": "built_collecting",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "fresh_evidence_loop",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "generated_at_utc": "2026-06-10T06:27:19Z",
           "key": "lane_promotion_state",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
           "row_count": null,
@@ -509,7 +501,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "fresh_evidence_loop",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
           "row_count": null,
@@ -569,7 +561,7 @@
       "implementation_status": "built_collecting",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "candidate_ledger",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
           "row_count": null,
@@ -673,7 +665,7 @@
       "implementation_status": "built",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "candidate_ledger",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
           "row_count": null,
@@ -688,15 +680,13 @@
           "capture_paper_only_exact_entry": 8,
           "collect_exact_exit_evidence": 1,
           "create_or_link_paper_review_row": 5,
-          "refresh_open_position_executable_review": 1,
           "refresh_suggested_trade_review": 1,
           "repair_historical_evidence": 39,
-          "resolve_open_risk_governor": 1,
           "respect_guardrail_or_lane_mismatch": 9,
           "wait_for_fresh_executable_tier_a_bridge": 21,
           "wait_for_fresh_match_or_archive_candidate": 16
         },
-        "queue_action_count": 11
+        "queue_action_count": 9
       },
       "next_action": "Use `docs/regular-options-candidate-outcome-ledger.md` as the operator queue.",
       "owner_commands": [
@@ -721,14 +711,14 @@
       "implementation_status": "built_collecting",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T07:21:56Z",
+          "generated_at_utc": "2026-06-10T06:27:21Z",
           "key": "volatility_probation",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\volatility_probation_reconciliation_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "generated_at_utc": "2026-06-10T06:27:19Z",
           "key": "lane_promotion_state",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
           "row_count": null,
@@ -741,8 +731,7 @@
         "current_paper_probation_exact_evidence_pending_count": 0,
         "lane_blockers": [
           "walk_forward_holdout_too_small_or_failed",
-          "fresh_paper_cohort_insufficient",
-          "current_live_exact_risk_governor_blocked"
+          "fresh_paper_cohort_insufficient"
         ],
         "lane_promotion_state": "paper_probation",
         "promotion_discussion_ready_excluding_legacy_count": 0
@@ -754,8 +743,7 @@
       ],
       "primary_blockers": [
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "prohibited_actions": [
         "do_not_create_live_row_from_profitability_layer_stack",
@@ -775,14 +763,14 @@
       "implementation_status": "built_blocked",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "generated_at_utc": "2026-06-10T06:18:55Z",
           "key": "open_risk",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "candidate_ledger",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
           "row_count": null,
@@ -793,18 +781,17 @@
       "live_policy_change": false,
       "metrics": {
         "collect_exact_exit_rows": 1,
-        "live_entry_allowed": false,
+        "live_entry_allowed": true,
         "live_exact_negative_ids": [
           537
         ],
-        "open_risk_status": "open_risk_governor_blocked"
+        "open_risk_status": "open_risk_governor_pass"
       },
       "next_action": "Resolve open-risk governor and exact-exit evidence before any new live validation.",
       "owner_commands": [
         "uv run --locked python scripts/audit_regular_open_position_risk.py"
       ],
       "primary_blockers": [
-        "live_exact_negative_open_risk",
         "exact_exit_evidence_required"
       ],
       "prohibited_actions": [
@@ -984,7 +971,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "generated_at_utc": "2026-06-10T06:18:55Z",
           "key": "open_risk",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
           "row_count": null,
@@ -1004,7 +991,7 @@
         "minute_level_replay_artifact": "minute_exit_replay_readiness_readback",
         "minute_quote_coverage_status": "full",
         "minute_readiness_overall_status": "minute_exit_replay_coverage_ready",
-        "open_risk_status": "open_risk_governor_blocked",
+        "open_risk_status": "open_risk_governor_pass",
         "position_linked_true_minute_exit_pnl_count": 1,
         "position_seed_ready_count": 1,
         "true_minute_exit_pnl_count": 12
@@ -1033,7 +1020,7 @@
       "implementation_status": "built_blocked",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-05T22:10:15Z",
+          "generated_at_utc": "2026-06-10T06:27:17Z",
           "key": "missed_picks_filter_matrix",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
           "row_count": null,
@@ -1119,21 +1106,21 @@
       "implementation_status": "built",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-05T19:35:21Z",
+          "generated_at_utc": "2026-06-10T06:27:05Z",
           "key": "missed_picks_outcome",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-05T21:03:55Z",
+          "generated_at_utc": "2026-06-10T06:27:17Z",
           "key": "missed_picks_failure_modes",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-05T22:10:15Z",
+          "generated_at_utc": "2026-06-10T06:27:17Z",
           "key": "missed_picks_filter_matrix",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
           "row_count": null,
@@ -1280,7 +1267,7 @@
       "implementation_status": "built_blocked",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-06T07:21:44Z",
+          "generated_at_utc": "2026-06-10T06:27:19Z",
           "key": "lane_promotion_state",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\lane_promotion_state_latest.json",
           "row_count": null,
@@ -1294,7 +1281,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-05T18:59:48Z",
+          "generated_at_utc": "2026-06-09T17:10:20Z",
           "key": "guardrail_starvation",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
           "row_count": null,
@@ -1307,7 +1294,7 @@
         "diagnostic_lane_count": 13,
         "lane_count": 14,
         "live_validation_lane_count": 0,
-        "open_risk_governor_status": "open_risk_governor_blocked",
+        "open_risk_governor_status": "open_risk_governor_pass",
         "paper_probation_lane_count": 1
       },
       "next_action": "Regenerate lane promotion, circuit-breaker, and guardrail-starvation readbacks before candidate routing.",
@@ -1316,8 +1303,7 @@
         "npm run options:audit:all-lanes"
       ],
       "primary_blockers": [
-        "no_live_validation_lanes",
-        "open_risk_governor_blocked"
+        "no_live_validation_lanes"
       ],
       "prohibited_actions": [
         "do_not_create_live_row_from_profitability_layer_stack",
@@ -1344,7 +1330,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "generated_at_utc": "2026-06-10T06:18:55Z",
           "key": "open_risk",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
           "row_count": null,
@@ -1417,14 +1403,14 @@
       "implementation_status": "built_collecting",
       "input_artifacts": [
         {
-          "generated_at_utc": "2026-06-08T01:37:29Z",
+          "generated_at_utc": "2026-06-10T06:28:09Z",
           "key": "risk_budget_sizing_replay",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_risk_budget_sizing_replay_latest.json",
           "row_count": null,
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:23Z",
+          "generated_at_utc": "2026-06-10T06:18:55Z",
           "key": "open_risk",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
           "row_count": null,
@@ -1438,7 +1424,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T08:03:23Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "candidate_ledger",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
           "row_count": null,
@@ -1448,15 +1434,15 @@
       "layer": 18,
       "live_policy_change": false,
       "metrics": {
-        "baseline_net_pnl_usd": -16314.0,
-        "best_research_net_pnl_usd": 972.3,
-        "best_research_profit_factor": 1.84,
+        "baseline_net_pnl_usd": -18755.0,
+        "best_research_net_pnl_usd": 971.3,
+        "best_research_profit_factor": 1.83,
         "best_research_scenario_id": "paper_shadow_only",
-        "live_entry_allowed": false,
-        "open_risk_status": "open_risk_governor_blocked",
+        "live_entry_allowed": true,
+        "open_risk_status": "open_risk_governor_pass",
         "positive_research_scenario_count": 2,
         "quality_gate_status": "quality_pending",
-        "sizing_replay_status": "sizing_replay_built_open_risk_blocked",
+        "sizing_replay_status": "sizing_replay_built_collect_fresh_exact_evidence",
         "source_row_count": 206
       },
       "next_action": "Use the sizing replay as research readback only; resolve open risk and collect fresh exact sizing evidence before any size-tier change.",
@@ -1468,7 +1454,6 @@
       "primary_blockers": [
         "fresh_exact_realized_sizing_evidence_required",
         "historical_research_backfill_rows_are_not_production_sizing_proof",
-        "open_risk_governor_blocks_sizing",
         "sizing_change_requires_separate_promotion_gate"
       ],
       "prohibited_actions": [
@@ -1503,7 +1488,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-06T07:21:33Z",
+          "generated_at_utc": "2026-06-10T06:27:23Z",
           "key": "fresh_evidence_loop",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
           "row_count": null,
@@ -1566,7 +1551,7 @@
           "status": "loaded"
         },
         {
-          "generated_at_utc": "2026-06-05T18:59:48Z",
+          "generated_at_utc": "2026-06-09T17:10:20Z",
           "key": "guardrail_starvation",
           "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_guardrail_starvation_latest.json",
           "row_count": null,
@@ -1643,7 +1628,7 @@
   "status": "profitability_layer_stack_readback",
   "summary": {
     "blocked_or_collecting_layer_count": 13,
-    "candidate_ledger_status": "ledger_live_entry_blocked_collect_evidence",
+    "candidate_ledger_status": "ledger_collect_exact_evidence",
     "category_counts": {
       "data_repair": 1,
       "event_research": 1,
@@ -1672,8 +1657,8 @@
     },
     "layer_count": 20,
     "live_policy_change": false,
-    "open_risk_status": "open_risk_governor_blocked",
-    "overall_status": "all_20_layers_wired_live_blocked_collect_evidence",
+    "open_risk_status": "open_risk_governor_pass",
+    "overall_status": "all_20_layers_wired_research_blocked",
     "wired_layer_count": 20
   }
 }

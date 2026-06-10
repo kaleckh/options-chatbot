@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260606T080323Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260610T062723Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260606T080323Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260610T062723Z.md"
   },
-  "generated_at_utc": "2026-06-06T08:03:23Z",
+  "generated_at_utc": "2026-06-10T06:27:23Z",
   "inputs": {
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:33Z",
+      "generated_at_utc": "2026-06-10T06:27:23Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -19,7 +19,7 @@
     "open_position_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-06T07:21:23Z",
+      "generated_at_utc": "2026-06-10T06:18:55Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "required": false,
       "status": "loaded"
@@ -50,78 +50,6 @@
     }
   },
   "ledger_rows": [
-    {
-      "action_label": "Resolve open-risk governor",
-      "action_priority": 0,
-      "action_reason": "open_risk_governor_blocks_live_entry",
-      "blocking_reasons": [
-        "live_exact_negative_open_risk",
-        "Position remains inside the stop, target, and exit rules."
-      ],
-      "current_pnl_pct": -58.2639,
-      "evidence_bucket": "fresh_executable_review",
-      "lane_id": "volatility_expansion_observation",
-      "ledger_key": "open_risk_governor:537",
-      "live_policy_change": false,
-      "next_evidence_action": "resolve_open_risk_governor",
-      "next_safe_action": "monitor",
-      "operator_next_step": "Refresh explicit open-position reviews during a fresh executable quote window; do not open new live scanner-origin rows while blocked.",
-      "playbook_id": "volatility_expansion_observation",
-      "position_id": 537,
-      "pricing_state": "priced_spread_exact",
-      "prohibited_actions": [
-        "do_not_create_live_row_from_candidate_outcome_ledger",
-        "do_not_submit_broker_order_from_candidate_outcome_ledger",
-        "do_not_change_scanner_policy_from_candidate_outcome_ledger",
-        "do_not_lower_exact_opra_nbbo_proof_bar_from_candidate_outcome_ledger",
-        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
-      ],
-      "recommendation": "HOLD",
-      "record_class": "live_exact_tracked",
-      "required_next_evidence": [
-        "fresh_executable_open_position_review"
-      ],
-      "row_type": "operator_blocker",
-      "source_report": "open_position_risk",
-      "symbol": "QQQ",
-      "ticker": "QQQ"
-    },
-    {
-      "action_label": "Refresh open-position executable review",
-      "action_priority": 1,
-      "action_reason": "open_position_actionable_row_requires_fresh_executable_review",
-      "blocking_reasons": [
-        "Time exit reached after 16 calendar day(s), versus a 16-day limit.",
-        "Using display-only spread marks because one or both legs are missing a live executable bid/ask quote."
-      ],
-      "current_pnl_pct": null,
-      "evidence_bucket": "fresh_unpriced_review",
-      "lane_id": "bullish_pullback_observation",
-      "ledger_key": "open_position_actionable:104",
-      "live_policy_change": false,
-      "next_evidence_action": "refresh_open_position_executable_review",
-      "next_safe_action": "do_not_auto_close_from_display_only_mark_rerun_explicit_review_during_fresh_executable_quote_window",
-      "operator_next_step": "Rerun the read-only open-position risk audit during a fresh executable quote window before acting on display-only marks.",
-      "playbook_id": "bullish_pullback_observation",
-      "position_id": 104,
-      "pricing_state": "priced_display_only_last",
-      "prohibited_actions": [
-        "do_not_create_live_row_from_candidate_outcome_ledger",
-        "do_not_submit_broker_order_from_candidate_outcome_ledger",
-        "do_not_change_scanner_policy_from_candidate_outcome_ledger",
-        "do_not_lower_exact_opra_nbbo_proof_bar_from_candidate_outcome_ledger",
-        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
-      ],
-      "recommendation": "SELL",
-      "record_class": "main_zero_pick_research_backfill",
-      "required_next_evidence": [
-        "fresh_executable_open_position_review"
-      ],
-      "row_type": "operator_blocker",
-      "source_report": "open_position_risk",
-      "symbol": "SBUX",
-      "ticker": "SBUX"
-    },
     {
       "action_label": "Refresh suggested-trade review",
       "action_priority": 1,
@@ -7411,40 +7339,6 @@
   ],
   "next_evidence_queue": [
     {
-      "action_label": "Resolve open-risk governor",
-      "action_priority": 0,
-      "count": 1,
-      "next_evidence_action": "resolve_open_risk_governor",
-      "operator_next_step": "Refresh explicit open-position reviews during a fresh executable quote window; do not open new live scanner-origin rows while blocked.",
-      "sample_rows": [
-        {
-          "action_reason": "open_risk_governor_blocks_live_entry",
-          "lane_id": "volatility_expansion_observation",
-          "ledger_key": "open_risk_governor:537",
-          "row_type": "operator_blocker",
-          "source_report": "open_position_risk",
-          "ticker": "QQQ"
-        }
-      ]
-    },
-    {
-      "action_label": "Refresh open-position executable review",
-      "action_priority": 1,
-      "count": 1,
-      "next_evidence_action": "refresh_open_position_executable_review",
-      "operator_next_step": "Rerun the read-only open-position risk audit during a fresh executable quote window before acting on display-only marks.",
-      "sample_rows": [
-        {
-          "action_reason": "open_position_actionable_row_requires_fresh_executable_review",
-          "lane_id": "bullish_pullback_observation",
-          "ledger_key": "open_position_actionable:104",
-          "row_type": "operator_blocker",
-          "source_report": "open_position_risk",
-          "ticker": "SBUX"
-        }
-      ]
-    },
-    {
       "action_label": "Refresh suggested-trade review",
       "action_priority": 1,
       "count": 1,
@@ -7878,52 +7772,30 @@
       }
     },
     "open_risk_governor": {
-      "blockers": [
-        "live_exact_negative_open_risk"
-      ],
-      "governor_details": [
-        {
-          "action_bucket": "negative_mark_hold_or_unknown",
-          "current_option_price": 4.265,
-          "current_pnl_pct": -58.2639,
-          "evidence_bucket": "fresh_executable_review",
-          "exit_execution_basis": "spread_bid_ask",
-          "exit_execution_price": 3.784,
-          "first_warning": null,
-          "id": 537,
-          "lane": "volatility_expansion_observation",
-          "last_reviewed_at": "2026-06-05T22:00:04.574135-06:00",
-          "mark_pnl_pct": -58.2639,
-          "next_safe_action": "monitor",
-          "price_trigger_ok": true,
-          "pricing_source": "spread_bid_ask_exact",
-          "pricing_state": "priced_spread_exact",
-          "reason": "Position remains inside the stop, target, and exit rules.",
-          "recommendation": "HOLD",
-          "record_class": "live_exact_tracked",
-          "status": "open",
-          "ticker": "QQQ",
-          "warning_count": 0
-        }
-      ],
-      "live_entry_allowed": false,
+      "blockers": [],
+      "governor_details": [],
+      "live_entry_allowed": true,
       "live_exact_executable_close_ready_count": 0,
       "live_exact_executable_close_ready_ids": [],
       "live_exact_negative_count": 1,
       "live_exact_negative_ids": [
         537
       ],
+      "live_exact_negative_resolved_hold_count": 1,
+      "live_exact_negative_resolved_hold_ids": [
+        537
+      ],
+      "live_exact_negative_unresolved_count": 0,
+      "live_exact_negative_unresolved_ids": [],
       "live_exact_open_count": 1,
       "live_exact_review_blocked_count": 0,
       "live_exact_review_blocked_ids": [],
       "live_policy_change": false,
       "next_safe_actions": [
-        "do_not_open_new_scanner_origin_rows_until_governor_passes",
-        "refresh_open_position_reviews_with_live_executable_quotes",
-        "resolve_executable_sell_or_negative_live_exact_rows_before_live_validation"
+        "continue_monitoring_open_risk_before_each_promotion_readback"
       ],
       "read_only": true,
-      "status": "open_risk_governor_blocked"
+      "status": "open_risk_governor_pass"
     },
     "paper_shortlist": {
       "capture_bridge_status_counts": {
@@ -8016,10 +7888,8 @@
       "capture_paper_only_exact_entry": 8,
       "collect_exact_exit_evidence": 1,
       "create_or_link_paper_review_row": 5,
-      "refresh_open_position_executable_review": 1,
       "refresh_suggested_trade_review": 1,
       "repair_historical_evidence": 39,
-      "resolve_open_risk_governor": 1,
       "respect_guardrail_or_lane_mismatch": 9,
       "wait_for_fresh_executable_tier_a_bridge": 21,
       "wait_for_fresh_match_or_archive_candidate": 16
@@ -8030,18 +7900,17 @@
     "input_status_counts": {
       "loaded": 5
     },
-    "ledger_row_count": 106,
+    "ledger_row_count": 104,
     "live_policy_change": false,
     "missing_realized_pnl_count": 1,
-    "open_risk_live_entry_allowed": false,
-    "open_risk_status": "open_risk_governor_blocked",
-    "operating_status": "ledger_live_entry_blocked_collect_evidence",
+    "open_risk_live_entry_allowed": true,
+    "open_risk_status": "open_risk_governor_pass",
+    "operating_status": "ledger_collect_exact_evidence",
     "paper_probation_bridge_count": 8,
     "paper_shortlist_eligible_count": 0,
     "paper_shortlist_invariant_violation_count": 0,
     "priority_counts": {
-      "0": 1,
-      "1": 2,
+      "1": 1,
       "10": 39,
       "11": 9,
       "2": 1,
@@ -8056,13 +7925,12 @@
     "promotion_discussion_ready_count": 0,
     "row_type_counts": {
       "candidate": 34,
-      "operator_blocker": 3,
+      "operator_blocker": 1,
       "paper_shortlist_bridge": 15,
       "profit_capture_candidate": 54
     },
     "source_counts": {
       "fresh_evidence_loop": 34,
-      "open_position_risk": 2,
       "paper_shortlist": 15,
       "profit_capture_queue": 54,
       "suggested_trade_close_risk": 1
