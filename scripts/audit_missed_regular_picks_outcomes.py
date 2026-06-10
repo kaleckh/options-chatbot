@@ -347,12 +347,13 @@ def metrics(values: list[float], usd_values: list[float] | None = None, *, row_c
     usd = usd_values or []
     winners = [value for value in values if value > 0]
     losers = [value for value in values if value < 0]
-    gross_profit = sum(winners)
-    gross_loss = -sum(losers)
+    pf_values = usd if usd else values
+    gross_profit_pct = sum(winners)
+    gross_loss_pct = -sum(losers)
+    gross_profit = sum(value for value in pf_values if value > 0)
+    gross_loss = -sum(value for value in pf_values if value < 0)
     if gross_loss > 0:
         profit_factor: float | None = round(gross_profit / gross_loss, 2)
-    elif gross_profit > 0:
-        profit_factor = 999.0
     else:
         profit_factor = None
     priced = len(values)
@@ -370,8 +371,12 @@ def metrics(values: list[float], usd_values: list[float] | None = None, *, row_c
         "max_net_pnl_pct": round(max(values), 2) if priced else None,
         "net_pnl_pct_points": round(sum(values), 2) if priced else 0.0,
         "profit_factor": profit_factor,
-        "gross_profit_pct_sum": round(gross_profit, 2),
-        "gross_loss_pct_sum": round(gross_loss, 2),
+        "profit_factor_basis": "net_pnl_usd" if usd else "net_pnl_pct",
+        "no_loss_sample": bool(pf_values and gross_loss <= 0 and gross_profit > 0),
+        "gross_profit_pct_sum": round(gross_profit_pct, 2),
+        "gross_loss_pct_sum": round(gross_loss_pct, 2),
+        "gross_profit_usd_sum": round(sum(value for value in usd if value > 0), 2) if usd else None,
+        "gross_loss_usd_sum": round(-sum(value for value in usd if value < 0), 2) if usd else None,
         "sum_net_pnl_usd": round(sum(usd), 2) if usd else None,
         "avg_net_pnl_usd": round(sum(usd) / len(usd), 2) if usd else None,
     }

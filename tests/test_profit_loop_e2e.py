@@ -192,7 +192,7 @@ class TestProfitLoopEndToEnd(unittest.TestCase):
         self.assertIn("risk.stop_loss_pct", param_names)
 
     def test_07_lenient_profitability_assessment(self):
-        """Best-effort eligibility gives partial credit."""
+        """Deprecated lenient eligibility fails closed."""
         from options_execution import scan_profitability_assessment_lenient
 
         # Fully eligible
@@ -214,8 +214,8 @@ class TestProfitLoopEndToEnd(unittest.TestCase):
             entry_execution_price=1.50,
             quote_freshness_status="stale",
         )
-        self.assertEqual(status2, "best_effort_eligible")
-        self.assertEqual(weight2, 0.5)
+        self.assertEqual(status2, "ineligible")
+        self.assertEqual(weight2, 0.0)
 
         # Missing contract → fully ineligible
         status3, blockers3, weight3 = scan_profitability_assessment_lenient(

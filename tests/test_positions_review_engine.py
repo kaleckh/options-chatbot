@@ -315,6 +315,20 @@ class PositionsReviewEngineTests(unittest.TestCase):
         self.assertEqual(result["gross_pnl_pct"], -100.0)
         self.assertEqual(result["net_pnl_pct"], -100.0)
 
+    def test_vertical_spread_exit_fee_charges_both_legs_when_closed_as_single_order(self):
+        result = oe.vertical_spread_pnl(
+            long_entry_price=3.0,
+            short_entry_price=1.0,
+            long_exit_price=4.0,
+            short_exit_price=1.0,
+            contracts=1,
+            close_as_single_order=True,
+        )
+
+        self.assertEqual(result["entry_fee_total_usd"], 1.3)
+        self.assertEqual(result["exit_fee_total_usd"], 1.3)
+        self.assertEqual(result["fee_total_usd"], 2.6)
+
     def test_executable_option_price_requires_known_fresh_quote(self):
         result = oe.executable_option_price(
             side="entry",

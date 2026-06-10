@@ -104,6 +104,32 @@ def _position_net_pnl_pct(position: dict[str, Any]) -> float | None:
     return _safe_float(snapshot.get("net_pnl_pct"))
 
 
+def _position_net_pnl_usd(position: dict[str, Any]) -> float | None:
+    net_pnl_usd = _safe_float(position.get("net_pnl_usd"))
+    if net_pnl_usd is not None:
+        return net_pnl_usd
+    entry = _safe_float(position.get("entry_execution_price"))
+    if entry is None:
+        entry = _safe_float(position.get("entry_option_price"))
+    exit_price = _safe_float(position.get("exit_execution_price"))
+    if exit_price is None:
+        exit_price = _safe_float(position.get("exit_option_price"))
+    if entry is None or entry <= 0 or exit_price is None:
+        return None
+    contracts = position.get("contracts")
+    if contracts in (None, ""):
+        contracts = 1
+    entry_fee, exit_fee = _position_fee_sides_from_total(position)
+    snapshot = option_pnl_snapshot(
+        entry_execution_price=entry,
+        exit_execution_price=exit_price,
+        contracts=contracts,
+        entry_fee_total_usd=entry_fee,
+        exit_fee_total_usd=exit_fee,
+    )
+    return _safe_float(snapshot.get("net_pnl_usd"))
+
+
 def _score_profit_factor(value: Any) -> float:
     parsed = _safe_float(value)
     if parsed is None:
@@ -344,9 +370,14 @@ def _candidate_forward_metrics(
             for value in (_safe_float(event.get("gross_pnl_pct")) for event in matched)
             if value is not None
         ]
-    positive = sum(value for value in net_pnls if value > 0)
-    negative = abs(sum(value for value in net_pnls if value < 0))
-    profit_factor = round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None)
+    net_pnl_usds = [
+        value
+        for value in (_safe_float(event.get("net_pnl_usd")) for event in matched)
+        if value is not None
+    ]
+    positive = sum(value for value in net_pnl_usds if value > 0)
+    negative = abs(sum(value for value in net_pnl_usds if value < 0))
+    profit_factor = round(positive / negative, 4) if negative > 0 else None
     return {
         "eligible_trade_count": len(matched),
         "priced_trade_count": len(net_pnls),
@@ -354,6 +385,8 @@ def _candidate_forward_metrics(
         "avg_net_pnl_pct": round(sum(net_pnls) / len(net_pnls), 4) if net_pnls else None,
         "profit_factor": profit_factor,
         "net_profit_factor": profit_factor,
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": bool(net_pnl_usds and negative <= 0 and positive > 0),
     }
 
 
@@ -459,6 +492,7 @@ def _candidate_position_metrics(
     positions: list[dict[str, Any]],
 ) -> dict[str, Any]:
     pnls: list[float] = []
+    pnl_usds: list[float] = []
     exact_outcome_count = 0
     normalized_direction = _normalize_direction(direction)
     for position in positions:
@@ -486,15 +520,21 @@ def _candidate_position_metrics(
         if row_has_raw_exact_contract(position):
             exact_outcome_count += 1
         pnls.append(net_pnl_pct)
-    positive = sum(value for value in pnls if value > 0)
-    negative = abs(sum(value for value in pnls if value < 0))
+        net_pnl_usd = _position_net_pnl_usd(position)
+        if net_pnl_usd is not None:
+            pnl_usds.append(net_pnl_usd)
+    positive = sum(value for value in pnl_usds if value > 0)
+    negative = abs(sum(value for value in pnl_usds if value < 0))
+    profit_factor = round(positive / negative, 4) if negative > 0 else None
     return {
         "closed_position_count": len(pnls),
         "exact_outcome_count": exact_outcome_count,
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
         "avg_net_pnl_pct": round(sum(pnls) / len(pnls), 4) if pnls else None,
-        "profit_factor": round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None),
-        "net_profit_factor": round(positive / negative, 4) if negative > 0 else (999.0 if positive > 0 else None),
+        "profit_factor": profit_factor,
+        "net_profit_factor": profit_factor,
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": bool(pnl_usds and negative <= 0 and positive > 0),
     }
 
 

@@ -133,14 +133,24 @@ class StrategyAuditTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
         self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
+        self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
+        self.forward_tracking_dir = os.path.join(self._tmp.name, "forward_tracking")
+        self.options_profit_state_dir = os.path.join(self._tmp.name, "options_profit")
+        self.profitability_lab_dir = os.path.join(self._tmp.name, "profitability_lab")
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
         self._env_patch = patch.dict(
             os.environ,
             {
                 "MARKET_DATA_DB_PATH": self.market_data_db_path,
+                "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                "OPTIONS_FORWARD_TRACKING_DIR": self.forward_tracking_dir,
+                "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
+                "OPTIONS_PROFITABILITY_LAB_DIR": self.profitability_lab_dir,
                 "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
                 "OPTIONS_RUN_MODE": "test",
+                "OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE": "0",
             },
             clear=False,
         )
@@ -2069,6 +2079,40 @@ class StrategyAuditTests(unittest.TestCase):
 
 
 class CalibrationSurfaceAuditTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.market_data_db_path = os.path.join(self._tmp.name, "market_data.db")
+        self.forward_ledger_db_path = os.path.join(self._tmp.name, "forward_tracking.db")
+        self.forward_tracking_dir = os.path.join(self._tmp.name, "forward_tracking")
+        self.options_profit_state_dir = os.path.join(self._tmp.name, "options_profit")
+        self.profitability_lab_dir = os.path.join(self._tmp.name, "profitability_lab")
+        mds._MEMORY_CACHE.clear()
+        mds._SCHEMA_READY.clear()
+        self._env_patch = patch.dict(
+            os.environ,
+            {
+                "MARKET_DATA_DB_PATH": self.market_data_db_path,
+                "FORWARD_OPTIONS_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                "FORWARD_OPTIONS_AUTHORITATIVE_LEDGER_DB_PATH": self.forward_ledger_db_path,
+                "OPTIONS_FORWARD_TRACKING_DIR": self.forward_tracking_dir,
+                "OPTIONS_PROFIT_STATE_DIR": self.options_profit_state_dir,
+                "OPTIONS_PROFITABILITY_LAB_DIR": self.profitability_lab_dir,
+                "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
+                "OPTIONS_RUN_MODE": "test",
+                "OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE": "0",
+            },
+            clear=False,
+        )
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
+        self._md_datetime_patch = patch.object(mds, "datetime", _StrategyAuditDateTime)
+        self._md_datetime_patch.start()
+        self.addCleanup(self._md_datetime_patch.stop)
+        self._expectancy_surface_patch = patch.object(oc, "_load_expectancy_surface_for_live", return_value=None)
+        self._expectancy_surface_patch.start()
+        self.addCleanup(self._expectancy_surface_patch.stop)
+
     def test_expectancy_surface_builds_hierarchical_levels(self):
         trades = [
             _make_calibration_trade(pnl_pct=25.0, market_regime="bullish", direction_score=74.0, quality_score=66.0),
@@ -2355,7 +2399,10 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             "quote_coverage_pct": 100.0,
             "priced_trade_count": 50,
             "unpriced_trade_count": 0,
-            "trades": [*[_trade("SPY", 12.0) for _ in range(25)], *[_trade("QQQ", -6.0) for _ in range(25)]],
+            "trades": [
+                *[_trade("SPY", -1.0 if idx == 0 else 12.0) for idx in range(25)],
+                *[_trade("QQQ", -6.0) for _ in range(25)],
+            ],
         }
         matrix = {
             "source": {
@@ -2489,7 +2536,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             "quote_coverage_pct": 100.0,
             "priced_trade_count": 30,
             "unpriced_trade_count": 0,
-            "trades": [dict(trade) for _ in range(30)],
+            "trades": [dict(trade, pnl_pct=-1.0, exit_reason="stop", directional_correct=False) if idx == 0 else dict(trade) for idx in range(30)],
             "preferred_evidence_source": {"status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS},
             "evidence_status": wfo.ARCHIVED_EXACT_INSUFFICIENT_STATUS,
         }
@@ -2564,7 +2611,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
             "nearest_contract_match_count": 25,
             "trades": [
                 *[
-                    _trade(trade_dates[idx], "SPY", 12.0, "exact_target_contract")
+                    _trade(trade_dates[idx], "SPY", -1.0 if idx == 0 else 12.0, "exact_target_contract")
                     for idx in range(25)
                 ],
                 *[
@@ -2624,7 +2671,7 @@ class CalibrationSurfaceAuditTests(unittest.TestCase):
                     for idx in range(25)
                 ],
                 *[
-                    _trade(trade_dates[idx + 25], "QQQ", 20.0, "nearest_listed_contract")
+                    _trade(trade_dates[idx + 25], "QQQ", -1.0 if idx == 0 else 20.0, "nearest_listed_contract")
                     for idx in range(25)
                 ],
             ],

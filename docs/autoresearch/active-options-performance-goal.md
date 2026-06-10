@@ -1,5 +1,7 @@
 # Active Options Multi-Lane Performance Goal
 
+> Retired for profitability strategy loops as of 2026-06-09. This broad operating prompt is still useful for product/runtime maintenance, but it is no longer the standing regular-options profitability objective because it can succeed without improving executable P&L. Use `docs/autoresearch/regular-options-goal.md` for clean-proof strategy work and `docs/autoresearch/fresh-executable-evidence-goal.md` for forward realized-P&L evidence collection.
+
 Use this prompt when running an end-to-end `/goal` loop to drastically improve performance across the active options system. This is a multi-lane operating goal, not a Lane A-only strategy loop.
 
 ## Objective

@@ -34,13 +34,13 @@ def _round(value: float | None, digits: int = 2) -> float | None:
     return round(float(value), digits)
 
 
-def _profit_factor(pnl_values: Iterable[float]) -> float:
+def _profit_factor(pnl_values: Iterable[float]) -> float | None:
     wins = [value for value in pnl_values if value > 0]
     losses = [value for value in pnl_values if value <= 0]
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
     if gross_loss <= 0:
-        return 999.0 if gross_win > 0 else 0.0
+        return None if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
 
 
@@ -70,6 +70,8 @@ def summarize_trade_subset(label: str, trades: list[dict], total_trades: int) ->
     profitable = [value for value in pnl_values if value > 0]
     directionally_correct = [trade for trade in trades if _is_truthy(trade.get("directional_correct"))]
     full_hits = [trade for trade in trades if str(trade.get("prediction_outcome") or "").lower() == "hit"]
+    gross_win = sum(value for value in pnl_values if value > 0)
+    gross_loss = abs(sum(value for value in pnl_values if value <= 0))
     avg_direction_score = (
         sum(_safe_number(trade.get("direction_score")) for trade in trades) / len(trades)
         if trades and _metric_present(trades, "direction_score")
@@ -84,6 +86,7 @@ def summarize_trade_subset(label: str, trades: list[dict], total_trades: int) ->
         "directional_accuracy_pct": _pct(len(directionally_correct), len(trades)),
         "full_hit_rate_pct": _pct(len(full_hits), len(trades)),
         "profit_factor": _profit_factor(pnl_values),
+        "no_loss_sample": bool(pnl_values and gross_loss <= 0 and gross_win > 0),
         "avg_pnl_pct": _round(sum(pnl_values) / len(pnl_values), 2) if pnl_values else 0.0,
         "median_pnl_pct": _round(median(pnl_values), 2) if pnl_values else 0.0,
         "avg_direction_score": _round(avg_direction_score, 1) if avg_direction_score is not None else None,
@@ -172,10 +175,10 @@ def _best_floor(floors: list[dict], baseline: dict, min_trades: int) -> dict | N
     dense = [
         item for item in floors
         if item["trades"] >= min_trades
-        and item["profit_factor"] >= baseline["profit_factor"]
+        and float(item.get("profit_factor") or 0.0) >= float(baseline.get("profit_factor") or 0.0)
         and item["avg_pnl_pct"] >= baseline["avg_pnl_pct"]
         and (
-            item["profit_factor"] > baseline["profit_factor"]
+            float(item.get("profit_factor") or 0.0) > float(baseline.get("profit_factor") or 0.0)
             or item["avg_pnl_pct"] > baseline["avg_pnl_pct"]
             or item["win_rate_pct"] > baseline["win_rate_pct"]
         )
@@ -286,7 +289,7 @@ def build_metric_truth_report(
     risk_flags: list[str] = []
     recommendations: list[str] = []
 
-    if authoritative_overall["profit_factor"] < 1.0:
+    if float(authoritative_overall.get("profit_factor") or 0.0) < 1.0:
         risk_flags.append("Overall profit factor is below 1.0, so the current replay is not profitable after losses.")
     if authoritative_overall["avg_pnl_pct"] <= 0:
         risk_flags.append("Average trade P&L is not positive, so the current metric stack is not producing positive expectancy.")

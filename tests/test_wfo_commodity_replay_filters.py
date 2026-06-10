@@ -119,7 +119,7 @@ class WFOCommodityReplayFilterTests(unittest.TestCase):
         self.assertEqual(report["overall_status"], "block")
         self.assertFalse(report["scenario_results"]["full_window"]["passes_quality_bar"])
         self.assertFalse(report["authoritative_profitability_gate"]["passed"])
-        self.assertIn("Exact-contract PF is non-finite.", report["authoritative_profitability_gate"]["blockers"])
+        self.assertIn("Exact-contract PF is 0.00, below 1.05.", report["authoritative_profitability_gate"]["blockers"])
 
     def test_ai_commodity_imported_replay_blocks_when_shared_opra_dates_are_missing(self):
         class FakeStore:
@@ -224,7 +224,8 @@ class WFOCommodityReplayFilterTests(unittest.TestCase):
         self.assertEqual(summary["profit_factor_status"], "has_losses")
 
         no_loss_summary = wfo._comparison_trade_subset_summary([{"pnl_pct": 5.0}])
-        self.assertEqual(no_loss_summary["profit_factor"], 5.0)
+        self.assertIsNone(no_loss_summary["profit_factor"])
+        self.assertTrue(no_loss_summary["no_loss_sample"])
         self.assertEqual(no_loss_summary["profit_factor_status"], "no_losses")
 
 

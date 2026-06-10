@@ -39,7 +39,7 @@ def _profit_factor(values: list[float]) -> float | None:
     gross_profit = sum(value for value in values if value > 0)
     gross_loss = -sum(value for value in values if value < 0)
     if gross_loss <= 0:
-        return None if gross_profit <= 0 else 999.0
+        return None
     return round(gross_profit / gross_loss, 2)
 
 
@@ -52,6 +52,7 @@ def _metrics(trades: list[dict[str, Any]]) -> dict[str, Any]:
         "trades": count,
         "avg_pnl_pct": round(sum(values) / count, 2) if count else 0.0,
         "profit_factor": _profit_factor(values),
+        "no_loss_sample": bool(values and not losers and winners),
         "win_rate_pct": round(len(winners) / count * 100, 1) if count else 0.0,
         "loss_count": len(losers),
         "avg_loss_pct": round(sum(losers) / len(losers), 2) if losers else 0.0,

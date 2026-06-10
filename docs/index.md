@@ -154,6 +154,8 @@ These are the living docs for the current worktree:
   - generated paper-shortlist release gate for fresh executable Tier A lane matches, with bridge blockers and live-prohibited states
 - `docs/regular-options-fresh-evidence-loop.md`
   - generated pending-candidate to fill-attempt/tracked-link/exact-realized-P&L readback for the regular options paper gate
+- `docs/fresh-executable-evidence-defect-report-2026-06-09.md`
+  - named-gate defect report for the still-empty fresh executable realized-P&L funnel
 - `docs/regular-options-candidate-outcome-ledger.md`
   - generated unified next-evidence ledger across fresh candidates, paper shortlist, profit-capture queue, open-risk governor, and suggested-trade review blockers
 - `docs/regular-options-stale-candidate-archive.md`
@@ -180,6 +182,8 @@ These are the living docs for the current worktree:
   - generated read-only open-risk resolution review plan that turns live-exact and display-only open-risk blockers into row-specific fresh executable review work without broker, DB, scanner, stop, sizing, proof, or promotion changes
 - `docs/regular-options-risk-budget-sizing-replay.md`
   - generated read-only risk-budget sizing replay over priced regular-options research/backfill rows, separating paper-shadow/tiered research P&L from live size-tier permission
+- `docs/wfo-friction-replay-diff-2026-06-09.md`
+  - deterministic one-sleeve WFO-style before/after diff showing that optimizer-selected parameters change once slippage and per-contract fees are charged
 - `docs/regular-options-lane-outcome-replay.md`
   - generated read-only lane-outcome coverage replay that separates active regular lanes with exact priced monthly outcomes from no-signal or no-exact-candidate lanes without synthesizing P&L
 - `docs/regular-options-lane-scan-hypothesis-repair.md`
@@ -237,7 +241,11 @@ These are the living docs for the current worktree:
 - `docs/autoresearch/code-audit-remediation-goal.md`
   - reusable six-subagent goal prompt for code audit remediation and long-term fixes
 - `docs/autoresearch/active-options-performance-goal.md`
-  - reusable multi-lane goal prompt for improving Trading Desk runtime, profitability, live-scan, proof, AI commodity, and architecture performance
+  - retired for profitability strategy loops; still usable for broad product/runtime maintenance
+- `docs/autoresearch/regular-options-goal.md`
+  - Clean-Proof Goal v2 for regular-options strategy loops under the frozen evaluator and executable-P&L progress score
+- `docs/autoresearch/fresh-executable-evidence-goal.md`
+  - forward evidence goal for collecting fresh exact realized-P&L rows and feeding realized cohort numbers back into strategy prompts
 - `docs/autoresearch/profitability-paper-gate-goal.md`
   - reusable six-sprint goal prompt for finishing the profitability paper-gate operator workflow with six-subagent review gates
 - `docs/autoresearch/monthly-all-lanes-profitability-goal.md`

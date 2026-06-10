@@ -435,6 +435,85 @@ class ForwardOptionsLedgerTests(unittest.TestCase):
         self.assertEqual(eligible_events[0]["eligibility_status"], "eligible")
         self.assertEqual(eligible_events[0]["eligibility_blockers"], [])
 
+    def test_unknown_evidence_class_routes_to_quarantine_not_live(self):
+        record_forward_snapshot(
+            scan_snapshot={
+                "picks": [
+                    {
+                        "ticker": "SPY",
+                        "direction": "call",
+                        "option_type": "call",
+                        "contract_symbol": "SPY260417C00560000",
+                        "expiry": "2026-04-17",
+                        "strike": 560.0,
+                        "entry_date": "2026-04-01",
+                        "quote_time_et": "2026-04-01T09:45:00-04:00",
+                        "quote_basis": "mid",
+                        "selection_source": "live_chain_exact_contract",
+                        "promotion_class": "promotable_exact_contract",
+                        "bid": 4.9,
+                        "ask": 5.1,
+                    }
+                ],
+                "policy_applied": True,
+                "policy": {
+                    "truth_source": "historical_imported_daily",
+                    "promotion_status": "watch",
+                },
+                "playbook": {"id": "short_term"},
+            },
+            reviewed_positions=[],
+            tracked_positions=[],
+            source_label="api_scan_auto",
+            db_path=self.db_path,
+        )
+
+        events = list_forward_scan_pick_events(db_path=self.db_path)
+        self.assertEqual(events[0]["evidence_class"], "quarantine_unknown")
+        self.assertEqual(events[0]["eligibility_status"], "ineligible")
+        self.assertIn("non_live_evidence_class", events[0]["eligibility_blockers"])
+
+    def test_unparseable_entry_and_quote_dates_are_ineligible(self):
+        with patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
+            record_forward_snapshot(
+                scan_snapshot={
+                    "picks": [
+                        {
+                            "ticker": "SPY",
+                            "direction": "call",
+                            "option_type": "call",
+                            "contract_symbol": "SPY260417C00560000",
+                            "expiry": "2026-04-17",
+                            "strike": 560.0,
+                            "entry_date": "not-a-date",
+                            "quote_time_et": "also-not-a-date",
+                            "quote_basis": "mid",
+                            "selection_source": "live_chain_exact_contract",
+                            "promotion_class": "promotable_exact_contract",
+                            "bid": 4.9,
+                            "ask": 5.1,
+                        }
+                    ],
+                    "policy_applied": True,
+                    "policy": {
+                        "truth_source": "historical_imported_daily",
+                        "promotion_status": "watch",
+                    },
+                    "playbook": {"id": "short_term"},
+                    "evidence_class": "live_production",
+                    "run_mode": "live",
+                },
+                reviewed_positions=[],
+                tracked_positions=[],
+                source_label="api_scan_auto",
+                db_path=self.db_path,
+            )
+
+        events = list_forward_scan_pick_events(db_path=self.db_path)
+        self.assertEqual(events[0]["evidence_class"], "live_production")
+        self.assertEqual(events[0]["eligibility_status"], "ineligible")
+        self.assertIn("unparseable_entry_date", events[0]["eligibility_blockers"])
+
     def test_legacy_blank_eligibility_status_does_not_count_as_eligible(self):
         with patch("forward_options_ledger._trusted_truth_horizon", return_value=date(2026, 4, 1)):
             record_forward_snapshot(

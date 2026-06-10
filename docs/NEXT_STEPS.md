@@ -2,6 +2,22 @@
 
 Last updated: 2026-06-09
 
+## Current Sprint Blockers From June 9 Audit
+
+Current read:
+- metric truth repairs are implemented: WFO charges slippage/commission, expiry settlement uses expiry-day close, unknown evidence quarantines, PF sentinels are removed, headline win rate separates full hits from directional accuracy, and dormant lenient quote/leg-fee footguns are defused.
+- WFO friction replay diff is documented at `docs/wfo-friction-replay-diff-2026-06-09.md`.
+- fresh executable evidence is still blocked at `0` exact realized P&L rows and `0` promotion-ready rows; the named defect report is `docs/fresh-executable-evidence-defect-report-2026-06-09.md`.
+- the specific fresh-evidence gate is `scripts/build_regular_options_fresh_evidence_loop.py`: `summary.entry_evidence_status_counts.fill_attempt_missing=28`, `summary.evidence_bridge_status_counts.non_executable_entry_blocked=20`, `summary.evidence_bridge_status_counts.paper_probation_exact_entry_required=8`, and `summary.evidence_bridge_status_counts.exact_exit_pnl_required=1`.
+- the linked exact-entry row needing exit evidence is QQQ `position_id=537`, with `evidence_bridge_status=exact_exit_pnl_required` and `realized_pnl_status=missing_realized_pnl`.
+- open-risk remains market-window blocked by `scripts/build_regular_options_open_risk_resolution_plan.py`: QQQ `id=537` needs a fresh executable monitor/close decision, SBUX `id=104` needs a display-only SELL executable review, and the readback remains `open_risk_resolution_plan_ready_blocked_for_market_window`.
+
+Next actions:
+
+1. During the next regular U.S. options quote window, refresh executable review for QQQ `id=537` and SBUX `id=104`; do not use stale, display-only, midpoint, daily/EOD, or paper marks.
+2. Collect exact OPRA/NBBO exit evidence for QQQ `id=537`, rerun `scripts/build_regular_options_fresh_evidence_loop.py`, then rerun open-risk, monthly profitability, and gateboard readbacks.
+3. Resume fresh-evidence collection until there are at least `20` exact realized rows, or keep the named-gate defect report current if the funnel remains blocked after 10 trading sessions.
+
 ## Documentation Hygiene
 
 Current read:

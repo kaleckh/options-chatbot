@@ -25,21 +25,22 @@ class LaneAGateExitSweepTests(unittest.TestCase):
         tmp = WorkspaceTempDir(prefix="lane-a-gate")
         self.addCleanup(tmp.cleanup)
         run_path = Path(tmp.name) / "lane_a_run.json"
-        trades = [
-            {
-                "date": "2026-05-01",
-                "ticker": "SPY",
-                "entry_contract_resolution": "exact_target_contract",
-                "pnl_pct": 10.0,
-                "net_debit": 4.0,
-                "spread_width": 10.0,
-                "signal_ret5": -1.5,
-                "signal_ret20": 5.0,
-                "direction_score": 80.0,
-                "quality_score": 70.0,
-            }
-            for _ in range(5)
-        ]
+        trades = []
+        for idx in range(5):
+            trades.append(
+                {
+                    "date": "2026-05-01",
+                    "ticker": "SPY",
+                    "entry_contract_resolution": "exact_target_contract",
+                    "pnl_pct": -1.0 if idx == 0 else 10.0,
+                    "net_debit": 4.0,
+                    "spread_width": 10.0,
+                    "signal_ret5": -1.5,
+                    "signal_ret20": 5.0,
+                    "direction_score": 80.0,
+                    "quality_score": 70.0,
+                }
+            )
         run_path.write_text(
             json.dumps({"playbook": LANE_A_PLAYBOOK, "trades": trades}),
             encoding="utf8",

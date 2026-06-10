@@ -24,6 +24,7 @@ logging.basicConfig(
 )
 
 try:
+    from auto_scan_metrics import build_perf_snapshot_from_predictions
     from options_chatbot import (
         DEFAULT_WATCHLIST,
         roll_forward_daily_picks,
@@ -96,6 +97,7 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     Returns None if nothing was graded today.
     """
     preds = _load_predictions()
+    return build_perf_snapshot_from_predictions(preds, date_str)
     today_graded = [
         p for p in preds
         if p.get("graded_date", "")[:10] == date_str
@@ -113,8 +115,10 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     # New-pick-only stats (exclude rolled picks for unbiased signal quality)
     new_graded   = [p for p in today_graded if p.get("pick_status", "new") == "new"]
     n_new        = len(new_graded)
-    new_dir_wins = sum(1 for p in new_graded if p.get("outcome") in ("hit", "directional"))
-    new_win_rate = round(new_dir_wins / n_new * 100, 1) if n_new else None
+    new_full_hits = sum(1 for p in new_graded if p.get("outcome") == "hit")
+    new_directional_wins = sum(1 for p in new_graded if p.get("outcome") in ("hit", "directional"))
+    new_win_rate = round(new_full_hits / n_new * 100, 1) if n_new else None
+    new_directional_accuracy = round(new_directional_wins / n_new * 100, 1) if n_new else None
 
     # Average estimated option gain
     gains = [
@@ -130,6 +134,10 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     low_score  = [p for p in today_graded if _dir_score(p) <  80]
     def _win_rate(lst):
         g = [p for p in lst if p.get("outcome")]
+        return round(sum(1 for p in g if p["outcome"] == "hit") / len(g) * 100, 1) if g else None
+
+    def _directional_accuracy(lst):
+        g = [p for p in lst if p.get("outcome")]
         return round(sum(1 for p in g if p["outcome"] in ("hit", "directional")) / len(g) * 100, 1) if g else None
 
     # Streak: look at all-time graded picks ordered by graded_date
@@ -140,7 +148,7 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     streak = 0
     streak_type = None
     for p in reversed(all_graded):
-        result = "win" if p["outcome"] in ("hit", "directional") else "loss"
+        result = "win" if p["outcome"] == "hit" else "loss"
         if streak_type is None:
             streak_type = result
         if result == streak_type:
@@ -151,24 +159,31 @@ def _build_perf_snapshot(date_str: str) -> dict | None:
     # All-time stats
     all_graded_count = len(all_graded)
     all_dir_wins = sum(1 for p in all_graded if p.get("outcome") in ("hit", "directional"))
-    all_time_win_rate = round(all_dir_wins / all_graded_count * 100, 1) if all_graded_count else None
+    all_full_hits = sum(1 for p in all_graded if p.get("outcome") == "hit")
+    all_time_win_rate = round(all_full_hits / all_graded_count * 100, 1) if all_graded_count else None
+    all_time_directional_accuracy = round(all_dir_wins / all_graded_count * 100, 1) if all_graded_count else None
 
     return {
         "date":                  date_str,
         "picks_graded":          n,
         "directional_wins":      dir_wins,
         "full_target_hits":      wins,
-        "win_rate_pct":          round(dir_wins / n * 100, 1),
+        "win_rate_pct":          round(wins / n * 100, 1),
+        "directional_accuracy_pct": round(dir_wins / n * 100, 1),
         "avg_est_option_gain_pct": avg_gain,
         "high_score_win_rate":   _win_rate(high_score),   # Dir Score >= 80
         "low_score_win_rate":    _win_rate(low_score),    # Dir Score < 80
+        "high_score_directional_accuracy_pct": _directional_accuracy(high_score),
+        "low_score_directional_accuracy_pct": _directional_accuracy(low_score),
         "current_streak":        streak,
         "current_streak_type":   streak_type,             # "win" or "loss"
         "all_time_win_rate_pct": all_time_win_rate,
+        "all_time_directional_accuracy_pct": all_time_directional_accuracy,
         "all_time_graded":       all_graded_count,
         # New-pick-only hit rate (excludes rolled picks — cleaner signal quality measure)
         "new_picks_graded":      n_new,
         "new_pick_win_rate_pct": new_win_rate,
+        "new_pick_directional_accuracy_pct": new_directional_accuracy,
     }
 
 try:

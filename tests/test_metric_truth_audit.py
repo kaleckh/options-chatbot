@@ -72,8 +72,10 @@ class MetricTruthAuditTests(unittest.TestCase):
                 {"direction_score": 48, "quality_score": 50, "tech_score": 58, "ev": 4, "pnl_pct": -4, "directional_correct": False},
                 {"direction_score": 61, "quality_score": 55, "tech_score": 66, "ev": 7, "pnl_pct": 8, "directional_correct": True},
                 {"direction_score": 64, "quality_score": 58, "tech_score": 68, "ev": 9, "pnl_pct": 7, "directional_correct": True},
+                {"direction_score": 66, "quality_score": 59, "tech_score": 69, "ev": 10, "pnl_pct": -10, "directional_correct": False},
                 {"direction_score": 82, "quality_score": 70, "tech_score": 85, "ev": 18, "pnl_pct": 15, "directional_correct": True},
                 {"direction_score": 86, "quality_score": 72, "tech_score": 87, "ev": 20, "pnl_pct": 14, "directional_correct": True},
+                {"direction_score": 88, "quality_score": 74, "tech_score": 88, "ev": 21, "pnl_pct": -1, "directional_correct": False},
             ],
         }
 
@@ -120,7 +122,8 @@ class MetricTruthAuditTests(unittest.TestCase):
         report = audit.build_metric_truth_report(result, min_trades=1)
 
         self.assertEqual(report["overall"]["directional_accuracy_pct"], 50.0)
-        self.assertEqual(report["overall"]["profit_factor"], 999.0)
+        self.assertIsNone(report["overall"]["profit_factor"])
+        self.assertTrue(report["overall"]["no_loss_sample"])
 
     def test_auto_tune_uses_miscalibrated_direction_score_floor(self):
         report = {

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 import supervised_scan as ss
 
@@ -58,6 +60,11 @@ def _bullish_pullback_pick(**overrides):
 
 
 class TrackedWinnerPrimaryLaneTests(unittest.TestCase):
+    def setUp(self):
+        self._env_patch = patch.dict(os.environ, {"OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE": "0"}, clear=False)
+        self._env_patch.start()
+        self.addCleanup(self._env_patch.stop)
+
     def test_omitted_playbook_uses_bullish_pullback_routing_fallback(self):
         captured: dict[str, object] = {}
 

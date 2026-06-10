@@ -23,7 +23,7 @@ class RunProfitabilityHypothesisSweepTests(unittest.TestCase):
                     "date": f"2025-01-{idx + 1:02d}",
                     "ticker": "SPY",
                     "entry_contract_resolution": "exact_target_contract",
-                    "net_pnl_pct": 10,
+                    "net_pnl_pct": -5 if idx == 0 else 10,
                     "net_debit": 4,
                     "spread_width": 10,
                     "tech_score": 90,

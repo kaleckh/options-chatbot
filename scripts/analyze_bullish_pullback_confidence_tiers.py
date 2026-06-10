@@ -132,12 +132,12 @@ def _pnl(trade: dict[str, Any]) -> float:
     return _safe_float(trade.get("pnl_pct") if trade.get("pnl_pct") is not None else trade.get("net_pnl_pct"))
 
 
-def _profit_factor(values: Iterable[float]) -> float:
+def _profit_factor(values: Iterable[float]) -> float | None:
     rows = list(values)
     gross_win = sum(value for value in rows if value > 0)
     gross_loss = abs(sum(value for value in rows if value <= 0))
     if gross_loss <= 0:
-        return 999.0 if gross_win > 0 else 0.0
+        return None if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
 
 
@@ -163,6 +163,7 @@ def metrics(trades: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "trade_count": len(rows),
         "symbol_count": len({str(trade.get("ticker") or "").upper() for trade in rows}),
         "profit_factor": _profit_factor(values),
+        "no_loss_sample": bool(values and not losses and wins),
         "avg_pnl_pct": round(sum(values) / len(values), 2) if values else 0.0,
         "median_pnl_pct": round(sorted(values)[len(values) // 2], 2) if values else 0.0,
         "win_rate_pct": round(len(wins) / max(len(rows), 1) * 100.0, 1) if rows else 0.0,

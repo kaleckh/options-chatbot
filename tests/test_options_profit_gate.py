@@ -113,8 +113,49 @@ class OptionsProfitGateTests(unittest.TestCase):
         self.assertEqual(metrics["avg_gross_pnl_pct"], 1.0)
         self.assertEqual(metrics["avg_net_pnl_pct"], -1.56)
         self.assertEqual(metrics["net_profit_factor"], 0.0)
+        self.assertEqual(metrics["profit_factor_basis"], "net_realized_pnl_usd")
+        self.assertFalse(metrics["no_loss_sample"])
         self.assertAlmostEqual(metrics["gross_realized_pnl_usd"], 1.0, places=2)
         self.assertAlmostEqual(metrics["net_realized_pnl_usd"], -1.6, places=2)
+
+    def test_realized_position_metrics_reports_no_loss_sample_without_pf_sentinel(self):
+        metrics = _realized_position_metrics(
+            [
+                self._live_proof_position(
+                    entry_execution_price=1.0,
+                    exit_execution_price=1.5,
+                    contracts=1,
+                    source_pick_snapshot={"entry_execution_price": 1.0},
+                )
+            ]
+        )
+
+        self.assertIsNone(metrics["net_profit_factor"])
+        self.assertTrue(metrics["no_loss_sample"])
+        self.assertEqual(metrics["profit_factor_basis"], "net_realized_pnl_usd")
+
+    def test_realized_position_metrics_uses_usd_profit_factor(self):
+        metrics = _realized_position_metrics(
+            [
+                self._live_proof_position(
+                    net_pnl_pct=90.0,
+                    gross_pnl_pct=90.0,
+                    net_pnl_usd=9.0,
+                    gross_pnl_usd=9.0,
+                ),
+                self._live_proof_position(
+                    contract_symbol="SPY240101C00510000",
+                    net_pnl_pct=-10.0,
+                    gross_pnl_pct=-10.0,
+                    net_pnl_usd=-30.0,
+                    gross_pnl_usd=-30.0,
+                ),
+            ]
+        )
+
+        self.assertEqual(metrics["net_profit_factor"], 0.3)
+        self.assertEqual(metrics["positive_sum_usd"], 9.0)
+        self.assertEqual(metrics["negative_sum_usd"], 30.0)
 
     def test_realized_position_metrics_excludes_missing_proof_eligible_rows(self):
         metrics = _realized_position_metrics(
@@ -213,6 +254,8 @@ class OptionsProfitGateTests(unittest.TestCase):
                     contract_symbol="SPY240101C00510000",
                     net_pnl_pct=-5.0,
                     gross_pnl_pct=-5.0,
+                    net_pnl_usd=-5.0,
+                    gross_pnl_usd=-5.0,
                 ),
             ]
         )
@@ -492,6 +535,16 @@ class OptionsProfitGateTests(unittest.TestCase):
                 net_pnl_usd=100.0,
                 gross_pnl_usd=100.0,
                 source_pick_snapshot={"entry_execution_price": 2.0},
+            ),
+            self._live_proof_position(
+                contract_symbol="SPY240101C00510000",
+                entry_execution_price=2.0,
+                exit_execution_price=1.6,
+                net_pnl_pct=-20.0,
+                gross_pnl_pct=-20.0,
+                net_pnl_usd=-40.0,
+                gross_pnl_usd=-40.0,
+                source_pick_snapshot={"entry_execution_price": 2.0},
             )
         ]
 
@@ -541,11 +594,15 @@ class OptionsProfitGateTests(unittest.TestCase):
             self._live_proof_position(
                 net_pnl_pct=20.0,
                 gross_pnl_pct=20.0,
+                net_pnl_usd=80.0,
+                gross_pnl_usd=80.0,
             ),
             self._live_proof_position(
                 contract_symbol="SPY240101C00510000",
                 net_pnl_pct=-25.0,
                 gross_pnl_pct=-25.0,
+                net_pnl_usd=-100.0,
+                gross_pnl_usd=-100.0,
             ),
         ]
 

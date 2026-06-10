@@ -304,9 +304,9 @@ def scan_profitability_assessment_lenient(
     quote_freshness_status: Any,
 ) -> tuple[str, list[str], float]:
     """
-    Like scan_profitability_assessment but returns a weight (0.0-1.0) for
-    best-effort evidence. Events missing only non-critical metadata count
-    at reduced weight rather than being fully ineligible.
+    Deprecated compatibility wrapper for older callers.
+
+    Stale, unknown, or research-only quote evidence fails closed with weight 0.
     """
     status, blockers = scan_profitability_assessment(
         contract_symbol=contract_symbol,
@@ -317,6 +317,7 @@ def scan_profitability_assessment_lenient(
     )
     if not blockers:
         return ELIGIBLE_STATUS, blockers, 1.0
+    return INELIGIBLE_STATUS, blockers, 0.0
 
     # Non-critical blockers that allow partial evidence credit
     non_critical = {
@@ -326,7 +327,7 @@ def scan_profitability_assessment_lenient(
     critical_blockers = [b for b in blockers if b not in non_critical and not b.startswith("research_only_quote_basis:")]
     if not critical_blockers:
         # Only non-critical issues — count at 50% weight
-        return "best_effort_eligible", blockers, 0.5
+        return INELIGIBLE_STATUS, blockers, 0.0
     return INELIGIBLE_STATUS, blockers, 0.0
 
 
@@ -619,7 +620,7 @@ def vertical_spread_pnl(
 
     # Fees: 2 legs on entry, 2 legs on exit = 4 sides total
     entry_sides = 2 if include_entry_fee else 0
-    exit_sides = (1 if close_as_single_order else 2) if include_exit_fee else 0
+    exit_sides = 2 if include_exit_fee else 0
     entry_fee = commission_total_usd(
         contracts=contracts, sides=entry_sides,
         commission_per_contract_usd=commission_per_contract_usd,

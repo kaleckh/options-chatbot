@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import unittest
+import math
+from types import SimpleNamespace
 from datetime import datetime, timedelta
 from unittest.mock import patch
+
+import numpy as np
+import pandas as pd
 
 import wfo_optimizer as wfo
 
@@ -12,6 +17,109 @@ def _trade_date(offset_days: int) -> str:
 
 
 class WFOOptimizerCalibrationTests(unittest.TestCase):
+    def test_model_window_charges_commission_and_slippage(self):
+        prices = pd.Series(
+            [100 + i * 0.25 + math.sin(i / 2) * 2 for i in range(160)],
+            index=pd.date_range("2026-01-01", periods=160, freq="B"),
+        )
+
+        result = wfo._simulate_window(
+            prices,
+            weights={"iv_percentile": 0.4, "delta": 0.35, "dte": 0.25},
+            dte_at_entry=10,
+            stop_loss_pct=50,
+            profit_target_pct=100,
+            delta_target=0.3,
+            min_confidence=0,
+            min_ev_pct=-100,
+            entry_momentum=0.0,
+            time_exit_pct=50,
+            entry_slippage_pct=1.0,
+            exit_slippage_pct=1.0,
+        )
+
+        self.assertGreater(result["n_trades"], 0)
+        trade = result["trades"][0]
+        self.assertEqual(trade["fee_total_usd"], 1.3)
+        self.assertGreater(trade["entry_px"], trade["entry_model_mark_px"])
+        self.assertLess(trade["net_pnl_pct"], trade["gross_pnl_pct"])
+        self.assertIn("model_bid", trade["exit_fill_basis"])
+        self.assertEqual(result["profit_factor_basis"], "net_pnl_usd")
+
+    def test_sharpe_has_no_small_sample_sentinel_and_does_not_scale_by_trade_count(self):
+        self.assertIsNone(wfo._sharpe([1.0, -1.0, 1.0, -1.0]))
+        short = wfo._sharpe([1.0, 2.0, 1.0, 2.0, 1.0, 2.0])
+        long = wfo._sharpe([1.0, 2.0] * 30)
+        self.assertIsNotNone(short)
+        self.assertIsNotNone(long)
+        assert short is not None and long is not None
+        self.assertLess(abs(long - short), 5.0)
+
+    def test_imported_expiry_settlement_uses_expiry_day_close_not_next_session(self):
+        dates = pd.date_range("2026-01-01", periods=10, freq="D")
+        prices = np.array([100, 101, 102, 103, 104, 104, 104, 105, 50, 49], dtype=float)
+        expiry = datetime(2026, 1, 8).date()
+        entry_quote = SimpleNamespace(
+            contract_symbol="SPY260108C00100000",
+            expiry=expiry.isoformat(),
+            strike=100.0,
+            bid=0.9,
+            ask=1.0,
+            last=0.95,
+            price_basis="bid_ask",
+            as_of_utc="2026-01-01T15:00:00Z",
+            quote_minute_et=600,
+        )
+        expiry_quote = SimpleNamespace(
+            contract_symbol="SPY260108C00100000",
+            expiry=expiry.isoformat(),
+            strike=100.0,
+            bid=5.0,
+            ask=5.1,
+            last=5.05,
+            price_basis="bid_ask",
+            as_of_utc="2026-01-08T20:55:00Z",
+            quote_minute_et=955,
+        )
+
+        class _Store:
+            def find_entry_quote_for_contract(self, **kwargs):
+                return entry_quote
+
+            def get_closing_quote(self, *, quote_date_et, **kwargs):
+                return expiry_quote if quote_date_et <= expiry else None
+
+        result = wfo._simulate_trade_outcome_imported(
+            store=_Store(),
+            ticker="SPY",
+            dates=dates,
+            prices=prices,
+            i=0,
+            trade_type="call",
+            hv30=0.2,
+            delta_target=0.3,
+            dte_at_entry=7,
+            stop_loss_pct=100,
+            profit_target_pct=10000,
+            time_exit_pct=200,
+            trailing_profit_pct=10000,
+            trailing_giveback_pct=0,
+            _rsi14=np.full(len(prices), 50.0),
+            _macd=np.zeros(len(prices)),
+            _sma20=np.full(len(prices), 100.0),
+            _sma50=np.full(len(prices), 100.0),
+            tech_at_entry=50.0,
+            entry_S0=100.0,
+            archived_contract_symbol="SPY260108C00100000",
+            pricing_lane="pessimistic",
+        )
+
+        self.assertTrue(result["priced"])
+        self.assertEqual(result["exit_reason"], "expired")
+        self.assertEqual(result["exit_stock_px"], 105.0)
+        self.assertEqual(result["exit_day_idx"], 7)
+        self.assertEqual(result["exit_px"], 5.0)
+
     def test_selection_calibration_summary_separates_dense_and_sparse(self):
         trades = [
             {

@@ -43,13 +43,17 @@ def _pnl_values(trades: Iterable[dict[str, Any]], *, slippage_pct_per_side: floa
     return [_safe_float(trade.get("pnl_pct") or trade.get("net_pnl_pct")) - penalty for trade in trades]
 
 
-def _profit_factor(values: Iterable[float]) -> float:
+def _profit_factor(values: Iterable[float]) -> float | None:
     rows = list(values)
     gross_win = sum(value for value in rows if value > 0)
     gross_loss = abs(sum(value for value in rows if value <= 0))
     if gross_loss <= 0:
-        return 999.0 if gross_win > 0 else 0.0
+        return None if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
+
+
+def _profit_factor_is_defined(metrics: dict[str, Any]) -> bool:
+    return metrics.get("profit_factor") is not None
 
 
 def _max_drawdown_pct(values: list[float]) -> float:
@@ -81,6 +85,7 @@ def _metrics(
         "share_of_total_pct": round(len(rows) / max(denominator, 1) * 100.0, 1) if denominator else 0.0,
         "win_rate_pct": round(len(wins) / max(len(rows), 1) * 100.0, 1) if rows else 0.0,
         "profit_factor": _profit_factor(pnls),
+        "no_loss_sample": bool(pnls and not losses and wins),
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 2) if pnls else 0.0,
         "median_pnl_pct": round(sorted(pnls)[len(pnls) // 2], 2) if pnls else 0.0,
         "gross_win": round(sum(wins), 2),
@@ -126,7 +131,9 @@ def _rolling_windows(
             blockers.append("unpriced_test_candidates_present")
         if test_metrics["trades"] < int(min_exact_test_trades):
             blockers.append("exact_test_trade_count_below_floor")
-        if test_metrics["profit_factor"] < 1.0:
+        if not _profit_factor_is_defined(test_metrics):
+            blockers.append("exact_test_profit_factor_undefined")
+        elif float(test_metrics["profit_factor"]) < 1.0:
             blockers.append("exact_test_profit_factor_below_1")
         if test_metrics["avg_pnl_pct"] <= 0:
             blockers.append("exact_test_avg_pnl_not_positive")
@@ -174,10 +181,14 @@ def _remove_key_report(trades: list[dict[str, Any]], key_fn, *, label: str, limi
                 "removed_trades": len(grouped),
                 "removed_metrics": group_metrics,
                 "remaining_metrics": kept_metrics,
-                "remaining_pf_delta": round(kept_metrics["profit_factor"] - baseline_pf, 2),
+                "remaining_pf_delta": (
+                    round(float(kept_metrics["profit_factor"]) - float(baseline_pf), 2)
+                    if kept_metrics.get("profit_factor") is not None and baseline_pf is not None
+                    else None
+                ),
             }
         )
-    rows.sort(key=lambda row: (row["remaining_metrics"]["profit_factor"], -row["removed_trades"]))
+    rows.sort(key=lambda row: (float(row["remaining_metrics"].get("profit_factor") or 0.0), -row["removed_trades"]))
     return rows[:limit]
 
 
@@ -244,7 +255,9 @@ def build_intraday_robustness_report(
     exact_metrics = _metrics(exact_trades)
     if exact_metrics["trades"] < 100:
         blockers.append("exact_trade_count_below_100_target")
-    if exact_metrics["profit_factor"] < 1.0:
+    if not _profit_factor_is_defined(exact_metrics):
+        blockers.append("exact_profit_factor_undefined")
+    elif float(exact_metrics["profit_factor"]) < 1.0:
         blockers.append("exact_profit_factor_below_1")
     if exact_metrics["avg_pnl_pct"] <= 0:
         blockers.append("exact_avg_pnl_not_positive")

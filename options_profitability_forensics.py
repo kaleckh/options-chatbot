@@ -31,14 +31,21 @@ def _round(value: float | None, digits: int = 2) -> float | None:
     return round(float(value), digits)
 
 
-def _profit_factor(pnl_values: Iterable[float]) -> float:
-    wins = [value for value in pnl_values if value > 0]
-    losses = [value for value in pnl_values if value <= 0]
+def _profit_factor(pnl_values: Iterable[float]) -> float | None:
+    values = list(pnl_values)
+    if not values:
+        return 0.0
+    wins = [value for value in values if value > 0]
+    losses = [value for value in values if value < 0]
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
     if gross_loss <= 0:
-        return 999.0 if gross_win > 0 else 0.0
+        return None if gross_win > 0 else 0.0
     return round(gross_win / gross_loss, 2)
+
+
+def _pf_sort_value(value: Any) -> float:
+    return _safe_number(value, 0.0)
 
 
 def _normalize_side(value: Any) -> str:
@@ -169,6 +176,8 @@ def _summarize_trade_subset(
         if trades
         else None
     )
+    gross_win = sum(value for value in pnl_values if value > 0)
+    gross_loss = abs(sum(value for value in pnl_values if value < 0))
     return {
         "group": category,
         "category": category,
@@ -179,6 +188,7 @@ def _summarize_trade_subset(
         "win_rate_pct": _pct(len(profitable), len(trades)),
         "directional_accuracy_pct": _pct(len(directionally_correct), len(trades)),
         "profit_factor": _profit_factor(pnl_values),
+        "no_loss_sample": bool(pnl_values and gross_loss <= 0 and gross_win > 0),
         "avg_pnl_pct": _round(sum(pnl_values) / len(pnl_values), 2) if pnl_values else 0.0,
         "median_pnl_pct": _round(median(pnl_values), 2) if pnl_values else 0.0,
         "avg_direction_score": _round(avg_direction_score, 1) if avg_direction_score is not None else None,
@@ -195,8 +205,8 @@ def _rank_best_slice(item: dict[str, Any]) -> tuple:
     return (
         0 if item.get("sparse") else 1,
         1 if float(item.get("avg_pnl_pct", 0.0) or 0.0) > 0 else 0,
-        1 if float(item.get("profit_factor", 0.0) or 0.0) >= 1.0 else 0,
-        float(item.get("profit_factor", 0.0) or 0.0),
+        1 if _pf_sort_value(item.get("profit_factor")) >= 1.0 else 0,
+        _pf_sort_value(item.get("profit_factor")),
         float(item.get("avg_pnl_pct", 0.0) or 0.0),
         float(item.get("directional_accuracy_pct", 0.0) or 0.0),
         int(item.get("trades", 0) or 0),
@@ -206,7 +216,7 @@ def _rank_best_slice(item: dict[str, Any]) -> tuple:
 def _rank_worst_slice(item: dict[str, Any]) -> tuple:
     return (
         0 if item.get("sparse") else 1,
-        -float(item.get("profit_factor", 0.0) or 0.0),
+        -_pf_sort_value(item.get("profit_factor")),
         -float(item.get("avg_pnl_pct", 0.0) or 0.0),
         -float(item.get("directional_accuracy_pct", 0.0) or 0.0),
         int(item.get("trades", 0) or 0),
@@ -379,11 +389,14 @@ def build_options_profitability_forensics(
 
     blockers: list[str] = []
     recommendations: list[str] = []
-    if float(overall.get("profit_factor", 0.0) or 0.0) < 1.0:
+    if overall.get("profit_factor") is not None and _pf_sort_value(overall.get("profit_factor")) < 1.0:
         blockers.append(f"{profitability_view['label']} profit factor is below 1.0.")
     if float(overall.get("avg_pnl_pct", 0.0) or 0.0) <= 0.0:
         blockers.append(f"{profitability_view['label']} average trade P&L is not positive.")
-    if float(exactness_view["exact_only"].get("profit_factor", 0.0) or 0.0) < 1.0:
+    if (
+        exactness_view["exact_only"].get("profit_factor") is not None
+        and _pf_sort_value(exactness_view["exact_only"].get("profit_factor")) < 1.0
+    ):
         blockers.append("Exact-contract-only subset is not profitable.")
     if float(exactness_view["exact_only"].get("avg_pnl_pct", 0.0) or 0.0) <= 0.0:
         blockers.append("Exact-contract-only average P&L is not positive.")

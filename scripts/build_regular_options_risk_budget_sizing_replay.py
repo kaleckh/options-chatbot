@@ -168,7 +168,7 @@ def _source_rows(missed_outcome: dict[str, Any], dispositions: dict[str, dict[st
 
 def _profit_factor(gross_profit: float, gross_loss_abs: float) -> float | None:
     if gross_loss_abs <= 0:
-        return None if gross_profit <= 0 else 999.0
+        return None
     return gross_profit / gross_loss_abs
 
 
@@ -242,6 +242,8 @@ def _scenario_metrics(
         "net_pnl_usd": _round(weighted_net),
         "improvement_vs_baseline_usd": _round(weighted_net - baseline_net_usd) if baseline_net_usd is not None else None,
         "profit_factor": _round(pf),
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": bool(included and gross_loss_abs <= 0 and gross_profit > 0),
         "avg_net_pnl_pct": _round(avg_pct),
         "median_net_pnl_pct": _round(median_pct),
         "win_rate_pct": _round((winners / len(included)) * 100.0 if included else None),
@@ -377,7 +379,14 @@ def build_report(
         scenario_rows.append(row)
 
     positive = [row for row in scenario_rows if float(row.get("net_pnl_usd") or 0) > 0 and float(row.get("risk_unit_count") or 0) > 0]
-    best = max(scenario_rows, key=lambda row: float(row.get("net_pnl_usd") or -10**12), default={})
+    positive_research = [row for row in scenario_rows if float(row.get("net_pnl_usd") or 0) > 0]
+    best_candidates = [
+        row
+        for row in positive_research
+        if row.get("scenario_id")
+        not in {"baseline_one_contract_all_untracked", "current_governor_zero_new_risk", "quarantine_zero_weight"}
+    ] or positive
+    best = max(best_candidates, key=lambda row: float(row.get("net_pnl_usd") or -10**12), default={})
     blockers = []
     if not rows:
         blockers.append("no_priced_untracked_rows_for_sizing_replay")

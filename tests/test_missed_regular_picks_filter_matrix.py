@@ -114,7 +114,8 @@ def test_filter_matrix_reports_lane_gate_and_dedupe_scenarios() -> None:
     assert report["boundary"]["production_claim"] is False
     assert report["boundary"]["quote_evidence"]["quote_evidence_class"] == "trusted_intraday_opra_nbbo"
     assert scenarios["baseline_all_untracked"]["kept_metrics"]["profit_factor"] < 1.0
-    assert scenarios["current_lane_gate_self_guardrails"]["kept_metrics"]["profit_factor"] == 999.0
+    assert scenarios["current_lane_gate_self_guardrails"]["kept_metrics"]["profit_factor"] is None
+    assert scenarios["current_lane_gate_self_guardrails"]["kept_metrics"]["no_loss_sample"] is True
     assert scenarios["current_lane_gate_self_guardrails"]["lost_winner_count"] == 0
     assert scenarios["exact_spread_dedupe_only"]["blocked_count"] == 1
     assert scenarios["lane_gate_self_guardrails_plus_exact_spread_dedupe"]["kept_count"] == 2

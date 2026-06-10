@@ -108,8 +108,9 @@ class OptionsProfitCycleTests(unittest.TestCase):
         direction: str = "call",
         cohort_id: str = "broad_ev7",
         net_pnl_pct: float = 5.0,
+        net_pnl_usd: float | None = None,
     ) -> dict:
-        return {
+        event = {
             "ticker": ticker,
             "direction": direction,
             "option_type": direction,
@@ -118,6 +119,9 @@ class OptionsProfitCycleTests(unittest.TestCase):
             "eligibility_status": "eligible",
             "net_pnl_pct": net_pnl_pct,
         }
+        if net_pnl_usd is not None:
+            event["net_pnl_usd"] = net_pnl_usd
+        return event
 
     def _install_canary(
         self,
@@ -236,7 +240,9 @@ class OptionsProfitCycleTests(unittest.TestCase):
 
         self.assertEqual(metrics["closed_position_count"], 1)
         self.assertEqual(metrics["exact_outcome_count"], 1)
-        self.assertEqual(metrics["profit_factor"], 999.0)
+        self.assertIsNone(metrics["profit_factor"])
+        self.assertTrue(metrics["no_loss_sample"])
+        self.assertEqual(metrics["profit_factor_basis"], "net_pnl_usd")
 
     def test_candidate_position_metrics_excludes_non_opra_proof_flag_rows(self):
         metrics = _candidate_position_metrics(
@@ -370,9 +376,9 @@ class OptionsProfitCycleTests(unittest.TestCase):
             "replay_policy_path": self._write_promoted_replay_policy(),
         }
         forward_events = [
-            self._forward_event(cohort_id="broad_ev7", net_pnl_pct=5.0)
-            for _ in range(30)
-        ]
+            self._forward_event(cohort_id="broad_ev7", net_pnl_pct=5.0, net_pnl_usd=10.0)
+            for _ in range(29)
+        ] + [self._forward_event(cohort_id="broad_ev7", net_pnl_pct=-2.0, net_pnl_usd=-10.0)]
         closed_positions = [
             self._live_proof_position(
                 ticker="SPY",
@@ -380,8 +386,18 @@ class OptionsProfitCycleTests(unittest.TestCase):
                 candidate_id=candidate_id,
                 contract_symbol=f"SPY260417C005{i:05d}",
                 net_pnl_pct=5.0,
+                net_pnl_usd=50.0,
             )
-            for i in range(10)
+            for i in range(9)
+        ] + [
+            self._live_proof_position(
+                ticker="SPY",
+                direction="call",
+                candidate_id=candidate_id,
+                contract_symbol="SPY260417C00599999",
+                net_pnl_pct=-2.0,
+                net_pnl_usd=-10.0,
+            )
         ]
         healthy_gate = {
             "state": "healthy",
@@ -465,6 +481,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
                 candidate_id=candidate_id,
                 contract_symbol="SPY260417C00500000",
                 net_pnl_pct=15.0,
+                net_pnl_usd=150.0,
             ),
             self._live_proof_position(
                 ticker="SPY",
@@ -472,6 +489,7 @@ class OptionsProfitCycleTests(unittest.TestCase):
                 candidate_id=candidate_id,
                 contract_symbol="SPY260417C00510000",
                 net_pnl_pct=-5.0,
+                net_pnl_usd=-50.0,
             ),
         ]
 

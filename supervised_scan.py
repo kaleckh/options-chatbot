@@ -2020,7 +2020,7 @@ def annotate_pick_with_guardrails(
         and spread_signature is not None
         and int(vertical_spread_signature_counts.get(repr(spread_signature), 0) or 0) > 0
     ):
-        cautions.append("An open tracked position already has this exact vertical spread.")
+        blocked.append("An open tracked position already has this exact vertical spread.")
 
     correlation_size_mult = 1.0
     if enforce_portfolio_caps:

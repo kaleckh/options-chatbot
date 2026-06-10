@@ -858,14 +858,14 @@ class TradeEvaluator:
 
 # ── Portfolio metrics ─────────────────────────────────────────────────────────
 
-def _sharpe(pnl_series: list[float], periods_per_year: int = 252) -> float:
+def _sharpe(pnl_series: list[float], periods_per_year: int = 252) -> float | None:
     if len(pnl_series) < 5:
-        return -99.0
+        return None
     arr = np.array(pnl_series, dtype=float)
     std = arr.std(ddof=1)
     if std == 0:
-        return 0.0
-    return float(arr.mean() / std * math.sqrt(min(len(arr), periods_per_year)))
+        return None
+    return float(arr.mean() / std * math.sqrt(periods_per_year))
 
 
 def _max_drawdown(pnl_series: list[float]) -> float:
@@ -987,13 +987,27 @@ def _precompute(
 
 # ── Portfolio metrics ─────────────────────────────────────────────────────────
 
-def _profit_factor(trades: list[dict]) -> float:
-    """Gross profit / gross loss. >1.5 is solid; >2.0 is excellent."""
-    gross_win  = sum(t["pnl_pct"] for t in trades if t["pnl_pct"] > 0)
-    gross_loss = sum(abs(t["pnl_pct"]) for t in trades if t["pnl_pct"] < 0)
-    if gross_loss < 0.01:
-        return gross_win / 0.01 if gross_win > 0 else 0.0
+def _profit_factor_from_values(values: Sequence[Any]) -> float | None:
+    pnl_values = [float(value or 0.0) for value in values]
+    if not pnl_values:
+        return 0.0
+    gross_win = sum(value for value in pnl_values if value > 0)
+    gross_loss = abs(sum(value for value in pnl_values if value < 0))
+    if gross_loss <= 0:
+        return None if gross_win > 0 else 0.0
     return gross_win / gross_loss
+
+
+def _no_loss_sample_from_values(values: Sequence[Any]) -> bool:
+    pnl_values = [float(value or 0.0) for value in values]
+    gross_win = sum(value for value in pnl_values if value > 0)
+    gross_loss = abs(sum(value for value in pnl_values if value < 0))
+    return bool(pnl_values and gross_loss <= 0 and gross_win > 0)
+
+
+def _profit_factor(trades: list[dict]) -> float | None:
+    """Gross profit / gross loss. >1.5 is solid; >2.0 is excellent."""
+    return _profit_factor_from_values([t.get("net_pnl_usd", t.get("pnl_pct")) for t in trades])
 
 
 def _profit_factor_denominator_truth_from_pnls(pnl_values: Sequence[Any]) -> dict[str, Any]:
@@ -1115,6 +1129,9 @@ def _simulate_window(
     qs_w_iv: float = 0.40,
     qs_w_delta: float = 0.35,
     qs_w_dte: float = 0.25,
+    entry_slippage_pct: float = 0.0,
+    exit_slippage_pct: float = 0.0,
+    commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
 ) -> dict:
     """
     Simulate options trades on one price slice.
@@ -1218,7 +1235,10 @@ def _simulate_window(
         if best_strike is None or not best_g or best_g.get("bs_price", 0) < 0.01:
             continue
 
-        entry_px  = best_g["bs_price"]
+        entry_mark_px = float(best_g["bs_price"])
+        entry_slip = max(float(entry_slippage_pct or 0.0), 0.0) / 100.0
+        exit_slip = max(float(exit_slippage_pct or 0.0), 0.0) / 100.0
+        entry_px = entry_mark_px * (1.0 + entry_slip)
         delta_val = abs(best_g.get("delta", 0))
 
         _rsi_at_entry = float(_rsi14[i])
@@ -1238,6 +1258,12 @@ def _simulate_window(
         target_px = entry_px * (1 + profit_target_pct / 100)
         exit_px, exit_reason = entry_px, "expired"
         exit_fill_basis = "model_mark"
+
+        def _model_exit_execution(mark_price: float, *, settlement: bool = False) -> float:
+            raw = max(float(mark_price or 0.0), 0.0)
+            if settlement:
+                return raw
+            return max(0.0, raw * max(0.0, 1.0 - exit_slip))
 
         # ── Adaptive exit state ───────────────────────────────────────────────
         # Trailing stop: activates once option gains ≥50% of profit target,
@@ -1265,7 +1291,8 @@ def _simulate_window(
                 )
                 # If trailing was active, allow gains above original target;
                 # otherwise cap at target to prevent inflated expiry returns.
-                exit_px     = min(intrinsic, high_watermark) if trail_active else min(intrinsic, target_px)
+                exit_mark = min(intrinsic, high_watermark) if trail_active else min(intrinsic, target_px)
+                exit_px = _model_exit_execution(exit_mark, settlement=True)
                 exit_reason = "expired"
                 exit_fill_basis = "expiry_intrinsic"
                 break
@@ -1321,9 +1348,9 @@ def _simulate_window(
                 max(dynamic_stop_px, trail_stop_px if trail_active else 0.0)
             )
             if opt_now <= effective_stop:
-                exit_px     = opt_now
+                exit_px     = _model_exit_execution(opt_now)
                 exit_reason = "trailing_stop" if trail_active else "stop"
-                exit_fill_basis = "model_mark"
+                exit_fill_basis = "model_bid"
                 break
 
             # ── Take-profit: extend if setup still healthy, else lock in ──────
@@ -1334,9 +1361,9 @@ def _simulate_window(
                     trail_stop_px = high_watermark * (1 - trail_depth)
                     # Don't break — trade continues under trail management
                 elif not trail_active:
-                    exit_px     = target_px
+                    exit_px     = _model_exit_execution(target_px)
                     exit_reason = "target"
-                    exit_fill_basis = "target_limit"
+                    exit_fill_basis = "target_limit_model_bid"
                     break
                 # If trail already active, just keep riding
 
@@ -1344,12 +1371,20 @@ def _simulate_window(
             # Check this after the profit-target logic so a same-day target hit
             # does not get reported as a richer time-exit mark.
             if d >= time_exit_day:
-                exit_px     = opt_now
+                exit_px     = _model_exit_execution(opt_now)
                 exit_reason = "time_exit"
-                exit_fill_basis = "model_mark"
+                exit_fill_basis = "model_bid"
                 break
 
-        pnl = (exit_px - entry_px) / entry_px * 100
+        pnl_snapshot = long_option_pnl(
+            entry_execution_price=entry_px,
+            exit_execution_price=exit_px,
+            contracts=1,
+            commission_per_contract_usd=commission_per_contract_usd,
+            include_entry_fee=True,
+            include_exit_fee=True,
+        )
+        pnl = float(pnl_snapshot.get("net_pnl_pct") or 0.0)
         pnl_list.append(pnl)
         trades.append({
             "date":           day["date"],
@@ -1359,9 +1394,19 @@ def _simulate_window(
             "hv30":           round(hv30, 4),          # vol used for BS pricing — auditable
             "dte":            dte_at_entry,            # days to expiry at entry
             "entry_px":       round(entry_px, 4),
+            "entry_model_mark_px": round(entry_mark_px, 4),
             "exit_px":        round(exit_px, 4),
             "exit_reason":    exit_reason,
             "exit_fill_basis": exit_fill_basis,
+            "entry_slippage_pct": round(float(entry_slippage_pct or 0.0), 4),
+            "exit_slippage_pct": round(float(exit_slippage_pct or 0.0), 4),
+            "gross_pnl_pct": pnl_snapshot.get("gross_pnl_pct"),
+            "net_pnl_pct": pnl_snapshot.get("net_pnl_pct"),
+            "gross_pnl_usd": pnl_snapshot.get("gross_pnl_usd"),
+            "net_pnl_usd": pnl_snapshot.get("net_pnl_usd"),
+            "fee_total_usd": pnl_snapshot.get("fee_total_usd"),
+            "entry_fee_total_usd": pnl_snapshot.get("entry_fee_total_usd"),
+            "exit_fee_total_usd": pnl_snapshot.get("exit_fee_total_usd"),
             "direction_score": round(direction_score, 1),
             "quality_score":   round(quality_score, 1),
             "tech_score":      round(tech, 1),
@@ -1371,10 +1416,13 @@ def _simulate_window(
 
     wins = sum(1 for p in pnl_list if p > 0)
     avg_quality = round(sum(t["quality_score"] for t in trades) / max(len(trades), 1), 1)
+    pf_values = [trade.get("net_pnl_usd", trade.get("pnl_pct")) for trade in trades]
     return {
         "sharpe":           _sharpe(pnl_list),
         "profit_factor":    _profit_factor(trades),
         **_profit_factor_denominator_truth(trades),
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": _no_loss_sample_from_values(pf_values),
         "win_rate":         round(wins / max(len(pnl_list), 1), 4),
         "max_drawdown_pct": _max_drawdown(pnl_list),
         "n_trades":         len(pnl_list),
@@ -1405,6 +1453,9 @@ def _simulate_window_multi(
     qs_w_iv: float = 0.40,
     qs_w_delta: float = 0.35,
     qs_w_dte: float = 0.25,
+    entry_slippage_pct: float = 0.0,
+    exit_slippage_pct: float = 0.0,
+    commission_per_contract_usd: float = DEFAULT_COMMISSION_PER_CONTRACT_USD,
 ) -> dict:
     """Pool trades across multiple tickers. Pass _caches to skip HV recomputation."""
     all_pnl:    list[float] = []
@@ -1425,6 +1476,9 @@ def _simulate_window_multi(
             rsi_sev_threshold=rsi_sev_threshold, rsi_mod_threshold=rsi_mod_threshold,
             rsi_sev_penalty=rsi_sev_penalty, rsi_mod_penalty=rsi_mod_penalty,
             qs_w_iv=qs_w_iv, qs_w_delta=qs_w_delta, qs_w_dte=qs_w_dte,
+            entry_slippage_pct=entry_slippage_pct,
+            exit_slippage_pct=exit_slippage_pct,
+            commission_per_contract_usd=commission_per_contract_usd,
         )
         for t in result["trades"]:
             t["ticker"] = ticker
@@ -1433,10 +1487,13 @@ def _simulate_window_multi(
 
     wins = sum(1 for p in all_pnl if p > 0)
     avg_quality = round(sum(t.get("quality_score", 50.0) for t in all_trades) / max(len(all_trades), 1), 1)
+    pf_values = [trade.get("net_pnl_usd", trade.get("pnl_pct")) for trade in all_trades]
     return {
         "sharpe":           _sharpe(all_pnl),
         "profit_factor":    _profit_factor(all_trades),
         **_profit_factor_denominator_truth(all_trades),
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": _no_loss_sample_from_values(pf_values),
         "win_rate":         round(wins / max(len(all_pnl), 1), 4),
         "max_drawdown_pct": _max_drawdown(all_pnl),
         "n_trades":         len(all_pnl),
@@ -1677,6 +1734,12 @@ def _make_objective(
             qs_w_iv=qs_w_iv,
             qs_w_delta=qs_w_delta,
             qs_w_dte=qs_w_dte,
+            entry_slippage_pct=float(config.get("entry_slippage_pct", 0.0) or 0.0),
+            exit_slippage_pct=float(config.get("exit_slippage_pct", 0.0) or 0.0),
+            commission_per_contract_usd=float(
+                config.get("commission_per_contract_usd", DEFAULT_COMMISSION_PER_CONTRACT_USD)
+                or DEFAULT_COMMISSION_PER_CONTRACT_USD
+            ),
         )
 
         if multi:
@@ -1687,14 +1750,14 @@ def _make_objective(
         if result["n_trades"] < max(1, config["min_trades"] // 2):
             return -99.0
 
-        pf   = result["profit_factor"]
-        sr   = result["sharpe"]
+        pf   = float(result.get("profit_factor") or 0.0)
+        sr   = result.get("sharpe")
         dd   = result["max_drawdown_pct"]
         # Small quality bonus: incentivises Optuna to prefer higher-quality option setups
         # when PF is otherwise equal. Scaled to ±0.005 so it never overrides PF signal.
         avg_q = result.get("avg_quality", 50.0)
         quality_bonus = 0.005 * (avg_q - 50.0) / 50.0
-        return pf + 0.1 * max(0.0, sr) - 0.02 * dd + quality_bonus
+        return pf + 0.1 * max(0.0, float(sr or 0.0)) - 0.02 * dd + quality_bonus
 
     return objective
 
@@ -1717,8 +1780,8 @@ def _check_guardrails(
     #   Part A: OOS PF must be ≥ 1.0 (strategy must be profitable on unseen data)
     #   Part B: Only apply ratio check when IS PF > 3.0 (genuinely inflated in-sample)
     #           A modest IS PF of 1.5–2.5 degrading slightly OOS is normal, not overfit.
-    is_pf  = is_result.get("profit_factor",  0)
-    oos_pf = oos_result.get("profit_factor", 0)
+    is_pf = float(is_result.get("profit_factor") or 0.0)
+    oos_pf = float(oos_result.get("profit_factor") or 0.0)
     if oos_pf < 1.0:
         issues.append(
             f"G1 — OOS PF ({oos_pf:.2f}) < 1.0: strategy loses money on unseen data"
@@ -1953,10 +2016,10 @@ def _run_wfo_for_closes(
             "train_end":          str(ref.index[-1].date()),
             "test_start":         str(ref_t.index[0].date()),
             "test_end":           str(ref_t.index[-1].date()),
-            "is_sharpe":          round(is_result["sharpe"], 3),
-            "is_profit_factor":   round(is_result["profit_factor"], 3),
-            "oos_sharpe":         round(oos_result["sharpe"], 3),
-            "oos_profit_factor":  round(oos_result["profit_factor"], 3),
+            "is_sharpe":          round(is_result["sharpe"], 3) if is_result.get("sharpe") is not None else None,
+            "is_profit_factor":   round(is_result["profit_factor"], 3) if is_result.get("profit_factor") is not None else None,
+            "oos_sharpe":         round(oos_result["sharpe"], 3) if oos_result.get("sharpe") is not None else None,
+            "oos_profit_factor":  round(oos_result["profit_factor"], 3) if oos_result.get("profit_factor") is not None else None,
             "oos_win_rate":       round(oos_result["win_rate"] * 100, 1),
             "oos_trades":         oos_result["n_trades"],
             "oos_max_dd":         round(oos_result["max_drawdown_pct"], 2),
@@ -2091,6 +2154,9 @@ def walk_forward(
         "delta_target":      float(sp["targets"].get("delta_optimal", 0.30)),
         "min_confidence":    50.0,
         "min_ev_pct":        float(sp["filters"].get("min_ev_return_pct", 10.0)),
+        "entry_slippage_pct": float(sp["filters"].get("entry_slippage_pct", 0.0) or 0.0),
+        "exit_slippage_pct": float(sp["filters"].get("exit_slippage_pct", 0.0) or 0.0),
+        "commission_per_contract_usd": DEFAULT_COMMISSION_PER_CONTRACT_USD,
         "min_trades":        15,   # placeholder — overwritten by _auto_min_trades() per run
     }
     current_weights = sp["confidence_weights"].copy()
@@ -3194,10 +3260,7 @@ def run_archived_forward_daily_backtest(
 
     pnl_list = [float(trade.get("pnl_pct") or 0.0) for trade in priced_trades]
     wins = [pnl for pnl in pnl_list if pnl > 0]
-    losses = [pnl for pnl in pnl_list if pnl <= 0]
-    gross_win = sum(wins)
-    gross_loss = abs(sum(losses))
-    pf = gross_win / max(gross_loss, 0.01)
+    pf = _profit_factor_from_values(pnl_list)
     win_rate = len(wins) / len(pnl_list) * 100.0
     full_hit_outcomes = [
         str(trade.get("prediction_outcome") or "").strip().lower()
@@ -3304,11 +3367,12 @@ def run_archived_forward_daily_backtest(
         "win_rate_pct": round(win_rate, 1),
         "full_hit_rate_pct": round(full_hit_rate, 1) if full_hit_rate is not None else None,
         "directional_accuracy_pct": round(directional_accuracy, 1),
-        "profit_factor": round(pf, 2),
+        "profit_factor": round(pf, 2) if pf is not None else None,
         **_profit_factor_denominator_truth_from_pnls(pnl_list),
+        "no_loss_sample": _no_loss_sample_from_values(pnl_list),
         "avg_pnl_pct": round(avg_pnl, 2),
         "avg_picks_per_day": round(len(priced_trades) / max(len(unique_entry_dates), 1), 2),
-        "sharpe": round(sharpe, 2),
+        "sharpe": round(sharpe, 2) if sharpe is not None else None,
         "max_drawdown_pct": round(max_drawdown, 1),
         "selection_source_counts": dict(selection_source_counts),
         "calibration_summary": _selection_calibration_summary(priced_trades),
@@ -3567,12 +3631,8 @@ def _normalized_market_regime(trade: dict) -> str:
         return "unknown"
 
 
-def _profit_factor_for(group: list[dict]) -> float:
-    wins = [float(t.get("pnl_pct", 0.0) or 0.0) for t in group if float(t.get("pnl_pct", 0.0) or 0.0) > 0]
-    losses = [float(t.get("pnl_pct", 0.0) or 0.0) for t in group if float(t.get("pnl_pct", 0.0) or 0.0) <= 0]
-    gross_win = sum(wins)
-    gross_loss = abs(sum(losses))
-    return gross_win / max(gross_loss, 0.01)
+def _profit_factor_for(group: list[dict]) -> float | None:
+    return _profit_factor_from_values([float(t.get("pnl_pct", 0.0) or 0.0) for t in group])
 
 
 def _summarize_prediction_group(
@@ -3598,8 +3658,13 @@ def _summarize_prediction_group(
         "win_rate_pct": round(wins / count * 100, 1) if count else 0.0,
         "full_hit_rate_pct": round(full_hits / count * 100, 1) if count else 0.0,
         "directional_accuracy_pct": round(directional_hits / count * 100, 1) if count else 0.0,
-        "profit_factor": round(_profit_factor_for(trades), 2) if count else 0.0,
+        "profit_factor": (
+            round(_profit_factor_for(trades), 2)
+            if count and _profit_factor_for(trades) is not None
+            else (0.0 if not count else None)
+        ),
         **_profit_factor_denominator_truth_from_pnls(pnl_values),
+        "no_loss_sample": _no_loss_sample_from_values(pnl_values),
         "avg_pnl_pct": round(sum(pnl_values) / count, 2) if count else 0.0,
         "avg_direction_score": round(sum(direction_scores) / count, 1) if count else 0.0,
         "avg_quality_score": round(sum(quality_scores) / count, 1) if count else 0.0,
@@ -4004,16 +4069,19 @@ def _summarize_experiment_slice(
     min_directional_accuracy_pct: float,
 ) -> dict:
     summary = _summarize_prediction_group("experiment", label, trades, total_trades)
+    profit_factor, profit_factor_finite = _finite_metric(summary.get("profit_factor"))
     summary.update(
         {
             "category": category,
             "label": label,
             "experiment_id": _experiment_id(category, filters),
             "filters": filters,
+            "profit_factor_defined": profit_factor_finite,
             "sparse": summary["trades"] < int(min_trades),
             "passes_quality_bar": (
                 summary["trades"] >= int(min_trades)
-                and summary["profit_factor"] >= float(min_profit_factor)
+                and profit_factor_finite
+                and profit_factor >= float(min_profit_factor)
                 and summary["directional_accuracy_pct"] >= float(min_directional_accuracy_pct)
                 and summary["avg_pnl_pct"] > 0.0
             ),
@@ -4236,7 +4304,7 @@ def build_options_experiment_matrix(
         for item in items:
             clone = dict(item)
             clone["profit_factor_delta"] = round(
-                float(clone.get("profit_factor", 0.0) or 0.0) - float(overall["profit_factor"]),
+                float(clone.get("profit_factor", 0.0) or 0.0) - float(overall.get("profit_factor") or 0.0),
                 2,
             )
             clone["avg_pnl_pct_delta"] = round(
@@ -4380,7 +4448,7 @@ def build_options_experiment_matrix(
         if not item["passes_quality_bar"]
         and not item["sparse"]
         and (
-            item["profit_factor"] >= 1.0
+            float(item.get("profit_factor") or 0.0) >= 1.0
             or item["directional_accuracy_pct"] >= min_directional_accuracy_pct
             or item["avg_pnl_pct"] > overall["avg_pnl_pct"]
         )
@@ -4402,7 +4470,7 @@ def build_options_experiment_matrix(
         item
         for item in score_floor_slices
         if item["trades"] >= min_trades
-        and item["profit_factor"] > overall["profit_factor"]
+        and float(item.get("profit_factor") or 0.0) > float(overall.get("profit_factor") or 0.0)
         and item["directional_accuracy_pct"] >= overall["directional_accuracy_pct"]
     ]
     if improving_score_floors:
@@ -5050,17 +5118,15 @@ def _playbook_trade_window(playbook: str) -> dict[str, int]:
 
 def _summarize_exit_reason_group(exit_reason: str, trades: list[dict]) -> dict:
     pnl_values = [float(trade.get("pnl_pct", 0.0) or 0.0) for trade in trades]
-    wins = [value for value in pnl_values if value > 0]
-    losses = [value for value in pnl_values if value <= 0]
-    gross_win = sum(wins)
-    gross_loss = abs(sum(losses))
+    profit_factor = _profit_factor_from_values(pnl_values)
     directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
     return {
         "exit_reason": exit_reason,
         "trades": len(trades),
         "avg_pnl_pct": round(sum(pnl_values) / max(len(pnl_values), 1), 2),
-        "profit_factor": round(gross_win / max(gross_loss, 0.01), 2),
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
         **_profit_factor_denominator_truth_from_pnls(pnl_values),
+        "no_loss_sample": _no_loss_sample_from_values(pnl_values),
         "directional_accuracy_pct": round(directional_hits / max(len(trades), 1) * 100.0, 1),
     }
 
@@ -5078,10 +5144,7 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
         }
 
     pnl_values = [float(trade.get("pnl_pct", 0.0) or 0.0) for trade in trades]
-    wins = [value for value in pnl_values if value > 0]
-    losses = [value for value in pnl_values if value <= 0]
-    gross_win = sum(wins)
-    gross_loss = abs(sum(losses))
+    profit_factor = _profit_factor_from_values(pnl_values)
     directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
 
     by_exit_reason: dict[str, list[dict]] = {}
@@ -5098,8 +5161,9 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
         "label": label,
         "trades": len(trades),
         "avg_pnl_pct": round(sum(pnl_values) / max(len(pnl_values), 1), 2),
-        "profit_factor": round(gross_win / max(gross_loss, 0.01), 2),
+        "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
         **_profit_factor_denominator_truth_from_pnls(pnl_values),
+        "no_loss_sample": _no_loss_sample_from_values(pnl_values),
         "directional_accuracy_pct": round(directional_hits / max(len(trades), 1) * 100.0, 1),
         "exit_reasons": exit_reasons,
     }
@@ -5270,12 +5334,13 @@ def _comparison_trade_subset_summary(trades: list[dict[str, Any]]) -> dict[str, 
     if gross_loss > 0:
         profit_factor = round(gross_profit / gross_loss, 2)
     elif gross_profit > 0:
-        profit_factor = round(gross_profit, 2)
+        profit_factor = None
     else:
         profit_factor = 0.0
     return {
         "trade_count": total,
         "profit_factor": profit_factor,
+        "no_loss_sample": bool(pnl_values and gross_loss <= 0 and gross_profit > 0),
         **_profit_factor_denominator_truth_from_pnls(pnl_values),
         "avg_pnl_pct": round(sum(pnl_values) / total, 2) if total else 0.0,
         "directional_accuracy_pct": round(100.0 * len(directional_hits) / len(directional_total), 1)
@@ -7681,12 +7746,23 @@ def _simulate_trade_outcome_imported(
         last_quote_date = quote_date.isoformat()
 
         if quote_date > expiry_date:
-            intrinsic = max(0.0, float(prices[fi]) - entry_quote.strike) if trade_type == "call" else max(0.0, entry_quote.strike - float(prices[fi]))
+            settlement_idx = fi
+            for candidate_idx in range(fi - 1, i, -1):
+                candidate_date = pd.Timestamp(dates[candidate_idx]).date()
+                if candidate_date <= expiry_date:
+                    settlement_idx = candidate_idx
+                    break
+            settlement_stock_px = float(prices[settlement_idx])
+            intrinsic = (
+                max(0.0, settlement_stock_px - entry_quote.strike)
+                if trade_type == "call"
+                else max(0.0, entry_quote.strike - settlement_stock_px)
+            )
             exit_px = intrinsic
             exit_reason = "expired"
             exit_fill_basis = "expiry_intrinsic"
-            exit_stock_px = float(prices[fi])
-            exit_day_idx = fi
+            exit_stock_px = settlement_stock_px
+            exit_day_idx = settlement_idx
             break
 
         quote = store.get_closing_quote(
@@ -8557,16 +8633,17 @@ def run_historical_backtest(
                 "observation_count": 0,
                 "priced_count": 0,
                 "unpriced_failure_count": 0,
-                "profit_factor": 999.0,
+                "profit_factor": None,
+                "no_loss_sample": False,
                 "avg_pnl_pct": 0.0,
             }
-        gross_win = sum(value for value in pnl_values if value > 0)
-        gross_loss = abs(sum(value for value in pnl_values if value < 0))
+        profit_factor = _profit_factor_from_values(pnl_values)
         return {
             "observation_count": len(pnl_values),
             "priced_count": sum(1 for item in observed if item.get("kind") == "priced"),
             "unpriced_failure_count": sum(1 for item in observed if item.get("kind") == "unpriced_failure"),
-            "profit_factor": round(gross_win / gross_loss, 2) if gross_loss > 0 else 999.0,
+            "profit_factor": round(profit_factor, 2) if profit_factor is not None else None,
+            "no_loss_sample": _no_loss_sample_from_values(pnl_values),
             "avg_pnl_pct": round(sum(pnl_values) / len(pnl_values), 2),
         }
 
@@ -10070,10 +10147,7 @@ def run_historical_backtest(
 
     pnl_list   = [t["pnl_pct"] for t in all_trades]
     wins       = [p for p in pnl_list if p > 0]
-    losses     = [p for p in pnl_list if p <= 0]
-    gross_win  = sum(wins)
-    gross_loss = abs(sum(losses))
-    pf         = gross_win / max(gross_loss, 0.01)
+    pf         = _profit_factor_from_values(pnl_list)
     win_rate   = len(wins) / len(pnl_list) * 100
     full_hits  = sum(1 for t in all_trades if t.get("prediction_outcome") == "hit")
     directional_hits = sum(1 for t in all_trades if t.get("directional_correct"))
@@ -10252,11 +10326,12 @@ def run_historical_backtest(
         "win_rate_pct":      round(win_rate, 1),
         "full_hit_rate_pct": round(full_hit_rate, 1),
         "directional_accuracy_pct": round(directional_accuracy, 1),
-        "profit_factor":     round(pf, 2),
+        "profit_factor":     round(pf, 2) if pf is not None else None,
         **_profit_factor_denominator_truth_from_pnls(pnl_list),
+        "no_loss_sample": _no_loss_sample_from_values(pnl_list),
         "avg_pnl_pct":       round(avg_pnl, 2),
         "avg_picks_per_day": round(len(all_trades) / max(days_simulated, 1), 2),
-        "sharpe":            round(sr, 2),
+        "sharpe":            round(sr, 2) if sr is not None else None,
         "max_drawdown_pct":  round(mdd, 1),
         "selection_source_counts": dict(selection_source_counts),
         "calibration_summary": calibration_summary,
@@ -10379,12 +10454,20 @@ def build_prediction_replay_report(
 
     best_segments = sorted(
         ranked_segments,
-        key=lambda item: (item["avg_pnl_pct"], item["profit_factor"], item["directional_accuracy_pct"]),
+        key=lambda item: (
+            float(item.get("avg_pnl_pct") or 0.0),
+            float(item.get("profit_factor") or 0.0),
+            float(item.get("directional_accuracy_pct") or 0.0),
+        ),
         reverse=True,
     )[:5]
     weakest_segments = sorted(
         ranked_segments,
-        key=lambda item: (item["avg_pnl_pct"], item["profit_factor"], item["directional_accuracy_pct"]),
+        key=lambda item: (
+            float(item.get("avg_pnl_pct") or 0.0),
+            float(item.get("profit_factor") or 0.0),
+            float(item.get("directional_accuracy_pct") or 0.0),
+        ),
     )[:5]
 
     overall = _summarize_prediction_group("overall", "overall", trades, total_trades)
@@ -10641,8 +10724,8 @@ def build_options_stability_report(
     if fixed_pass and rolling_pass_rate >= 70.0 and worst_rolling_pf >= catastrophic_pf_floor:
         overall_status = "promote"
     elif (
-        scenario_results["full_window"]["profit_factor"] >= 1.0
-        or scenario_results["last_1y"]["profit_factor"] >= 1.0
+        float(scenario_results["full_window"].get("profit_factor") or 0.0) >= 1.0
+        or float(scenario_results["last_1y"].get("profit_factor") or 0.0) >= 1.0
         or rolling_pass_rate >= 50.0
     ):
         overall_status = "watch"
@@ -10950,7 +11033,9 @@ def _summarize_playbook_discovery_slice(
         summary.get("directional_accuracy_pct")
     )
     non_finite_metrics: list[str] = []
-    if not profit_factor_finite and summary.get("profit_factor") is not None:
+    if summary.get("profit_factor") is None and summary.get("no_loss_sample"):
+        non_finite_metrics.append("profit_factor")
+    elif not profit_factor_finite and summary.get("profit_factor") is not None:
         non_finite_metrics.append("profit_factor")
     if not avg_pnl_pct_finite and summary.get("avg_pnl_pct") is not None:
         non_finite_metrics.append("avg_pnl_pct")
@@ -11509,7 +11594,7 @@ def build_playbook_discovery_report(
             overall["passes_quality_bar"]
             or len(source_passes) > 0
             or rolling_confirmed
-            or overall["profit_factor"] >= 1.0
+            or float(overall.get("profit_factor") or 0.0) >= 1.0
             or overall["avg_pnl_pct"] > 0.0
         )
 

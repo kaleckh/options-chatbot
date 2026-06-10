@@ -1042,13 +1042,13 @@ def _simulate_candidate(
     return trade, None
 
 
-def _profit_factor(values: Sequence[float]) -> float:
+def _profit_factor(values: Sequence[float]) -> float | None:
     gross_profit = sum(value for value in values if value > 0)
     gross_loss = -sum(value for value in values if value < 0)
     if gross_loss > 0:
         return gross_profit / gross_loss
     if gross_profit > 0:
-        return 999.0
+        return None
     return 0.0
 
 
@@ -1069,10 +1069,12 @@ def _summarize_trades(trades: Sequence[SimulatedTrade]) -> dict[str, Any]:
     expiries = sorted({trade.expiry for trade in trades})
     wins = [value for value in values if value > 0]
     losses = [value for value in values if value < 0]
+    pf = _profit_factor(values)
     return {
         "trade_count": len(trades),
         "win_rate_pct": round(len(wins) / len(values) * 100.0, 2) if values else 0.0,
-        "profit_factor": round(_profit_factor(values), 4),
+        "profit_factor": round(pf, 4) if pf is not None else None,
+        "no_loss_sample": bool(values and not losses and wins),
         "avg_pnl_pct": round(sum(values) / len(values), 4) if values else 0.0,
         "median_pnl_pct": round(float(pd.Series(values).median()), 4) if values else 0.0,
         "gross_profit_pct": round(sum(wins), 4),
@@ -1123,17 +1125,19 @@ def _lane_report(
     proof_summary = _summarize_trades(proof)
     oos_summary = _summarize_trades(oos)
     walk_good = bool(walk) and all(
-        item["trade_count"] < 5 or (item["avg_pnl_pct"] > 0 and item["profit_factor"] >= 1.0)
+        item["trade_count"] < 5 or (item["avg_pnl_pct"] > 0 and float(item.get("profit_factor") or 0.0) >= 1.0)
         for item in walk
     )
+    proof_pf = float(proof_summary.get("profit_factor") or 0.0)
+    oos_pf = float(oos_summary.get("profit_factor") or 0.0)
     gates = {
         "min_50_exact_trades": len(proof) >= min_total_trades,
         "min_oos_exact_trades": len(oos) >= min_oos_trades,
         "multi_month_distribution": proof_summary["month_count"] >= 4 and proof_summary["expiration_cycle_count"] >= 4,
-        "profit_factor_min": proof_summary["profit_factor"] >= min_profit_factor,
-        "profit_factor_preferred": proof_summary["profit_factor"] >= preferred_profit_factor,
+        "profit_factor_min": proof_pf >= min_profit_factor,
+        "profit_factor_preferred": proof_pf >= preferred_profit_factor,
         "positive_expectancy_after_slippage_fees": proof_summary["avg_pnl_pct"] > 0,
-        "oos_positive": oos_summary["trade_count"] >= min_oos_trades and oos_summary["avg_pnl_pct"] > 0 and oos_summary["profit_factor"] >= 1.0,
+        "oos_positive": oos_summary["trade_count"] >= min_oos_trades and oos_summary["avg_pnl_pct"] > 0 and oos_pf >= 1.0,
         "walk_forward_holds": walk_good,
         "bid_ask_proof_only": len(ordered) == len(proof),
     }

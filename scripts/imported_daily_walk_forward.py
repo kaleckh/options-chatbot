@@ -31,13 +31,14 @@ def _safe_number(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def _profit_factor(values: Iterable[float]) -> float:
+def _profit_factor(values: Iterable[float]) -> float | None:
     wins = [value for value in values if value > 0]
     losses = [value for value in values if value <= 0]
+    gross_win = sum(wins)
     gross_loss = abs(sum(losses))
     if gross_loss <= 0:
-        return 999.0 if wins else 0.0
-    return round(sum(wins) / gross_loss, 2)
+        return None if gross_win > 0 else 0.0
+    return round(gross_win / gross_loss, 2)
 
 
 def _is_truthy(value: Any) -> bool:
@@ -60,6 +61,7 @@ def _metrics(trades: list[dict[str, Any]], *, total_trades: int | None = None) -
         "win_rate_pct": round(len(wins) / max(len(trades), 1) * 100.0, 1) if trades else 0.0,
         "directional_accuracy_pct": round(len(directional) / max(len(trades), 1) * 100.0, 1) if trades else 0.0,
         "profit_factor": _profit_factor(pnls),
+        "no_loss_sample": bool(pnls and not any(value <= 0 for value in pnls) and any(value > 0 for value in pnls)),
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 2) if pnls else 0.0,
     }
 
@@ -170,7 +172,7 @@ def build_imported_daily_walk_forward_validation(
             gate_blockers.append("unpriced_test_candidates_present")
         if exact_test_metrics["trade_count"] < int(min_exact_test_trades):
             gate_blockers.append("exact_test_trade_count_below_floor")
-        if exact_test_metrics["profit_factor"] < 1.0:
+        if float(exact_test_metrics.get("profit_factor") or 0.0) < 1.0:
             gate_blockers.append("exact_test_profit_factor_below_1")
         if exact_test_metrics["avg_pnl_pct"] <= 0:
             gate_blockers.append("exact_test_avg_pnl_not_positive")

@@ -96,14 +96,14 @@ def safe_num(value: Any, default: float = 0.0) -> float:
         return default
 
 
-def profit_factor(values: Iterable[float]) -> float:
+def profit_factor(values: Iterable[float]) -> float | None:
     vals = [float(value) for value in values]
     gross_profit = sum(value for value in vals if value > 0)
     gross_loss = -sum(value for value in vals if value < 0)
     if gross_loss > 0:
         return round(gross_profit / gross_loss, 2)
     if gross_profit > 0:
-        return 999.0
+        return None
     return 0.0
 
 
@@ -119,6 +119,7 @@ def summarize_pnl_values(values: Iterable[float]) -> dict[str, Any]:
         "win_rate_pct": round(len(winners) / count * 100.0, 1) if count else 0.0,
         "avg_pnl_pct": round(sum(vals) / count, 2) if count else 0.0,
         "profit_factor": profit_factor(vals),
+        "no_loss_sample": bool(vals and not losers and winners),
         "best_pnl_pct": round(max(vals), 2) if vals else None,
         "worst_pnl_pct": round(min(vals), 2) if vals else None,
     }

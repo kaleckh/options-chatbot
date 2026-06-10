@@ -1138,6 +1138,7 @@ class HistoricalTruthLaneTests(unittest.TestCase):
                 ],
                 "policy_applied": True,
                 "policy": {"truth_source": wfo.IMPORTED_DAILY_TRUTH_SOURCE, "promotion_status": "watch"},
+                "evidence_class": "live_production",
                 "playbook": {"id": "short_term"},
                 "scan_funnel": {
                     "raw_candidates": 2,

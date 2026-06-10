@@ -59,9 +59,11 @@ class AlpacaOptionsStrategyLabTests(unittest.TestCase):
     def test_lane_report_promotes_only_exact_bid_ask_oos_positive_trades(self):
         trades = []
         for idx in range(30):
-            trades.append(_trade(entry_date=date(2024, 2, 1) + timedelta(days=idx * 7), pnl_pct=8.0))
+            pnl_pct = -2.0 if idx in {0, 25} else 8.0
+            trades.append(_trade(entry_date=date(2024, 2, 1) + timedelta(days=idx * 7), pnl_pct=pnl_pct))
         for idx in range(25):
-            trades.append(_trade(entry_date=date(2025, 7, 1) + timedelta(days=idx * 7), pnl_pct=6.0))
+            pnl_pct = -1.0 if idx == 0 else 6.0
+            trades.append(_trade(entry_date=date(2025, 7, 1) + timedelta(days=idx * 7), pnl_pct=pnl_pct))
 
         report = _lane_report(
             "bullish",

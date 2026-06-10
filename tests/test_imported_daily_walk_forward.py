@@ -34,6 +34,7 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
                 _trade(2, "nearest_listed_contract", 20.0),
                 _trade(3, "exact_archived_contract", 6.0),
                 _trade(4, "nearest_listed_contract", -5.0, False),
+                _trade(4, "exact_target_contract", -2.0, False),
                 _trade(5, "exact_target_contract", 7.0),
                 _trade(6, "exact_target_contract", -2.0, False),
             ],
@@ -49,9 +50,9 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
         self.assertEqual(report["status"], "passed")
         self.assertEqual(report["frozen_universe"], ["QQQ", "SPY"])
         self.assertEqual(report["authoritative_profitability_basis"], "exact_contract_only")
-        self.assertEqual(report["source_contract_accounting"]["exact_contract_match_count"], 4)
+        self.assertEqual(report["source_contract_accounting"]["exact_contract_match_count"], 5)
         self.assertEqual(report["window_count"], 2)
-        self.assertEqual(report["windows"][0]["exact_test"]["trade_count"], 1)
+        self.assertEqual(report["windows"][0]["exact_test"]["trade_count"], 2)
         self.assertEqual(report["windows"][0]["research_test_trade_count"], 1)
 
     def test_validation_blocks_when_there_are_not_enough_oos_dates(self):
@@ -114,7 +115,8 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
         )
 
         self.assertEqual(metrics["directional_accuracy_pct"], 50.0)
-        self.assertEqual(metrics["profit_factor"], 999.0)
+        self.assertIsNone(metrics["profit_factor"])
+        self.assertTrue(metrics["no_loss_sample"])
 
     def test_window_dates_rejects_non_positive_steps(self):
         with self.assertRaises(ValueError):
@@ -127,7 +129,11 @@ class ImportedDailyWalkForwardTests(unittest.TestCase):
             "truth_source": "historical_imported_daily",
             "playbook": "bullish_pullback_observation",
             "validation_universe": ["SPY"],
-            "trades": [_trade(1, "exact_target_contract", 4.0), _trade(2, "exact_target_contract", 3.0)],
+            "trades": [
+                _trade(1, "exact_target_contract", 4.0),
+                _trade(2, "exact_target_contract", 3.0),
+                _trade(2, "exact_target_contract", -1.0, False),
+            ],
         }
 
         with patch("scripts.imported_daily_walk_forward.wfo.run_historical_backtest", return_value=replay) as run_backtest:

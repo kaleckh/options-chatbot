@@ -46,6 +46,7 @@ PROOF_GRADE_SCAN_FIELDS = {
     "source_scan_event_key": "short_term:rank_1",
     "source_scan_run_id": "api_scan_20260330T133500Z",
     "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+    "entry_date": "2026-03-30",
     "quote_time_et": "2026-03-30T09:35:00-04:00",
     "quote_time_utc": "2026-03-30T13:35:00Z",
     "quote_freshness_status": "fresh",
@@ -86,6 +87,7 @@ def _proof_grade_closed_snapshot_row() -> dict:
         "source_scan_event_key": "short_term:rank_1",
         "source_scan_run_id": "api_scan_20260330T133500Z",
         "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+        "entry_date": "2026-03-30",
         "quote_time_et": "2026-03-30T09:35:00-04:00",
         "quote_time_utc": "2026-03-30T13:35:00Z",
         "quote_freshness_status": "fresh",
@@ -101,6 +103,7 @@ def _proof_grade_closed_snapshot_row() -> dict:
             "source_scan_event_key": "short_term:rank_1",
             "source_scan_run_id": "api_scan_20260330T133500Z",
             "source_scan_recorded_at_utc": "2026-03-30T13:35:00Z",
+            "entry_date": "2026-03-30",
             "quote_time_et": "2026-03-30T09:35:00-04:00",
             "quote_time_utc": "2026-03-30T13:35:00Z",
             "quote_freshness_status": "fresh",
@@ -186,6 +189,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
                     "OPTIONS_PROFITABILITY_LAB_DIR": self.profitability_lab_dir,
                     "OPTIONS_MARKET_DATA_PROVIDER": "yahoo",
                     "OPTIONS_RUN_MODE": "test",
+                    "OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE": "0",
                 },
                 clear=False,
             )
@@ -1182,9 +1186,9 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.assertFalse(evidence["activation_check"]["active"])
         self.assertEqual(
             evidence["activation_check"]["status"],
-            "historical_evidence_only_latest_scan_empty",
+            "archived_forward_unavailable",
         )
-        self.assertTrue(evidence["activation_check"]["historical_evidence_available"])
+        self.assertFalse(evidence["activation_check"]["historical_evidence_available"])
         self.assertEqual(evidence["activation_check"]["latest_recorded_scan_pick_count"], 0)
         self.assertGreaterEqual(evidence["authoritative_session_count"], 0)
         self.assertGreaterEqual(evidence["ledger_summary"]["observation_scan_pick_count"], 0)

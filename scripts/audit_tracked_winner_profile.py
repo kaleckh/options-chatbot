@@ -153,7 +153,7 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if gross_loss > 0:
         profit_factor: float | None = round(gross_profit / gross_loss, 2)
     elif gross_profit > 0:
-        profit_factor = 999.0
+        profit_factor = None
     else:
         profit_factor = None
     return {
@@ -164,6 +164,7 @@ def _metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "win_rate_pct": round(len(winners) / len(pnl_values) * 100.0, 1) if pnl_values else 0.0,
         "avg_pnl_pct": round(sum(pnl_values) / len(pnl_values), 2) if pnl_values else None,
         "profit_factor": profit_factor,
+        "no_loss_sample": bool(pnl_values and gross_loss <= 0 and gross_profit > 0),
         "total_net_pnl_pct_points": round(sum(pnl_values), 2) if pnl_values else 0.0,
     }
 

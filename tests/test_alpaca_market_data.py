@@ -397,6 +397,7 @@ class AlpacaMarketDataTests(unittest.TestCase):
             ],
             "market_data_source": amd.ALPACA_OPTIONS_SOURCE,
             "options_data_source": amd.ALPACA_OPTIONS_SOURCE,
+            "entry_date": "2026-03-30",
         }
         status, blockers, freshness = fol._eligibility_for_pick(
             pick,

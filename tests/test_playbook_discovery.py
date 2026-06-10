@@ -100,7 +100,7 @@ class PlaybookDiscoveryTests(unittest.TestCase):
     def test_stable_slice_gets_promote(self):
         start = date(2024, 1, 5)
         tickers = ["PFE", "MRK", "LLY"]
-        pnl_values = [12.0, 10.0, 8.0, 9.0, 11.0, 7.0, 10.0, 9.0, 8.0, 12.0, 6.0, 10.0, 9.0, 7.0, 11.0]
+        pnl_values = [12.0, 10.0, 8.0, 9.0, 11.0, -1.0, 10.0, 9.0, 8.0, -1.0, 6.0, 10.0, 9.0, 7.0, 11.0]
         trades = [
             _make_trade(start + timedelta(days=index * 30), ticker=tickers[index % len(tickers)], pnl_pct=pnl)
             for index, pnl in enumerate(pnl_values)
@@ -124,7 +124,7 @@ class PlaybookDiscoveryTests(unittest.TestCase):
         start = date(2024, 1, 5)
         trades = [
             _make_trade(start, ticker="PFE", pnl_pct=12.0),
-            _make_trade(start + timedelta(days=40), ticker="MRK", pnl_pct=11.0),
+            _make_trade(start + timedelta(days=40), ticker="MRK", pnl_pct=-1.0),
         ]
 
         report = wfo.build_playbook_discovery_report(
@@ -178,6 +178,7 @@ class PlaybookDiscoveryTests(unittest.TestCase):
         self.assertEqual(candidate["status"], "block")
         self.assertFalse(candidate["overall"]["metrics_finite"])
         self.assertIn("profit_factor", candidate["overall"]["non_finite_metrics"])
+        self.assertTrue(candidate["overall"]["no_loss_sample"])
         self.assertIn("avg_pnl_pct", candidate["overall"]["non_finite_metrics"])
         self.assertTrue(any("non-finite metrics" in blocker.lower() for blocker in candidate["blockers"]))
 
@@ -238,7 +239,7 @@ class PlaybookDiscoveryTests(unittest.TestCase):
         tickers = ["PFE", "MRK", "LLY"]
         stable_trades = [
             _make_trade(start + timedelta(days=index * 30), ticker=tickers[index % len(tickers)], pnl_pct=pnl)
-            for index, pnl in enumerate([12.0, 10.0, 8.0, 9.0, 11.0, 7.0, 10.0, 9.0, 8.0, 12.0, 6.0, 10.0, 9.0, 7.0, 11.0])
+            for index, pnl in enumerate([12.0, 10.0, 8.0, 9.0, 11.0, -1.0, 10.0, 9.0, 8.0, -1.0, 6.0, 10.0, 9.0, 7.0, 11.0])
         ]
         weak_1y_trades = [
             _make_trade(

@@ -40,6 +40,28 @@ class ExpectancyCalibrationTests(unittest.TestCase):
         self.assertEqual(surface["overall"]["avg_pnl_pct"], -5.0)
         self.assertEqual(surface["overall"]["profit_factor"], 0.0)
 
+    def test_surface_reports_no_loss_sample_without_pf_sentinel(self):
+        surface = ec.build_expectancy_surface_from_trades(
+            [
+                {
+                    "direction_score": 78,
+                    "quality_score": 66,
+                    "tech_score": 72,
+                    "market_regime": "bullish",
+                    "direction": "call",
+                    "pnl_pct": 4.0,
+                    "directional_correct": True,
+                }
+            ],
+            min_trades=1,
+            shrinkage_trades=0.0,
+        )
+
+        self.assertIsNotNone(surface)
+        assert surface is not None
+        self.assertIsNone(surface["overall"]["profit_factor"])
+        self.assertTrue(surface["overall"]["no_loss_sample"])
+
     def test_build_expectancy_surface_preserves_provenance(self):
         trades = [
             {

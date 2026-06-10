@@ -82,7 +82,8 @@ def _failure_modes() -> dict:
                     "key": "volatility_expansion_observation",
                     "rows": 2,
                     "priced": 2,
-                    "profit_factor": 999.0,
+                    "profit_factor": None,
+                    "no_loss_sample": True,
                     "avg_net_pnl_pct": 25.0,
                     "median_net_pnl_pct": 25.0,
                     "win_rate_pct": 100.0,
@@ -160,16 +161,16 @@ class RegularOptionsRiskBudgetSizingReplayTests(unittest.TestCase):
         self.assertEqual(report["summary"]["overall_status"], "sizing_replay_built_open_risk_blocked")
         self.assertEqual(report["summary"]["source_row_count"], 5)
         self.assertEqual(report["summary"]["baseline_net_pnl_usd"], -100.0)
-        self.assertEqual(report["summary"]["best_research_scenario_id"], "paper_shadow_only")
-        self.assertEqual(report["summary"]["best_research_net_pnl_usd"], 100.0)
+        self.assertEqual(report["summary"]["best_research_scenario_id"], "quarantine_zero_weight")
+        self.assertEqual(report["summary"]["best_research_net_pnl_usd"], 80.0)
         self.assertFalse(report["summary"]["promotion_ready"])
         self.assertIn("open_risk_governor_blocks_sizing", report["summary"]["blockers"])
         scenarios = {row["scenario_id"]: row for row in report["scenarios"]}
-        self.assertEqual(scenarios["paper_shadow_only"]["net_pnl_usd"], 100.0)
+        self.assertEqual(scenarios["paper_shadow_only"]["net_pnl_usd"], 0.0)
         self.assertEqual(scenarios["current_governor_zero_new_risk"]["risk_unit_count"], 0.0)
         lanes = {row["lane"]: row for row in report["lane_budget_table"]}
         self.assertEqual(lanes["short_term"]["disposition"], "quarantine")
-        self.assertEqual(lanes["volatility_expansion_observation"]["paper_shadow_only_weight"], 1.0)
+        self.assertEqual(lanes["volatility_expansion_observation"]["paper_shadow_only_weight"], 0.0)
 
     def test_missing_inputs_block_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

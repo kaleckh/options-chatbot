@@ -42,6 +42,7 @@ FIXTURE_SMOKE_EVIDENCE_CLASS = "fixture_smoke"
 UNIT_TEST_EVIDENCE_CLASS = "unit_test"
 E2E_TEST_EVIDENCE_CLASS = "e2e_test"
 RESEARCH_BACKFILL_EVIDENCE_CLASS = "research_backfill"
+QUARANTINE_UNKNOWN_EVIDENCE_CLASS = "quarantine_unknown"
 EXACT_SELECTION_SOURCE = "live_chain_exact_contract"
 EXACT_PROMOTION_CLASS = "promotable_exact_contract"
 SPREAD_BID_ASK_ENTRY_BASIS = "spread_ask_bid"
@@ -579,9 +580,12 @@ def _normalize_evidence_class(
         UNIT_TEST_EVIDENCE_CLASS,
         E2E_TEST_EVIDENCE_CLASS,
         RESEARCH_BACKFILL_EVIDENCE_CLASS,
+        QUARANTINE_UNKNOWN_EVIDENCE_CLASS,
     }:
         return normalized
     label = str(source_label or "").strip().lower()
+    if label in {LIVE_PRODUCTION_EVIDENCE_CLASS, "live", "production"}:
+        return LIVE_PRODUCTION_EVIDENCE_CLASS
     if "manual" in label or "observation" in label:
         return MANUAL_OBSERVATION_EVIDENCE_CLASS
     if "fixture" in label or "smoke" in label:
@@ -590,9 +594,9 @@ def _normalize_evidence_class(
         return UNIT_TEST_EVIDENCE_CLASS
     if "e2e" in label:
         return E2E_TEST_EVIDENCE_CLASS
-    if "research" in label or "backfill" in label:
+    if any(token in label for token in ("research", "backfill", "eod", "thetadata", "onclickmedia", "fallback")):
         return RESEARCH_BACKFILL_EVIDENCE_CLASS
-    return LIVE_PRODUCTION_EVIDENCE_CLASS
+    return QUARANTINE_UNKNOWN_EVIDENCE_CLASS
 
 
 def _default_run_mode(evidence_class: str) -> str:
@@ -762,10 +766,11 @@ def _eligibility_for_pick(
     if not deduped_blockers:
         trusted_truth_horizon = _trusted_truth_horizon()
         entry_date = _parse_date(
-            pick.get("quote_time_et")
-            or pick.get("entry_date")
-            or provenance.get("recorded_at_utc")
+            pick.get("entry_date")
+            or pick.get("quote_time_et")
         )
+        if entry_date is None:
+            return INELIGIBLE_STATUS, ["unparseable_entry_date"], quote_freshness_status
         if trusted_truth_horizon and entry_date and entry_date > trusted_truth_horizon:
             return PENDING_TRUTH_STATUS, ["entry_date_beyond_trusted_truth_horizon"], quote_freshness_status
     return (

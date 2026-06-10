@@ -72,12 +72,11 @@ def _metrics(trades: list[dict[str, Any]]) -> dict[str, Any]:
     profit_factor = None
     if gross_loss > 0:
         profit_factor = round(gross_profit / gross_loss, 2)
-    elif gross_profit > 0:
-        profit_factor = 999.0
     return {
         "trades": count,
         "avg_pnl_pct": round(sum(values) / count, 2) if count else 0.0,
         "profit_factor": profit_factor,
+        "no_loss_sample": bool(values and gross_loss <= 0 and gross_profit > 0),
         "win_rate_pct": round(sum(1 for value in values if value > 0) / count * 100, 1) if count else 0.0,
         "worst_pnl_pct": round(min(values), 2) if values else 0.0,
         "best_pnl_pct": round(max(values), 2) if values else 0.0,

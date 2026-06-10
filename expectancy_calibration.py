@@ -160,12 +160,16 @@ def tech_score_bucket(score: Any, bucket_size: int = DEFAULT_TECH_BUCKET_SIZE) -
     return score_bucket(score, bucket_size=bucket_size)
 
 
-def _profit_factor(pnl_values: list[float]) -> float:
+def _profit_factor(pnl_values: list[float]) -> float | None:
+    if not pnl_values:
+        return 0.0
     wins = [value for value in pnl_values if value > 0]
-    losses = [value for value in pnl_values if value <= 0]
+    losses = [value for value in pnl_values if value < 0]
     gross_win = sum(wins)
     gross_loss = abs(sum(losses))
-    return round(gross_win / max(gross_loss, 0.01), 2)
+    if gross_loss <= 0:
+        return None
+    return round(gross_win / gross_loss, 2)
 
 
 def _surface_level_definitions(include_tech_band: bool) -> tuple[list[dict[str, Any]], list[str]]:
@@ -255,6 +259,8 @@ def _summarize_group(
     direction_values = [_safe_float(trade.get("direction_score"), 0.0) for trade in trades]
     tech_values = [_safe_float(trade.get("tech_score"), 0.0) for trade in trades]
     raw_avg = sum(pnl_values) / max(len(pnl_values), 1)
+    gross_win = sum(value for value in pnl_values if value > 0)
+    gross_loss = abs(sum(value for value in pnl_values if value < 0))
     out = {
         "level": level_id,
         "group_key": _group_key(fields, field_values),
@@ -272,6 +278,7 @@ def _summarize_group(
         "win_rate_pct": round(win_rate, 1),
         "directional_accuracy_pct": round(directional_hits / max(len(trades), 1) * 100.0, 1),
         "profit_factor": _profit_factor(pnl_values),
+        "no_loss_sample": bool(pnl_values and gross_loss <= 0 and gross_win > 0),
         "avg_quality_score": round(sum(quality_values) / max(len(quality_values), 1), 1),
         "avg_direction_score": round(sum(direction_values) / max(len(direction_values), 1), 1),
         "avg_tech_score": round(sum(tech_values) / max(len(tech_values), 1), 1),
@@ -419,7 +426,8 @@ def _summarize_group_from_stats(
         "win_rate_pct_raw": round(win_rate, 1),
         "win_rate_pct": round(win_rate, 1),
         "directional_accuracy_pct": round(int(stats.get("directional_hits", 0) or 0) / max(trades, 1) * 100.0, 1),
-        "profit_factor": round(gross_win / max(gross_loss, 0.01), 2),
+        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss > 0 else None,
+        "no_loss_sample": bool(trades and gross_loss <= 0 and gross_win > 0),
         "avg_quality_score": round(quality_sum / max(trades, 1), 1),
         "avg_direction_score": round(direction_sum / max(trades, 1), 1),
         "avg_tech_score": round(tech_sum / max(trades, 1), 1),

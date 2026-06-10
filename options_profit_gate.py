@@ -45,12 +45,14 @@ from proof_contract import row_counts_as_proof_grade_exact_closed, row_has_raw_e
 
 
 LIVE_EVIDENCE_CLASS = "live_production"
+QUARANTINE_UNKNOWN_EVIDENCE_CLASS = "quarantine_unknown"
 NON_PRODUCTION_EVIDENCE_CLASSES = {
     "manual_observation",
     "fixture_smoke",
     "unit_test",
     "e2e_test",
     "research_backfill",
+    QUARANTINE_UNKNOWN_EVIDENCE_CLASS,
 }
 DEFAULT_MIN_IMPORTED_QUOTE_COVERAGE_PCT = 70.0
 DEFAULT_MIN_ELIGIBLE_FORWARD_EVENTS = 10
@@ -303,8 +305,8 @@ def _normalize_evidence_class(value: Any, *, source_label: str = "") -> str:
     if any(token in source for token in ("research", "backfill", "eod", "thetadata", "onclickmedia", "fallback")):
         return "research_backfill"
     if source:
-        return "research_backfill"
-    return LIVE_EVIDENCE_CLASS
+        return QUARANTINE_UNKNOWN_EVIDENCE_CLASS
+    return QUARANTINE_UNKNOWN_EVIDENCE_CLASS
 
 
 def _business_days_stale(truth_horizon: date | None, current_date: date | None) -> Optional[int]:
@@ -361,6 +363,7 @@ def _load_positions_snapshot() -> dict[str, Any]:
 def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any]:
     net_pnls: list[float] = []
     gross_pnls: list[float] = []
+    net_pnl_usds: list[float] = []
     net_realized_pnl_usd = 0.0
     gross_realized_pnl_usd = 0.0
     exact_contract_count = 0
@@ -394,11 +397,18 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
             net_pnl_usd = _safe_float(snapshot.get("net_pnl_usd"))
         if gross_pnl_usd is None and snapshot is not None:
             gross_pnl_usd = _safe_float(snapshot.get("gross_pnl_usd"))
-        net_realized_pnl_usd += float(net_pnl_usd or 0.0)
-        gross_realized_pnl_usd += float(gross_pnl_usd or 0.0)
-    positive = sum(value for value in net_pnls if value > 0)
-    negative = abs(sum(value for value in net_pnls if value < 0))
-    profit_factor = round(positive / negative, 3) if negative > 0 else (999.0 if positive > 0 else None)
+        if net_pnl_usd is not None:
+            net_pnl_usd_value = float(net_pnl_usd)
+            net_pnl_usds.append(net_pnl_usd_value)
+            net_realized_pnl_usd += net_pnl_usd_value
+        if gross_pnl_usd is not None:
+            gross_realized_pnl_usd += float(gross_pnl_usd)
+    positive_pct = sum(value for value in net_pnls if value > 0)
+    negative_pct = abs(sum(value for value in net_pnls if value < 0))
+    positive_usd = sum(value for value in net_pnl_usds if value > 0)
+    negative_usd = abs(sum(value for value in net_pnl_usds if value < 0))
+    profit_factor = round(positive_usd / negative_usd, 3) if negative_usd > 0 else None
+    no_loss_sample = bool(net_pnl_usds and negative_usd <= 0 and positive_usd > 0)
     return {
         "closed_position_count": len(net_pnls),
         "exact_contract_closed_count": exact_contract_count,
@@ -407,8 +417,12 @@ def _realized_position_metrics(positions: list[dict[str, Any]]) -> dict[str, Any
         "avg_gross_pnl_pct": round(sum(gross_pnls) / len(gross_pnls), 3) if gross_pnls else None,
         "profit_factor": profit_factor,
         "net_profit_factor": profit_factor,
-        "positive_sum_pct": round(positive, 3),
-        "negative_sum_pct": round(negative, 3),
+        "profit_factor_basis": "net_realized_pnl_usd",
+        "no_loss_sample": no_loss_sample,
+        "positive_sum_pct": round(positive_pct, 3),
+        "negative_sum_pct": round(negative_pct, 3),
+        "positive_sum_usd": round(positive_usd, 2),
+        "negative_sum_usd": round(negative_usd, 2),
         "net_realized_pnl_usd": round(net_realized_pnl_usd, 2),
         "gross_realized_pnl_usd": round(gross_realized_pnl_usd, 2),
         "non_proof_closed_position_count": excluded_non_proof_count,
@@ -432,6 +446,8 @@ def _forward_ledger_runtime_diagnostics(
         "live_production_session_count": 0,
         "live_production_zero_pick_session_count": 0,
         "live_production_event_count": 0,
+        "quarantine_unknown_session_count": 0,
+        "quarantine_unknown_event_count": 0,
         "eligible_live_production_event_count": 0,
         "pending_truth_live_production_event_count": 0,
         "ineligible_live_production_event_count": 0,
@@ -450,6 +466,7 @@ def _forward_ledger_runtime_diagnostics(
 
     live_session_count = 0
     live_zero_pick_session_count = 0
+    quarantine_session_count = 0
     for session in sessions:
         notes = dict(session.get("notes") or {})
         source_label = str(session.get("source_label") or "").strip()
@@ -460,6 +477,8 @@ def _forward_ledger_runtime_diagnostics(
             or notes.get("run_mode"),
             source_label=source_label,
         )
+        if evidence_class == QUARANTINE_UNKNOWN_EVIDENCE_CLASS:
+            quarantine_session_count += 1
         if evidence_class != LIVE_EVIDENCE_CLASS or bool(session.get("is_fixture")):
             continue
         live_session_count += 1
@@ -470,12 +489,15 @@ def _forward_ledger_runtime_diagnostics(
     eligible_live_event_count = 0
     pending_live_event_count = 0
     ineligible_live_event_count = 0
+    quarantine_event_count = 0
     for event in events:
         source_label = str(event.get("source_label") or "").strip()
         evidence_class = _normalize_evidence_class(
             event.get("evidence_class") or event.get("run_mode"),
             source_label=source_label,
         )
+        if evidence_class == QUARANTINE_UNKNOWN_EVIDENCE_CLASS:
+            quarantine_event_count += 1
         if evidence_class != LIVE_EVIDENCE_CLASS or bool(event.get("is_fixture")):
             continue
         live_event_count += 1
@@ -494,6 +516,8 @@ def _forward_ledger_runtime_diagnostics(
         "live_production_session_count": live_session_count,
         "live_production_zero_pick_session_count": live_zero_pick_session_count,
         "live_production_event_count": live_event_count,
+        "quarantine_unknown_session_count": quarantine_session_count,
+        "quarantine_unknown_event_count": quarantine_event_count,
         "eligible_live_production_event_count": eligible_live_event_count,
         "pending_truth_live_production_event_count": pending_live_event_count,
         "ineligible_live_production_event_count": ineligible_live_event_count,
@@ -521,6 +545,7 @@ def _load_forward_evidence(
     all_events: list[dict[str, Any]] = []
     contamination_findings: list[dict[str, Any]] = []
     stale_metadata_events: list[dict[str, Any]] = []
+    quarantined_events: list[dict[str, Any]] = []
     by_symbol: dict[str, dict[str, int]] = {
         symbol: {"eligible": 0, "pending_truth": 0, "ineligible": 0}
         for symbol in TARGET_SYMBOLS
@@ -640,6 +665,15 @@ def _load_forward_evidence(
                     "evidence_class": evidence_class,
                 }
             )
+        if evidence_class == QUARANTINE_UNKNOWN_EVIDENCE_CLASS:
+            quarantined_events.append(
+                {
+                    "event_id": normalized_event.get("event_id"),
+                    "session_id": normalized_event.get("session_id"),
+                    "source_label": source_label or None,
+                    "evidence_class": evidence_class,
+                }
+            )
         if quote_freshness_status == "stale":
             stale_metadata_events.append(
                 {
@@ -663,6 +697,8 @@ def _load_forward_evidence(
         "pending_truth_events": pending_truth_events,
         "pending_truth_event_count": len(pending_truth_events),
         "contamination_findings": contamination_findings,
+        "quarantined_events": quarantined_events,
+        "quarantined_event_count": len(quarantined_events),
         "stale_metadata_events": stale_metadata_events,
         "by_symbol": by_symbol,
         "requested_ledger_diagnostics": requested_ledger_diagnostics,

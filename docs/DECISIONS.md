@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-06-09: Stop Treating No-Loss Samples As High Profit Factor
+
+Profit-factor readbacks used several sentinels for no-loss samples, including `999.0` and gross-profit divided by tiny denominators. Those values looked like exceptional PF and could satisfy downstream readiness checks even when the sample had no losing trades and therefore no defined profit factor.
+
+Durable decision: no-loss samples report `profit_factor=null` with an explicit `no_loss_sample=true` flag. Profit factor is computed on net USD P&L where available, not summed per-trade percentages, and no null/no-loss PF may be used as a ranking key or claim-readiness pass. This applies across the options-profit gate/flywheel, WFO reports, expectancy calibration, missed-pick audits, risk-budget sizing, chain-native exits, and metric-truth readbacks.
+
+## 2026-06-09: Regular Strategy Direction After Sprint Audit
+
+The sprint audit confirmed that the current broad regular-options shapes are losing in the evidence that matters: baseline missed-pick economics remain `206` rows at PF `0.34` and average `-15.28%`, the one-contract sizing replay is deeply negative, no lane is promoted, and the fresh executable realized-P&L cohort is still `0` rows. Filter tuning is not the live problem: regular bearish put chain-native relaxation kept current filters at PF `0.00` / average `-27.93%`, and the best relaxed branch reached only PF `0.62`. The only positive historical signal remains `volatility_expansion_observation`, but its positive slice is thin and now has an open-risk blocker on QQQ `id=537`.
+
+Durable decision: stop tuning `regular_bearish_put_primary`-style lanes, Lane A entry/memory/count variants, and broad bad-zero-ticker variants as the next profitability route. Put research weight on collecting fresh executable realized rows and growing the volatility-expansion sample only after exact exit evidence exists. Treat the 2026-05 drift as a regime-survival question, not a filter question, and re-decide after the fresh-evidence loop has at least `20` realized rows or a named market-window defect is cleared.
+
 ## 2026-06-09: Add Autoresearch Progress Score Without Relaxing Promotion Gates
 
 The regular-options autoresearch judge had a frozen all-or-nothing `score`: below the full promotion bar, every experiment scored `0.00`, so the goal harness fell back to proxy-heavy ranking. That let raw count and quote-coverage backfill look like progress even when executable-P&L economics did not improve.

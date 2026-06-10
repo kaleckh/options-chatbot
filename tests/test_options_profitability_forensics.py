@@ -31,8 +31,10 @@ class OptionsProfitabilityForensicsTests(unittest.TestCase):
             min_trades=1,
         )
 
-        self.assertEqual(report["overall"]["profit_factor"], 999.0)
-        self.assertEqual(report["exactness_view"]["exact_only"]["profit_factor"], 999.0)
+        self.assertIsNone(report["overall"]["profit_factor"])
+        self.assertTrue(report["overall"]["no_loss_sample"])
+        self.assertIsNone(report["exactness_view"]["exact_only"]["profit_factor"])
+        self.assertTrue(report["exactness_view"]["exact_only"]["no_loss_sample"])
         self.assertFalse(any("profit factor is below 1.0" in item for item in report["blockers"]))
 
 

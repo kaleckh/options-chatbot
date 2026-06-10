@@ -389,13 +389,15 @@ def _metric_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
     ]
     values = [float(row["net_pnl_pct"]) for row in priced]
     usd = [float(row["net_pnl_usd"]) for row in priced if _safe_float(row.get("net_pnl_usd")) is not None]
-    gains = sum(value for value in values if value > 0)
-    losses = abs(sum(value for value in values if value < 0))
+    gains = sum(value for value in usd if value > 0)
+    losses = abs(sum(value for value in usd if value < 0))
     return {
         "rows": len(rows),
         "priced": len(priced),
         "unpriced": len(rows) - len(priced),
-        "profit_factor": round(gains / losses, 2) if losses else (999.0 if gains > 0 else 0.0 if priced else None),
+        "profit_factor": round(gains / losses, 2) if losses else None,
+        "profit_factor_basis": "net_pnl_usd",
+        "no_loss_sample": bool(usd and losses <= 0 and gains > 0),
         "avg_net_pnl_pct": round(sum(values) / len(values), 2) if values else None,
         "median_net_pnl_pct": round(median(values), 2) if values else None,
         "min_net_pnl_pct": round(min(values), 2) if values else None,
