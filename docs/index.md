@@ -246,6 +246,8 @@ These are the living docs for the current worktree:
   - Clean-Proof Goal v2 for regular-options strategy loops under the frozen evaluator and executable-P&L progress score
 - `docs/autoresearch/fresh-executable-evidence-goal.md`
   - forward evidence goal for collecting fresh exact realized-P&L rows and feeding realized cohort numbers back into strategy prompts
+- `docs/autoresearch/goal-prompt-rotation.md`
+  - post-sprint operating-loop rotation for heartbeat evidence collection, weekly strategy hypotheses, monthly lane lifecycle review, execution-quality truth, new-lane incubation, and recurring meta-loop audits
 - `docs/autoresearch/profitability-paper-gate-goal.md`
   - reusable six-sprint goal prompt for finishing the profitability paper-gate operator workflow with six-subagent review gates
 - `docs/autoresearch/monthly-all-lanes-profitability-goal.md`
