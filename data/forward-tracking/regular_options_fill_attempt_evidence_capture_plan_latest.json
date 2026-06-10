@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-fill-attempt-evidence-capture-plan.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260610T062724Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260610T163306Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260610T062724Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fill_attempt_evidence_capture_plan_20260610T163306Z.md"
   },
   "evidence_boundary": {
     "operator_rule": "A row may only move out of this plan after a fresh selection window creates durable fill-attempt evidence and the candidate ledger is rerun.",
@@ -22,7 +22,7 @@
     "readback_is": "read-only row plan for missing fill-attempt evidence in regular supervised options",
     "readback_is_not": "broker action, trading-row DB mutation, scanner-policy change, stop/sizing change, proof-bar change, or lane promotion"
   },
-  "generated_at_utc": "2026-06-10T06:27:24Z",
+  "generated_at_utc": "2026-06-10T16:33:06Z",
   "inputs": {
     "candidate_ledger": {
       "error": null,
