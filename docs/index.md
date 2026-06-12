@@ -206,6 +206,8 @@ These are the living docs for the current worktree:
   - generated read-only import/query plan that turns minute-exit exact entry seeds into grouped ThetaData OPRA/NBBO minute quote commands without changing stops, scanner policy, sizing, broker behavior, proof bars, or promotion
 - `docs/monthly-all-lanes-profitability-audit.md`
   - generated monthly all-lanes profitability command center that unifies lane economics, monthly drift, candidate-rule scoring, execution realism, portfolio risk, oracle replay gaps, and next-evidence actions without changing scanner, broker, stop, sizing, DB, proof, or promotion behavior
+- `docs/regime-stratified-replay-report.md`
+  - generated read-only regime stratification of current exact replay rows by VIX tercile, SPY 50-day trend state, and entry month, surfaced in the monthly audit without changing scanner, broker, proof, or promotion behavior
 - `docs/volatility-probation-reconciliation.md`
   - generated readback separating legacy pre-promotion volatility rows from current paper/probation exact-evidence work and open-risk blockers
 - `docs/regular-options-operator-workflow.md`

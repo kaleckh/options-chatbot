@@ -29,6 +29,7 @@ DEFAULT_ARTIFACT_PATHS: dict[str, Path] = {
 }
 
 DEFAULT_OPTIONAL_ARTIFACT_PATHS: dict[str, Path] = {
+    "regime_stratified_replay_report": ROOT / "data" / "profitability-lab" / "regime-stratified-replay" / "latest.json",
     "overfit_rule_archive": ROOT / "data" / "forward-tracking" / "regular_options_overfit_rule_archive_latest.json",
     "lane_quarantine_archive": ROOT / "data" / "forward-tracking" / "regular_options_lane_quarantine_archive_latest.json",
     "stale_candidate_archive": ROOT
@@ -780,6 +781,43 @@ def _risk_portfolio(open_risk: dict[str, Any], multilane: dict[str, Any], layer_
         "risk_budget_sizing_metrics": _as_dict(sizing.get("metrics")),
         "risk_portfolio_status": "blocked" if blockers else "ready",
         "promotion_blockers": blockers,
+    }
+
+
+def _regime_stratified_replay_report(report: dict[str, Any]) -> dict[str, Any]:
+    summary = _as_dict(report.get("summary"))
+    if report.get("status") != "regime_stratified_replay_readback":
+        return {
+            "status": "missing_or_unavailable",
+            "implementation_status": "missing",
+            "regime_robust": False,
+            "metrics": {},
+            "next_evidence_queue": [],
+        }
+    market_context_status = _norm(summary.get("market_context_status"))
+    regime_robust = bool(summary.get("regime_robust"))
+    if regime_robust:
+        implementation_status = "built_regime_robust"
+    elif market_context_status != "complete":
+        implementation_status = "built_context_blocked"
+    else:
+        implementation_status = "built_regime_failure"
+    return {
+        "status": summary.get("overall_status"),
+        "implementation_status": implementation_status,
+        "regime_robust": regime_robust,
+        "metrics": {
+            "eligible_replay_row_count": summary.get("eligible_replay_row_count"),
+            "vix_missing_count": summary.get("vix_missing_count"),
+            "spy50_missing_count": summary.get("spy50_missing_count"),
+            "market_context_status": summary.get("market_context_status"),
+            "evaluable_bucket_count": summary.get("evaluable_bucket_count"),
+            "failing_bucket_count": summary.get("failing_bucket_count"),
+            "branch_count": summary.get("branch_count"),
+            "branch_bucket_count": summary.get("branch_bucket_count"),
+            "minimum_bucket_n_for_robustness": summary.get("minimum_bucket_n_for_robustness"),
+        },
+        "next_evidence_queue": _as_list(report.get("next_evidence_queue")),
     }
 
 
@@ -1728,6 +1766,9 @@ def build_report(
     suggested_trade_plan = _suggested_trade_review_plan(
         reports.get("suggested_trade_review_plan", {})
     )
+    regime_stratification = _regime_stratified_replay_report(
+        reports.get("regime_stratified_replay_report", {})
+    )
     oracle = _oracle_ceiling()
     promotion = _promotion_gate(reports, risk, execution)
     lane_dispositions = _annotate_lane_quarantine_archive(
@@ -1869,6 +1910,10 @@ def build_report(
                 "implementation_status"
             ),
             "suggested_trade_review_plan_metrics": suggested_trade_plan.get("metrics"),
+            "regime_stratification_status": regime_stratification.get("status"),
+            "regime_stratification_implementation_status": regime_stratification.get("implementation_status"),
+            "regime_robust": regime_stratification.get("regime_robust"),
+            "regime_stratification_metrics": regime_stratification.get("metrics"),
             "next_evidence_action_count": len(next_queue),
             "live_policy_change": live_policy_change,
         },
@@ -1894,6 +1939,7 @@ def build_report(
         "open_risk_resolution_plan": open_risk_plan,
         "fill_attempt_evidence_capture_plan": fill_attempt_plan,
         "suggested_trade_review_plan": suggested_trade_plan,
+        "regime_stratified_replay_report": regime_stratification,
         "monthly_drift": monthly_drift,
         "worst_buckets": worst_buckets,
         "candidate_rules": candidate_rules,
@@ -1947,6 +1993,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Open-risk resolution plan: `{summary.get('open_risk_resolution_plan_status')}` / `{summary.get('open_risk_resolution_plan_implementation_status')}` / `{_json_inline(summary.get('open_risk_resolution_plan_metrics') or {})}`.",
         f"- Fill-attempt evidence capture plan: `{summary.get('fill_attempt_evidence_capture_plan_status')}` / `{summary.get('fill_attempt_evidence_capture_plan_implementation_status')}` / `{_json_inline(summary.get('fill_attempt_evidence_capture_plan_metrics') or {})}`.",
         f"- Suggested-trade review plan: `{summary.get('suggested_trade_review_plan_status')}` / `{summary.get('suggested_trade_review_plan_implementation_status')}` / `{_json_inline(summary.get('suggested_trade_review_plan_metrics') or {})}`.",
+        f"- Regime stratification: `{summary.get('regime_stratification_status')}` / `{summary.get('regime_stratification_implementation_status')}` / robust `{summary.get('regime_robust')}` / `{_json_inline(summary.get('regime_stratification_metrics') or {})}`.",
         f"- Quarantine archive: `{summary.get('archived_quarantine_lane_count')}` archived, `{summary.get('unarchived_quarantine_lane_count')}` unarchived.",
         f"- Archived rejected rules: `{summary.get('archived_reject_overfit_rule_count')}` archived, `{summary.get('unarchived_reject_overfit_rule_count')}` unarchived.",
         f"- Next evidence actions: `{summary.get('next_evidence_action_count')}`.",
@@ -2343,6 +2390,21 @@ def render_markdown(report: dict[str, Any]) -> str:
             )
             + " |"
         )
+    regime = _as_dict(report.get("regime_stratified_replay_report"))
+    regime_metrics = _as_dict(regime.get("metrics"))
+    lines.extend(
+        [
+            "",
+            "## Regime Stratification",
+            "",
+            f"- Status: `{regime.get('status')}` / `{regime.get('implementation_status')}`.",
+            f"- Regime robust: `{regime.get('regime_robust')}`.",
+            f"- Eligible rows: `{regime_metrics.get('eligible_replay_row_count')}`.",
+            f"- Branches: `{regime_metrics.get('branch_count')}`; branch buckets `{regime_metrics.get('branch_bucket_count')}`.",
+            f"- Market context: `{regime_metrics.get('market_context_status')}`; VIX missing `{regime_metrics.get('vix_missing_count')}`, SPY50 missing `{regime_metrics.get('spy50_missing_count')}`.",
+            f"- Evaluable / failing buckets: `{regime_metrics.get('evaluable_bucket_count')}` / `{regime_metrics.get('failing_bucket_count')}`.",
+        ]
+    )
     lines.extend(
         [
             "",

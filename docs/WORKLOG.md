@@ -4,6 +4,8 @@
 
 - Added deterministic bootstrap confidence diagnostics to the frozen regular-options autoresearch evaluator without changing `score`, `progress_score`, promotion gates, scanner behavior, or proof bars. The evaluator now reports combined and per-branch `pf_point`, `pf_lb_5pct`, `pf_ub_95pct`, `avg_net_lb_5pct`, `n_trades`, and `statistical_confidence` from 10,000 trade-level net-P&L% resamples; the experiment harness summary and compact ledger rows carry the same aggregate readback fields.
 
+- Added Phase 1.2 regime stratification for regular-options replay rows. `scripts/build_regime_stratified_replay_report.py` now reads exact trusted replay P&L rows, classifies VIX tercile at entry, SPY prior-close 50-day trend state, and entry month, reports PF/avg/N per aggregate and per-branch bucket, and fails `regime_robust` closed when market context is missing or any bucket with at least 15 rows has PF below 1.0 or unavailable no-loss PF. The monthly profitability audit now carries this as an advisory readback only, with no scanner, broker, threshold, proof-bar, or promotion behavior change.
+
 ## 2026-06-10
 
 - Removed the GitHub Actions CI workflow at `.github/workflows/ci.yml` so push/PR CI checks no longer run from this repo, while keeping local verification scripts in `package.json`. Consolidated the remaining `codex/` branches: `codex/s1-loop-and-handoff-split` was already an ancestor of `main`, and `codex/claude-critique-handoff` was merged as a superseded branch without downgrading newer June 10 readbacks. Preserved the current local generated evidence updates for regular guardrail starvation, fresh evidence, fill-attempt capture, and liquidity near-miss tracking.
