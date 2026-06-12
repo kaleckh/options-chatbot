@@ -1,5 +1,9 @@
 # Worklog
 
+## 2026-06-12
+
+- Added deterministic bootstrap confidence diagnostics to the frozen regular-options autoresearch evaluator without changing `score`, `progress_score`, promotion gates, scanner behavior, or proof bars. The evaluator now reports combined and per-branch `pf_point`, `pf_lb_5pct`, `pf_ub_95pct`, `avg_net_lb_5pct`, `n_trades`, and `statistical_confidence` from 10,000 trade-level net-P&L% resamples; the experiment harness summary and compact ledger rows carry the same aggregate readback fields.
+
 ## 2026-06-10
 
 - Removed the GitHub Actions CI workflow at `.github/workflows/ci.yml` so push/PR CI checks no longer run from this repo, while keeping local verification scripts in `package.json`. Consolidated the remaining `codex/` branches: `codex/s1-loop-and-handoff-split` was already an ancestor of `main`, and `codex/claude-critique-handoff` was merged as a superseded branch without downgrading newer June 10 readbacks. Preserved the current local generated evidence updates for regular guardrail starvation, fresh evidence, fill-attempt capture, and liquidity near-miss tracking.

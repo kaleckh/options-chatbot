@@ -15,8 +15,11 @@ Primary metrics, reported before and after every loop from the evaluator score l
 - M1: strict-deduped clean exact trade count, deduped by date, ticker, and direction.
 - M2: portfolio PF on conservative side-aware pricing, not priced-only PF.
 - M3: 5%/side slippage-stress PF.
+- M4: diagnostic bootstrap PF 5% lower bound and `stat_conf`, used to separate possible edge from selection luck without changing the frozen `score`.
 
 A loop succeeds only if M1 increases by at least 10 strict-new clean trades while M2 stays at least 1.50 and M3 stays at least 1.25 on the combined stack, all on trusted intraday OPRA/NBBO exact-contract evidence with executable side-aware exit pricing. Never count midpoint, last-trade, daily/EOD, stale-snapshot, or unresolved rows.
+
+Bootstrap readbacks are trade-level resamples over net P&L%, seeded and deterministic. They are diagnostic only: `underpowered` means the point PF looks positive but the 5% lower bound falls below 1.0, `confident_positive` means the lower bound is above 1.0, and `negative_or_flat` means the branch has not established a positive PF lower bound. No-loss PF remains undefined rather than promoted through a sentinel.
 
 ## Hard Constraints
 

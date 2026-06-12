@@ -57,7 +57,14 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
             "status": "scout_or_blocked",
             "promotion_blockers": [],
             "score_line": "score: 0.00 progress_score: 1.00",
-            "metrics": {},
+            "metrics": {
+                "pf_point": 1.3,
+                "pf_lb_5pct": 0.8,
+                "pf_ub_95pct": 2.4,
+                "avg_net_lb_5pct": -3.2,
+                "n_trades": 44,
+                "statistical_confidence": "underpowered",
+            },
         }
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -89,6 +96,8 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
                 )
 
         self.assertFalse(report["write_global_latest"])
+        self.assertEqual(report["variants"][0]["pf_lb_5pct"], 0.8)
+        self.assertEqual(report["variants"][0]["statistical_confidence"], "underpowered")
         self.assertEqual(len(write_calls), 1)
         self.assertNotEqual(write_calls[0], goal.evaluator.OUTPUT_DIR)
         self.assertEqual(write_calls[0].name, "autoresearch-scoreboard")

@@ -188,6 +188,7 @@ def run_goal_experiments(
         scoreboard["artifacts"] = artifacts
         _write_json(variant_dir / "scoreboard.json", scoreboard)
 
+        metrics = scoreboard.get("metrics") or {}
         rows.append(
             {
                 "variant_id": variant_id,
@@ -198,6 +199,12 @@ def run_goal_experiments(
                 "score": scoreboard.get("score"),
                 "progress_score": scoreboard.get("progress_score"),
                 "research_score": scoreboard.get("research_score"),
+                "pf_point": metrics.get("pf_point"),
+                "pf_lb_5pct": metrics.get("pf_lb_5pct"),
+                "pf_ub_95pct": metrics.get("pf_ub_95pct"),
+                "avg_net_lb_5pct": metrics.get("avg_net_lb_5pct"),
+                "n_trades": metrics.get("n_trades"),
+                "statistical_confidence": metrics.get("statistical_confidence"),
                 "status": scoreboard.get("status"),
                 "promotion_blockers": scoreboard.get("promotion_blockers"),
                 "score_line": scoreboard.get("score_line"),
@@ -211,7 +218,7 @@ def run_goal_experiments(
                     "pre_entry_filtered_candidate_count": variant_row.get("pre_entry_filtered_candidate_count"),
                     "pre_entry_filtered_candidate_reasons": variant_row.get("pre_entry_filtered_candidate_reasons"),
                 },
-                "autoresearch_metrics": scoreboard.get("metrics"),
+                "autoresearch_metrics": metrics,
             }
         )
 

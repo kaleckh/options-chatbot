@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts.evaluate_regular_options_autoresearch import (
     append_ledger,
+    bootstrap_confidence_for_values,
     build_scoreboard,
     evaluator_config_hash,
     format_score_line,
@@ -87,6 +88,33 @@ def _report(*, with_lane_a: bool = True, side_aware_pf: float = 1.40, side_aware
             }
         },
     }
+
+
+def _report_with_selected_trades(values_by_branch: dict[str, list[float]]) -> dict:
+    report = _report(with_lane_a=False)
+    report["combined_portfolio"]["metrics"]["exact_trade_count"] = sum(len(values) for values in values_by_branch.values())
+    report["selected_trades"] = []
+    for branch_id, values in values_by_branch.items():
+        report["selected_trades"].extend(
+            {
+                "lane_id": branch_id,
+                "exact_priced": True,
+                "priced": True,
+                "pnl_pct": value,
+            }
+            for value in values
+        )
+    report["lanes"] = [
+        _lane(
+            branch_id,
+            candidates=len(values),
+            exact=len(values),
+            unpriced=0,
+            include=True,
+        )
+        for branch_id, values in values_by_branch.items()
+    ]
+    return report
 
 
 class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
@@ -191,7 +219,62 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         self.assertEqual(row["evaluator_config_hash"], evaluator_config_hash())
         self.assertIn("score", row)
         self.assertIn("progress_score", row)
+        self.assertIn("pf_lb_5pct", row)
+        self.assertIn("avg_net_lb_5pct", row)
+        self.assertIn("statistical_confidence", row)
         self.assertNotIn("metrics", row)
+
+    def test_bootstrap_all_winners_preserves_no_loss_pf_null_and_positive_avg_lb(self):
+        stats = bootstrap_confidence_for_values([5.0, 10.0, 15.0, 20.0], branch_id="all-winners")
+
+        self.assertEqual(stats["n_trades"], 4)
+        self.assertIsNone(stats["pf_point"])
+        self.assertIsNone(stats["pf_lb_5pct"])
+        self.assertIsNone(stats["pf_ub_95pct"])
+        self.assertTrue(stats["no_loss_sample"])
+        self.assertGreater(stats["avg_net_lb_5pct"], 0.0)
+        self.assertEqual(stats["statistical_confidence"], "negative_or_flat")
+
+    def test_bootstrap_mixed_positive_branch_is_confident_and_deterministic(self):
+        values = [10.0] * 8 + [-5.0] * 2
+        first = bootstrap_confidence_for_values(values, branch_id="mixed-positive")
+        second = bootstrap_confidence_for_values(values, branch_id="mixed-positive")
+
+        self.assertEqual(first, second)
+        self.assertEqual(first["pf_point"], 8.0)
+        self.assertGreater(first["pf_lb_5pct"], 1.0)
+        self.assertEqual(first["statistical_confidence"], "confident_positive")
+
+    def test_bootstrap_heavy_tail_loser_marks_point_pf_as_underpowered(self):
+        values = [20.0] * 20 + [-250.0]
+        stats = bootstrap_confidence_for_values(values, branch_id="heavy-tail")
+
+        self.assertGreaterEqual(stats["pf_point"], 1.2)
+        self.assertLess(stats["pf_lb_5pct"], 1.0)
+        self.assertLess(stats["avg_net_lb_5pct"], 0.0)
+        self.assertEqual(stats["statistical_confidence"], "underpowered")
+
+    def test_scoreboard_reports_combined_and_per_branch_bootstrap_fields(self):
+        scoreboard = build_scoreboard(
+            _report_with_selected_trades(
+                {
+                    "branch_a": [10.0] * 8 + [-5.0] * 2,
+                    "branch_b": [20.0] * 20 + [-250.0],
+                }
+            ),
+            experiment_id="bootstrap",
+            hypothesis="bootstrap diagnostics",
+            generated_at_utc="2026-06-12T00:00:00Z",
+        )
+
+        metrics = scoreboard["metrics"]
+        self.assertEqual(metrics["n_trades"], 31)
+        self.assertIn(metrics["statistical_confidence"], {"underpowered", "confident_positive", "negative_or_flat"})
+        branches = metrics["bootstrap_confidence"]["branches"]
+        self.assertEqual([row["branch_id"] for row in branches], ["branch_a", "branch_b"])
+        self.assertEqual(branches[0]["statistical_confidence"], "confident_positive")
+        self.assertEqual(branches[1]["statistical_confidence"], "underpowered")
+        self.assertIn("pf_lb_5pct:", scoreboard["score_line"])
 
 
 if __name__ == "__main__":

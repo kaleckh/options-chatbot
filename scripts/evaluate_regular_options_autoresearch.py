@@ -4,7 +4,9 @@ import argparse
 import hashlib
 import json
 import math
+import random
 import sys
+from collections import defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,8 @@ LEDGER_PATH = OUTPUT_DIR / "ledger.jsonl"
 EVALUATOR_VERSION = "regular-options-autoresearch-v2"
 TARGET_CLEAN_TRADES = 200
 COUNT_CANDIDATE_STATUSES = {"count_candidate", "portfolio_candidate"}
+BOOTSTRAP_DRAWS = 10_000
+BOOTSTRAP_SEED = "regular-options-autoresearch-bootstrap-v1"
 
 PROMOTION_GATES: dict[str, Any] = {
     "clean_trade_count_min": TARGET_CLEAN_TRADES,
@@ -47,6 +51,9 @@ EVALUATOR_CONFIG: dict[str, Any] = {
     "score_policy": {
         "score_is_zero_until_promotable_clean": True,
         "progress_score_is_diagnostic_triage_only": True,
+        "bootstrap_confidence_is_diagnostic_only": True,
+        "bootstrap_draws": BOOTSTRAP_DRAWS,
+        "bootstrap_seed": BOOTSTRAP_SEED,
         "progress_score_inputs": [
             "promotable_clean_count",
             "conservative_profit_factor",
@@ -82,6 +89,18 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 def _round(value: Any, digits: int = 2) -> float:
     return round(_safe_float(value), digits)
+
+
+def _round_optional(value: Any, digits: int = 2) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return round(parsed, digits)
 
 
 def evaluator_config_hash() -> str:
@@ -185,6 +204,124 @@ def _stress_floor(lanes: list[dict[str, Any]]) -> float:
     return round(min(values), 2) if values else 0.0
 
 
+def _net_pnl_pct_value(trade: dict[str, Any]) -> float | None:
+    value = trade.get("net_pnl_pct", trade.get("pnl_pct"))
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if math.isfinite(parsed) else None
+
+
+def _profit_factor_point(values: list[float]) -> float | None:
+    wins = [value for value in values if value > 0.0]
+    losses = [value for value in values if value < 0.0]
+    gross_win = sum(wins)
+    gross_loss = abs(sum(losses))
+    if gross_loss <= 0.0:
+        return None
+    return gross_win / gross_loss
+
+
+def _percentile(sorted_values: list[float], pct: float) -> float | None:
+    if not sorted_values:
+        return None
+    index = max(0, min(len(sorted_values) - 1, math.ceil(float(pct) * len(sorted_values)) - 1))
+    return sorted_values[index]
+
+
+def _bootstrap_seed(label: str, values: list[float]) -> int:
+    payload = json.dumps(
+        {"label": label, "seed": BOOTSTRAP_SEED, "values": [round(value, 6) for value in values]},
+        sort_keys=True,
+    ).encode("utf8")
+    return int.from_bytes(hashlib.sha256(payload).digest()[:8], "big")
+
+
+def bootstrap_confidence_for_values(
+    values: list[float],
+    *,
+    branch_id: str,
+    draws: int = BOOTSTRAP_DRAWS,
+) -> dict[str, Any]:
+    clean_values = [float(value) for value in values if math.isfinite(float(value))]
+    n_trades = len(clean_values)
+    pf_point = _profit_factor_point(clean_values)
+    avg_point = sum(clean_values) / n_trades if n_trades else None
+    pf_draws: list[float] = []
+    avg_draws: list[float] = []
+
+    if n_trades:
+        rng = random.Random(_bootstrap_seed(branch_id, clean_values))
+        for _ in range(int(draws)):
+            sample = [clean_values[rng.randrange(n_trades)] for _ in range(n_trades)]
+            sample_pf = _profit_factor_point(sample)
+            if sample_pf is not None:
+                pf_draws.append(sample_pf)
+            avg_draws.append(sum(sample) / n_trades)
+
+    pf_draws.sort()
+    avg_draws.sort()
+    pf_lb = _percentile(pf_draws, 0.05)
+    pf_ub = _percentile(pf_draws, 0.95)
+    avg_lb = _percentile(avg_draws, 0.05)
+
+    if pf_lb is not None and pf_point is not None and pf_lb < 1.0 and pf_point >= 1.2:
+        confidence = "underpowered"
+    elif pf_lb is not None and pf_lb > 1.0:
+        confidence = "confident_positive"
+    else:
+        confidence = "negative_or_flat"
+
+    return {
+        "branch_id": branch_id,
+        "draws": int(draws),
+        "n_trades": n_trades,
+        "pf_point": _round_optional(pf_point),
+        "pf_lb_5pct": _round_optional(pf_lb),
+        "pf_ub_95pct": _round_optional(pf_ub),
+        "avg_net_point": _round_optional(avg_point),
+        "avg_net_lb_5pct": _round_optional(avg_lb),
+        "statistical_confidence": confidence,
+        "pf_defined_draws": len(pf_draws),
+        "no_loss_sample": bool(n_trades and pf_point is None and any(value > 0.0 for value in clean_values)),
+    }
+
+
+def _bootstrap_confidence(report: dict[str, Any]) -> dict[str, Any]:
+    selected = [
+        dict(trade)
+        for trade in report.get("selected_trades") or []
+        if dict(trade).get("exact_priced", dict(trade).get("priced", True))
+    ]
+    combined_values = [value for trade in selected if (value := _net_pnl_pct_value(trade)) is not None]
+    combined = bootstrap_confidence_for_values(combined_values, branch_id="combined_portfolio")
+
+    grouped: dict[str, list[float]] = defaultdict(list)
+    for trade in selected:
+        value = _net_pnl_pct_value(trade)
+        if value is None:
+            continue
+        branch_id = str(trade.get("lane_id") or "unknown")
+        grouped[branch_id].append(value)
+
+    branch_rows = [
+        bootstrap_confidence_for_values(values, branch_id=branch_id)
+        for branch_id, values in sorted(grouped.items())
+    ]
+    return {
+        "combined": combined,
+        "branches": branch_rows,
+        "policy": {
+            "level": "trade_level_with_replacement",
+            "draws": BOOTSTRAP_DRAWS,
+            "seed": BOOTSTRAP_SEED,
+            "pnl_basis": "net_pnl_pct",
+            "diagnostic_only": True,
+        },
+    }
+
+
 def _rolling_blocked_lanes(lanes: list[dict[str, Any]]) -> list[str]:
     blocked: list[str] = []
     for lane in lanes:
@@ -228,6 +365,8 @@ def build_metric_snapshot(report: dict[str, Any]) -> dict[str, Any]:
     reported_coverage = _reported_lane_coverage(lanes)
     effective_coverage = _effective_lane_coverage(lanes, conservative)
     zero_bid = _zero_bid_metrics(conservative)
+    bootstrap = _bootstrap_confidence(report)
+    bootstrap_combined = bootstrap["combined"]
 
     return {
         "scope": report.get("scope"),
@@ -250,6 +389,13 @@ def build_metric_snapshot(report: dict[str, Any]) -> dict[str, Any]:
         "paper_shadow_status": quality_gate.get("paper_shadow_status"),
         "included_lane_ids": [str(lane.get("lane_id") or "") for lane in lanes],
         "lane_a_is_counted": _lane_a_is_counted(lanes),
+        "pf_point": bootstrap_combined.get("pf_point"),
+        "pf_lb_5pct": bootstrap_combined.get("pf_lb_5pct"),
+        "pf_ub_95pct": bootstrap_combined.get("pf_ub_95pct"),
+        "avg_net_lb_5pct": bootstrap_combined.get("avg_net_lb_5pct"),
+        "n_trades": bootstrap_combined.get("n_trades"),
+        "statistical_confidence": bootstrap_combined.get("statistical_confidence"),
+        "bootstrap_confidence": bootstrap,
         **zero_bid,
     }
 
@@ -400,6 +546,10 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
     blockers = ",".join(scoreboard.get("promotion_blockers") or []) or "none"
     lane_a_pf = metrics.get("lane_a_conservative_profit_factor")
     zero_bid = metrics.get("zero_bid_exit_rate_pct")
+    pf_lb = metrics.get("pf_lb_5pct")
+    avg_lb = metrics.get("avg_net_lb_5pct")
+    pf_lb_text = "n/a" if pf_lb is None else f"{_round(pf_lb):.2f}"
+    avg_lb_text = "n/a" if avg_lb is None else f"{_round(avg_lb):.2f}"
     return (
         f"score: {_round(scoreboard.get('score')):.2f} "
         f"progress_score: {_round(scoreboard.get('progress_score')):.2f} "
@@ -413,6 +563,9 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
         f"coverage: {_round(metrics.get('effective_quote_coverage_pct')):.2f} "
         f"unresolved: {_safe_int(metrics.get('effective_unresolved_count'))} "
         f"stress_pf: {_round(metrics.get('stress_5pct_profit_factor')):.2f} "
+        f"pf_lb_5pct: {pf_lb_text} "
+        f"avg_net_lb_5pct: {avg_lb_text} "
+        f"stat_conf: {metrics.get('statistical_confidence')} "
         f"zero_bid_exit_rate: {('n/a' if zero_bid is None else f'{_round(zero_bid):.2f}')} "
         f"lane_a_zero_bid_pf: {('n/a' if lane_a_pf is None else f'{_round(lane_a_pf):.2f}')} "
         f"blockers: {blockers}"
@@ -435,6 +588,12 @@ def _ledger_entry(scoreboard: dict[str, Any]) -> dict[str, Any]:
         "clean_count": metrics.get("promotable_clean_count"),
         "scout_count": metrics.get("scout_count"),
         "profit_factor": metrics.get("profit_factor"),
+        "pf_point": metrics.get("pf_point"),
+        "pf_lb_5pct": metrics.get("pf_lb_5pct"),
+        "pf_ub_95pct": metrics.get("pf_ub_95pct"),
+        "avg_net_lb_5pct": metrics.get("avg_net_lb_5pct"),
+        "n_trades": metrics.get("n_trades"),
+        "statistical_confidence": metrics.get("statistical_confidence"),
         "avg_pnl_pct": metrics.get("avg_pnl_pct"),
         "effective_quote_coverage_pct": metrics.get("effective_quote_coverage_pct"),
         "effective_unresolved_count": metrics.get("effective_unresolved_count"),
@@ -454,6 +613,8 @@ def append_ledger(scoreboard: dict[str, Any], *, path: Path = LEDGER_PATH) -> No
 
 def render_markdown(scoreboard: dict[str, Any]) -> str:
     metrics = scoreboard.get("metrics") or {}
+    bootstrap = metrics.get("bootstrap_confidence") or {}
+    branches = bootstrap.get("branches") or []
     lines = [
         "# Regular Options Autoresearch Scoreboard",
         "",
@@ -481,6 +642,12 @@ def render_markdown(scoreboard: dict[str, Any]) -> str:
         f"- Clean count: `{metrics.get('promotable_clean_count')}`",
         f"- Scout count: `{metrics.get('scout_count')}`",
         f"- PF: `{metrics.get('profit_factor')}`",
+        f"- Bootstrap PF point: `{metrics.get('pf_point')}`",
+        f"- Bootstrap PF 5% lower bound: `{metrics.get('pf_lb_5pct')}`",
+        f"- Bootstrap PF 95% upper bound: `{metrics.get('pf_ub_95pct')}`",
+        f"- Bootstrap avg net 5% lower bound: `{metrics.get('avg_net_lb_5pct')}%`",
+        f"- Bootstrap trades: `{metrics.get('n_trades')}`",
+        f"- Statistical confidence: `{metrics.get('statistical_confidence')}`",
         f"- Avg PnL: `{metrics.get('avg_pnl_pct')}%`",
         f"- Effective coverage: `{metrics.get('effective_quote_coverage_pct')}%`",
         f"- Effective unresolved candidates: `{metrics.get('effective_unresolved_count')}`",
@@ -493,6 +660,32 @@ def render_markdown(scoreboard: dict[str, Any]) -> str:
     ]
     blockers = list(scoreboard.get("promotion_blockers") or [])
     lines.extend(f"- `{item}`" for item in blockers) if blockers else lines.append("- None.")
+    if branches:
+        lines.extend(
+            [
+                "",
+                "## Branch Bootstrap Diagnostics",
+                "",
+                "| Branch | N | PF point | PF LB 5% | PF UB 95% | Avg net LB 5% | Confidence |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+        )
+        for row in branches:
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        str(row.get("branch_id")),
+                        str(row.get("n_trades")),
+                        str(row.get("pf_point")),
+                        str(row.get("pf_lb_5pct")),
+                        str(row.get("pf_ub_95pct")),
+                        str(row.get("avg_net_lb_5pct")),
+                        str(row.get("statistical_confidence")),
+                    ]
+                )
+                + " |"
+            )
     lines.extend(["", "## Production Blockers", ""])
     production = list(scoreboard.get("production_blockers") or [])
     lines.extend(f"- `{item}`" for item in production) if production else lines.append("- None.")
