@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from scripts import audit_bullish_pullback_ticker_evidence as ticker_audit
 from scripts.audit_bullish_pullback_ticker_evidence import classify_ticker
 
 
@@ -128,6 +129,23 @@ class BullishPullbackTickerAuditTests(unittest.TestCase):
 
         self.assertEqual(decision, "research-only/data-needed")
         self.assertEqual(lane, "defensive_income")
+
+    def test_n_floor_label_freezes_legacy_queue_disposition_below_30_exact(self):
+        self.assertEqual(ticker_audit._n_floor_disposition("keep-in-current-lane", 2), "insufficient_n_frozen")
+        self.assertFalse(ticker_audit._queue_change_allowed("remove", 29))
+        self.assertEqual(ticker_audit._n_floor_disposition("remove", 30), "remove")
+        self.assertTrue(ticker_audit._queue_change_allowed("remove", 30))
+
+    def test_lane_parent_expectancy_is_trade_weighted(self):
+        parent = ticker_audit._lane_parent_expectancy(
+            {
+                "AAA": {"exact_trade_count": 2, "exact_avg_pnl_pct": 100.0},
+                "BBB": {"exact_trade_count": 8, "exact_avg_pnl_pct": 0.0},
+            }
+        )
+
+        self.assertEqual(parent["trade_count"], 10)
+        self.assertEqual(parent["avg_pnl_pct"], 20.0)
 
 
 if __name__ == "__main__":

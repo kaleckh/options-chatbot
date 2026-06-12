@@ -223,6 +223,20 @@ class ExpectancyCalibrationTests(unittest.TestCase):
         self.assertEqual(lookup["surface_provenance"]["source_playbook"], "bullish_momentum")
         self.assertEqual(lookup["surface_provenance"]["source_truth_source"], "historical_imported_daily")
 
+    def test_shrink_expectancy_to_parent_uses_surface_shrinkage_formula(self):
+        readback = ec.shrink_expectancy_to_parent(
+            raw_avg_pnl_pct=100.0,
+            child_trade_count=2,
+            parent_avg_pnl_pct=20.0,
+            parent_trade_count=50,
+            shrinkage_trades=4.0,
+        )
+
+        self.assertEqual(readback["raw_avg_pnl_pct"], 100.0)
+        self.assertEqual(readback["parent_avg_pnl_pct"], 20.0)
+        self.assertEqual(readback["shrunk_avg_pnl_pct"], 46.67)
+        self.assertTrue(readback["used_parent_shrinkage"])
+
 
 if __name__ == "__main__":
     unittest.main()

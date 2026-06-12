@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import expectancy_calibration as ec
+
 
 UNIVERSE_PATH = ROOT / "data" / "options-lanes" / "universes" / "bullish_pullback_observation.json"
 CONFIDENCE_PATH = ROOT / "data" / "profitability-lab" / "bullish-pullback-observation" / "confidence" / "latest.json"
@@ -22,7 +24,7 @@ SLEEVE_ROUND_PATH = (
     / "profitability-lab"
     / "bullish-pullback-observation"
     / "sleeves"
-    / "sleeve_round_20260528T025450Z.json"
+    / "sleeve_round_20260602T163650Z.json"
 )
 COUNT_EXPANDED_PATH = (
     ROOT
@@ -33,6 +35,9 @@ COUNT_EXPANDED_PATH = (
 )
 OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "bullish-pullback-observation" / "ticker-audit"
 DOCS_OUTPUT = ROOT / "docs" / "bullish-pullback-ticker-audit-2026-05-29.md"
+
+MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION = 30
+TICKER_EXPECTANCY_SHRINKAGE_TRADES = ec.DEFAULT_SHRINKAGE_TRADES
 
 
 LANE_MAP: dict[str, str] = {
@@ -293,6 +298,35 @@ def classify_ticker(symbol: str, row: dict[str, Any], confidence: dict[str, Any]
     )
 
 
+def _lane_parent_expectancy(rows: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    total_pnl = 0.0
+    total_trades = 0
+    for row in rows.values():
+        exact = _safe_int(row.get("exact_trade_count"))
+        if exact <= 0:
+            continue
+        total_trades += exact
+        total_pnl += _safe_float(row.get("exact_avg_pnl_pct")) * exact
+    avg = total_pnl / total_trades if total_trades else 0.0
+    return {
+        "lane_id": "bullish_pullback_observation",
+        "trade_count": total_trades,
+        "avg_pnl_pct": round(avg, 2),
+    }
+
+
+def _n_floor_disposition(decision: str, exact_trades: int) -> str:
+    if int(exact_trades) < MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION:
+        return "insufficient_n_frozen"
+    return decision
+
+
+def _queue_change_allowed(decision: str, exact_trades: int) -> bool:
+    if int(exact_trades) < MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION:
+        return False
+    return decision in {"keep-in-current-lane", "move-to-different-lane", "remove"}
+
+
 def build_audit(
     *,
     universe_path: Path = UNIVERSE_PATH,
@@ -305,6 +339,7 @@ def build_audit(
     confidence_by_symbol = confidence_rows(confidence_path)
     confidence_report = _load_json(confidence_path)
     count_expanded = _load_json(count_expanded_path) if count_expanded_path.exists() else {}
+    lane_parent_expectancy = _lane_parent_expectancy(sleeve_by_symbol)
 
     rows: list[dict[str, Any]] = []
     for item in universe:
@@ -313,6 +348,17 @@ def build_audit(
         conf = confidence_by_symbol.get(symbol, {})
         run = _load_run(row)
         decision, recommended_lane, rationale = classify_ticker(symbol, row, conf)
+        exact = _safe_int(row.get("exact_trade_count"))
+        n_floor_disposition = _n_floor_disposition(decision, exact)
+        queue_change_allowed = _queue_change_allowed(decision, exact)
+        raw_avg = _safe_float(row.get("exact_avg_pnl_pct"))
+        expectancy = ec.shrink_expectancy_to_parent(
+            raw_avg_pnl_pct=raw_avg,
+            child_trade_count=exact,
+            parent_avg_pnl_pct=lane_parent_expectancy["avg_pnl_pct"],
+            parent_trade_count=lane_parent_expectancy["trade_count"],
+            shrinkage_trades=TICKER_EXPECTANCY_SHRINKAGE_TRADES,
+        )
         rows.append(
             {
                 "ticker": symbol,
@@ -320,13 +366,20 @@ def build_audit(
                 "confidence_tier": conf.get("best_tier"),
                 "confidence_score": conf.get("best_confidence_score"),
                 "decision": decision,
+                "n_floor_disposition": n_floor_disposition,
+                "legacy_decision_preserved": True,
+                "min_exact_trades_for_disposition": MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION,
+                "queue_change_allowed_by_n_floor": queue_change_allowed,
+                "queue_change_block_reason": None if queue_change_allowed else "insufficient_exact_trades_for_ticker_disposition",
                 "recommended_lane": recommended_lane,
                 "candidate_trade_count": _safe_int(row.get("candidate_trade_count")),
-                "exact_quoted_trade_count": _safe_int(row.get("exact_trade_count")),
+                "exact_quoted_trade_count": exact,
                 "unpriced_trade_count": _safe_int(row.get("unpriced_trade_count")),
                 "quote_coverage_pct": _safe_float(row.get("quote_coverage_pct")),
                 "profit_factor": _safe_float(row.get("exact_profit_factor")),
-                "avg_pnl_pct": _safe_float(row.get("exact_avg_pnl_pct")),
+                "avg_pnl_pct": raw_avg,
+                "expectancy_shrinkage": expectancy,
+                "shrunk_avg_pnl_pct": expectancy.get("shrunk_avg_pnl_pct"),
                 "directional_accuracy_pct": _safe_float(row.get("exact_directional_accuracy_pct")),
                 "confidence_trade_count": _safe_int(conf.get("trade_count")),
                 "confidence_profit_factor": _safe_float(conf.get("profit_factor")),
@@ -340,10 +393,17 @@ def build_audit(
         )
 
     decision_counts = dict(Counter(row["decision"] for row in rows))
+    n_floor_disposition_counts = dict(Counter(row["n_floor_disposition"] for row in rows))
     keep_symbols = [row["ticker"] for row in rows if row["decision"] == "keep-in-current-lane"]
     move_symbols = [row["ticker"] for row in rows if row["decision"] == "move-to-different-lane"]
     research_symbols = [row["ticker"] for row in rows if row["decision"] == "research-only/data-needed"]
     remove_symbols = [row["ticker"] for row in rows if row["decision"] == "remove"]
+    queue_change_allowed_symbols = [
+        row["ticker"]
+        for row in rows
+        if row["queue_change_allowed_by_n_floor"]
+    ]
+    insufficient_n_symbols = [row["ticker"] for row in rows if row["n_floor_disposition"] == "insufficient_n_frozen"]
     count_metrics = count_expanded.get("exact_contract_metrics") or count_expanded.get("authoritative_profitability_metrics") or {}
     count_exact = _safe_int(count_metrics.get("trade_count"))
     high_conf = confidence_report.get("combined_tradable_metrics") or {}
@@ -365,6 +425,8 @@ def build_audit(
                 "unresolved candidates",
             ],
             "remove_scope": "remove from current bullish-pullback tradable queue unless explicitly stated otherwise",
+            "per_ticker_disposition_floor": MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION,
+            "floor_migration_note": "Legacy decision fields are preserved. New keep/move/remove emission must use n_floor_disposition and queue_change_allowed_by_n_floor.",
         },
         "portfolio_targets": {
             "target_exact_trades_per_year_low": 200,
@@ -384,11 +446,16 @@ def build_audit(
             "gap_from_200_count_expanded": max(200 - count_exact, 0),
         },
         "decision_counts": decision_counts,
+        "n_floor_disposition_counts": n_floor_disposition_counts,
+        "lane_parent_expectancy": lane_parent_expectancy,
+        "expectancy_shrinkage_trades": TICKER_EXPECTANCY_SHRINKAGE_TRADES,
         "symbols": {
             "keep_in_current_lane": keep_symbols,
             "move_to_different_lane": move_symbols,
             "research_only_data_needed": research_symbols,
             "remove": remove_symbols,
+            "insufficient_n_frozen": insufficient_n_symbols,
+            "queue_change_allowed_by_n_floor": queue_change_allowed_symbols,
         },
         "rows": rows,
     }
@@ -423,6 +490,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Count-expanded current candidate: `{current['count_expanded_exact_trades']}` exact trades, PF `{current['count_expanded_profit_factor']}`, avg `{current['count_expanded_avg_pnl_pct']}%`.",
         f"- Gap to `200` exact trades/year: `{current['gap_from_200_high_confidence']}` from high-confidence evidence, `{current['gap_from_200_count_expanded']}` from count-expanded evidence.",
         f"- Decision counts: `{json.dumps(report['decision_counts'], sort_keys=True)}`.",
+        f"- N-floor disposition counts: `{json.dumps(report.get('n_floor_disposition_counts') or {}, sort_keys=True)}`.",
+        f"- Per-ticker keep/move/remove floor: `{report.get('proof_rules', {}).get('per_ticker_disposition_floor')}` exact trades. Legacy `decision` values are preserved; new queue-change emission must use `n_floor_disposition` plus `queue_change_allowed_by_n_floor`.",
+        f"- Lane parent expectancy for shrinkage: `{json.dumps(report.get('lane_parent_expectancy') or {}, sort_keys=True)}`.",
         "",
         "## Decision Buckets",
         "",
@@ -430,11 +500,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Move to different lane: `{', '.join(report['symbols']['move_to_different_lane']) or 'none'}`.",
         f"- Research/data-needed: `{', '.join(report['symbols']['research_only_data_needed']) or 'none'}`.",
         f"- Remove from current queue: `{', '.join(report['symbols']['remove']) or 'none'}`.",
+        f"- Insufficient-N frozen: `{', '.join(report['symbols'].get('insufficient_n_frozen') or []) or 'none'}`.",
+        f"- Queue-change allowed by N floor: `{', '.join(report['symbols'].get('queue_change_allowed_by_n_floor') or []) or 'none'}`.",
         "",
         "## Per-Ticker Table",
         "",
-        "| Ticker | Decision | Lane | Conf | Exact/Cand | PF | Avg % | Coverage % | Main issue / rationale | Next action |",
-        "|---|---|---|---:|---:|---:|---:|---:|---|---|",
+        "| Ticker | Decision | N-Floor Label | Queue Emit | Lane | Conf | Exact/Cand | PF | Avg % | Shrunk Avg % | Coverage % | Main issue / rationale | Next action |",
+        "|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|",
     ]
     for row in report["rows"]:
         lines.append(
@@ -443,11 +515,14 @@ def render_markdown(report: dict[str, Any]) -> str:
                 [
                     _md_cell(row["ticker"]),
                     _md_cell(row["decision"]),
+                    _md_cell(row["n_floor_disposition"]),
+                    _md_cell(row["queue_change_allowed_by_n_floor"]),
                     _md_cell(row["recommended_lane"]),
                     _md_cell(row["confidence_tier"] or ""),
                     f"{row['exact_quoted_trade_count']}/{row['candidate_trade_count']}",
                     _md_cell(row["profit_factor"]),
                     _md_cell(row["avg_pnl_pct"]),
+                    _md_cell(row.get("shrunk_avg_pnl_pct")),
                     _md_cell(row["quote_coverage_pct"]),
                     _md_cell(row["rationale"]),
                     _md_cell(row["next_action"]),
@@ -461,6 +536,8 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Notes",
             "",
             "- `remove` means remove from the current bullish-pullback tradable queue. It is not a permanent ban from all future research unless a future decision explicitly says so.",
+            "- Migration note: use `n_floor_disposition` and `queue_change_allowed_by_n_floor` for new keep/move/remove emission. Rows below `30` exact trades are `insufficient_n_frozen` even when legacy `decision` records the older call.",
+            "- Per-ticker average P&L now also carries `expectancy_shrinkage`, which shrinks the ticker mean toward the bullish-pullback lane mean using `expectancy_calibration.py` shrinkage helpers.",
             "- The current one-year all-symbol data readiness is adequate for exact replay, but many high-profile names still have too few qualifying exact trades under this specific playbook.",
             "- The path to `200+` trades/year likely requires new frozen lanes for high-beta, ETF/index, defensive-income, REIT/rate-sensitive, commodity, and financial symbols rather than forcing the current bullish-pullback sleeve to trade weak evidence.",
         ]

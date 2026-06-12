@@ -152,6 +152,30 @@ class RegularOptionsSymbolSleevesTests(unittest.TestCase):
         self.assertEqual(card["open_position_state"]["first_position_id"], 104)
         self.assertIn("tracked_and_suggested_trade_audits", card["source_tiers"])
 
+    def test_finalize_cards_adds_n_floor_and_shrunk_expectancy_without_rewriting_status(self):
+        cards = {
+            "lane:AAA": symbol_sleeves._new_card("lane", "family", "logic", "AAA"),
+            "lane:BBB": symbol_sleeves._new_card("lane", "family", "logic", "BBB"),
+        }
+        cards["lane:AAA"]["evidence_class"] = symbol_sleeves.TRUSTED_EXACT
+        cards["lane:AAA"]["source_tiers"] = ["exact_intraday_run_artifacts"]
+        cards["lane:AAA"]["_pnls"] = [100.0, 100.0]
+        cards["lane:AAA"]["_candidate_count"] = 2
+        cards["lane:BBB"]["evidence_class"] = symbol_sleeves.TRUSTED_EXACT
+        cards["lane:BBB"]["source_tiers"] = ["exact_intraday_run_artifacts"]
+        cards["lane:BBB"]["_pnls"] = [0.0] * 8
+        cards["lane:BBB"]["_candidate_count"] = 8
+
+        rows = symbol_sleeves.finalize_cards(cards)
+        by_symbol = {row["symbol"]: row for row in rows}
+
+        self.assertEqual(by_symbol["AAA"]["status"], "watch")
+        self.assertEqual(by_symbol["AAA"]["n_floor_disposition"], "insufficient_n_frozen")
+        self.assertFalse(by_symbol["AAA"]["queue_change_allowed_by_n_floor"])
+        self.assertEqual(by_symbol["AAA"]["metrics"]["avg_pnl"], 100.0)
+        self.assertEqual(by_symbol["AAA"]["metrics"]["avg_pnl_shrunk"], 42.86)
+        self.assertEqual(by_symbol["AAA"]["expectancy_shrinkage"]["parent_avg_pnl_pct"], 20.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import expectancy_calibration as ec
+
 
 OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-symbol-sleeves"
 DOCS_REPORT = ROOT / "docs" / "regular-options-symbol-sleeves.md"
@@ -63,6 +65,8 @@ SOURCE_PRECEDENCE = [
 HIGH_BETA_SYMBOLS = {"NVDA", "AMZN", "TSLA", "COIN", "PLTR", "MSTR", "ARM", "SMCI", "AMD", "META", "NFLX"}
 INDEX_SECTOR_SYMBOLS = {"SPY", "QQQ", "DIA", "XLK", "IWM", "TLT", "XLE", "XLF", "KRE", "SMH"}
 SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
+MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION = 30
+TICKER_EXPECTANCY_SHRINKAGE_TRADES = ec.DEFAULT_SHRINKAGE_TRADES
 
 
 def _utc_now() -> str:
@@ -332,6 +336,39 @@ def sample_status(exact_count: int) -> str:
     return "robust"
 
 
+def n_floor_disposition_label(disposition: Any, exact_trades: Any) -> str:
+    if _safe_int(exact_trades) < MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION:
+        return "insufficient_n_frozen"
+    return str(disposition or "")
+
+
+def queue_change_allowed_by_n_floor(disposition: Any, exact_trades: Any) -> bool:
+    if _safe_int(exact_trades) < MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION:
+        return False
+    return str(disposition or "") in {"keep", "quarantine", "rejected"}
+
+
+def _lane_parent_expectancy_by_lane(cards: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    grouped: dict[str, dict[str, Any]] = defaultdict(lambda: {"trade_count": 0, "pnl_sum": 0.0})
+    for card in cards:
+        lane_id = str(card.get("lane_id") or "unknown_lane")
+        pnls = [_safe_float(value) for value in card.get("_pnls") or []]
+        if not pnls:
+            continue
+        grouped[lane_id]["trade_count"] += len(pnls)
+        grouped[lane_id]["pnl_sum"] += sum(pnls)
+    out: dict[str, dict[str, Any]] = {}
+    for lane_id, row in grouped.items():
+        trade_count = _safe_int(row.get("trade_count"))
+        avg = _safe_float(row.get("pnl_sum")) / trade_count if trade_count else 0.0
+        out[lane_id] = {
+            "lane_id": lane_id,
+            "trade_count": trade_count,
+            "avg_pnl_pct": round(avg, 2),
+        }
+    return out
+
+
 def _zero_bid_rate_from_side_aware(side_aware: dict[str, Any] | None) -> float | None:
     if not isinstance(side_aware, dict):
         return None
@@ -433,6 +470,11 @@ def _new_card(lane_id: str, lane_family: str, strategy_logic_id: str, symbol: st
         "source_artifacts": [],
         "source_tiers": [],
         "metrics": metrics_from_pnls([], 0, 0),
+        "expectancy_shrinkage": {},
+        "n_floor_disposition": None,
+        "min_exact_trades_for_disposition": MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION,
+        "queue_change_allowed_by_n_floor": False,
+        "queue_change_block_reason": None,
         "sample_status": "none",
         "metric_source": "raw_trades",
         "stress_pf": None,
@@ -623,16 +665,27 @@ def enrich_with_bullish_ticker_audit(
         )
         card["bp_decision"] = row.get("decision")
         card["bp_recommended_lane"] = row.get("recommended_lane")
+        card["bp_n_floor_disposition"] = row.get("n_floor_disposition")
+        card["bp_queue_change_allowed_by_n_floor"] = row.get("queue_change_allowed_by_n_floor")
+        if row.get("expectancy_shrinkage"):
+            card["bp_expectancy_shrinkage"] = row.get("expectancy_shrinkage")
         card["confidence_tier"] = row.get("confidence_tier")
         card["status_reason"] = row.get("rationale") or ""
         card["next_step"] = row.get("next_action") or ""
         _merge_list(card, "source_tiers", "bullish_pullback_ticker_confidence_layer_artifacts")
         if row.get("result_path"):
             _merge_list(card, "source_artifacts", _rel(row.get("result_path")))
+        exact = _safe_int(row.get("exact_quoted_trade_count"))
+        if card["bp_n_floor_disposition"] is None:
+            card["bp_n_floor_disposition"] = n_floor_disposition_label(row.get("decision"), exact)
+        if card["bp_queue_change_allowed_by_n_floor"] is None:
+            card["bp_queue_change_allowed_by_n_floor"] = bool(
+                exact >= MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION
+                and str(row.get("decision") or "") in {"keep-in-current-lane", "move-to-different-lane", "remove"}
+            )
         if not card["_candidate_count"] and _safe_int(row.get("candidate_trade_count")):
             card["_candidate_count"] = _safe_int(row.get("candidate_trade_count"))
             card["_unresolved_count"] = _safe_int(row.get("unpriced_trade_count"))
-            exact = _safe_int(row.get("exact_quoted_trade_count"))
             avg = _safe_float(row.get("avg_pnl_pct"))
             card["_pnls"] = [avg for _ in range(exact)] if exact and avg else []
             if exact:
@@ -743,11 +796,41 @@ def collect_lane_lab_universe(universe: dict[str, dict[str, Any]], payload: dict
 
 def finalize_cards(cards: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
+    lane_parent_expectancy = _lane_parent_expectancy_by_lane(list(cards.values()))
     for card in cards.values():
         card["metrics"] = metrics_from_pnls(card["_pnls"], _safe_int(card["_candidate_count"]), _safe_int(card["_unresolved_count"]))
+        exact = _safe_int(card["metrics"]["exact_trusted_priced_trades"])
+        lane_parent = lane_parent_expectancy.get(
+            str(card.get("lane_id") or ""),
+            {"lane_id": card.get("lane_id"), "trade_count": 0, "avg_pnl_pct": 0.0},
+        )
+        expectancy = ec.shrink_expectancy_to_parent(
+            raw_avg_pnl_pct=card["metrics"].get("avg_pnl"),
+            child_trade_count=exact,
+            parent_avg_pnl_pct=lane_parent.get("avg_pnl_pct"),
+            parent_trade_count=lane_parent.get("trade_count"),
+            shrinkage_trades=TICKER_EXPECTANCY_SHRINKAGE_TRADES,
+        )
+        card["metrics"]["avg_pnl_raw"] = card["metrics"].get("avg_pnl")
+        card["metrics"]["avg_pnl_shrunk"] = expectancy.get("shrunk_avg_pnl_pct")
+        card["metrics"]["expectancy_parent_avg_pnl"] = expectancy.get("parent_avg_pnl_pct")
+        card["metrics"]["expectancy_parent_trade_count"] = expectancy.get("parent_trade_count")
+        card["metrics"]["expectancy_used_parent_shrinkage"] = expectancy.get("used_parent_shrinkage")
+        card["expectancy_shrinkage"] = expectancy
+        card["lane_parent_expectancy"] = lane_parent
         card["sample_status"] = sample_status(_safe_int(card["metrics"]["exact_trusted_priced_trades"]))
         status, reasons = classify_symbol_lane(card)
         card["status"] = status
+        card["n_floor_disposition"] = n_floor_disposition_label(status, exact)
+        card["min_exact_trades_for_disposition"] = MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION
+        card["queue_change_allowed_by_n_floor"] = queue_change_allowed_by_n_floor(status, exact)
+        card["queue_change_block_reason"] = (
+            None
+            if card["queue_change_allowed_by_n_floor"]
+            else "insufficient_exact_trades_for_ticker_disposition"
+            if exact < MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION
+            else "status_does_not_emit_queue_change"
+        )
         card["reason_codes"] = sorted(set(reasons))
         card["blockers"] = card["reason_codes"]
         if not card.get("status_reason"):
@@ -876,6 +959,7 @@ def build_report(
 
     lane_symbol_rows = finalize_cards(cards)
     status_counts = Counter(str(row.get("status")) for row in lane_symbol_rows)
+    n_floor_counts = Counter(str(row.get("n_floor_disposition")) for row in lane_symbol_rows)
     evidence_counts = Counter(str(row.get("evidence_class")) for row in lane_symbol_rows)
     reason_counts = Counter(reason for row in lane_symbol_rows for reason in row.get("reason_codes") or [])
 
@@ -888,6 +972,12 @@ def build_report(
         row["symbol"]
         for row in bp_rows
         if row.get("status") in {"quarantine", "rejected"} and row["symbol"] not in queue_removals
+    )
+    n_floor_frozen_symbols = sorted(
+        {row["symbol"] for row in bp_rows if row.get("n_floor_disposition") == "insufficient_n_frozen"}
+    )
+    n_floor_queue_allowed_symbols = sorted(
+        {row["symbol"] for row in bp_rows if row.get("queue_change_allowed_by_n_floor")}
     )
     high_beta_rows = [
         row
@@ -950,6 +1040,9 @@ def build_report(
                 "last_trade",
                 "stale_snapshot",
             ],
+            "per_ticker_disposition_floor": MIN_TICKER_EXACT_TRADES_FOR_DISPOSITION,
+            "floor_migration_note": "Legacy status and ticker-audit decision fields are preserved. New queue-change emission must use n_floor_disposition and queue_change_allowed_by_n_floor.",
+            "expectancy_shrinkage": "Per-symbol expectancy diagnostics shrink raw ticker average P&L toward the lane mean through expectancy_calibration.py helpers.",
         },
         "inputs": inputs,
         "source_precedence": SOURCE_PRECEDENCE,
@@ -967,6 +1060,7 @@ def build_report(
         },
         "lane_symbol_rows": lane_symbol_rows,
         "classification_counts": dict(sorted(status_counts.items())),
+        "n_floor_disposition_counts": dict(sorted(n_floor_counts.items())),
         "evidence_class_counts": dict(sorted(evidence_counts.items())),
         "queues": {
             "bullish_pullback_keep": (bullish_ticker_audit.get("symbols") or {}).get("keep_in_current_lane", []),
@@ -975,6 +1069,8 @@ def build_report(
             ),
             "bullish_pullback_remove_recommendations": queue_removals,
             "bullish_pullback_quarantine_or_rejected": queue_quarantine,
+            "bullish_pullback_insufficient_n_frozen": n_floor_frozen_symbols,
+            "bullish_pullback_queue_change_allowed_by_n_floor": n_floor_queue_allowed_symbols,
             "queue_changes_are_recommendations_only": True,
         },
         "blockers": {
@@ -1012,13 +1108,14 @@ def _metrics_cell(row: dict[str, Any]) -> list[str]:
         str(metrics.get("quote_coverage", 0.0)),
         str(metrics.get("profit_factor", 0.0)),
         str(metrics.get("avg_pnl", 0.0)),
+        str(metrics.get("avg_pnl_shrunk", "")),
     ]
 
 
 def _table_rows(rows: list[dict[str, Any]], limit: int = 40) -> list[str]:
     lines = [
-        "| Symbol | Lane | Status | Evidence | Exact | Cand | Unres | Cov % | PF | Avg % | Reason |",
-        "|---|---|---|---|---:|---:|---:|---:|---:|---:|---|",
+        "| Symbol | Lane | Status | N-Floor Label | Queue Emit | Evidence | Exact | Cand | Unres | Cov % | PF | Avg % | Shrunk Avg % | Reason |",
+        "|---|---|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows[:limit]:
         reason = ", ".join((row.get("reason_codes") or [])[:3])
@@ -1029,6 +1126,8 @@ def _table_rows(rows: list[dict[str, Any]], limit: int = 40) -> list[str]:
                     _fmt(row.get("symbol")),
                     _fmt(row.get("lane_id")),
                     _fmt(row.get("status")),
+                    _fmt(row.get("n_floor_disposition")),
+                    _fmt(row.get("queue_change_allowed_by_n_floor")),
                     _fmt(row.get("evidence_class")),
                     *_metrics_cell(row),
                     _fmt(reason),
@@ -1072,15 +1171,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Tracked symbols found: `{final.get('tracked_symbol_count')}`.",
         f"- Symbol-lane rows: `{final.get('lane_symbol_row_count')}`.",
         f"- Classification counts: `{json.dumps(report.get('classification_counts') or {}, sort_keys=True)}`.",
+        f"- N-floor disposition counts: `{json.dumps(report.get('n_floor_disposition_counts') or {}, sort_keys=True)}`.",
         f"- Evidence classes: `{json.dumps(report.get('evidence_class_counts') or {}, sort_keys=True)}`.",
         f"- Bullish Pullback carrier symbols: `{', '.join(final.get('bullish_pullback_carrier_symbols') or []) or 'none'}`.",
         f"- Queue removals are recommendations only: `{report.get('queues', {}).get('queue_changes_are_recommendations_only')}`.",
+        f"- Per-ticker queue-change floor: `{report.get('proof_policy', {}).get('per_ticker_disposition_floor')}` exact trades; rows below that carry `insufficient_n_frozen` in `n_floor_disposition` while legacy `status` stays visible.",
         "",
         "## Proof Policy",
         "",
         "- Strict proof claims require exact trusted intraday OPRA/NBBO contract rows with executable bid/ask evidence.",
         "- Daily/EOD, research backfill, stale/display marks, unresolved candidates, midpoint-only, and last-trade rows remain non-production proof.",
         "- Executable exit P&L is kept separate from paper/mark P&L in the open-risk readback.",
+        "- Per-symbol expectancy diagnostics shrink raw ticker average P&L toward the lane mean through `expectancy_calibration.py`; use the shrunk fields for new per-ticker research readbacks.",
+        "- Migration note: legacy `status` and ticker-audit `decision` fields are preserved. New keep/remove-style queue emission must use `n_floor_disposition` and `queue_change_allowed_by_n_floor`.",
         "",
         "## Best Rows",
         "",
@@ -1095,6 +1198,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Keep queue: `{', '.join(report.get('queues', {}).get('bullish_pullback_keep') or []) or 'none'}`.",
         f"- Move to frozen hypotheses: `{', '.join(report.get('queues', {}).get('bullish_pullback_move_to_frozen_hypotheses') or []) or 'none'}`.",
         f"- Remove recommendations: `{', '.join(report.get('queues', {}).get('bullish_pullback_remove_recommendations') or []) or 'none'}`.",
+        f"- Insufficient-N frozen: `{', '.join(report.get('queues', {}).get('bullish_pullback_insufficient_n_frozen') or []) or 'none'}`.",
+        f"- Queue-change allowed by N floor: `{', '.join(report.get('queues', {}).get('bullish_pullback_queue_change_allowed_by_n_floor') or []) or 'none'}`.",
         "",
         *_table_rows(bp_rows, limit=80),
         "",

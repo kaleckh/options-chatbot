@@ -336,6 +336,71 @@ def _attach_shrinkage(
             node["sparse_cohort"] = int(node.get("trades", 0) or 0) < int(sparse_warning_trades)
 
 
+def shrink_expectancy_to_parent(
+    *,
+    raw_avg_pnl_pct: Any,
+    child_trade_count: Any,
+    parent_avg_pnl_pct: Any,
+    parent_trade_count: Any = None,
+    shrinkage_trades: float = DEFAULT_SHRINKAGE_TRADES,
+    sparse_warning_trades: int = DEFAULT_SPARSE_WARNING_TRADES,
+) -> dict[str, Any]:
+    """Shrink a child expectancy estimate toward its parent mean using the surface shrinkage engine."""
+    raw_avg = _safe_float(raw_avg_pnl_pct, 0.0)
+    parent_avg = _safe_float(parent_avg_pnl_pct, raw_avg)
+    child_trades = max(0, int(_safe_float(child_trade_count, 0.0)))
+    parent_trades = max(0, int(_safe_float(parent_trade_count, 0.0)))
+    levels = [
+        {"id": "parent", "label": "parent", "fields": [], "parent": None},
+        {"id": "child", "label": "child", "fields": ["child"], "parent": "parent"},
+    ]
+    nodes_by_level = {
+        "parent": {
+            "overall": {
+                "level": "parent",
+                "group_key": "overall",
+                "fields": [],
+                "field_values": {},
+                "trades": parent_trades,
+                "avg_pnl_pct_raw": round(parent_avg, 2),
+                "avg_pnl_pct": round(parent_avg, 2),
+                "win_rate_pct_raw": 0.0,
+                "win_rate_pct": 0.0,
+            }
+        },
+        "child": {
+            "child": {
+                "level": "child",
+                "group_key": "child",
+                "fields": ["child"],
+                "field_values": {"child": "child"},
+                "trades": child_trades,
+                "avg_pnl_pct_raw": round(raw_avg, 2),
+                "avg_pnl_pct": round(raw_avg, 2),
+                "win_rate_pct_raw": 0.0,
+                "win_rate_pct": 0.0,
+            }
+        },
+    }
+    _attach_shrinkage(
+        nodes_by_level,
+        levels,
+        shrinkage_trades=float(shrinkage_trades),
+        sparse_warning_trades=int(sparse_warning_trades),
+    )
+    child = nodes_by_level["child"]["child"]
+    return {
+        "raw_avg_pnl_pct": round(raw_avg, 2),
+        "shrunk_avg_pnl_pct": child.get("avg_pnl_pct"),
+        "parent_avg_pnl_pct": child.get("parent_avg_pnl_pct"),
+        "child_trade_count": child_trades,
+        "parent_trade_count": parent_trades,
+        "shrinkage_trades": child.get("shrinkage_trades"),
+        "used_parent_shrinkage": bool(child.get("used_parent_shrinkage")),
+        "sparse_cohort": bool(child.get("sparse_cohort")),
+    }
+
+
 def _level_density(
     level: dict[str, Any],
     nodes: dict[str, dict[str, Any]],
