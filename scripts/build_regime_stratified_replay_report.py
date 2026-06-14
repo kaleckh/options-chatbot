@@ -554,6 +554,46 @@ def _robustness_summary(
     }
 
 
+def _branch_robustness_summary(
+    branch_bucket_tables: dict[str, dict[str, list[dict[str, Any]]]],
+    context: dict[str, Any],
+) -> list[dict[str, Any]]:
+    coverage_ready = (
+        int(context.get("vix_missing_count") or 0) == 0
+        and int(context.get("spy50_missing_count") or 0) == 0
+        and context.get("vix_tercile_thresholds") is not None
+    )
+    branch_rows: list[dict[str, Any]] = []
+    for branch, dimensions in sorted(branch_bucket_tables.items()):
+        buckets = [bucket for rows in dimensions.values() for bucket in rows]
+        evaluable = [bucket for bucket in buckets if bucket.get("robustness_required")]
+        failures = [bucket for bucket in evaluable if bucket.get("robustness_pass") is not True]
+        if not coverage_ready:
+            status = "blocked_missing_market_context"
+        elif failures:
+            status = "regime_not_robust"
+        elif evaluable:
+            status = "regime_robust"
+        else:
+            status = "thin_no_evaluable_buckets"
+        branch_rows.append(
+            {
+                "branch": branch,
+                "regime_robust": bool(coverage_ready and evaluable and not failures),
+                "status": status,
+                "coverage_ready": coverage_ready,
+                "evaluable_bucket_count": len(evaluable),
+                "thin_bucket_count": len([bucket for bucket in buckets if not bucket.get("robustness_required")]),
+                "failing_bucket_count": len(failures),
+                "failing_buckets": sorted(
+                    failures,
+                    key=lambda item: (_norm(item.get("dimension")), _norm(item.get("bucket"))),
+                ),
+            }
+        )
+    return branch_rows
+
+
 def build_report(
     *,
     source_path: Path | None = None,
@@ -584,6 +624,7 @@ def build_report(
     bucket_tables = {dimension: _bucket_table(annotated_rows, dimension) for dimension in REGIME_DIMENSIONS}
     branch_bucket_tables = _branch_bucket_tables(annotated_rows)
     robustness = _robustness_summary(bucket_tables, context, branch_bucket_tables=branch_bucket_tables)
+    branch_robustness = _branch_robustness_summary(branch_bucket_tables, context)
 
     if missing_required:
         status = "blocked_missing_inputs"
@@ -651,6 +692,10 @@ def build_report(
             "branch_bucket_count": sum(
                 len(buckets) for branch_tables in branch_bucket_tables.values() for buckets in branch_tables.values()
             ),
+            "branch_regime_robust_count": len([row for row in branch_robustness if row.get("regime_robust")]),
+            "branch_regime_failure_count": len(
+                [row for row in branch_robustness if row.get("status") == "regime_not_robust"]
+            ),
             "market_context_status": "complete" if robustness["coverage_ready"] else "missing_or_incomplete",
             "regime_robust": robustness["regime_robust"],
             "coverage_ready": robustness["coverage_ready"],
@@ -677,6 +722,7 @@ def build_report(
         "market_context": context,
         "bucket_tables": bucket_tables,
         "branch_bucket_tables": branch_bucket_tables,
+        "branch_robustness": branch_robustness,
         "robustness": robustness,
         "annotated_rows": annotated_rows,
         "next_evidence_queue": next_queue,
@@ -704,6 +750,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Eligible replay rows: `{summary.get('eligible_replay_row_count')}`.",
         f"- Branches: `{summary.get('branch_count')}`; branch buckets `{summary.get('branch_bucket_count')}`.",
         f"- Regime robust: `{summary.get('regime_robust')}`.",
+        f"- Branch regime robust count: `{summary.get('branch_regime_robust_count')}`; bucket-failing branches `{summary.get('branch_regime_failure_count')}`.",
         f"- Market context: `{summary.get('market_context_status')}`; VIX missing `{summary.get('vix_missing_count')}`, SPY50 missing `{summary.get('spy50_missing_count')}`.",
         f"- Evaluable / failing buckets: `{summary.get('evaluable_bucket_count')}` / `{summary.get('failing_bucket_count')}`.",
         "",
@@ -759,6 +806,33 @@ def render_markdown(report: dict[str, Any]) -> str:
                         _cell(bucket.get("winner_count")),
                         _cell(bucket.get("loser_count")),
                         _cell(bucket.get("robustness_reason")),
+                    ]
+                )
+                + " |"
+            )
+    branch_robustness = _as_list(report.get("branch_robustness"))
+    if branch_robustness:
+        lines.extend(
+            [
+                "",
+                "## Branch Robustness",
+                "",
+                "| Branch | Regime Robust | Status | Evaluable | Failing | Coverage Ready |",
+                "|---|---:|---|---:|---:|---:|",
+            ]
+        )
+        for row in branch_robustness:
+            row = _as_dict(row)
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _cell(row.get("branch")),
+                        _cell(row.get("regime_robust")),
+                        _cell(row.get("status")),
+                        _cell(row.get("evaluable_bucket_count")),
+                        _cell(row.get("failing_bucket_count")),
+                        _cell(row.get("coverage_ready")),
                     ]
                 )
                 + " |"

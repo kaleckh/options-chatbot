@@ -95,8 +95,12 @@ def _source_rows(*, all_winners: bool = False) -> dict:
 
 def _selected_trade_source_rows() -> dict:
     rows = []
-    for lane_id, pnl in (("lane_a", 4.0), ("lane_b", -6.0)):
-        for day in _business_days(date(2025, 4, 1), 20):
+    days = _business_days(date(2025, 4, 1), 20)
+    for lane_id in ("lane_a", "lane_b"):
+        for index, day in enumerate(days):
+            pnl = -1.0 if lane_id == "lane_a" and index % 5 == 0 else 4.0
+            if lane_id == "lane_b":
+                pnl = -6.0
             rows.append(
                 {
                     "entry_date": day.isoformat(),
@@ -187,7 +191,15 @@ class RegimeStratifiedReplayReportTests(unittest.TestCase):
 
         self.assertEqual(report["summary"]["eligible_replay_row_count"], 40)
         self.assertEqual(report["summary"]["branch_count"], 2)
+        self.assertEqual(report["summary"]["branch_regime_failure_count"], 1)
         self.assertEqual(set(report["branch_bucket_tables"]), {"lane_a", "lane_b"})
+        self.assertEqual({row["branch"] for row in report["branch_robustness"]}, {"lane_a", "lane_b"})
+        lane_a_robustness = [row for row in report["branch_robustness"] if row["branch"] == "lane_a"][0]
+        self.assertTrue(lane_a_robustness["regime_robust"])
+        self.assertEqual(lane_a_robustness["status"], "regime_robust")
+        lane_b_robustness = [row for row in report["branch_robustness"] if row["branch"] == "lane_b"][0]
+        self.assertFalse(lane_b_robustness["regime_robust"])
+        self.assertEqual(lane_b_robustness["status"], "regime_not_robust")
         self.assertTrue(all(row["lane"] in {"lane_a", "lane_b"} for row in report["annotated_rows"]))
         lane_b_month = [
             bucket
@@ -234,6 +246,8 @@ class RegimeStratifiedReplayReportTests(unittest.TestCase):
                     "failing_bucket_count": 0,
                     "branch_count": 2,
                     "branch_bucket_count": 12,
+                    "branch_regime_robust_count": 0,
+                    "branch_regime_failure_count": 0,
                     "minimum_bucket_n_for_robustness": 15,
                 },
                 "next_evidence_queue": [{"action": "refresh_vix_daily_history_for_regime_report"}],
@@ -245,6 +259,7 @@ class RegimeStratifiedReplayReportTests(unittest.TestCase):
         self.assertEqual(readback["metrics"]["vix_missing_count"], 60)
         self.assertEqual(readback["metrics"]["branch_count"], 2)
         self.assertEqual(readback["metrics"]["branch_bucket_count"], 12)
+        self.assertEqual(readback["metrics"]["branch_regime_failure_count"], 0)
         self.assertEqual(readback["next_evidence_queue"][0]["action"], "refresh_vix_daily_history_for_regime_report")
 
 

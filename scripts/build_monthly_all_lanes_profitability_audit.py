@@ -880,6 +880,8 @@ def _regime_stratified_replay_report(report: dict[str, Any]) -> dict[str, Any]:
             "failing_bucket_count": summary.get("failing_bucket_count"),
             "branch_count": summary.get("branch_count"),
             "branch_bucket_count": summary.get("branch_bucket_count"),
+            "branch_regime_robust_count": summary.get("branch_regime_robust_count"),
+            "branch_regime_failure_count": summary.get("branch_regime_failure_count"),
             "minimum_bucket_n_for_robustness": summary.get("minimum_bucket_n_for_robustness"),
         },
         "next_evidence_queue": _as_list(report.get("next_evidence_queue")),
@@ -2515,6 +2517,7 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Regime robust: `{regime.get('regime_robust')}`.",
             f"- Eligible rows: `{regime_metrics.get('eligible_replay_row_count')}`.",
             f"- Branches: `{regime_metrics.get('branch_count')}`; branch buckets `{regime_metrics.get('branch_bucket_count')}`.",
+            f"- Branch robust / bucket-failing: `{regime_metrics.get('branch_regime_robust_count')}` / `{regime_metrics.get('branch_regime_failure_count')}`.",
             f"- Market context: `{regime_metrics.get('market_context_status')}`; VIX missing `{regime_metrics.get('vix_missing_count')}`, SPY50 missing `{regime_metrics.get('spy50_missing_count')}`.",
             f"- Evaluable / failing buckets: `{regime_metrics.get('evaluable_bucket_count')}` / `{regime_metrics.get('failing_bucket_count')}`.",
         ]

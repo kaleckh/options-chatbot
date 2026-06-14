@@ -4449,10 +4449,10 @@
   ],
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regime-stratified-replay-report.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T011501Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T012253Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T011501Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T012253Z.md"
   },
   "branch_bucket_tables": {
     "bullish_pullback_core": {
@@ -4868,6 +4868,28 @@
       ]
     }
   },
+  "branch_robustness": [
+    {
+      "branch": "bullish_pullback_core",
+      "coverage_ready": false,
+      "evaluable_bucket_count": 6,
+      "failing_bucket_count": 0,
+      "failing_buckets": [],
+      "regime_robust": false,
+      "status": "blocked_missing_market_context",
+      "thin_bucket_count": 5
+    },
+    {
+      "branch": "lane_a_chain_native_ret20_4_stop200_time75",
+      "coverage_ready": false,
+      "evaluable_bucket_count": 6,
+      "failing_bucket_count": 0,
+      "failing_buckets": [],
+      "regime_robust": false,
+      "status": "blocked_missing_market_context",
+      "thin_bucket_count": 5
+    }
+  ],
   "bucket_tables": {
     "entry_month": [
       {
@@ -5063,7 +5085,7 @@
       }
     ]
   },
-  "generated_at_utc": "2026-06-14T01:15:01Z",
+  "generated_at_utc": "2026-06-14T01:22:53Z",
   "inputs": {
     "market_data_db": {
       "error": null,
@@ -5174,6 +5196,8 @@
     "annotated_replay_row_count": 234,
     "branch_bucket_count": 22,
     "branch_count": 2,
+    "branch_regime_failure_count": 0,
+    "branch_regime_robust_count": 0,
     "coverage_ready": false,
     "eligible_replay_row_count": 234,
     "entry_month_count": 8,
