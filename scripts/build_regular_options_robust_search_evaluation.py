@@ -37,6 +37,7 @@ MIN_TOTAL_EXACT_TRADES = 100
 MIN_VALIDATION_EXACT_TRADES = 30
 MIN_FINAL_HOLDOUT_EXACT_TRADES = 30
 MIN_FINAL_HOLDOUT_BOOTSTRAP_PF_LB = 1.0
+MIN_FEATURE_STORE_SHARED_QUOTE_DATES = 504
 
 PROHIBITED_ACTIONS = (
     "do_not_create_live_row_from_robust_search_evaluation",
@@ -385,6 +386,40 @@ def _quality_gate_check(source_report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _feature_store_check(feature_store_report: dict[str, Any], feature_meta: dict[str, Any]) -> dict[str, Any]:
+    if feature_meta.get("status") != "loaded":
+        return {
+            "status": "feature_store_gate_blocked",
+            "passed": False,
+            "blockers": ["feature_store_report_missing"],
+            "minimum_shared_quote_dates": MIN_FEATURE_STORE_SHARED_QUOTE_DATES,
+        }
+    summary = _as_dict(feature_store_report.get("summary"))
+    inputs = _as_dict(feature_store_report.get("inputs"))
+    blockers: list[str] = []
+    status = _norm(feature_store_report.get("status") or summary.get("overall_status"))
+    if status != "feature_store_built":
+        blockers.append(f"feature_store_status:{status or 'missing'}")
+    missing_inputs = [str(item) for item in _as_list(summary.get("missing_required_inputs")) if item]
+    blockers.extend(f"feature_store_missing_input:{item}" for item in missing_inputs)
+    shared_dates = _safe_int(summary.get("shared_quote_date_count"))
+    if shared_dates < MIN_FEATURE_STORE_SHARED_QUOTE_DATES:
+        blockers.append(f"feature_store_shared_quote_dates_{shared_dates}_below_{MIN_FEATURE_STORE_SHARED_QUOTE_DATES}")
+    if _norm(inputs.get("source_label")) != "thetadata_opra_nbbo_1m":
+        blockers.append("feature_store_source_label_not_thetadata_opra_nbbo_1m")
+    if _norm(inputs.get("snapshot_kind")) != "intraday":
+        blockers.append("feature_store_snapshot_kind_not_intraday")
+    if _norm(inputs.get("data_trust")) != "trusted":
+        blockers.append("feature_store_data_trust_not_trusted")
+    return {
+        "status": "feature_store_gate_passed" if not blockers else "feature_store_gate_blocked",
+        "passed": not blockers,
+        "shared_quote_date_count": shared_dates,
+        "minimum_shared_quote_dates": MIN_FEATURE_STORE_SHARED_QUOTE_DATES,
+        "blockers": sorted(set(blockers)),
+    }
+
+
 def _candidate_blockers(
     *,
     split_metrics: dict[str, Any],
@@ -393,6 +428,7 @@ def _candidate_blockers(
     ablation_check: dict[str, Any],
     winner_check: dict[str, Any],
     quality_gate: dict[str, Any],
+    feature_store_gate: dict[str, Any],
 ) -> list[str]:
     total_n = _safe_int(split_metrics["combined"]["exact_trade_count"])
     validation_n = _safe_int(split_metrics["validation"]["exact_trade_count"])
@@ -419,6 +455,10 @@ def _candidate_blockers(
         blockers.extend(str(item) for item in _as_list(winner_check.get("blockers")) or ["winner_damage_not_cleared"])
     if not bool(quality_gate.get("passed")):
         blockers.extend(str(item) for item in _as_list(quality_gate.get("blockers")) or ["source_quality_gate_not_passed"])
+    if not bool(feature_store_gate.get("passed")):
+        blockers.extend(
+            str(item) for item in _as_list(feature_store_gate.get("blockers")) or ["feature_store_gate_not_passed"]
+        )
     return sorted(set(blockers))
 
 
@@ -432,6 +472,7 @@ def _candidate_report(
     baseline_report: dict[str, Any],
     baseline_meta: dict[str, Any],
     quality_gate: dict[str, Any],
+    feature_store_gate: dict[str, Any],
     bootstrap_draws: int,
 ) -> dict[str, Any]:
     split_metrics = _split_metrics(rows, candidate_id=candidate_id, bootstrap_draws=bootstrap_draws)
@@ -446,6 +487,7 @@ def _candidate_report(
         ablation_check=ablation,
         winner_check=winner,
         quality_gate=quality_gate,
+        feature_store_gate=feature_store_gate,
     )
     return {
         "candidate_id": candidate_id,
@@ -463,6 +505,7 @@ def _candidate_report(
         "ablation_check": ablation,
         "winner_damage_check": winner,
         "source_quality_gate": quality_gate,
+        "feature_store_gate": feature_store_gate,
         "read_only": True,
     }
 
@@ -500,6 +543,7 @@ def build_report(
     variants = _variants_searched(ledger_rows)
     regime_check = _regime_check(regime, regime_meta)
     quality_gate = _quality_gate_check(source)
+    feature_store_gate = _feature_store_check(feature_store, feature_meta)
     candidates = [
         _candidate_report(
             candidate_id=candidate_id,
@@ -510,6 +554,7 @@ def build_report(
             baseline_report=baseline,
             baseline_meta=baseline_meta,
             quality_gate=quality_gate,
+            feature_store_gate=feature_store_gate,
             bootstrap_draws=bootstrap_draws,
         )
         for candidate_id, (candidate_type, rows) in _group_candidates(trades).items()
@@ -554,6 +599,8 @@ def build_report(
             "requires_positive_ablation_vs_baseline": True,
             "requires_zero_material_winner_damage_findings": True,
             "requires_source_quality_gate_passed": True,
+            "requires_feature_store_gate_passed": True,
+            "min_feature_store_shared_quote_dates": MIN_FEATURE_STORE_SHARED_QUOTE_DATES,
             "bootstrap_draws": bootstrap_draws,
         },
         "summary": {
@@ -569,6 +616,7 @@ def build_report(
             "feature_store_shared_quote_date_count": _as_dict(feature_store.get("summary")).get("shared_quote_date_count")
             if feature_meta.get("status") == "loaded"
             else None,
+            "feature_store_gate_status": feature_store_gate.get("status"),
             "regime_status": regime_check.get("status"),
             "source_quality_gate_status": quality_gate.get("status"),
             "promotion_ready": False,
@@ -608,6 +656,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Selection-adjusted PF-LB bar: `{summary.get('selection_adjusted_bar')}`.",
         f"- Regime status: `{summary.get('regime_status')}`.",
         f"- Feature-store status: `{summary.get('feature_store_status')}`; shared dates `{summary.get('feature_store_shared_quote_date_count')}`.",
+        f"- Feature-store gate: `{summary.get('feature_store_gate_status')}`.",
         f"- Source quality gate: `{summary.get('source_quality_gate_status')}`.",
         f"- Rejected row counts: `{_json_inline(summary.get('rejected_row_counts') or {})}`.",
         "",

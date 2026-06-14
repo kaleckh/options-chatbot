@@ -88,7 +88,18 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
                     }
                 },
             )
-            _write_json(feature_store, {"status": "feature_store_built", "summary": {"shared_quote_date_count": 504}})
+            _write_json(
+                feature_store,
+                {
+                    "status": "feature_store_built",
+                    "inputs": {
+                        "source_label": "thetadata_opra_nbbo_1m",
+                        "snapshot_kind": "intraday",
+                        "data_trust": "trusted",
+                    },
+                    "summary": {"shared_quote_date_count": 504, "missing_required_inputs": []},
+                },
+            )
             _write_json(baseline, {"baseline_metrics": {"profit_factor": 0.8, "avg_pnl_pct": -1.0}})
             _write_jsonl(ledger, [{"experiment_id": f"variant_{index}"} for index in range(4)])
 
@@ -110,6 +121,63 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
         self.assertEqual(combined["split_metrics"]["final_holdout"]["exact_trade_count"], 30)
         self.assertGreater(combined["split_metrics"]["final_holdout"]["bootstrap"]["pf_lb_5pct"], 1.0)
         self.assertEqual(combined["selection_adjustment"]["variants_searched"], 4)
+        self.assertEqual(combined["feature_store_gate"]["status"], "feature_store_gate_passed")
+
+    def test_feature_store_gate_blocks_nomination_when_shared_history_is_thin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source.json"
+            regime = root / "regime.json"
+            feature_store = root / "feature_store.json"
+            baseline = root / "baseline.json"
+            ledger = root / "ledger.jsonl"
+            _write_json(
+                source,
+                {
+                    "selected_trades": _passing_source_rows(),
+                    "quality_gate": {"overall_status": "passed", "blockers": []},
+                },
+            )
+            _write_json(
+                regime,
+                {
+                    "summary": {
+                        "regime_robust": True,
+                        "overall_status": "regime_robust",
+                        "market_context_status": "available",
+                    }
+                },
+            )
+            _write_json(
+                feature_store,
+                {
+                    "status": "feature_store_built",
+                    "inputs": {
+                        "source_label": "thetadata_opra_nbbo_1m",
+                        "snapshot_kind": "intraday",
+                        "data_trust": "trusted",
+                    },
+                    "summary": {"shared_quote_date_count": 100, "missing_required_inputs": []},
+                },
+            )
+            _write_json(baseline, {"baseline_metrics": {"profit_factor": 0.8, "avg_pnl_pct": -1.0}})
+            _write_jsonl(ledger, [{"experiment_id": f"variant_{index}"} for index in range(4)])
+
+            report = robust.build_report(
+                source_report_path=source,
+                regime_report_path=regime,
+                feature_store_report_path=feature_store,
+                autoresearch_ledger_path=ledger,
+                baseline_report_path=baseline,
+                bootstrap_draws=200,
+                generated_at_utc="2026-01-01T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "historical_candidates_blocked")
+        combined = next(candidate for candidate in report["candidates"] if candidate["candidate_id"] == "combined_portfolio")
+        self.assertFalse(combined["historical_nomination_ready"])
+        self.assertIn("feature_store_shared_quote_dates_100_below_504", combined["blockers"])
+        self.assertEqual(combined["feature_store_gate"]["status"], "feature_store_gate_blocked")
 
     def test_build_report_fails_closed_when_evidence_chain_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -146,6 +214,7 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
         self.assertIn("regime_report_missing", combined["blockers"])
         self.assertIn("baseline_ablation_report_missing", combined["blockers"])
         self.assertIn("source_quality_gate:quality_pending", combined["blockers"])
+        self.assertIn("feature_store_report_missing", combined["blockers"])
 
 
 if __name__ == "__main__":
