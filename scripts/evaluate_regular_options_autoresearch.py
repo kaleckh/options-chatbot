@@ -694,7 +694,7 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
 
 def _ledger_entry(scoreboard: dict[str, Any]) -> dict[str, Any]:
     metrics = scoreboard.get("metrics") or {}
-    return {
+    entry = {
         "generated_at_utc": scoreboard.get("generated_at_utc"),
         "evaluator_version": scoreboard.get("evaluator_version"),
         "evaluator_config_hash": scoreboard.get("evaluator_config_hash"),
@@ -729,6 +729,12 @@ def _ledger_entry(scoreboard: dict[str, Any]) -> dict[str, Any]:
         "promotion_blockers": scoreboard.get("promotion_blockers"),
         "production_blockers": scoreboard.get("production_blockers"),
     }
+    if "champion_final_eval" in scoreboard:
+        entry["champion_final_eval"] = bool(scoreboard.get("champion_final_eval"))
+    holdout_consumption = scoreboard.get("holdout_consumption")
+    if isinstance(holdout_consumption, dict):
+        entry["holdout_consumption"] = holdout_consumption
+    return entry
 
 
 def append_ledger(scoreboard: dict[str, Any], *, path: Path = LEDGER_PATH) -> None:

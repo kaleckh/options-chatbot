@@ -1,5 +1,9 @@
 # Worklog
 
+## 2026-06-14
+
+- Added Phase 1.5 protected forward-holdout enforcement for regular-options autoresearch. `scripts/generate_forward_holdout_contract.py` now generates `data/contracts/forward-holdout-contract.json` and `docs/forward-holdout-contract.md`; the protected range starts `2026-06-05`. `scripts/run_regular_options_goal_experiment.py` refuses ordinary overlapping replay windows before variant replay, while `--champion-final-eval` allows exactly one final variant and one consumption per inferred strategy family. The evaluator ledger now records `holdout_consumption` markers for those one-shot final evaluations. This changes no scanner policy, broker behavior, proof bars, or promotion gates.
+
 ## 2026-06-12
 
 - Added deterministic bootstrap confidence diagnostics to the frozen regular-options autoresearch evaluator without changing `score`, `progress_score`, promotion gates, scanner behavior, or proof bars. The evaluator now reports combined and per-branch `pf_point`, `pf_lb_5pct`, `pf_ub_95pct`, `avg_net_lb_5pct`, `n_trades`, and `statistical_confidence` from 10,000 trade-level net-P&L% resamples; the experiment harness summary and compact ledger rows carry the same aggregate readback fields.

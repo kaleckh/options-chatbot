@@ -176,4 +176,16 @@ GENERATED_ARTIFACTS = (
         generator="scripts/generate_final_remediation_closure_pack.py",
         artifact_type="json",
     ),
+    GeneratedArtifact(
+        path="docs/forward-holdout-contract.md",
+        command="docs:forward-holdout-contract",
+        generator="scripts/generate_forward_holdout_contract.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/forward-holdout-contract.json",
+        command="docs:forward-holdout-contract",
+        generator="scripts/generate_forward_holdout_contract.py",
+        artifact_type="json",
+    ),
 )

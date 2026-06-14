@@ -94,6 +94,10 @@ These are the living docs for the current worktree:
   - canonical local SQLite DB safety and read-only audit contract, implemented by `python-backend/local_db_hardening.py`
 - `docs/evidence-operations.md`
   - operational survivability contract for authoritative evidence host, backups, scheduled-scan heartbeat, daily operator command, and retention policy
+- `docs/forward-holdout-contract.md`
+  - generated protected forward-holdout contract for regular-options autoresearch and one-shot champion final evaluation consumption
+- `data/contracts/forward-holdout-contract.json`
+  - generated machine-readable protected forward-holdout contract consumed by the regular-options autoresearch harness
 - `docs/repository-migrations.md`
   - canonical Trading Desk repository migration manifest and ledger contract, implemented by `python-backend/repository_migrations.py`
 - `docs/repository-constraints.md`

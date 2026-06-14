@@ -114,6 +114,13 @@ SOURCE_INPUTS_BY_GENERATOR = {
         "docs/WORKLOG.md",
         "package.json",
     ),
+    "scripts/generate_forward_holdout_contract.py": (
+        "scripts/generate_forward_holdout_contract.py",
+        "scripts/run_regular_options_goal_experiment.py",
+        "scripts/evaluate_regular_options_autoresearch.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/NEXT_STEPS.md",
+    ),
 }
 
 OWNER_DOCS_BY_GENERATOR = {
@@ -131,6 +138,7 @@ OWNER_DOCS_BY_GENERATOR = {
     "scripts/generate_agent_memory_graph.py": ("docs/agent-memory-graph.md", "docs/index.md"),
     GENERATOR: ("docs/generated-artifact-governance.md", "docs/living-docs-hygiene.md"),
     "scripts/generate_final_remediation_closure_pack.py": ("docs/final-remediation-closure-pack.md", "docs/remediation-loop-map.md"),
+    "scripts/generate_forward_holdout_contract.py": ("docs/forward-holdout-contract.md", "docs/PROJECT_CONTEXT.md"),
 }
 
 

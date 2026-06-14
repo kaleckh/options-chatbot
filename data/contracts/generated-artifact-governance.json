@@ -926,6 +926,76 @@
       "stale_detection": "owner generator --check in npm run verify:docs",
       "trust_role": "machine_readable_check",
       "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_forward_holdout_contract.py --check",
+      "generator": "scripts/generate_forward_holdout_contract.py",
+      "hand_edit_allowed": false,
+      "id": "docs_forward_holdout_contract_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:forward-holdout-contract",
+      "owner_docs": [
+        "docs/forward-holdout-contract.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "docs/forward-holdout-contract.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generate_forward_holdout_contract.py",
+        "scripts/run_regular_options_goal_experiment.py",
+        "scripts/evaluate_regular_options_autoresearch.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_forward_holdout_contract.py --check",
+      "generator": "scripts/generate_forward_holdout_contract.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_forward_holdout_contract_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:forward-holdout-contract",
+      "owner_docs": [
+        "docs/forward-holdout-contract.md",
+        "docs/PROJECT_CONTEXT.md"
+      ],
+      "path": "data/contracts/forward-holdout-contract.json",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generate_forward_holdout_contract.py",
+        "scripts/run_regular_options_goal_experiment.py",
+        "scripts/evaluate_regular_options_autoresearch.py",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/NEXT_STEPS.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
     }
   ],
   "non_goals": [
@@ -975,6 +1045,13 @@
       "docs/architecture-best-practices.md",
       "docs/WORKLOG.md",
       "package.json"
+    ],
+    "scripts/generate_forward_holdout_contract.py": [
+      "scripts/generate_forward_holdout_contract.py",
+      "scripts/run_regular_options_goal_experiment.py",
+      "scripts/evaluate_regular_options_autoresearch.py",
+      "docs/PROJECT_CONTEXT.md",
+      "docs/NEXT_STEPS.md"
     ],
     "scripts/generate_generated_artifact_governance.py": [
       "scripts/generated_artifact_manifest.py",

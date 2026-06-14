@@ -45,6 +45,8 @@ This inventory explains which generated artifacts are checked, what owns them, h
 | data/contracts/generated-artifact-governance.json | json | non_runtime_metadata | machine_readable_check | npm run docs:generated-artifact-governance | scripts/generate_generated_artifact_governance.py | Do not hand-edit; run npm run docs:generated-artifact-governance. Trust the source inputs and generator over stale output. |
 | docs/final-remediation-closure-pack.md | markdown | non_runtime_metadata | closure_readback | npm run docs:final-remediation-closure-pack | scripts/generate_final_remediation_closure_pack.py | Do not hand-edit; run npm run docs:final-remediation-closure-pack. Trust the source inputs and generator over stale output. |
 | data/contracts/final-remediation-closure-pack.json | json | non_runtime_metadata | machine_readable_check | npm run docs:final-remediation-closure-pack | scripts/generate_final_remediation_closure_pack.py | Do not hand-edit; run npm run docs:final-remediation-closure-pack. Trust the source inputs and generator over stale output. |
+| docs/forward-holdout-contract.md | markdown | non_runtime_metadata | generated_readability_doc | npm run docs:forward-holdout-contract | scripts/generate_forward_holdout_contract.py | Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output. |
+| data/contracts/forward-holdout-contract.json | json | non_runtime_metadata | machine_readable_check | npm run docs:forward-holdout-contract | scripts/generate_forward_holdout_contract.py | Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output. |
 
 ## Excluded Artifact Classes
 

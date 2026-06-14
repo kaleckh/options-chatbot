@@ -1,0 +1,46 @@
+{
+  "contract_id": "forward-holdout-contract",
+  "enforcement": {
+    "harness": "scripts/run_regular_options_goal_experiment.py",
+    "refusal_timing": "before_lane_variant_replay",
+    "strategy_family_source": "scripts/evaluate_regular_options_autoresearch.py infer_strategy_family"
+  },
+  "generated_by": "scripts/generate_forward_holdout_contract.py",
+  "last_updated": "2026-06-14",
+  "non_goals": [
+    "does_not_lower_existing_promotion_bars",
+    "does_not_turn_holdout_rows_into_production_proof",
+    "does_not_submit_or_change_broker_orders",
+    "does_not_change_scanner_guardrails"
+  ],
+  "policy": {
+    "broker_behavior": "unchanged",
+    "champion_final_eval": {
+      "allowed": true,
+      "flag": "--champion-final-eval",
+      "ledger_marker": "holdout_consumption.consumed=true",
+      "ledger_path": "data/profitability-lab/regular-options-autoresearch/ledger.jsonl",
+      "limit": "one_consumption_per_strategy_family_ever",
+      "variant_limit": 1
+    },
+    "normal_experiments": "refuse_any_replay_window_overlapping_the_protected_range",
+    "proof_bars": "unchanged",
+    "scanner_policy": "unchanged"
+  },
+  "protected_range": {
+    "date_basis": "candidate_entry_date",
+    "end_date": null,
+    "rationale": "Dates after the repaired intraday proof artifact are reserved for fresh forward validation and must not be consumed by ordinary autoresearch experiments.",
+    "source_evidence": [
+      "docs/PROJECT_CONTEXT.md regular profit-loop intraday repair note",
+      "docs/NEXT_STEPS.md forward-holdout strict canary note",
+      "data/options-validation/runs/20260605_022559_broad_intraday.json"
+    ],
+    "start_date": "2026-06-05",
+    "timezone": "America/New_York"
+  },
+  "runtime_use": false,
+  "scope": "regular_options_autoresearch",
+  "status": "active",
+  "version": 1
+}

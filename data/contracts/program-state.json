@@ -3,8 +3,8 @@
     "1.1": "done",
     "1.2": "done",
     "1.3": "done",
-    "1.4": "todo",
-    "1.5": "todo",
+    "1.4": "done",
+    "1.5": "done",
     "1.6": "todo",
     "1.7": "todo",
     "1.8": "todo",
@@ -29,7 +29,7 @@
   },
   "kill_log": [],
   "last_session": {
-    "date": "2026-06-12",
-    "work": "Phase 1.3 verified and reconciled per-ticker N-floor hardening: rows below 30 exact trades emit additive insufficient_n_frozen/queue-emission blockers while legacy decision/status fields remain unchanged, and per-ticker expectancy readbacks flow through expectancy_calibration.py shrinkage."
+    "date": "2026-06-14",
+    "work": "Phase 1.5 added a generated protected forward-holdout contract and autoresearch harness guard: ordinary overlapping experiments are refused, while one-shot champion final evaluations are ledger-recorded per strategy family."
   }
 }

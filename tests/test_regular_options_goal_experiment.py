@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -98,6 +99,7 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
                     variants=["lane_a_goal_test"],
                     lookback_years=1,
                     output_dir=output_dir,
+                    as_of_date=date(2026, 6, 4),
                 )
 
         self.assertFalse(report["write_global_latest"])
@@ -133,7 +135,7 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
             row = rows[variant_id]
             return {"variants": [row]}, row
 
-        def fake_score_variant(*, variant_id, run_path, robustness_path, side_aware_path, hypothesis):
+        def fake_score_variant(*, variant_id, run_path, robustness_path, side_aware_path, hypothesis, ledger_path=None):
             progress = 40.0 if variant_id == "pnl_progress" else 10.0
             research = 10.0 if variant_id == "pnl_progress" else 100.0
             return {
@@ -170,11 +172,101 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
                     lookback_years=1,
                     output_dir=output_dir,
                     append_ledger=False,
+                    as_of_date=date(2026, 6, 4),
                 )
 
         self.assertEqual(report["best"]["variant_id"], "pnl_progress")
         self.assertEqual(report["ranked"][0]["progress_score"], 40.0)
         self.assertEqual(report["ranked"][1]["research_score"], 100.0)
+
+    def test_forward_holdout_blocks_overlapping_non_champion_experiment(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            with self.assertRaisesRegex(RuntimeError, "protected forward holdout"):
+                goal.run_goal_experiments(
+                    variants=["lane_a_goal_test"],
+                    lookback_years=1,
+                    output_dir=output_dir,
+                    append_ledger=False,
+                    as_of_date=date(2026, 6, 14),
+                )
+
+    def test_champion_final_eval_records_one_holdout_consumption(self):
+        variant_row = {
+            "variant_id": "lane_a_goal_test",
+            "result_path": "run.json",
+            "description": "test variant",
+            "candidate_trade_count": 1,
+            "exact_trade_count": 1,
+        }
+
+        def fake_write_outputs(scoreboard, *, output_dir=goal.evaluator.OUTPUT_DIR):
+            return {"latest_json": str(Path(output_dir) / "latest.json")}
+
+        scoreboard = {
+            "score": 0.0,
+            "progress_score": 1.0,
+            "research_score": 1.0,
+            "status": "scout_or_blocked",
+            "promotion_blockers": [],
+            "score_line": "score: 0.00 progress_score: 1.00",
+            "metrics": {
+                "strategy_family": "lane_a",
+                "variant_id": "lane_a_goal_test",
+            },
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "experiments"
+            ledger = Path(tmp) / "ledger.jsonl"
+            with patch.object(goal, "_run_lane_variant", return_value=({"variants": [variant_row]}, variant_row)), patch.object(
+                goal,
+                "_run_robustness",
+                return_value=({"ok": True}, output_dir / "robustness.json"),
+            ), patch.object(
+                goal,
+                "_run_side_aware",
+                return_value=({"ok": True}, output_dir / "side-aware.json"),
+            ), patch.object(
+                goal,
+                "_score_variant",
+                return_value=scoreboard,
+            ), patch.object(
+                goal.evaluator,
+                "write_outputs",
+                side_effect=fake_write_outputs,
+            ):
+                report = goal.run_goal_experiments(
+                    variants=["lane_a_goal_test"],
+                    lookback_years=1,
+                    output_dir=output_dir,
+                    champion_final_eval=True,
+                    holdout_ledger_path=ledger,
+                    as_of_date=date(2026, 6, 14),
+                )
+
+            rows = [__import__("json").loads(line) for line in ledger.read_text(encoding="utf8").splitlines()]
+
+        self.assertTrue(report["champion_final_eval"])
+        self.assertTrue(report["forward_holdout_guard"]["consumption_required"])
+        self.assertEqual(rows[0]["holdout_consumption"]["strategy_family"], "lane_a")
+        self.assertTrue(rows[0]["holdout_consumption"]["consumed"])
+
+    def test_champion_final_eval_is_one_shot_per_strategy_family(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.jsonl"
+            ledger.write_text(
+                '{"strategy_family":"lane_a","holdout_consumption":{"contract_id":"forward-holdout-contract","strategy_family":"lane_a","consumed":true}}\n',
+                encoding="utf8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "already been consumed"):
+                goal.validate_forward_holdout_guard(
+                    variants=["lane_a_goal_test"],
+                    lookback_years=1,
+                    champion_final_eval=True,
+                    ledger_path=ledger,
+                    as_of_date=date(2026, 6, 14),
+                )
 
 
 if __name__ == "__main__":
