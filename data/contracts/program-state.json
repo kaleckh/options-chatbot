@@ -13,7 +13,7 @@
     "1.11": "done",
     "1.12": "done",
     "1.13": "done",
-    "1.14": "todo",
+    "1.14": "done",
     "1.15": "todo"
   },
   "cohort": {
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.13 verified and completed daily-ops command hardening: npm run daily-ops now chains exit-evidence planning, suggested-trade review planning, paper-shadow/fresh-evidence collection, scheduled-scan heartbeat health, and gateboard refresh in order, with read-only safety metadata and tests. A red heartbeat still allows the final gateboard refresh while the run reports failed."
+    "work": "Phase 1.14 verified and completed backend single-worker startup assertion coverage. FastAPI startup already rejects configured worker counts above 1 unless OPTIONS_ALLOW_MULTI_WORKER_BACKEND is explicit; added deterministic regression tests for env, CLI, single-worker, and override paths."
   }
 }

@@ -20,7 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 
 class BackendBridgeAuthTests(unittest.TestCase):
-    def _load_backend(self, env: dict[str, str]):
+    def _load_backend(self, env: dict[str, str], argv: list[str] | None = None):
         module_name = f"backend_bridge_auth_{self._testMethodName}_{len(sys.modules)}"
         spec = importlib.util.spec_from_file_location(module_name, BACKEND_MAIN)
         if spec is None or spec.loader is None:
@@ -33,20 +33,34 @@ class BackendBridgeAuthTests(unittest.TestCase):
             "DATABASE_URL": "",
             "OPTIONS_BACKEND_API_TOKEN": "",
             "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "",
+            "OPTIONS_ALLOW_MULTI_WORKER_BACKEND": "",
+            "OPTIONS_BACKEND_WORKERS": "",
+            "UVICORN_WORKERS": "",
+            "WEB_CONCURRENCY": "",
         }
         default_env.update(env)
+        argv_values = argv if argv is not None else ["uvicorn", "main:app"]
 
-        with patch.dict(sys.modules, {"dotenv": dotenv_module}, clear=False), patch.dict(
-            os.environ,
-            default_env,
-            clear=False,
-        ):
-            sys.modules[module_name] = module
-            try:
-                spec.loader.exec_module(module)
-            except Exception:
-                sys.modules.pop(module_name, None)
-                raise
+        had_dotenv = "dotenv" in sys.modules
+        original_dotenv = sys.modules.get("dotenv")
+        sys.modules["dotenv"] = dotenv_module
+        try:
+            with patch.dict(
+                os.environ,
+                default_env,
+                clear=False,
+            ), patch.object(sys, "argv", argv_values):
+                sys.modules[module_name] = module
+                try:
+                    spec.loader.exec_module(module)
+                except Exception:
+                    sys.modules.pop(module_name, None)
+                    raise
+        finally:
+            if had_dotenv:
+                sys.modules["dotenv"] = original_dotenv
+            else:
+                sys.modules.pop("dotenv", None)
         self.addCleanup(lambda: sys.modules.pop(module_name, None))
         return module
 
@@ -77,6 +91,43 @@ class BackendBridgeAuthTests(unittest.TestCase):
             response = client.get("/api/health")
 
         self.assertEqual(response.status_code, 200)
+
+    def test_backend_startup_rejects_multi_worker_env(self):
+        with self.assertRaisesRegex(RuntimeError, "must run with one worker"):
+            self._load_backend(
+                {
+                    "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                    "WEB_CONCURRENCY": "2",
+                }
+            )
+
+    def test_backend_startup_allows_single_worker_env(self):
+        backend = self._load_backend(
+            {
+                "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                "UVICORN_WORKERS": "1",
+            }
+        )
+
+        self.assertEqual(backend.app.title, "Options Chatbot Backend")
+
+    def test_backend_startup_rejects_multi_worker_cli_flag(self):
+        with self.assertRaisesRegex(RuntimeError, "must run with one worker"):
+            self._load_backend(
+                {"OPTIONS_BACKEND_API_TOKEN": "test-token"},
+                argv=["uvicorn", "main:app", "--workers", "2"],
+            )
+
+    def test_backend_startup_allows_explicit_multi_worker_override(self):
+        backend = self._load_backend(
+            {
+                "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                "OPTIONS_BACKEND_WORKERS": "2",
+                "OPTIONS_ALLOW_MULTI_WORKER_BACKEND": "1",
+            }
+        )
+
+        self.assertEqual(backend.app.title, "Options Chatbot Backend")
 
     def test_backend_api_token_blocks_direct_api_calls_when_configured(self):
         backend = self._load_backend(
