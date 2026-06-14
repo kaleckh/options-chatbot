@@ -272,6 +272,22 @@ STORE_CLASSIFICATIONS: dict[str, dict[str, Any]] = {
         ),
         "notes": ("Backups cover SQLite evidence stores and Postgres tracked-position dumps.",),
     },
+    "operator_audit_mutation_ledger": {
+        "label": "Operator mutation audit ledger",
+        "storage_role": "ignored_sidecar_or_backup",
+        "persistence": "jsonl_file",
+        "scope": "active_browser",
+        "location": "data/operator-audit/mutations.jsonl",
+        "production_role": "Append-only local audit trail for Trading Desk mutation outcomes.",
+        "owners": ("python-backend/main.py::_append_operator_mutation",),
+        "owner_docs": ("docs/local-db-hardening.md", "docs/api-and-storage.md"),
+        "hard_rules": (
+            "Do not treat the operator audit ledger as proof or repository state.",
+            "Do not commit data/operator-audit contents.",
+            "Do not truncate or prune it from read-only audits.",
+        ),
+        "notes": ("Request middleware logs all attempts; this JSONL records successful mutation outcomes.",),
+    },
     "sqlite_sidecars_and_backups": {
         "label": "SQLite sidecars and backups",
         "storage_role": "ignored_sidecar_or_backup",

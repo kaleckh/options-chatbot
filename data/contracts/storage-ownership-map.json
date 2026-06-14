@@ -1324,6 +1324,61 @@
     },
     {
       "hard_rules": [
+        "Do not treat the operator audit ledger as proof or repository state.",
+        "Do not commit data/operator-audit contents.",
+        "Do not truncate or prune it from read-only audits."
+      ],
+      "label": "Operator mutation audit ledger",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Append-only local operator audit JSONL for Trading Desk mutation outcomes.",
+          "audit_checks": [
+            "classified_ignored"
+          ],
+          "backup_rule": "Keep generated audit lines ignored locally; include them in off-machine evidence copies only when the operator needs local mutation-audit retention.",
+          "database_id": "operator_audit_mutation_ledger",
+          "expected_connection_policy": [
+            "JSONL append-only file; not opened as SQLite."
+          ],
+          "expected_tables": [],
+          "mutability": "ignored_sidecar_or_backup",
+          "notes": "Records successful Trading Desk create/review/close mutation outcomes. Request middleware logs all attempts separately.",
+          "optional_tables": [],
+          "owner": "python-backend/main.py::_append_operator_mutation",
+          "path_pattern": "data/operator-audit/mutations.jsonl",
+          "store_id": "operator_audit_mutation_ledger"
+        }
+      ],
+      "location": "data/operator-audit/mutations.jsonl",
+      "notes": [
+        "Request middleware logs all attempts; this JSONL records successful mutation outcomes."
+      ],
+      "owner_docs": [
+        "docs/local-db-hardening.md",
+        "docs/api-and-storage.md"
+      ],
+      "owners": [
+        "python-backend/main.py::_append_operator_mutation"
+      ],
+      "persistence": "jsonl_file",
+      "production_role": "Append-only local audit trail for Trading Desk mutation outcomes.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "active_browser",
+      "storage_role": "ignored_sidecar_or_backup",
+      "store_id": "operator_audit_mutation_ledger",
+      "tables": []
+    },
+    {
+      "hard_rules": [
         "Do not migrate or repair this store through Trading Desk repository contracts."
       ],
       "label": "Options history truth store",

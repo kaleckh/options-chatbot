@@ -17,7 +17,7 @@ import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Any
@@ -106,6 +106,7 @@ from proof_contract import (
     row_has_research_backfill_marker as _row_has_research_backfill_marker,
 )
 from backend_route_context import BackendRouteContext
+from logging_setup import configure_logging
 from predictions_routes import create_predictions_router
 from profile_routes import create_profile_router
 import replay_profit_service
@@ -182,6 +183,13 @@ _assert_single_process_backend_runtime()
 app = FastAPI(title="Options Chatbot Backend")
 
 BACKEND_API_TOKEN_HEADER = "x-options-backend-token"
+TRADING_DESK_MUTATION_HEADER = "x-trading-desk-mutation"
+STRATEGY_LAB_MUTATION_HEADER = "x-strategy-lab-mutation"
+GENERIC_INTERNAL_ERROR_DETAIL = "Internal server error."
+LOGGER = configure_logging()
+_OPERATOR_AUDIT_LOCK = threading.Lock()
+_OPERATOR_AUDIT_PATH_ENV = str(os.getenv("OPTIONS_OPERATOR_AUDIT_PATH") or "").strip()
+_OPERATOR_AUDIT_DIR_ENV = str(os.getenv("OPTIONS_OPERATOR_AUDIT_DIR") or "").strip()
 
 
 def _backend_api_token() -> str:
@@ -200,13 +208,33 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def add_backend_timing_header(request, call_next):
-    start = time.perf_counter()
-    response = await call_next(request)
-    duration_ms = (time.perf_counter() - start) * 1000.0
-    response.headers["x-python-backend-duration-ms"] = f"{duration_ms:.1f}"
-    return response
+def _mutation_intent_from_request(request: Request) -> tuple[str | None, str | None]:
+    for header_name in (TRADING_DESK_MUTATION_HEADER, STRATEGY_LAB_MUTATION_HEADER):
+        raw = str(request.headers.get(header_name) or "").strip()
+        if raw:
+            return header_name, raw
+    return None, None
+
+
+def _request_log_payload(request: Request, *, status_code: int, duration_ms: float) -> dict[str, Any]:
+    mutation_intent_header, mutation_intent = _mutation_intent_from_request(request)
+    return {
+        "event": "http_request",
+        "method": request.method,
+        "path": request.url.path,
+        "status": int(status_code),
+        "duration_ms": round(float(duration_ms), 3),
+        "mutation_intent_header": mutation_intent_header,
+        "mutation_intent": mutation_intent,
+    }
+
+
+def _internal_server_error(exc: Exception, operation: str) -> HTTPException:
+    LOGGER.exception(
+        "backend_internal_error",
+        extra={"structured": {"event": "backend_exception", "operation": operation}},
+    )
+    return HTTPException(status_code=500, detail=GENERIC_INTERNAL_ERROR_DETAIL)
 
 
 @app.middleware("http")
@@ -220,6 +248,27 @@ async def require_backend_api_token(request, call_next):
                 status_code=401,
             )
     return await call_next(request)
+
+
+@app.middleware("http")
+async def log_backend_request(request: Request, call_next):
+    start = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.perf_counter() - start) * 1000.0
+        LOGGER.exception(
+            "http_request_failed",
+            extra={"structured": _request_log_payload(request, status_code=500, duration_ms=duration_ms)},
+        )
+        raise
+    duration_ms = (time.perf_counter() - start) * 1000.0
+    response.headers["x-python-backend-duration-ms"] = f"{duration_ms:.1f}"
+    LOGGER.info(
+        "http_request",
+        extra={"structured": _request_log_payload(request, status_code=response.status_code, duration_ms=duration_ms)},
+    )
+    return response
 
 
 # ── SQLite session management (shared DB with existing Streamlit app) ──────────
@@ -2034,6 +2083,85 @@ def _append_forward_evidence_event(
         handle.write(json.dumps(payload) + "\n")
 
 
+def _operator_audit_path() -> Path:
+    override_path = str(os.getenv("OPTIONS_OPERATOR_AUDIT_PATH") or _OPERATOR_AUDIT_PATH_ENV or "").strip()
+    if override_path:
+        return Path(override_path).resolve()
+    override_dir = str(os.getenv("OPTIONS_OPERATOR_AUDIT_DIR") or _OPERATOR_AUDIT_DIR_ENV or "").strip()
+    base_dir = Path(override_dir).resolve() if override_dir else Path(ROOT_DIR) / "data" / "operator-audit"
+    return base_dir / "mutations.jsonl"
+
+
+def _operator_audit_record_ref(record: dict[str, Any]) -> dict[str, Any]:
+    fields = (
+        "id",
+        "ticker",
+        "contract_symbol",
+        "status",
+        "created_at",
+        "updated_at",
+        "filled_at",
+        "closed_at",
+        "entry_execution_basis",
+        "exit_execution_basis",
+    )
+    return {field: record.get(field) for field in fields if record.get(field) is not None}
+
+
+def _append_operator_mutation(
+    request: Request,
+    *,
+    operation: str,
+    store: str,
+    outcome: str,
+    record_class: str,
+    status_code: int = 200,
+    record: dict[str, Any] | None = None,
+    records: list[dict[str, Any]] | None = None,
+    duplicate: bool = False,
+) -> None:
+    rows: list[dict[str, Any]] = []
+    if record is not None:
+        rows.append(record)
+    rows.extend(row for row in list(records or []) if isinstance(row, dict))
+    mutation_intent_header, mutation_intent = _mutation_intent_from_request(request)
+    payload = {
+        "recorded_at_utc": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "event": "operator_mutation",
+        "operation": str(operation),
+        "store": str(store),
+        "record_class": str(record_class),
+        "outcome": str(outcome),
+        "status_code": int(status_code),
+        "duplicate": bool(duplicate),
+        "method": request.method,
+        "path": request.url.path,
+        "mutation_intent_header": mutation_intent_header,
+        "mutation_intent": mutation_intent,
+        "record_count": len(rows),
+        "record_ids": _position_ids_from_rows(rows),
+        "records": [_operator_audit_record_ref(row) for row in rows],
+    }
+    path = _operator_audit_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with _OPERATOR_AUDIT_LOCK:
+            with path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(payload, sort_keys=True, default=str) + "\n")
+    except Exception:
+        LOGGER.exception(
+            "operator_audit_write_failed",
+            extra={
+                "structured": {
+                    "event": "operator_audit_write_failed",
+                    "operation": operation,
+                    "store": store,
+                    "path": str(path),
+                }
+            },
+        )
+
+
 def _position_ids_from_rows(rows: list[dict[str, Any]]) -> list[int]:
     ids: list[int] = []
     for row in list(rows or []):
@@ -2703,11 +2831,11 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise _internal_server_error(e, "scan")
 
 
 @app.post("/api/positions")
-async def create_position_endpoint(body: dict[str, Any]):
+async def create_position_endpoint(request: Request, body: dict[str, Any]):
     """Track a user-confirmed options position from a live scan pick."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -2746,6 +2874,15 @@ async def create_position_endpoint(body: dict[str, Any]):
         )
         existing_position = _find_existing_open_contract(POSITIONS_REPOSITORY, payload)
         if existing_position is not None:
+            _append_operator_mutation(
+                request,
+                operation="create_tracked_position",
+                store="postgres_tracked_positions",
+                outcome="duplicate_open_contract",
+                record_class="tracked_position",
+                record=existing_position,
+                duplicate=True,
+            )
             return {
                 "position": existing_position,
                 "duplicate": True,
@@ -2796,13 +2933,21 @@ async def create_position_endpoint(body: dict[str, Any]):
                 run_mode="position_opened",
                 reason="position_opened",
             )
+        _append_operator_mutation(
+            request,
+            operation="create_tracked_position",
+            store="postgres_tracked_positions",
+            outcome="created",
+            record_class="tracked_position",
+            record=position,
+        )
         return {"position": position, "position_event_persistence": position_event_persistence}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "create_tracked_position")
 
 
 @app.get("/api/positions")
@@ -2847,11 +2992,11 @@ async def list_positions_endpoint(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "list_tracked_positions")
 
 
 @app.post("/api/positions/review")
-async def review_positions_endpoint(body: dict[str, Any] | None = None):
+async def review_positions_endpoint(request: Request, body: dict[str, Any] | None = None):
     """Review open tracked positions and return HOLD/SELL guidance."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -2882,11 +3027,19 @@ async def review_positions_endpoint(body: dict[str, Any] | None = None):
                 run_mode="positions_review",
                 reason="tracked_positions_review",
             )
+        _append_operator_mutation(
+            request,
+            operation="review_tracked_positions",
+            store="postgres_tracked_positions",
+            outcome="reviewed",
+            record_class="tracked_position",
+            records=reviewed,
+        )
         return {"positions": reviewed, "position_event_persistence": position_event_persistence}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "review_tracked_positions")
 
 
 @app.get("/api/positions/{position_id}/close-prefill")
@@ -2930,11 +3083,11 @@ async def close_prefill_endpoint(position_id: int):
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "tracked_position_close_prefill")
 
 
 @app.post("/api/positions/{position_id}/close")
-async def close_position_endpoint(position_id: int, body: dict[str, Any]):
+async def close_position_endpoint(position_id: int, request: Request, body: dict[str, Any]):
     """Mark a tracked position closed after the user exits it."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -2975,6 +3128,14 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
                 run_mode="positions_close",
                 reason="manual_close",
             )
+        _append_operator_mutation(
+            request,
+            operation="close_tracked_position",
+            store="postgres_tracked_positions",
+            outcome="closed",
+            record_class="tracked_position",
+            record=position,
+        )
         return {"position": position, "position_event_persistence": position_event_persistence}
     except HTTPException:
         raise
@@ -2983,11 +3144,11 @@ async def close_position_endpoint(position_id: int, body: dict[str, Any]):
         status = 409 if "already closed" in message.lower() or "not open" in message.lower() else 400
         raise HTTPException(status, message)
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "close_tracked_position")
 
 
 @app.post("/api/suggested-trades")
-async def create_suggested_trade_endpoint(body: dict[str, Any]):
+async def create_suggested_trade_endpoint(request: Request, body: dict[str, Any]):
     """Save a hypothetical scanner trade for later mark-to-market review."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3015,15 +3176,32 @@ async def create_suggested_trade_endpoint(body: dict[str, Any]):
         )
         existing_trade = _find_existing_open_contract(SUGGESTED_TRADES_REPOSITORY, payload)
         if existing_trade is not None:
+            _append_operator_mutation(
+                request,
+                operation="create_suggested_trade",
+                store="sqlite_suggested_trades",
+                outcome="duplicate_open_contract",
+                record_class="suggested_trade",
+                record=existing_trade,
+                duplicate=True,
+            )
             return {"trade": existing_trade, "duplicate": True}
         trade = SUGGESTED_TRADES_REPOSITORY.create_position(payload)
+        _append_operator_mutation(
+            request,
+            operation="create_suggested_trade",
+            store="sqlite_suggested_trades",
+            outcome="created",
+            record_class="suggested_trade",
+            record=trade,
+        )
         return {"trade": trade}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "create_suggested_trade")
 
 
 @app.get("/api/suggested-trades")
@@ -3064,11 +3242,11 @@ async def list_suggested_trades_endpoint(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "list_suggested_trades")
 
 
 @app.post("/api/suggested-trades/review")
-async def review_suggested_trades_endpoint(body: dict[str, Any] | None = None):
+async def review_suggested_trades_endpoint(request: Request, body: dict[str, Any] | None = None):
     """Review open suggested trades and refresh their hypothetical P/L."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3078,15 +3256,23 @@ async def review_suggested_trades_endpoint(body: dict[str, Any] | None = None):
         position_ids = _parse_position_ids(body.get("position_ids"))
         reviewed = await _run_in_worker(review_open_positions, SUGGESTED_TRADES_REPOSITORY, position_ids=position_ids)
         reviewed = _annotate_share_safety_rows(reviewed)
+        _append_operator_mutation(
+            request,
+            operation="review_suggested_trades",
+            store="sqlite_suggested_trades",
+            outcome="reviewed",
+            record_class="suggested_trade",
+            records=reviewed,
+        )
         return {"trades": reviewed}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "review_suggested_trades")
 
 
 @app.post("/api/suggested-trades/{position_id}/close")
-async def close_suggested_trade_endpoint(position_id: int, body: dict[str, Any]):
+async def close_suggested_trade_endpoint(position_id: int, request: Request, body: dict[str, Any]):
     """Mark a suggested trade closed using a hypothetical or observed exit price."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3107,13 +3293,21 @@ async def close_suggested_trade_endpoint(position_id: int, body: dict[str, Any])
         )
         if trade is None:
             raise HTTPException(404, f"Suggested trade {position_id} was not found")
+        _append_operator_mutation(
+            request,
+            operation="close_suggested_trade",
+            store="sqlite_suggested_trades",
+            outcome="closed",
+            record_class="suggested_trade",
+            record=trade,
+        )
         return {"trade": trade}
     except HTTPException:
         raise
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "close_suggested_trade")
 
 
 @app.post("/api/scan/recommendations")
@@ -3313,7 +3507,7 @@ async def run_backtest_endpoint(body: dict[str, Any] | None = None):
     except ValueError as exc:
         raise HTTPException(400, str(exc))
     except Exception as e:
-        raise HTTPException(500, str(e))
+        raise _internal_server_error(e, "run_backtest")
 
 
 @app.post("/api/backtest/archived-forward")
@@ -3327,7 +3521,7 @@ async def run_archived_forward_backtest_endpoint(body: dict[str, Any] | None = N
         )
         return result
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "run_archived_forward_backtest")
 
 
 @app.get("/api/backtest/last")
@@ -3345,7 +3539,7 @@ async def get_forward_evidence_report():
     try:
         return await _run_in_worker(_cached_forward_evidence_report)
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "get_forward_evidence_report")
 
 
 @app.get("/api/backtest/report")
@@ -3502,7 +3696,7 @@ async def get_backtest_summary(
             bucket_size,
         )
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "get_backtest_summary")
 
 
 # ── Changelog endpoint ────────────────────────────────────────────────────────
@@ -3544,7 +3738,7 @@ async def get_options_profit_status():
     try:
         return await _run_in_worker(_read_only_options_profit_status)
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "get_options_profit_status")
 
 
 @app.get("/api/proof-summary")
@@ -3553,4 +3747,4 @@ async def get_proof_summary():
     try:
         return await _run_in_worker(build_proof_summary, _ROUTE_CONTEXT)
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise _internal_server_error(exc, "get_proof_summary")

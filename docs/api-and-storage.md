@@ -45,6 +45,8 @@ There are two separate auth layers:
 
 Mutation-intent headers remain separate. `x-trading-desk-mutation` and `x-strategy-lab-mutation` prove caller intent for audited writes, but they are not authorization and must run after local operator auth.
 
+FastAPI request middleware writes stdlib JSON logs to stderr with method, path, status, duration, and any mutation-intent header/value. Successful Trading Desk create, duplicate-create, review, and close outcomes also append compact rows to ignored `data/operator-audit/mutations.jsonl`; that audit ledger is local operator evidence, not proof or repository state.
+
 Auth verification map:
 
 - `tests/ui/operator-auth.test.js` proves local operator auth fail-closed behavior, private header / bearer / signed session-cookie allowance, the static guard requirement for browser-facing mutations/tools, generic scan / prediction-grade / tool dispatch rejection and allowance, direct operator-session unlock rejection/cookie flags, and generated route-inventory coverage anchors.
@@ -150,6 +152,7 @@ Store ownership:
 - scanner-origin creates follow `docs/scanner-creation-safety-contract.md`: source and current rerun picks must both have verified lineage, caps-enforced creation state, `creation_eligible=true`, no `creation_blockers`, and final proof eligibility
 - scanner-origin create tamper rejection is covered by tracked and suggested route-level lineage mutation tests, with a full scan-to-create smoke test in `tests/test_options_api_e2e.py`
 - tracked-position create/review/close responses include `position_event_persistence`; `status=failed` means the primary row mutation succeeded but the forward-evidence lifecycle event did not persist and is visible in `/api/backtest/forward-evidence` recording health
+- successful create, duplicate-create, review, and close outcomes append compact mutation refs to `data/operator-audit/mutations.jsonl`
 
 ### Suggested Trades
 
@@ -177,6 +180,7 @@ Store ownership:
 - scanner-origin suggested trades use the same source/rerun creation-safety contract as tracked positions; explicit manual modes are the only non-scanner creation path
 - suggested scanner-origin creates share the same archived-lineage mutation rejection tests as tracked creates, but remain local paper/hypothetical rows rather than production proof rows
 - suggested trades are local paper/hypothetical workflow state; responses use `trade` / `trades`, must not include `position_event_persistence`, and must not feed production proof or options-profit truth
+- successful create, duplicate-create, review, and close outcomes append compact mutation refs to `data/operator-audit/mutations.jsonl`
 
 ### Support
 
@@ -258,6 +262,7 @@ Artifact directories:
 - `data/options-validation/*`
 - `data/options-profit/*`
 - `data/forward-tracking/*`
+- `data/operator-audit/*`
 - `data/ai-commodity-infra/*`
 - `data/alpaca-options-strategy-lab/*`
 - `docs/autoresearch/*`
@@ -269,6 +274,7 @@ Used for:
 - policy artifacts
 - truth-gate state
 - forward evidence
+- local operator mutation audit JSONL
 - pending selected-candidate validation dispositions
 - current-policy entry-filter point-in-time replay readbacks
 - AI commodity OPRA capture progress and lane proof-readiness evidence
@@ -295,6 +301,8 @@ Used for:
   - backend HTTP transport plus domain-specific request helpers
 - `python-backend/main.py`
   - FastAPI app composition, router mounting, and cache orchestration
+- `python-backend/logging_setup.py`
+  - stdlib JSON stderr logging for backend request and exception events
 - `docs/backend-route-ownership-map.md`
   - generated route adapter ownership map for FastAPI handlers, extracted routers, service delegation, and backend-only surfaces
 - `python-backend/backend_route_context.py`

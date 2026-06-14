@@ -177,6 +177,26 @@ LOCAL_DATABASE_ROLES: tuple[LocalDatabaseRole, ...] = (
             "the local DB audit classifies it but must not open or prune it."
         ),
     ),
+    LocalDatabaseRole(
+        database_id="operator_audit_mutation_ledger",
+        store_id="operator_audit_mutation_ledger",
+        path_pattern="data/operator-audit/mutations.jsonl",
+        owner="python-backend/main.py::_append_operator_mutation",
+        mutability="ignored_sidecar_or_backup",
+        active_scope="Append-only local operator audit JSONL for Trading Desk mutation outcomes.",
+        expected_tables=(),
+        optional_tables=(),
+        expected_connection_policy=("JSONL append-only file; not opened as SQLite.",),
+        audit_checks=("classified_ignored",),
+        backup_rule=(
+            "Keep generated audit lines ignored locally; include them in off-machine evidence "
+            "copies only when the operator needs local mutation-audit retention."
+        ),
+        notes=(
+            "Records successful Trading Desk create/review/close mutation outcomes. "
+            "Request middleware logs all attempts separately."
+        ),
+    ),
 )
 
 

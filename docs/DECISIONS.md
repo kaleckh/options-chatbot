@@ -1,5 +1,11 @@
 # Decisions
 
+## 2026-06-14: Keep Backend Error Details In Logs, Not HTTP 500 Bodies
+
+Raw exception messages in `500` responses can leak local paths, provider details, or implementation state, while Trading Desk mutations still need an auditable operator trail.
+
+Durable decision: FastAPI backend exceptions are logged through stdlib JSON stderr logging and public `500` responses use a generic internal-error message. Request logs include method, path, status, duration, and mutation-intent header/value. Successful Trading Desk create, duplicate-create, review, and close outcomes append compact local audit refs to ignored `data/operator-audit/mutations.jsonl`; that ledger is local operator audit evidence only, not proof, not repository state, and not a production P&L source.
+
 ## 2026-06-14: Use Bootstrap Lower Bounds For Autoresearch Promotion Language
 
 Point-estimate profit factor is not enough evidence after many overlapping sleeve variants have been searched. A branch can show PF above the discussion threshold while its trade-level downside resamples still include flat or losing outcomes.

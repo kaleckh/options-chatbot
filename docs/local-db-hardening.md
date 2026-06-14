@@ -12,6 +12,7 @@ Point 15 is a guardrail and readability point. It classifies local DB files, doc
 | Explicit tracked SQLite legacy/test DB | `data/tracked_positions.db` | Tests and legacy tools only | Never a browser tracked-position fallback; Postgres through `DATABASE_URL` owns production tracked positions. |
 | SQLite sidecars/backups | `*.db-wal`, `*.db-shm`, `chat_history.backup-*.db`, `data/tracked_positions.backup-*` | Local runtime or recovery files | Ignored locally; audit may enumerate but must not delete or rewrite them. |
 | Evidence backup directory | `data/backups/**` | Nightly evidence-store backups | Ignored locally; owned by `scripts/backup_evidence_stores.py` and rotated by that script only. |
+| Operator mutation audit JSONL | `data/operator-audit/mutations.jsonl` | Trading Desk mutation outcome audit trail | Append-only JSONL, ignored locally, and not opened as SQLite. |
 
 ## Classified Outside This Contract
 
@@ -65,7 +66,7 @@ For manual mutation or one-off repair scripts:
 - prefer SQLite's backup API or stop writers before copying a live DB file
 - record the backup path in the repair output
 - keep backups ignored unless a specific recovery workflow requires publishing one
-- do not prune backup or sidecar files from audit scripts
+- do not prune backup, sidecar, or operator-audit JSONL files from audit scripts
 
 For operational survivability:
 
@@ -84,10 +85,13 @@ For operational survivability:
 - Do not change `chat_history.db` journal mode in Point 15.
 - Do not include AI commodity, options-history, forward-evidence, or market-cache stores in Trading Desk repository hardening.
 - Do not treat `data/backups/**` as an active database source.
+- Do not treat `data/operator-audit/mutations.jsonl` as proof, repository state, or an active database source.
 
 ## Implementation Anchors
 
 - Local DB manifest: `python-backend/local_db_hardening.py`
+- Backend JSON logging: `python-backend/logging_setup.py`
+- Operator mutation audit append: `python-backend/main.py::_append_operator_mutation`
 - Read-only local DB audit: `scripts/audit_local_databases.py`
 - Evidence backup script: `scripts/backup_evidence_stores.py`
 - Suggested-trade repository: `python-backend/suggested_trades_repository.py`

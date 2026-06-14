@@ -40,6 +40,7 @@ research_runs/
 
 # Local runtime state
 data/backups/
+data/operator-audit/
 data/forward-tracking/scheduled_scan_heartbeat*.json
 data/options-profit/decisions/
 data/profitability-lab/

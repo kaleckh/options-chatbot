@@ -6,6 +6,10 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from backend_route_context import BackendRouteContext
+from logging_setup import get_logger
+
+
+LOGGER = get_logger("tools")
 
 
 def _coerce_tool_result(result: Any) -> Any:
@@ -33,7 +37,20 @@ def create_tools_router(ctx: BackendRouteContext) -> APIRouter:
         try:
             result = await ctx._run_in_worker(fn, **body)
             return {"result": _coerce_tool_result(result)}
-        except Exception as e:
-            raise HTTPException(500, {"error": type(e).__name__, "message": str(e)})
+        except Exception:
+            LOGGER.exception(
+                "backend_tool_dispatch_error",
+                extra={
+                    "structured": {
+                        "event": "backend_exception",
+                        "operation": "tool_dispatch",
+                        "tool_name": tool_name,
+                    }
+                },
+            )
+            raise HTTPException(
+                status_code=500,
+                detail={"error": "internal_server_error", "message": "Internal server error."},
+            )
 
     return router

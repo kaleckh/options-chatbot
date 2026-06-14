@@ -109,6 +109,7 @@ class StorageOwnershipMapTests(unittest.TestCase):
         tools = self.stores["backend_tool_dispatch"]
         market_data = self.stores["market_data_cache"]
         backup_dir = self.stores["evidence_store_backup_directory"]
+        operator_audit = self.stores["operator_audit_mutation_ledger"]
 
         self.assertEqual(backend_domain["persistence"], "virtual")
         self.assertEqual(backend_domain["storage_role"], "backend_domain")
@@ -126,6 +127,11 @@ class StorageOwnershipMapTests(unittest.TestCase):
         self.assertEqual(backup_dir["location"], "data/backups/**")
         self.assertEqual(backup_dir["local_database_roles"][0]["mutability"], "ignored_sidecar_or_backup")
         self.assertIn("Do not commit data/backups contents.", backup_dir["hard_rules"])
+
+        self.assertEqual(operator_audit["persistence"], "jsonl_file")
+        self.assertEqual(operator_audit["location"], "data/operator-audit/mutations.jsonl")
+        self.assertEqual(operator_audit["local_database_roles"][0]["mutability"], "ignored_sidecar_or_backup")
+        self.assertIn("Do not commit data/operator-audit contents.", operator_audit["hard_rules"])
 
     def test_living_docs_and_memory_graph_link_storage_map(self):
         for path in [

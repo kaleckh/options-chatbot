@@ -45,6 +45,7 @@ Current read:
 - the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` and fail after more than `2` market days without a completed scheduled scan.
 - backups write ignored bundles under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
 - FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.
+- FastAPI request/exception logs are stdlib JSON to stderr, and successful Trading Desk mutation outcomes append compact local audit refs to ignored `data/operator-audit/mutations.jsonl`; that ledger is audit evidence only, not proof or repository state.
 
 1. Add these commands to the scheduled Windows task or the operator routine:
 

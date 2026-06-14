@@ -48,6 +48,11 @@ class LocalDbHardeningTests(unittest.TestCase):
         self.assertEqual(tracked.mutability, "test_legacy_mutable")
         self.assertIn("never the browser tracked-position fallback", tracked.active_scope)
 
+        operator_audit = local_database_role("operator_audit_mutation_ledger")
+        self.assertEqual(operator_audit.path_pattern, "data/operator-audit/mutations.jsonl")
+        self.assertEqual(operator_audit.mutability, "ignored_sidecar_or_backup")
+        self.assertIn("JSONL append-only", " ".join(operator_audit.expected_connection_policy))
+
     def test_manifest_marks_truth_forward_market_and_ai_stores_out_of_scope(self):
         manifest = {entry["database_id"]: entry for entry in local_database_manifest()}
 
@@ -150,10 +155,12 @@ class LocalDbHardeningTests(unittest.TestCase):
         self.assertIn("data/options-validation/options_history.db", local_doc)
         self.assertIn("data/ai-commodity-infra/*", local_doc)
         self.assertIn("data/backups/**", local_doc)
+        self.assertIn("data/operator-audit/mutations.jsonl", local_doc)
 
         gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         for pattern in (
             "data/backups/",
+            "data/operator-audit/",
             "chat_history.db",
             "chat_history.backup-*.db",
             "market_data.db",

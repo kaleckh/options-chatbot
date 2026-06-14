@@ -33,6 +33,7 @@ Detailed rules remain in the owner manifests and docs listed under each store.
 | latest_replay_artifacts | route_artifact | file_artifact | active_browser | data/options-validation/* and related replay readbacks | 8 | 0 | docs/replay-profit-contract.md, docs/api-and-storage.md |
 | local_operator_session_cookie | session_cookie | cookie | active_browser | HttpOnly options_local_operator_session cookie | 2 | 0 | docs/api-and-storage.md, docs/route-lifecycle-contracts.md |
 | market_data_cache | support_cache | sqlite_or_file_cache | backend_support | market_data.db | 1 | 0 | docs/local-db-hardening.md, docs/api-and-storage.md |
+| operator_audit_mutation_ledger | ignored_sidecar_or_backup | jsonl_file | active_browser | data/operator-audit/mutations.jsonl | 0 | 0 | docs/local-db-hardening.md, docs/api-and-storage.md |
 | options_history_truth_store | out_of_scope_local_db | sqlite | out_of_scope | data/options-validation/options_history.db | 0 | 0 | docs/local-db-hardening.md, docs/api-and-storage.md |
 | options_profit_state_artifacts | route_artifact | file_artifact | active_browser | data/options-profit/* and options-profit state | 1 | 0 | docs/replay-profit-contract.md, docs/api-and-storage.md |
 | postgres_tracked_positions | active_repository | postgres | active_browser | DATABASE_URL | 4 | 0 | docs/repository-contract.md, docs/api-and-storage.md, docs/repository-migrations.md, docs/repository-constraints.md, docs/repository-indexes.md |
@@ -109,6 +110,7 @@ Hard rules:
 | evidence_store_backup_directory | evidence_store_backup_directory | data/backups/** | ignored_sidecar_or_backup | classified_ignored |
 | forward_tracking_ledgers | forward_tracking_ledgers | data/options-validation/forward_tracking*.db | outside_repository_scope | classified_out_of_scope |
 | market_data_cache | market_data_cache | market_data.db | outside_repository_scope | classified_out_of_scope |
+| operator_audit_mutation_ledger | operator_audit_mutation_ledger | data/operator-audit/mutations.jsonl | ignored_sidecar_or_backup | classified_ignored |
 | options_history_truth_store | options_history_truth_store | data/options-validation/options_history.db | outside_repository_scope | classified_out_of_scope |
 | sqlite_sidecars_and_backups | sqlite_sidecars_and_backups | *.db-wal, *.db-shm, chat_history.backup-*.db, data/tracked_positions.backup-* | ignored_sidecar_or_backup | classified_ignored |
 | sqlite_suggested_trades | chat_history_sqlite_suggested_trades | chat_history.db | active_mutable | exists_or_skipped, read_only_uri_open, quick_check, foreign_key_check, required_tables, sidecar_and_backup_inventory |
