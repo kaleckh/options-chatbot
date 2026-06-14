@@ -15,7 +15,7 @@
     "verify:typecheck": "tsc --noEmit --incremental false",
     "verify:deps": "uv lock --check && uv run --locked python -m pip check && npm ci --dry-run --ignore-scripts && npm audit --omit=dev --audit-level=moderate",
     "verify:python:full": "uv run --locked python -m unittest discover -s tests -p \"test_*.py\" -v",
-    "verify:python:research": "uv run --locked python -m unittest tests.test_options_api_e2e tests.test_market_data_service tests.test_metric_truth_audit tests.test_expectancy_calibration tests.test_wfo_optimizer_calibration tests.test_autoresearch_cycle -v",
+    "verify:python:research": "uv run --locked python -m unittest tests.test_options_api_e2e tests.test_market_data_service tests.test_metric_truth_audit tests.test_expectancy_calibration tests.test_wfo_optimizer_calibration tests.test_autoresearch_cycle tests.test_options_chatbot_timezone_sweep -v",
     "verify:python": "npm run verify:python:full",
     "verify:smoke": "uv run --locked python scripts/options_algorithm_smoke.py --fixture",
     "profit-loop:dry-report": "uv run --locked python scripts/run_profit_loop_canary.py --temp-state-dir --dry-run --report-only",

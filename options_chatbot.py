@@ -79,6 +79,14 @@ _ET = ZoneInfo("America/New_York")
 _UTC = ZoneInfo("UTC")
 
 
+def _now_et_naive() -> datetime:
+    return datetime.now(_ET).replace(tzinfo=None)
+
+
+def _today_et_date():
+    return datetime.now(_ET).date()
+
+
 def _quote_timestamp_snapshot(*, now_et: datetime | None = None) -> dict[str, str]:
     captured_et = now_et or datetime.now(_ET)
     if captured_et.tzinfo is None:
@@ -1793,7 +1801,7 @@ def get_stock_snapshot(symbol: str) -> str:
 def get_options_chain(symbol: str, option_type: str = None,
                       max_dte: int = DTE_MAX, expiration_date: str = None) -> str:
     try:
-        today = datetime.now()
+        today = _now_et_naive()
         symbol_up = symbol.upper()
         all_exps = _cached_options(symbol_up)
 
@@ -1838,7 +1846,7 @@ def screen_options(symbols: list, option_type: str = "both",
                    max_dte: int = 21, min_volume: int = 100) -> str:
     if isinstance(symbols, str):
         symbols = [symbols]
-    today = datetime.now()
+    today = _now_et_naive()
     all_opts = []
 
     for sym in symbols[:6]:
@@ -1901,7 +1909,7 @@ def find_high_leverage_options(
     if isinstance(symbols, str):
         symbols = [symbols]
 
-    today = datetime.now()
+    today = _now_et_naive()
     candidates = []
 
     for sym in symbols[:8]:
@@ -2016,7 +2024,7 @@ def find_high_leverage_options(
 def get_expirations(symbol: str) -> str:
     try:
         symbol_up = symbol.upper()
-        today = datetime.now()
+        today = _now_et_naive()
         results = []
         all_exps = _cached_options(symbol_up)
         for exp in all_exps:
@@ -2044,7 +2052,7 @@ def get_iv_analysis(symbol: str) -> str:
     - IV vs HV spread (positive = options expensive, negative = options cheap)
     """
     try:
-        today = datetime.now()
+        today = _now_et_naive()
         symbol_up = symbol.upper()
 
         # ── Historical volatility ──────────────────────────────────────────────
@@ -2138,7 +2146,7 @@ def get_earnings_info(symbol: str) -> str:
     try:
         symbol_up = symbol.upper()
         t = None
-        today = datetime.now()
+        today = _now_et_naive()
         next_date = None
 
         # Try earnings_dates DataFrame first (most reliable)
@@ -2211,7 +2219,7 @@ def get_market_context() -> str:
     - Overall options environment (cheap vs expensive)
     """
     try:
-        today = datetime.now()
+        today = _now_et_naive()
 
         # VIX
         vix_hist = _cached_history("^VIX", period="10d")
@@ -2300,7 +2308,7 @@ def get_put_call_ratio(symbol: str, max_dte: int = 21) -> str:
     Also shows P/C by expiration and highlights the most active strikes.
     """
     try:
-        today = datetime.now()
+        today = _now_et_naive()
         symbol_up = symbol.upper()
         S = _get_price(symbol=symbol_up)
 
@@ -2703,7 +2711,7 @@ def log_paper_trade(
     action="close" — mark a trade closed with a final exit price
     """
     trades = _load_trades()
-    today = datetime.now()
+    today = _now_et_naive()
 
     if action == "add":
         if not all([symbol, option_type, strike, expiration, entry_price]):
@@ -2889,7 +2897,7 @@ def log_prediction(
     action="delete" — remove a prediction by id
     """
     preds = _load_predictions()
-    today = datetime.now()
+    today = _now_et_naive()
 
     # ── list ──────────────────────────────────────────────────────────────────
     if action == "list":
@@ -3379,8 +3387,8 @@ def backfill_predictions(
     if not overwrite:
         existing = {(p["ticker"], p["entry_date"]) for p in preds}
 
-    today       = datetime.now().date()
-    fetch_start = (datetime.now() - timedelta(days=lookback_days + 60)).strftime("%Y-%m-%d")
+    today       = _today_et_date()
+    fetch_start = (datetime.now(_ET) - timedelta(days=lookback_days + 60)).strftime("%Y-%m-%d")
     fetch_end   = today.strftime("%Y-%m-%d")
 
     added = 0
@@ -4115,7 +4123,7 @@ def _fetch_best_option(
         _exp_snapshot = _cached_options_metadata(ticker)
         _exps = list(_exp_snapshot.value or []) if getattr(_exp_snapshot, "status", None) == "fresh" else []
         if _exps:
-            _today_d = datetime.now().date()
+            _today_d = _today_et_date()
             # Filter to expirations within system-wide DTE bounds
             _valid_exps = [
                 e for e in _exps
@@ -4589,7 +4597,7 @@ def _best_option_from_chain_context(
     if df is None or getattr(df, "empty", True):
         return None
     try:
-        today_d = datetime.now().date()
+        today_d = _today_et_date()
         dte = (datetime.strptime(expiry, "%Y-%m-%d").date() - today_d).days
     except Exception:
         dte = int(target_dte)
@@ -4721,7 +4729,7 @@ def _select_liquidity_first_spread(
         return None
 
     try:
-        today_d = datetime.now().date()
+        today_d = _today_et_date()
         dte = (datetime.strptime(expiry, "%Y-%m-%d").date() - today_d).days
     except Exception:
         dte = int(target_dte)
@@ -5567,7 +5575,7 @@ def scan_daily_top_trades(
     if positions_repository is not None:
         try:
             closed = positions_repository.list_positions(status="closed")
-            _now = datetime.now()
+            _now = _now_et_naive()
             for _pos in closed:
                 _exit_reason = str(_pos.get("exit_reason") or "").strip().lower()
                 if _exit_reason not in ("sl_hit", "stop", "trailing_stop"):
@@ -5793,7 +5801,7 @@ def scan_daily_top_trades(
                 _earnings_skip = False
                 _earnings_size_mult = 1.0
                 try:
-                    _today_dt = datetime.now().replace(tzinfo=None)
+                    _today_dt = _now_et_naive()
                     _ticker_info = _cached_ticker_info(ticker) or {}
                     _sector = _ticker_info.get("sector")
                     _next_earn = _next_earnings_datetime_from_info(_ticker_info)
@@ -6114,7 +6122,7 @@ def scan_daily_top_trades(
             if actual_exp:
                 target_str = actual_exp
             else:
-                _raw_target = datetime.now() + timedelta(days=actual_dte + 2)
+                _raw_target = datetime.now(_ET) + timedelta(days=actual_dte + 2)
                 while _raw_target.weekday() >= 5:
                     _raw_target += timedelta(days=1)
                 target_str = _raw_target.strftime("%Y-%m-%d")
@@ -7220,7 +7228,7 @@ def evaluate_trade_signal(
             try:
                 _ed_df = _cached_earnings_dates(symbol)
                 if _ed_df is not None and not _ed_df.empty:
-                    _now_dt = datetime.now().replace(tzinfo=None)
+                    _now_dt = _now_et_naive()
                     _fed = _ed_df[_ed_df.index.tz_localize(None) >= _now_dt] if _ed_df.index.tzinfo else _ed_df[_ed_df.index >= _now_dt]
                     if not _fed.empty:
                         _next_e = _fed.sort_index().index[0].to_pydatetime().replace(tzinfo=None)
@@ -7955,7 +7963,7 @@ def chat():
     conversation = []
     system = _get_system_prompt().format(
         watchlist=", ".join(DEFAULT_WATCHLIST),
-        datetime=datetime.now().strftime("%A, %Y-%m-%d %H:%M ET"),
+        datetime=datetime.now(_ET).strftime("%A, %Y-%m-%d %H:%M ET"),
         rfr=round(RISK_FREE_RATE * 100, 1),
     ) + "\n\n## Tool Calling\n" + _build_tool_schema_text()
 
