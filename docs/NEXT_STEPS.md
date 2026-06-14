@@ -7,14 +7,14 @@ Last updated: 2026-06-14
 Current read:
 - the forward cohort remains frozen and passive; do not use historical rows as fresh forward promotion proof.
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
-- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `315` shared dates from `2024-05-22` through `2026-06-04`; target for a two-year surface is `504` shared dates, so `189` shared dates remain.
+- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `325` shared dates from `2024-05-22` through `2026-06-04`; target for a two-year surface is `504` shared dates, so `179` shared dates remain.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
-- batches `2130` through `2135` imported `2024-05-22` through `2024-08-09` for the 13-symbol set with `1,266,874` trusted intraday rows, `0` duplicates, and `0` rejects.
+- batches `2130` through `2136` imported `2024-05-22` through `2024-08-23` for the 13-symbol set with `1,502,130` trusted intraday rows, `0` duplicates, and `0` rejects.
 - current harness pieces exist for bootstrap, search-effort accounting, rolling robustness, and regime reporting, but there is no single split-aware robust-search report that combines chronological train/validation/final holdout, bootstrap by split, regime by split, and search-effort accounting.
 
 Next actions:
 
-1. Continue old-history imports in chunks until the 13-symbol proof/import set reaches the two-year target or ThetaData returns a provider/license blocker. Next chunk starts at `2024-08-12`. Use the same parameters as batches `2130` through `2135`: `--snapshot-kind intraday --start-time 09:45 --end-time 15:55 --interval 1h --min-dte 21 --max-dte 60 --strike-range 20 --right both --source thetadata_opra_nbbo_1m`.
+1. Continue old-history imports in chunks until the 13-symbol proof/import set reaches the two-year target or ThetaData returns a provider/license blocker. Next chunk starts at `2024-08-26`. Use the same parameters as batches `2130` through `2136`: `--snapshot-kind intraday --start-time 09:45 --end-time 15:55 --interval 1h --min-dte 21 --max-dte 60 --strike-range 20 --right both --source thetadata_opra_nbbo_1m`.
 2. After each chunk, validate with:
 
 ```powershell
