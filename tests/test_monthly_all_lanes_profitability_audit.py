@@ -1661,6 +1661,65 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
         self.assertEqual(report["status"], "invalid_live_policy_change")
         self.assertTrue(report["summary"]["live_policy_change"])
 
+    def test_scheduled_scan_heartbeat_reports_stale_market_days(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths, fill_attempts = self._fixture(root)
+            paths["scheduled_scan_heartbeat"] = root / "scheduled_scan_heartbeat.json"
+            _write_json(
+                paths["scheduled_scan_heartbeat"],
+                {
+                    "status": "completed",
+                    "run_completed_at_utc": "2026-06-05T18:00:00Z",
+                    "host": "KaesDevice",
+                    "commit_sha": "abc123",
+                },
+            )
+            report = audit.build_report(
+                artifact_paths=paths,
+                fill_attempts_path=fill_attempts,
+                generated_at_utc="2026-06-10T18:00:00Z",
+            )
+
+        self.assertEqual(report["scheduled_scan_health"]["state"], "fail")
+        self.assertEqual(report["scheduled_scan_health"]["days_since_last_scheduled_scan"], 3)
+        self.assertEqual(report["summary"]["scheduled_scan_heartbeat_state"], "fail")
+
+    def test_autoresearch_search_effort_is_visible_when_scoreboard_available(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths, fill_attempts = self._fixture(root)
+            paths["regular_options_autoresearch_scoreboard"] = root / "autoresearch_latest.json"
+            _write_json(
+                paths["regular_options_autoresearch_scoreboard"],
+                {
+                    "evaluator_version": "regular-options-autoresearch-v2",
+                    "search_effort": {
+                        "strategy_family": "lane_a",
+                        "variant_id": "lane_a_goal_51",
+                        "variants_searched": 51,
+                        "selection_adjusted_bar": 1.28,
+                        "selection_adjustment_formula": "1.0 + 0.05 * log2(max(variants_searched, 1))",
+                        "selection_adjustment_metric": "pf_lb_5pct",
+                    },
+                    "metrics": {
+                        "pf_lb_5pct": 1.12,
+                        "statistical_confidence": "underpowered",
+                        "selection_adjusted_confidence": "below_selection_adjusted_bar",
+                    },
+                },
+            )
+
+            report = audit.build_report(artifact_paths=paths, fill_attempts_path=fill_attempts)
+            markdown = audit.render_markdown(report)
+
+        metrics = report["autoresearch_search_effort"]["metrics"]
+        self.assertEqual(metrics["variants_searched"], 51)
+        self.assertEqual(metrics["selection_adjusted_bar"], 1.28)
+        self.assertEqual(report["summary"]["autoresearch_search_effort_status"], "available")
+        self.assertIn("## Autoresearch Search Effort", markdown)
+        self.assertIn("1.0 + 0.05 * log2", markdown)
+
     def test_markdown_renders_core_tables_and_read_only_boundary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             paths, fill_attempts = self._fixture(Path(tmp))

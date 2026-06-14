@@ -29,6 +29,12 @@ DEFAULT_ARTIFACT_PATHS: dict[str, Path] = {
 }
 
 DEFAULT_OPTIONAL_ARTIFACT_PATHS: dict[str, Path] = {
+    "scheduled_scan_heartbeat": ROOT / "data" / "forward-tracking" / "scheduled_scan_heartbeat_latest.json",
+    "regular_options_autoresearch_scoreboard": ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-autoresearch"
+    / "latest.json",
     "regime_stratified_replay_report": ROOT / "data" / "profitability-lab" / "regime-stratified-replay" / "latest.json",
     "overfit_rule_archive": ROOT / "data" / "forward-tracking" / "regular_options_overfit_rule_archive_latest.json",
     "lane_quarantine_archive": ROOT / "data" / "forward-tracking" / "regular_options_lane_quarantine_archive_latest.json",
@@ -200,6 +206,65 @@ def _load_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     meta["status"] = "loaded"
     meta["generated_at_utc"] = payload.get("generated_at_utc") or payload.get("generated_at")
     return payload, meta
+
+
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _weekday_market_days_since(value: Any, *, as_of_utc: str | None = None) -> int | None:
+    parsed = _parse_utc_datetime(value)
+    if parsed is None:
+        return None
+    as_of = _parse_utc_datetime(as_of_utc) or datetime.now(UTC)
+    current = parsed.date()
+    count = 0
+    while current < as_of.date():
+        current = current.fromordinal(current.toordinal() + 1)
+        if current.weekday() < 5:
+            count += 1
+    return count
+
+
+def _scheduled_scan_health(heartbeat: dict[str, Any], *, as_of_utc: str | None = None) -> dict[str, Any]:
+    if not heartbeat:
+        return {
+            "status": "missing",
+            "state": "fail",
+            "days_since_last_scheduled_scan": None,
+            "blocker": "scheduled_scan_heartbeat_missing",
+        }
+    generated = heartbeat.get("run_completed_at_utc") or heartbeat.get("generated_at_utc")
+    days = _weekday_market_days_since(generated, as_of_utc=as_of_utc)
+    if days is None:
+        status = "unusable_timestamp"
+        state = "fail"
+    elif days > 2:
+        status = "stale"
+        state = "fail"
+    else:
+        status = "fresh"
+        state = "pass"
+    return {
+        "status": status,
+        "state": state,
+        "last_run_at_utc": generated,
+        "last_status": heartbeat.get("status"),
+        "last_host": heartbeat.get("host"),
+        "last_commit_sha": heartbeat.get("commit_sha"),
+        "days_since_last_scheduled_scan": days,
+        "stale_market_day_limit": 2,
+        "blocker": None if state == "pass" else "scheduled_scan_heartbeat_missing_or_stale",
+    }
 
 
 def _load_jsonl(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -818,6 +883,36 @@ def _regime_stratified_replay_report(report: dict[str, Any]) -> dict[str, Any]:
             "minimum_bucket_n_for_robustness": summary.get("minimum_bucket_n_for_robustness"),
         },
         "next_evidence_queue": _as_list(report.get("next_evidence_queue")),
+    }
+
+
+def _autoresearch_search_effort(scoreboard: dict[str, Any]) -> dict[str, Any]:
+    if not scoreboard or not scoreboard.get("evaluator_version"):
+        return {
+            "status": "missing_or_unavailable",
+            "implementation_status": "missing",
+            "metrics": {},
+        }
+    search_effort = _as_dict(scoreboard.get("search_effort"))
+    metrics = _as_dict(scoreboard.get("metrics"))
+    variants_searched = search_effort.get("variants_searched", metrics.get("variants_searched"))
+    selection_adjusted_bar = search_effort.get("selection_adjusted_bar", metrics.get("selection_adjusted_bar"))
+    formula = search_effort.get("selection_adjustment_formula", metrics.get("selection_adjustment_formula"))
+    return {
+        "status": "available",
+        "implementation_status": "built_advisory",
+        "metrics": {
+            "strategy_family": search_effort.get("strategy_family", metrics.get("strategy_family")),
+            "variant_id": search_effort.get("variant_id", metrics.get("variant_id")),
+            "variants_searched": variants_searched,
+            "selection_adjusted_bar": selection_adjusted_bar,
+            "selection_adjusted_confidence": metrics.get("selection_adjusted_confidence"),
+            "selection_adjustment_formula": formula,
+            "selection_adjustment_metric": search_effort.get("selection_adjustment_metric", "pf_lb_5pct"),
+            "pf_lb_5pct": metrics.get("pf_lb_5pct"),
+            "statistical_confidence": metrics.get("statistical_confidence"),
+            "diagnostic_only": True,
+        },
     }
 
 
@@ -1769,6 +1864,13 @@ def build_report(
     regime_stratification = _regime_stratified_replay_report(
         reports.get("regime_stratified_replay_report", {})
     )
+    autoresearch_search_effort = _autoresearch_search_effort(
+        reports.get("regular_options_autoresearch_scoreboard", {})
+    )
+    scheduled_scan = _scheduled_scan_health(
+        reports.get("scheduled_scan_heartbeat", {}),
+        as_of_utc=generated_at_utc,
+    )
     oracle = _oracle_ceiling()
     promotion = _promotion_gate(reports, risk, execution)
     lane_dispositions = _annotate_lane_quarantine_archive(
@@ -1914,6 +2016,14 @@ def build_report(
             "regime_stratification_implementation_status": regime_stratification.get("implementation_status"),
             "regime_robust": regime_stratification.get("regime_robust"),
             "regime_stratification_metrics": regime_stratification.get("metrics"),
+            "autoresearch_search_effort_status": autoresearch_search_effort.get("status"),
+            "autoresearch_search_effort_implementation_status": autoresearch_search_effort.get(
+                "implementation_status"
+            ),
+            "autoresearch_search_effort_metrics": autoresearch_search_effort.get("metrics"),
+            "scheduled_scan_heartbeat_status": scheduled_scan.get("status"),
+            "days_since_last_scheduled_scan": scheduled_scan.get("days_since_last_scheduled_scan"),
+            "scheduled_scan_heartbeat_state": scheduled_scan.get("state"),
             "next_evidence_action_count": len(next_queue),
             "live_policy_change": live_policy_change,
         },
@@ -1940,6 +2050,8 @@ def build_report(
         "fill_attempt_evidence_capture_plan": fill_attempt_plan,
         "suggested_trade_review_plan": suggested_trade_plan,
         "regime_stratified_replay_report": regime_stratification,
+        "autoresearch_search_effort": autoresearch_search_effort,
+        "scheduled_scan_health": scheduled_scan,
         "monthly_drift": monthly_drift,
         "worst_buckets": worst_buckets,
         "candidate_rules": candidate_rules,
@@ -1994,6 +2106,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Fill-attempt evidence capture plan: `{summary.get('fill_attempt_evidence_capture_plan_status')}` / `{summary.get('fill_attempt_evidence_capture_plan_implementation_status')}` / `{_json_inline(summary.get('fill_attempt_evidence_capture_plan_metrics') or {})}`.",
         f"- Suggested-trade review plan: `{summary.get('suggested_trade_review_plan_status')}` / `{summary.get('suggested_trade_review_plan_implementation_status')}` / `{_json_inline(summary.get('suggested_trade_review_plan_metrics') or {})}`.",
         f"- Regime stratification: `{summary.get('regime_stratification_status')}` / `{summary.get('regime_stratification_implementation_status')}` / robust `{summary.get('regime_robust')}` / `{_json_inline(summary.get('regime_stratification_metrics') or {})}`.",
+        f"- Autoresearch search effort: `{summary.get('autoresearch_search_effort_status')}` / `{summary.get('autoresearch_search_effort_implementation_status')}` / `{_json_inline(summary.get('autoresearch_search_effort_metrics') or {})}`.",
+        f"- Scheduled scan heartbeat: `{summary.get('scheduled_scan_heartbeat_status')}`; days since last scheduled scan `{summary.get('days_since_last_scheduled_scan')}`.",
         f"- Quarantine archive: `{summary.get('archived_quarantine_lane_count')}` archived, `{summary.get('unarchived_quarantine_lane_count')}` unarchived.",
         f"- Archived rejected rules: `{summary.get('archived_reject_overfit_rule_count')}` archived, `{summary.get('unarchived_reject_overfit_rule_count')}` unarchived.",
         f"- Next evidence actions: `{summary.get('next_evidence_action_count')}`.",
@@ -2403,6 +2517,21 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"- Branches: `{regime_metrics.get('branch_count')}`; branch buckets `{regime_metrics.get('branch_bucket_count')}`.",
             f"- Market context: `{regime_metrics.get('market_context_status')}`; VIX missing `{regime_metrics.get('vix_missing_count')}`, SPY50 missing `{regime_metrics.get('spy50_missing_count')}`.",
             f"- Evaluable / failing buckets: `{regime_metrics.get('evaluable_bucket_count')}` / `{regime_metrics.get('failing_bucket_count')}`.",
+        ]
+    )
+    search_effort = _as_dict(report.get("autoresearch_search_effort"))
+    search_metrics = _as_dict(search_effort.get("metrics"))
+    lines.extend(
+        [
+            "",
+            "## Autoresearch Search Effort",
+            "",
+            f"- Status: `{search_effort.get('status')}` / `{search_effort.get('implementation_status')}`.",
+            f"- Strategy family: `{search_metrics.get('strategy_family')}`.",
+            f"- Variants searched: `{search_metrics.get('variants_searched')}`.",
+            f"- PF-LB selection-adjusted bar: `{search_metrics.get('selection_adjusted_bar')}`.",
+            f"- Formula: `{search_metrics.get('selection_adjustment_formula')}`.",
+            f"- Diagnostic only: `{search_metrics.get('diagnostic_only')}`.",
         ]
     )
     lines.extend(

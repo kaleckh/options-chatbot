@@ -146,6 +146,18 @@ class ProjectOperatorGateboardTests(unittest.TestCase):
                     "required_shared_quote_dates": 100,
                 },
             )
+            heartbeat = self._write_json(
+                root,
+                "heartbeat.json",
+                {
+                    "report_id": "scheduled_scan_heartbeat",
+                    "status": "completed",
+                    "generated_at_utc": "2026-06-05T18:00:00Z",
+                    "run_completed_at_utc": "2026-06-05T18:00:00Z",
+                    "host": "KaesDevice",
+                    "commit_sha": "abcdef123456",
+                },
+            )
             data_integrity = {
                 "audit": "repository_constraints",
                 "status": "pass_or_skipped",
@@ -168,6 +180,7 @@ class ProjectOperatorGateboardTests(unittest.TestCase):
                 operating_scorecard_path=scorecard,
                 candidate_lifecycle_path=lifecycle,
                 ai_commodity_path=ai,
+                scan_heartbeat_path=heartbeat,
             )
 
         states = {row["id"]: row["state"] for row in report["pathway_statuses"]}
@@ -177,6 +190,7 @@ class ProjectOperatorGateboardTests(unittest.TestCase):
         self.assertEqual(report["overall_status"], "safe_blocked_no_live_release")
         self.assertIn("Data is readable", report["primary_message"])
         self.assertEqual(report["no_chase_manifest"]["status"], "no_chase_active")
+        self.assertEqual(report["scheduled_scan_health"]["status"], "fresh")
         reasons = {row["reason"] for row in report["no_chase_manifest"]["reasons"]}
         self.assertIn("open_risk_governor_blocked_or_missing", reasons)
         self.assertIn("suggested_trade_review_attention_required", reasons)

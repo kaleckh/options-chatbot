@@ -125,6 +125,7 @@ class LocalDbHardeningTests(unittest.TestCase):
         out_of_scope_ids = {entry["database_id"] for entry in audit["classified_out_of_scope"]}
         self.assertIn("options_history_truth_store", out_of_scope_ids)
         self.assertIn("ai_commodity_artifacts", out_of_scope_ids)
+        self.assertIn("evidence_store_backup_directory", out_of_scope_ids)
 
     def test_docs_and_gitignore_name_local_db_hardening_boundaries(self):
         docs = {
@@ -148,9 +149,11 @@ class LocalDbHardeningTests(unittest.TestCase):
         self.assertIn("Do not add a silent tracked-position SQLite fallback", local_doc)
         self.assertIn("data/options-validation/options_history.db", local_doc)
         self.assertIn("data/ai-commodity-infra/*", local_doc)
+        self.assertIn("data/backups/**", local_doc)
 
         gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
         for pattern in (
+            "data/backups/",
             "chat_history.db",
             "chat_history.backup-*.db",
             "market_data.db",

@@ -29,6 +29,9 @@ from local_env import load_local_env
 from forward_options_ledger import build_forward_scan_snapshot, record_forward_snapshot
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
+from scripts.evidence_host_policy import evidence_host_status
+from scripts.operational_provenance import build_operational_provenance
+from scripts.scan_heartbeat import write_scan_heartbeat
 from supervised_scan import (
     LIVE_SCAN_TRUTH_LANE,
     SCAN_PLAYBOOK_FALLBACK_ID,
@@ -145,6 +148,57 @@ def _safe_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, dict):
         return dict(value)
     return {}
+
+
+def _run_provenance(scan_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    return _safe_dict((scan_result or {}).get("operational_provenance"))
+
+
+def _provenance_fields(scan_result: dict[str, Any] | None = None) -> dict[str, Any]:
+    provenance = _run_provenance(scan_result)
+    return {
+        "scan_host": provenance.get("host"),
+        "scan_commit_sha": provenance.get("commit_sha"),
+        "scan_short_commit_sha": provenance.get("short_commit_sha"),
+        "scan_branch": provenance.get("branch"),
+        "scan_run_id": provenance.get("run_id"),
+    }
+
+
+def _heartbeat_path() -> Path:
+    return LOG_DIR / "scheduled_scan_heartbeat_latest.json"
+
+
+def _write_scan_heartbeat(
+    *,
+    status: str,
+    scan_date: str,
+    provenance: dict[str, Any],
+    details: dict[str, Any] | None = None,
+) -> None:
+    try:
+        write_scan_heartbeat(
+            status=status,
+            heartbeat_path=_heartbeat_path(),
+            scan_date=scan_date,
+            details=details,
+            provenance=provenance,
+        )
+    except Exception as exc:
+        print(f"Scheduled scan heartbeat failed: {exc}")
+
+
+def _scheduled_scan_host_policy(provenance: dict[str, Any]) -> dict[str, Any]:
+    return evidence_host_status(current_host=str(provenance.get("host") or ""))
+
+
+def _scheduled_scan_write_allowed(provenance: dict[str, Any]) -> tuple[bool, dict[str, Any]]:
+    policy = _scheduled_scan_host_policy(provenance)
+    if bool(policy.get("write_allowed")):
+        return True, policy
+    if _env_flag_enabled("OPTIONS_ALLOW_REPLICA_SCAN_WRITES", False):
+        return True, {**policy, "override": "OPTIONS_ALLOW_REPLICA_SCAN_WRITES"}
+    return False, policy
 
 
 def _first_float(*values: Any) -> float | None:
@@ -672,6 +726,7 @@ def _build_log_record(
         "playbook_label": pick.get("playbook_label") or playbook.get("label"),
         "truth_lane": scan_result.get("truth_lane"),
         "policy_applied": scan_result.get("policy_applied"),
+        **_provenance_fields(scan_result),
         "approximation_only": pick.get("approximation_only"),
         "comparable_contract": pick.get("comparable_contract"),
         "comparable_contract_basis": pick.get("comparable_contract_basis"),
@@ -806,6 +861,7 @@ def _build_fill_attempt_record(
         "playbook_id": playbook_id or None,
         "playbook_label": pick.get("playbook_label") or playbook.get("label"),
         "cohort_id": pick.get("cohort_id") or playbook.get("forced_cohort_id"),
+        **_provenance_fields(scan_result),
         "market_open_at_run": scan_result.get("market_open_at_run"),
         "portfolio_caps_enforced": exposure.get("portfolio_caps_enforced"),
         "exposure_available": exposure.get("available"),
@@ -1077,6 +1133,7 @@ def _build_liquidity_near_miss_records(
                 "playbook_id": playbook.get("id"),
                 "playbook_label": playbook.get("label"),
                 "cohort_id": playbook.get("forced_cohort_id"),
+                **_provenance_fields(scan_result),
                 "ticker": str(symbol or "").strip().upper(),
                 "drop_key": "option_liquidity",
                 "reason": details.get("reason"),
@@ -1178,12 +1235,13 @@ def _record_forward_ledger_snapshot(
         exposure_snapshot=scan_result.get("exposure_snapshot"),
         cohort_funnels=cohort_funnels,
         cohort_ids=sorted(requested_cohort_ids),
-        run_id=f"scheduled_scan:{scan_date}:{datetime.now().isoformat()}",
+        run_id=str(_run_provenance(scan_result).get("run_id") or f"scheduled_scan:{scan_date}:{datetime.now().isoformat()}"),
         run_mode="scheduled_scan",
         evidence_class="live_production",
         is_fixture=False,
         policy_artifact_id="scheduled_scan",
     )
+    snapshot["operational_provenance"] = _run_provenance(scan_result)
     try:
         result = record_forward_snapshot(
             scan_snapshot=snapshot,
@@ -1286,8 +1344,36 @@ def _backfill_position_scan_provenance(
 def main() -> int:
     run_at = datetime.now()
     scan_date = run_at.strftime("%Y-%m-%d")
+    operational_provenance = build_operational_provenance(
+        run_id_prefix=f"scheduled_scan:{scan_date}",
+        extra={"scan_date": scan_date},
+    )
+    _write_scan_heartbeat(
+        status="started",
+        scan_date=scan_date,
+        provenance=operational_provenance,
+    )
+    write_allowed, host_policy = _scheduled_scan_write_allowed(operational_provenance)
+    if not write_allowed:
+        print(
+            "Scheduled scan blocked: "
+            f"host={host_policy.get('current_host')} is not authoritative "
+            f"(authoritative_host={host_policy.get('authoritative_host')})."
+        )
+        _write_scan_heartbeat(
+            status="failed_non_authoritative_host",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"evidence_host_policy": host_policy},
+        )
+        return 1
     if _is_market_closed(run_at):
         print(f"Market closed for {scan_date}; skipping scan logging.")
+        _write_scan_heartbeat(
+            status="skipped_market_closed",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+        )
         return 0
 
     load_local_env(ROOT)
@@ -1316,9 +1402,16 @@ def main() -> int:
         truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,
         min_trades=int(os.getenv("OPTIONS_SCAN_MIN_TRADES", "20")),
     )
+    scan_result["operational_provenance"] = operational_provenance
     scan_result["market_open_at_run"] = market_open_at_run
     if scan_result.get("policy_fail_closed"):
         print(f"Supervised scan failed closed: {scan_result.get('policy_error') or 'unknown policy error'}")
+        _write_scan_heartbeat(
+            status="failed_policy_closed",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"policy_error": scan_result.get("policy_error")},
+        )
         return 1
 
     picks = list(scan_result.get("picks") or [])
@@ -1339,7 +1432,19 @@ def main() -> int:
             scan_date=scan_date,
         )
         if ledger_result is None:
+            _write_scan_heartbeat(
+                status="failed_forward_ledger_snapshot",
+                scan_date=scan_date,
+                provenance=operational_provenance,
+                details={"returned_picks": 0},
+            )
             return 1
+        _write_scan_heartbeat(
+            status="completed",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"returned_picks": 0, "ledger_session_id": ledger_result.get("session_id")},
+        )
         return 0
 
     records = [_build_log_record(pick, run_at=run_at, scan_result=scan_result) for pick in picks]
@@ -1381,6 +1486,12 @@ def main() -> int:
         scan_date=scan_date,
     )
     if ledger_result is None:
+        _write_scan_heartbeat(
+            status="failed_forward_ledger_snapshot",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"returned_picks": len(picks)},
+        )
         return 1
     picks = _annotate_picks_with_scan_provenance(picks, ledger_result=ledger_result)
 
@@ -1443,6 +1554,12 @@ def main() -> int:
         picks=picks,
         tracked_links=tracked_links,
         ledger_result=ledger_result,
+    )
+    _write_scan_heartbeat(
+        status="completed",
+        scan_date=scan_date,
+        provenance=operational_provenance,
+        details={"returned_picks": len(picks), "ledger_session_id": ledger_result.get("session_id")},
     )
     return 0
 

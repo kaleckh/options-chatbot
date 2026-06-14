@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-suggested-trade-review-plan.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260608T013710Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260612T152522Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260608T013710Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_suggested_trade_review_plan_20260612T152522Z.md"
   },
   "evidence_boundary": {
     "operator_rule": "Suggested-trade close or P&L conclusions require a fresh explicit review before use in the monthly profitability loop.",
@@ -23,7 +23,7 @@
     "readback_is": "read-only suggested-trade review plan for regular supervised options paper ideas",
     "readback_is_not": "broker action, auto-close instruction, suggested-trade DB mutation, production proof, scanner-policy change, stop/sizing change, proof-bar change, or lane promotion"
   },
-  "generated_at_utc": "2026-06-08T01:37:10Z",
+  "generated_at_utc": "2026-06-12T15:25:22Z",
   "inputs": {
     "suggested_trade_close_risk": {
       "error": null,

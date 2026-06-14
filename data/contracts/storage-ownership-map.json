@@ -778,6 +778,60 @@
     },
     {
       "hard_rules": [
+        "Do not treat backup bundles as active stores.",
+        "Do not commit data/backups contents."
+      ],
+      "label": "Evidence store backup directory",
+      "lifecycles": [],
+      "local_database_roles": [
+        {
+          "active_scope": "Nightly local evidence-store backups and optional weekly off-machine copies.",
+          "audit_checks": [
+            "classified_ignored"
+          ],
+          "backup_rule": "Keep generated backup runs ignored; rotate inside the backup script only.",
+          "database_id": "evidence_store_backup_directory",
+          "expected_connection_policy": [
+            "Do not treat backup files as active stores."
+          ],
+          "expected_tables": [],
+          "mutability": "ignored_sidecar_or_backup",
+          "notes": "Contains SQLite backup API outputs and pg_dump artifacts for irreplaceable evidence stores; the local DB audit classifies it but must not open or prune it.",
+          "optional_tables": [],
+          "owner": "scripts/backup_evidence_stores.py",
+          "path_pattern": "data/backups/**",
+          "store_id": "evidence_store_backup_directory"
+        }
+      ],
+      "location": "data/backups/**",
+      "notes": [
+        "Backups cover SQLite evidence stores and Postgres tracked-position dumps."
+      ],
+      "owner_docs": [
+        "docs/evidence-operations.md",
+        "docs/local-db-hardening.md"
+      ],
+      "owners": [
+        "scripts/backup_evidence_stores.py"
+      ],
+      "persistence": "backup_bundle",
+      "production_role": "Ignored rolling backup bundles for irreplaceable evidence stores.",
+      "record_classes": [],
+      "repository_constraints_by_enforcement": {},
+      "repository_indexes_by_status": {},
+      "repository_migrations": [],
+      "route_contract_ids": [],
+      "route_references": {
+        "active_browser": [],
+        "backend_only": []
+      },
+      "scope": "out_of_scope",
+      "storage_role": "ignored_sidecar_or_backup",
+      "store_id": "evidence_store_backup_directory",
+      "tables": []
+    },
+    {
+      "hard_rules": [
         "Forward evidence can support proof but does not make suggested trades production proof rows.",
         "Exact-looking payloads without verified scan lineage remain proof-ineligible."
       ],

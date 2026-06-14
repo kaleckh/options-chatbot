@@ -27,6 +27,7 @@ Detailed rules remain in the owner manifests and docs listed under each store.
 | ai_commodity_artifacts | separate_lane | file_artifact | separate_lane | data/ai-commodity-infra/* | 0 | 0 | docs/PROJECT_CONTEXT.md, docs/local-db-hardening.md |
 | backend/domain | backend_domain | virtual | backend_support | FastAPI backend-only route/domain logic | 0 | 14 | docs/api-and-storage.md, docs/route-parity.md |
 | backend_tool_dispatch | backend_dispatch | virtual | active_browser | POST /api/tools/{name} dispatch | 1 | 0 | docs/api-and-storage.md, docs/route-parity.md |
+| evidence_store_backup_directory | ignored_sidecar_or_backup | backup_bundle | out_of_scope | data/backups/** | 0 | 0 | docs/evidence-operations.md, docs/local-db-hardening.md |
 | forward_evidence_artifacts | route_artifact | file_artifact | active_browser | data/options-validation/forward_tracking* and forward-evidence ledgers | 2 | 0 | docs/proof-evidence-contract.md, docs/scanner-creation-safety-contract.md, docs/api-and-storage.md |
 | forward_tracking_ledgers | out_of_scope_local_db | sqlite | out_of_scope | data/options-validation/forward_tracking*.db | 0 | 0 | docs/local-db-hardening.md, docs/proof-evidence-contract.md |
 | latest_replay_artifacts | route_artifact | file_artifact | active_browser | data/options-validation/* and related replay readbacks | 8 | 0 | docs/replay-profit-contract.md, docs/api-and-storage.md |
@@ -105,6 +106,7 @@ Hard rules:
 | Store | Database role | Path pattern | Mutability | Audit checks |
 | --- | --- | --- | --- | --- |
 | ai_commodity_artifacts | ai_commodity_artifacts | data/ai-commodity-infra/* | outside_repository_scope | classified_out_of_scope |
+| evidence_store_backup_directory | evidence_store_backup_directory | data/backups/** | ignored_sidecar_or_backup | classified_ignored |
 | forward_tracking_ledgers | forward_tracking_ledgers | data/options-validation/forward_tracking*.db | outside_repository_scope | classified_out_of_scope |
 | market_data_cache | market_data_cache | market_data.db | outside_repository_scope | classified_out_of_scope |
 | options_history_truth_store | options_history_truth_store | data/options-validation/options_history.db | outside_repository_scope | classified_out_of_scope |

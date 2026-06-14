@@ -11,6 +11,7 @@ Point 15 is a guardrail and readability point. It classifies local DB files, doc
 | Active suggested-trade SQLite | `chat_history.db` | Trading Desk suggested trades and local paper workflow state | Mutable through `SQLiteSuggestedTradesRepository`; repository write connections enable `PRAGMA foreign_keys=ON`. |
 | Explicit tracked SQLite legacy/test DB | `data/tracked_positions.db` | Tests and legacy tools only | Never a browser tracked-position fallback; Postgres through `DATABASE_URL` owns production tracked positions. |
 | SQLite sidecars/backups | `*.db-wal`, `*.db-shm`, `chat_history.backup-*.db`, `data/tracked_positions.backup-*` | Local runtime or recovery files | Ignored locally; audit may enumerate but must not delete or rewrite them. |
+| Evidence backup directory | `data/backups/**` | Nightly evidence-store backups | Ignored locally; owned by `scripts/backup_evidence_stores.py` and rotated by that script only. |
 
 ## Classified Outside This Contract
 
@@ -66,6 +67,14 @@ For manual mutation or one-off repair scripts:
 - keep backups ignored unless a specific recovery workflow requires publishing one
 - do not prune backup or sidecar files from audit scripts
 
+For operational survivability:
+
+- run `npm run evidence:backup` nightly on the authoritative evidence host
+- run `npm run evidence:backup:weekly` from a scheduled weekly task after setting `OPTIONS_BACKUP_WEEKLY_COPY_DIR` to an off-machine target
+- the backup script uses SQLite's backup API for `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`
+- the same script uses `pg_dump --format=custom` for Postgres tracked positions when `DATABASE_URL` or `OPTIONS_BACKUP_DATABASE_URL` is configured
+- generated runs live under ignored `data/backups/<timestamp>/` and are rotated after `14` days by the backup script, not by the read-only audit
+
 ## Hard Rules
 
 - Do not add a silent tracked-position SQLite fallback.
@@ -74,11 +83,13 @@ For manual mutation or one-off repair scripts:
 - Do not add schema DDL, migrations, constraints, indexes, or table rebuilds through local DB hardening.
 - Do not change `chat_history.db` journal mode in Point 15.
 - Do not include AI commodity, options-history, forward-evidence, or market-cache stores in Trading Desk repository hardening.
+- Do not treat `data/backups/**` as an active database source.
 
 ## Implementation Anchors
 
 - Local DB manifest: `python-backend/local_db_hardening.py`
 - Read-only local DB audit: `scripts/audit_local_databases.py`
+- Evidence backup script: `scripts/backup_evidence_stores.py`
 - Suggested-trade repository: `python-backend/suggested_trades_repository.py`
 - Explicit legacy/test tracked SQLite repository: `python-backend/positions_repository.py`
 - Repository ownership: `docs/repository-contract.md`

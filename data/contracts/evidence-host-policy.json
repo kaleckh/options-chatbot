@@ -1,0 +1,15 @@
+{
+  "report_id": "evidence_host_policy",
+  "authoritative_host": "KaesDevice",
+  "evidence_home": "C:/Users/kalec/options-chatbot",
+  "read_only_hosts": [],
+  "source_of_truth": {
+    "postgres_tracked_positions": "DATABASE_URL on authoritative_host",
+    "suggested_trades_sqlite": "chat_history.db on authoritative_host",
+    "forward_evidence_ledger": "data/options-validation/forward_tracking_authoritative.db on authoritative_host",
+    "options_history_truth_store": "data/options-validation/options_history.db on authoritative_host"
+  },
+  "replica_rule": "Non-authoritative hosts may run read-only reports after sync, but must not append forward evidence or mutate the named evidence stores.",
+  "sync_rule": "Scheduled scan automation on the authoritative host should write heartbeat/provenance artifacts and sync/copy evidence stores or backups to the replica/off-machine target before the replica reads current state.",
+  "override_env": "OPTIONS_AUTHORITATIVE_EVIDENCE_HOST"
+}

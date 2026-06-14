@@ -39,6 +39,8 @@ data/polymarket/state.json
 research_runs/
 
 # Local runtime state
+data/backups/
+data/forward-tracking/scheduled_scan_heartbeat*.json
 data/options-profit/decisions/
 data/profitability-lab/
 data/lane-lab/

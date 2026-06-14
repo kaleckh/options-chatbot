@@ -23,6 +23,11 @@ except Exception:  # pragma: no cover - direct import errors are reported in the
     build_constraint_audit = None  # type: ignore[assignment]
     load_constraints_env = None  # type: ignore[assignment]
 
+try:
+    from scripts.scan_heartbeat import build_scan_heartbeat_health
+except Exception:  # pragma: no cover - direct import errors are reported in scheduler health.
+    build_scan_heartbeat_health = None  # type: ignore[assignment]
+
 
 REPORT_ID = "project_operator_gateboard"
 GENERATOR = "scripts/build_project_operator_gateboard.py"
@@ -40,6 +45,7 @@ DEFAULT_PAPER_SHORTLIST = ROOT / "data" / "profitability-lab" / "regular-options
 DEFAULT_OPERATING_SCORECARD = ROOT / "data" / "profitability-lab" / "regular-options-operating-scorecard" / "latest.json"
 DEFAULT_CANDIDATE_LIFECYCLE = ROOT / "data" / "contracts" / "candidate-lifecycle-contract.json"
 DEFAULT_AI_COMMODITY = ROOT / "data" / "ai-commodity-infra" / "progress" / "latest.json"
+DEFAULT_SCAN_HEARTBEAT = ROOT / "data" / "forward-tracking" / "scheduled_scan_heartbeat_latest.json"
 
 
 def _utc_now_iso() -> str:
@@ -344,6 +350,7 @@ def _operator_pathway(
     ai_commodity: dict[str, Any],
     open_risk: dict[str, Any],
     suggested_risk: dict[str, Any],
+    scan_heartbeat_health: dict[str, Any],
     registry: dict[str, Any],
 ) -> dict[str, Any]:
     shortlist_summary = paper_shortlist.get("summary") if isinstance(paper_shortlist.get("summary"), dict) else {}
@@ -353,7 +360,10 @@ def _operator_pathway(
     open_governor = open_risk.get("open_risk_governor") if isinstance(open_risk.get("open_risk_governor"), dict) else {}
     suggested_summary = suggested_risk.get("summary") if isinstance(suggested_risk.get("summary"), dict) else {}
     suggested_attention = _safe_int(suggested_summary.get("rows"), 0)
-    if paper_shortlist.get("error") or scorecard.get("error"):
+    if scan_heartbeat_health.get("state") == "fail":
+        state = "fail"
+        headline = "Scheduled scan heartbeat is missing or stale."
+    elif paper_shortlist.get("error") or scorecard.get("error"):
         state = "warning"
         headline = "Operator readback is missing one or more current artifacts."
     elif eligible > 0:
@@ -388,6 +398,10 @@ def _operator_pathway(
         f"open_risk_governor_blockers={json.dumps(open_governor.get('blockers') or [], sort_keys=True)}",
         f"suggested_open_rows={suggested_attention}",
         f"suggested_attention_trade_count={len(suggested_risk.get('attention_trade_ids') or [])}",
+        f"scheduled_scan_heartbeat_status={scan_heartbeat_health.get('status')}",
+        f"days_since_last_scheduled_scan={scan_heartbeat_health.get('days_since_last_scheduled_scan')}",
+        f"last_scheduled_scan_host={scan_heartbeat_health.get('last_host')}",
+        f"last_scheduled_scan_commit={scan_heartbeat_health.get('last_commit_sha')}",
         f"ai_commodity_verified={ai_verified}",
         f"ai_commodity_shared_quote_dates={ai_current_shared}/{ai_required_shared}",
     ]
@@ -552,6 +566,7 @@ def build_gateboard(
     operating_scorecard_path: Path = DEFAULT_OPERATING_SCORECARD,
     candidate_lifecycle_path: Path = DEFAULT_CANDIDATE_LIFECYCLE,
     ai_commodity_path: Path = DEFAULT_AI_COMMODITY,
+    scan_heartbeat_path: Path = DEFAULT_SCAN_HEARTBEAT,
 ) -> dict[str, Any]:
     registry = _load_json(pathway_registry_path)
     missed_outcome = _load_json(missed_outcome_path)
@@ -563,6 +578,20 @@ def build_gateboard(
     scorecard = _load_json(operating_scorecard_path)
     lifecycle = _load_json(candidate_lifecycle_path)
     ai_commodity = _load_json(ai_commodity_path)
+    if build_scan_heartbeat_health is None:
+        scan_heartbeat_health = {
+            "report_id": "scheduled_scan_heartbeat_health",
+            "state": "fail",
+            "status": "unavailable",
+            "heartbeat_path": str(scan_heartbeat_path),
+            "heartbeat_available": False,
+            "blocker": "scheduled_scan_heartbeat_health_import_failed",
+        }
+    else:
+        scan_heartbeat_health = build_scan_heartbeat_health(
+            heartbeat_path=scan_heartbeat_path,
+            as_of_utc=generated_at_utc,
+        )
     integrity = data_integrity_audit or _run_data_integrity_audit(
         sqlite_suggested_db=sqlite_suggested_db,
         database_url=database_url,
@@ -574,7 +603,15 @@ def build_gateboard(
         _evidence_pathway(fresh_evidence, registry),
         _profitability_pathway(missed_outcome, registry),
         _promotion_pathway(lane_promotion, registry),
-        _operator_pathway(paper_shortlist, scorecard, ai_commodity, open_risk, suggested_risk, registry),
+        _operator_pathway(
+            paper_shortlist,
+            scorecard,
+            ai_commodity,
+            open_risk,
+            suggested_risk,
+            scan_heartbeat_health,
+            registry,
+        ),
     ]
     overall_status, primary_message = _overall_status(pathways)
     source_artifacts = {
@@ -588,6 +625,13 @@ def build_gateboard(
         "paper_shortlist": _artifact_summary(paper_shortlist_path, paper_shortlist),
         "operating_scorecard": _artifact_summary(operating_scorecard_path, scorecard),
         "ai_commodity_progress": _artifact_summary(ai_commodity_path, ai_commodity),
+        "scheduled_scan_heartbeat": {
+            "path": _rel(scan_heartbeat_path),
+            "available": bool(scan_heartbeat_health.get("heartbeat_available")),
+            "status": scan_heartbeat_health.get("status"),
+            "generated_at_utc": scan_heartbeat_health.get("last_run_at_utc"),
+            "error": scan_heartbeat_health.get("blocker"),
+        },
     }
     return {
         "report_id": REPORT_ID,
@@ -599,6 +643,7 @@ def build_gateboard(
         "pathway_statuses": pathways,
         "repository_data_integrity": integrity,
         "source_artifacts": source_artifacts,
+        "scheduled_scan_health": scan_heartbeat_health,
         "no_chase_manifest": _no_chase_manifest(
             missed_outcome=missed_outcome,
             lane_promotion=lane_promotion,

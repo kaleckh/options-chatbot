@@ -65,7 +65,7 @@
   "evidence_counts": {
     "missing_review": 1
   },
-  "generated_at_utc": "2026-06-05T17:28:57Z",
+  "generated_at_utc": "2026-06-12T22:44:53Z",
   "load_error": null,
   "read_only": true,
   "scope": "suggested_trades_close_risk_read_only",

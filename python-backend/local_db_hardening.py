@@ -160,6 +160,23 @@ LOCAL_DATABASE_ROLES: tuple[LocalDatabaseRole, ...] = (
         backup_rule="Keep ignored locally unless a specific recovery workflow needs them.",
         notes="Audit scripts may enumerate these files but must not delete or rewrite them.",
     ),
+    LocalDatabaseRole(
+        database_id="evidence_store_backup_directory",
+        store_id="evidence_store_backup_directory",
+        path_pattern="data/backups/**",
+        owner="scripts/backup_evidence_stores.py",
+        mutability="ignored_sidecar_or_backup",
+        active_scope="Nightly local evidence-store backups and optional weekly off-machine copies.",
+        expected_tables=(),
+        optional_tables=(),
+        expected_connection_policy=("Do not treat backup files as active stores.",),
+        audit_checks=("classified_ignored",),
+        backup_rule="Keep generated backup runs ignored; rotate inside the backup script only.",
+        notes=(
+            "Contains SQLite backup API outputs and pg_dump artifacts for irreplaceable evidence stores; "
+            "the local DB audit classifies it but must not open or prune it."
+        ),
+    ),
 )
 
 

@@ -1,5 +1,17 @@
 # Decisions
 
+## 2026-06-12: Treat Evidence Stores As Irreplaceable Product Data
+
+The forward evidence stores can be replay-read, but not replay-created for missed calendar days. A single local disk failure or split-brain host could erase or confuse the evidence that decides whether the regular-options funnel is actually closing.
+
+Durable decision: `data/contracts/evidence-host-policy.json` declares one authoritative evidence host, currently `KaesDevice`, for Postgres tracked positions, `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`. Non-authoritative hosts are read-only for those stores unless an explicit process-env override is set for a controlled recovery. Scheduled scan runs write host, commit SHA, branch, and run id provenance plus a heartbeat artifact, and `scripts/log_scan_picks.py` fails closed before evidence writes when the current host is not authoritative. `scripts/backup_evidence_stores.py` owns rolling local evidence backups under ignored `data/backups/` with `14`-day retention and optional weekly off-machine copy when `OPTIONS_BACKUP_WEEKLY_COPY_DIR` is configured. `scripts/build_project_operator_gateboard.py` and `scripts/build_monthly_all_lanes_profitability_audit.py` surface stale scheduled scans after more than `2` market days.
+
+## 2026-06-12: Keep The FastAPI Backend Single-Process Unless Re-Architected
+
+The backend still has module-level caches, strategy profiles, and repository singletons whose correctness assumes one process. Running multiple uvicorn workers would create divergent in-memory state and confusing evidence readbacks.
+
+Durable decision: `python-backend/main.py` asserts at startup that configured worker count is `1` or absent. It checks `WEB_CONCURRENCY`, `UVICORN_WORKERS`, `OPTIONS_BACKEND_WORKERS`, and common CLI worker flags. Multi-worker startup requires an explicit `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` override and should not be used without first removing or externalizing the single-process state assumptions.
+
 ## 2026-06-10: Treat Fresh Exact HOLD Reviews As Resolved Open-Risk Dispositions
 
 Sprint 3 allowed open positions to be dispositioned as close, hold-with-thesis, or mark-as-research. Blocking every negative live-exact row even after a fresh executable exact HOLD review made the open-risk governor impossible to clear without violating the strategy's own stop/target/time-exit rules.

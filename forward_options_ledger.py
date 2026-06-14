@@ -1780,6 +1780,7 @@ def record_forward_snapshot(
         "quote_freshness_status": provenance["quote_freshness_status"],
         "eligibility_status": provenance["eligibility_status"],
         "eligibility_blockers": list(provenance["eligibility_blockers"]),
+        "operational_provenance": dict(scan_snapshot.get("operational_provenance") or {}),
     }
 
     taken_count = 0

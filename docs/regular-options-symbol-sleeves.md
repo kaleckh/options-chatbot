@@ -315,8 +315,8 @@ High-beta upside is treated as a question, not an assumption. Rows below are exa
 
 ## Open Position And Suggested-Trade Risk
 
-- Open-position summary: `{"avg_pnl_pct": 10.04, "median_pnl_pct": 13.7, "negative": 15, "positive_or_flat": 32, "priced_or_marked": 47, "rows": 48}`.
-- Open-position actionable ids: `[104]`.
+- Open-position summary: `{"avg_pnl_pct": -54.51, "median_pnl_pct": -57.66, "negative": 5, "positive_or_flat": 0, "priced_or_marked": 5, "rows": 5}`.
+- Open-position actionable ids: `[]`.
 - Suggested-trade summary: `{"avg_pnl_pct": null, "median_pnl_pct": null, "negative": 0, "positive_or_flat": 0, "priced_or_marked": 0, "rows": 1}`.
 - Suggested-trade attention ids: `[138]`.
 
@@ -339,11 +339,11 @@ High-beta upside is treated as a question, not an assumption. Rows below are exa
 
 | Source | Status | Generated | Path |
 |---|---|---|---|
-| bullish_pullback_ticker_audit | ok | 2026-06-02T16:37:24Z | data/profitability-lab/bullish-pullback-observation/ticker-audit/latest.json |
-| regular_options_multilane | ok | 2026-06-02T17:06:54Z | data/profitability-lab/regular-options-multilane/latest.json |
+| bullish_pullback_ticker_audit | ok | 2026-06-12T21:03:35Z | data/profitability-lab/bullish-pullback-observation/ticker-audit/latest.json |
+| regular_options_multilane | ok | 2026-06-04T21:43:39Z | data/profitability-lab/regular-options-multilane/latest.json |
 | all_planned_sleeves_full | ok | 2026-06-02T17:03:19Z | data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/latest.json |
 | all_planned_sleeves_partial | stale | 2026-06-02T14:22:28Z | data/profitability-lab/regular-options-autoresearch/all-planned-sleeves/latest_partial.json |
-| lane_lab | ok | 2026-06-01T14:18:56Z | data/lane-lab/latest.json |
+| lane_lab | ok | 2026-06-03T20:23:37Z | data/lane-lab/latest.json |
 | trading_desk_guardrails | ok | 2026-05-31T21:29:54Z | data/forward-tracking/trading_desk_profitability_guardrails_latest.json |
-| open_position_risk | ok | 2026-06-01T02:51:56Z | data/forward-tracking/regular_open_position_risk_latest.json |
-| suggested_trade_close_risk | ok | 2026-06-01T03:02:34Z | data/forward-tracking/suggested_trade_close_risk_latest.json |
+| open_position_risk | ok | 2026-06-10T06:18:55Z | data/forward-tracking/regular_open_position_risk_latest.json |
+| suggested_trade_close_risk | ok | 2026-06-12T22:44:53Z | data/forward-tracking/suggested_trade_close_risk_latest.json |

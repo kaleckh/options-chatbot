@@ -92,6 +92,8 @@ These are the living docs for the current worktree:
   - generated frontend candidate lifecycle status/outcome artifact
 - `docs/local-db-hardening.md`
   - canonical local SQLite DB safety and read-only audit contract, implemented by `python-backend/local_db_hardening.py`
+- `docs/evidence-operations.md`
+  - operational survivability contract for authoritative evidence host, backups, scheduled-scan heartbeat, daily operator command, and retention policy
 - `docs/repository-migrations.md`
   - canonical Trading Desk repository migration manifest and ledger contract, implemented by `python-backend/repository_migrations.py`
 - `docs/repository-constraints.md`

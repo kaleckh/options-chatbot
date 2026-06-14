@@ -11,6 +11,8 @@ from scripts.evaluate_regular_options_autoresearch import (
     build_scoreboard,
     evaluator_config_hash,
     format_score_line,
+    search_effort_snapshot,
+    selection_adjusted_bar,
 )
 
 
@@ -222,7 +224,52 @@ class RegularOptionsAutoresearchEvaluatorTests(unittest.TestCase):
         self.assertIn("pf_lb_5pct", row)
         self.assertIn("avg_net_lb_5pct", row)
         self.assertIn("statistical_confidence", row)
+        self.assertIn("variants_searched", row)
+        self.assertIn("selection_adjusted_bar", row)
         self.assertNotIn("metrics", row)
+
+    def test_search_effort_counts_distinct_variants_by_family(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.jsonl"
+            rows = [
+                {"experiment_id": "lane_a_goal_one"},
+                {"experiment_id": "lane_a_goal_one"},
+                {"experiment_id": "lane_a_goal_two"},
+                {"experiment_id": "sleeve_next_index_refill_v1"},
+            ]
+            ledger.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+
+            effort = search_effort_snapshot(
+                strategy_family="lane_a",
+                variant_id="lane_a_goal_three",
+                ledger_path=ledger,
+            )
+
+        self.assertEqual(effort["variants_searched"], 3)
+        self.assertEqual(effort["selection_adjusted_bar"], selection_adjusted_bar(3))
+        self.assertEqual(effort["family_variant_counts"]["regular_options_symbol_sleeves"], 1)
+
+    def test_scoreboard_reports_selection_adjusted_search_effort_without_scoring(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ledger = Path(tmp) / "ledger.jsonl"
+            ledger.write_text(
+                "\n".join(
+                    json.dumps({"experiment_id": item})
+                    for item in ["lane_a_goal_one", "lane_a_goal_two"]
+                )
+                + "\n",
+                encoding="utf8",
+            )
+            scoreboard = build_scoreboard(
+                _report_with_selected_trades({"lane_a": [10.0] * 8 + [-5.0] * 2}),
+                experiment_id="lane_a_goal_three",
+                hypothesis="third try",
+                ledger_path=ledger,
+            )
+
+        self.assertEqual(scoreboard["metrics"]["variants_searched"], 3)
+        self.assertEqual(scoreboard["search_effort"]["selection_adjusted_bar"], selection_adjusted_bar(3))
+        self.assertIn("variants_searched:", scoreboard["score_line"])
 
     def test_bootstrap_all_winners_preserves_no_loss_pf_null_and_positive_avg_lb(self):
         stats = bootstrap_confidence_for_values([5.0, 10.0, 15.0, 20.0], branch_id="all-winners")

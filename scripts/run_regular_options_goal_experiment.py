@@ -142,6 +142,8 @@ def _score_variant(
         report,
         experiment_id=variant_id,
         hypothesis=hypothesis,
+        strategy_family=evaluator.infer_strategy_family(variant_id, hypothesis),
+        ledger_path=evaluator.LEDGER_PATH,
     )
 
 
@@ -205,6 +207,11 @@ def run_goal_experiments(
                 "avg_net_lb_5pct": metrics.get("avg_net_lb_5pct"),
                 "n_trades": metrics.get("n_trades"),
                 "statistical_confidence": metrics.get("statistical_confidence"),
+                "strategy_family": metrics.get("strategy_family"),
+                "variants_searched": metrics.get("variants_searched"),
+                "selection_adjusted_bar": metrics.get("selection_adjusted_bar"),
+                "selection_adjusted_confidence": metrics.get("selection_adjusted_confidence"),
+                "selection_adjustment_formula": metrics.get("selection_adjustment_formula"),
                 "status": scoreboard.get("status"),
                 "promotion_blockers": scoreboard.get("promotion_blockers"),
                 "score_line": scoreboard.get("score_line"),

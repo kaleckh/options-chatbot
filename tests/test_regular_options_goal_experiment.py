@@ -64,6 +64,11 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
                 "avg_net_lb_5pct": -3.2,
                 "n_trades": 44,
                 "statistical_confidence": "underpowered",
+                "strategy_family": "lane_a",
+                "variants_searched": 7,
+                "selection_adjusted_bar": 1.14,
+                "selection_adjusted_confidence": "below_selection_adjusted_bar",
+                "selection_adjustment_formula": "1.0 + 0.05 * log2(max(variants_searched, 1))",
             },
         }
 
@@ -98,6 +103,8 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
         self.assertFalse(report["write_global_latest"])
         self.assertEqual(report["variants"][0]["pf_lb_5pct"], 0.8)
         self.assertEqual(report["variants"][0]["statistical_confidence"], "underpowered")
+        self.assertEqual(report["variants"][0]["variants_searched"], 7)
+        self.assertEqual(report["variants"][0]["selection_adjusted_bar"], 1.14)
         self.assertEqual(len(write_calls), 1)
         self.assertNotEqual(write_calls[0], goal.evaluator.OUTPUT_DIR)
         self.assertEqual(write_calls[0].name, "autoresearch-scoreboard")

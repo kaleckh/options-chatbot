@@ -257,6 +257,21 @@ STORE_CLASSIFICATIONS: dict[str, dict[str, Any]] = {
         "hard_rules": ("Do not mix AI commodity artifacts into browser Trading Desk storage ownership.",),
         "notes": (),
     },
+    "evidence_store_backup_directory": {
+        "label": "Evidence store backup directory",
+        "storage_role": "ignored_sidecar_or_backup",
+        "persistence": "backup_bundle",
+        "scope": "out_of_scope",
+        "location": "data/backups/**",
+        "production_role": "Ignored rolling backup bundles for irreplaceable evidence stores.",
+        "owners": ("scripts/backup_evidence_stores.py",),
+        "owner_docs": ("docs/evidence-operations.md", "docs/local-db-hardening.md"),
+        "hard_rules": (
+            "Do not treat backup bundles as active stores.",
+            "Do not commit data/backups contents.",
+        ),
+        "notes": ("Backups cover SQLite evidence stores and Postgres tracked-position dumps.",),
+    },
     "sqlite_sidecars_and_backups": {
         "label": "SQLite sidecars and backups",
         "storage_role": "ignored_sidecar_or_backup",

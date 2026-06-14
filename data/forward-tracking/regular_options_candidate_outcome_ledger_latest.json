@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260610T062723Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260612T141450Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260610T062723Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260612T141450Z.md"
   },
-  "generated_at_utc": "2026-06-10T06:27:23Z",
+  "generated_at_utc": "2026-06-12T14:14:50Z",
   "inputs": {
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-10T06:27:23Z",
+      "generated_at_utc": "2026-06-10T16:32:47Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -27,7 +27,7 @@
     "paper_shortlist": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-04T23:05:21Z",
+      "generated_at_utc": "2026-06-10T16:31:50Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
       "required": false,
       "status": "loaded"

@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-10
+Last updated: 2026-06-12
 
 ## Current Sprint Blockers From June 9 Audit
 
@@ -11,12 +11,14 @@ Current read:
 - the specific fresh-evidence gate is `scripts/build_regular_options_fresh_evidence_loop.py`: `summary.entry_evidence_status_counts.fill_attempt_missing=28`, `summary.evidence_bridge_status_counts.non_executable_entry_blocked=20`, `summary.evidence_bridge_status_counts.paper_probation_exact_entry_required=8`, and `summary.evidence_bridge_status_counts.exact_exit_pnl_required=1`.
 - the linked exact-entry row needing exit evidence is QQQ `position_id=537`, with `evidence_bridge_status=exact_exit_pnl_required` and `realized_pnl_status=missing_realized_pnl`.
 - open risk is no longer blocked: ThetaTerminal was reachable, a targeted ThetaData exact-expiration import wrote batch `2124` for 2026-06-08 QQQ/SBUX rows, Alpaca OPRA latest snapshots supplied the current QQQ/SBUX quote window, SBUX `id=104` closed from exact side-aware executable exit evidence, and QQQ `id=537` has a fresh exact executable HOLD review. `scripts/build_regular_options_open_risk_resolution_plan.py` now reports `open_risk_resolution_plan_clear`.
+- the regular profit-loop broad intraday artifact is still blocked for policy use by weak quote coverage: `quote_coverage_pct=20.7`. Treat this as a mechanical data-pipeline repair during the strategy-iteration moratorium, not a reason to tune strategy gates or promote profitability.
 
 Next actions:
 
 1. Collect legitimate exact OPRA/NBBO exit evidence for QQQ `id=537` only when stop, target, time-exit, or another policy-defined exit condition fires; do not close a current HOLD row to manufacture realized evidence.
 2. Capture durable fill-attempt evidence for the `4` missing fresh-selection rows and exact entry evidence for the `8` paper/probation rows without loosening guardrails.
 3. Resume fresh-evidence collection until there are at least `20` exact realized rows, or keep the named-gate defect report current if the funnel remains blocked after 10 trading sessions.
+4. Repair the broad intraday profit-loop quote coverage path until the active artifact clears the policy coverage blocker; do not count low-coverage broad artifacts as proof.
 
 ## Documentation Hygiene
 
@@ -30,6 +32,39 @@ Current read:
 - latest Markdown placement audit: `docs/markdown-audit-2026-05-31.md`
 
 1. When adding new Markdown, update `docs/index.md` only for living docs or reports that change the current decision surface. Keep generated research reports beside their source artifacts under `data/` or `research_runs/`.
+
+## Operational Survivability
+
+Current read:
+- `docs/evidence-operations.md` owns the authoritative evidence-host, backup, heartbeat, daily-ops, and retention runbook.
+- `data/contracts/evidence-host-policy.json` declares `KaesDevice` as the current authoritative host for Postgres tracked positions, `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`.
+- scheduled scans now write host/commit/run provenance and a local heartbeat at `data/forward-tracking/scheduled_scan_heartbeat_latest.json`; scan logging fails closed before evidence writes on a non-authoritative host.
+- the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` and fail after more than `2` market days without a completed scheduled scan.
+- backups write ignored bundles under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
+- FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.
+
+1. Add these commands to the scheduled Windows task or the operator routine:
+
+```powershell
+npm run evidence:backup
+npm run options:daily-ops
+npm run options:gateboard
+```
+
+2. Add weekly off-machine copy after setting a target:
+
+```powershell
+$env:OPTIONS_BACKUP_WEEKLY_COPY_DIR = "D:\options-evidence-backups"
+npm run evidence:backup:weekly
+```
+
+3. Before interpreting missing fresh rows as strategy behavior, check scheduler health:
+
+```powershell
+npm run scan:heartbeat
+```
+
+4. Keep non-authoritative machines read-only for the named evidence stores. If the authoritative host changes, update `data/contracts/evidence-host-policy.json`, the scheduled task, and the off-machine backup target in the same operator change.
 
 ## Project Operating Map And Gateboard
 

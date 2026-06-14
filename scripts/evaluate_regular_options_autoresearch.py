@@ -26,6 +26,9 @@ TARGET_CLEAN_TRADES = 200
 COUNT_CANDIDATE_STATUSES = {"count_candidate", "portfolio_candidate"}
 BOOTSTRAP_DRAWS = 10_000
 BOOTSTRAP_SEED = "regular-options-autoresearch-bootstrap-v1"
+SELECTION_ADJUSTMENT_BASE = 1.0
+SELECTION_ADJUSTMENT_LOG2_STEP = 0.05
+SELECTION_ADJUSTMENT_FORMULA = "1.0 + 0.05 * log2(max(variants_searched, 1))"
 
 PROMOTION_GATES: dict[str, Any] = {
     "clean_trade_count_min": TARGET_CLEAN_TRADES,
@@ -52,6 +55,8 @@ EVALUATOR_CONFIG: dict[str, Any] = {
         "score_is_zero_until_promotable_clean": True,
         "progress_score_is_diagnostic_triage_only": True,
         "bootstrap_confidence_is_diagnostic_only": True,
+        "selection_adjusted_bar_is_diagnostic_only": True,
+        "selection_adjusted_bar_formula": SELECTION_ADJUSTMENT_FORMULA,
         "bootstrap_draws": BOOTSTRAP_DRAWS,
         "bootstrap_seed": BOOTSTRAP_SEED,
         "progress_score_inputs": [
@@ -110,6 +115,94 @@ def evaluator_config_hash() -> str:
 
 def _load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf8"))
+
+
+def _load_ledger_rows(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for raw in path.read_text(encoding="utf8").splitlines():
+        if not raw.strip():
+            continue
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(parsed, dict):
+            rows.append(parsed)
+    return rows
+
+
+def infer_strategy_family(experiment_id: Any, hypothesis: Any = None) -> str:
+    value = str(experiment_id or "").strip().lower()
+    if not value:
+        value = str(hypothesis or "").strip().lower()
+    if not value:
+        return "regular_options_autoresearch"
+    if value == "baseline-current-stack" or value.startswith("baseline"):
+        return "baseline_current_stack"
+    family_prefixes = (
+        ("lane_a_", "lane_a"),
+        ("sleeve_", "regular_options_symbol_sleeves"),
+        ("tracked_winner_", "tracked_winner"),
+        ("bullish_pullback_", "bullish_pullback"),
+        ("regular_bearish_put_", "regular_bearish_put"),
+        ("range_breakout_", "range_breakout"),
+        ("volatility_expansion_", "volatility_expansion"),
+        ("relative_strength_", "relative_strength"),
+        ("sector_rotation_", "sector_rotation"),
+        ("iwm_", "iwm_small_cap_risk"),
+    )
+    for prefix, family in family_prefixes:
+        if value.startswith(prefix):
+            return family
+    parts = [part for part in value.replace("-", "_").split("_") if part]
+    return "_".join(parts[:2]) if len(parts) >= 2 else parts[0]
+
+
+def selection_adjusted_bar(variants_searched: Any) -> float:
+    count = max(1, _safe_int(variants_searched, 1))
+    return round(SELECTION_ADJUSTMENT_BASE + SELECTION_ADJUSTMENT_LOG2_STEP * math.log2(count), 2)
+
+
+def _ledger_variant_id(row: dict[str, Any]) -> str:
+    return str(row.get("variant_id") or row.get("experiment_id") or "").strip()
+
+
+def search_effort_snapshot(
+    *,
+    strategy_family: str,
+    variant_id: str,
+    ledger_path: Path | None = LEDGER_PATH,
+) -> dict[str, Any]:
+    variants_by_family: dict[str, set[str]] = defaultdict(set)
+    for row in _load_ledger_rows(ledger_path) if ledger_path is not None else []:
+        row_variant = _ledger_variant_id(row)
+        if not row_variant:
+            continue
+        family = str(row.get("strategy_family") or "").strip()
+        if not family:
+            family = infer_strategy_family(row_variant, row.get("hypothesis"))
+        variants_by_family[family].add(row_variant)
+
+    family = str(strategy_family or "").strip() or infer_strategy_family(variant_id)
+    current_variant = str(variant_id or "").strip()
+    if current_variant:
+        variants_by_family[family].add(current_variant)
+    variants_searched = max(1, len(variants_by_family.get(family, set())))
+    return {
+        "strategy_family": family,
+        "variant_id": current_variant,
+        "variants_searched": variants_searched,
+        "selection_adjusted_bar": selection_adjusted_bar(variants_searched),
+        "selection_adjustment_formula": SELECTION_ADJUSTMENT_FORMULA,
+        "selection_adjustment_metric": "pf_lb_5pct",
+        "diagnostic_only": True,
+        "family_variant_counts": {
+            key: len(value)
+            for key, value in sorted(variants_by_family.items())
+        },
+    }
 
 
 def load_or_build_multilane_report(*, refresh: bool, write_refreshed: bool) -> dict[str, Any]:
@@ -494,8 +587,30 @@ def build_scoreboard(
     experiment_id: str,
     hypothesis: str,
     generated_at_utc: str | None = None,
+    strategy_family: str | None = None,
+    ledger_path: Path | None = None,
 ) -> dict[str, Any]:
     metrics = build_metric_snapshot(report)
+    family = strategy_family or infer_strategy_family(experiment_id, hypothesis)
+    search_effort = search_effort_snapshot(
+        strategy_family=family,
+        variant_id=experiment_id,
+        ledger_path=ledger_path,
+    )
+    metrics["strategy_family"] = search_effort["strategy_family"]
+    metrics["variant_id"] = search_effort["variant_id"]
+    metrics["variants_searched"] = search_effort["variants_searched"]
+    metrics["selection_adjusted_bar"] = search_effort["selection_adjusted_bar"]
+    metrics["selection_adjustment_formula"] = search_effort["selection_adjustment_formula"]
+    pf_lb = metrics.get("pf_lb_5pct")
+    selection_bar = metrics.get("selection_adjusted_bar")
+    metrics["selection_adjusted_confidence"] = (
+        "not_evaluable"
+        if pf_lb is None
+        else "clears_selection_adjusted_bar"
+        if _safe_float(pf_lb) >= _safe_float(selection_bar)
+        else "below_selection_adjusted_bar"
+    )
     historical_blockers = promotion_blockers(metrics)
     production_gate_blockers = production_blockers(metrics, historical_blockers)
     historical_status = "promotable_clean" if not historical_blockers else "scout_or_blocked"
@@ -519,6 +634,7 @@ def build_scoreboard(
         "research_score": _research_score(metrics),
         "quality_multiplier": multiplier,
         "metrics": metrics,
+        "search_effort": search_effort,
         "promotion_gates": PROMOTION_GATES,
         "production_extra_gates": PRODUCTION_EXTRA_GATES,
         "promotion_blockers": historical_blockers,
@@ -550,6 +666,8 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
     avg_lb = metrics.get("avg_net_lb_5pct")
     pf_lb_text = "n/a" if pf_lb is None else f"{_round(pf_lb):.2f}"
     avg_lb_text = "n/a" if avg_lb is None else f"{_round(avg_lb):.2f}"
+    selection_bar = metrics.get("selection_adjusted_bar")
+    selection_bar_text = "n/a" if selection_bar is None else f"{_round(selection_bar):.2f}"
     return (
         f"score: {_round(scoreboard.get('score')):.2f} "
         f"progress_score: {_round(scoreboard.get('progress_score')):.2f} "
@@ -564,6 +682,8 @@ def format_score_line(scoreboard: dict[str, Any]) -> str:
         f"unresolved: {_safe_int(metrics.get('effective_unresolved_count'))} "
         f"stress_pf: {_round(metrics.get('stress_5pct_profit_factor')):.2f} "
         f"pf_lb_5pct: {pf_lb_text} "
+        f"variants_searched: {_safe_int(metrics.get('variants_searched'), 1)} "
+        f"selection_adjusted_bar: {selection_bar_text} "
         f"avg_net_lb_5pct: {avg_lb_text} "
         f"stat_conf: {metrics.get('statistical_confidence')} "
         f"zero_bid_exit_rate: {('n/a' if zero_bid is None else f'{_round(zero_bid):.2f}')} "
@@ -580,6 +700,12 @@ def _ledger_entry(scoreboard: dict[str, Any]) -> dict[str, Any]:
         "evaluator_config_hash": scoreboard.get("evaluator_config_hash"),
         "experiment_id": scoreboard.get("experiment_id"),
         "hypothesis": scoreboard.get("hypothesis"),
+        "strategy_family": metrics.get("strategy_family"),
+        "variant_id": metrics.get("variant_id"),
+        "variants_searched": metrics.get("variants_searched"),
+        "selection_adjusted_bar": metrics.get("selection_adjusted_bar"),
+        "selection_adjusted_confidence": metrics.get("selection_adjusted_confidence"),
+        "selection_adjustment_formula": metrics.get("selection_adjustment_formula"),
         "status": scoreboard.get("status"),
         "production_status": scoreboard.get("production_status"),
         "score": scoreboard.get("score"),
@@ -648,6 +774,11 @@ def render_markdown(scoreboard: dict[str, Any]) -> str:
         f"- Bootstrap avg net 5% lower bound: `{metrics.get('avg_net_lb_5pct')}%`",
         f"- Bootstrap trades: `{metrics.get('n_trades')}`",
         f"- Statistical confidence: `{metrics.get('statistical_confidence')}`",
+        f"- Strategy family: `{metrics.get('strategy_family')}`",
+        f"- Variants searched: `{metrics.get('variants_searched')}`",
+        f"- Selection-adjusted PF-LB bar: `{metrics.get('selection_adjusted_bar')}`",
+        f"- Selection-adjusted confidence: `{metrics.get('selection_adjusted_confidence')}`",
+        f"- Selection-adjusted formula: `{metrics.get('selection_adjustment_formula')}`.",
         f"- Avg PnL: `{metrics.get('avg_pnl_pct')}%`",
         f"- Effective coverage: `{metrics.get('effective_quote_coverage_pct')}%`",
         f"- Effective unresolved candidates: `{metrics.get('effective_unresolved_count')}`",
@@ -738,6 +869,7 @@ def main(argv: list[str] | None = None) -> int:
         report,
         experiment_id=args.experiment_id,
         hypothesis=args.hypothesis,
+        ledger_path=LEDGER_PATH,
     )
     if not args.no_write:
         scoreboard["artifacts"] = write_outputs(scoreboard)

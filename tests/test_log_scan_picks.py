@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import types
@@ -137,6 +138,22 @@ def _lane_promotion_report(
 
 
 class LogScanPicksTests(unittest.TestCase):
+    def setUp(self):
+        self._scan_host_policy_patch = patch.object(
+            log_scan_picks,
+            "_scheduled_scan_write_allowed",
+            return_value=(
+                True,
+                {
+                    "current_host": "KaesDevice",
+                    "authoritative_host": "KaesDevice",
+                    "write_allowed": True,
+                },
+            ),
+        )
+        self._scan_host_policy_patch.start()
+        self.addCleanup(self._scan_host_policy_patch.stop)
+
     def test_replace_scan_rows_rewrites_only_requested_date(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             log_file = Path(tmpdir) / "scan_picks.jsonl"
@@ -235,6 +252,36 @@ class LogScanPicksTests(unittest.TestCase):
 
             load_local_env.assert_not_called()
             self.assertFalse(log_file.exists())
+
+    def test_main_blocks_non_authoritative_scan_before_evidence_writes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            log_file = log_dir / "scan_picks.jsonl"
+            with (
+                patch.object(log_scan_picks, "LOG_DIR", log_dir),
+                patch.object(log_scan_picks, "LOG_FILE", log_file),
+                patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
+                patch.object(log_scan_picks, "load_local_env") as load_local_env,
+                patch.object(
+                    log_scan_picks,
+                    "_scheduled_scan_write_allowed",
+                    return_value=(
+                        False,
+                        {
+                            "current_host": "ReplicaMac",
+                            "authoritative_host": "KaesDevice",
+                            "write_allowed": False,
+                        },
+                    ),
+                ),
+            ):
+                result = log_scan_picks.main()
+
+            heartbeat = json.loads((log_dir / "scheduled_scan_heartbeat_latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(result, 1)
+            load_local_env.assert_not_called()
+            self.assertFalse(log_file.exists())
+            self.assertEqual(heartbeat["status"], "failed_non_authoritative_host")
 
     def test_pick_fill_price_prefers_executable_spread_entry_over_net_debit(self):
         pick = _make_pick("AMZN", debit=7.625)

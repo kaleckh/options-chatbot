@@ -132,6 +132,50 @@ from trading_desk_api_models import (
     parse_review_trading_desk_records_body,
 )
 
+
+def _configured_backend_worker_count() -> int | None:
+    for env_name in ("WEB_CONCURRENCY", "UVICORN_WORKERS", "OPTIONS_BACKEND_WORKERS"):
+        raw = str(os.getenv(env_name) or "").strip()
+        if not raw:
+            continue
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+    argv = list(sys.argv or [])
+    for idx, item in enumerate(argv):
+        if item == "--workers" and idx + 1 < len(argv):
+            try:
+                return int(argv[idx + 1])
+            except ValueError:
+                return None
+        if item.startswith("--workers="):
+            try:
+                return int(item.split("=", 1)[1])
+            except ValueError:
+                return None
+        if item == "-w" and idx + 1 < len(argv):
+            try:
+                return int(argv[idx + 1])
+            except ValueError:
+                return None
+    return None
+
+
+def _assert_single_process_backend_runtime() -> None:
+    if str(os.getenv("OPTIONS_ALLOW_MULTI_WORKER_BACKEND") or "").strip().lower() in {"1", "true", "yes"}:
+        return
+    worker_count = _configured_backend_worker_count()
+    if worker_count is not None and worker_count > 1:
+        raise RuntimeError(
+            "Options backend must run with one worker. Module-level caches, strategy profiles, "
+            "and repository singletons are process-local; set workers=1 or explicitly set "
+            "OPTIONS_ALLOW_MULTI_WORKER_BACKEND=1 after auditing those state boundaries."
+        )
+
+
+_assert_single_process_backend_runtime()
+
 app = FastAPI(title="Options Chatbot Backend")
 
 BACKEND_API_TOKEN_HEADER = "x-options-backend-token"

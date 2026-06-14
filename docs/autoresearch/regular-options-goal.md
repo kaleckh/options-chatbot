@@ -21,6 +21,8 @@ A loop succeeds only if M1 increases by at least 10 strict-new clean trades whil
 
 Bootstrap readbacks are trade-level resamples over net P&L%, seeded and deterministic. They are diagnostic only: `underpowered` means the point PF looks positive but the 5% lower bound falls below 1.0, `confident_positive` means the lower bound is above 1.0, and `negative_or_flat` means the branch has not established a positive PF lower bound. No-loss PF remains undefined rather than promoted through a sentinel.
 
+Search-effort readbacks are also diagnostic only. The evaluator counts distinct variants already evaluated per `strategy_family` from the autoresearch ledger and reports `variants_searched` plus `selection_adjusted_bar`. Formula: `selection_adjusted_bar = 1.0 + 0.05 * log2(max(variants_searched, 1))`, rounded to two decimals. This is an advisory PF-LB discussion bar, not a frozen `score` or `progress_score` gate.
+
 ## Hard Constraints
 
 1. Lane A variants, entry-memory variants, symbol-health variants, and backfill-count variants are banned.

@@ -2,7 +2,7 @@
   "phase1_tasks": {
     "1.1": "done",
     "1.2": "done",
-    "1.3": "todo",
+    "1.3": "done",
     "1.4": "todo",
     "1.5": "todo",
     "1.6": "todo",
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-12",
-    "work": "Phase 1.2 added and verified read-only regime stratification for exact replay rows, including VIX tercile, SPY 50-day state, entry-month aggregate and per-branch bucket metrics, fail-closed regime_robust, generated readback artifacts, and monthly-audit advisory readback."
+    "work": "Phase 1.3 verified and reconciled per-ticker N-floor hardening: rows below 30 exact trades emit additive insufficient_n_frozen/queue-emission blockers while legacy decision/status fields remain unchanged, and per-ticker expectancy readbacks flow through expectancy_calibration.py shrinkage."
   }
 }
