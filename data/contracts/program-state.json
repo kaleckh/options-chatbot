@@ -6,7 +6,7 @@
     "1.4": "done",
     "1.5": "done",
     "1.6": "done",
-    "1.7": "todo",
+    "1.7": "done",
     "1.8": "todo",
     "1.9": "todo",
     "1.10": "todo",
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.6 replaced remaining naive datetime.now() calls in options_chatbot.py with ET/UTC-intent calls and added a static unittest tripwire to keep the file free of bare datetime.now() calls."
+    "work": "Phase 1.7 hardened STRATEGY_PROFILES with locked build-new-dict-and-swap refresh, removed the mutable risk_settings alias in favor of accessors, routed backend profile APIs through snapshot/update callbacks, and added regression coverage for concurrent refresh completeness plus WFO alias synchronization."
   }
 }

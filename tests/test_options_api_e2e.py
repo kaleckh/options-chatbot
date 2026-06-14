@@ -2,6 +2,7 @@ import os
 import sys
 import unittest
 import json
+import copy
 from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
@@ -170,6 +171,7 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
         self.options_profit_state_dir = os.path.join(self._tmp.name, "options_profit")
         self.forward_tracking_dir = os.path.join(self._tmp.name, "forward_tracking")
         self.profitability_lab_dir = os.path.join(self._tmp.name, "profitability_lab")
+        self.original_strategy_profiles = oc.get_strategy_profiles_snapshot()
         mds._MEMORY_CACHE.clear()
         mds._SCHEMA_READY.clear()
         mds.reset_cache_stats()
@@ -215,6 +217,10 @@ class OptionsAlgorithmApiE2ETests(unittest.TestCase):
     def _cleanup(self):
         mds.reset_cache_stats()
         self.stack.close()
+        with oc._STRATEGY_PROFILE_LOCK:
+            oc._swap_strategy_profiles_unlocked(copy.deepcopy(self.original_strategy_profiles))
+            oc._PROFILE_LOAD_FINGERPRINT = None
+            oc._PROFILE_LOADED_SNAPSHOT = copy.deepcopy(self.original_strategy_profiles)
         self._tmp.cleanup()
 
     def test_options_profit_status_endpoint_returns_read_only_status_surface(self):

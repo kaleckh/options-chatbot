@@ -9,27 +9,49 @@ from fastapi import APIRouter, HTTPException
 
 
 SaveProfileFn = Callable[..., None]
+GetStrategyProfileFn = Callable[[str], dict[str, Any]]
+GetStrategyProfilesFn = Callable[[], dict[str, dict[str, Any]]]
+GetRiskSettingsFn = Callable[[], dict[str, dict[str, Any]]]
+UpdateProfileSectionsFn = Callable[[str, dict[str, Any]], dict[str, Any]]
 
 
 def create_profile_router(
     *,
-    strategy_profiles: dict[str, dict[str, Any]],
+    strategy_profiles: dict[str, dict[str, Any]] | None = None,
     save_profile: SaveProfileFn,
     changelog_files: Mapping[str, str],
+    get_strategy_profile_fn: GetStrategyProfileFn | None = None,
+    get_strategy_profiles_fn: GetStrategyProfilesFn | None = None,
+    get_risk_settings_fn: GetRiskSettingsFn | None = None,
+    update_profile_sections_fn: UpdateProfileSectionsFn | None = None,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _all_profiles() -> dict[str, dict[str, Any]]:
+        if get_strategy_profiles_fn is not None:
+            return get_strategy_profiles_fn()
+        return strategy_profiles or {}
+
+    def _one_profile(profile_type: str) -> dict[str, Any]:
+        if get_strategy_profile_fn is not None:
+            try:
+                return get_strategy_profile_fn(profile_type)
+            except KeyError:
+                raise HTTPException(400, f"Unknown profile type: {profile_type}") from None
+        profiles = _all_profiles()
+        if profile_type not in profiles:
+            raise HTTPException(400, f"Unknown profile type: {profile_type}")
+        return profiles[profile_type]
 
     @router.get("/api/profile")
     async def get_profile(type: str = "equity"):
         """Return one strategy profile."""
-        if type not in strategy_profiles:
-            raise HTTPException(400, f"Unknown profile type: {type}")
-        return strategy_profiles[type]
+        return _one_profile(type)
 
     @router.get("/api/profiles")
     async def get_profiles():
         """Return both strategy profiles."""
-        return strategy_profiles
+        return _all_profiles()
 
     @router.put("/api/profile")
     async def update_profile(body: dict[str, Any]):
@@ -38,19 +60,25 @@ def create_profile_router(
         updates = body.get("updates", {})
         note = body.get("note", "")
 
-        if profile_type not in strategy_profiles:
-            raise HTTPException(400, f"Unknown profile type: {profile_type}")
         if not isinstance(updates, dict):
             raise HTTPException(400, "updates must be an object")
 
-        profile = strategy_profiles[profile_type]
-        for section_key, section_value in updates.items():
-            if (
-                section_key in profile
-                and isinstance(profile[section_key], dict)
-                and isinstance(section_value, dict)
-            ):
-                profile[section_key].update(section_value)
+        if update_profile_sections_fn is not None:
+            try:
+                update_profile_sections_fn(profile_type, updates)
+            except KeyError:
+                raise HTTPException(400, f"Unknown profile type: {profile_type}") from None
+            except TypeError:
+                raise HTTPException(400, "updates must be an object") from None
+        else:
+            profile = _one_profile(profile_type)
+            for section_key, section_value in updates.items():
+                if (
+                    section_key in profile
+                    and isinstance(profile[section_key], dict)
+                    and isinstance(section_value, dict)
+                ):
+                    profile[section_key].update(section_value)
 
         save_profile(note=note or f"{profile_type} profile updated", profile=profile_type)
         return {"ok": True}
@@ -70,9 +98,12 @@ def create_profile_router(
     @router.get("/api/risk")
     async def get_risk_settings():
         """Return current risk settings for sidebar display."""
+        if get_risk_settings_fn is not None:
+            return get_risk_settings_fn()
+        profiles = _all_profiles()
         return {
-            "equity": strategy_profiles["equity"]["risk"],
-            "index": strategy_profiles["index"]["risk"],
+            "equity": profiles["equity"]["risk"],
+            "index": profiles["index"]["risk"],
         }
 
     return router

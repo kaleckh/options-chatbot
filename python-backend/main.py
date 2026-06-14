@@ -41,9 +41,12 @@ if load_dotenv is not None:
 from options_chatbot import (
     log_prediction,
     TOOL_DISPATCH,
-    STRATEGY_PROFILES,
     _load_predictions,
     _save_profile,
+    get_strategy_profile_snapshot,
+    get_strategy_profiles_snapshot,
+    get_strategy_risk_settings_snapshot,
+    update_strategy_profile_sections,
     scan_daily_top_trades,
     roll_forward_daily_picks,
     generate_position_recommendations,
@@ -235,9 +238,12 @@ _ROUTE_CONTEXT = BackendRouteContext(globals())
 
 app.include_router(
     create_profile_router(
-        strategy_profiles=STRATEGY_PROFILES,
         save_profile=_save_profile,
         changelog_files=CHANGELOG_FILES,
+        get_strategy_profile_fn=get_strategy_profile_snapshot,
+        get_strategy_profiles_fn=get_strategy_profiles_snapshot,
+        get_risk_settings_fn=get_strategy_risk_settings_snapshot,
+        update_profile_sections_fn=update_strategy_profile_sections,
     )
 )
 app.include_router(create_tools_router(_ROUTE_CONTEXT))

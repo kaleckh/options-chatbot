@@ -6,6 +6,8 @@
 
 - Closed the research-evaluation hardening pass for selection-luck controls. Living decisions now record bootstrap PF lower-bound promotion language, the `30` exact-trade per-ticker disposition floor with shrinkage toward lane means, and protected forward-holdout consumption requiring ledger append. `docs/NEXT_STEPS.md` now carries the remaining human actions: ThetaData history-depth check, cheap EOD long-history falsification dataset decision, and `6`-week frozen paper cohort date pre-registration.
 
+- Hardened strategy-profile access so API reads and updates use locked snapshot/update helpers instead of exposing mutable global profile dictionaries or the legacy `risk_settings` alias. The FastAPI profile router now consumes accessor/update callbacks, WFO's imported profile aliases are synchronized after profile swaps, and `tests/test_strategy_profile_safety.py` covers concurrent profile refresh/read completeness plus alias synchronization.
+
 - Completed Phase 1.6 timezone hardening in `options_chatbot.py`: remaining bare `datetime.now()` calls now use ET-aware or UTC-aware intent, with ET converted back to naive only where provider dates and existing comparisons require naive local-market datetimes. Added `tests/test_options_chatbot_timezone_sweep.py` and included it in `npm run verify:fast` through `verify:python:research` so the tripwire fails on future bare `datetime.now()` calls in `options_chatbot.py`.
 
 ## 2026-06-12

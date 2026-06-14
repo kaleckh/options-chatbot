@@ -164,26 +164,50 @@ class StrategyAuditTests(unittest.TestCase):
         self.addCleanup(self._expectancy_surface_patch.stop)
 
     def test_calculate_position_size_uses_risk_bands_and_fails_closed_when_one_contract_is_too_large(self):
-        with patch.dict(
-            oc.risk_settings,
+        original_risk = oc._get_risk_settings()
+        oc.update_strategy_profile_sections(
+            "equity",
             {
-                "account_size": 10_000.0,
-                "min_position_pct": 0.5,
-                "max_position_pct": 3.0,
-                "dte_0_max_pct": 0.5,
-                "stop_loss_pct": 50.0,
-                "max_drawdown_pct": 20.0,
+                "risk": {
+                    "account_size": 10_000.0,
+                    "min_position_pct": 0.5,
+                    "max_position_pct": 3.0,
+                    "dte_0_max_pct": 0.5,
+                    "stop_loss_pct": 50.0,
+                    "max_drawdown_pct": 20.0,
+                }
             },
-            clear=False,
-        ):
+        )
+        try:
             oversized = json.loads(oc.calculate_position_size(option_price=1.0, confidence=1, dte=7))
             sized = json.loads(oc.calculate_position_size(option_price=2.0, confidence=10, dte=7))
+        finally:
+            oc.update_strategy_profile_sections("equity", {"risk": original_risk})
 
         self.assertEqual(oversized["error"], "Trade exceeds the current risk budget.")
         self.assertEqual(oversized["confidence_sizing"]["risk_pct_applied"], 0.5)
         self.assertEqual(sized["confidence_sizing"]["risk_pct_applied"], 3.0)
         self.assertEqual(sized["sizing"]["max_contracts"], 1)
         self.assertEqual(sized["sizing"]["max_loss_if_zero"], 200.0)
+
+    def test_strategy_risk_settings_accessor_replaces_mutable_alias(self):
+        self.assertNotIn("risk_settings", vars(oc))
+        original_risk = oc._get_risk_settings()
+        updated_risk = {
+            "account_size": 25_000.0,
+            "min_position_pct": original_risk["min_position_pct"],
+            "max_position_pct": original_risk["max_position_pct"],
+            "dte_0_max_pct": original_risk["dte_0_max_pct"],
+            "stop_loss_pct": original_risk["stop_loss_pct"],
+            "max_drawdown_pct": original_risk["max_drawdown_pct"],
+        }
+        oc.update_strategy_profile_sections("equity", {"risk": updated_risk})
+        try:
+            snapshot = oc._get_risk_settings()
+            snapshot["account_size"] = 1.0
+            self.assertEqual(oc._get_risk_settings()["account_size"], 25_000.0)
+        finally:
+            oc.update_strategy_profile_sections("equity", {"risk": original_risk})
 
     def test_calibration_accumulator_reuses_surface_core_with_fresh_metadata(self):
         accumulator = ec.CalibrationAccumulator(min_trades=1)

@@ -21,12 +21,14 @@ Free enhancements:
 
 import os
 import re
+import sys
 import json
 import math
 import glob
 import copy
 import shutil
 import subprocess
+import threading
 from functools import wraps
 from typing import Any, Optional
 import numpy as np
@@ -1219,7 +1221,8 @@ def _compute_tech_score_from_close_series(
 def _get_profile(ticker: str, direction: str | None = None) -> dict:
     """Return the strategy profile dict for the given ticker."""
     ensure_strategy_profiles_current()
-    base_profile = STRATEGY_PROFILES[_asset_class(ticker)]
+    with _STRATEGY_PROFILE_LOCK:
+        base_profile = copy.deepcopy(STRATEGY_PROFILES[_asset_class(ticker)])
     merged_profile = merge_live_profile(copy.deepcopy(base_profile), ticker, direction)
     return merged_profile
 
@@ -1242,7 +1245,6 @@ def _normalize_profile_direction(direction: Any) -> str | None:
 
 # ─── Risk settings (user can update account_size mid-conversation) ────────────
 # Claude will read/write these via the manage_risk_settings tool.
-# risk_settings is a live alias for STRATEGY_PROFILE["risk"] — defined after STRATEGY_PROFILE below
 
 PAPER_TRADES_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades.json")
 PREDICTIONS_FILE    = os.path.join(os.path.dirname(os.path.abspath(__file__)), "predictions.json")
@@ -1454,6 +1456,20 @@ STRATEGY_PROFILES: dict[str, dict] = {
 # Backwards-compat alias — all existing code referencing STRATEGY_PROFILE gets equity profile
 DEFAULT_STRATEGY_PROFILES = copy.deepcopy(STRATEGY_PROFILES)
 STRATEGY_PROFILE = STRATEGY_PROFILES["equity"]
+_STRATEGY_PROFILE_LOCK = threading.RLock()
+_PROFILE_SECTION_KEYS = (
+    "confidence_weights",
+    "targets",
+    "filters",
+    "risk",
+    "entry",
+    "direction_score_weights",
+    "rsi_overextension",
+    "quality_score_weights",
+    "early_exit",
+    "spread",
+    "entry_filters",
+)
 
 # ── Persist / restore both profiles across restarts ───────────────────────────
 _DIR_OC = os.path.dirname(os.path.abspath(__file__))
@@ -1463,6 +1479,27 @@ PROFILE_FILE = ""
 CHANGELOG_FILE = ""
 _PROFILE_LOAD_FINGERPRINT: tuple[tuple[str, str, int | None, int | None], ...] | None = None
 _PROFILE_LOADED_SNAPSHOT: dict[str, Any] = copy.deepcopy(STRATEGY_PROFILES)
+
+
+def _build_profile_map(base_profiles: dict[str, Any] | None = None) -> dict[str, dict]:
+    source_profiles = base_profiles or DEFAULT_STRATEGY_PROFILES
+    return {
+        str(profile): copy.deepcopy(source_profile)
+        for profile, source_profile in source_profiles.items()
+        if isinstance(source_profile, dict)
+    }
+
+
+def _swap_strategy_profiles_unlocked(profiles: dict[str, dict]) -> None:
+    global STRATEGY_PROFILES, STRATEGY_PROFILE
+    if "equity" not in profiles:
+        raise KeyError("strategy profile map must include equity")
+    STRATEGY_PROFILES = profiles
+    STRATEGY_PROFILE = STRATEGY_PROFILES["equity"]
+    wfo_module = sys.modules.get("wfo_optimizer")
+    if wfo_module is not None:
+        setattr(wfo_module, "STRATEGY_PROFILES", STRATEGY_PROFILES)
+        setattr(wfo_module, "STRATEGY_PROFILE", STRATEGY_PROFILE)
 
 
 def _profile_storage_dir() -> str:
@@ -1491,17 +1528,9 @@ def _refresh_profile_file_aliases() -> None:
 
 
 def _reset_profiles(base_profiles: dict[str, Any] | None = None) -> None:
-    source_profiles = base_profiles or DEFAULT_STRATEGY_PROFILES
-    for profile, source_profile in source_profiles.items():
-        current_profile = STRATEGY_PROFILES.setdefault(profile, {})
-        current_profile.clear()
-        current_profile.update(copy.deepcopy(source_profile))
-    for profile in list(STRATEGY_PROFILES.keys()):
-        if profile not in source_profiles:
-            del STRATEGY_PROFILES[profile]
-    if "risk_settings" in globals() and isinstance(risk_settings, dict):
-        risk_settings.clear()
-        risk_settings.update(STRATEGY_PROFILE["risk"])
+    next_profiles = _build_profile_map(base_profiles)
+    with _STRATEGY_PROFILE_LOCK:
+        _swap_strategy_profiles_unlocked(next_profiles)
 
 
 def _deep_profile_diff(current: Any, baseline: Any) -> Any:
@@ -1528,71 +1557,120 @@ def _deep_profile_merge(target: dict[str, Any], overrides: dict[str, Any]) -> No
             target[key] = copy.deepcopy(value)
 
 
+def _apply_saved_profile_overrides(
+    profile_map: dict[str, dict],
+    profile: str,
+    pfile: str,
+) -> None:
+    if not os.path.exists(pfile):
+        return
+    try:
+        with open(pfile) as f:
+            saved = json.load(f)
+        if not isinstance(saved, dict):
+            return
+        if profile not in profile_map and profile in DEFAULT_STRATEGY_PROFILES:
+            profile_map[profile] = copy.deepcopy(DEFAULT_STRATEGY_PROFILES[profile])
+        sp = profile_map.get(profile)
+        if not isinstance(sp, dict):
+            return
+        for section in _PROFILE_SECTION_KEYS:
+            if section in saved and isinstance(saved[section], dict):
+                sp.setdefault(section, {})
+                if isinstance(sp[section], dict):
+                    sp[section].update(saved[section])
+        if "strategy_type" in saved:
+            sp["strategy_type"] = saved["strategy_type"]
+        if "auto_tune" in saved and isinstance(saved["auto_tune"], dict):
+            sp.setdefault("auto_tune", {}).update(saved["auto_tune"])
+    except Exception:
+        pass
+
+
 def ensure_strategy_profiles_current(*, force: bool = False) -> None:
     global _PROFILE_LOAD_FINGERPRINT, _PROFILE_LOADED_SNAPSHOT
-    _refresh_profile_file_aliases()
-    fingerprint: list[tuple[str, str, int | None, int | None]] = []
-    for profile, pfile in PROFILE_FILES.items():
-        try:
-            stat = os.stat(pfile)
-            fingerprint.append((profile, pfile, int(stat.st_mtime_ns), int(stat.st_size)))
-        except FileNotFoundError:
-            fingerprint.append((profile, pfile, None, None))
-    current_fingerprint = tuple(fingerprint)
-    if not force and current_fingerprint == _PROFILE_LOAD_FINGERPRINT:
-        return
+    with _STRATEGY_PROFILE_LOCK:
+        _refresh_profile_file_aliases()
+        fingerprint: list[tuple[str, str, int | None, int | None]] = []
+        for profile, pfile in PROFILE_FILES.items():
+            try:
+                stat = os.stat(pfile)
+                fingerprint.append((profile, pfile, int(stat.st_mtime_ns), int(stat.st_size)))
+            except FileNotFoundError:
+                fingerprint.append((profile, pfile, None, None))
+        current_fingerprint = tuple(fingerprint)
+        if not force and current_fingerprint == _PROFILE_LOAD_FINGERPRINT:
+            return
 
-    in_memory_overrides: dict[str, Any] = {}
-    for profile, current_profile in STRATEGY_PROFILES.items():
-        baseline_profile = dict(_PROFILE_LOADED_SNAPSHOT.get(profile) or {})
-        diff = _deep_profile_diff(current_profile, baseline_profile)
-        if diff not in ({}, None):
-            in_memory_overrides[profile] = diff
+        in_memory_overrides: dict[str, Any] = {}
+        for profile, current_profile in STRATEGY_PROFILES.items():
+            baseline_profile = dict(_PROFILE_LOADED_SNAPSHOT.get(profile) or {})
+            diff = _deep_profile_diff(current_profile, baseline_profile)
+            if diff not in ({}, None):
+                in_memory_overrides[profile] = diff
 
-    has_saved_profiles = any(os.path.exists(pfile) for pfile in PROFILE_FILES.values())
-    if has_saved_profiles:
-        _reset_profiles()
-    else:
-        _reset_profiles(base_profiles=_PROFILE_LOADED_SNAPSHOT)
-    for profile, pfile in PROFILE_FILES.items():
-        if not os.path.exists(pfile):
-            continue
-        try:
-            with open(pfile) as f:
-                saved = json.load(f)
-            sp = STRATEGY_PROFILES[profile]
-            for section in (
-                "confidence_weights",
-                "targets",
-                "filters",
-                "risk",
-                "entry",
-                "direction_score_weights",
-                "rsi_overextension",
-                "quality_score_weights",
-                "early_exit",
-                "spread",
-                "entry_filters",
+        has_saved_profiles = any(os.path.exists(pfile) for pfile in PROFILE_FILES.values())
+        if has_saved_profiles:
+            next_profiles = _build_profile_map()
+        else:
+            next_profiles = _build_profile_map(_PROFILE_LOADED_SNAPSHOT)
+        for profile, pfile in PROFILE_FILES.items():
+            _apply_saved_profile_overrides(next_profiles, profile, pfile)
+        for profile, overrides in in_memory_overrides.items():
+            target_profile = next_profiles.get(profile)
+            if isinstance(target_profile, dict) and isinstance(overrides, dict):
+                _deep_profile_merge(target_profile, overrides)
+        _swap_strategy_profiles_unlocked(next_profiles)
+        _PROFILE_LOAD_FINGERPRINT = current_fingerprint
+        _PROFILE_LOADED_SNAPSHOT = copy.deepcopy(STRATEGY_PROFILES)
+
+
+def get_strategy_profile_snapshot(profile: str = "equity") -> dict[str, Any]:
+    ensure_strategy_profiles_current()
+    with _STRATEGY_PROFILE_LOCK:
+        if profile not in STRATEGY_PROFILES:
+            raise KeyError(profile)
+        return copy.deepcopy(STRATEGY_PROFILES[profile])
+
+
+def get_strategy_profiles_snapshot() -> dict[str, dict[str, Any]]:
+    ensure_strategy_profiles_current()
+    with _STRATEGY_PROFILE_LOCK:
+        return copy.deepcopy(STRATEGY_PROFILES)
+
+
+def get_strategy_risk_settings_snapshot() -> dict[str, dict[str, Any]]:
+    ensure_strategy_profiles_current()
+    with _STRATEGY_PROFILE_LOCK:
+        return {
+            profile: copy.deepcopy(settings.get("risk", {}))
+            for profile, settings in STRATEGY_PROFILES.items()
+            if isinstance(settings, dict)
+        }
+
+
+def _get_risk_settings(profile: str = "equity") -> dict[str, Any]:
+    return get_strategy_profile_snapshot(profile).get("risk", {})
+
+
+def update_strategy_profile_sections(profile: str, updates: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(updates, dict):
+        raise TypeError("updates must be an object")
+    ensure_strategy_profiles_current()
+    with _STRATEGY_PROFILE_LOCK:
+        if profile not in STRATEGY_PROFILES:
+            raise KeyError(profile)
+        next_profiles = _build_profile_map(STRATEGY_PROFILES)
+        target_profile = next_profiles[profile]
+        for section_key, section_value in updates.items():
+            if (
+                section_key in target_profile
+                and isinstance(target_profile[section_key], dict)
+                and isinstance(section_value, dict)
             ):
-                if section in saved and isinstance(saved[section], dict):
-                    if section not in sp:
-                        sp[section] = {}
-                    sp[section].update(saved[section])
-            if "strategy_type" in saved:
-                sp["strategy_type"] = saved["strategy_type"]
-            if "auto_tune" in saved and isinstance(saved["auto_tune"], dict):
-                sp.setdefault("auto_tune", {}).update(saved["auto_tune"])
-        except Exception:
-            pass
-    for profile, overrides in in_memory_overrides.items():
-        target_profile = STRATEGY_PROFILES.get(profile)
-        if isinstance(target_profile, dict) and isinstance(overrides, dict):
-            _deep_profile_merge(target_profile, overrides)
-    if "risk_settings" in globals() and isinstance(risk_settings, dict):
-        risk_settings.clear()
-        risk_settings.update(STRATEGY_PROFILE["risk"])
-    _PROFILE_LOAD_FINGERPRINT = current_fingerprint
-    _PROFILE_LOADED_SNAPSHOT = copy.deepcopy(STRATEGY_PROFILES)
+                target_profile[section_key].update(copy.deepcopy(section_value))
+        _swap_strategy_profiles_unlocked(next_profiles)
+        return copy.deepcopy(STRATEGY_PROFILES[profile])
 
 
 def _log_brain_update(source: str, note: str, profile: str = "equity") -> None:
@@ -1621,7 +1699,8 @@ def _log_brain_update(source: str, note: str, profile: str = "equity") -> None:
 def _save_profile(note: str = "", profile: str = "equity") -> None:
     """Write one strategy profile to disk. Call after every Apply."""
     ensure_strategy_profiles_current()
-    sp = STRATEGY_PROFILES[profile]
+    with _STRATEGY_PROFILE_LOCK:
+        sp = copy.deepcopy(STRATEGY_PROFILES[profile])
     with open(PROFILE_FILES[profile], "w") as f:
         json.dump(
             {k: v for k, v in sp.items() if k not in ("name", "philosophy")},
@@ -1636,9 +1715,6 @@ def _load_profile() -> None:
 
 
 _load_profile()  # restore on every import / app startup
-
-# Live alias so legacy code that reads risk_settings["x"] auto-reflects equity changes
-risk_settings = STRATEGY_PROFILE["risk"]
 
 
 # ─── Black-Scholes Greeks ──────────────────────────────────────────────────────
@@ -2426,6 +2502,7 @@ def calculate_position_size(
     confidence (1–10): scales premium-at-risk linearly from min_position_pct
     up to max_position_pct. Use your honest assessment of edge.
     """
+    risk_settings = _get_risk_settings()
     acct = account_size or risk_settings["account_size"]
 
     if not acct:
@@ -2556,52 +2633,56 @@ def manage_risk_settings(
     Call with specific arguments to update those values.
     """
     ensure_strategy_profiles_current()
-    sp  = STRATEGY_PROFILE
-    rsk = sp["risk"]
-    flt = sp["filters"]
-    tgt = sp["targets"]
+    with _STRATEGY_PROFILE_LOCK:
+        profile_map = _build_profile_map(STRATEGY_PROFILES)
+        sp  = profile_map["equity"]
+        rsk = sp["risk"]
+        flt = sp["filters"]
+        tgt = sp["targets"]
 
-    # ── Track changes: capture before values, apply, record after ─────────────
-    _changes: dict[str, dict] = {}
+        # ── Track changes: capture before values, apply, record after ─────────
+        _changes: dict[str, dict] = {}
 
-    def _apply(store: dict, key: str, new_val):
-        if new_val is not None:
-            old = store.get(key)
-            store[key] = new_val
-            if old != new_val:
-                _changes[key] = {"before": old, "after": new_val}
+        def _apply(store: dict, key: str, new_val):
+            if new_val is not None:
+                old = store.get(key)
+                store[key] = new_val
+                if old != new_val:
+                    _changes[key] = {"before": old, "after": new_val}
 
-    _apply(rsk, "account_size",               account_size)
-    _apply(rsk, "max_drawdown_pct",           max_drawdown_pct)
-    _apply(rsk, "stop_loss_pct",              stop_loss_pct)
-    _apply(rsk, "profit_target_pct",          profit_target_pct)
-    _apply(rsk, "min_position_pct",           min_position_pct)
-    _apply(rsk, "max_position_pct",           max_position_pct)
-    _apply(rsk, "dte_0_max_pct",              dte_0_max_pct)
-    _apply(flt, "vix_defense_threshold",      vix_defense_threshold)
-    _apply(flt, "defense_position_mult",      defense_position_mult)
-    _apply(flt, "atr_expansion_stop_mult",    atr_expansion_stop_mult)
-    _apply(flt, "min_ev_return_pct",          min_ev_return_pct)
-    _apply(flt, "liquidity_spread_max_pct",   liquidity_spread_max_pct)
-    _apply(flt, "illiquid_extra_margin_pct",  illiquid_extra_margin_pct)
-    _apply(flt, "min_option_mid_price",       min_option_mid_price)
-    _apply(flt, "min_option_volume",          min_option_volume)
-    _apply(flt, "min_option_open_interest",   min_option_open_interest)
-    _apply(flt, "max_option_quote_age_hours", max_option_quote_age_hours)
-    _apply(flt, "min_calibrated_expectancy_pct", min_calibrated_expectancy_pct)
-    _apply(flt, "entry_slippage_pct",         entry_slippage_pct)
-    _apply(flt, "exit_slippage_pct",          exit_slippage_pct)
-    _apply(flt, "iv_crush_z_threshold",       iv_crush_z_threshold)
-    _apply(flt, "iv_crush_confidence_penalty", iv_crush_confidence_penalty)
-    if delta_target is not None:
-        _apply(tgt, "delta_optimal", delta_target)
-    if dte_target is not None:
-        _apply(tgt, "dte_optimal", dte_target)
-    _apply(rsk, "daily_loss_limit_pct",          daily_loss_limit_pct)
-    _apply(rsk, "weekly_loss_limit_pct",         weekly_loss_limit_pct)
-    _apply(rsk, "max_concurrent_positions",      max_concurrent_positions)
-    _apply(rsk, "max_positions_per_ticker",      max_positions_per_ticker)
-    _apply(rsk, "max_correlated_index_positions", max_correlated_index_positions)
+        _apply(rsk, "account_size",               account_size)
+        _apply(rsk, "max_drawdown_pct",           max_drawdown_pct)
+        _apply(rsk, "stop_loss_pct",              stop_loss_pct)
+        _apply(rsk, "profit_target_pct",          profit_target_pct)
+        _apply(rsk, "min_position_pct",           min_position_pct)
+        _apply(rsk, "max_position_pct",           max_position_pct)
+        _apply(rsk, "dte_0_max_pct",              dte_0_max_pct)
+        _apply(flt, "vix_defense_threshold",      vix_defense_threshold)
+        _apply(flt, "defense_position_mult",      defense_position_mult)
+        _apply(flt, "atr_expansion_stop_mult",    atr_expansion_stop_mult)
+        _apply(flt, "min_ev_return_pct",          min_ev_return_pct)
+        _apply(flt, "liquidity_spread_max_pct",   liquidity_spread_max_pct)
+        _apply(flt, "illiquid_extra_margin_pct",  illiquid_extra_margin_pct)
+        _apply(flt, "min_option_mid_price",       min_option_mid_price)
+        _apply(flt, "min_option_volume",          min_option_volume)
+        _apply(flt, "min_option_open_interest",   min_option_open_interest)
+        _apply(flt, "max_option_quote_age_hours", max_option_quote_age_hours)
+        _apply(flt, "min_calibrated_expectancy_pct", min_calibrated_expectancy_pct)
+        _apply(flt, "entry_slippage_pct",         entry_slippage_pct)
+        _apply(flt, "exit_slippage_pct",          exit_slippage_pct)
+        _apply(flt, "iv_crush_z_threshold",       iv_crush_z_threshold)
+        _apply(flt, "iv_crush_confidence_penalty", iv_crush_confidence_penalty)
+        if delta_target is not None:
+            _apply(tgt, "delta_optimal", delta_target)
+        if dte_target is not None:
+            _apply(tgt, "dte_optimal", dte_target)
+        _apply(rsk, "daily_loss_limit_pct",          daily_loss_limit_pct)
+        _apply(rsk, "weekly_loss_limit_pct",         weekly_loss_limit_pct)
+        _apply(rsk, "max_concurrent_positions",      max_concurrent_positions)
+        _apply(rsk, "max_positions_per_ticker",      max_positions_per_ticker)
+        _apply(rsk, "max_correlated_index_positions", max_correlated_index_positions)
+        if _changes:
+            _swap_strategy_profiles_unlocked(profile_map)
 
     # ── Build full profile snapshot ───────────────────────────────────────────
     acct = rsk.get("account_size")
@@ -2712,6 +2793,7 @@ def log_paper_trade(
     """
     trades = _load_trades()
     today = _now_et_naive()
+    risk_settings = _get_risk_settings()
 
     if action == "add":
         if not all([symbol, option_type, strike, expiration, entry_price]):

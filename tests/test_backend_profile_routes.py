@@ -93,6 +93,48 @@ class ProfileRoutesTests(unittest.TestCase):
         self.assertNotIn("unknown", self.profiles["equity"])
         self.assertEqual(self.saved_calls, [{"note": "tighten profile", "profile": "equity"}])
 
+    def test_profile_router_callable_update_path_does_not_require_mutable_profiles(self):
+        saved_calls: list[dict[str, str]] = []
+        update_calls: list[dict[str, object]] = []
+
+        def save_profile(**kwargs):
+            saved_calls.append({key: str(value) for key, value in kwargs.items()})
+
+        def get_profile(profile_type: str):
+            if profile_type != "equity":
+                raise KeyError(profile_type)
+            return {"risk": {"stop_loss_pct": 90.0}, "entry": {"min_tech_score": 55.0}}
+
+        def get_profiles():
+            return {"equity": get_profile("equity")}
+
+        def update_profile_sections(profile_type: str, updates: dict[str, object]):
+            update_calls.append({"profile": profile_type, "updates": updates})
+            return get_profile(profile_type)
+
+        app = FastAPI()
+        app.include_router(
+            create_profile_router(
+                save_profile=save_profile,
+                changelog_files={},
+                get_strategy_profile_fn=get_profile,
+                get_strategy_profiles_fn=get_profiles,
+                update_profile_sections_fn=update_profile_sections,
+            )
+        )
+        client = TestClient(app)
+        self.addCleanup(client.close)
+
+        response = client.put(
+            "/api/profile",
+            json={"type": "equity", "updates": {"entry": {"min_tech_score": 60.0}}},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"ok": True})
+        self.assertEqual(update_calls, [{"profile": "equity", "updates": {"entry": {"min_tech_score": 60.0}}}])
+        self.assertEqual(saved_calls, [{"note": "equity profile updated", "profile": "equity"}])
+
     def test_profile_router_rejects_unknown_profile_or_bad_updates(self):
         bad_profile = self.client.get("/api/profile?type=missing")
         self.assertEqual(bad_profile.status_code, 400)
