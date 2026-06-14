@@ -188,4 +188,17 @@ GENERATED_ARTIFACTS = (
         generator="scripts/generate_forward_holdout_contract.py",
         artifact_type="json",
     ),
+    GeneratedArtifact(
+        path="docs/forward-cohort-preregistration.md",
+        command="docs:forward-cohort-preregistration",
+        generator="scripts/generate_forward_cohort_preregistration.py",
+        artifact_type="markdown",
+    ),
+    GeneratedArtifact(
+        path="data/contracts/forward-cohort-preregistration.json",
+        command="docs:forward-cohort-preregistration",
+        generator="scripts/generate_forward_cohort_preregistration.py",
+        artifact_type="json",
+        runtime_use_false=False,
+    ),
 )

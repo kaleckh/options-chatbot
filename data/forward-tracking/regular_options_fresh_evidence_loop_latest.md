@@ -24,6 +24,13 @@ This report is generated from `scripts/build_regular_options_fresh_evidence_loop
 - Legacy pre-promotion rows: `22`.
 - Live policy change: `False`.
 
+## Provenance
+
+- Host: `KAESDEVICE`.
+- Commit SHA: `8f2cf209fcd70205af32e7359c2b70ae57a8d2e6`.
+- Branch: `main`.
+- Run ID: `regular_options_fresh_evidence_loop:KAESDEVICE:8f2cf209fcd7:2026-06-14T03:59:32Z`.
+
 ## Evidence Boundary
 
 - Exact realized P&L is required before promotion discussion.

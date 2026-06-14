@@ -30,6 +30,11 @@ from forward_options_ledger import build_forward_scan_snapshot, record_forward_s
 from positions_repository import create_positions_repository
 from positions_service import build_position_payload, review_open_positions
 from scripts.evidence_host_policy import evidence_host_status
+from scripts.forward_cohort_preregistration import (
+    PARKED_CANDIDATE_STATUS_REASON,
+    forward_cohort_playbook_is_parked,
+    load_forward_cohort_preregistration,
+)
 from scripts.operational_provenance import build_operational_provenance
 from scripts.scan_heartbeat import write_scan_heartbeat
 from supervised_scan import (
@@ -302,6 +307,13 @@ def _env_flag_enabled(name: str, default: bool = True) -> bool:
     if not raw:
         return default
     return raw not in {"0", "false", "no", "off"}
+
+
+def _forward_cohort_scan_blocker(playbook_id: str) -> str | None:
+    contract = load_forward_cohort_preregistration()
+    if not forward_cohort_playbook_is_parked(playbook_id, contract):
+        return None
+    return PARKED_CANDIDATE_STATUS_REASON
 
 
 def _safe_scan_playbook_allows_auto_track(playbook_id: str) -> bool:
@@ -1391,12 +1403,27 @@ def main() -> int:
 
     repository = create_positions_repository(os.getenv("DATABASE_URL"))
     reviewed_positions: list[dict[str, Any]] = _review_positions_before_scan(repository)
+    requested_playbook_id = os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID
+    cohort_blocker = _forward_cohort_scan_blocker(requested_playbook_id)
+    if cohort_blocker:
+        print(
+            "Scheduled scan blocked by forward cohort freeze: "
+            f"playbook={requested_playbook_id} reason={cohort_blocker}"
+        )
+        _write_scan_heartbeat(
+            status="failed_forward_cohort_parked_playbook",
+            scan_date=scan_date,
+            provenance=operational_provenance,
+            details={"playbook": requested_playbook_id, "reason": cohort_blocker},
+        )
+        return 1
+
     scan_result = run_supervised_scan(
         scan_func=oc.scan_daily_top_trades,
         positions_repository=repository,
         n_picks=10,
         watchlist_size=len(oc.DEFAULT_WATCHLIST),
-        playbook_id=os.getenv("OPTIONS_SCAN_PLAYBOOK") or SCAN_PLAYBOOK_FALLBACK_ID,
+        playbook_id=requested_playbook_id,
         use_recommended_policy=_env_flag_enabled("OPTIONS_SCAN_USE_RECOMMENDED_POLICY", False),
         enforce_portfolio_caps=_env_flag_enabled("OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS", True),
         truth_lane=os.getenv("OPTIONS_SCAN_TRUTH_LANE") or LIVE_SCAN_TRUTH_LANE,

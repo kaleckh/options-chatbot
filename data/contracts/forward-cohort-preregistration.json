@@ -1,0 +1,341 @@
+{
+  "byte_frozen_policy_snapshot": {
+    "lanes": {
+      "bullish_pullback_observation": {
+        "policy": {
+          "allowed_asset_classes": [
+            "index",
+            "equity"
+          ],
+          "allowed_directions": [
+            "call"
+          ],
+          "allowed_strategy_types": [
+            "vertical_spread"
+          ],
+          "allowed_tickers": [
+            "SPY",
+            "QQQ",
+            "IWM",
+            "DIA",
+            "XLK",
+            "AAPL",
+            "NVDA",
+            "MSFT",
+            "AMZN",
+            "GOOGL",
+            "META",
+            "AMD",
+            "NFLX",
+            "JPM",
+            "TSLA",
+            "DIS",
+            "T",
+            "GS",
+            "BAC",
+            "V",
+            "C",
+            "UNH",
+            "LLY",
+            "JNJ",
+            "ABBV",
+            "PFE",
+            "XOM",
+            "CVX",
+            "OXY",
+            "COP",
+            "SLB",
+            "MCD",
+            "NKE",
+            "SBUX",
+            "WMT",
+            "KO",
+            "COST",
+            "PG",
+            "PM",
+            "CAT",
+            "BA",
+            "DE",
+            "LMT",
+            "RTX",
+            "FCX",
+            "NEM",
+            "CLF",
+            "AA",
+            "LIN",
+            "AMT",
+            "PLD",
+            "SPG",
+            "WELL",
+            "EQR",
+            "COIN",
+            "MSTR",
+            "PLTR",
+            "ARM",
+            "SMCI"
+          ],
+          "block_same_ticker": true,
+          "calibration_playbook": "broad",
+          "daily_loss_limit_pct": 1.0,
+          "forced_cohort_id": "bullish_pullback_observation",
+          "forced_cohort_role": "candidate",
+          "forced_size_tier": "starter",
+          "max_concurrent_positions": 2,
+          "max_correlated_index_positions": 2,
+          "max_debit_pct_of_width": 55.0,
+          "max_fill_degradation_vs_mid_pct": 20.0,
+          "max_new_positions_per_day": 1,
+          "max_portfolio_cost_risk_pct": 10.0,
+          "max_position_cost_risk_pct": 5.0,
+          "max_regime_open_positions": 2,
+          "max_scan_picks_per_ticker": 1,
+          "max_sector_open_positions": 2,
+          "max_worst_leg_bid_ask_spread_pct": 20.0,
+          "min_quality_score": 0.0,
+          "profitability_repair_allowed_tickers": [
+            "IWM",
+            "AAPL",
+            "GOOGL",
+            "UNH",
+            "LLY",
+            "JNJ",
+            "XOM",
+            "CVX",
+            "COP",
+            "NEM"
+          ],
+          "profitability_repair_max_debit_pct_of_width": 45.0,
+          "profitability_repair_min_ret5": -2.0,
+          "required_candidate_execution_label": "executable_opra_paper_candidate",
+          "scan_allowed_directions": [
+            "call"
+          ],
+          "scan_tickers": [
+            "SPY",
+            "QQQ",
+            "IWM",
+            "DIA",
+            "XLK",
+            "AAPL",
+            "NVDA",
+            "MSFT",
+            "AMZN",
+            "GOOGL",
+            "META",
+            "AMD",
+            "NFLX",
+            "JPM",
+            "TSLA",
+            "DIS",
+            "T",
+            "GS",
+            "BAC",
+            "V",
+            "C",
+            "UNH",
+            "LLY",
+            "JNJ",
+            "ABBV",
+            "PFE",
+            "XOM",
+            "CVX",
+            "OXY",
+            "COP",
+            "SLB",
+            "MCD",
+            "NKE",
+            "SBUX",
+            "WMT",
+            "KO",
+            "COST",
+            "PG",
+            "PM",
+            "CAT",
+            "BA",
+            "DE",
+            "LMT",
+            "RTX",
+            "FCX",
+            "NEM",
+            "CLF",
+            "AA",
+            "LIN",
+            "AMT",
+            "PLD",
+            "SPG",
+            "WELL",
+            "EQR",
+            "COIN",
+            "MSTR",
+            "PLTR",
+            "ARM",
+            "SMCI"
+          ],
+          "signal_variant": "pullback_uptrend",
+          "target_dte": 35,
+          "weekly_loss_limit_pct": 2.5
+        },
+        "sha256": "e8af3d61712bd2fcecfed64c83b4a6a6e0cdc3a8a40ecfd71ea11031da1eecd7",
+        "source": "supervised_scan.SCAN_PLAYBOOKS['bullish_pullback_observation']"
+      },
+      "volatility_expansion_observation": {
+        "policy": {
+          "allowed_asset_classes": [
+            "index"
+          ],
+          "allowed_directions": [
+            "call",
+            "put"
+          ],
+          "allowed_strategy_types": [
+            "vertical_spread"
+          ],
+          "allowed_tickers": [
+            "SPY",
+            "QQQ",
+            "IWM",
+            "DIA"
+          ],
+          "block_same_ticker": true,
+          "calibration_playbook": "broad",
+          "daily_loss_limit_pct": 1.0,
+          "forced_cohort_id": "volatility_expansion_observation",
+          "forced_cohort_role": "candidate",
+          "forced_size_tier": "starter",
+          "max_concurrent_positions": 2,
+          "max_correlated_index_positions": 2,
+          "max_debit_pct_of_width": 55.0,
+          "max_fill_degradation_vs_mid_pct": 6.0,
+          "max_new_positions_per_day": 1,
+          "max_portfolio_cost_risk_pct": 12.0,
+          "max_position_cost_risk_pct": 5.0,
+          "max_regime_open_positions": 2,
+          "max_scan_picks_per_ticker": 1,
+          "max_sector_open_positions": 1,
+          "max_worst_leg_bid_ask_spread_pct": 2.0,
+          "min_quality_score": 70.0,
+          "target_dte": 14,
+          "weekly_loss_limit_pct": 2.5
+        },
+        "sha256": "55e102c420e81c81baf8fd374b0c9c6c78c9acca349495f077b2877616b8657a",
+        "source": "supervised_scan.SCAN_PLAYBOOKS['volatility_expansion_observation']"
+      }
+    },
+    "snapshot_format": "canonical_json_sha256_with_embedded_policy_payloads",
+    "source_file": "supervised_scan.py",
+    "source_file_sha256": "bb9bc4324113337a9669dfb57acb459464deac4cb4174be41dbafd358d2fcaa1"
+  },
+  "cohort": {
+    "date_basis": "candidate_entry_date_after_freeze_date",
+    "eval_date": "2026-07-28",
+    "freeze_date": "2026-06-14",
+    "fresh_rows_collected": {
+      "bullish_pullback_observation": 0,
+      "volatility_expansion_observation": 0
+    },
+    "frozen": true,
+    "market_day_count": 30,
+    "timezone": "America/New_York"
+  },
+  "contract_id": "forward-cohort-preregistration",
+  "generated_by": "scripts/generate_forward_cohort_preregistration.py",
+  "kill_criteria": {
+    "per_frozen_lane": [
+      "profit_factor_below_1_0_over_at_least_30_fresh_forward_exact_realized_rows",
+      "fewer_than_10_fresh_forward_exact_realized_rows_by_eval_date_is_operational_kill_fix_funnel_and_refreeze"
+    ],
+    "program_negative_success": "If both frozen lanes receive evidence-backed kill verdicts and the credit-side incubator study reaches a replay-backed verdict, document the definitive negative as success."
+  },
+  "lanes": [
+    {
+      "cohort_role": "frozen_regular_lane",
+      "guardrails_source": "supervised_scan.SCAN_PLAYBOOKS['volatility_expansion_observation']",
+      "label": "Volatility Expansion Observation",
+      "lane_id": "volatility_expansion_observation",
+      "policy_snapshot_sha256": "55e102c420e81c81baf8fd374b0c9c6c78c9acca349495f077b2877616b8657a",
+      "symbols": [
+        "SPY",
+        "QQQ",
+        "IWM",
+        "DIA"
+      ]
+    },
+    {
+      "cohort_role": "clean_bullish_pullback_carrier_set",
+      "guardrails_source": "supervised_scan.SCAN_PLAYBOOKS['bullish_pullback_observation'] plus supervised_scan.BULLISH_PULLBACK_PROFIT_REPAIR_KEEP_TICKERS",
+      "label": "Bullish Pullback Carrier Set",
+      "lane_id": "bullish_pullback_observation",
+      "policy_snapshot_sha256": "e8af3d61712bd2fcecfed64c83b4a6a6e0cdc3a8a40ecfd71ea11031da1eecd7",
+      "symbols": [
+        "IWM",
+        "AAPL",
+        "GOOGL",
+        "UNH",
+        "LLY",
+        "JNJ",
+        "XOM",
+        "CVX",
+        "COP",
+        "NEM"
+      ]
+    }
+  ],
+  "last_updated": "2026-06-14",
+  "non_goals": [
+    "does_not_lower_existing_promotion_bars",
+    "does_not_change_scanner_guardrails_for_frozen_lanes",
+    "does_not_submit_broker_orders",
+    "does_not_count_research_backfill_or_synthetic_pnl_as_forward_proof",
+    "does_not_consume_protected_holdout_before_phase_5_champion_final_eval"
+  ],
+  "promotion_criteria": {
+    "additional_forward_bars": [
+      "at_least_30_fresh_forward_exact_realized_pnl_rows_after_freeze_date_per_lane",
+      "bootstrap_pf_lower_bound_5pct_above_1_0_on_forward_cohort",
+      "regime_robust_true",
+      "zero_winner_damage_findings"
+    ],
+    "evidence_allowed": "fresh_forward_exact_realized_opra_nbbo_rows_only",
+    "evidence_not_allowed": [
+      "research_backfill",
+      "midpoint",
+      "daily_eod",
+      "stale_snapshot",
+      "manual_mark",
+      "synthetic_pnl"
+    ],
+    "existing_promotion_bars": "unchanged_never_lowered"
+  },
+  "runtime_use": true,
+  "scope": "regular_options_forward_cohort",
+  "source_evidence": [
+    "docs/DECISIONS.md 2026-06-09 regular strategy direction",
+    "docs/lane-lab-lanes.md active bullish pullback extensions",
+    "docs/bullish-pullback-ticker-audit-2026-05-29.md current keep queue",
+    "data/forward-tracking/lane_promotion_state_latest.json",
+    "data/contracts/forward-holdout-contract.json"
+  ],
+  "status": "active",
+  "suspension": {
+    "chores_enabled": false,
+    "parked_regular_lane_count": 11,
+    "parked_regular_lanes": [
+      "bearish_defensive",
+      "bearish_index_put_observation",
+      "bullish_momentum",
+      "quality90_debit55_canary",
+      "range_breakout_observation",
+      "regular_bearish_put_primary",
+      "short_term",
+      "speculative",
+      "swing",
+      "tracked_winner_observation",
+      "tracked_winner_primary"
+    ],
+    "parked_status": "parked_outside_forward_cohort",
+    "readback_line": "All non-cohort regular lanes are parked outside the frozen forward cohort: no scans, no chores, and no promotion work until the cohort is evaluated or explicitly refrozen.",
+    "scans_enabled": false,
+    "status": "active"
+  },
+  "version": 1
+}

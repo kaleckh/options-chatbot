@@ -22,6 +22,16 @@ from scripts.candidate_lifecycle import (
     STATUS_PENDING_PAPER_EXACT_EVIDENCE,
     STATUS_PENDING_LIVE_VALIDATION,
 )
+from scripts.forward_cohort_preregistration import (
+    DEFAULT_FORWARD_COHORT_PREREGISTRATION,
+    PARKED_CANDIDATE_STATUS_REASON,
+    PARKED_PROMOTION_STATE,
+    forward_cohort_is_active,
+    forward_cohort_lane_ids,
+    forward_cohort_summary,
+    load_forward_cohort_preregistration,
+    parked_regular_lane_ids,
+)
 from scripts.lane_profitability_gate import (
     DEFAULT_LANE_GATE_MAX_AGE_HOURS,
     DEFAULT_LANE_GATE_REPORT,
@@ -53,6 +63,7 @@ PROMOTION_STATE_DIAGNOSTIC = "diagnostic"
 PROMOTION_STATE_PAPER_PROBATION = "paper_probation"
 PROMOTION_STATE_LIVE_VALIDATION = "live_validation"
 PROMOTION_STATE_AUTO_TRACK = "auto_track"
+PROMOTION_STATE_PARKED = PARKED_PROMOTION_STATE
 
 LANE_PROMOTION_DIAGNOSTIC_STATUS = STATUS_DIAGNOSTIC_LANE_PROMOTION_STATE
 LANE_PROMOTION_PAPER_ONLY_STATUS = STATUS_PAPER_LANE_PROMOTION_STATE
@@ -430,6 +441,7 @@ def build_lane_promotion_state(
     fresh_evidence: dict[str, Any] | None = None,
     open_risk: dict[str, Any] | None = None,
     circuit_breaker: dict[str, Any] | None = None,
+    forward_cohort: dict[str, Any] | None = None,
     generated_at_utc: str | None = None,
     now_utc: datetime | None = None,
 ) -> dict[str, Any]:
@@ -454,13 +466,19 @@ def build_lane_promotion_state(
     open_risk_governor_blockers = [
         str(item) for item in list(open_risk_governor.get("blockers") or []) if str(item).strip()
     ]
+    cohort_active = forward_cohort_is_active(forward_cohort)
+    cohort_lane_ids = set(forward_cohort_lane_ids(forward_cohort))
+    cohort_parked_lane_ids = set(parked_regular_lane_ids(forward_cohort))
 
     state_rows: list[dict[str, Any]] = []
     for playbook_id in sorted(SCAN_PLAYBOOKS):
         lane = _norm(playbook_id).lower()
         playbook = SCAN_PLAYBOOKS[playbook_id]
-        tracking_mode = scan_playbook_position_tracking_mode(lane)
-        fresh_validation = scan_playbook_fresh_live_validation_enabled(lane)
+        configured_tracking_mode = scan_playbook_position_tracking_mode(lane)
+        configured_fresh_validation = scan_playbook_fresh_live_validation_enabled(lane)
+        parked_by_cohort = bool(cohort_active and lane in cohort_parked_lane_ids and lane not in cohort_lane_ids)
+        tracking_mode = "disabled" if parked_by_cohort else configured_tracking_mode
+        fresh_validation = False if parked_by_cohort else configured_fresh_validation
         is_regular_auto_track = (
             lane != AI_COMMODITY_INFRA_OBSERVATION_COHORT_ID
             and tracking_mode == POSITION_TRACKING_AUTO_TRACK
@@ -618,7 +636,13 @@ def build_lane_promotion_state(
         failed_gate_ids = [str(item["gate"]) for item in gates if not item.get("passed")]
         failed_blockers = [str(item.get("blocker")) for item in gates if item.get("blocker")]
 
-        if not is_regular_auto_track or not bool(lane_gate_health.get("usable")) or not lane_gate_present or not lane_profitable:
+        if parked_by_cohort:
+            promotion_state = PROMOTION_STATE_PARKED
+            candidate_status = LANE_PROMOTION_DIAGNOSTIC_STATUS
+            status_reason = PARKED_CANDIDATE_STATUS_REASON
+            failed_gate_ids = sorted(set([*failed_gate_ids, "forward_cohort_membership"]))
+            failed_blockers = sorted(set([*failed_blockers, PARKED_CANDIDATE_STATUS_REASON]))
+        elif not is_regular_auto_track or not bool(lane_gate_health.get("usable")) or not lane_gate_present or not lane_profitable:
             promotion_state = PROMOTION_STATE_DIAGNOSTIC
             candidate_status = LANE_PROMOTION_DIAGNOSTIC_STATUS
             status_reason = failed_blockers[0] if failed_blockers else "lane_not_promotable"
@@ -640,6 +664,19 @@ def build_lane_promotion_state(
                 "candidate_status_reason": status_reason,
                 "tracking_mode": tracking_mode,
                 "fresh_live_validation_enabled": fresh_validation,
+                "configured_tracking_mode": configured_tracking_mode,
+                "configured_fresh_live_validation_enabled": configured_fresh_validation,
+                "forward_cohort": {
+                    "active": cohort_active,
+                    "cohort_member": lane in cohort_lane_ids,
+                    "parked": parked_by_cohort,
+                    "freeze_date": (forward_cohort or {}).get("cohort", {}).get("freeze_date")
+                    if isinstance((forward_cohort or {}).get("cohort"), dict)
+                    else None,
+                    "eval_date": (forward_cohort or {}).get("cohort", {}).get("eval_date")
+                    if isinstance((forward_cohort or {}).get("cohort"), dict)
+                    else None,
+                },
                 "lane_gate_status": gate_status or None,
                 "lane_gate_metrics": {
                     "priced": gate_metrics.get("priced"),
@@ -669,6 +706,7 @@ def build_lane_promotion_state(
                 PROMOTION_STATE_PAPER_PROBATION,
                 PROMOTION_STATE_LIVE_VALIDATION,
                 PROMOTION_STATE_AUTO_TRACK,
+                PROMOTION_STATE_PARKED,
             ],
             "default_for_profitable_historical_lane": PROMOTION_STATE_PAPER_PROBATION,
             "live_validation_requires": [
@@ -685,6 +723,10 @@ def build_lane_promotion_state(
             "auto_track_requires": [
                 "live_validation state",
                 "separate explicit release review before broker/live tracking semantics change",
+            ],
+            "parked_requires": [
+                "active forward-cohort preregistration",
+                "regular lane outside frozen cohort membership",
             ],
         },
         "inputs": {
@@ -703,6 +745,7 @@ def build_lane_promotion_state(
             "circuit_breaker_generated_at_utc": (circuit_breaker or {}).get("generated_at_utc")
             if isinstance(circuit_breaker, dict)
             else None,
+            "forward_cohort_preregistration_path": _rel(DEFAULT_FORWARD_COHORT_PREREGISTRATION),
         },
         "input_health": {
             "lane_profitability_gate": lane_gate_health,
@@ -716,6 +759,7 @@ def build_lane_promotion_state(
                 "live_entry_allowed": bool(open_risk_governor.get("live_entry_allowed")),
             },
             "current_policy_circuit_breaker_loaded": isinstance(circuit_breaker, dict),
+            "forward_cohort": forward_cohort_summary(forward_cohort),
         },
         "summary": {
             "lane_count": len(state_rows),
@@ -724,11 +768,13 @@ def build_lane_promotion_state(
             "live_validation_lane_count": state_counts.get(PROMOTION_STATE_LIVE_VALIDATION, 0),
             "auto_track_lane_count": state_counts.get(PROMOTION_STATE_AUTO_TRACK, 0),
             "paper_probation_lane_count": state_counts.get(PROMOTION_STATE_PAPER_PROBATION, 0),
+            "parked_lane_count": state_counts.get(PROMOTION_STATE_PARKED, 0),
             "diagnostic_lane_count": state_counts.get(PROMOTION_STATE_DIAGNOSTIC, 0),
             "live_policy_change": False,
             "global_live_exact_negative_count": global_live_exact_negative,
             "open_risk_governor_status": open_risk_governor_status or None,
             "open_risk_governor_blockers": open_risk_governor_blockers,
+            "forward_cohort": forward_cohort_summary(forward_cohort),
         },
         "lane_states": {row["playbook_id"]: row for row in state_rows},
         "lane_state_rows": state_rows,
@@ -831,6 +877,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Candidate status counts: `{json.dumps(summary['candidate_status_counts'], sort_keys=True)}`.",
         f"- Live-validation lanes: `{summary['live_validation_lane_count']}`.",
         f"- Auto-track lanes: `{summary['auto_track_lane_count']}`.",
+        f"- Parked lanes: `{summary.get('parked_lane_count', 0)}`.",
         f"- Current live-exact negative open rows: `{summary['global_live_exact_negative_count']}`.",
         f"- Live policy change: `{summary['live_policy_change']}`.",
         "",
@@ -840,12 +887,32 @@ def render_markdown(report: dict[str, Any]) -> str:
         "- `paper_probation`: the lane is historically profitable enough to study, but still lacks fresh walk-forward/paper/risk clearance.",
         "- `live_validation`: the lane may enter fresh validation; this still is not broker execution by itself.",
         "- `auto_track`: reserved for an explicit future release review after live-validation gates pass.",
+        "- `parked`: the lane is outside the frozen forward cohort; readbacks disable scans and chores for that lane without changing the frozen cohort proof bars.",
         "",
-        "## Lane States",
-        "",
-        "| Lane | State | Candidate status | PF | Avg P&L % | Fresh ready | Exact realized | Main blockers |",
-        "|---|---:|---:|---:|---:|---:|---:|---|",
     ]
+    cohort = summary.get("forward_cohort") if isinstance(summary.get("forward_cohort"), dict) else {}
+    if cohort.get("active"):
+        lines.extend(
+            [
+                "",
+                "## Forward Cohort Freeze",
+                "",
+                f"- Freeze date: `{cohort.get('freeze_date')}`.",
+                f"- Eval date: `{cohort.get('eval_date')}`.",
+                f"- Cohort lanes: `{json.dumps(cohort.get('lane_ids') or [])}`.",
+                f"- Parked regular lanes: `{cohort.get('parked_regular_lane_count')}`.",
+                "- Parked-status line: All non-cohort regular lanes are parked outside the frozen forward cohort: no scans, no chores, and no promotion work until the cohort is evaluated or explicitly refrozen.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Lane States",
+            "",
+            "| Lane | State | Candidate status | PF | Avg P&L % | Fresh ready | Exact realized | Main blockers |",
+            "|---|---:|---:|---:|---:|---:|---:|---|",
+        ]
+    )
     for row in report["lane_state_rows"]:
         metrics = row.get("lane_gate_metrics") if isinstance(row.get("lane_gate_metrics"), dict) else {}
         fresh = row.get("fresh_evidence") if isinstance(row.get("fresh_evidence"), dict) else {}
@@ -905,6 +972,7 @@ def build_from_paths(
     fresh_evidence_path: Path = DEFAULT_FRESH_EVIDENCE_LOOP,
     open_risk_path: Path = DEFAULT_OPEN_RISK_REPORT,
     circuit_breaker_path: Path = DEFAULT_CIRCUIT_BREAKER,
+    forward_cohort_path: Path = DEFAULT_FORWARD_COHORT_PREREGISTRATION,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     return build_lane_promotion_state(
@@ -913,6 +981,7 @@ def build_from_paths(
         fresh_evidence=_load_json(fresh_evidence_path),
         open_risk=_load_json(open_risk_path),
         circuit_breaker=_load_json(circuit_breaker_path),
+        forward_cohort=load_forward_cohort_preregistration(forward_cohort_path),
         generated_at_utc=generated_at_utc,
     )
 
@@ -924,6 +993,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fresh-evidence-loop", type=Path, default=DEFAULT_FRESH_EVIDENCE_LOOP)
     parser.add_argument("--open-risk", type=Path, default=DEFAULT_OPEN_RISK_REPORT)
     parser.add_argument("--circuit-breaker", type=Path, default=DEFAULT_CIRCUIT_BREAKER)
+    parser.add_argument("--forward-cohort", type=Path, default=DEFAULT_FORWARD_COHORT_PREREGISTRATION)
     parser.add_argument("--output-json", type=Path, default=DEFAULT_LANE_PROMOTION_REPORT)
     parser.add_argument("--output-markdown", type=Path, default=DEFAULT_LANE_PROMOTION_MARKDOWN)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
@@ -937,6 +1007,7 @@ def main(argv: list[str] | None = None) -> int:
         fresh_evidence_path=args.fresh_evidence_loop,
         open_risk_path=args.open_risk,
         circuit_breaker_path=args.circuit_breaker,
+        forward_cohort_path=args.forward_cohort,
     )
     if not args.no_write:
         write_outputs(

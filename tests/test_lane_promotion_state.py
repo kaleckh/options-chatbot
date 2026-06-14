@@ -9,6 +9,7 @@ from scripts.lane_promotion_state import (
     PROMOTION_STATE_DIAGNOSTIC,
     PROMOTION_STATE_LIVE_VALIDATION,
     PROMOTION_STATE_PAPER_PROBATION,
+    PROMOTION_STATE_PARKED,
     build_lane_promotion_state,
     candidate_promotion_decision,
     lane_promotion_report_health,
@@ -117,6 +118,26 @@ def _open_risk(
     return payload
 
 
+def _forward_cohort() -> dict[str, object]:
+    return {
+        "contract_id": "forward-cohort-preregistration",
+        "status": "active",
+        "cohort": {
+            "frozen": True,
+            "freeze_date": "2026-06-14",
+            "eval_date": "2026-07-28",
+        },
+        "lanes": [
+            {"lane_id": "volatility_expansion_observation"},
+            {"lane_id": "bullish_pullback_observation"},
+        ],
+        "suspension": {
+            "parked_regular_lanes": ["swing"],
+            "parked_status": "parked_outside_forward_cohort",
+        },
+    }
+
+
 class LanePromotionStateTests(unittest.TestCase):
     def test_profitable_lane_stays_paper_probation_without_forward_depth(self) -> None:
         report = build_lane_promotion_state(
@@ -221,6 +242,41 @@ class LanePromotionStateTests(unittest.TestCase):
         self.assertIn("fresh_paper_cohort_insufficient", volatility["blockers"])
         self.assertEqual(volatility["fresh_evidence"]["legacy_pre_promotion_state_gate_count"], 20)
         self.assertEqual(volatility["fresh_evidence"]["exact_realized_pnl_count"], 0)
+
+    def test_forward_cohort_parks_regular_lanes_outside_frozen_membership(self) -> None:
+        report = build_lane_promotion_state(
+            lane_gate_report=_lane_gate_report(),
+            filter_matrix=_filter_matrix(later_rows=12),
+            fresh_evidence=_fresh_evidence(exact_rows=20, ready_rows=10),
+            open_risk=_open_risk(blocked=False),
+            circuit_breaker={"generated_at_utc": "2026-06-05T14:25:00Z", "lane_routes": []},
+            forward_cohort=_forward_cohort(),
+            generated_at_utc="2026-06-05T14:30:00Z",
+            now_utc=NOW,
+        )
+
+        swing = report["lane_states"]["swing"]
+        volatility = report["lane_states"]["volatility_expansion_observation"]
+        self.assertEqual(swing["promotion_state"], PROMOTION_STATE_PARKED)
+        self.assertEqual(swing["candidate_status"], LANE_PROMOTION_DIAGNOSTIC_STATUS)
+        self.assertEqual(swing["candidate_status_reason"], "parked_outside_forward_cohort")
+        self.assertEqual(swing["tracking_mode"], "disabled")
+        self.assertFalse(swing["fresh_live_validation_enabled"])
+        self.assertTrue(swing["forward_cohort"]["parked"])
+        self.assertIn("forward_cohort_membership", swing["failed_promotion_gates"])
+        self.assertEqual(volatility["promotion_state"], PROMOTION_STATE_LIVE_VALIDATION)
+        self.assertFalse(volatility["forward_cohort"]["parked"])
+        self.assertTrue(report["summary"]["forward_cohort"]["active"])
+        self.assertEqual(report["summary"]["parked_lane_count"], 1)
+
+        decision = candidate_promotion_decision(
+            playbook_id="swing",
+            report=report,
+            require_fresh_report=True,
+            now_utc=NOW,
+        )
+        self.assertFalse(decision["allowed"])
+        self.assertEqual(decision["candidate_status_reason"], "parked_outside_forward_cohort")
 
     def test_promotion_report_health_fails_closed_when_missing(self) -> None:
         health = lane_promotion_report_health(None, now_utc=NOW)

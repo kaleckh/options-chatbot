@@ -17,11 +17,17 @@
     "1.15": "done"
   },
   "cohort": {
-    "frozen": false,
-    "freeze_date": null,
-    "eval_date": null,
-    "lanes": [],
-    "fresh_rows_collected": {}
+    "frozen": true,
+    "freeze_date": "2026-06-14",
+    "eval_date": "2026-07-28",
+    "lanes": [
+      "volatility_expansion_observation",
+      "bullish_pullback_observation"
+    ],
+    "fresh_rows_collected": {
+      "volatility_expansion_observation": 0,
+      "bullish_pullback_observation": 0
+    }
   },
   "incubator": {
     "active_study": "none",
@@ -30,6 +36,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.15 completed broad intraday quote-coverage repair. Active artifact moved from stale 20.7% coverage to 86.0% after trusted ThetaData OPRA/NBBO exit-quote imports; exact-fill planning now has 0 remaining missing-exit targets. Remaining unpriced rows are replay-selection blockers, not quote-provider gaps."
+    "work": "Phase 2 froze the forward cohort: volatility_expansion_observation plus bullish_pullback_observation carrier symbols, freeze_date 2026-06-14, eval_date 2026-07-28, 0 fresh exact realized P&L rows per frozen lane at freeze. All other regular lanes are parked outside the cohort; lane promotion, audit chores, scheduled scan logging, and pending validation now fail closed or skip parked lanes."
   }
 }

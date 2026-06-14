@@ -996,12 +996,90 @@
       "stale_detection": "owner generator --check in npm run verify:docs",
       "trust_role": "machine_readable_check",
       "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "markdown",
+      "check_command": "uv run --locked python scripts/generate_forward_cohort_preregistration.py --check",
+      "generator": "scripts/generate_forward_cohort_preregistration.py",
+      "hand_edit_allowed": false,
+      "id": "docs_forward_cohort_preregistration_md",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:forward-cohort-preregistration",
+      "owner_docs": [
+        "docs/forward-cohort-preregistration.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/DECISIONS.md"
+      ],
+      "path": "docs/forward-cohort-preregistration.md",
+      "runtime_posture": "non_runtime_metadata",
+      "runtime_use": false,
+      "source_inputs": [
+        "scripts/generate_forward_cohort_preregistration.py",
+        "scripts/forward_cohort_preregistration.py",
+        "scripts/lane_promotion_state.py",
+        "scripts/audit_regular_guardrail_starvation.py",
+        "scripts/audit_zero_pick_days_all_lanes.py",
+        "supervised_scan.py",
+        "docs/lane-lab-lanes.md",
+        "docs/bullish-pullback-ticker-audit-2026-05-29.md"
+      ],
+      "source_of_truth_for_runtime": false,
+      "source_of_truth_role": "derived snapshot from generator source inputs",
+      "stale_action": "Do not hand-edit; run npm run docs:forward-cohort-preregistration. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "generated_readability_doc",
+      "verify_docs_covered": true
+    },
+    {
+      "artifact_type": "json",
+      "check_command": "uv run --locked python scripts/generate_forward_cohort_preregistration.py --check",
+      "generator": "scripts/generate_forward_cohort_preregistration.py",
+      "hand_edit_allowed": false,
+      "id": "data_contracts_forward_cohort_preregistration_json",
+      "must_not_claim": [
+        "independent route behavior",
+        "auth semantics",
+        "proof/scanner/replay semantics",
+        "database schema",
+        "frontend behavior beyond declared runtime projection"
+      ],
+      "owner_command": "docs:forward-cohort-preregistration",
+      "owner_docs": [
+        "docs/forward-cohort-preregistration.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/DECISIONS.md"
+      ],
+      "path": "data/contracts/forward-cohort-preregistration.json",
+      "runtime_posture": "generated_runtime_cohort_freeze_policy",
+      "runtime_use": true,
+      "source_inputs": [
+        "scripts/generate_forward_cohort_preregistration.py",
+        "scripts/forward_cohort_preregistration.py",
+        "scripts/lane_promotion_state.py",
+        "scripts/audit_regular_guardrail_starvation.py",
+        "scripts/audit_zero_pick_days_all_lanes.py",
+        "supervised_scan.py",
+        "docs/lane-lab-lanes.md",
+        "docs/bullish-pullback-ticker-audit-2026-05-29.md"
+      ],
+      "source_of_truth_for_runtime": true,
+      "source_of_truth_role": "generated runtime cohort-freeze contract consumed by lane promotion and all-lanes scan selectors",
+      "stale_action": "Do not hand-edit; run npm run docs:forward-cohort-preregistration. Trust the source inputs and generator over stale output.",
+      "stale_detection": "owner generator --check in npm run verify:docs",
+      "trust_role": "machine_readable_check",
+      "verify_docs_covered": true
     }
   ],
   "non_goals": [
     "Does not govern volatile research runs, generated market-data outputs, DB sidecars, build output, archives, or dated evidence reports.",
     "Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
-    "Does not promote generated snapshots into runtime policy unless the artifact is already runtime-consumed generated code.",
+    "Does not promote generated snapshots into runtime policy unless the artifact is an explicitly allowlisted runtime-consumed generated code or contract artifact.",
     "Does not use timestamps, mtimes, content hashes, or network freshness checks."
   ],
   "runtime_use": false,
@@ -1045,6 +1123,16 @@
       "docs/architecture-best-practices.md",
       "docs/WORKLOG.md",
       "package.json"
+    ],
+    "scripts/generate_forward_cohort_preregistration.py": [
+      "scripts/generate_forward_cohort_preregistration.py",
+      "scripts/forward_cohort_preregistration.py",
+      "scripts/lane_promotion_state.py",
+      "scripts/audit_regular_guardrail_starvation.py",
+      "scripts/audit_zero_pick_days_all_lanes.py",
+      "supervised_scan.py",
+      "docs/lane-lab-lanes.md",
+      "docs/bullish-pullback-ticker-audit-2026-05-29.md"
     ],
     "scripts/generate_forward_holdout_contract.py": [
       "scripts/generate_forward_holdout_contract.py",

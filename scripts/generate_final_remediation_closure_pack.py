@@ -12,7 +12,10 @@ GENERATOR = "scripts/generate_final_remediation_closure_pack.py"
 JSON_OUTPUT_PATH = ROOT / "data" / "contracts" / "final-remediation-closure-pack.json"
 MD_OUTPUT_PATH = ROOT / "docs" / "final-remediation-closure-pack.md"
 
-EXPECTED_RUNTIME_GENERATED_ARTIFACTS = ("src/lib/generated/proofEvidenceContract.ts",)
+EXPECTED_RUNTIME_GENERATED_ARTIFACTS = (
+    "data/contracts/forward-cohort-preregistration.json",
+    "src/lib/generated/proofEvidenceContract.ts",
+)
 DISCOVERY_TARGETS = (
     "docs/index.md",
     "docs/living-docs-hygiene.md",

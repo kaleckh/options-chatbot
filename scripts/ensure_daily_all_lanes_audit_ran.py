@@ -33,6 +33,10 @@ from scripts.pending_audit_candidates import (
     DUPLICATE_EXACT_SPREAD_PAPER_STATUS,
     append_pending_candidate_rows,
 )
+from scripts.forward_cohort_preregistration import (
+    load_forward_cohort_preregistration,
+    scan_enabled_playbook_ids,
+)
 from scripts.candidate_lifecycle import (
     STATUS_DIAGNOSTIC_UNAPPROVED_LANE,
     STATUS_PENDING_LIVE_VALIDATION,
@@ -85,7 +89,13 @@ def _audit_is_complete_for_date(scan_date: date, *, path: Path = LATEST_AUDIT_JS
     overall = payload.get("overall") if isinstance(payload.get("overall"), dict) else {}
     errors = list(payload.get("errors") or [])
     generated = _generated_date(payload.get("generated_at_utc"))
-    expected_playbooks = len(SCAN_PLAYBOOKS)
+    expected_playbooks = len(
+        scan_enabled_playbook_ids(
+            SCAN_PLAYBOOKS,
+            contract=load_forward_cohort_preregistration(),
+            include_commodity=True,
+        )
+    )
     completed = int(overall.get("playbooks_completed") or 0)
     requested = int(overall.get("playbooks_requested") or 0)
     watchlist_size = int(settings.get("watchlist_size") or 0)

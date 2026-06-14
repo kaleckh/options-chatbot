@@ -16,6 +16,11 @@ if str(ROOT) not in sys.path:
 from supervised_scan import get_scan_playbook, get_scan_playbooks
 
 from scripts import audit_zero_pick_days_current_main_lane as single_lane_audit
+from scripts.forward_cohort_preregistration import (
+    forward_cohort_is_active,
+    load_forward_cohort_preregistration,
+    scan_enabled_playbook_ids,
+)
 from scripts.quote_evidence_readback import quote_evidence_readback
 
 
@@ -143,10 +148,31 @@ def selected_playbook_ids(args: argparse.Namespace) -> list[str]:
     available_set = set(available)
     requested = _split_csv(getattr(args, "playbooks", None))
     excluded = set(_split_csv(getattr(args, "exclude_playbooks", None)))
-    selected = requested or available
+    include_commodity = bool(getattr(args, "include_commodity", False))
+    include_parked = bool(getattr(args, "include_parked_playbooks", False))
+    cohort_contract = load_forward_cohort_preregistration()
+    default_enabled = (
+        scan_enabled_playbook_ids(
+            available,
+            contract=cohort_contract,
+            include_commodity=include_commodity,
+            include_parked=include_parked,
+        )
+        if forward_cohort_is_active(cohort_contract)
+        else available
+    )
+    selected = requested or default_enabled
     unknown = sorted({playbook_id for playbook_id in [*selected, *excluded] if playbook_id not in available_set})
     if unknown:
         raise ValueError(f"Unknown scan playbook(s): {', '.join(unknown)}. Available: {', '.join(available)}")
+    if requested and forward_cohort_is_active(cohort_contract) and not include_parked:
+        allowed = set(default_enabled)
+        parked_requested = sorted(playbook_id for playbook_id in selected if playbook_id not in allowed)
+        if parked_requested:
+            raise ValueError(
+                "Forward cohort freeze parks these playbooks; pass --include-parked-playbooks only for explicit "
+                f"diagnostic override: {', '.join(parked_requested)}"
+            )
     return [playbook_id for playbook_id in selected if playbook_id not in excluded]
 
 
@@ -257,6 +283,8 @@ def build_all_lanes_audit(args: argparse.Namespace) -> dict[str, Any]:
             "scope": args.scope,
             "playbooks": playbook_ids,
             "excluded_playbooks": _split_csv(args.exclude_playbooks),
+            "forward_cohort_preregistration_active": forward_cohort_is_active(load_forward_cohort_preregistration()),
+            "include_parked_playbooks": bool(getattr(args, "include_parked_playbooks", False)),
             "truth_lane": args.truth_lane,
             "pricing_lane": args.pricing_lane,
             "source_labels": [
@@ -291,6 +319,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Audit zero-pick days against every runnable supervised scan lane.")
     parser.add_argument("--playbooks", help="Comma-separated scan playbook IDs. Omit to audit all scan playbooks.")
     parser.add_argument("--exclude-playbooks", help="Comma-separated scan playbook IDs to skip.")
+    parser.add_argument("--include-commodity", action="store_true", help="Include the separate AI commodity playbook.")
+    parser.add_argument(
+        "--include-parked-playbooks",
+        action="store_true",
+        help="Explicit diagnostic override for lanes parked by the forward cohort preregistration.",
+    )
     parser.add_argument("--scope", choices=["zero_any", "main_zero", "zero_any_or_main_zero"], default="zero_any_or_main_zero")
     parser.add_argument("--date-from")
     parser.add_argument("--date-to")

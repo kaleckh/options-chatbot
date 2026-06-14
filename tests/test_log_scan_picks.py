@@ -137,6 +137,26 @@ def _lane_promotion_report(
     }
 
 
+def _active_forward_cohort() -> dict:
+    return {
+        "contract_id": "forward-cohort-preregistration",
+        "status": "active",
+        "cohort": {
+            "frozen": True,
+            "freeze_date": "2026-06-14",
+            "eval_date": "2026-07-28",
+        },
+        "lanes": [
+            {"lane_id": "volatility_expansion_observation"},
+            {"lane_id": "bullish_pullback_observation"},
+        ],
+        "suspension": {
+            "parked_regular_lanes": ["short_term"],
+            "parked_status": "parked_outside_forward_cohort",
+        },
+    }
+
+
 class LogScanPicksTests(unittest.TestCase):
     def setUp(self):
         self._scan_host_policy_patch = patch.object(
@@ -153,6 +173,54 @@ class LogScanPicksTests(unittest.TestCase):
         )
         self._scan_host_policy_patch.start()
         self.addCleanup(self._scan_host_policy_patch.stop)
+        self._forward_cohort_patch = patch.object(
+            log_scan_picks,
+            "load_forward_cohort_preregistration",
+            return_value=None,
+        )
+        self._forward_cohort_patch.start()
+        self.addCleanup(self._forward_cohort_patch.stop)
+
+    def test_main_blocks_scheduled_scan_for_parked_forward_cohort_lane(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            log_file = log_dir / "scan_picks.jsonl"
+            fake_mds = types.SimpleNamespace(_MEMORY_CACHE={})
+            fake_oc = types.SimpleNamespace(
+                DEFAULT_WATCHLIST=["SPY"],
+                _market_is_open=lambda: True,
+                scan_daily_top_trades=lambda **kwargs: [_make_pick("SPY", debit=5.0)],
+            )
+            output = StringIO()
+
+            with (
+                patch.object(log_scan_picks, "LOG_DIR", log_dir),
+                patch.object(log_scan_picks, "LOG_FILE", log_file),
+                patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
+                patch.object(log_scan_picks, "load_local_env"),
+                patch.object(
+                    log_scan_picks,
+                    "create_positions_repository",
+                    return_value=_UnavailableRepository(),
+                ),
+                patch.object(log_scan_picks, "load_forward_cohort_preregistration", return_value=_active_forward_cohort()),
+                patch.object(log_scan_picks, "run_supervised_scan") as run_supervised_scan,
+                patch.dict(log_scan_picks.os.environ, {"OPTIONS_SCAN_PLAYBOOK": "short_term"}),
+                patch.dict(
+                    sys.modules,
+                    {
+                        "market_data_service": fake_mds,
+                        "options_chatbot": fake_oc,
+                    },
+                ),
+                redirect_stdout(output),
+            ):
+                exit_code = log_scan_picks.main()
+
+            self.assertEqual(exit_code, 1)
+            self.assertFalse(run_supervised_scan.called)
+            self.assertFalse(log_file.exists())
+            self.assertIn("Scheduled scan blocked by forward cohort freeze", output.getvalue())
 
     def test_replace_scan_rows_rewrites_only_requested_date(self):
         with tempfile.TemporaryDirectory() as tmpdir:

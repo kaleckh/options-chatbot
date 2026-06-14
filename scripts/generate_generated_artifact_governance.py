@@ -25,7 +25,7 @@ MD_OUTPUT_PATH = ROOT / "docs" / "generated-artifact-governance.md"
 NON_GOALS = (
     "Does not govern volatile research runs, generated market-data outputs, DB sidecars, build output, archives, or dated evidence reports.",
     "Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.",
-    "Does not promote generated snapshots into runtime policy unless the artifact is already runtime-consumed generated code.",
+    "Does not promote generated snapshots into runtime policy unless the artifact is an explicitly allowlisted runtime-consumed generated code or contract artifact.",
     "Does not use timestamps, mtimes, content hashes, or network freshness checks.",
 )
 
@@ -121,6 +121,16 @@ SOURCE_INPUTS_BY_GENERATOR = {
         "docs/PROJECT_CONTEXT.md",
         "docs/NEXT_STEPS.md",
     ),
+    "scripts/generate_forward_cohort_preregistration.py": (
+        "scripts/generate_forward_cohort_preregistration.py",
+        "scripts/forward_cohort_preregistration.py",
+        "scripts/lane_promotion_state.py",
+        "scripts/audit_regular_guardrail_starvation.py",
+        "scripts/audit_zero_pick_days_all_lanes.py",
+        "supervised_scan.py",
+        "docs/lane-lab-lanes.md",
+        "docs/bullish-pullback-ticker-audit-2026-05-29.md",
+    ),
 }
 
 OWNER_DOCS_BY_GENERATOR = {
@@ -139,6 +149,11 @@ OWNER_DOCS_BY_GENERATOR = {
     GENERATOR: ("docs/generated-artifact-governance.md", "docs/living-docs-hygiene.md"),
     "scripts/generate_final_remediation_closure_pack.py": ("docs/final-remediation-closure-pack.md", "docs/remediation-loop-map.md"),
     "scripts/generate_forward_holdout_contract.py": ("docs/forward-holdout-contract.md", "docs/PROJECT_CONTEXT.md"),
+    "scripts/generate_forward_cohort_preregistration.py": (
+        "docs/forward-cohort-preregistration.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/DECISIONS.md",
+    ),
 }
 
 
@@ -175,6 +190,8 @@ def _trust_role(artifact: GeneratedArtifact) -> str:
 def _source_of_truth_role(artifact: GeneratedArtifact) -> str:
     if artifact.path == "src/lib/generated/proofEvidenceContract.ts":
         return "generated runtime projection of data/contracts/proof-evidence-contract.json"
+    if artifact.path == "data/contracts/forward-cohort-preregistration.json":
+        return "generated runtime cohort-freeze contract consumed by lane promotion and all-lanes scan selectors"
     if "proof-invariant" in artifact.path:
         return "derived test/readability projection"
     if "final-remediation-closure-pack" in artifact.path:
@@ -185,6 +202,8 @@ def _source_of_truth_role(artifact: GeneratedArtifact) -> str:
 def _runtime_posture(artifact: GeneratedArtifact) -> str:
     if artifact.path == "src/lib/generated/proofEvidenceContract.ts":
         return "generated_frontend_runtime_policy"
+    if artifact.path == "data/contracts/forward-cohort-preregistration.json":
+        return "generated_runtime_cohort_freeze_policy"
     return "non_runtime_metadata"
 
 
@@ -203,7 +222,11 @@ def _governed_artifact(artifact: GeneratedArtifact, scripts: dict[str, str]) -> 
         "source_of_truth_role": _source_of_truth_role(artifact),
         "runtime_use": not artifact.runtime_use_false,
         "runtime_posture": _runtime_posture(artifact),
-        "source_of_truth_for_runtime": artifact.path == "src/lib/generated/proofEvidenceContract.ts",
+        "source_of_truth_for_runtime": artifact.path
+        in {
+            "src/lib/generated/proofEvidenceContract.ts",
+            "data/contracts/forward-cohort-preregistration.json",
+        },
         "stale_detection": "owner generator --check in npm run verify:docs",
         "stale_action": f"Do not hand-edit; run npm run {artifact.command}. Trust the source inputs and generator over stale output.",
         "hand_edit_allowed": False,
@@ -299,7 +322,10 @@ def _validate_governance(governance: dict[str, Any], *, allow_output_paths: bool
     runtime_artifacts = sorted(
         artifact["path"] for artifact in governance["governed_artifacts"] if artifact["runtime_use"]
     )
-    if runtime_artifacts != ["src/lib/generated/proofEvidenceContract.ts"]:
+    if runtime_artifacts != [
+        "data/contracts/forward-cohort-preregistration.json",
+        "src/lib/generated/proofEvidenceContract.ts",
+    ]:
         errors.append(f"Unexpected generated runtime-use artifacts: {runtime_artifacts}")
     for relative_path in (
         "docs/index.md",
@@ -374,7 +400,7 @@ def render_markdown(governance: dict[str, Any]) -> str:
         "- If a generated artifact is stale, run its owner command; do not edit the output file.",
         "- Trust source inputs and the generator over stale generated output.",
         "- Treat non-runtime generated docs/JSON as readability and drift-check metadata.",
-        "- Treat `src/lib/generated/proofEvidenceContract.ts` as the single generated runtime-consumed policy projection.",
+        "- Treat runtime-consumed generated artifacts as allowlisted exceptions: `src/lib/generated/proofEvidenceContract.ts` and `data/contracts/forward-cohort-preregistration.json`.",
         "",
         "## Governed Artifacts",
         "",

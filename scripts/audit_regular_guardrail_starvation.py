@@ -20,6 +20,11 @@ for candidate in (ROOT, BACKEND_DIR):
 from local_env import load_local_env
 from positions_repository import create_positions_repository
 from supervised_scan import LIVE_SCAN_TRUTH_LANE, SCAN_PLAYBOOKS, run_supervised_scan
+from scripts.forward_cohort_preregistration import (
+    forward_cohort_is_active,
+    load_forward_cohort_preregistration,
+    scan_enabled_playbook_ids,
+)
 
 import options_chatbot as oc
 
@@ -33,15 +38,24 @@ def _utc_now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def _regular_playbook_ids(*, include_commodity: bool = False) -> list[str]:
-    if include_commodity:
-        return list(SCAN_PLAYBOOKS)
-    return [playbook_id for playbook_id in SCAN_PLAYBOOKS if playbook_id not in COMMODITY_PLAYBOOK_IDS]
+def _regular_playbook_ids(*, include_commodity: bool = False, include_parked: bool = False) -> list[str]:
+    contract = load_forward_cohort_preregistration()
+    return scan_enabled_playbook_ids(
+        SCAN_PLAYBOOKS,
+        contract=contract,
+        include_commodity=include_commodity,
+        include_parked=include_parked,
+    )
 
 
-def _parse_playbooks(value: str | None, *, include_commodity: bool = False) -> list[str]:
+def _parse_playbooks(
+    value: str | None,
+    *,
+    include_commodity: bool = False,
+    include_parked: bool = False,
+) -> list[str]:
     if not value:
-        return _regular_playbook_ids(include_commodity=include_commodity)
+        return _regular_playbook_ids(include_commodity=include_commodity, include_parked=include_parked)
     playbooks = [item.strip() for item in value.split(",") if item.strip()]
     unknown = [item for item in playbooks if item not in SCAN_PLAYBOOKS]
     if unknown:
@@ -52,6 +66,22 @@ def _parse_playbooks(value: str | None, *, include_commodity: bool = False) -> l
             "Commodity playbooks are intentionally excluded from this regular-lane audit: "
             + ", ".join(forbidden)
         )
+    contract = load_forward_cohort_preregistration()
+    if forward_cohort_is_active(contract) and not include_parked:
+        allowed = set(
+            scan_enabled_playbook_ids(
+                SCAN_PLAYBOOKS,
+                contract=contract,
+                include_commodity=include_commodity,
+                include_parked=False,
+            )
+        )
+        parked_requested = sorted(playbook_id for playbook_id in playbooks if playbook_id not in allowed)
+        if parked_requested:
+            raise ValueError(
+                "Forward cohort freeze parks these playbooks; pass --include-parked-playbooks only for explicit "
+                f"diagnostic override: {', '.join(parked_requested)}"
+            )
     return playbooks
 
 
@@ -431,6 +461,7 @@ def build_report(
             "truth_lane": truth_lane,
             "market_open_at_run": market_open_at_run,
             "audit_all_configured_tickers": True,
+            "forward_cohort_preregistration_active": forward_cohort_is_active(load_forward_cohort_preregistration()),
             "include_commodity_playbooks": any(
                 playbook_id in COMMODITY_PLAYBOOK_IDS for playbook_id in playbook_ids
             ),
@@ -511,13 +542,22 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Include the separate AI commodity/infrastructure strategy lane in the cross-strategy daily audit.",
     )
+    parser.add_argument(
+        "--include-parked-playbooks",
+        action="store_true",
+        help="Explicit diagnostic override for lanes parked by the forward cohort preregistration.",
+    )
     parser.add_argument("--json", action="store_true", help="Print the full report JSON.")
     parser.add_argument("--include-playbooks", action="store_true", help="Include compact per-playbook details in non-JSON console output.")
     parser.add_argument("--no-write", action="store_true", help="Run without writing latest JSON/Markdown artifacts.")
     args = parser.parse_args(argv)
 
     report = build_report(
-        playbook_ids=_parse_playbooks(args.playbooks, include_commodity=bool(args.include_commodity)),
+        playbook_ids=_parse_playbooks(
+            args.playbooks,
+            include_commodity=bool(args.include_commodity),
+            include_parked=bool(args.include_parked_playbooks),
+        ),
         n_picks=max(int(args.n_picks), 0),
         watchlist_size=max(int(args.watchlist_size), 0),
         use_recommended_policy=bool(args.use_recommended_policy),

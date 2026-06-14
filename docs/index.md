@@ -98,6 +98,10 @@ These are the living docs for the current worktree:
   - generated protected forward-holdout contract for regular-options autoresearch and one-shot champion final evaluation consumption
 - `data/contracts/forward-holdout-contract.json`
   - generated machine-readable protected forward-holdout contract consumed by the regular-options autoresearch harness
+- `docs/forward-cohort-preregistration.md`
+  - generated frozen forward-cohort preregistration for the regular-options six-week validation window and parked-lane readback
+- `data/contracts/forward-cohort-preregistration.json`
+  - generated machine-readable frozen cohort contract consumed by lane promotion and all-lanes scan selectors
 - `docs/repository-migrations.md`
   - canonical Trading Desk repository migration manifest and ledger contract, implemented by `python-backend/repository_migrations.py`
 - `docs/repository-constraints.md`

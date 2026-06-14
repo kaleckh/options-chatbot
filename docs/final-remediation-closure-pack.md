@@ -34,9 +34,9 @@ This generated readback closes the 44-point architecture/readability remediation
 
 ## Generated Artifact Closure
 
-- Governed artifact count: `29`
+- Governed artifact count: `31`
 - Closure artifacts governed: `data/contracts/final-remediation-closure-pack.json, docs/final-remediation-closure-pack.md`
-- Runtime generated artifacts: `src/lib/generated/proofEvidenceContract.ts`
+- Runtime generated artifacts: `data/contracts/forward-cohort-preregistration.json, src/lib/generated/proofEvidenceContract.ts`
 - Stale generated output rule: trust source inputs and owner generator over stale output; do not hand-edit generated artifacts.
 
 ## Discoverability

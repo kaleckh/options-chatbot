@@ -12,7 +12,7 @@ This inventory explains which generated artifacts are checked, what owns them, h
 - If a generated artifact is stale, run its owner command; do not edit the output file.
 - Trust source inputs and the generator over stale generated output.
 - Treat non-runtime generated docs/JSON as readability and drift-check metadata.
-- Treat `src/lib/generated/proofEvidenceContract.ts` as the single generated runtime-consumed policy projection.
+- Treat runtime-consumed generated artifacts as allowlisted exceptions: `src/lib/generated/proofEvidenceContract.ts` and `data/contracts/forward-cohort-preregistration.json`.
 
 ## Governed Artifacts
 
@@ -47,6 +47,8 @@ This inventory explains which generated artifacts are checked, what owns them, h
 | data/contracts/final-remediation-closure-pack.json | json | non_runtime_metadata | machine_readable_check | npm run docs:final-remediation-closure-pack | scripts/generate_final_remediation_closure_pack.py | Do not hand-edit; run npm run docs:final-remediation-closure-pack. Trust the source inputs and generator over stale output. |
 | docs/forward-holdout-contract.md | markdown | non_runtime_metadata | generated_readability_doc | npm run docs:forward-holdout-contract | scripts/generate_forward_holdout_contract.py | Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output. |
 | data/contracts/forward-holdout-contract.json | json | non_runtime_metadata | machine_readable_check | npm run docs:forward-holdout-contract | scripts/generate_forward_holdout_contract.py | Do not hand-edit; run npm run docs:forward-holdout-contract. Trust the source inputs and generator over stale output. |
+| docs/forward-cohort-preregistration.md | markdown | non_runtime_metadata | generated_readability_doc | npm run docs:forward-cohort-preregistration | scripts/generate_forward_cohort_preregistration.py | Do not hand-edit; run npm run docs:forward-cohort-preregistration. Trust the source inputs and generator over stale output. |
+| data/contracts/forward-cohort-preregistration.json | json | generated_runtime_cohort_freeze_policy | machine_readable_check | npm run docs:forward-cohort-preregistration | scripts/generate_forward_cohort_preregistration.py | Do not hand-edit; run npm run docs:forward-cohort-preregistration. Trust the source inputs and generator over stale output. |
 
 ## Excluded Artifact Classes
 
@@ -67,5 +69,5 @@ This inventory explains which generated artifacts are checked, what owns them, h
 
 - Does not govern volatile research runs, generated market-data outputs, DB sidecars, build output, archives, or dated evidence reports.
 - Does not define route behavior, payloads, auth semantics, proof predicates, scanner policy, replay math, DB schema, or frontend behavior.
-- Does not promote generated snapshots into runtime policy unless the artifact is already runtime-consumed generated code.
+- Does not promote generated snapshots into runtime policy unless the artifact is an explicitly allowlisted runtime-consumed generated code or contract artifact.
 - Does not use timestamps, mtimes, content hashes, or network freshness checks.

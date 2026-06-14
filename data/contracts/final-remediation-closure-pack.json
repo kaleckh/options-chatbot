@@ -56,10 +56,11 @@
       ".next/**",
       "*.db, *.db-wal, *.db-shm"
     ],
-    "governed_artifact_count": 29,
+    "governed_artifact_count": 31,
     "hand_editable_artifacts": [],
     "missing_closure_artifacts": [],
     "runtime_generated_artifacts": [
+      "data/contracts/forward-cohort-preregistration.json",
       "src/lib/generated/proofEvidenceContract.ts"
     ],
     "source": "data/contracts/generated-artifact-governance.json",

@@ -1,12 +1,12 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-circuit-breaker.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260604T234617Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260614T035945Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260604T234617Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_circuit_breaker_20260614T035945Z.md"
   },
-  "generated_at_utc": "2026-06-04T23:46:17Z",
+  "generated_at_utc": "2026-06-14T03:59:45Z",
   "input_paths": {
     "cohort_health": "data/forward-tracking/current_policy_cohort_health_latest.json",
     "paper_monitor": "data/forward-tracking/current_policy_entry_filter_paper_monitor_latest.json",

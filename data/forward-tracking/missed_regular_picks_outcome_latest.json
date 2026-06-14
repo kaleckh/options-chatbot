@@ -1,12 +1,12 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\missed-regular-picks-outcome-audit.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_20260610T062705Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_20260614T035916Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_20260610T062705Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_outcome_20260614T035916Z.md"
   },
-  "generated_at_utc": "2026-06-10T06:27:05Z",
+  "generated_at_utc": "2026-06-14T03:59:16Z",
   "inputs": {
     "evidence_policy": {
       "evidence_group": "research_backfill",

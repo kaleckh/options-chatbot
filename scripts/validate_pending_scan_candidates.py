@@ -16,6 +16,10 @@ if str(ROOT) not in sys.path:
 
 from local_env import load_local_env
 from scripts.candidate_lifecycle import STATUS_PENDING_LIVE_VALIDATION
+from scripts.forward_cohort_preregistration import (
+    forward_cohort_playbook_is_parked,
+    load_forward_cohort_preregistration,
+)
 from scripts.pending_audit_candidates import (
     DEFAULT_DISPOSITION_FILE,
     DEFAULT_FILL_ATTEMPT_FILE,
@@ -65,10 +69,13 @@ def _candidate_scan_date(row: dict[str, Any]) -> str:
 
 def pending_playbooks_for_date(scan_date: date, *, queue_file: Path = DEFAULT_QUEUE_FILE) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    forward_cohort = load_forward_cohort_preregistration()
     for row in latest_candidate_rows(queue_file):
         if str(row.get("candidate_status") or "") != STATUS_PENDING_LIVE_VALIDATION:
             continue
         playbook_id = str(row.get("playbook_id") or "").strip()
+        if forward_cohort_playbook_is_parked(playbook_id, forward_cohort):
+            continue
         if not scan_playbook_fresh_live_validation_enabled(playbook_id):
             continue
         if _candidate_scan_date(row) != scan_date.isoformat():

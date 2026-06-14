@@ -11,6 +11,26 @@ from scripts import audit_zero_pick_days_all_lanes as all_lanes
 from scripts import audit_zero_pick_days_current_main_lane as single_lane
 
 
+def _active_forward_cohort() -> dict[str, object]:
+    return {
+        "contract_id": "forward-cohort-preregistration",
+        "status": "active",
+        "cohort": {
+            "frozen": True,
+            "freeze_date": "2026-06-14",
+            "eval_date": "2026-07-28",
+        },
+        "lanes": [
+            {"lane_id": "volatility_expansion_observation"},
+            {"lane_id": "bullish_pullback_observation"},
+        ],
+        "suspension": {
+            "parked_regular_lanes": ["short_term"],
+            "parked_status": "parked_outside_forward_cohort",
+        },
+    }
+
+
 class _MonkeyPatch:
     def __init__(self, test_case: unittest.TestCase) -> None:
         self._test_case = test_case
@@ -93,6 +113,55 @@ def test_all_lanes_audit_invokes_requested_lanes(monkeypatch: object) -> None:
     assert [lane["status"] for lane in audit["lanes"]] == ["completed", "completed"]
 
 
+def test_all_lanes_default_selection_only_parks_lanes_when_cohort_active(monkeypatch: object) -> None:
+    monkeypatch.setattr(
+        all_lanes,
+        "get_scan_playbooks",
+        lambda: [
+            {"id": "short_term"},
+            {"id": "volatility_expansion_observation"},
+            {"id": "bullish_pullback_observation"},
+            {"id": "ai_commodity_infra_observation"},
+        ],
+    )
+
+    args = argparse.Namespace(
+        playbooks=None,
+        exclude_playbooks=None,
+        include_commodity=False,
+        include_parked_playbooks=False,
+    )
+
+    monkeypatch.setattr(all_lanes, "load_forward_cohort_preregistration", lambda: None)
+    assert all_lanes.selected_playbook_ids(args) == [
+        "short_term",
+        "volatility_expansion_observation",
+        "bullish_pullback_observation",
+        "ai_commodity_infra_observation",
+    ]
+
+    monkeypatch.setattr(all_lanes, "load_forward_cohort_preregistration", _active_forward_cohort)
+    assert all_lanes.selected_playbook_ids(args) == [
+        "volatility_expansion_observation",
+        "bullish_pullback_observation",
+    ]
+
+    args.include_commodity = True
+    assert all_lanes.selected_playbook_ids(args) == [
+        "volatility_expansion_observation",
+        "bullish_pullback_observation",
+        "ai_commodity_infra_observation",
+    ]
+
+    args.include_commodity = False
+    args.include_parked_playbooks = True
+    assert all_lanes.selected_playbook_ids(args) == [
+        "short_term",
+        "volatility_expansion_observation",
+        "bullish_pullback_observation",
+    ]
+
+
 def test_quote_store_coverage_marks_missing_requested_market_dates() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "options_history.db"
@@ -158,6 +227,9 @@ class ZeroPickAllLanesAuditTests(unittest.TestCase):
 
     def test_all_lanes_audit_invokes_requested_lanes(self) -> None:
         test_all_lanes_audit_invokes_requested_lanes(_MonkeyPatch(self))
+
+    def test_all_lanes_default_selection_only_parks_lanes_when_cohort_active(self) -> None:
+        test_all_lanes_default_selection_only_parks_lanes_when_cohort_active(_MonkeyPatch(self))
 
     def test_quote_store_coverage_marks_missing_requested_market_dates(self) -> None:
         test_quote_store_coverage_marks_missing_requested_market_dates()

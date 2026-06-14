@@ -23,6 +23,26 @@ from scripts import validate_pending_scan_candidates
 import supervised_scan
 
 
+def _active_forward_cohort() -> dict[str, object]:
+    return {
+        "contract_id": "forward-cohort-preregistration",
+        "status": "active",
+        "cohort": {
+            "frozen": True,
+            "freeze_date": "2026-06-14",
+            "eval_date": "2026-07-28",
+        },
+        "lanes": [
+            {"lane_id": "volatility_expansion_observation"},
+            {"lane_id": "bullish_pullback_observation"},
+        ],
+        "suspension": {
+            "parked_regular_lanes": ["short_term"],
+            "parked_status": "parked_outside_forward_cohort",
+        },
+    }
+
+
 @contextmanager
 def _raises(expected: type[BaseException], *, match: str):
     try:
@@ -45,8 +65,9 @@ class _MonkeyPatch:
 
 
 def test_starvation_audit_can_include_every_supervised_playbook() -> None:
-    regular_playbooks = starvation._parse_playbooks(None)
-    all_playbooks = starvation._parse_playbooks(None, include_commodity=True)
+    with patch.object(starvation, "load_forward_cohort_preregistration", return_value=None):
+        regular_playbooks = starvation._parse_playbooks(None)
+        all_playbooks = starvation._parse_playbooks(None, include_commodity=True)
 
     assert "ai_commodity_infra_observation" not in regular_playbooks
     assert "ai_commodity_infra_observation" in all_playbooks
@@ -54,13 +75,31 @@ def test_starvation_audit_can_include_every_supervised_playbook() -> None:
 
 
 def test_starvation_audit_rejects_commodity_without_explicit_all_lanes_flag() -> None:
-    with _raises(ValueError, match="Commodity playbooks"):
-        starvation._parse_playbooks("ai_commodity_infra_observation")
+    with patch.object(starvation, "load_forward_cohort_preregistration", return_value=None):
+        with _raises(ValueError, match="Commodity playbooks"):
+            starvation._parse_playbooks("ai_commodity_infra_observation")
 
-    assert starvation._parse_playbooks(
-        "ai_commodity_infra_observation",
-        include_commodity=True,
-    ) == ["ai_commodity_infra_observation"]
+        assert starvation._parse_playbooks(
+            "ai_commodity_infra_observation",
+            include_commodity=True,
+        ) == ["ai_commodity_infra_observation"]
+
+
+def test_starvation_audit_parks_non_cohort_regular_lanes_by_default() -> None:
+    with patch.object(starvation, "SCAN_PLAYBOOKS", {
+        "short_term": {},
+        "volatility_expansion_observation": {},
+        "bullish_pullback_observation": {},
+        "ai_commodity_infra_observation": {},
+    }):
+        with patch.object(starvation, "load_forward_cohort_preregistration", return_value=_active_forward_cohort()):
+            assert starvation._parse_playbooks(None) == [
+                "volatility_expansion_observation",
+                "bullish_pullback_observation",
+            ]
+            with _raises(ValueError, match="Forward cohort freeze parks"):
+                starvation._parse_playbooks("short_term")
+            assert starvation._parse_playbooks("short_term", include_parked=True) == ["short_term"]
 
 
 def _write_latest(path: Path, **overrides: object) -> None:
@@ -91,6 +130,7 @@ def test_daily_all_lanes_artifact_must_be_complete_for_the_market_day(
     latest = tmp_path / "latest.json"
     monkeypatch.setattr(ensure_audit, "SCAN_PLAYBOOKS", {"short_term": {}, "ai_commodity_infra_observation": {}})
     monkeypatch.setattr(ensure_audit, "oc", types.SimpleNamespace(DEFAULT_WATCHLIST=["SPY", "QQQ"]))
+    monkeypatch.setattr(ensure_audit, "load_forward_cohort_preregistration", lambda: None)
 
     _write_latest(latest)
     assert ensure_audit._audit_is_complete_for_date(date(2026, 6, 2), path=latest) is not None
@@ -102,6 +142,47 @@ def test_daily_all_lanes_artifact_must_be_complete_for_the_market_day(
     assert ensure_audit._audit_is_complete_for_date(date(2026, 6, 2), path=latest) is None
 
     _write_latest(latest, overall={"playbooks_completed": 1, "playbooks_requested": 2})
+    assert ensure_audit._audit_is_complete_for_date(date(2026, 6, 2), path=latest) is None
+
+
+def test_daily_all_lanes_artifact_uses_forward_cohort_expected_count(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    latest = tmp_path / "latest.json"
+    monkeypatch.setattr(
+        ensure_audit,
+        "SCAN_PLAYBOOKS",
+        {
+            "short_term": {},
+            "volatility_expansion_observation": {},
+            "bullish_pullback_observation": {},
+            "ai_commodity_infra_observation": {},
+        },
+    )
+    monkeypatch.setattr(ensure_audit, "oc", types.SimpleNamespace(DEFAULT_WATCHLIST=["SPY", "QQQ"]))
+    monkeypatch.setattr(ensure_audit, "load_forward_cohort_preregistration", _active_forward_cohort)
+
+    _write_latest(
+        latest,
+        overall={
+            "playbooks_completed": 3,
+            "playbooks_requested": 3,
+            "candidate_count_total": 0,
+            "returned_count_total": 0,
+        },
+    )
+    assert ensure_audit._audit_is_complete_for_date(date(2026, 6, 2), path=latest) is not None
+
+    _write_latest(
+        latest,
+        overall={
+            "playbooks_completed": 2,
+            "playbooks_requested": 2,
+            "candidate_count_total": 0,
+            "returned_count_total": 0,
+        },
+    )
     assert ensure_audit._audit_is_complete_for_date(date(2026, 6, 2), path=latest) is None
 
 
@@ -648,14 +729,53 @@ def test_pending_candidate_validation_groups_all_validation_enabled_pending_rows
     ]
     queue.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
 
-    grouped = validate_pending_scan_candidates.pending_playbooks_for_date(
-        date(2026, 6, 2),
-        queue_file=queue,
-    )
+    with patch.object(validate_pending_scan_candidates, "load_forward_cohort_preregistration", return_value=None):
+        grouped = validate_pending_scan_candidates.pending_playbooks_for_date(
+            date(2026, 6, 2),
+            queue_file=queue,
+        )
 
     assert set(grouped) == {"swing", "speculative"}
     assert grouped["swing"][0]["ticker"] == "SPY"
     assert grouped["speculative"][0]["ticker"] == "QQQ"
+
+
+def test_pending_candidate_validation_skips_parked_forward_cohort_lanes(
+    tmp_path: Path,
+) -> None:
+    queue = tmp_path / "pending.jsonl"
+    rows = [
+        {
+            "audit_generated_at_utc": "2026-06-02T06:39:32Z",
+            "candidate_key": "2026-06-02|short_term|SPY|call|2026-06-26||||780.0",
+            "candidate_status": "pending_live_validation",
+            "tracking_approved_lane": True,
+            "playbook_id": "short_term",
+            "ticker": "SPY",
+        },
+        {
+            "audit_generated_at_utc": "2026-06-02T06:39:32Z",
+            "candidate_key": "2026-06-02|volatility_expansion_observation|QQQ|call|2026-06-26||||780.0",
+            "candidate_status": "pending_live_validation",
+            "tracking_approved_lane": True,
+            "playbook_id": "volatility_expansion_observation",
+            "ticker": "QQQ",
+        },
+    ]
+    queue.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf8")
+
+    with patch.object(
+        validate_pending_scan_candidates,
+        "load_forward_cohort_preregistration",
+        return_value=_active_forward_cohort(),
+    ):
+        grouped = validate_pending_scan_candidates.pending_playbooks_for_date(
+            date(2026, 6, 2),
+            queue_file=queue,
+        )
+
+    assert set(grouped) == {"volatility_expansion_observation"}
+    assert grouped["volatility_expansion_observation"][0]["ticker"] == "QQQ"
 
 
 def test_pending_candidate_validation_runs_log_scan_with_caps(
@@ -926,9 +1046,19 @@ class DailyAllLanesAuditTests(unittest.TestCase):
     def test_starvation_audit_rejects_commodity_without_explicit_all_lanes_flag(self) -> None:
         test_starvation_audit_rejects_commodity_without_explicit_all_lanes_flag()
 
+    def test_starvation_audit_parks_non_cohort_regular_lanes_by_default(self) -> None:
+        test_starvation_audit_parks_non_cohort_regular_lanes_by_default()
+
     def test_daily_all_lanes_artifact_must_be_complete_for_the_market_day(self) -> None:
         with TemporaryDirectory() as temp_dir:
             test_daily_all_lanes_artifact_must_be_complete_for_the_market_day(
+                Path(temp_dir),
+                _MonkeyPatch(self),
+            )
+
+    def test_daily_all_lanes_artifact_uses_forward_cohort_expected_count(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            test_daily_all_lanes_artifact_uses_forward_cohort_expected_count(
                 Path(temp_dir),
                 _MonkeyPatch(self),
             )
@@ -980,6 +1110,10 @@ class DailyAllLanesAuditTests(unittest.TestCase):
     def test_pending_candidate_validation_groups_all_validation_enabled_pending_rows(self) -> None:
         with TemporaryDirectory() as temp_dir:
             test_pending_candidate_validation_groups_all_validation_enabled_pending_rows(Path(temp_dir))
+
+    def test_pending_candidate_validation_skips_parked_forward_cohort_lanes(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            test_pending_candidate_validation_skips_parked_forward_cohort_lanes(Path(temp_dir))
 
     def test_pending_candidate_validation_runs_log_scan_with_caps(self) -> None:
         test_pending_candidate_validation_runs_log_scan_with_caps(_MonkeyPatch(self))
