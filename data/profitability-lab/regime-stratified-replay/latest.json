@@ -4449,10 +4449,10 @@
   ],
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regime-stratified-replay-report.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260612T194149Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T011501Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260612T194149Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regime-stratified-replay\\regime_stratified_replay_report_20260614T011501Z.md"
   },
   "branch_bucket_tables": {
     "bullish_pullback_core": {
@@ -5063,7 +5063,7 @@
       }
     ]
   },
-  "generated_at_utc": "2026-06-12T19:41:49Z",
+  "generated_at_utc": "2026-06-14T01:15:01Z",
   "inputs": {
     "market_data_db": {
       "error": null,
