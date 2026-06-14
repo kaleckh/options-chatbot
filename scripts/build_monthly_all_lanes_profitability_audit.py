@@ -11,6 +11,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_ID = "monthly_all_lanes_profitability_audit"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from scripts.scan_heartbeat import DEFAULT_STALE_MARKET_DAY_LIMIT, market_days_since
+except Exception:  # pragma: no cover - standalone fallback keeps readback available.
+    DEFAULT_STALE_MARKET_DAY_LIMIT = 2  # type: ignore[assignment]
+    market_days_since = None  # type: ignore[assignment]
 
 DEFAULT_ARTIFACT_PATHS: dict[str, Path] = {
     "missed_picks_outcome": ROOT / "data" / "forward-tracking" / "missed_regular_picks_outcome_latest.json",
@@ -244,11 +252,14 @@ def _scheduled_scan_health(heartbeat: dict[str, Any], *, as_of_utc: str | None =
             "blocker": "scheduled_scan_heartbeat_missing",
         }
     generated = heartbeat.get("run_completed_at_utc") or heartbeat.get("generated_at_utc")
-    days = _weekday_market_days_since(generated, as_of_utc=as_of_utc)
+    if market_days_since is not None:
+        days = market_days_since(str(generated or ""), as_of_utc=as_of_utc)
+    else:
+        days = _weekday_market_days_since(generated, as_of_utc=as_of_utc)
     if days is None:
         status = "unusable_timestamp"
         state = "fail"
-    elif days > 2:
+    elif days > int(DEFAULT_STALE_MARKET_DAY_LIMIT):
         status = "stale"
         state = "fail"
     else:
@@ -262,7 +273,7 @@ def _scheduled_scan_health(heartbeat: dict[str, Any], *, as_of_utc: str | None =
         "last_host": heartbeat.get("host"),
         "last_commit_sha": heartbeat.get("commit_sha"),
         "days_since_last_scheduled_scan": days,
-        "stale_market_day_limit": 2,
+        "stale_market_day_limit": int(DEFAULT_STALE_MARKET_DAY_LIMIT),
         "blocker": None if state == "pass" else "scheduled_scan_heartbeat_missing_or_stale",
     }
 

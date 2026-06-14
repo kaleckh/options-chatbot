@@ -1685,6 +1685,30 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
         self.assertEqual(report["scheduled_scan_health"]["days_since_last_scheduled_scan"], 3)
         self.assertEqual(report["summary"]["scheduled_scan_heartbeat_state"], "fail")
 
+    def test_scheduled_scan_heartbeat_uses_market_holidays_not_weekdays(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths, fill_attempts = self._fixture(root)
+            paths["scheduled_scan_heartbeat"] = root / "scheduled_scan_heartbeat.json"
+            _write_json(
+                paths["scheduled_scan_heartbeat"],
+                {
+                    "status": "completed",
+                    "run_completed_at_utc": "2026-05-22T18:00:00Z",
+                    "host": "KaesDevice",
+                    "commit_sha": "abc123",
+                },
+            )
+            report = audit.build_report(
+                artifact_paths=paths,
+                fill_attempts_path=fill_attempts,
+                generated_at_utc="2026-05-27T18:00:00Z",
+            )
+
+        self.assertEqual(report["scheduled_scan_health"]["state"], "pass")
+        self.assertEqual(report["scheduled_scan_health"]["days_since_last_scheduled_scan"], 2)
+        self.assertEqual(report["summary"]["scheduled_scan_heartbeat_state"], "pass")
+
     def test_autoresearch_search_effort_is_visible_when_scoreboard_available(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

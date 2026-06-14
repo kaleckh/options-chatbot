@@ -283,6 +283,70 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertFalse(log_file.exists())
             self.assertEqual(heartbeat["status"], "failed_non_authoritative_host")
 
+    def test_main_writes_completed_heartbeat_with_scan_provenance(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            log_dir = Path(tmpdir)
+            log_file = log_dir / "scan_picks.jsonl"
+            fake_mds = types.SimpleNamespace(_MEMORY_CACHE={})
+            fake_oc = types.SimpleNamespace(
+                DEFAULT_WATCHLIST=["SPY"],
+                scan_daily_top_trades=lambda **kwargs: [],
+                _market_is_open=lambda: True,
+            )
+            provenance = {
+                "host": "KaesDevice",
+                "commit_sha": "abcdef1234567890",
+                "short_commit_sha": "abcdef123456",
+                "branch": "main",
+                "run_id": "scheduled_scan:2026-04-14:test",
+            }
+
+            with (
+                patch.object(log_scan_picks, "LOG_DIR", log_dir),
+                patch.object(log_scan_picks, "LOG_FILE", log_file),
+                patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
+                patch.object(log_scan_picks, "load_local_env"),
+                patch.object(log_scan_picks, "build_operational_provenance", return_value=provenance),
+                patch.object(log_scan_picks, "create_positions_repository", return_value=_UnavailableRepository()),
+                patch.object(
+                    log_scan_picks,
+                    "run_supervised_scan",
+                    return_value={
+                        "picks": [],
+                        "policy_applied": False,
+                        "policy_fail_closed": False,
+                        "truth_lane": "historical_imported_daily",
+                        "playbook": {"id": "short_term", "label": "Short Term"},
+                        "scan_funnel": {"raw_candidates": 0, "returned_picks": 0},
+                    },
+                ),
+                patch.object(
+                    log_scan_picks,
+                    "record_forward_snapshot",
+                    return_value={
+                        "session_id": 789,
+                        "scan_picks_count": 0,
+                        "eligibility_status": "eligible",
+                    },
+                ),
+                patch.dict(sys.modules, {"market_data_service": fake_mds, "options_chatbot": fake_oc}),
+            ):
+                result = log_scan_picks.main()
+
+            heartbeat = json.loads((log_dir / "scheduled_scan_heartbeat_latest.json").read_text(encoding="utf-8"))
+            self.assertEqual(result, 0)
+            self.assertEqual(heartbeat["status"], "completed")
+            self.assertEqual(heartbeat["scan_date"], "2026-04-14")
+            self.assertEqual(heartbeat["host"], "KaesDevice")
+            self.assertEqual(heartbeat["commit_sha"], "abcdef1234567890")
+            self.assertEqual(heartbeat["short_commit_sha"], "abcdef123456")
+            self.assertEqual(heartbeat["branch"], "main")
+            self.assertEqual(heartbeat["run_id"], "scheduled_scan:2026-04-14:test")
+            self.assertTrue(heartbeat["generated_at_utc"])
+            self.assertEqual(heartbeat["run_completed_at_utc"], heartbeat["generated_at_utc"])
+            self.assertEqual(heartbeat["details"]["returned_picks"], 0)
+            self.assertEqual(heartbeat["details"]["ledger_session_id"], 789)
+
     def test_pick_fill_price_prefers_executable_spread_entry_over_net_debit(self):
         pick = _make_pick("AMZN", debit=7.625)
         pick["entry_execution_price"] = 11.34

@@ -10,7 +10,7 @@
     "1.8": "done",
     "1.9": "done",
     "1.10": "done",
-    "1.11": "todo",
+    "1.11": "done",
     "1.12": "todo",
     "1.13": "todo",
     "1.14": "todo",
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.10 verified and completed evidence-store backups: SQLite backup API covers chat_history, both forward ledgers, and options_history; pg_dump covers Postgres; ignored data/backups rotation is 14 days; weekly off-machine copy docs remain in NEXT_STEPS."
+    "work": "Phase 1.11 verified and completed scheduled-scan heartbeat/dead-man coverage: scheduled scans write timestamp/host/commit/run heartbeat artifacts; gateboard and monthly audit expose days_since_last_scheduled_scan and fail stale or missing heartbeats after more than 2 market days."
   }
 }
