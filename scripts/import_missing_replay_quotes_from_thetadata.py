@@ -164,32 +164,72 @@ def _record_available_date(attempt: dict[str, Any], quote_date: str) -> None:
     attempt["available_quote_dates"] = sorted(dates)
 
 
+def _is_no_match_error(error: str) -> bool:
+    return "no matched rows" in str(error).lower()
+
+
+def _is_feed_down_error(error: str) -> bool:
+    lowered = str(error).lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "winerror 10061",
+            "connection refused",
+            "failed to establish a new connection",
+            "no connection could be made",
+            "max retries exceeded",
+            "connecttimeout",
+            "read timed out",
+        )
+    )
+
+
 def _finalize_attempt(attempt: dict[str, Any], *, plan_only: bool, import_performed: bool) -> dict[str, Any]:
     exact_count = int(attempt.get("exact_date_row_count") or 0)
     lookahead_count = int(attempt.get("lookahead_row_count") or 0)
     available_dates = sorted(str(value) for value in attempt.get("available_quote_dates") or [])
+    request_dates = sorted(str(value) for value in attempt.get("request_dates_attempted") or [])
+    request_errors = [str(value) for value in attempt.get("errors") or [] if not _is_no_match_error(str(value))]
+    feed_down = any(_is_feed_down_error(error) for error in request_errors)
     missing_quote_date = str(attempt.get("missing_quote_date") or "")[:10]
     first_after = next((value for value in available_dates if value > missing_quote_date), None)
+    exact_request_error = any(str(error).startswith(f"{missing_quote_date} ") for error in request_errors)
+    exact_request_attempted = missing_quote_date in request_dates
+    current_source_exhausted = bool(exact_request_attempted and exact_count == 0 and not exact_request_error)
     if plan_only:
         outcome = "planned_not_requested"
         exact_status = "not_requested"
         proof_status = "not_requested"
+        current_source_exhausted = False
+    elif not request_dates:
+        outcome = "not_requested"
+        exact_status = "not_requested"
+        proof_status = "not_requested"
+        current_source_exhausted = False
     elif exact_count > 0 and import_performed:
         outcome = "imported_pending_replay"
         exact_status = "rows_found"
         proof_status = "exact_date_imported_pending_replay"
+        current_source_exhausted = False
     elif exact_count > 0:
         outcome = "exact_date_rows_found"
         exact_status = "rows_found"
         proof_status = "exact_date_repair_candidate"
+        current_source_exhausted = False
     elif lookahead_count > 0:
         outcome = "lookahead_only_rows_found"
         exact_status = "no_rows_found"
         proof_status = "lookahead_only_not_exact_proof"
+    elif request_errors:
+        outcome = "theta_feed_down" if feed_down else "request_failed"
+        exact_status = "request_error"
+        proof_status = "feed_down_not_evidence" if feed_down else "request_error_not_evidence"
+        current_source_exhausted = False
     else:
         outcome = "exact_date_no_match"
         exact_status = "no_rows_found"
         proof_status = "current_source_exhausted"
+        current_source_exhausted = True
     return {
         **attempt,
         "available_quote_dates": available_dates,
@@ -197,7 +237,7 @@ def _finalize_attempt(attempt: dict[str, Any], *, plan_only: bool, import_perfor
         "outcome": outcome,
         "exact_missing_date_status": exact_status,
         "proof_repair_status": proof_status,
-        "current_source_exhausted_for_exact_date": not plan_only and exact_count == 0,
+        "current_source_exhausted_for_exact_date": current_source_exhausted,
     }
 
 

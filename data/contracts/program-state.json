@@ -14,7 +14,7 @@
     "1.12": "done",
     "1.13": "done",
     "1.14": "done",
-    "1.15": "todo"
+    "1.15": "done"
   },
   "cohort": {
     "frozen": false,
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.14 verified and completed backend single-worker startup assertion coverage. FastAPI startup already rejects configured worker counts above 1 unless OPTIONS_ALLOW_MULTI_WORKER_BACKEND is explicit; added deterministic regression tests for env, CLI, single-worker, and override paths."
+    "work": "Phase 1.15 completed broad intraday quote-coverage repair. Active artifact moved from stale 20.7% coverage to 86.0% after trusted ThetaData OPRA/NBBO exit-quote imports; exact-fill planning now has 0 remaining missing-exit targets. Remaining unpriced rows are replay-selection blockers, not quote-provider gaps."
   }
 }

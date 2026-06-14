@@ -11,14 +11,14 @@ Current read:
 - the specific fresh-evidence gate is `scripts/build_regular_options_fresh_evidence_loop.py`: `summary.entry_evidence_status_counts.fill_attempt_missing=28`, `summary.evidence_bridge_status_counts.non_executable_entry_blocked=20`, `summary.evidence_bridge_status_counts.paper_probation_exact_entry_required=8`, and `summary.evidence_bridge_status_counts.exact_exit_pnl_required=1`.
 - the linked exact-entry row needing exit evidence is QQQ `position_id=537`, with `evidence_bridge_status=exact_exit_pnl_required` and `realized_pnl_status=missing_realized_pnl`.
 - open risk is no longer blocked: ThetaTerminal was reachable, a targeted ThetaData exact-expiration import wrote batch `2124` for 2026-06-08 QQQ/SBUX rows, Alpaca OPRA latest snapshots supplied the current QQQ/SBUX quote window, SBUX `id=104` closed from exact side-aware executable exit evidence, and QQQ `id=537` has a fresh exact executable HOLD review. `scripts/build_regular_options_open_risk_resolution_plan.py` now reports `open_risk_resolution_plan_clear`.
-- the regular profit-loop broad intraday artifact is still blocked for policy use by weak quote coverage: `quote_coverage_pct=20.7`. Treat this as a mechanical data-pipeline repair during the strategy-iteration moratorium, not a reason to tune strategy gates or promote profitability.
+- the stale regular profit-loop broad intraday quote-pipeline blocker is repaired: active artifact `data/options-validation/runs/20260613_213820_broad_intraday.json` is now `104` / `121` priced with `quote_coverage_pct=86.0`, and the exact-fill planner returns `0` remaining missing-exit quote targets. Remaining unpriced rows are `13` `missing_long_entry_quote` and `4` `invalid_spread_width`, so future work should treat them as replay-selection diagnostics, not more provider quote imports. Broad remains exploratory-only and non-promotable.
 
 Next actions:
 
 1. Collect legitimate exact OPRA/NBBO exit evidence for QQQ `id=537` only when stop, target, time-exit, or another policy-defined exit condition fires; do not close a current HOLD row to manufacture realized evidence.
 2. Capture durable fill-attempt evidence for the `4` missing fresh-selection rows and exact entry evidence for the `8` paper/probation rows without loosening guardrails.
 3. Resume fresh-evidence collection until there are at least `20` exact realized rows, or keep the named-gate defect report current if the funnel remains blocked after 10 trading sessions.
-4. Repair the broad intraday profit-loop quote coverage path until the active artifact clears the policy coverage blocker; do not count low-coverage broad artifacts as proof.
+4. If the broad profit-loop artifact is needed again, diagnose the remaining entry-contract resolution and invalid-spread rows without changing scanner policy or proof bars; do not run more exact-exit quote imports for this artifact unless new missing-exit targets appear.
 5. Run a ThetaData history-depth check for the trusted intraday OPRA/NBBO cache before interpreting missing older regime buckets as strategy behavior.
 6. Decide whether to buy or build a cheap EOD long-history falsification dataset for broad pre-screening only; EOD evidence must stay below the production proof bar.
 7. Pre-register the next `6`-week frozen paper cohort dates and champion family before any protected holdout consumption.

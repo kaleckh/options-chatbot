@@ -164,6 +164,71 @@ class ImportMissingReplayQuotesFromThetaDataTests(unittest.TestCase):
             self.assertFalse(output_dir.exists())
             theta_rows.assert_not_called()
 
+    def test_dry_run_max_requests_leaves_unrequested_targets_unexhausted(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_path = root / "run.json"
+            _write_run(run_path)
+            stdout = io.StringIO()
+
+            argv = [
+                "import_missing_replay_quotes_from_thetadata.py",
+                str(run_path),
+                "--max-requests",
+                "1",
+                "--dry-run",
+                "--json",
+            ]
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(
+                importer, "_theta_rows_for_contract", return_value=[]
+            ) as theta_rows, redirect_stdout(stdout):
+                self.assertEqual(importer.main(), 0)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["base_unique_items"], 2)
+            self.assertEqual(payload["unique_items"], 1)
+            self.assertEqual(payload["request_count"], 1)
+            self.assertEqual(
+                payload["repair_attempt_summary"]["outcome_counts"],
+                {"exact_date_no_match": 1, "not_requested": 1},
+            )
+            by_outcome = {attempt["outcome"]: attempt for attempt in payload["repair_attempts"]}
+            self.assertTrue(by_outcome["exact_date_no_match"]["current_source_exhausted_for_exact_date"])
+            self.assertFalse(by_outcome["not_requested"]["current_source_exhausted_for_exact_date"])
+            self.assertEqual(by_outcome["not_requested"]["proof_repair_status"], "not_requested")
+            self.assertEqual(theta_rows.call_count, 1)
+
+    def test_dry_run_connection_refused_is_feed_down_not_evidence_exhaustion(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            run_path = root / "run.json"
+            _write_run(run_path)
+            stdout = io.StringIO()
+
+            argv = [
+                "import_missing_replay_quotes_from_thetadata.py",
+                str(run_path),
+                "--dry-run",
+                "--json",
+            ]
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(
+                importer,
+                "_theta_rows_for_contract",
+                side_effect=ConnectionError("[WinError 10061] No connection could be made"),
+            ), redirect_stdout(stdout):
+                self.assertEqual(importer.main(), 0)
+
+            payload = json.loads(stdout.getvalue())
+            self.assertEqual(payload["request_count"], 0)
+            self.assertEqual(payload["repair_attempt_summary"]["outcome_counts"], {"theta_feed_down": 2})
+            self.assertEqual(
+                payload["repair_attempt_summary"]["proof_repair_status_counts"],
+                {"feed_down_not_evidence": 2},
+            )
+            for attempt in payload["repair_attempts"]:
+                self.assertEqual(attempt["exact_missing_date_status"], "request_error")
+                self.assertFalse(attempt["current_source_exhausted_for_exact_date"])
+
     def test_plan_only_filters_targets_before_lookahead_expansion(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
