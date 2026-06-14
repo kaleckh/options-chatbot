@@ -43,7 +43,7 @@ Current read:
 - `data/contracts/evidence-host-policy.json` declares `KaesDevice` as the current authoritative host for Postgres tracked positions, `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`.
 - scheduled scans now write host/commit/run provenance and a local heartbeat at `data/forward-tracking/scheduled_scan_heartbeat_latest.json`; scan logging fails closed before evidence writes on a non-authoritative host.
 - the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` and fail after more than `2` market days without a completed scheduled scan.
-- backups write ignored bundles under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
+- backups write ignored bundles for `chat_history.db`, both forward ledgers, `options_history.db`, and Postgres tracked positions under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
 - FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.
 - FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is explicitly set for local dev/test.
 - FastAPI request/exception logs are stdlib JSON to stderr, and successful Trading Desk mutation outcomes append compact local audit refs to ignored `data/operator-audit/mutations.jsonl`; that ledger is audit evidence only, not proof or repository state.

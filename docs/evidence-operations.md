@@ -24,7 +24,7 @@ Nightly local backup command:
 npm run evidence:backup
 ```
 
-The backup script writes ignored bundles under `data/backups/<timestamp>/`, keeps a manifest in each bundle, and prunes local bundles older than `14` days. SQLite stores are copied through the SQLite backup API. Postgres tracked positions are dumped with `pg_dump --format=custom` from `OPTIONS_BACKUP_DATABASE_URL` or `DATABASE_URL`.
+The backup script writes ignored bundles under `data/backups/<timestamp>/`, keeps a manifest in each bundle, and prunes local bundles older than `14` days. SQLite stores are copied through the SQLite backup API: `chat_history.db`, both forward ledgers under `data/options-validation/forward_tracking*.db`, and `data/options-validation/options_history.db`. Postgres tracked positions are dumped with `pg_dump --format=custom` from `OPTIONS_BACKUP_DATABASE_URL` or `DATABASE_URL`.
 
 Weekly off-machine copy command:
 

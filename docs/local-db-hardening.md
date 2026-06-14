@@ -72,7 +72,7 @@ For operational survivability:
 
 - run `npm run evidence:backup` nightly on the authoritative evidence host
 - run `npm run evidence:backup:weekly` from a scheduled weekly task after setting `OPTIONS_BACKUP_WEEKLY_COPY_DIR` to an off-machine target
-- the backup script uses SQLite's backup API for `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`
+- the backup script uses SQLite's backup API for `chat_history.db`, both forward ledgers under `data/options-validation/forward_tracking*.db`, and `data/options-validation/options_history.db`
 - the same script uses `pg_dump --format=custom` for Postgres tracked positions when `DATABASE_URL` or `OPTIONS_BACKUP_DATABASE_URL` is configured
 - generated runs live under ignored `data/backups/<timestamp>/` and are rotated after `14` days by the backup script, not by the read-only audit
 

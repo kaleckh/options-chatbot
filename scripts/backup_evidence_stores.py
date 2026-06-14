@@ -29,6 +29,7 @@ DEFAULT_BACKUP_ROOT = ROOT / "data" / "backups"
 DEFAULT_RETENTION_DAYS = 14
 DEFAULT_SQLITE_STORES: tuple[tuple[str, Path], ...] = (
     ("chat_history", ROOT / "chat_history.db"),
+    ("forward_tracking_archive", ROOT / "data" / "options-validation" / "forward_tracking.db"),
     ("forward_tracking_authoritative", ROOT / "data" / "options-validation" / "forward_tracking_authoritative.db"),
     ("options_history", ROOT / "data" / "options-validation" / "options_history.db"),
 )
