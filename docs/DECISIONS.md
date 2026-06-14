@@ -1,5 +1,11 @@
 # Decisions
 
+## 2026-06-14: Add A No-Wait Historical Robust-Search Track Without Weakening Forward Proof
+
+The forward-cohort preregistration remains the only path to live-validation promotion under the fresh-evidence contract, but waiting for future rows is not the only useful profitability work. The active research track may use paid historical ThetaData OPRA/NBBO data to discover stronger lane candidates now, then freeze and forward-track only candidates that survive chronological out-of-sample checks.
+
+Durable decision: extend the trusted intraday ThetaData history for the regular-options proof set before another broad variant loop. The current 13-symbol proof/import set is `SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, and `DIA`. A dry-run for `2024-05-22` succeeded against ThetaTerminal v3, and batch `2130` imported the first old-history chunk (`2024-05-22` through `2024-05-31`) as trusted `thetadata_opra_nbbo_1m` intraday rows: `168,826` imported, `0` duplicates, `0` rejects. The shared trusted intraday window for the 13-symbol set is now `267` dates from `2024-05-22` through `2026-06-04`, leaving `237` shared dates to reach a 504-date two-year target. Historical robust-search results may nominate or kill lanes faster, but they do not turn research/backfill rows into forward production proof, do not consume the protected forward holdout, and do not lower the existing promotion bars.
+
 ## 2026-06-14: Freeze The Forward Cohort And Park Other Regular Lanes
 
 Phase 1 hardening is complete, so the program now needs forward evidence rather than more retrospective tuning. The next answer must come from a frozen cohort with unchanged promotion bars, fresh exact realized P&L rows after freeze, and no protected-holdout consumption until the registered final evaluation.

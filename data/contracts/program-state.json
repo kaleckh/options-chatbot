@@ -36,6 +36,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 3 blocked-audit pass. Confirmed the same blocker has repeated across consecutive goal turns: heartbeat is fresh with 0 market days stale, gateboard remains safe_blocked_no_live_release, open risk remains blocked on stale negative live-exact QQQ id=537 review requiring a valid market-data window, and post-freeze exact realized P&L rows remain 0 for volatility_expansion_observation and 0 for bullish_pullback_observation. No kill trigger fired before eval_date 2026-07-28; further progress requires a market-data window and new forward evidence rather than another same-day readback refresh."
+    "work": "User approved a no-wait historical robust-search track alongside passive Phase 3 forward collection. Audited trusted ThetaData intraday depth for the 13-symbol proof/import set and confirmed it was about one year, not two. ThetaTerminal v3 old-date dry-run for 2024-05-22 succeeded with 20,958 normalized rows and 0 errors. Imported batch 2130 for 2024-05-22 through 2024-05-31, adding 168,826 trusted thetadata_opra_nbbo_1m intraday rows with 0 duplicates and 0 rejects. Validated 267 shared trusted intraday dates from 2024-05-22 through 2026-06-04, leaving 237 shared dates to reach a 504-date two-year target. Frozen cohort fresh realized P&L rows remain 0 and promotion proof bars are unchanged."
   }
 }
