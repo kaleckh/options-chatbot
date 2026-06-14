@@ -7,24 +7,24 @@ Last updated: 2026-06-14
 Current read:
 - the forward cohort remains frozen and passive; do not use historical rows as fresh forward promotion proof.
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
-- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `474` shared dates from `2024-05-22` through `2026-06-04`; target for a two-year surface is `504` shared dates, so `30` shared dates remain.
-- paid-data readiness is `not_ready` after batch `2144` because `CVX` executable quote coverage is `88.64%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
+- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `505` shared dates from `2024-05-22` through `2026-06-04`; the 504-date two-year feature-store depth target is met.
+- paid-data readiness is still `not_ready` after batch `2146` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
-- batches `2130` through `2144` imported `2024-05-22` through `2025-03-31` for the 13-symbol set with `5,090,302` trusted intraday rows, `0` duplicates, and `0` rejects.
-- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `11,434,494` trusted intraday rows, all `13` symbols available, `474` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
-- `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `234` exact rows accepted, `0` / `3` candidates ready, combined final holdout `29` trades with bootstrap PF lower bound `0.56`, and blockers include feature-store shared history below the `504`-date gate, missing baseline ablation, missing VIX/regime context, final holdout below `30`, and existing source quality blockers.
+- batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects.
+- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,428` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
+- `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `234` exact rows accepted, `0` / `3` candidates ready, feature-store gate passed, combined final holdout `29` trades with bootstrap PF lower bound `0.56`, and blockers include missing baseline ablation, missing VIX/regime context, final holdout below `30`, and existing source quality blockers.
 
 Next actions:
 
-1. Continue old-history imports in chunks until the 13-symbol proof/import set reaches the two-year target and the low-executable `CVX` audit clears, or ThetaData returns a provider/license blocker. Next chunk starts at `2025-04-01`. Use the same parameters as batches `2130` through `2144`: `--snapshot-kind intraday --start-time 09:45 --end-time 15:55 --interval 1h --min-dte 21 --max-dte 60 --strike-range 20 --right both --source thetadata_opra_nbbo_1m`.
-2. After each chunk, validate with:
+1. Diagnose the persistent `CVX` low-executable quote coverage before treating the full 13-symbol surface as nomination-ready. If it is a real tradability problem, kill or exclude affected CVX-dependent candidates only through a preregistered historical-candidate rule; do not lower the `90%` source-quality floor.
+2. After any further source-quality repair, import, or symbol-surface change, validate with:
 
 ```powershell
 uv run --locked python scripts\audit_paid_data_readiness.py --force --json --snapshot-kind intraday --source-labels thetadata_opra_nbbo_1m --required-underlyings SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA --min-quote-dates 504 --min-shared-quote-dates 504 --min-executable-quote-pct 90
 ```
 
-3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: feature-store depth to at least `504` shared trusted intraday dates, baseline ablation after costs, VIX/regime context coverage, and enough newest holdout rows to reach at least `30` exact final-holdout trades.
-4. Rerun `npm run options:features:regular-options` and `npm run options:robust-search:regular-options` after each historical import chunk or source-replay repair.
+3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: baseline ablation after costs, VIX/regime context coverage, enough newest holdout rows to reach at least `30` exact final-holdout trades, and source-quality blockers.
+4. Rerun `npm run options:features:regular-options` and `npm run options:robust-search:regular-options` after any historical import, source-quality repair, or source-replay repair.
 5. Use historical robust-search results only to nominate, reject, or refreeze lanes; do not mark any historical result as fresh forward proof or live-validation promotion.
 
 ## Current Sprint Blockers From June 9 Audit
