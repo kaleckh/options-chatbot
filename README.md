@@ -173,6 +173,8 @@ The repo still contains legacy day-trading tests and engine code, but the corres
   - live audit of dead surfaces, sidecars, and remaining monoliths
 - `docs/living-docs-hygiene.md`
   - living-doc ownership, generated-artifact, and source-of-truth hygiene rules
+- `docs/agent-control-plane.md`
+  - local CEO/worker orchestration flow and runtime memory graph
 - `docs/current-state.md`
   - current options product status
 - `docs/day-trading-current-state.md`

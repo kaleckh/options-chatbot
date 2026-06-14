@@ -34,6 +34,8 @@ These are the living docs for the current worktree:
   - generated machine-readable AI commodity isolation contract and guard results
 - `docs/living-docs-hygiene.md`
   - living docs ownership, generated-artifact, and source-of-truth hygiene rules
+- `docs/agent-control-plane.md`
+  - local CEO/worker orchestration flow and runtime memory graph backed by ignored SQLite/JSONL state
 - `docs/agent-memory-graph.md`
   - generated where-to-go graph for owner docs, code, contracts, and generated artifacts
 - `data/contracts/agent-memory-graph.json`
@@ -188,6 +190,8 @@ These are the living docs for the current worktree:
   - machine-readable runtime source-quality scope policy consumed by the robust-search evaluator
 - `docs/regular-options-robust-search-evaluation.md`
   - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
+- `docs/regular-options-historical-walk-forward.md`
+  - generated read-only operator workflow that refreshes feature-store and robust-search readbacks, ingests all-planned peer sleeve results, and reports historical walk-forward blockers without consuming protected holdout
 - `docs/regular-options-overfit-rule-archive.md`
   - generated read-only archive for rejected/winner-damaging candidate filter rules so overfit branches are retired from the monthly next-evidence queue without changing scanner policy
 - `docs/regular-options-lane-quarantine-archive.md`

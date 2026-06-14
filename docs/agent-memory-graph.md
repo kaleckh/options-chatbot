@@ -162,6 +162,17 @@ Run the owner generator and keep generated artifacts deterministic and checked.
 - `final_remediation_closure_pack_json`: Final remediation closure JSON - `data/contracts/final-remediation-closure-pack.json`. Machine-reading final remediation closure status, validation, and scope boundaries.
 - `memory_graph_doc`: Agent memory graph docs - `docs/agent-memory-graph.md`. Human-readable where-to-go memory graph.
 
+## If Running CEO/Runtime Agent Memory
+
+Use the local control plane after startup context when coordinating larger worker sprints.
+
+- `agents_guide`: Agent guide - `AGENTS.md`. Before code or docs edits.
+- `project_context`: Project context - `docs/PROJECT_CONTEXT.md`. Checking product scope, lane boundaries, and proof posture.
+- `next_steps`: Next steps - `docs/NEXT_STEPS.md`. Checking active blockers and current commands.
+- `agent_control_plane_doc`: Agent control plane - `docs/agent-control-plane.md`. Running CEO worker coordination or using the runtime memory graph.
+- `agent_control_cli`: Agent control CLI - `scripts/agent_control.py`. Creating, claiming, reporting, accepting, remembering, linking, querying, or digesting runtime graph state.
+- `memory_graph_doc`: Agent memory graph docs - `docs/agent-memory-graph.md`. Human-readable where-to-go memory graph.
+
 ## If Touching AI Commodity
 
 Treat AI commodity as a separate non-browser proof-first lane.
@@ -216,6 +227,8 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `architecture_overview` | `doc` | `docs/architecture-overview.md` | Current system map and subsystem ownership. |
 | `architecture_best_practices` | `doc` | `docs/architecture-best-practices.md` | Target architecture and readability rubric. |
 | `living_docs_hygiene` | `doc` | `docs/living-docs-hygiene.md` | Living-doc ownership, generated-artifact, and source-of-truth hygiene rules. |
+| `agent_control_plane_doc` | `doc` | `docs/agent-control-plane.md` | Local CEO/worker orchestration workflow and runtime memory graph contract. |
+| `agent_control_cli` | `script` | `scripts/agent_control.py` | SQLite WAL plus append-only JSONL task/message/graph control-plane implementation. |
 | `architecture_audit` | `doc` | `docs/architecture-audit.md` | Live audit of confusing surfaces and remaining monoliths. |
 | `runtime_request_flow` | `doc` | `docs/runtime-request-flow.md` | Narrative request-flow map. |
 | `api_and_storage` | `doc` | `docs/api-and-storage.md` | Active route groups, auth boundaries, and storage ownership. |
@@ -323,6 +336,9 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `memory_graph_generator` | `generates` | `memory_graph_json` | Generator emits machine-readable graph. |
 | `memory_graph_generator` | `generates` | `memory_graph_doc` | Generator emits human-readable graph. |
 | `memory_graph_doc` | `documents` | `memory_graph_json` | Markdown is rendered from the JSON graph manifest. |
+| `agent_control_plane_doc` | `owns` | `agent_control_cli` | The control-plane doc owns the runtime task, message, and graph memory CLI contract. |
+| `agent_control_cli` | `implements` | `agent_control_plane_doc` | The CLI implements the local SQLite and JSONL runtime graph described by the doc. |
+| `memory_graph_doc` | `does_not_replace` | `agent_control_plane_doc` | The static navigation graph points to the runtime control plane instead of serving as a task ledger. |
 | `remediation_loop_map_generator` | `generates` | `remediation_loop_map_json` | Generator emits the machine-readable remediation handoff ledger. |
 | `remediation_loop_map_generator` | `generates` | `remediation_loop_map_doc` | Generator emits the human-readable remediation handoff ledger. |
 | `remediation_loop_map_doc` | `documents` | `remediation_loop_map_json` | Markdown is rendered from the JSON handoff ledger. |

@@ -70,6 +70,22 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
         self.assertEqual(memberships["2026-01-01"], {"train"})
         self.assertEqual(memberships["2026-01-02"], {"final_holdout"})
 
+    def test_risk_metrics_include_drawdown_and_loss_streak(self) -> None:
+        rows = [
+            _trade("2026-01-01", -10.0),
+            _trade("2026-01-02", -5.0),
+            _trade("2026-01-03", 30.0),
+            _trade("2026-01-04", -20.0),
+        ]
+
+        metrics = robust._metrics_for_rows(rows, branch_id="risk-test", bootstrap_draws=20)
+
+        self.assertEqual(metrics["risk"]["cumulative_pnl_pct_points"], -5.0)
+        self.assertEqual(metrics["risk"]["max_drawdown_pct_points"], 20.0)
+        self.assertEqual(metrics["risk"]["max_consecutive_loss_count"], 2)
+        self.assertEqual(metrics["risk"]["best_trade_pnl_pct"], 30.0)
+        self.assertEqual(metrics["risk"]["worst_trade_pnl_pct"], -20.0)
+
     def test_build_report_can_mark_historical_candidate_ready_for_forward_nomination(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -127,6 +143,8 @@ class RegularOptionsRobustSearchEvaluationTests(unittest.TestCase):
         self.assertEqual(combined["split_metrics"]["validation"]["exact_trade_count"], 50)
         self.assertEqual(combined["split_metrics"]["final_holdout"]["exact_trade_count"], 30)
         self.assertGreater(combined["split_metrics"]["final_holdout"]["bootstrap"]["pf_lb_5pct"], 1.0)
+        self.assertEqual(combined["split_metrics"]["combined"]["risk"]["cumulative_pnl_pct_points"], 2900.0)
+        self.assertEqual(combined["split_metrics"]["combined"]["risk"]["max_drawdown_pct_points"], 2.0)
         self.assertEqual(combined["selection_adjustment"]["variants_searched"], 4)
         self.assertEqual(combined["feature_store_gate"]["status"], "feature_store_gate_passed")
 

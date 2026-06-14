@@ -38,6 +38,8 @@ class AgentMemoryGraphTests(unittest.TestCase):
             "architecture_best_practices",
             "living_docs_hygiene",
             "living_docs_hygiene_checker",
+            "agent_control_plane_doc",
+            "agent_control_cli",
             "memory_graph_doc",
             "memory_graph_json",
             "route_parity_doc",
@@ -89,6 +91,9 @@ class AgentMemoryGraphTests(unittest.TestCase):
         for edge_key in [
             ("memory_graph_generator", "generates", "memory_graph_json"),
             ("memory_graph_generator", "generates", "memory_graph_doc"),
+            ("agent_control_plane_doc", "owns", "agent_control_cli"),
+            ("agent_control_cli", "implements", "agent_control_plane_doc"),
+            ("memory_graph_doc", "does_not_replace", "agent_control_plane_doc"),
             ("remediation_loop_map_generator", "generates", "remediation_loop_map_json"),
             ("remediation_loop_map_generator", "generates", "remediation_loop_map_doc"),
             ("memory_graph_doc", "does_not_replace", "remediation_loop_map_doc"),
@@ -144,6 +149,7 @@ class AgentMemoryGraphTests(unittest.TestCase):
             "db_repositories",
             "frontend_trading_desk",
             "generated_artifacts",
+            "ceo_runtime_memory",
             "ai_commodity",
             "final_closure",
         ]:
@@ -151,6 +157,8 @@ class AgentMemoryGraphTests(unittest.TestCase):
             self.assertGreaterEqual(len(playbooks[playbook_id]["nodes"]), 3)
         self.assertIn("regular_options_operating_scorecard_doc", playbooks["profitability_paper_gates"]["nodes"])
         self.assertIn("regular_options_repair_burndown_doc", playbooks["profitability_paper_gates"]["nodes"])
+        self.assertIn("agent_control_plane_doc", playbooks["ceo_runtime_memory"]["nodes"])
+        self.assertIn("agent_control_cli", playbooks["ceo_runtime_memory"]["nodes"])
 
     def test_living_docs_link_the_memory_graph(self):
         for path in [

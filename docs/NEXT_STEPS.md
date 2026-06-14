@@ -8,25 +8,27 @@ Current read:
 - the forward cohort remains frozen and passive; do not use historical rows as fresh forward promotion proof.
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
 - trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `505` shared dates from `2024-05-22` through `2026-06-04`; the 504-date two-year feature-store depth target is met.
-- paid-data readiness is still `not_ready` after batch `2146` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
+- paid-data readiness is still `not_ready` after batch `2147` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
 - `docs/regular-options-cvx-executable-coverage.md` diagnoses the CVX issue as observed zero-bid tradability, not missing provider data: `495,306` trusted rows, `505` dates, `56,191` non-executable rows, `100.0%` of non-executable rows are zero-bid/positive-ask, `0` missing bid/ask rows, `0` crossed quotes, and the current multilane source report contains `3` selected CVX historical trades plus `1` suppressed duplicate.
 - `data/contracts/regular-options-source-quality-scope-policy.json` is active and applies the `cvx_zero_bid_tradability_candidate_scope_v1` rule, excluding the `3` matching CVX `bullish_pullback_core` rows from historical nomination metrics without lowering the quote-quality floor.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
-- batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects.
-- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,428` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
+- batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects. Batch `2147` then imported the scoped post-repair exact missing rows for the four coverage-repair variants: `17` trusted intraday rows, `0` duplicates, `0` rejects, `0` dry-run/import errors, and `0` lookahead-only rows.
+- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,436` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
 - `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `231` exact rows accepted after `3` CVX source-quality scope exclusions, `0` / `3` candidates ready, regime robustness passed, feature-store gate passed, combined final holdout `28` trades with bootstrap PF lower bound `0.61`, and blockers include final holdout below `30`, final PF-LB below the selection-adjusted bar, paper-shadow/source-quality blockers, and lane-specific unpriced/zero-bid blockers.
+- `docs/regular-options-historical-walk-forward.md` is now the one-command operator workflow report, exposed as `npm run options:replay:regular-options-walk-forward`. Current result after the scoped quote repair is still `historical_walkforward_ran_candidates_blocked`: feature store built, robust search blocked, `231` exact rows accepted, `0` / `3` robust candidates ready, all-planned sleeves loaded with `44` / `44` variants tested as of `2026-06-04`, `0` all-planned run failures, protected holdout starts `2026-06-05`, no holdout overlap, and `promotion_ready=false`. Schema `2` now carries a ranked repair queue with `19` rows / `3` high-priority rows. The prior coverage-repair rows were cleared as coverage blockers: `sleeve_next_index_refill_v1` is now `profitable_but_overlaps` (`116` exact, `100.0%` coverage, PF `1.74`, stress PF `1.33`, `6` strict-new rows), `sleeve_next_reit_industrial_refill_v1` is now `repair_stress_before_counting` (`128` exact, `100.0%` coverage, PF `1.53`, stress PF `1.17`, `15` strict-new rows), `sleeve_next_defensive_refill_v1` is now `weak_positive_or_marginal` (`143` exact, `100.0%` coverage, PF `1.48`, stress PF `1.13`, `15` strict-new rows), and `sleeve_next_move_bucket_refill_v1` is now `weak_positive_or_marginal` (`153` exact, `100.0%` coverage, PF `1.27`, stress PF `0.96`, `23` strict-new rows).
+- The scoped exact quote import/replay repaired coverage but did not produce a promotion-ready historical lane. Current all-planned worth counts are `1` `profitable_but_overlaps`, `1` `repair_stress_before_counting`, `6` `weak_positive_or_marginal`, `6` `thin_sample`, `19` `not_worth_current_shape`, and `11` `no_current_candidates`.
 
 Next actions:
 
-1. Repair the remaining candidate-specific source-quality blockers without changing scanner policy or proof bars: `bullish_pullback_core:unpriced_candidates_3`, Lane A conservative zero-bid economics, Lane A `53.1%` quote coverage, Lane A rolling OOS watch, and `paper_shadow_fill_evidence_pending`.
+1. Use the workflow `repair_queue` as the first operating queue for historical profitability work. Do not mutate quote/evidence stores, import repair quotes, change scanner policy, change proof bars, or consume protected holdout from these rows without explicit approval. High-priority rows now point back to robust-candidate source-quality/unpriced blockers; the repaired peer variants need stress/risk repair, overlap review, or a new causal hypothesis rather than more quote-coverage import.
 2. After any further source-quality repair, import, or symbol-surface change, validate with:
 
 ```powershell
 uv run --locked python scripts\audit_paid_data_readiness.py --force --json --snapshot-kind intraday --source-labels thetadata_opra_nbbo_1m --required-underlyings SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA --min-quote-dates 504 --min-shared-quote-dates 504 --min-executable-quote-pct 90
 ```
 
-3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: enough newest holdout rows to reach at least `30` exact final-holdout trades, final-holdout PF-LB above `1.0` and the selection-adjusted bar, and the remaining source-quality blockers.
-4. Rerun `npm run options:features:regular-options` and `npm run options:robust-search:regular-options` after any historical import, source-quality repair, or source-replay repair.
+3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: enough pre-holdout repair rows or future frozen-forward rows to reach at least `30` exact final-holdout trades, final-holdout PF-LB above `1.0` and the selection-adjusted bar, and the remaining source-quality blockers.
+4. Rerun `npm run options:features:regular-options`, `npm run options:robust-search:regular-options`, and `npm run options:replay:regular-options-walk-forward` after any historical import, source-quality repair, source-replay repair, or all-planned sleeve refresh.
 5. Use historical robust-search results only to nominate, reject, or refreeze lanes; do not mark any historical result as fresh forward proof or live-validation promotion.
 
 ## Current Sprint Blockers From June 9 Audit
@@ -63,6 +65,56 @@ Current read:
 - latest Markdown placement audit: `docs/markdown-audit-2026-05-31.md`
 
 1. When adding new Markdown, update `docs/index.md` only for living docs or reports that change the current decision surface. Keep generated research reports beside their source artifacts under `data/` or `research_runs/`.
+
+## Agent Control Plane And Runtime Memory Graph
+
+Current read:
+- `docs/agent-control-plane.md` owns the local CEO/worker control-plane workflow and runtime memory graph.
+- `scripts/agent_control.py` writes ignored local runtime state under `data/agent-control/`: SQLite WAL task/message/graph tables plus append-only `events.jsonl`.
+- `npm run agent:control -- seed project --json` seeds the repo-wide graph layer from checked startup/living docs, visible non-ignored tracked and untracked repo text files, the generated static memory graph, the latest gateboard JSON, and `package.json`.
+- `npm run agent:control -- bootstrap --json` is the default next-context-window handoff command: it seeds the graph, returns a digest, and emits compact prompt-ready gateboard blocker context.
+- `npm run agent:control -- bootstrap --prompt-only` prints the same compact handoff context without the surrounding JSON.
+- `npm run agent:control -- checkpoint write ...` records the current CEO objective, scope, status, constraints, next actions, files, and verification into `checkpoint:latest`; `checkpoint latest --prompt-only` reads it without reseeding. Its default autonomy is `read_only_workers`; pass broader modes only when explicitly approved for that session.
+- Accepted worker reports now write back into typed operating memory with `source_type=operating_memory`: `worker_report`, `verification`, `artifact`, and accepted `blocker` nodes linked to the raw report, task, and accepting decision. Verification and artifact memories also link directly to the task for future context recovery, raw submitted reports remain task artifacts until accepted, and late reports are rejected once a task is `accepted`, `blocked`, or `cancelled`.
+- `npm run agent:control -- context pack --goal "..." --pathway operator --prompt-only` emits the normal focused prompt pack for future context windows: latest checkpoint, pathway-scoped accepted decisions/verifications/artifacts/worker reports/open questions, current fail-closed gateboard blockers from every pathway, relevant repo files, and recommended commands.
+- `graph query` now supports `--memory-type`, `--include-inactive`, and `--fresh-only`; typed operating-memory search hides resolved, superseded, archived, expired, and stale-by-expiry memories by default.
+- `npm run agent:control -- memory audit --prompt-only` checks active operating memory for expired/stale entries and supersession inconsistencies, including missing `superseded_by` targets and missing `supersedes` edges. `npm run agent:control -- memory eval --prompt-only` runs deterministic recovery checks over checkpoint, current gateboard recovery, repo-file recovery, context pack output, and audit health without requiring the blocker text to be named open risk.
+- `npm run verify:memory` runs the focused control-plane regression suite plus the memory eval.
+- Seeded repo-file context materializes visible files as `repo_file:<path>` nodes with `source_type=repo_file_index`, category, `git_state`, content hash, and bounded body excerpts. Seed refresh prunes prior seed-owned current-state static, gateboard, and repo-file nodes before reseeding so removed files and cleared gateboard blockers do not keep appearing in current queries. Seeded gateboard context materializes current no-chase blockers as `blocker:gateboard:*` nodes, pathway statuses as `entity:gateboard:pathway:*`, and source readbacks as `evidence_artifact:gateboard:*`.
+- `graph query` supports metadata filters and `--context` prompt output, so future sessions can retrieve focused graph context such as gateboard blockers without rereading every owner file first.
+- `docs/agent-memory-graph.md` remains generated static navigation metadata with `runtime_use=false`; do not use it as the runtime task ledger.
+- CEO may spawn labelled visible worker terminals when the work is large enough, without per-terminal user approval, but each terminal must have a scoped pathway, allowed commands, prohibitions, report format, and stop condition.
+- The control plane is orchestration memory only. It does not create or approve trades, submit broker orders, mutate evidence stores, change scanner policy, change stops or sizing, lower proof bars, consume protected holdout, or promote lanes.
+
+Next actions:
+
+1. At the start of the next large CEO sprint, run:
+
+```powershell
+npm run agent:control -- bootstrap --prompt-only
+npm run agent:control -- context pack --goal "current CEO objective" --pathway operator --prompt-only
+npm run agent:control -- graph query "open risk" --metadata source_type=gateboard_blocker --max-depth 1 --context --json
+npm run agent:control -- graph query "agent control checkpoint bootstrap" --metadata source_type=repo_file_index --max-depth 0 --context --json
+npm run agent:control -- memory audit --prompt-only
+```
+
+Use `npm run agent:control -- bootstrap --json` when seed counts or digest fields are needed, and `npm run agent:control -- seed project --json` only when explicitly inspecting seed results.
+
+2. Use `task create`, `task claim`, `task report`, `task accept`, `graph remember`, `graph link`, `graph query`, `context pack`, `memory remember`, `memory supersede`, `memory audit`, `memory eval`, and `digest` during worker-based sprints.
+3. Write a checkpoint after meaningful CEO milestones:
+
+```powershell
+npm run agent:control -- checkpoint write --objective "..." --summary "..." --autonomy-level read_only_workers --next-action "..." --prompt-only
+```
+
+4. Seed only non-trading orchestration facts beyond the deterministic repo seed: worker reports, durable decisions, sprint stop conditions, and blocker summaries.
+5. After one or two real CEO runs, decide whether to add scheduler integration and vector/embedding retrieval. Do not add external HydraDB calls or API keys until the local ledger shape proves useful.
+6. Verify focused changes with:
+
+```powershell
+npm run verify:agent-control
+npm run verify:memory
+```
 
 ## Operational Survivability
 

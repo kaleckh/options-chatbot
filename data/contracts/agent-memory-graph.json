@@ -56,6 +56,24 @@
       "type": "documents"
     },
     {
+      "from": "agent_control_plane_doc",
+      "reason": "The control-plane doc owns the runtime task, message, and graph memory CLI contract.",
+      "to": "agent_control_cli",
+      "type": "owns"
+    },
+    {
+      "from": "agent_control_cli",
+      "reason": "The CLI implements the local SQLite and JSONL runtime graph described by the doc.",
+      "to": "agent_control_plane_doc",
+      "type": "implements"
+    },
+    {
+      "from": "memory_graph_doc",
+      "reason": "The static navigation graph points to the runtime control plane instead of serving as a task ledger.",
+      "to": "agent_control_plane_doc",
+      "type": "does_not_replace"
+    },
+    {
       "from": "remediation_loop_map_generator",
       "reason": "Generator emits the machine-readable remediation handoff ledger.",
       "to": "remediation_loop_map_json",
@@ -914,6 +932,22 @@
       "owner_summary": "Living-doc ownership, generated-artifact, and source-of-truth hygiene rules.",
       "path": "docs/living-docs-hygiene.md",
       "read_when": "Touching living docs, generated artifacts, or source-of-truth documentation."
+    },
+    {
+      "id": "agent_control_plane_doc",
+      "kind": "doc",
+      "label": "Agent control plane",
+      "owner_summary": "Local CEO/worker orchestration workflow and runtime memory graph contract.",
+      "path": "docs/agent-control-plane.md",
+      "read_when": "Running CEO worker coordination or using the runtime memory graph."
+    },
+    {
+      "id": "agent_control_cli",
+      "kind": "script",
+      "label": "Agent control CLI",
+      "owner_summary": "SQLite WAL plus append-only JSONL task/message/graph control-plane implementation.",
+      "path": "scripts/agent_control.py",
+      "read_when": "Creating, claiming, reporting, accepting, remembering, linking, querying, or digesting runtime graph state."
     },
     {
       "id": "architecture_audit",
@@ -1839,6 +1873,19 @@
         "memory_graph_doc"
       ],
       "summary": "Run the owner generator and keep generated artifacts deterministic and checked."
+    },
+    {
+      "heading": "If Running CEO/Runtime Agent Memory",
+      "id": "ceo_runtime_memory",
+      "nodes": [
+        "agents_guide",
+        "project_context",
+        "next_steps",
+        "agent_control_plane_doc",
+        "agent_control_cli",
+        "memory_graph_doc"
+      ],
+      "summary": "Use the local control plane after startup context when coordinating larger worker sprints."
     },
     {
       "heading": "If Touching AI Commodity",

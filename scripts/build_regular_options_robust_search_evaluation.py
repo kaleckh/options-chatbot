@@ -256,7 +256,69 @@ def _metrics_for_rows(rows: Sequence[dict[str, Any]], *, branch_id: str, bootstr
     metrics["latest_entry_date"] = rows[-1]["entry_date"] if rows else None
     metrics["entry_date_count"] = len({row["entry_date"] for row in rows})
     metrics["ticker_count"] = len({row["ticker"] for row in rows})
+    metrics["risk"] = _risk_metrics_for_rows(rows)
     return metrics
+
+
+def _risk_metrics_for_rows(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return {
+            "cumulative_pnl_pct_points": None,
+            "max_drawdown_pct_points": None,
+            "max_drawdown_start_entry_date": None,
+            "max_drawdown_end_entry_date": None,
+            "max_consecutive_loss_count": 0,
+            "best_trade_pnl_pct": None,
+            "worst_trade_pnl_pct": None,
+        }
+
+    ordered = sorted(
+        (dict(row) for row in rows),
+        key=lambda item: (
+            str(item.get("entry_date") or ""),
+            str(item.get("ticker") or ""),
+            str(item.get("direction") or ""),
+            str(item.get("lane_id") or ""),
+        ),
+    )
+    cumulative = 0.0
+    peak = 0.0
+    peak_entry_date: str | None = None
+    max_drawdown = 0.0
+    max_drawdown_start: str | None = None
+    max_drawdown_end: str | None = None
+    current_loss_streak = 0
+    max_loss_streak = 0
+    values: list[float] = []
+
+    for row in ordered:
+        pnl = float(row["pnl_pct"])
+        values.append(pnl)
+        cumulative += pnl
+        entry_date = str(row.get("entry_date") or "")
+        if cumulative > peak:
+            peak = cumulative
+            peak_entry_date = entry_date
+        drawdown = peak - cumulative
+        if drawdown > max_drawdown:
+            max_drawdown = drawdown
+            max_drawdown_start = peak_entry_date
+            max_drawdown_end = entry_date
+        if pnl < 0.0:
+            current_loss_streak += 1
+            max_loss_streak = max(max_loss_streak, current_loss_streak)
+        else:
+            current_loss_streak = 0
+
+    return {
+        "cumulative_pnl_pct_points": round(cumulative, 2),
+        "max_drawdown_pct_points": round(max_drawdown, 2),
+        "max_drawdown_start_entry_date": max_drawdown_start,
+        "max_drawdown_end_entry_date": max_drawdown_end,
+        "max_consecutive_loss_count": max_loss_streak,
+        "best_trade_pnl_pct": _round_optional(max(values), 2),
+        "worst_trade_pnl_pct": _round_optional(min(values), 2),
+    }
 
 
 def _split_metrics(rows: Sequence[dict[str, Any]], *, candidate_id: str, bootstrap_draws: int) -> dict[str, Any]:
@@ -846,8 +908,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "## Candidate Table",
         "",
-        "| Candidate | Type | Status | Total N | Validation N | Final N | Final PF LB | Blockers |",
-        "|---|---|---|---:|---:|---:|---:|---|",
+        "| Candidate | Type | Status | Total N | Validation N | Final N | Final PF LB | Total Max DD | Final Max DD | Blockers |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|---|",
     ]
     for candidate in _as_list(report.get("candidates")):
         candidate = _as_dict(candidate)
@@ -856,6 +918,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         validation = _as_dict(splits.get("validation"))
         final = _as_dict(splits.get("final_holdout"))
         final_bootstrap = _as_dict(final.get("bootstrap"))
+        combined_risk = _as_dict(combined.get("risk"))
+        final_risk = _as_dict(final.get("risk"))
         lines.append(
             "| "
             + " | ".join(
@@ -867,6 +931,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                     _cell(validation.get("exact_trade_count")),
                     _cell(final.get("exact_trade_count")),
                     _cell(final_bootstrap.get("pf_lb_5pct")),
+                    _cell(combined_risk.get("max_drawdown_pct_points")),
+                    _cell(final_risk.get("max_drawdown_pct_points")),
                     _cell(", ".join(str(item) for item in _as_list(candidate.get("blockers"))) or "none"),
                 ]
             )

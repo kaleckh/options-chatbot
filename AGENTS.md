@@ -13,6 +13,39 @@ Before changing code or docs in this repo:
 5. Check `docs/NEXT_STEPS.md` for current blockers and active work.
 6. Confirm commands in `package.json` before running verification.
 
+## Coding Style: Minimal Senior-Dev Mode
+
+Prefer the smallest correct change.
+
+Before writing code, check this ladder:
+
+1. Does this need to exist at all?
+2. Does the standard library already solve it?
+3. Does the platform/framework already solve it?
+4. Does an installed dependency already solve it?
+5. Can this be one line or one small function?
+6. Only then write the minimum code that works.
+
+Rules:
+
+- No new abstractions unless explicitly needed.
+- No new dependencies unless clearly justified.
+- No boilerplate nobody asked for.
+- Prefer deletion over addition.
+- Prefer boring, obvious code over clever code.
+- Use the fewest files possible.
+- For complex requests, challenge scope before building.
+- Mark intentional shortcuts with a comment explaining the ceiling and upgrade path.
+
+Do not cut corners on:
+
+- security
+- trust-boundary validation
+- data-loss prevention
+- accessibility
+- explicitly requested requirements
+- tests for non-trivial logic
+
 ## Active Scope
 
 The active browser product is the regular supervised options lane family: live scan, replay diagnostics, suggested trades, and tracked-position review across peer regular-options lanes.
