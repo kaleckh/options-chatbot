@@ -1,6 +1,6 @@
 # Next Steps
 
-Last updated: 2026-06-12
+Last updated: 2026-06-14
 
 ## Current Sprint Blockers From June 9 Audit
 
@@ -19,6 +19,9 @@ Next actions:
 2. Capture durable fill-attempt evidence for the `4` missing fresh-selection rows and exact entry evidence for the `8` paper/probation rows without loosening guardrails.
 3. Resume fresh-evidence collection until there are at least `20` exact realized rows, or keep the named-gate defect report current if the funnel remains blocked after 10 trading sessions.
 4. Repair the broad intraday profit-loop quote coverage path until the active artifact clears the policy coverage blocker; do not count low-coverage broad artifacts as proof.
+5. Run a ThetaData history-depth check for the trusted intraday OPRA/NBBO cache before interpreting missing older regime buckets as strategy behavior.
+6. Decide whether to buy or build a cheap EOD long-history falsification dataset for broad pre-screening only; EOD evidence must stay below the production proof bar.
+7. Pre-register the next `6`-week frozen paper cohort dates and champion family before any protected holdout consumption.
 
 ## Documentation Hygiene
 
