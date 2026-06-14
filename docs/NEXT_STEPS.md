@@ -7,16 +7,16 @@ Last updated: 2026-06-14
 Current read:
 - the forward cohort remains frozen and passive; do not use historical rows as fresh forward promotion proof.
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
-- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `453` shared dates from `2024-05-22` through `2026-06-04`; target for a two-year surface is `504` shared dates, so `51` shared dates remain.
-- paid-data readiness is `not_ready` after batch `2143` because `CVX` executable quote coverage is `89.23%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
+- trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `474` shared dates from `2024-05-22` through `2026-06-04`; target for a two-year surface is `504` shared dates, so `30` shared dates remain.
+- paid-data readiness is `not_ready` after batch `2144` because `CVX` executable quote coverage is `88.64%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
-- batches `2130` through `2143` imported `2024-05-22` through `2025-02-28` for the 13-symbol set with `4,582,228` trusted intraday rows, `0` duplicates, and `0` rejects.
-- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `10,926,420` trusted intraday rows, all `13` symbols available, `453` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
+- batches `2130` through `2144` imported `2024-05-22` through `2025-03-31` for the 13-symbol set with `5,090,302` trusted intraday rows, `0` duplicates, and `0` rejects.
+- `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `11,434,494` trusted intraday rows, all `13` symbols available, `474` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
 - `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `234` exact rows accepted, `0` / `3` candidates ready, combined final holdout `29` trades with bootstrap PF lower bound `0.56`, and blockers include feature-store shared history below the `504`-date gate, missing baseline ablation, missing VIX/regime context, final holdout below `30`, and existing source quality blockers.
 
 Next actions:
 
-1. Continue old-history imports in chunks until the 13-symbol proof/import set reaches the two-year target and the low-executable `CVX` audit clears, or ThetaData returns a provider/license blocker. Next chunk starts at `2025-03-03`. Use the same parameters as batches `2130` through `2143`: `--snapshot-kind intraday --start-time 09:45 --end-time 15:55 --interval 1h --min-dte 21 --max-dte 60 --strike-range 20 --right both --source thetadata_opra_nbbo_1m`.
+1. Continue old-history imports in chunks until the 13-symbol proof/import set reaches the two-year target and the low-executable `CVX` audit clears, or ThetaData returns a provider/license blocker. Next chunk starts at `2025-04-01`. Use the same parameters as batches `2130` through `2144`: `--snapshot-kind intraday --start-time 09:45 --end-time 15:55 --interval 1h --min-dte 21 --max-dte 60 --strike-range 20 --right both --source thetadata_opra_nbbo_1m`.
 2. After each chunk, validate with:
 
 ```powershell
