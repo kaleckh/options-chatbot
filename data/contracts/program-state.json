@@ -36,6 +36,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 3 operating pass after cohort freeze. Ran npm run daily-ops successfully and confirmed scheduled-scan heartbeat health is fresh with 0 market days stale. Repaired a read-only open-risk/candidate-ledger duplicate so QQQ id=537 appears once as the open-risk governor blocker, and wired the regression tests into verify:fast. Refreshed open-risk, fresh-evidence, candidate-ledger, fill-attempt, paper-monitor, and gateboard readbacks. Post-freeze exact realized P&L rows remain 0 for volatility_expansion_observation and 0 for bullish_pullback_observation; no kill trigger fired before eval_date 2026-07-28."
+    "work": "Phase 3 operating pass. Ran npm run daily-ops successfully; all chores passed. Scheduled-scan heartbeat remains fresh with 0 market days stale, gateboard remains safe_blocked_no_live_release, and open risk remains blocked on stale negative live-exact QQQ id=537 review requiring a valid market-data window. Post-freeze exact realized P&L rows remain 0 for volatility_expansion_observation and 0 for bullish_pullback_observation; no kill trigger fired before eval_date 2026-07-28."
   }
 }

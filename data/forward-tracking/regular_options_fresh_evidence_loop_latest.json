@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-fresh-evidence-loop.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_20260614T042135Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_20260614T042750Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_20260614T042135Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_20260614T042750Z.md"
   },
   "candidates": [
     {
@@ -1860,7 +1860,7 @@
     "readback_is": "pending candidate to validation, fill-attempt, tracked-link, and exact realized-P&L readback",
     "readback_is_not": "scanner promotion, broker action, proof-bar change, auth change, or DB mutation"
   },
-  "generated_at_utc": "2026-06-14T04:21:35Z",
+  "generated_at_utc": "2026-06-14T04:27:50Z",
   "inputs": {
     "fill_attempt_file": "data/forward-tracking/fill_attempts.jsonl",
     "queue_file": "data/forward-tracking/pending_scan_candidates.jsonl",
@@ -1871,12 +1871,12 @@
   "provenance": {
     "artifact_kind": "forward_evidence_readback",
     "branch": "main",
-    "commit_sha": "cb06236b7406a0d21819ca0d0dd8b5c57bd517e8",
-    "generated_at_utc": "2026-06-14T04:21:35Z",
+    "commit_sha": "318345349424897ddb60722d145a7ee03fe8db36",
+    "generated_at_utc": "2026-06-14T04:27:50Z",
     "host": "KAESDEVICE",
     "repository_root": "C:\\Users\\kalec\\options-chatbot",
-    "run_id": "regular_options_fresh_evidence_loop:KAESDEVICE:cb06236b7406:2026-06-14T04:21:35Z",
-    "short_commit_sha": "cb06236b7406"
+    "run_id": "regular_options_fresh_evidence_loop:KAESDEVICE:318345349424:2026-06-14T04:27:50Z",
+    "short_commit_sha": "318345349424"
   },
   "report_id": "regular_options_fresh_evidence_loop",
   "scope": "regular_options_fresh_exact_evidence_loop",

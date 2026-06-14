@@ -7,7 +7,7 @@ This is read-only. It explains where the project is blocked without changing sca
 ## At A Glance
 
 - Overall status: `safe_blocked_no_live_release`
-- Generated at UTC: `2026-06-14T04:21:36Z`
+- Generated at UTC: `2026-06-14T04:27:51Z`
 - Primary message: Data is readable, but release is intentionally blocked in Evidence Path, Profitability Path, Promotion Path, Operator Path.
 
 ## Current Flow
@@ -68,11 +68,11 @@ flowchart LR
 | pathway_registry: `data/contracts/project-pathway-registry.json` | True | project_pathway_registry | n/a |
 | candidate_lifecycle: `data/contracts/candidate-lifecycle-contract.json` | True | candidate_lifecycle_contract | n/a |
 | missed_regular_picks_outcome: `data/forward-tracking/missed_regular_picks_outcome_latest.json` | True | missed_regular_picks_outcome | 2026-06-14T03:59:16Z |
-| fresh_evidence_loop: `data/forward-tracking/regular_options_fresh_evidence_loop_latest.json` | True | fresh_evidence_loop_readback | 2026-06-14T04:21:35Z |
+| fresh_evidence_loop: `data/forward-tracking/regular_options_fresh_evidence_loop_latest.json` | True | fresh_evidence_loop_readback | 2026-06-14T04:27:50Z |
 | open_position_risk: `data/forward-tracking/regular_open_position_risk_latest.json` | True | n/a | 2026-06-14T04:21:25Z |
 | suggested_trade_close_risk: `data/forward-tracking/suggested_trade_close_risk_latest.json` | True | n/a | 2026-06-12T22:44:53Z |
 | lane_promotion_state: `data/forward-tracking/lane_promotion_state_latest.json` | True | lane_promotion_state_readback | 2026-06-14T03:59:55Z |
-| paper_shortlist: `data/profitability-lab/regular-options-paper-shortlist/latest.json` | True | paper_shortlist_readback | 2026-06-14T04:21:34Z |
+| paper_shortlist: `data/profitability-lab/regular-options-paper-shortlist/latest.json` | True | paper_shortlist_readback | 2026-06-14T04:27:48Z |
 | operating_scorecard: `data/profitability-lab/regular-options-operating-scorecard/latest.json` | True | visible_product_profitability_progress_but_proof_still_blocked | 2026-06-05T17:28:57Z |
 | ai_commodity_progress: `data/ai-commodity-infra/progress/latest.json` | True | n/a | n/a |
 | scheduled_scan_heartbeat: `data/forward-tracking/scheduled_scan_heartbeat_latest.json` | True | fresh | 2026-06-12T17:46:27Z |
