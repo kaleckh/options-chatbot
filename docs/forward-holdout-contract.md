@@ -28,6 +28,7 @@ JSON sibling: `data/contracts/forward-holdout-contract.json`.
 - Champion flag: `--champion-final-eval`
 - Champion limit: `one_consumption_per_strategy_family_ever`
 - Variant limit: `1`
+- Ledger append required: `True`
 - Ledger path: `data/profitability-lab/regular-options-autoresearch/ledger.jsonl`
 - Ledger marker: `holdout_consumption.consumed=true`
 

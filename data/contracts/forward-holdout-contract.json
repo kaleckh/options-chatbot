@@ -18,6 +18,7 @@
     "champion_final_eval": {
       "allowed": true,
       "flag": "--champion-final-eval",
+      "ledger_append_required": true,
       "ledger_marker": "holdout_consumption.consumed=true",
       "ledger_path": "data/profitability-lab/regular-options-autoresearch/ledger.jsonl",
       "limit": "one_consumption_per_strategy_family_ever",

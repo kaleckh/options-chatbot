@@ -252,6 +252,18 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
         self.assertEqual(rows[0]["holdout_consumption"]["strategy_family"], "lane_a")
         self.assertTrue(rows[0]["holdout_consumption"]["consumed"])
 
+    def test_champion_final_eval_requires_ledger_append(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaisesRegex(RuntimeError, "requires ledger append"):
+                goal.run_goal_experiments(
+                    variants=["lane_a_goal_test"],
+                    lookback_years=1,
+                    output_dir=Path(tmp),
+                    append_ledger=False,
+                    champion_final_eval=True,
+                    as_of_date=date(2026, 6, 14),
+                )
+
     def test_champion_final_eval_is_one_shot_per_strategy_family(self):
         with tempfile.TemporaryDirectory() as tmp:
             ledger = Path(tmp) / "ledger.jsonl"

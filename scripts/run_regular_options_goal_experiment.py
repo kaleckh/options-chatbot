@@ -291,6 +291,8 @@ def run_goal_experiments(
     holdout_ledger_path: Path = evaluator.LEDGER_PATH,
     as_of_date: date | None = None,
 ) -> dict[str, Any]:
+    if champion_final_eval and not append_ledger:
+        raise RuntimeError("--champion-final-eval requires ledger append so holdout consumption is recorded.")
     variant_list = [str(item).strip() for item in variants if str(item).strip()]
     holdout_guard = validate_forward_holdout_guard(
         variants=variant_list,
