@@ -24,6 +24,7 @@ from scripts.candidate_lifecycle import (  # noqa: E402
     fresh_evidence_loop_outcome_for_status,
     is_paper_only_status,
 )
+from scripts.operational_provenance import build_operational_provenance  # noqa: E402
 
 
 REPORT_ID = "regular_options_fresh_evidence_loop"
@@ -336,6 +337,7 @@ def build_report(
     dispositions = _disposition_by_key(queue_file=queue_file, fill_attempt_file=fill_attempt_file)
     stop_grid = _read_json(stop_grid_path)
     stop_rows = _stop_rows_by_position(stop_grid)
+    generated_at_utc = _utc_now()
 
     rows: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -429,9 +431,14 @@ def build_report(
     }
     return {
         "report_id": REPORT_ID,
-        "generated_at_utc": _utc_now(),
+        "generated_at_utc": generated_at_utc,
         "scope": "regular_options_fresh_exact_evidence_loop",
         "status": "fresh_evidence_loop_readback",
+        "provenance": build_operational_provenance(
+            run_id_prefix=REPORT_ID,
+            generated_at_utc=generated_at_utc,
+            extra={"artifact_kind": "forward_evidence_readback"},
+        ),
         "evidence_boundary": {
             "readback_is": (
                 "pending candidate to validation, fill-attempt, tracked-link, and exact realized-P&L readback"
@@ -478,6 +485,7 @@ def _fmt(value: Any) -> str:
 
 def render_markdown(report: dict[str, Any]) -> str:
     summary = report["summary"]
+    provenance = report.get("provenance") if isinstance(report.get("provenance"), dict) else {}
     lines = [
         "# Regular Options Fresh Evidence Loop",
         "",
@@ -504,9 +512,24 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Exact-exit bridge rows: `{summary['exact_exit_bridge_count']}`.",
         f"- Legacy pre-promotion rows: `{summary['legacy_pre_promotion_state_gate_count']}`.",
         f"- Live policy change: `{summary['live_policy_change']}`.",
-        "",
-        "## Evidence Boundary",
-        "",
+    ]
+    if provenance:
+        lines.extend(
+            [
+                "",
+                "## Provenance",
+                "",
+                f"- Host: `{_fmt(provenance.get('host'))}`.",
+                f"- Commit SHA: `{_fmt(provenance.get('commit_sha'))}`.",
+                f"- Branch: `{_fmt(provenance.get('branch'))}`.",
+                f"- Run ID: `{_fmt(provenance.get('run_id'))}`.",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "## Evidence Boundary",
+            "",
         "- Exact realized P&L is required before promotion discussion.",
         "- Entry evidence status describes scanner quote/limit evidence only; it is not a fill, position, or broker execution status.",
         "- `created` and `duplicate` validation outcomes are still paper/tracked linkage states, not broker fills.",
@@ -517,7 +540,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "| Date | Lane | Ticker | Outcome | Entry Evidence | P&L Status | Bridge | Position | Ready | Reason |",
         "|---|---|---|---|---|---|---|---:|---|---|",
-    ]
+        ]
+    )
     for row in report.get("candidates") or []:
         lines.append(
             "| "

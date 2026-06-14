@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import build_regular_options_fresh_evidence_loop as evidence_loop
 
@@ -100,6 +101,37 @@ def _stop_row(position_id: int, pnl: float, *, basis: str = "historical_spread_b
 
 
 class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
+    def test_fresh_evidence_loop_records_operational_provenance(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            queue = root / "pending.jsonl"
+            fills = root / "fills.jsonl"
+            stop_grid = root / "stop-grid.json"
+            queue.write_text("", encoding="utf8")
+            fills.write_text("", encoding="utf8")
+            stop_grid.write_text(json.dumps({"rows": []}), encoding="utf8")
+            provenance = {
+                "host": "KaesDevice",
+                "commit_sha": "abcdef1234567890",
+                "short_commit_sha": "abcdef123456",
+                "branch": "main",
+                "run_id": "regular_options_fresh_evidence_loop:KaesDevice:abcdef123456:test",
+            }
+
+            with patch.object(evidence_loop, "build_operational_provenance", return_value=provenance) as build:
+                report = evidence_loop.build_report(
+                    queue_file=queue,
+                    fill_attempt_file=fills,
+                    stop_grid_path=stop_grid,
+                )
+
+        self.assertEqual(report["provenance"]["host"], "KaesDevice")
+        self.assertEqual(report["provenance"]["commit_sha"], "abcdef1234567890")
+        build.assert_called_once()
+        self.assertEqual(build.call_args.kwargs["run_id_prefix"], evidence_loop.REPORT_ID)
+        self.assertEqual(build.call_args.kwargs["generated_at_utc"], report["generated_at_utc"])
+        self.assertEqual(build.call_args.kwargs["extra"]["artifact_kind"], "forward_evidence_readback")
+
     def test_fresh_evidence_loop_reconciles_validation_fill_links_and_realized_pnl(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -311,6 +343,12 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
     def test_markdown_renders_core_readback_counts(self):
         report = {
             "status": "fresh_evidence_loop_readback",
+            "provenance": {
+                "host": "KaesDevice",
+                "commit_sha": "abcdef1234567890",
+                "branch": "main",
+                "run_id": "regular_options_fresh_evidence_loop:KaesDevice:abcdef123456:test",
+            },
             "summary": {
                 "candidate_count": 2,
                 "validation_outcome_counts": {"no_longer_matched": 1, "proof_ineligible": 1},
@@ -340,6 +378,55 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
         self.assertIn("# Regular Options Fresh Evidence Loop", markdown)
         self.assertIn("No-longer-matched: `1`", markdown)
         self.assertIn("Non-executable entry evidence: `1`", markdown)
+        self.assertIn("Host: `KaesDevice`", markdown)
+        self.assertIn("Commit SHA: `abcdef1234567890`", markdown)
+
+    def test_write_outputs_persists_provenance_in_json_and_markdown(self):
+        report = {
+            "status": "fresh_evidence_loop_readback",
+            "provenance": {
+                "host": "KaesDevice",
+                "commit_sha": "abcdef1234567890",
+                "branch": "main",
+                "run_id": "regular_options_fresh_evidence_loop:KaesDevice:abcdef123456:test",
+            },
+            "summary": {
+                "candidate_count": 0,
+                "validation_outcome_counts": {},
+                "entry_evidence_status_counts": {},
+                "realized_pnl_status_counts": {},
+                "evidence_bridge_status_counts": {},
+                "promotion_gate_context_counts": {},
+                "no_longer_matched_count": 0,
+                "proof_ineligible_count": 0,
+                "linked_position_count": 0,
+                "exact_realized_pnl_count": 0,
+                "missing_realized_pnl_count": 0,
+                "stale_count": 0,
+                "non_executable_count": 0,
+                "promotion_discussion_ready_count": 0,
+                "paper_probation_bridge_count": 0,
+                "exact_exit_bridge_count": 0,
+                "non_executable_bridge_count": 0,
+                "legacy_pre_promotion_state_gate_count": 0,
+                "live_policy_change": False,
+            },
+            "candidates": [],
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            artifacts = evidence_loop.write_outputs(
+                report,
+                output_dir=root / "out",
+                docs_report=root / "docs" / "fresh.md",
+            )
+            latest = json.loads(Path(artifacts["latest_json"]).read_text(encoding="utf8"))
+            markdown = Path(artifacts["docs_report"]).read_text(encoding="utf8")
+
+        self.assertEqual(latest["provenance"]["host"], "KaesDevice")
+        self.assertEqual(latest["provenance"]["commit_sha"], "abcdef1234567890")
+        self.assertIn("Host: `KaesDevice`", markdown)
+        self.assertIn("Commit SHA: `abcdef1234567890`", markdown)
 
 
 if __name__ == "__main__":

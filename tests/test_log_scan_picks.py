@@ -532,6 +532,13 @@ class LogScanPicksTests(unittest.TestCase):
                     "label": "AI Commodity Infra",
                     "forced_cohort_id": "ai_commodity_infra_observation",
                 },
+                "operational_provenance": {
+                    "host": "KaesDevice",
+                    "commit_sha": "abcdef1234567890",
+                    "short_commit_sha": "abcdef123456",
+                    "branch": "main",
+                    "run_id": "scheduled_scan:2026-04-14:test",
+                },
                 "scan_funnel": {"raw_candidates": 0, "returned_picks": 0},
                 "scan_drop_reasons": {
                     "RIO": {
@@ -568,6 +575,8 @@ class LogScanPicksTests(unittest.TestCase):
 
         self.assertEqual(record["event_type"], "liquidity_near_miss")
         self.assertEqual(record["playbook_id"], "ai_commodity_infra_observation")
+        self.assertEqual(record["scan_host"], "KaesDevice")
+        self.assertEqual(record["scan_commit_sha"], "abcdef1234567890")
         self.assertEqual(record["ticker"], "RIO")
         self.assertEqual(record["distance_components"]["worst_leg_spread_excess_pct"], 4.5)
         self.assertEqual(record["distance_components"]["quote_age_excess_hours"], 10.25)
@@ -1163,6 +1172,13 @@ class LogScanPicksTests(unittest.TestCase):
                 scan_daily_top_trades=lambda **kwargs: [_make_pick("SPY", debit=5.0)],
                 _market_is_open=lambda: True,
             )
+            provenance = {
+                "host": "KaesDevice",
+                "commit_sha": "abcdef1234567890",
+                "short_commit_sha": "abcdef123456",
+                "branch": "main",
+                "run_id": "scheduled_scan:2026-04-14:test",
+            }
             pick = _make_pick("SPY", debit=5.0)
             pick.update(
                 {
@@ -1210,6 +1226,7 @@ class LogScanPicksTests(unittest.TestCase):
                 patch.object(log_scan_picks, "LOG_FILE", log_file),
                 patch.object(log_scan_picks, "datetime", _WeekdayDateTime),
                 patch.object(log_scan_picks, "load_local_env"),
+                patch.object(log_scan_picks, "build_operational_provenance", return_value=provenance),
                 patch.object(
                     log_scan_picks,
                     "create_positions_repository",
@@ -1258,9 +1275,15 @@ class LogScanPicksTests(unittest.TestCase):
             rows = log_scan_picks._load_log_rows(log_file=log_file)
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["playbook_id"], "short_term")
+            self.assertEqual(rows[0]["scan_host"], "KaesDevice")
+            self.assertEqual(rows[0]["scan_commit_sha"], "abcdef1234567890")
+            self.assertEqual(rows[0]["scan_branch"], "main")
+            self.assertEqual(rows[0]["scan_run_id"], "scheduled_scan:2026-04-14:test")
             fill_rows = log_scan_picks._load_log_rows(log_file=log_dir / "fill_attempts.jsonl")
             self.assertEqual(len(fill_rows), 1)
             self.assertEqual(fill_rows[0]["fill_status"], "auto_tracked")
+            self.assertEqual(fill_rows[0]["scan_host"], "KaesDevice")
+            self.assertEqual(fill_rows[0]["scan_commit_sha"], "abcdef1234567890")
             self.assertEqual(fill_rows[0]["fill_outcome"], "paper_fill_recorded")
             self.assertEqual(fill_rows[0]["attempted_limit_price"], 5.0)
             self.assertEqual(fill_rows[0]["auto_track_position_id"], 1)
@@ -1276,6 +1299,8 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(review_open_positions.call_count, 3)
             review_open_positions.assert_any_call(repository, position_ids=[1])
             self.assertEqual(record_forward_snapshot.call_count, 1)
+            snapshot = record_forward_snapshot.call_args.kwargs["scan_snapshot"]
+            self.assertEqual(snapshot["operational_provenance"], provenance)
 
     def test_main_returns_nonzero_when_pick_forward_snapshot_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:

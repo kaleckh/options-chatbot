@@ -41,7 +41,7 @@ Current read:
 Current read:
 - `docs/evidence-operations.md` owns the authoritative evidence-host, backup, heartbeat, daily-ops, and retention runbook.
 - `data/contracts/evidence-host-policy.json` declares `KaesDevice` as the current authoritative host for Postgres tracked positions, `chat_history.db`, `data/options-validation/forward_tracking_authoritative.db`, and `data/options-validation/options_history.db`.
-- scheduled scans now write host/commit/run provenance and a local heartbeat at `data/forward-tracking/scheduled_scan_heartbeat_latest.json`; scan logging fails closed before evidence writes on a non-authoritative host.
+- scheduled scans now write host/commit/run provenance and a local heartbeat at `data/forward-tracking/scheduled_scan_heartbeat_latest.json`; scan logging fails closed before evidence writes on a non-authoritative host, and generated fresh forward-evidence readbacks record host/commit/run provenance in their JSON and Markdown artifacts.
 - the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` from the shared market-day heartbeat health check and fail after more than `2` market days without a completed scheduled scan.
 - backups write ignored bundles for `chat_history.db`, both forward ledgers, `options_history.db`, and Postgres tracked positions under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
 - FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.

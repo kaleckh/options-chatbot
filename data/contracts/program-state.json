@@ -11,7 +11,7 @@
     "1.9": "done",
     "1.10": "done",
     "1.11": "done",
-    "1.12": "todo",
+    "1.12": "done",
     "1.13": "todo",
     "1.14": "todo",
     "1.15": "todo"
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.11 verified and completed scheduled-scan heartbeat/dead-man coverage: scheduled scans write timestamp/host/commit/run heartbeat artifacts; gateboard and monthly audit expose days_since_last_scheduled_scan and fail stale or missing heartbeats after more than 2 market days."
+    "work": "Phase 1.12 verified and completed provenance coverage: scheduled scan rows, fill attempts, near-miss records, heartbeat artifacts, forward ledger scan snapshots, and generated fresh forward-evidence JSON/Markdown readbacks now carry host/commit/run provenance. No proof bars, scanner policy, broker behavior, or P&L calculations changed."
   }
 }
