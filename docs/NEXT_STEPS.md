@@ -47,7 +47,7 @@ Current read:
 
 ```powershell
 npm run evidence:backup
-npm run options:daily-ops
+npm run daily-ops
 npm run options:gateboard
 ```
 
