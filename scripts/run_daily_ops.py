@@ -17,51 +17,75 @@ DAILY_OP_STEPS: tuple[dict[str, Any], ...] = (
     {
         "id": "open_risk_exit_evidence_plan",
         "label": "Open-risk exit-evidence plan",
+        "stage": "exit_evidence_capture",
         "command": [sys.executable, "scripts/build_regular_options_open_risk_resolution_plan.py"],
         "read_only_safe": True,
     },
     {
         "id": "suggested_trade_review_plan",
         "label": "Suggested-trade review plan",
+        "stage": "suggested_trade_review_plan_execution",
         "command": [sys.executable, "scripts/build_regular_options_suggested_trade_review_plan.py"],
         "read_only_safe": True,
     },
     {
         "id": "fill_attempt_evidence_capture_plan",
         "label": "Fill-attempt evidence capture plan",
+        "stage": "paper_shadow_collection",
         "command": [sys.executable, "scripts/build_regular_options_fill_attempt_evidence_capture_plan.py"],
         "read_only_safe": True,
     },
     {
         "id": "paper_shadow_monitor",
         "label": "Paper-shadow entry-filter monitor",
+        "stage": "paper_shadow_collection",
         "command": [sys.executable, "scripts/monitor_current_policy_entry_filter_paper.py"],
         "read_only_safe": True,
     },
     {
         "id": "paper_shortlist_gate",
         "label": "Paper-shortlist release gate",
+        "stage": "paper_shadow_collection",
         "command": [sys.executable, "scripts/build_regular_options_paper_shortlist.py", "--strict-gate"],
         "read_only_safe": True,
     },
     {
         "id": "fresh_evidence_loop",
         "label": "Fresh executable evidence loop",
+        "stage": "paper_shadow_collection",
         "command": [sys.executable, "scripts/build_regular_options_fresh_evidence_loop.py"],
         "read_only_safe": True,
     },
     {
         "id": "candidate_outcome_ledger",
         "label": "Candidate outcome ledger",
+        "stage": "paper_shadow_collection",
         "command": [sys.executable, "scripts/build_regular_options_candidate_outcome_ledger.py"],
         "read_only_safe": True,
     },
     {
+        "id": "scheduled_scan_heartbeat_health",
+        "label": "Scheduled-scan heartbeat health",
+        "stage": "heartbeat_check",
+        "command": [sys.executable, "scripts/scan_heartbeat.py", "--health"],
+        "read_only_safe": True,
+        "continue_after_failure": True,
+    },
+    {
         "id": "operator_gateboard",
         "label": "Operator gateboard",
+        "stage": "gateboard_refresh",
         "command": [sys.executable, "scripts/build_project_operator_gateboard.py"],
         "read_only_safe": True,
     },
+)
+
+REQUIRED_STAGE_ORDER: tuple[str, ...] = (
+    "exit_evidence_capture",
+    "suggested_trade_review_plan_execution",
+    "paper_shadow_collection",
+    "heartbeat_check",
+    "gateboard_refresh",
 )
 
 
@@ -83,15 +107,17 @@ def run_daily_ops(*, stop_on_failure: bool = True) -> dict[str, Any]:
         step_result = {
             "id": step["id"],
             "label": step["label"],
+            "stage": step["stage"],
             "command": " ".join(step["command"]),
             "read_only_safe": bool(step["read_only_safe"]),
+            "continue_after_failure": bool(step.get("continue_after_failure")),
             "returncode": result.returncode,
             "status": "pass" if result.returncode == 0 else "fail",
             "stdout_tail": result.stdout.strip().splitlines()[-5:],
             "stderr_tail": result.stderr.strip().splitlines()[-5:],
         }
         results.append(step_result)
-        if result.returncode != 0 and stop_on_failure:
+        if result.returncode != 0 and stop_on_failure and not bool(step.get("continue_after_failure")):
             break
     failed = [step for step in results if step["status"] == "fail"]
     return {
@@ -101,9 +127,11 @@ def run_daily_ops(*, stop_on_failure: bool = True) -> dict[str, Any]:
         "completed_at_utc": _utc_now_iso(),
         "step_count": len(results),
         "failed_step_count": len(failed),
+        "required_stage_order": list(REQUIRED_STAGE_ORDER),
         "steps": results,
         "boundary": (
             "This runner refreshes read-only operator artifacts and row plans. "
+            "It checks scheduled-scan heartbeat health before the gateboard refresh. "
             "It does not submit broker orders, create trades, mutate tracked-position rows, "
             "change scanner policy, or lower proof bars."
         ),

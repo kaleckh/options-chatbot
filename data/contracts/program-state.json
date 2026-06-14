@@ -12,7 +12,7 @@
     "1.10": "done",
     "1.11": "done",
     "1.12": "done",
-    "1.13": "todo",
+    "1.13": "done",
     "1.14": "todo",
     "1.15": "todo"
   },
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.12 verified and completed provenance coverage: scheduled scan rows, fill attempts, near-miss records, heartbeat artifacts, forward ledger scan snapshots, and generated fresh forward-evidence JSON/Markdown readbacks now carry host/commit/run provenance. No proof bars, scanner policy, broker behavior, or P&L calculations changed."
+    "work": "Phase 1.13 verified and completed daily-ops command hardening: npm run daily-ops now chains exit-evidence planning, suggested-trade review planning, paper-shadow/fresh-evidence collection, scheduled-scan heartbeat health, and gateboard refresh in order, with read-only safety metadata and tests. A red heartbeat still allows the final gateboard refresh while the run reports failed."
   }
 }

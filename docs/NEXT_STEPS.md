@@ -44,6 +44,7 @@ Current read:
 - scheduled scans now write host/commit/run provenance and a local heartbeat at `data/forward-tracking/scheduled_scan_heartbeat_latest.json`; scan logging fails closed before evidence writes on a non-authoritative host, and generated fresh forward-evidence readbacks record host/commit/run provenance in their JSON and Markdown artifacts.
 - the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` from the shared market-day heartbeat health check and fail after more than `2` market days without a completed scheduled scan.
 - backups write ignored bundles for `chat_history.db`, both forward ledgers, `options_history.db`, and Postgres tracked positions under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
+- `npm run daily-ops` runs the read-only daily chain in order: exit-evidence plan, suggested-trade review plan, paper-shadow/fresh-evidence collection, scheduled-scan heartbeat health, and gateboard refresh.
 - FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.
 - FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is explicitly set for local dev/test.
 - FastAPI request/exception logs are stdlib JSON to stderr, and successful Trading Desk mutation outcomes append compact local audit refs to ignored `data/operator-audit/mutations.jsonl`; that ledger is audit evidence only, not proof or repository state.

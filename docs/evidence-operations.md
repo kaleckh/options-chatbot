@@ -55,7 +55,7 @@ Run the low-mutation daily chores from one command:
 npm run daily-ops
 ```
 
-This chains the open-risk plan, suggested-trade review plan, fill-attempt evidence capture plan, paper-filter monitor, strict paper shortlist, fresh-evidence loop, candidate ledger, and gateboard refresh. The command writes readback artifacts and reports, but it is not a broker action, scanner-policy change, or proof-bar change.
+This chains the open-risk exit-evidence plan, suggested-trade review plan, fill-attempt evidence capture plan, paper-filter monitor, strict paper shortlist, fresh-evidence loop, candidate ledger, scheduled-scan heartbeat health check, and gateboard refresh in that order. A red heartbeat still lets the final gateboard refresh run so the stale-scan signal remains visible. The command writes readback artifacts and reports, but it is not a broker action, scanner-policy change, or proof-bar change.
 
 ## Retention
 
