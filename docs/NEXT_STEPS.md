@@ -9,6 +9,7 @@ Current read:
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
 - trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `505` shared dates from `2024-05-22` through `2026-06-04`; the 504-date two-year feature-store depth target is met.
 - paid-data readiness is still `not_ready` after batch `2146` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
+- `docs/regular-options-cvx-executable-coverage.md` diagnoses the CVX issue as observed zero-bid tradability, not missing provider data: `495,306` trusted rows, `505` dates, `56,191` non-executable rows, `100.0%` of non-executable rows are zero-bid/positive-ask, `0` missing bid/ask rows, `0` crossed quotes, and the current multilane source report contains `3` selected CVX historical trades plus `1` suppressed duplicate.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
 - batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects.
 - `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,428` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
@@ -16,7 +17,7 @@ Current read:
 
 Next actions:
 
-1. Diagnose the persistent `CVX` low-executable quote coverage before treating the full 13-symbol surface as nomination-ready. If it is a real tradability problem, kill or exclude affected CVX-dependent candidates only through a preregistered historical-candidate rule; do not lower the `90%` source-quality floor.
+1. Apply a preregistered candidate-scoped source-quality rule for the affected `CVX` historical candidates, then rerun robust search. Valid outcomes are killing the CVX-dependent historical candidates or excluding CVX from that candidate scope; invalid outcomes are lowering the `90%` floor, synthesizing bids, or treating zero-bid rows as executable.
 2. After any further source-quality repair, import, or symbol-surface change, validate with:
 
 ```powershell
