@@ -1,5 +1,11 @@
 # Decisions
 
+## 2026-06-14: Fail Closed On Missing Backend Bridge Token Outside Dev/Test
+
+The FastAPI app exposes direct backend-only `/api/*` surfaces. Treating the Next-to-FastAPI bridge token as optional in normal startup made a missing deployment secret look like an intentional unauthenticated backend.
+
+Durable decision: FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is explicitly set for local dev/test. `npm run dev` and `npm run dev:python` are the sanctioned local unauthenticated paths and set the opt-out through `scripts/run_dev_python_backend.js`; non-dev operators should set the bridge token and let `src/lib/backend/transport.ts` forward it as `x-options-backend-token`. This does not merge backend bridge auth with local operator auth, and mutation-intent headers remain audit labels rather than authorization.
+
 ## 2026-06-14: Keep Backend Error Details In Logs, Not HTTP 500 Bodies
 
 Raw exception messages in `500` responses can leak local paths, provider details, or implementation state, while Trading Desk mutations still need an auditable operator trail.

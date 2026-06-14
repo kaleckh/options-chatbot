@@ -45,6 +45,7 @@ Current read:
 - the gateboard and monthly profitability audit surface `days_since_last_scheduled_scan` and fail after more than `2` market days without a completed scheduled scan.
 - backups write ignored bundles under `data/backups/` with `14`-day local retention; weekly off-machine copy requires `OPTIONS_BACKUP_WEEKLY_COPY_DIR`.
 - FastAPI startup asserts the single-worker assumption unless `OPTIONS_ALLOW_MULTI_WORKER_BACKEND` is explicitly set.
+- FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is explicitly set for local dev/test.
 - FastAPI request/exception logs are stdlib JSON to stderr, and successful Trading Desk mutation outcomes append compact local audit refs to ignored `data/operator-audit/mutations.jsonl`; that ledger is audit evidence only, not proof or repository state.
 
 1. Add these commands to the scheduled Windows task or the operator routine:
@@ -186,7 +187,7 @@ Do not fill rows from midpoint, last trade, daily/EOD, stale marks, or display-o
 Current read:
 - browser-facing state-changing and tool routes now call `requireLocalOperator(req)` before body parsing
 - `OPTIONS_LOCAL_OPERATOR_TOKEN` is the local operator secret; callers can use `x-options-operator-token`, `Authorization: Bearer ...`, or the HttpOnly session cookie opened by `POST /api/operator/session`
-- `OPTIONS_BACKEND_API_TOKEN` is a separate Next-to-FastAPI bridge token and is forwarded only by the server-side backend transport
+- `OPTIONS_BACKEND_API_TOKEN` is a separate Next-to-FastAPI bridge token and is forwarded only by the server-side backend transport; FastAPI startup fails closed without it unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is explicitly set for local dev/test
 - Trading Desk and Strategy Lab mutation-intent headers are still required for audited writes, but they are not authorization
 - `docs/route-parity.md` now includes a generated route auth/mutation inventory covering mounted browser routes and backend-only FastAPI routes
 - `tests/ui/operator-auth.test.js` fails if a future browser-facing mutation route lacks the operator guard, except the explicit operator session endpoint, and it directly proves scan, prediction grading, and tool routes reject missing or wrong auth before body parsing or bridge calls and allow valid auth through to mocked bridge calls with lifecycle headers

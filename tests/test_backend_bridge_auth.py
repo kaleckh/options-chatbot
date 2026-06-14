@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import importlib.util
+import json
 import os
 import sys
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -11,30 +14,91 @@ from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = ROOT / "python-backend"
+BACKEND_MAIN = BACKEND_DIR / "main.py"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-import main as backend  # noqa: E402
-
 
 class BackendBridgeAuthTests(unittest.TestCase):
-    def setUp(self):
-        self.client = TestClient(backend.app)
+    def _load_backend(self, env: dict[str, str]):
+        module_name = f"backend_bridge_auth_{self._testMethodName}_{len(sys.modules)}"
+        spec = importlib.util.spec_from_file_location(module_name, BACKEND_MAIN)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Unable to load backend module from {BACKEND_MAIN}")
 
-    def test_backend_api_token_is_optional_for_local_default(self):
-        with patch.dict(os.environ, {"OPTIONS_BACKEND_API_TOKEN": ""}, clear=False):
-            response = self.client.get("/api/health")
+        dotenv_module = types.ModuleType("dotenv")
+        dotenv_module.load_dotenv = lambda *_args, **_kwargs: False
+        module = importlib.util.module_from_spec(spec)
+        default_env = {
+            "DATABASE_URL": "",
+            "OPTIONS_BACKEND_API_TOKEN": "",
+            "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "",
+        }
+        default_env.update(env)
+
+        with patch.dict(sys.modules, {"dotenv": dotenv_module}, clear=False), patch.dict(
+            os.environ,
+            default_env,
+            clear=False,
+        ):
+            sys.modules[module_name] = module
+            try:
+                spec.loader.exec_module(module)
+            except Exception:
+                sys.modules.pop(module_name, None)
+                raise
+        self.addCleanup(lambda: sys.modules.pop(module_name, None))
+        return module
+
+    def test_backend_startup_requires_api_token_without_dev_opt_out(self):
+        with self.assertRaisesRegex(RuntimeError, "OPTIONS_BACKEND_API_TOKEN is required"):
+            self._load_backend(
+                {
+                    "OPTIONS_BACKEND_API_TOKEN": "",
+                    "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "",
+                }
+            )
+
+    def test_backend_startup_allows_explicit_dev_opt_out(self):
+        backend = self._load_backend(
+            {
+                "OPTIONS_BACKEND_API_TOKEN": "",
+                "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "1",
+            }
+        )
+        client = TestClient(backend.app)
+        self.addCleanup(client.close)
+
+        with patch.dict(
+            os.environ,
+            {"OPTIONS_BACKEND_API_TOKEN": "", "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "1"},
+            clear=False,
+        ):
+            response = client.get("/api/health")
 
         self.assertEqual(response.status_code, 200)
 
     def test_backend_api_token_blocks_direct_api_calls_when_configured(self):
-        with patch.dict(os.environ, {"OPTIONS_BACKEND_API_TOKEN": "test-token"}, clear=False):
-            missing = self.client.get("/api/health")
-            wrong = self.client.get(
+        backend = self._load_backend(
+            {
+                "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "",
+            }
+        )
+        client = TestClient(backend.app)
+        self.addCleanup(client.close)
+
+        with patch.dict(
+            os.environ,
+            {"OPTIONS_BACKEND_API_TOKEN": "test-token", "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": ""},
+            clear=False,
+        ):
+            missing = client.get("/api/health")
+            wrong = client.get(
                 "/api/health",
                 headers={backend.BACKEND_API_TOKEN_HEADER: "wrong-token"},
             )
-            allowed = self.client.get(
+            allowed = client.get(
                 "/api/health",
                 headers={backend.BACKEND_API_TOKEN_HEADER: "test-token"},
             )
@@ -42,6 +106,15 @@ class BackendBridgeAuthTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 401)
         self.assertEqual(wrong.status_code, 401)
         self.assertEqual(allowed.status_code, 200)
+
+    def test_dev_python_script_sets_backend_unauthenticated_opt_out(self):
+        package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        wrapper = (ROOT / "scripts" / "run_dev_python_backend.js").read_text(encoding="utf-8")
+
+        self.assertIn("node scripts/run_dev_python_backend.js", package["scripts"]["dev"])
+        self.assertIn("node scripts/run_dev_python_backend.js", package["scripts"]["dev:python"])
+        self.assertIn("OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED", wrapper)
+        self.assertIn('"1"', wrapper)
 
 
 if __name__ == "__main__":

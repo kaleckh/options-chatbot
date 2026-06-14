@@ -106,7 +106,7 @@ Responsibilities:
 
 This layer is intentionally thin. If behavior seems surprising, the real logic usually lives in the Python backend, not in the Next route file.
 
-`src/lib/operator-auth.ts` is the browser-facing write boundary. It reads server-only `OPTIONS_LOCAL_OPERATOR_TOKEN`, accepts `x-options-operator-token`, `Authorization: Bearer ...`, or an HttpOnly `options_local_operator_session` cookie, and fails closed before request body parsing. `OPTIONS_BACKEND_API_TOKEN` is a separate Next-to-FastAPI bridge secret forwarded by `src/lib/backend/transport.ts`; do not use mutation-intent headers as auth.
+`src/lib/operator-auth.ts` is the browser-facing write boundary. It reads server-only `OPTIONS_LOCAL_OPERATOR_TOKEN`, accepts `x-options-operator-token`, `Authorization: Bearer ...`, or an HttpOnly `options_local_operator_session` cookie, and fails closed before request body parsing. `OPTIONS_BACKEND_API_TOKEN` is a separate Next-to-FastAPI bridge secret forwarded by `src/lib/backend/transport.ts`; FastAPI startup requires it unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is set for local dev/test. Do not use mutation-intent headers as auth.
 
 The backend also exposes support endpoints that are not mirrored through `src/app/api/*` yet, including:
 - `/api/profiles`

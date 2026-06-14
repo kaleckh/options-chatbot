@@ -41,7 +41,7 @@ The actual request helpers now live under `src/lib/backend/*`, while `src/lib/py
 There are two separate auth layers:
 
 1. Local operator auth protects browser-facing state-changing and tool routes before body parsing. `src/lib/operator-auth.ts` reads the server-only `OPTIONS_LOCAL_OPERATOR_TOKEN` secret and accepts `x-options-operator-token`, `Authorization: Bearer ...`, or an HttpOnly `options_local_operator_session` cookie opened by `POST /api/operator/session`.
-2. Backend bridge auth protects direct FastAPI `/api/*` calls when `OPTIONS_BACKEND_API_TOKEN` is configured. `src/lib/backend/transport.ts` forwards `x-options-backend-token`, and `python-backend/main.py` checks it with a constant-time comparison.
+2. Backend bridge auth protects direct FastAPI `/api/*` calls. FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is set for local dev/test; `src/lib/backend/transport.ts` forwards `x-options-backend-token`, and `python-backend/main.py` checks it with a constant-time comparison.
 
 Mutation-intent headers remain separate. `x-trading-desk-mutation` and `x-strategy-lab-mutation` prove caller intent for audited writes, but they are not authorization and must run after local operator auth.
 

@@ -45,7 +45,7 @@ Browser flow:
 Auth boundaries:
 - browser-facing state-changing and tool routes require local operator auth from `src/lib/operator-auth.ts`
 - set `OPTIONS_LOCAL_OPERATOR_TOKEN` server-side, then use `x-options-operator-token`, `Authorization: Bearer ...`, or `POST /api/operator/session` for an HttpOnly local session cookie
-- the separate `OPTIONS_BACKEND_API_TOKEN` is only the Next-to-FastAPI bridge token; it is forwarded by `src/lib/backend/transport.ts` and checked by `python-backend/main.py`
+- the separate `OPTIONS_BACKEND_API_TOKEN` is only the Next-to-FastAPI bridge token; FastAPI startup requires it unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is set for local dev/test, and it is forwarded by `src/lib/backend/transport.ts` and checked by `python-backend/main.py`
 - mutation-intent headers such as `x-trading-desk-mutation` and `x-strategy-lab-mutation` are audit/intent labels, not authentication
 
 The fastest files to read for orientation are:
@@ -108,6 +108,8 @@ Backend only:
 ```bash
 npm run dev:python
 ```
+
+`npm run dev` and `npm run dev:python` set `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` for local development. Non-dev FastAPI startup should set `OPTIONS_BACKEND_API_TOKEN` and let the Next backend transport forward it.
 
 Optional Postgres for tracked positions:
 

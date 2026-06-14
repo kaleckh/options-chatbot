@@ -8,7 +8,7 @@
     "1.6": "done",
     "1.7": "done",
     "1.8": "done",
-    "1.9": "todo",
+    "1.9": "done",
     "1.10": "todo",
     "1.11": "todo",
     "1.12": "todo",
@@ -30,6 +30,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 1.8 added stdlib JSON backend logging, request timing/status/mutation-intent logs, generic logged 500 responses, append-only Trading Desk mutation audit JSONL, local DB/docs registration, generated ownership map refreshes, and focused regression tests."
+    "work": "Phase 1.9 added fail-closed FastAPI backend bridge-token startup enforcement, an explicit local dev/test unauthenticated opt-out wired through npm dev scripts, updated backend auth tests/fixtures/docs, and passed focused auth/logging checks plus verify:docs and verify:fast."
   }
 }

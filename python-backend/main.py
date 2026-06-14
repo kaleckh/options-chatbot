@@ -196,8 +196,24 @@ def _backend_api_token() -> str:
     return str(os.getenv("OPTIONS_BACKEND_API_TOKEN") or "").strip()
 
 
+def _backend_allow_unauthenticated() -> bool:
+    return str(os.getenv("OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED") or "").strip() == "1"
+
+
+def _assert_backend_api_token_configured() -> None:
+    if _backend_api_token() or _backend_allow_unauthenticated():
+        return
+    raise RuntimeError(
+        "OPTIONS_BACKEND_API_TOKEN is required for the FastAPI backend. "
+        "Set OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1 only for local dev/test runs."
+    )
+
+
 def _backend_api_token_required(path: str) -> bool:
     return bool(_backend_api_token()) and str(path or "").startswith("/api/")
+
+
+_assert_backend_api_token_configured()
 
 app.add_middleware(
     CORSMiddleware,

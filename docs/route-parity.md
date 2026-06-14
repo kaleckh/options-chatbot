@@ -176,7 +176,7 @@ These exist in the FastAPI backend but are not mirrored through active Next rout
 
 ## Backend-Only Auth And Mutation Inventory
 
-Backend-only routes are direct FastAPI surfaces. When `OPTIONS_BACKEND_API_TOKEN` is configured, direct `/api/*` calls must include `x-options-backend-token`; local operator auth applies at the Next route layer only.
+Backend-only routes are direct FastAPI surfaces. FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is set for local dev/test; when token auth is active, direct `/api/*` calls must include `x-options-backend-token`. Local operator auth applies at the Next route layer only.
 
 | FastAPI route | Lifecycle | Auth boundary | Contract | Store | Owner |
 | --- | --- | --- | --- | --- | --- |

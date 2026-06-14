@@ -20,7 +20,7 @@ FastAPI also exposes backend-only support endpoints, but the browser app only re
 
 Local operator auth is the browser-facing write boundary. State-changing and tool routes call `requireLocalOperator(req)` before reading the request body or checking mutation-intent headers. Configure `OPTIONS_LOCAL_OPERATOR_TOKEN` server-side; callers can use `x-options-operator-token`, `Authorization: Bearer ...`, or the HttpOnly session cookie from `POST /api/operator/session`.
 
-Backend bridge auth is separate service-to-service protection. When `OPTIONS_BACKEND_API_TOKEN` is set, Next forwards `x-options-backend-token` to FastAPI and direct `/api/*` calls without the token are rejected.
+Backend bridge auth is separate service-to-service protection. FastAPI startup requires `OPTIONS_BACKEND_API_TOKEN` unless `OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED=1` is set for local dev/test. When token auth is active, Next forwards `x-options-backend-token` to FastAPI and direct `/api/*` calls without the token are rejected.
 
 Mutation-intent headers are not auth. They remain useful write-intent labels for Trading Desk and Strategy Lab routes, but correct intent with missing operator auth still fails.
 

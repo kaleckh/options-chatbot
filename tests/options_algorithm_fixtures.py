@@ -377,6 +377,7 @@ def load_backend_main(db_path: str, database_url: str | None = ""):
         "OPTIONS_EVIDENCE_CLASS": "e2e_test",
         "OPTIONS_RUN_MODE": "test_harness",
         "OPTIONS_IS_FIXTURE": "1",
+        "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "1",
         "OPTIONS_OPERATOR_AUDIT_DIR": str(Path(db_path).with_name("operator_audit_test")),
     }
 
