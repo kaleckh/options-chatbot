@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-14T04:02:11Z",
+  "generated_at_utc": "2026-06-14T04:21:36Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -275,7 +275,7 @@
   },
   "runtime_use": false,
   "scheduled_scan_health": {
-    "as_of_utc": "2026-06-14T04:02:10Z",
+    "as_of_utc": "2026-06-14T04:21:36Z",
     "blocker": null,
     "days_since_last_scheduled_scan": 0,
     "heartbeat_available": true,
@@ -309,7 +309,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T03:59:32Z",
+      "generated_at_utc": "2026-06-14T04:21:35Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -333,7 +333,7 @@
     "open_position_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T03:59:38Z",
+      "generated_at_utc": "2026-06-14T04:21:25Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "report_id": null,
       "status": null
@@ -349,7 +349,7 @@
     "paper_shortlist": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-10T16:31:50Z",
+      "generated_at_utc": "2026-06-14T04:21:34Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "report_id": null,
       "status": "paper_shortlist_readback"

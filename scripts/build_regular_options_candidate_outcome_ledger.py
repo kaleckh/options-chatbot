@@ -462,9 +462,12 @@ def _open_risk_governor_rows(report: dict[str, Any]) -> list[dict[str, Any]]:
             if not isinstance(detail, dict):
                 continue
             blockers = _unique_text(_as_list(governor.get("blockers")) + [_norm(detail.get("reason"))])
+            ledger_key = f"open_risk_governor:{_norm(detail.get('id')) or 'unkeyed'}"
+            if any(row.get("ledger_key") == ledger_key for row in rows):
+                continue
             rows.append(
                 {
-                    "ledger_key": f"open_risk_governor:{_norm(detail.get('id')) or 'unkeyed'}",
+                    "ledger_key": ledger_key,
                     "row_type": "operator_blocker",
                     "source_report": "open_position_risk",
                     "position_id": detail.get("id"),

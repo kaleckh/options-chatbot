@@ -1,6 +1,6 @@
 {
   "report_id": "current_policy_entry_filter_paper_monitor",
-  "generated_at_utc": "2026-06-04T21:43:39Z",
+  "generated_at_utc": "2026-06-14T04:21:34Z",
   "scope": "regular_supervised_trading_desk_entry_filter_forward_monitor",
   "evidence_boundary": {
     "description": "Read-only paper monitor for the current-policy entry-filter champion. It classifies fresh tracked rows after the configured since date and does not mutate scanner guardrails.",
@@ -8,7 +8,7 @@
   },
   "inputs": {
     "since_date": "2026-06-02",
-    "position_count": 536,
+    "position_count": 537,
     "filter_lab_generated_at_utc": "2026-06-02T02:02:39Z",
     "champion_filter_id": "short_term_fill_degradation_ge_15",
     "shadow_thresholds": [
@@ -272,11 +272,11 @@
   "lane_counts": {},
   "ticker_counts": {},
   "artifacts": {
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260604T214339Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042134Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.json",
-    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260604T214339Z.csv",
+    "csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042134Z.csv",
     "latest_csv": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.csv",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260604T214339Z.md",
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_20260614T042134Z.md",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\current_policy_entry_filter_paper_monitor_latest.md",
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\current-policy-entry-filter-paper-monitor.md"
   }

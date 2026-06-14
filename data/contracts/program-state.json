@@ -36,6 +36,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "Phase 2 froze the forward cohort: volatility_expansion_observation plus bullish_pullback_observation carrier symbols, freeze_date 2026-06-14, eval_date 2026-07-28, 0 fresh exact realized P&L rows per frozen lane at freeze. All other regular lanes are parked outside the cohort; lane promotion, audit chores, scheduled scan logging, and pending validation now fail closed or skip parked lanes."
+    "work": "Phase 3 operating pass after cohort freeze. Ran npm run daily-ops successfully and confirmed scheduled-scan heartbeat health is fresh with 0 market days stale. Repaired a read-only open-risk/candidate-ledger duplicate so QQQ id=537 appears once as the open-risk governor blocker, and wired the regression tests into verify:fast. Refreshed open-risk, fresh-evidence, candidate-ledger, fill-attempt, paper-monitor, and gateboard readbacks. Post-freeze exact realized P&L rows remain 0 for volatility_expansion_observation and 0 for bullish_pullback_observation; no kill trigger fired before eval_date 2026-07-28."
   }
 }

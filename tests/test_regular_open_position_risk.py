@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unittest
+
 from scripts.audit_regular_open_position_risk import build_report
 
 
@@ -168,6 +170,8 @@ def test_open_risk_governor_blocks_unresolved_live_exact_negative_rows_only():
     assert governor["blockers"] == ["live_exact_negative_open_risk", "live_exact_review_stale_missing_or_non_executable"]
     assert governor["live_exact_negative_ids"] == [537]
     assert governor["live_exact_negative_unresolved_ids"] == [537]
+    assert governor["live_exact_review_blocked_ids"] == [537]
+    assert [detail["id"] for detail in governor["governor_details"]] == [537]
     assert 104 not in governor["live_exact_negative_ids"]
 
 
@@ -199,3 +203,39 @@ def test_open_risk_governor_blocks_live_exact_non_executable_review():
     assert governor["status"] == "open_risk_governor_blocked"
     assert governor["blockers"] == ["live_exact_review_stale_missing_or_non_executable"]
     assert governor["live_exact_review_blocked_ids"] == [600]
+
+
+class RegularOpenPositionRiskUnitTests(unittest.TestCase):
+    def test_governor_details_dedupes_position_matching_multiple_blockers(self) -> None:
+        report = build_report(
+            [
+                {
+                    "id": 537,
+                    "status": "open",
+                    "ticker": "QQQ",
+                    "proof_class": "live_exact_tracked",
+                    "last_pnl_pct": -39.86,
+                    "source_pick_snapshot": {"playbook_id": "volatility_expansion_observation"},
+                    "latest_review": {
+                        "reviewed_at": "2026-06-06T15:00:00Z",
+                        "recommendation": "HOLD",
+                        "pricing_source": "spread_display_only",
+                        "pricing_state": "priced_display_only_last",
+                        "current_pnl_pct": -39.86,
+                        "exit_execution_price": None,
+                        "exit_execution_basis": None,
+                        "metrics_snapshot": {"price_trigger_ok": False},
+                    },
+                }
+            ],
+            as_of="2026-06-06T18:00:00Z",
+        )
+
+        governor = report["open_risk_governor"]
+        self.assertEqual(
+            governor["blockers"],
+            ["live_exact_negative_open_risk", "live_exact_review_stale_missing_or_non_executable"],
+        )
+        self.assertEqual(governor["live_exact_negative_unresolved_ids"], [537])
+        self.assertEqual(governor["live_exact_review_blocked_ids"], [537])
+        self.assertEqual([detail["id"] for detail in governor["governor_details"]], [537])

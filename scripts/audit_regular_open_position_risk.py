@@ -207,6 +207,19 @@ def _group_counts(rows: list[dict[str, Any]], key_fn) -> dict[str, dict[str, Any
     return {key: _summarize(items) for key, items in sorted(grouped.items())}
 
 
+def _unique_position_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for row in rows:
+        position_id = row.get("id")
+        key = f"id:{position_id}" if position_id not in (None, "") else f"object:{id(row)}"
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(row)
+    return result
+
+
 def _build_open_risk_governor(
     open_rows: list[dict[str, Any]],
     *,
@@ -248,7 +261,7 @@ def _build_open_risk_governor(
     details = [
         _actionable_position_detail(row, now=now, stale_hours=stale_hours)
         for row in sorted(
-            live_exact_negative_unresolved + live_exact_close_ready + live_exact_review_blocked,
+            _unique_position_rows(live_exact_negative_unresolved + live_exact_close_ready + live_exact_review_blocked),
             key=lambda item: (
                 _safe_float(item.get("id")) or 0.0,
                 item.get("ticker") or "",

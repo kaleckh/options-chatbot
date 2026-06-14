@@ -27,36 +27,13 @@
   "evidence_counts": {
     "stale_executable_review": 1
   },
-  "generated_at_utc": "2026-06-14T03:59:38Z",
+  "generated_at_utc": "2026-06-14T04:21:25Z",
   "open_risk_governor": {
     "blockers": [
       "live_exact_negative_open_risk",
       "live_exact_review_stale_missing_or_non_executable"
     ],
     "governor_details": [
-      {
-        "action_bucket": "negative_mark_hold_or_unknown",
-        "current_option_price": 6.525,
-        "current_pnl_pct": -33.2543,
-        "evidence_bucket": "stale_executable_review",
-        "exit_execution_basis": "spread_bid_ask",
-        "exit_execution_price": 6.0515,
-        "first_warning": null,
-        "id": 537,
-        "lane": "volatility_expansion_observation",
-        "last_reviewed_at": "2026-06-12T11:45:37.662420-06:00",
-        "mark_pnl_pct": -33.2543,
-        "next_safe_action": "monitor",
-        "price_trigger_ok": true,
-        "pricing_source": "spread_bid_ask_exact",
-        "pricing_state": "priced_spread_exact",
-        "reason": "Position remains inside the stop, target, and exit rules.",
-        "recommendation": "HOLD",
-        "record_class": "live_exact_tracked",
-        "status": "open",
-        "ticker": "QQQ",
-        "warning_count": 0
-      },
       {
         "action_bucket": "negative_mark_hold_or_unknown",
         "current_option_price": 6.525,

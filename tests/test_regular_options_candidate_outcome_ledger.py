@@ -175,6 +175,13 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
                                 "lane": "volatility_expansion_observation",
                                 "record_class": "live_exact_tracked",
                                 "next_safe_action": "monitor",
+                            },
+                            {
+                                "id": 537,
+                                "ticker": "QQQ",
+                                "lane": "volatility_expansion_observation",
+                                "record_class": "live_exact_tracked",
+                                "next_safe_action": "monitor",
                             }
                         ],
                     },
@@ -222,6 +229,7 @@ class RegularOptionsCandidateOutcomeLedgerTests(unittest.TestCase):
         self.assertEqual(actions["refresh_suggested_trade_review"], 1)
         self.assertEqual(report["ledger_rows"][0]["next_evidence_action"], "resolve_open_risk_governor")
         self.assertEqual(report["next_evidence_queue"][0]["next_evidence_action"], "resolve_open_risk_governor")
+        self.assertEqual(report["next_evidence_queue"][0]["count"], 1)
 
     def test_missing_required_fresh_evidence_loop_fails_closed(self):
         with tempfile.TemporaryDirectory() as temp_dir:
