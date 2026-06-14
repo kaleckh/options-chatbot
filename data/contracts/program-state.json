@@ -36,6 +36,6 @@
   "kill_log": [],
   "last_session": {
     "date": "2026-06-14",
-    "work": "User approved a no-wait historical robust-search track alongside passive Phase 3 forward collection. Audited trusted ThetaData intraday depth for the 13-symbol proof/import set and confirmed it was about one year, not two. ThetaTerminal v3 old-date dry-run for 2024-05-22 succeeded with 20,958 normalized rows and 0 errors. Imported batches 2130 through 2132 for 2024-05-22 through 2024-06-28, adding 608,062 trusted thetadata_opra_nbbo_1m intraday rows with 0 duplicates and 0 rejects. Validated 286 shared trusted intraday dates from 2024-05-22 through 2026-06-04, leaving 218 shared dates to reach a 504-date two-year target. Frozen cohort fresh realized P&L rows remain 0 and promotion proof bars are unchanged."
+    "work": "User approved a no-wait historical robust-search track alongside passive Phase 3 forward collection. Audited trusted ThetaData intraday depth for the 13-symbol proof/import set and confirmed it was about one year, not two. ThetaTerminal v3 old-date dry-run for 2024-05-22 succeeded with 20,958 normalized rows and 0 errors. Imported batches 2130 through 2133 for 2024-05-22 through 2024-07-12, adding 813,596 trusted thetadata_opra_nbbo_1m intraday rows with 0 duplicates and 0 rejects. Validated 295 shared trusted intraday dates from 2024-05-22 through 2026-06-04, leaving 209 shared dates to reach a 504-date two-year target. Frozen cohort fresh realized P&L rows remain 0 and promotion proof bars are unchanged."
   }
 }
