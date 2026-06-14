@@ -26,6 +26,9 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 - Open-risk resolution plan: `open_risk_resolution_plan_clear` / `built` / `{"action_counts": {}, "display_only_sell_count": 0, "live_entry_allowed": true, "live_exact_negative_count": 1, "live_exact_negative_ids": [537], "live_exact_plan_row_count": 0, "market_window_required_count": 0, "open_position_avg_pnl_pct": -54.51, "open_position_median_pnl_pct": -57.66, "open_position_negative_count": 5, "open_position_row_count": 5, "operator_plan_status": "no_rows_to_resolve", "plan_row_count": 0, "source_open_risk_status": "open_risk_governor_pass"}`.
 - Fill-attempt evidence capture plan: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection` / `built_collecting` / `{"lane_counts": {"short_term": 1, "swing": 2, "volatility_expansion_observation": 1}, "ledger_stale_fill_attempt_logged_count": 0, "market_window_required_count": 4, "missing_fill_attempt_evidence_count": 4, "operator_plan_status": "ready_for_fresh_selection_capture", "plan_row_count": 4, "scan_dates": ["2026-06-05"], "source_candidate_ledger_operating_status": "ledger_collect_exact_evidence", "source_fill_attempt_rows": 497, "source_missing_fill_attempt_action_count": 4, "ticker_counts": {"QQQ": 2, "SPY": 2}}`.
 - Suggested-trade review plan: `suggested_trade_review_plan_ready_blocked_for_market_window` / `built_collecting` / `{"attention_trade_count": 1, "close_risk_trade_count": 0, "executable_close_ready_count": 0, "market_window_required_count": 1, "missing_review_count": 1, "non_executable_close_risk_count": 0, "open_suggested_trade_rows": 1, "operator_plan_status": "ready_for_fresh_suggested_trade_review_window", "plan_row_count": 1, "source_action_counts": {"no_stored_review": 1}, "source_evidence_counts": {"missing_review": 1}, "stale_or_missing_review_trade_count": 1, "stale_review_count": 0}`.
+- Regime stratification: `blocked_missing_market_context` / `built_context_blocked` / robust `False` / `{"branch_bucket_count": 22, "branch_count": 2, "branch_regime_failure_count": 0, "branch_regime_robust_count": 0, "eligible_replay_row_count": 234, "evaluable_bucket_count": 21, "failing_bucket_count": 0, "market_context_status": "missing_or_incomplete", "minimum_bucket_n_for_robustness": 15, "spy50_missing_count": 0, "vix_missing_count": 234}`.
+- Autoresearch search effort: `available` / `built_advisory` / `{"diagnostic_only": true, "pf_lb_5pct": null, "selection_adjusted_bar": null, "selection_adjusted_confidence": null, "selection_adjustment_formula": null, "selection_adjustment_metric": "pf_lb_5pct", "statistical_confidence": null, "strategy_family": null, "variant_id": null, "variants_searched": null}`.
+- Scheduled scan heartbeat: `fresh`; days since last scheduled scan `0`.
 - Quarantine archive: `4` archived, `0` unarchived.
 - Archived rejected rules: `10` archived, `0` unarchived.
 - Next evidence actions: `10`.
@@ -263,6 +266,25 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 | Priority | ID | Ticker | Lane | Class | Action | Status |
 |---:|---:|---|---|---|---|---|
 | 1 | 138 | AAA | legacy_unlabeled | suggested_trade | `refresh_missing_suggested_trade_review` | `market_window_required_missing_suggested_trade_review` |
+
+## Regime Stratification
+
+- Status: `blocked_missing_market_context` / `built_context_blocked`.
+- Regime robust: `False`.
+- Eligible rows: `234`.
+- Branches: `2`; branch buckets `22`.
+- Branch robust / bucket-failing: `0` / `0`.
+- Market context: `missing_or_incomplete`; VIX missing `234`, SPY50 missing `0`.
+- Evaluable / failing buckets: `21` / `0`.
+
+## Autoresearch Search Effort
+
+- Status: `available` / `built_advisory`.
+- Strategy family: `None`.
+- Variants searched: `None`.
+- PF-LB selection-adjusted bar: `None`.
+- Formula: `None`.
+- Diagnostic only: `True`.
 
 ## Risk And Portfolio
 
