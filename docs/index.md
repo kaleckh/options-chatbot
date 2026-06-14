@@ -178,6 +178,10 @@ These are the living docs for the current worktree:
   - generated read-only structure split for regular-options fill-attempt evidence, separating vertical, single-leg, and other multi-leg diagnostics without counting production proof until exact executable entry/fill/exit P&L exists
 - `docs/regular-options-event-data-spine.md`
   - generated read-only event annotation and post-event vol-crush spine for regular-options candidate rows, separating missing event-calendar coverage from exact executable event P&L proof
+- `docs/regular-options-feature-store.md`
+  - generated read-only point-in-time feature-store readback over trusted ThetaData intraday OPRA/NBBO rows, with `tradable_after_time <= candidate_entry_time` join policy
+- `docs/regular-options-robust-search-evaluation.md`
+  - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
 - `docs/regular-options-overfit-rule-archive.md`
   - generated read-only archive for rejected/winner-damaging candidate filter rules so overfit branches are retired from the monthly next-evidence queue without changing scanner policy
 - `docs/regular-options-lane-quarantine-archive.md`
