@@ -26,6 +26,10 @@ DEFAULT_SOURCE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-m
 DEFAULT_REGIME_REPORT = ROOT / "data" / "profitability-lab" / "regime-stratified-replay" / "latest.json"
 DEFAULT_FEATURE_STORE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-feature-store" / "latest.json"
 DEFAULT_AUTORESEARCH_LEDGER = ROOT / "data" / "profitability-lab" / "regular-options-autoresearch" / "ledger.jsonl"
+DEFAULT_SOURCE_QUALITY_POLICY = ROOT / "data" / "contracts" / "regular-options-source-quality-scope-policy.json"
+DEFAULT_BASELINE_REPORT = (
+    ROOT / "data" / "options-validation" / "runs" / "20260527_211058_bullish_pullback_observation_intraday.json"
+)
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-robust-search-evaluation"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-robust-search-evaluation.md"
 
@@ -272,6 +276,93 @@ def _variants_searched(ledger_rows: list[dict[str, Any]]) -> int:
     return max(len(experiment_ids), 1)
 
 
+def _active_source_quality_rules(policy: dict[str, Any], policy_meta: dict[str, Any]) -> list[dict[str, Any]]:
+    if policy_meta.get("status") != "loaded" or _norm(policy.get("status")) not in {"active", "enabled"}:
+        return []
+    rules = []
+    for raw_rule in _as_list(policy.get("rules")):
+        rule = _as_dict(raw_rule)
+        if _norm(rule.get("status")) not in {"active", "enabled"}:
+            continue
+        if _norm(rule.get("action")) != "exclude_matching_trades_from_historical_candidate_scope":
+            continue
+        rules.append(rule)
+    return rules
+
+
+def _rule_matches_trade(rule: dict[str, Any], row: dict[str, Any]) -> bool:
+    symbols = {_norm(item).upper() for item in _as_list(rule.get("symbols")) if _norm(item)}
+    if symbols and _norm(row.get("ticker")).upper() not in symbols:
+        return False
+    lane_ids = {_norm(item) for item in _as_list(rule.get("lane_ids")) if _norm(item)}
+    if lane_ids and _norm(row.get("lane_id")) not in lane_ids:
+        return False
+    lane_families = {_norm(item) for item in _as_list(rule.get("lane_families")) if _norm(item)}
+    if lane_families and _norm(row.get("lane_family")) not in lane_families:
+        return False
+    return True
+
+
+def _exclusion_snapshot(row: dict[str, Any], rule: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "rule_id": _norm(rule.get("rule_id")),
+        "reason": _norm(rule.get("reason")),
+        "entry_date": row.get("entry_date"),
+        "exit_date": row.get("exit_date"),
+        "ticker": row.get("ticker"),
+        "lane_id": row.get("lane_id"),
+        "lane_family": row.get("lane_family"),
+        "direction": row.get("direction"),
+        "pnl_pct": row.get("pnl_pct"),
+        "dedupe_key": row.get("dedupe_key"),
+    }
+
+
+def apply_source_quality_scope_policy(
+    rows: Sequence[dict[str, Any]],
+    *,
+    policy: dict[str, Any],
+    policy_meta: dict[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    rules = _active_source_quality_rules(policy, policy_meta)
+    if not rules:
+        return [dict(row) for row in rows], []
+    included: list[dict[str, Any]] = []
+    excluded: list[dict[str, Any]] = []
+    for row in rows:
+        matched_rule = next((rule for rule in rules if _rule_matches_trade(rule, row)), None)
+        if matched_rule is None:
+            included.append(dict(row))
+            continue
+        excluded.append(_exclusion_snapshot(row, matched_rule))
+    return included, excluded
+
+
+def _source_quality_policy_summary(
+    policy: dict[str, Any],
+    policy_meta: dict[str, Any],
+    exclusions: Sequence[dict[str, Any]],
+) -> dict[str, Any]:
+    rules = _active_source_quality_rules(policy, policy_meta)
+    return {
+        "status": "source_quality_scope_policy_loaded"
+        if policy_meta.get("status") == "loaded"
+        else "source_quality_scope_policy_missing",
+        "policy_id": policy.get("policy_id"),
+        "active_rule_count": len(rules),
+        "applied_rule_ids": sorted(
+            {
+                str(exclusion.get("rule_id"))
+                for exclusion in exclusions
+                if exclusion.get("rule_id")
+            }
+        ),
+        "excluded_trade_count": len(exclusions),
+        "excluded_tickers": sorted({str(exclusion.get("ticker")) for exclusion in exclusions if exclusion.get("ticker")}),
+        "policy_meta": policy_meta,
+    }
+
+
 def _regime_check(regime_report: dict[str, Any], regime_meta: dict[str, Any]) -> dict[str, Any]:
     summary = _as_dict(regime_report.get("summary"))
     if regime_meta.get("status") != "loaded":
@@ -310,7 +401,9 @@ def _ablation_check(
             "blockers": ["baseline_ablation_report_missing"],
         }
     baseline = (
-        _as_dict(baseline_report.get("baseline_metrics"))
+        _as_dict(baseline_report.get("authoritative_profitability_metrics"))
+        or _as_dict(baseline_report.get("exact_contract_metrics"))
+        or _as_dict(baseline_report.get("baseline_metrics"))
         or _as_dict(_as_dict(baseline_report.get("combined_portfolio")).get("metrics"))
         or _as_dict(baseline_report.get("metrics"))
         or _as_dict(baseline_report.get("summary"))
@@ -371,17 +464,54 @@ def _winner_fragility_check(rows: Sequence[dict[str, Any]], *, remove_count: int
     }
 
 
-def _quality_gate_check(source_report: dict[str, Any]) -> dict[str, Any]:
+def _quality_gate_check(
+    source_report: dict[str, Any],
+    *,
+    candidate_rows: Sequence[dict[str, Any]],
+    scope_exclusions: Sequence[dict[str, Any]],
+    source_quality_policy: dict[str, Any],
+    source_quality_policy_meta: dict[str, Any],
+) -> dict[str, Any]:
     gate = _as_dict(source_report.get("quality_gate"))
     status = _norm(gate.get("overall_status"))
-    blockers = [str(item) for item in _as_list(gate.get("blockers")) if item]
-    passed = status in {"passed", "quality_passed", "production_ready"}
-    if not passed:
-        blockers.append(f"source_quality_gate:{status or 'missing'}")
+    raw_blockers = [str(item) for item in _as_list(gate.get("blockers")) if item]
+    candidate_lane_ids = {_norm(row.get("lane_id")) for row in candidate_rows if _norm(row.get("lane_id"))}
+    candidate_lane_ids.update(_norm(row.get("lane_id")) for row in scope_exclusions if _norm(row.get("lane_id")))
+    suppression_tokens = {
+        _norm(token).lower()
+        for rule in _active_source_quality_rules(source_quality_policy, source_quality_policy_meta)
+        for token in _as_list(rule.get("suppressed_quality_blocker_tokens"))
+        if _norm(token)
+    }
+    suppressed_blockers = []
+    blockers = []
+    for blocker in raw_blockers:
+        blocker_lower = blocker.lower()
+        if suppression_tokens and any(token in blocker_lower for token in suppression_tokens):
+            suppressed_blockers.append(blocker)
+            continue
+        prefix = blocker.split(":", 1)[0] if ":" in blocker else ""
+        prefix_applies = any(
+            lane_id == prefix or lane_id.startswith(f"{prefix}_") or prefix.startswith(f"{lane_id}_")
+            for lane_id in candidate_lane_ids
+        )
+        if prefix and candidate_lane_ids and not prefix_applies:
+            suppressed_blockers.append(blocker)
+            continue
+        blockers.append(blocker)
+    passed_status = status in {"passed", "quality_passed", "production_ready"}
+    missing_status = not status
+    passed = passed_status or (not blockers and not missing_status)
+    if not passed and missing_status:
+        blockers.append("source_quality_gate:missing")
+    elif not passed:
+        blockers.append(f"source_quality_gate:{status}")
     return {
         "status": "source_quality_gate_passed" if passed else "source_quality_gate_blocked",
         "passed": passed,
         "overall_status": status or None,
+        "raw_blockers": raw_blockers,
+        "suppressed_blockers": sorted(set(suppressed_blockers)),
         "blockers": sorted(set(blockers)),
     }
 
@@ -429,6 +559,7 @@ def _candidate_blockers(
     winner_check: dict[str, Any],
     quality_gate: dict[str, Any],
     feature_store_gate: dict[str, Any],
+    source_scope_exclusions: Sequence[dict[str, Any]],
 ) -> list[str]:
     total_n = _safe_int(split_metrics["combined"]["exact_trade_count"])
     validation_n = _safe_int(split_metrics["validation"]["exact_trade_count"])
@@ -459,6 +590,8 @@ def _candidate_blockers(
         blockers.extend(
             str(item) for item in _as_list(feature_store_gate.get("blockers")) or ["feature_store_gate_not_passed"]
         )
+    if total_n == 0 and source_scope_exclusions:
+        blockers.append("all_candidate_rows_excluded_by_source_quality_scope_policy")
     return sorted(set(blockers))
 
 
@@ -471,15 +604,29 @@ def _candidate_report(
     regime_check: dict[str, Any],
     baseline_report: dict[str, Any],
     baseline_meta: dict[str, Any],
-    quality_gate: dict[str, Any],
+    source_report: dict[str, Any],
+    source_quality_policy: dict[str, Any],
+    source_quality_policy_meta: dict[str, Any],
     feature_store_gate: dict[str, Any],
     bootstrap_draws: int,
 ) -> dict[str, Any]:
-    split_metrics = _split_metrics(rows, candidate_id=candidate_id, bootstrap_draws=bootstrap_draws)
-    combined = _metrics_for_rows(rows, branch_id=f"{candidate_id}:combined", bootstrap_draws=bootstrap_draws)
+    scoped_rows, scope_exclusions = apply_source_quality_scope_policy(
+        rows,
+        policy=source_quality_policy,
+        policy_meta=source_quality_policy_meta,
+    )
+    quality_gate = _quality_gate_check(
+        source_report,
+        candidate_rows=scoped_rows,
+        scope_exclusions=scope_exclusions,
+        source_quality_policy=source_quality_policy,
+        source_quality_policy_meta=source_quality_policy_meta,
+    )
+    split_metrics = _split_metrics(scoped_rows, candidate_id=candidate_id, bootstrap_draws=bootstrap_draws)
+    combined = _metrics_for_rows(scoped_rows, branch_id=f"{candidate_id}:combined", bootstrap_draws=bootstrap_draws)
     split_metrics["combined"] = combined
     ablation = _ablation_check(split_metrics["final_holdout"], baseline_report, baseline_meta)
-    winner = _winner_fragility_check(rows)
+    winner = _winner_fragility_check(scoped_rows)
     blockers = _candidate_blockers(
         split_metrics=split_metrics,
         variants_searched=variants_searched,
@@ -488,6 +635,7 @@ def _candidate_report(
         winner_check=winner,
         quality_gate=quality_gate,
         feature_store_gate=feature_store_gate,
+        source_scope_exclusions=scope_exclusions,
     )
     return {
         "candidate_id": candidate_id,
@@ -505,6 +653,12 @@ def _candidate_report(
         "ablation_check": ablation,
         "winner_damage_check": winner,
         "source_quality_gate": quality_gate,
+        "source_quality_scope_policy": _source_quality_policy_summary(
+            source_quality_policy,
+            source_quality_policy_meta,
+            scope_exclusions,
+        ),
+        "source_quality_exclusions": scope_exclusions,
         "feature_store_gate": feature_store_gate,
         "read_only": True,
     }
@@ -528,7 +682,8 @@ def build_report(
     regime_report_path: Path = DEFAULT_REGIME_REPORT,
     feature_store_report_path: Path = DEFAULT_FEATURE_STORE_REPORT,
     autoresearch_ledger_path: Path = DEFAULT_AUTORESEARCH_LEDGER,
-    baseline_report_path: Path | None = None,
+    source_quality_policy_path: Path | None = DEFAULT_SOURCE_QUALITY_POLICY,
+    baseline_report_path: Path | None = DEFAULT_BASELINE_REPORT,
     generated_at_utc: str | None = None,
     bootstrap_draws: int = 10_000,
 ) -> dict[str, Any]:
@@ -536,13 +691,22 @@ def build_report(
     regime, regime_meta = _load_json(regime_report_path)
     feature_store, feature_meta = _load_json(feature_store_report_path)
     ledger_rows, ledger_meta = _load_jsonl(autoresearch_ledger_path)
+    source_quality_policy, source_quality_policy_meta = (
+        _load_json(source_quality_policy_path)
+        if source_quality_policy_path
+        else ({}, {"status": "missing", "path": None, "exists": False, "error": "policy_not_configured"})
+    )
     baseline, baseline_meta = _load_json(baseline_report_path) if baseline_report_path else ({}, {"status": "missing", "path": None})
 
     raw_rows = _as_list(source.get("selected_trades")) if source_meta.get("status") == "loaded" else []
     trades, rejected = normalize_trades([dict(row) for row in raw_rows if isinstance(row, dict)])
+    scoped_combined_rows, combined_scope_exclusions = apply_source_quality_scope_policy(
+        trades,
+        policy=source_quality_policy,
+        policy_meta=source_quality_policy_meta,
+    )
     variants = _variants_searched(ledger_rows)
     regime_check = _regime_check(regime, regime_meta)
-    quality_gate = _quality_gate_check(source)
     feature_store_gate = _feature_store_check(feature_store, feature_meta)
     candidates = [
         _candidate_report(
@@ -553,7 +717,9 @@ def build_report(
             regime_check=regime_check,
             baseline_report=baseline,
             baseline_meta=baseline_meta,
-            quality_gate=quality_gate,
+            source_report=source,
+            source_quality_policy=source_quality_policy,
+            source_quality_policy_meta=source_quality_policy_meta,
             feature_store_gate=feature_store_gate,
             bootstrap_draws=bootstrap_draws,
         )
@@ -581,6 +747,7 @@ def build_report(
             "regime_report": regime_meta,
             "feature_store_report": feature_meta,
             "autoresearch_ledger": ledger_meta,
+            "source_quality_scope_policy": source_quality_policy_meta,
             "baseline_report": baseline_meta,
         },
         "split_policy": {
@@ -599,6 +766,7 @@ def build_report(
             "requires_positive_ablation_vs_baseline": True,
             "requires_zero_material_winner_damage_findings": True,
             "requires_source_quality_gate_passed": True,
+            "requires_source_quality_scope_policy_applied": True,
             "requires_feature_store_gate_passed": True,
             "min_feature_store_shared_quote_dates": MIN_FEATURE_STORE_SHARED_QUOTE_DATES,
             "bootstrap_draws": bootstrap_draws,
@@ -606,7 +774,9 @@ def build_report(
         "summary": {
             "overall_status": status,
             "source_selected_trade_count": len(raw_rows),
-            "accepted_exact_trade_count": len(trades),
+            "accepted_exact_trade_count_before_source_quality_scope": len(trades),
+            "accepted_exact_trade_count": len(scoped_combined_rows),
+            "source_quality_scope_excluded_trade_count": len(combined_scope_exclusions),
             "rejected_row_counts": dict(sorted(rejected.items())),
             "candidate_count": len(candidates),
             "ready_candidate_count": len(ready),
@@ -618,9 +788,22 @@ def build_report(
             else None,
             "feature_store_gate_status": feature_store_gate.get("status"),
             "regime_status": regime_check.get("status"),
-            "source_quality_gate_status": quality_gate.get("status"),
+            "source_quality_scope_policy_status": _source_quality_policy_summary(
+                source_quality_policy,
+                source_quality_policy_meta,
+                combined_scope_exclusions,
+            ).get("status"),
+            "source_quality_gate_status": "source_quality_gate_passed"
+            if candidates and all(candidate.get("source_quality_gate", {}).get("passed") for candidate in candidates)
+            else "source_quality_gate_blocked",
             "promotion_ready": False,
         },
+        "source_quality_scope_policy": _source_quality_policy_summary(
+            source_quality_policy,
+            source_quality_policy_meta,
+            combined_scope_exclusions,
+        ),
+        "source_quality_exclusions": combined_scope_exclusions,
         "candidates": candidates,
         "proof_policy": {
             "readback_is": "historical robust-search nomination readback over trusted intraday exact rows",
@@ -657,6 +840,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Regime status: `{summary.get('regime_status')}`.",
         f"- Feature-store status: `{summary.get('feature_store_status')}`; shared dates `{summary.get('feature_store_shared_quote_date_count')}`.",
         f"- Feature-store gate: `{summary.get('feature_store_gate_status')}`.",
+        f"- Source-quality scope policy: `{summary.get('source_quality_scope_policy_status')}`; excluded trades `{summary.get('source_quality_scope_excluded_trade_count')}`.",
         f"- Source quality gate: `{summary.get('source_quality_gate_status')}`.",
         f"- Rejected row counts: `{_json_inline(summary.get('rejected_row_counts') or {})}`.",
         "",
@@ -688,6 +872,33 @@ def render_markdown(report: dict[str, Any]) -> str:
             )
             + " |"
         )
+    exclusions = _as_list(report.get("source_quality_exclusions"))
+    if exclusions:
+        lines.extend(
+            [
+                "",
+                "## Source-Quality Scope Exclusions",
+                "",
+                "| Rule | Date | Ticker | Lane | P&L % | Reason |",
+                "|---|---|---|---|---:|---|",
+            ]
+        )
+        for exclusion in exclusions:
+            exclusion = _as_dict(exclusion)
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        f"`{_cell(exclusion.get('rule_id'))}`",
+                        f"`{_cell(exclusion.get('entry_date'))}`",
+                        f"`{_cell(exclusion.get('ticker'))}`",
+                        f"`{_cell(exclusion.get('lane_id'))}`",
+                        _cell(exclusion.get("pnl_pct")),
+                        _cell(exclusion.get("reason")),
+                    ]
+                )
+                + " |"
+            )
     lines.extend(
         [
             "",
@@ -737,7 +948,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--regime-report", type=Path, default=DEFAULT_REGIME_REPORT)
     parser.add_argument("--feature-store-report", type=Path, default=DEFAULT_FEATURE_STORE_REPORT)
     parser.add_argument("--autoresearch-ledger", type=Path, default=DEFAULT_AUTORESEARCH_LEDGER)
-    parser.add_argument("--baseline-report", type=Path, default=None)
+    parser.add_argument("--source-quality-policy", type=Path, default=DEFAULT_SOURCE_QUALITY_POLICY)
+    parser.add_argument("--baseline-report", type=Path, default=DEFAULT_BASELINE_REPORT)
     parser.add_argument("--bootstrap-draws", type=int, default=10_000)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
@@ -753,6 +965,7 @@ def main(argv: list[str] | None = None) -> int:
         regime_report_path=args.regime_report,
         feature_store_report_path=args.feature_store_report,
         autoresearch_ledger_path=args.autoresearch_ledger,
+        source_quality_policy_path=args.source_quality_policy,
         baseline_report_path=args.baseline_report,
         bootstrap_draws=max(int(args.bootstrap_draws), 1),
     )

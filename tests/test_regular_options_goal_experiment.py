@@ -131,8 +131,9 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
             },
         }
 
-        def fake_run_lane_variant(variant_id: str, *, lookback_years: int):
+        def fake_run_lane_variant(variant_id: str, *, lookback_years: int, as_of_date=None):
             row = rows[variant_id]
+            self.assertEqual(as_of_date, date(2026, 6, 4))
             return {"variants": [row]}, row
 
         def fake_score_variant(*, variant_id, run_path, robustness_path, side_aware_path, hypothesis, ledger_path=None):
@@ -176,8 +177,64 @@ class RegularOptionsGoalExperimentTests(unittest.TestCase):
                 )
 
         self.assertEqual(report["best"]["variant_id"], "pnl_progress")
+        self.assertEqual(report["as_of_date"], "2026-06-04")
         self.assertEqual(report["ranked"][0]["progress_score"], 40.0)
         self.assertEqual(report["ranked"][1]["research_score"], 100.0)
+
+    def test_goal_experiment_passes_as_of_date_to_variant_runner(self):
+        captured = {}
+        variant_row = {
+            "variant_id": "lane_a_goal_test",
+            "result_path": "run.json",
+            "description": "test variant",
+            "candidate_trade_count": 1,
+            "exact_trade_count": 1,
+        }
+
+        def fake_run_lane_variant(variant_id: str, *, lookback_years: int, as_of_date=None):
+            captured["variant_id"] = variant_id
+            captured["lookback_years"] = lookback_years
+            captured["as_of_date"] = as_of_date
+            return {"variants": [variant_row]}, variant_row
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            with patch.object(goal, "_run_lane_variant", side_effect=fake_run_lane_variant), patch.object(
+                goal,
+                "_run_robustness",
+                return_value=({"ok": True}, output_dir / "robustness.json"),
+            ), patch.object(
+                goal,
+                "_run_side_aware",
+                return_value=({"ok": True}, output_dir / "side-aware.json"),
+            ), patch.object(
+                goal,
+                "_score_variant",
+                return_value={
+                    "score": 0.0,
+                    "progress_score": 1.0,
+                    "research_score": 1.0,
+                    "status": "scout_or_blocked",
+                    "promotion_blockers": [],
+                    "score_line": "score: 0.00 progress_score: 1.00",
+                    "metrics": {},
+                },
+            ), patch.object(
+                goal.evaluator,
+                "write_outputs",
+                return_value={"latest_json": "latest.json"},
+            ):
+                goal.run_goal_experiments(
+                    variants=["lane_a_goal_test"],
+                    lookback_years=2,
+                    output_dir=output_dir,
+                    append_ledger=False,
+                    as_of_date=date(2026, 6, 4),
+                )
+
+        self.assertEqual(captured["variant_id"], "lane_a_goal_test")
+        self.assertEqual(captured["lookback_years"], 2)
+        self.assertEqual(captured["as_of_date"], date(2026, 6, 4))
 
     def test_forward_holdout_blocks_overlapping_non_champion_experiment(self):
         with tempfile.TemporaryDirectory() as tmp:

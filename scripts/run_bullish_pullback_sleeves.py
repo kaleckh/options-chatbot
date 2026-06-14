@@ -5,7 +5,7 @@ import copy
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -2249,7 +2249,27 @@ def _summarize(result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_variants(*, lookback_years: int, only: set[str] | None = None, include_themes: bool = False, include_tickers: bool = False) -> dict[str, Any]:
+def _parse_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return date.fromisoformat(text[:10])
+
+
+def run_variants(
+    *,
+    lookback_years: int,
+    only: set[str] | None = None,
+    include_themes: bool = False,
+    include_tickers: bool = False,
+    as_of_date: date | None = None,
+) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     variants = list(VARIANTS)
     if include_themes:
@@ -2272,6 +2292,7 @@ def run_variants(*, lookback_years: int, only: set[str] | None = None, include_t
                 historical_source_labels="thetadata_opra_nbbo_1m",
                 allow_research_imported_data=False,
                 min_imported_calendar_dates=252,
+                as_of_date=as_of_date,
                 save_result=True,
             )
             rows.append(
@@ -2299,6 +2320,7 @@ def run_variants(*, lookback_years: int, only: set[str] | None = None, include_t
     )
     report = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "as_of_date": as_of_date.isoformat() if as_of_date else None,
         "active_universe_count": len(_active_universe_symbols()),
         "cmcsa_active": "CMCSA" in set(_active_universe_symbols()),
         "rows": rows,
@@ -2317,6 +2339,7 @@ def main() -> int:
     parser.add_argument("--only", nargs="*", default=None)
     parser.add_argument("--include-themes", action="store_true")
     parser.add_argument("--include-tickers", action="store_true")
+    parser.add_argument("--as-of-date", default=None, help="Cap imported replay data at this YYYY-MM-DD date.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     report = run_variants(
@@ -2324,6 +2347,7 @@ def main() -> int:
         only=set(args.only) if args.only else None,
         include_themes=bool(args.include_themes),
         include_tickers=bool(args.include_tickers),
+        as_of_date=_parse_date(args.as_of_date),
     )
     if args.json:
         print(json.dumps(report, indent=2))

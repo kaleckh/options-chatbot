@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import unittest
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -359,6 +360,7 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
                         "include_themes": False,
                     },
                     lookback_years=1,
+                    as_of_date=date(2026, 6, 4),
                 )
 
         self.assertEqual(result, result_path.resolve())
@@ -367,7 +369,33 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
             only={"sleeve_ticker_iwm"},
             include_themes=False,
             include_tickers=True,
+            as_of_date=date(2026, 6, 4),
         )
+
+    def test_wfo_variant_passes_as_of_date_to_historical_backtest(self):
+        result_path = Path("result.json")
+        with patch.object(
+            all_sleeves.wfo,
+            "run_historical_backtest",
+            return_value={"result_path": str(result_path)},
+        ) as run_historical_backtest:
+            result = all_sleeves._run_wfo_variant(
+                {
+                    "variant_id": "iwm_small_cap_risk_call_chain_native_timeexit_all_sleeves",
+                    "base_playbook": "bullish_pullback_observation",
+                    "n_picks": 1,
+                    "description": "IWM call",
+                    "overrides": {
+                        "allowed_tickers": ["IWM"],
+                        "historical_required_underlyings": ["IWM"],
+                    },
+                },
+                lookback_years=2,
+                as_of_date=date(2026, 6, 4),
+            )
+
+        self.assertEqual(result, result_path.resolve())
+        self.assertEqual(run_historical_backtest.call_args.kwargs["as_of_date"], date(2026, 6, 4))
 
 
 if __name__ == "__main__":

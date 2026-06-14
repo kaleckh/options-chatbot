@@ -10,21 +10,22 @@ Current read:
 - trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `505` shared dates from `2024-05-22` through `2026-06-04`; the 504-date two-year feature-store depth target is met.
 - paid-data readiness is still `not_ready` after batch `2146` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
 - `docs/regular-options-cvx-executable-coverage.md` diagnoses the CVX issue as observed zero-bid tradability, not missing provider data: `495,306` trusted rows, `505` dates, `56,191` non-executable rows, `100.0%` of non-executable rows are zero-bid/positive-ask, `0` missing bid/ask rows, `0` crossed quotes, and the current multilane source report contains `3` selected CVX historical trades plus `1` suppressed duplicate.
+- `data/contracts/regular-options-source-quality-scope-policy.json` is active and applies the `cvx_zero_bid_tradability_candidate_scope_v1` rule, excluding the `3` matching CVX `bullish_pullback_core` rows from historical nomination metrics without lowering the quote-quality floor.
 - ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
 - batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects.
 - `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,428` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
-- `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `234` exact rows accepted, `0` / `3` candidates ready, feature-store gate passed, combined final holdout `29` trades with bootstrap PF lower bound `0.56`, and blockers include missing baseline ablation, missing VIX/regime context, final holdout below `30`, and existing source quality blockers.
+- `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `231` exact rows accepted after `3` CVX source-quality scope exclusions, `0` / `3` candidates ready, regime robustness passed, feature-store gate passed, combined final holdout `28` trades with bootstrap PF lower bound `0.61`, and blockers include final holdout below `30`, final PF-LB below the selection-adjusted bar, paper-shadow/source-quality blockers, and lane-specific unpriced/zero-bid blockers.
 
 Next actions:
 
-1. Apply a preregistered candidate-scoped source-quality rule for the affected `CVX` historical candidates, then rerun robust search. Valid outcomes are killing the CVX-dependent historical candidates or excluding CVX from that candidate scope; invalid outcomes are lowering the `90%` floor, synthesizing bids, or treating zero-bid rows as executable.
+1. Repair the remaining candidate-specific source-quality blockers without changing scanner policy or proof bars: `bullish_pullback_core:unpriced_candidates_3`, Lane A conservative zero-bid economics, Lane A `53.1%` quote coverage, Lane A rolling OOS watch, and `paper_shadow_fill_evidence_pending`.
 2. After any further source-quality repair, import, or symbol-surface change, validate with:
 
 ```powershell
 uv run --locked python scripts\audit_paid_data_readiness.py --force --json --snapshot-kind intraday --source-labels thetadata_opra_nbbo_1m --required-underlyings SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA --min-quote-dates 504 --min-shared-quote-dates 504 --min-executable-quote-pct 90
 ```
 
-3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: baseline ablation after costs, VIX/regime context coverage, enough newest holdout rows to reach at least `30` exact final-holdout trades, and source-quality blockers.
+3. Build or repair the missing inputs named by the robust-search report before treating any historical result as a nomination: enough newest holdout rows to reach at least `30` exact final-holdout trades, final-holdout PF-LB above `1.0` and the selection-adjusted bar, and the remaining source-quality blockers.
 4. Rerun `npm run options:features:regular-options` and `npm run options:robust-search:regular-options` after any historical import, source-quality repair, or source-replay repair.
 5. Use historical robust-search results only to nominate, reject, or refreeze lanes; do not mark any historical result as fresh forward proof or live-validation promotion.
 

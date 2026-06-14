@@ -2704,6 +2704,25 @@ def _parse_forward_entry_date(value: Any) -> Optional[date]:
             return None
 
 
+def _parse_replay_as_of_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw[:10])
+    except ValueError:
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).date()
+        except ValueError as exc:
+            raise ValueError(f"Invalid replay as_of_date: {value!r}") from exc
+
+
 def _forward_pick_truth_required_date(pick: dict[str, Any], entry_date: date) -> date:
     expiry_date = _parse_forward_entry_date(pick.get("expiry"))
     if expiry_date is not None:
@@ -8258,6 +8277,7 @@ def run_historical_backtest(
     save_result: bool = True,
     historical_source_labels: Optional[Sequence[str] | str] = None,
     allow_research_imported_data: bool = False,
+    as_of_date: Optional[Any] = None,
 ) -> dict:
     """
     Historical replay of the daily scan.
@@ -8296,6 +8316,14 @@ def run_historical_backtest(
         normalized_truth_lane = SYNTHETIC_TRUTH_SOURCE
     if normalized_truth_lane not in {SYNTHETIC_TRUTH_SOURCE, IMPORTED_TRUTH_SOURCE, IMPORTED_DAILY_TRUTH_SOURCE}:
         return {"error": f"Unsupported truth_lane: {truth_lane}"}
+    replay_as_of_date = _parse_replay_as_of_date(as_of_date)
+
+    def _quote_date_at_or_before_as_of(value: Any) -> bool:
+        if replay_as_of_date is None:
+            return True
+        parsed = _parse_replay_as_of_date(value)
+        return parsed is not None and parsed <= replay_as_of_date
+
     try:
         required_imported_calendar_dates = max(1, int(min_imported_calendar_dates))
     except (TypeError, ValueError):
@@ -8389,6 +8417,11 @@ def run_historical_backtest(
             trusted_only=imported_trusted_only,
             source_labels=imported_source_labels,
         )
+        imported_calendar_quote_dates = [
+            quote_date
+            for quote_date in imported_calendar_quote_dates
+            if _quote_date_at_or_before_as_of(quote_date)
+        ]
         if not imported_calendar_quote_dates:
             return {
                 "error": (
@@ -8404,6 +8437,11 @@ def run_historical_backtest(
             trusted_only=imported_trusted_only,
             source_labels=imported_source_labels,
         )
+        imported_shared_quote_dates = [
+            quote_date
+            for quote_date in imported_shared_quote_dates
+            if _quote_date_at_or_before_as_of(quote_date)
+        ]
         requires_shared_imported_dates = is_ai_commodity_playbook_id(replay_playbook.get("id"))
         if imported_shared_quote_dates:
             imported_replay_quote_dates = imported_shared_quote_dates
@@ -8947,6 +8985,8 @@ def run_historical_backtest(
                 normalized_hist = hist[["Open", "Close", "Volume"]].copy()
                 normalized_hist.index = _normalize_replay_history_index(normalized_hist.index)
                 normalized_hist = normalized_hist[~normalized_hist.index.duplicated(keep="last")]
+                if replay_as_of_date is not None:
+                    normalized_hist = normalized_hist[normalized_hist.index <= pd.Timestamp(replay_as_of_date)]
                 all_histories[sym] = normalized_hist
                 # Open prices — used as entry price (mirrors live scan's ~10:10 AM execution)
         except Exception:
@@ -8964,6 +9004,8 @@ def run_historical_backtest(
         imported_quote_index = _normalize_replay_history_index(pd.to_datetime(imported_replay_quote_dates))
         imported_quote_set = set(imported_quote_index)
         spy_index = pd.DatetimeIndex([stamp for stamp in spy_index if stamp in imported_quote_set])
+        if replay_as_of_date is not None:
+            spy_index = pd.DatetimeIndex([stamp for stamp in spy_index if stamp.date() <= replay_as_of_date])
         replay_calendar_summary = _build_replay_calendar_summary(
             source=f"{imported_data_scope_label}_imported_{imported_replay_quote_date_source}",
             index=spy_index,
@@ -8996,11 +9038,21 @@ def run_historical_backtest(
                 "required_imported_calendar_dates": required_imported_calendar_dates,
             }
     else:
+        if replay_as_of_date is not None:
+            spy_index = pd.DatetimeIndex([stamp for stamp in spy_index if stamp.date() <= replay_as_of_date])
         replay_calendar_summary = _build_replay_calendar_summary(
             source="spy_history",
             index=spy_index,
             raw_history_date_count=len(raw_spy_index),
         )
+    if replay_calendar_summary is not None:
+        replay_calendar_summary["replay_as_of_date"] = replay_as_of_date.isoformat() if replay_as_of_date else None
+    if len(spy_index) == 0:
+        return {
+            "error": "Replay calendar has no dates at or before the requested as_of_date.",
+            "replay_as_of_date": replay_as_of_date.isoformat() if replay_as_of_date else None,
+            "replay_calendar": replay_calendar_summary,
+        }
     replay_start = spy_index[0]
     excluded_tickers: list[dict] = []
     aligned_histories: dict[str, pd.DataFrame] = {}
@@ -10059,6 +10111,7 @@ def run_historical_backtest(
             "run_at": datetime.now().isoformat(timespec="seconds"),
             "mode": "backtest", "profile": "mixed",
             "lookback_years": lookback_years,
+            "replay_as_of_date": replay_as_of_date.isoformat() if replay_as_of_date else None,
             "iv_adj": iv_adj,
             "requested_pricing_lane": requested_pricing_lane,
             "effective_pricing_lane": requested_pricing_lane,
@@ -10283,6 +10336,7 @@ def run_historical_backtest(
         "imported_data_scope": imported_data_scope_label if _is_imported_truth_source(normalized_truth_lane) else None,
         "research_imported_data_allowed": (not imported_trusted_only) if _is_imported_truth_source(normalized_truth_lane) else False,
         "lookback_years":    lookback_years,
+        "replay_as_of_date": replay_as_of_date.isoformat() if replay_as_of_date else None,
         "iv_adj":            iv_adj,
         "requested_pricing_lane": requested_pricing_lane,
         "effective_pricing_lane": effective_pricing_lane,

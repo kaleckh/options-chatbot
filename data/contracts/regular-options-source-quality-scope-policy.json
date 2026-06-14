@@ -1,0 +1,52 @@
+{
+  "policy_id": "regular_options_source_quality_scope_policy",
+  "schema_version": 1,
+  "status": "active",
+  "runtime_use": true,
+  "owner": "scripts/build_regular_options_robust_search_evaluation.py",
+  "decision_ref": "docs/DECISIONS.md#2026-06-14-treat-cvx-coverage-failure-as-observed-zero-bid-tradability",
+  "scope": "regular_options_historical_robust_search_nomination_only",
+  "rules": [
+    {
+      "rule_id": "cvx_zero_bid_tradability_candidate_scope_v1",
+      "status": "active",
+      "action": "exclude_matching_trades_from_historical_candidate_scope",
+      "symbols": [
+        "CVX"
+      ],
+      "lane_ids": [
+        "bullish_pullback_core"
+      ],
+      "lane_families": [
+        "bullish_pullback_observation"
+      ],
+      "reason": "zero_bid_tradability_floor_failure",
+      "diagnostic_report": "docs/regular-options-cvx-executable-coverage.md",
+      "minimum_executable_quote_pct": 90.0,
+      "observed_executable_quote_pct": 88.66,
+      "observed_quote_rows": 495306,
+      "observed_quote_dates": 505,
+      "observed_non_executable_rows": 56191,
+      "observed_non_executable_reason": "zero_bid_positive_ask",
+      "observed_missing_bid_ask_rows": 0,
+      "observed_crossed_quote_rows": 0,
+      "affected_selected_trade_count": 3,
+      "affected_suppressed_duplicate_count": 1,
+      "suppressed_quality_blocker_tokens": [
+        "CVX",
+        "cvx",
+        "zero_bid_tradability_floor_failure",
+        "low_executable_quote_coverage"
+      ],
+      "prohibited_actions": [
+        "do_not_lower_90pct_executable_quote_floor",
+        "do_not_synthesize_bids",
+        "do_not_use_midpoint_fills",
+        "do_not_treat_zero_bid_positive_ask_as_executable_entry_quality",
+        "do_not_change_scanner_policy",
+        "do_not_change_broker_or_paper_order_behavior",
+        "do_not_count_historical_rows_as_fresh_forward_promotion_proof"
+      ]
+    }
+  ]
+}

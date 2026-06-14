@@ -182,6 +182,10 @@ These are the living docs for the current worktree:
   - generated read-only point-in-time feature-store readback over trusted ThetaData intraday OPRA/NBBO rows, with `tradable_after_time <= candidate_entry_time` join policy
 - `docs/regular-options-cvx-executable-coverage.md`
   - generated read-only CVX executable quote coverage diagnostic separating observed zero-bid tradability failure from missing provider data
+- `docs/regular-options-source-quality-scope-policy.md`
+  - manually maintained historical robust-search source-quality scope policy for candidate-specific exclusions such as CVX zero-bid tradability
+- `data/contracts/regular-options-source-quality-scope-policy.json`
+  - machine-readable runtime source-quality scope policy consumed by the robust-search evaluator
 - `docs/regular-options-robust-search-evaluation.md`
   - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
 - `docs/regular-options-overfit-rule-archive.md`

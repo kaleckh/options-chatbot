@@ -7,7 +7,7 @@ import os
 import sqlite3
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -596,6 +596,19 @@ def _utc_stamp() -> str:
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _parse_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return date.fromisoformat(text[:10])
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
@@ -632,12 +645,18 @@ def _variant_row(report: dict[str, Any], variant_id: str) -> dict[str, Any]:
     raise RuntimeError(f"Variant {variant_id} did not produce a result row.")
 
 
-def _run_bullish_sleeve_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
+def _run_bullish_sleeve_variant(
+    spec: dict[str, Any],
+    *,
+    lookback_years: int,
+    as_of_date: date | None = None,
+) -> Path:
     report = sleeve_runner.run_variants(
         lookback_years=lookback_years,
         only={str(spec["variant_id"])},
         include_themes=bool(spec.get("include_themes")),
         include_tickers=bool(spec.get("include_tickers")),
+        as_of_date=as_of_date,
     )
     row = _variant_row(report, str(spec["variant_id"]))
     result_path = row.get("result_path")
@@ -646,7 +665,12 @@ def _run_bullish_sleeve_variant(spec: dict[str, Any], *, lookback_years: int) ->
     return Path(str(result_path)).resolve()
 
 
-def _run_wfo_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
+def _run_wfo_variant(
+    spec: dict[str, Any],
+    *,
+    lookback_years: int,
+    as_of_date: date | None = None,
+) -> Path:
     original_playbooks = copy.deepcopy(wfo.REPLAY_PLAYBOOKS)
     try:
         playbook = _wfo_playbook_for_spec(spec)
@@ -660,6 +684,7 @@ def _run_wfo_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
             historical_source_labels="thetadata_opra_nbbo_1m",
             allow_research_imported_data=False,
             min_imported_calendar_dates=252,
+            as_of_date=as_of_date,
             save_result=True,
         )
     finally:
@@ -671,11 +696,11 @@ def _run_wfo_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
     return Path(str(result_path)).resolve()
 
 
-def _run_variant(spec: dict[str, Any], *, lookback_years: int) -> Path:
+def _run_variant(spec: dict[str, Any], *, lookback_years: int, as_of_date: date | None = None) -> Path:
     if spec["runner"] == "bullish_sleeve":
-        return _run_bullish_sleeve_variant(spec, lookback_years=lookback_years)
+        return _run_bullish_sleeve_variant(spec, lookback_years=lookback_years, as_of_date=as_of_date)
     if spec["runner"] == "wfo_playbook":
-        return _run_wfo_variant(spec, lookback_years=lookback_years)
+        return _run_wfo_variant(spec, lookback_years=lookback_years, as_of_date=as_of_date)
     raise ValueError(f"Unsupported runner {spec['runner']!r}")
 
 
@@ -1040,6 +1065,7 @@ def run_all_planned_sleeves(
     output_dir: Path = OUTPUT_DIR,
     only: set[str] | None = None,
     skip_run: bool = False,
+    as_of_date: date | None = None,
 ) -> dict[str, Any]:
     stamp = _utc_stamp()
     root = output_dir / stamp
@@ -1053,7 +1079,7 @@ def run_all_planned_sleeves(
         try:
             if skip_run:
                 raise RuntimeError("skip_run requires explicit run_path support; rerun without --skip-run for end-to-end execution.")
-            run_path = _run_variant(spec, lookback_years=lookback_years)
+            run_path = _run_variant(spec, lookback_years=lookback_years, as_of_date=as_of_date)
             run = _load_json(run_path)
             robustness, robustness_path = _run_robustness(run_path, variant_dir / "robustness")
             run_metrics = _run_metrics(run)
@@ -1118,6 +1144,7 @@ def run_all_planned_sleeves(
         "experiment_batch": stamp,
         "goal": "Run every currently planned regular stock-options sleeve end-to-end where implementation exists.",
         "lookback_years": int(lookback_years),
+        "as_of_date": as_of_date.isoformat() if as_of_date else None,
         "base_clean_stack": {
             "lanes": sorted(BASE_CLEAN_LANE_IDS),
             "strict_deduped_trade_count": base_count,
@@ -1156,12 +1183,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--lookback-years", type=int, default=1)
     parser.add_argument("--only", nargs="*", default=None, help="Variant ids or lane ids to run.")
     parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR)
+    parser.add_argument("--as-of-date", default=None, help="Cap imported replay data at this YYYY-MM-DD date.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     report = run_all_planned_sleeves(
         lookback_years=int(args.lookback_years),
         output_dir=args.output_dir,
         only=set(args.only) if args.only else None,
+        as_of_date=_parse_date(args.as_of_date),
     )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

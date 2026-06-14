@@ -190,8 +190,13 @@ def _variant_row(report: dict[str, Any], variant_id: str) -> dict[str, Any]:
     raise RuntimeError(f"Variant {variant_id} did not produce a result row.")
 
 
-def _run_lane_variant(variant_id: str, *, lookback_years: int) -> tuple[dict[str, Any], dict[str, Any]]:
-    report = next_round.run_variants(lookback_years=lookback_years, only={variant_id})
+def _run_lane_variant(
+    variant_id: str,
+    *,
+    lookback_years: int,
+    as_of_date: date | None = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    report = next_round.run_variants(lookback_years=lookback_years, only={variant_id}, as_of_date=as_of_date)
     row = _variant_row(report, variant_id)
     if row.get("error"):
         raise RuntimeError(f"Variant {variant_id} failed: {row['error']}")
@@ -307,7 +312,11 @@ def run_goal_experiments(
     rows: list[dict[str, Any]] = []
     for index, variant_id in enumerate(variant_list, start=1):
         variant_dir = root / f"v{index:02d}"
-        variant_report, variant_row = _run_lane_variant(variant_id, lookback_years=lookback_years)
+        variant_report, variant_row = _run_lane_variant(
+            variant_id,
+            lookback_years=lookback_years,
+            as_of_date=as_of_date,
+        )
         run_path = Path(str(variant_row["result_path"])).resolve()
         _write_json(variant_dir / "lane_variant_report.json", variant_report)
         _write_json(variant_dir / "lane_variant_row.json", variant_row)
@@ -398,6 +407,7 @@ def run_goal_experiments(
         "experiment_batch": stamp,
         "goal": DEFAULT_GOAL,
         "lookback_years": int(lookback_years),
+        "as_of_date": as_of_date.isoformat() if as_of_date else None,
         "append_ledger": bool(append_ledger),
         "write_global_latest": bool(write_global_latest),
         "champion_final_eval": bool(champion_final_eval),
@@ -416,6 +426,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Lane A goal experiments and score them with the frozen evaluator.")
     parser.add_argument("--variant", action="append", help="Variant id to run. Repeat for multiple variants.")
     parser.add_argument("--lookback-years", type=int, default=1)
+    parser.add_argument("--as-of-date", help="Cap replay entry dates at this YYYY-MM-DD date.")
     parser.add_argument("--no-append-ledger", action="store_true")
     parser.add_argument(
         "--champion-final-eval",
@@ -441,6 +452,7 @@ def main(argv: list[str] | None = None) -> int:
         append_ledger=not args.no_append_ledger,
         write_global_latest=bool(args.write_global_latest),
         champion_final_eval=bool(args.champion_final_eval),
+        as_of_date=_parse_date(args.as_of_date),
     )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))

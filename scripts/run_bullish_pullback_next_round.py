@@ -5,7 +5,7 @@ import copy
 import json
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -851,7 +851,25 @@ def _build_playbook(variant: dict[str, Any]) -> dict[str, Any]:
     return playbook
 
 
-def run_variants(*, lookback_years: int, only: set[str] | None = None) -> dict[str, Any]:
+def _parse_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip()
+    if not text:
+        return None
+    return date.fromisoformat(text[:10])
+
+
+def run_variants(
+    *,
+    lookback_years: int,
+    only: set[str] | None = None,
+    as_of_date: date | None = None,
+) -> dict[str, Any]:
     started_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     rows: list[dict[str, Any]] = []
     original_playbooks = copy.deepcopy(wfo.REPLAY_PLAYBOOKS)
@@ -871,6 +889,7 @@ def run_variants(*, lookback_years: int, only: set[str] | None = None) -> dict[s
                 allow_research_imported_data=False,
                 min_imported_calendar_dates=252,
                 save_result=True,
+                as_of_date=as_of_date,
             )
             rows.append(
                 {
@@ -907,6 +926,7 @@ def run_variants(*, lookback_years: int, only: set[str] | None = None) -> dict[s
             "authoritative_profitability_basis": "exact_contract_only",
             "universe_path": str(UNIVERSE_PATH),
             "cmcsa_active": "CMCSA" in _active_universe_symbols(),
+            "replay_as_of_date": as_of_date.isoformat() if as_of_date else None,
         },
         "variants": rows,
         "best": ranked[0] if ranked else None,
@@ -928,11 +948,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run the next bounded bullish-pullback exact-contract variant round.")
     parser.add_argument("--lookback-years", type=int, default=1)
     parser.add_argument("--only", help="Comma-separated variant ids to run.")
+    parser.add_argument("--as-of-date", help="Cap replay entry dates at this YYYY-MM-DD date.")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     only = {item.strip() for item in str(args.only or "").split(",") if item.strip()} or None
-    report = run_variants(lookback_years=args.lookback_years, only=only)
+    report = run_variants(lookback_years=args.lookback_years, only=only, as_of_date=_parse_date(args.as_of_date))
     artifacts = write_report(report)
     payload = {"artifacts": artifacts, "report": report}
     if args.json:

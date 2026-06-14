@@ -197,6 +197,22 @@ class HistoricalTruthLaneTests(unittest.TestCase):
         self.assertEqual(comparison["imported"]["truth_source"], wfo.IMPORTED_TRUTH_SOURCE)
         self.assertIn("unsupported_by_import_count", comparison)
 
+    def test_imported_backtest_as_of_date_caps_replay_calendar(self):
+        imported = wfo.run_historical_backtest(
+            lookback_years=1,
+            n_picks=1,
+            iv_adj=1.0,
+            truth_lane="historical_imported",
+            as_of_date="2026-03-10",
+        )
+
+        self.assertNotIn("error", imported)
+        self.assertEqual(imported["replay_as_of_date"], "2026-03-10")
+        self.assertEqual(imported["replay_calendar"]["replay_as_of_date"], "2026-03-10")
+        trade_dates = [str(trade["date"]) for trade in imported["trades"]]
+        self.assertTrue(trade_dates)
+        self.assertLessEqual(max(trade_dates), "2026-03-10")
+
     def test_live_policy_prefers_imported_truth_when_present(self):
         wfo.run_historical_backtest(
             lookback_years=1,
