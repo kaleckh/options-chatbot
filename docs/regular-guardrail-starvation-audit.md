@@ -1,37 +1,37 @@
 # Regular Guardrail Starvation Audit
 
-- Generated: `2026-06-12T17:07:53Z`
+- Generated: `2026-06-16T17:04:38Z`
 - Status: `guardrail_starvation_detected`
-- Playbooks completed/requested: `14` / `14`
-- Candidate/returned totals: `2` / `2`
-- Candidate guardrail decisions: `{'blocked': 2}`
-- Starvation playbooks: `['ai_commodity_infra_observation']`
-- Zero-candidate playbooks: `13`
+- Playbooks completed/requested: `3` / `3`
+- Candidate/returned totals: `5` / `5`
+- Candidate guardrail decisions: `{'blocked': 5}`
+- Starvation playbooks: `['volatility_expansion_observation', 'ai_commodity_infra_observation']`
+- Zero-candidate playbooks: `1`
 - Market open at run: `True`
 - All configured ticker scopes audited: `True`
 - Commodity playbooks included: `True`
 
 ## Leading Upstream Drops
 
-- `momentum`: `122`
-- `direction_filter`: `97`
-- `option_liquidity`: `73`
-- `history_or_liquidity`: `55`
-- `tech_score`: `49`
-- `ev_floor`: `4`
+- `momentum`: `54`
+- `option_liquidity`: `14`
+- `history_or_liquidity`: `9`
+- `tech_score`: `4`
+- `ev_floor`: `1`
 - `min_history`: `0`
 - `signal_index`: `0`
+- `direction_score`: `0`
 
 ## Leading Drop Details
 
-- `momentum`: `76` - momentum/trend signal not met (`ABBV, AMD, AMT, ARM, DIA, DIS, FCX, IWM`)
-- `direction_filter`: `65` - put not in allowed directions call (`AA, AAPL, AMZN, COIN, COP, CVX, GOOGL, META`)
-- `history_or_liquidity`: `54` - underlying history/liquidity gate; tier=thin (`CAT, CLF, COST, DE, EQR, GS, LIN, LMT`)
-- `momentum`: `46` - close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25% (`AA, AAPL, AMD, AMZN, ARM, BA, BAC, C`)
-- `option_liquidity`: `42` - illiquid_quote: wide_leg_spread (`BAC, C, JNJ, JPM, KO, RTX, UNH, AMZN`)
-- `direction_filter`: `32` - call not in allowed directions put (`BA, BAC, C, JNJ, JPM, KO, LLY, MCD`)
-- `option_liquidity`: `12` - illiquid_quote: wide_leg_spread,wide_spread_entry_slippage (`PG, SBUX, JNJ, JPM, RTX, CVX, CARR, GEV`)
-- `option_liquidity`: `7` - illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume (`PLD, WELL, LLY, AMT`)
+- `momentum`: `47` - close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25% (`AA, AAPL, AMD, AMZN, ARM, BA, BAC, C`)
+- `history_or_liquidity`: `9` - underlying history/liquidity gate; tier=thin (`CAT, CLF, COST, DE, EQR, GS, LIN, LMT`)
+- `option_liquidity`: `9` - illiquid_quote: wide_leg_spread,wide_spread_entry_slippage (`AMT, CARR, COPX, ETN, NVT, PWR, SCCO, TECK`)
+- `momentum`: `7` - momentum/trend signal not met (`CEG, GEV, MP, NRG, SLV, URA, VRT`)
+- `option_liquidity`: `3` - illiquid_quote: wide_leg_spread (`ABBV, LLY, BHP`)
+- `option_liquidity`: `1` - illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest (`DIA`)
+- `ev_floor`: `1` - {'direction_score': #} (`AA`)
+- `tech_score`: `1` - tech_score 51.4 below 65.0 (`ALB`)
 
 ## Interpretation
 

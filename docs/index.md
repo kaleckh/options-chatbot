@@ -192,6 +192,12 @@ These are the living docs for the current worktree:
   - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
 - `docs/regular-options-historical-walk-forward.md`
   - generated read-only operator workflow that refreshes feature-store and robust-search readbacks, ingests all-planned peer sleeve results, and reports historical walk-forward blockers without consuming protected holdout
+- `docs/regular-options-robust-candidate-source-quality-manifest.md`
+  - generated read-only manifest classifying high-priority historical robust-candidate source-quality blockers into missing-quote, zero-bid/tradability, chain-native selection, paper-shadow evidence, and statistical/sample gates
+- `docs/regular-options-exact-target-plan.md`
+  - generated read-only exact target plan for robust-candidate source-quality missing-exit quote rows and Lane A no-chain-native-spread selection gaps, with protected-holdout and duplicate accounting
+- `docs/regular-options-exact-target-import-approval-packet.md`
+  - read-only approval packet for staged plan-only and dry-run decisions over the regular-options exact-target quote-import scope
 - `docs/regular-options-overfit-rule-archive.md`
   - generated read-only archive for rejected/winner-damaging candidate filter rules so overfit branches are retired from the monthly next-evidence queue without changing scanner policy
 - `docs/regular-options-lane-quarantine-archive.md`
