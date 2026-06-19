@@ -1,0 +1,526 @@
+{
+  "artifacts": {
+    "docs_report": "docs/regular-options-trade-qualification.md",
+    "json": "data/forward-tracking/regular_options_trade_qualification_20260618T020454Z.json",
+    "latest_json": "data/forward-tracking/regular_options_trade_qualification_latest.json",
+    "latest_markdown": "data/forward-tracking/regular_options_trade_qualification_latest.md",
+    "markdown": "data/forward-tracking/regular_options_trade_qualification_20260618T020454Z.md"
+  },
+  "auto_track_allowed": false,
+  "best_current_lane_if_any": {
+    "avg_net_pnl_pct": 6.74,
+    "decision": "paper_shadow_collect",
+    "exact_realized_pnl_count": 0,
+    "fresh_exact_entry_count": 3,
+    "lane_id": "volatility_expansion_observation",
+    "operator_action": "paper-shadow evidence collection only; capture fresh exact entries and policy-defined exact exits.",
+    "profit_factor": 1.83
+  },
+  "broker_order_allowed": false,
+  "exact_realized_pnl_count": 0,
+  "fresh_exact_entry_count": 6,
+  "generated_at_utc": "2026-06-18T02:04:54Z",
+  "historical_signatures": {
+    "actionability": "historical robust-search and walk-forward results can nominate or reject future forward candidates, but are not fresh forward proof by themselves.",
+    "robust_search_status": "historical_candidates_blocked",
+    "walk_forward_status": "historical_walkforward_ran_candidates_blocked"
+  },
+  "lane_decisions": [
+    {
+      "avg_net_pnl_pct": -12.62,
+      "decision": "insufficient_sample",
+      "disposition": "retest",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "speculative",
+      "median_net_pnl_pct": -15.53,
+      "next_operator_action": "Collect or repair exact priced outcomes before lane decisions.",
+      "priced_rows": 8,
+      "profit_factor": 0.1,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "insufficient_priced_exact_outcomes",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": null,
+      "sample_window_start": null,
+      "win_rate_pct": 25.0
+    },
+    {
+      "avg_net_pnl_pct": -8.43,
+      "decision": "insufficient_sample",
+      "disposition": "retest",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "tracked_winner_observation",
+      "median_net_pnl_pct": -5.72,
+      "next_operator_action": "Collect or repair exact priced outcomes before lane decisions.",
+      "priced_rows": 20,
+      "profit_factor": 0.5,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": "2026-06-03",
+      "sample_window_start": "2026-06-03",
+      "win_rate_pct": 45.0
+    },
+    {
+      "avg_net_pnl_pct": -8.43,
+      "decision": "insufficient_sample",
+      "disposition": "retest",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "tracked_winner_primary",
+      "median_net_pnl_pct": -5.72,
+      "next_operator_action": "Collect or repair exact priced outcomes before lane decisions.",
+      "priced_rows": 20,
+      "profit_factor": 0.5,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": "2026-06-03",
+      "sample_window_start": "2026-06-03",
+      "win_rate_pct": 45.0
+    },
+    {
+      "avg_net_pnl_pct": 6.74,
+      "decision": "paper_shadow_collect",
+      "disposition": "paper_shadow",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 3,
+      "lane_id": "volatility_expansion_observation",
+      "median_net_pnl_pct": 2.15,
+      "next_operator_action": "Collect fresh exact entry and exact realized exit evidence; do not route live.",
+      "priced_rows": 24,
+      "profit_factor": 1.83,
+      "promotion_state": "paper_probation",
+      "reason_codes": [
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "positive_historical_lane_without_fresh_exact_realized_pnl",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": "2026-06-05",
+      "sample_window_start": "2026-06-04",
+      "win_rate_pct": 50.0
+    },
+    {
+      "avg_net_pnl_pct": -48.45,
+      "decision": "quarantine_no_chase",
+      "disposition": "quarantine",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "bullish_momentum",
+      "median_net_pnl_pct": -54.84,
+      "next_operator_action": "Keep lane parked; require earn-back or frozen retest before any fresh collection.",
+      "priced_rows": 16,
+      "profit_factor": 0.04,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": null,
+      "sample_window_start": null,
+      "win_rate_pct": 12.5
+    },
+    {
+      "avg_net_pnl_pct": -22.81,
+      "decision": "quarantine_no_chase",
+      "disposition": "quarantine",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "bullish_pullback_observation",
+      "median_net_pnl_pct": -24.1,
+      "next_operator_action": "Keep lane parked; require earn-back or frozen retest before any fresh collection.",
+      "priced_rows": 15,
+      "profit_factor": 0.24,
+      "promotion_state": "diagnostic",
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "fresh_paper_cohort",
+        "fresh_paper_cohort_insufficient",
+        "lane_not_profitable_enough_for_probation",
+        "profit_factor_below_lane_gate",
+        "profitable_lane_gate",
+        "recent_cohort_circuit_breaker_active",
+        "recent_cohort_circuit_breaker_clear",
+        "walk_forward_holdout_depth",
+        "walk_forward_holdout_too_small_or_failed",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows",
+        "insufficient_priced_exact_sample"
+      ],
+      "sample_window_end": null,
+      "sample_window_start": null,
+      "win_rate_pct": 33.3
+    },
+    {
+      "avg_net_pnl_pct": -18.93,
+      "decision": "quarantine_no_chase",
+      "disposition": "quarantine",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 0,
+      "lane_id": "short_term",
+      "median_net_pnl_pct": -16.91,
+      "next_operator_action": "Keep lane parked; require earn-back or frozen retest before any fresh collection.",
+      "priced_rows": 54,
+      "profit_factor": 0.33,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows"
+      ],
+      "sample_window_end": "2026-06-05",
+      "sample_window_start": "2026-06-05",
+      "win_rate_pct": 33.3
+    },
+    {
+      "avg_net_pnl_pct": -20.24,
+      "decision": "quarantine_no_chase",
+      "disposition": "quarantine",
+      "exact_realized_pnl_count": 0,
+      "fresh_exact_entry_count": 1,
+      "lane_id": "swing",
+      "median_net_pnl_pct": -16.81,
+      "next_operator_action": "Keep lane parked; require earn-back or frozen retest before any fresh collection.",
+      "priced_rows": 49,
+      "profit_factor": 0.2,
+      "promotion_state": null,
+      "reason_codes": [
+        "average_net_pnl_not_positive",
+        "profit_factor_below_lane_gate",
+        "no_chase_active",
+        "no_exact_realized_pnl_rows",
+        "no_promotion_ready_rows"
+      ],
+      "sample_window_end": "2026-06-05",
+      "sample_window_start": "2026-06-02",
+      "win_rate_pct": 30.6
+    }
+  ],
+  "live_entry_allowed": false,
+  "no_chase_active": true,
+  "non_goals": [
+    "create trades",
+    "submit broker orders",
+    "change stops",
+    "change scanner policy",
+    "change sizing",
+    "lower proof bars",
+    "promote lanes",
+    "mutate evidence databases"
+  ],
+  "open_risk_status": {
+    "new_scanner_origin_entries_allowed": true,
+    "reason_codes": [],
+    "sources": [
+      {
+        "blockers": [],
+        "live_entry_allowed": true,
+        "source": "open_position_risk",
+        "status": "open_risk_governor_pass"
+      },
+      {
+        "blockers": [],
+        "live_entry_allowed": null,
+        "source": "lane_promotion_state",
+        "status": "open_risk_governor_pass"
+      },
+      {
+        "blockers": [],
+        "live_entry_allowed": true,
+        "source": "candidate_outcome_ledger",
+        "status": "open_risk_governor_pass"
+      },
+      {
+        "blockers": [],
+        "live_entry_allowed": true,
+        "source": "monthly_profitability",
+        "status": "open_risk_governor_pass"
+      }
+    ],
+    "status": "open_risk_governor_pass"
+  },
+  "operator_queue": [
+    {
+      "action": "collect_exact_exit_evidence",
+      "count": 1,
+      "operator_next_step": "Collect exact exit evidence for linked/live exact rows only when policy-defined exit conditions fire.",
+      "priority": 2,
+      "trade_recommendation": false
+    },
+    {
+      "action": "collect_paper_shadow_exact_evidence",
+      "count": 1,
+      "lane_id": "volatility_expansion_observation",
+      "operator_next_step": "Collect fresh exact entry and exact realized exit evidence for the strongest paper-shadow lane.",
+      "priority": 3,
+      "trade_recommendation": false
+    },
+    {
+      "action": "capture_missing_fill_attempt_evidence",
+      "count": 4,
+      "operator_next_step": "Capture missing fill-attempt evidence only for fresh selections during a valid market-data window.",
+      "priority": 4,
+      "trade_recommendation": false
+    },
+    {
+      "action": "refresh_suggested_trade_reviews",
+      "count": 1,
+      "operator_next_step": "Refresh suggested-trade reviews during valid market-data windows; this is review attention, not a trade recommendation.",
+      "priority": 5,
+      "trade_recommendation": false
+    },
+    {
+      "action": "repair_replay_source_evidence",
+      "count": 16,
+      "operator_next_step": "Repair replay/source evidence only where the repair burn-down target is active and unexhausted.",
+      "priority": 6,
+      "trade_recommendation": false
+    },
+    {
+      "action": "keep_broad_quarantined_lanes_parked",
+      "count": 4,
+      "operator_next_step": "Keep broad and quarantined lanes parked; do not chase historical winners.",
+      "priority": 7,
+      "trade_recommendation": false
+    }
+  ],
+  "overall_status": "blocked_no_live_release",
+  "paper_review_candidate_count": 0,
+  "prohibited_actions": [
+    "do_not_create_trades_from_trade_qualification",
+    "do_not_submit_broker_orders_from_trade_qualification",
+    "do_not_change_scanner_policy_from_trade_qualification",
+    "do_not_change_stops_from_trade_qualification",
+    "do_not_change_sizing_from_trade_qualification",
+    "do_not_enable_live_validation_from_trade_qualification",
+    "do_not_enable_auto_track_from_trade_qualification",
+    "do_not_lower_exact_executable_proof_bars_from_trade_qualification",
+    "do_not_mutate_evidence_databases_from_trade_qualification",
+    "do_not_open_live_or_auto_track_rows_from_blocked_readbacks",
+    "do_not_chase_paper_or_historical_signature_rows_without_fresh_exact_bridge",
+    "do_not_use_stale_midpoint_eod_manual_or_display_only_marks_as_proof",
+    "do_not_create_live_row_from_monthly_profitability_audit",
+    "do_not_submit_broker_order_from_monthly_profitability_audit",
+    "do_not_mutate_database_from_monthly_profitability_audit",
+    "do_not_change_scanner_policy_from_monthly_profitability_audit",
+    "do_not_change_stop_policy_from_monthly_profitability_audit",
+    "do_not_change_sizing_from_monthly_profitability_audit",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_monthly_profitability_audit",
+    "do_not_promote_paper_research_or_backfill_rows_to_production_proof"
+  ],
+  "promotion_ready_count": 0,
+  "read_only": true,
+  "report_id": "regular_options_trade_qualification",
+  "required_evidence_before_promotion": [
+    "fresh executable exact OPRA/NBBO entry evidence for the lane after freeze",
+    "fresh executable exact OPRA/NBBO exit evidence and exact realized P&L for the lane",
+    "promotion_ready_count greater than zero from fresh forward evidence",
+    "sufficient fresh forward sample size under the policy-defined lane gate",
+    "positive lane economics under executable pricing, not midpoint, EOD, stale, or display-only marks",
+    "open-risk governor passing from fresh executable review or legitimate exit evidence",
+    "no active no-chase or quarantine blocker for the lane",
+    "paper-shadow/probation evidence bridge complete before any promotion discussion"
+  ],
+  "schema_version": 1,
+  "scope": "regular_options_trade_qualification_profitability_triage",
+  "source_artifacts": {
+    "candidate_outcome_ledger": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:11:09Z",
+      "path": "data/forward-tracking/regular_options_candidate_outcome_ledger_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_candidate_outcome_ledger",
+      "required": true,
+      "status": "loaded"
+    },
+    "fill_attempt_evidence_capture_plan": {
+      "age_hours": 20.38,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:42:01Z",
+      "path": "data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_fill_attempt_evidence_capture_plan",
+      "required": true,
+      "status": "loaded"
+    },
+    "fresh_evidence_loop": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:59Z",
+      "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_fresh_evidence_loop",
+      "required": true,
+      "status": "loaded"
+    },
+    "gateboard": {
+      "age_hours": 20.28,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:48:07Z",
+      "path": "data/forward-tracking/project_operator_gateboard_latest.json",
+      "reason_codes": [],
+      "report_id": "project_operator_gateboard",
+      "required": true,
+      "status": "loaded"
+    },
+    "historical_walk_forward": {
+      "age_hours": 0.0,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-18T02:04:44Z",
+      "path": "data/profitability-lab/regular-options-historical-walk-forward/latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_historical_walkforward",
+      "required": true,
+      "status": "loaded"
+    },
+    "lane_promotion_state": {
+      "age_hours": 0.26,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-18T01:49:14Z",
+      "path": "data/forward-tracking/lane_promotion_state_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_lane_promotion_state",
+      "required": true,
+      "status": "loaded"
+    },
+    "monthly_profitability": {
+      "age_hours": 0.0,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-18T02:04:50Z",
+      "path": "data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json",
+      "reason_codes": [],
+      "report_id": "monthly_all_lanes_profitability_audit",
+      "required": true,
+      "status": "loaded"
+    },
+    "open_position_risk": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:58Z",
+      "path": "data/forward-tracking/regular_open_position_risk_latest.json",
+      "reason_codes": [],
+      "report_id": "open_position_risk",
+      "required": true,
+      "status": "loaded"
+    },
+    "open_risk_resolution_plan": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:11:05Z",
+      "path": "data/forward-tracking/regular_options_open_risk_resolution_plan_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_open_risk_resolution_plan",
+      "required": true,
+      "status": "loaded"
+    },
+    "paper_shortlist": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:57Z",
+      "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
+      "reason_codes": [],
+      "report_id": "paper_shortlist",
+      "required": true,
+      "status": "loaded"
+    },
+    "profit_capture_queue": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:49Z",
+      "path": "data/profitability-lab/regular-options-profit-capture-queue/latest.json",
+      "reason_codes": [],
+      "report_id": "profit_capture_queue",
+      "required": true,
+      "status": "loaded"
+    },
+    "repair_burndown": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:49Z",
+      "path": "data/profitability-lab/regular-options-repair-burndown/latest.json",
+      "reason_codes": [],
+      "report_id": "repair_burndown",
+      "required": true,
+      "status": "loaded"
+    },
+    "robust_search_evaluation": {
+      "age_hours": 0.0,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-18T02:04:44Z",
+      "path": "data/profitability-lab/regular-options-robust-search-evaluation/latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_robust_search_evaluation",
+      "required": true,
+      "status": "loaded"
+    },
+    "suggested_trade_close_risk": {
+      "age_hours": 20.9,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:10:43Z",
+      "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
+      "reason_codes": [],
+      "report_id": "suggested_trade_close_risk",
+      "required": true,
+      "status": "loaded"
+    },
+    "suggested_trade_review_plan": {
+      "age_hours": 20.38,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-17T05:42:01Z",
+      "path": "data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_suggested_trade_review_plan",
+      "required": true,
+      "status": "loaded"
+    }
+  }
+}

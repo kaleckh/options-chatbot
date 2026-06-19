@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-14T03:59:55Z",
+  "generated_at_utc": "2026-06-18T02:13:58Z",
   "input_health": {
     "current_policy_circuit_breaker_loaded": true,
     "filter_matrix_loaded": true,
@@ -28,8 +28,8 @@
     },
     "fresh_evidence_loop_loaded": true,
     "lane_profitability_gate": {
-      "age_hours": 0.0108,
-      "generated_at_utc": "2026-06-14T03:59:16Z",
+      "age_hours": 0.0043,
+      "generated_at_utc": "2026-06-18T02:13:43Z",
       "latest_intraday_quote_date": "2026-06-08",
       "mark_unpriced_count": 0,
       "max_age_hours": 36.0,
@@ -39,22 +39,16 @@
       "usable": true
     },
     "open_risk_governor": {
-      "blockers": [
-        "live_exact_negative_open_risk",
-        "live_exact_review_stale_missing_or_non_executable"
-      ],
-      "live_entry_allowed": false,
-      "status": "open_risk_governor_blocked"
+      "blockers": [],
+      "live_entry_allowed": true,
+      "status": "open_risk_governor_pass"
     },
     "open_risk_loaded": true,
     "open_risk_report": {
-      "age_hours": 0.0047,
-      "generated_at_utc": "2026-06-14T03:59:38Z",
-      "governor_blockers": [
-        "live_exact_negative_open_risk",
-        "live_exact_review_stale_missing_or_non_executable"
-      ],
-      "governor_status": "open_risk_governor_blocked",
+      "age_hours": 21.0502,
+      "generated_at_utc": "2026-06-17T05:10:58Z",
+      "governor_blockers": [],
+      "governor_status": "open_risk_governor_pass",
       "max_age_hours": 24.0,
       "reason": "open_risk_report_fresh",
       "usable": true
@@ -62,11 +56,11 @@
   },
   "inputs": {
     "circuit_breaker_generated_at_utc": "2026-06-14T03:59:45Z",
-    "filter_matrix_generated_at_utc": "2026-06-14T03:59:24Z",
+    "filter_matrix_generated_at_utc": "2026-06-18T02:13:53Z",
     "forward_cohort_preregistration_path": "data\\contracts\\forward-cohort-preregistration.json",
-    "fresh_evidence_generated_at_utc": "2026-06-14T03:59:32Z",
-    "lane_gate_report_generated_at_utc": "2026-06-14T03:59:16Z",
-    "open_risk_generated_at_utc": "2026-06-14T03:59:38Z"
+    "fresh_evidence_generated_at_utc": "2026-06-17T05:10:59Z",
+    "lane_gate_report_generated_at_utc": "2026-06-18T02:13:43Z",
+    "open_risk_generated_at_utc": "2026-06-17T05:10:58Z"
   },
   "lane_state_rows": [
     {
@@ -74,8 +68,7 @@
         "lane_outside_regular_auto_track_scope",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
       "candidate_status_reason": "lane_outside_regular_auto_track_scope",
@@ -85,8 +78,7 @@
         "regular_auto_track_scope",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
-        "fresh_paper_cohort",
-        "current_live_exact_risk_clear"
+        "fresh_paper_cohort"
       ],
       "forward_cohort": {
         "active": true,
@@ -168,33 +160,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -243,7 +228,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -255,7 +239,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -342,33 +325,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -417,7 +393,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -429,7 +404,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -516,33 +490,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -591,7 +558,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -603,7 +569,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -690,33 +655,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -768,7 +726,6 @@
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked",
         "recent_cohort_circuit_breaker_active"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
@@ -779,7 +736,6 @@
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort",
-        "current_live_exact_risk_clear",
         "recent_cohort_circuit_breaker_clear"
       ],
       "forward_cohort": {
@@ -861,33 +817,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -937,7 +886,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -949,7 +897,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1046,33 +993,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -1121,7 +1061,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -1133,7 +1072,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1230,33 +1168,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -1305,7 +1236,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -1317,7 +1247,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1404,33 +1333,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -1479,7 +1401,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -1492,7 +1413,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1590,33 +1510,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -1666,7 +1579,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -1678,7 +1590,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1765,33 +1676,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -1840,7 +1744,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -1852,7 +1755,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -1949,33 +1851,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2024,7 +1919,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -2036,7 +1930,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -2133,33 +2026,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2208,7 +2094,6 @@
     },
     {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -2220,7 +2105,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -2317,33 +2201,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2393,8 +2270,7 @@
     {
       "blockers": [
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "candidate_status": "pending_paper_exact_evidence",
       "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
@@ -2402,8 +2278,7 @@
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
         "walk_forward_holdout_depth",
-        "fresh_paper_cohort",
-        "current_live_exact_risk_clear"
+        "fresh_paper_cohort"
       ],
       "forward_cohort": {
         "active": true,
@@ -2493,33 +2368,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
-            "lane_live_exact_negative_count": 1,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2573,8 +2441,7 @@
         "lane_outside_regular_auto_track_scope",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
       "candidate_status_reason": "lane_outside_regular_auto_track_scope",
@@ -2584,8 +2451,7 @@
         "regular_auto_track_scope",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
-        "fresh_paper_cohort",
-        "current_live_exact_risk_clear"
+        "fresh_paper_cohort"
       ],
       "forward_cohort": {
         "active": true,
@@ -2667,33 +2533,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2742,7 +2601,6 @@
     },
     "bearish_defensive": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -2754,7 +2612,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -2841,33 +2698,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -2916,7 +2766,6 @@
     },
     "bearish_index_put_observation": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -2928,7 +2777,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -3015,33 +2863,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3090,7 +2931,6 @@
     },
     "bullish_momentum": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -3102,7 +2942,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -3189,33 +3028,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3267,7 +3099,6 @@
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked",
         "recent_cohort_circuit_breaker_active"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
@@ -3278,7 +3109,6 @@
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort",
-        "current_live_exact_risk_clear",
         "recent_cohort_circuit_breaker_clear"
       ],
       "forward_cohort": {
@@ -3360,33 +3190,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3436,7 +3259,6 @@
     },
     "quality90_debit55_canary": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -3448,7 +3270,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -3545,33 +3366,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3620,7 +3434,6 @@
     },
     "range_breakout_observation": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -3632,7 +3445,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -3729,33 +3541,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3804,7 +3609,6 @@
     },
     "regular_bearish_put_primary": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -3816,7 +3620,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -3903,33 +3706,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -3978,7 +3774,6 @@
     },
     "short_term": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -3991,7 +3786,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -4089,33 +3883,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -4165,7 +3952,6 @@
     },
     "speculative": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -4177,7 +3963,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -4264,33 +4049,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -4339,7 +4117,6 @@
     },
     "swing": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -4351,7 +4128,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -4448,33 +4224,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -4523,7 +4292,6 @@
     },
     "tracked_winner_observation": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -4535,7 +4303,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -4632,33 +4399,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -4707,7 +4467,6 @@
     },
     "tracked_winner_primary": {
       "blockers": [
-        "current_live_exact_risk_governor_blocked",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
@@ -4719,7 +4478,6 @@
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
-        "current_live_exact_risk_clear",
         "forward_cohort_membership",
         "fresh_paper_cohort",
         "profitable_lane_gate",
@@ -4816,33 +4574,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
+            "global_live_exact_negative_count": 0,
             "lane_live_exact_negative_count": 0,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -4892,8 +4643,7 @@
     "volatility_expansion_observation": {
       "blockers": [
         "walk_forward_holdout_too_small_or_failed",
-        "fresh_paper_cohort_insufficient",
-        "current_live_exact_risk_governor_blocked"
+        "fresh_paper_cohort_insufficient"
       ],
       "candidate_status": "pending_paper_exact_evidence",
       "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
@@ -4901,8 +4651,7 @@
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
         "walk_forward_holdout_depth",
-        "fresh_paper_cohort",
-        "current_live_exact_risk_clear"
+        "fresh_paper_cohort"
       ],
       "forward_cohort": {
         "active": true,
@@ -4992,33 +4741,26 @@
           }
         },
         {
-          "blocker": "current_live_exact_risk_governor_blocked",
           "current": {
-            "global_live_exact_negative_count": 1,
-            "lane_live_exact_negative_count": 1,
-            "open_risk_governor_blockers": [
-              "live_exact_negative_open_risk",
-              "live_exact_review_stale_missing_or_non_executable"
-            ],
-            "open_risk_governor_status": "open_risk_governor_blocked",
+            "global_live_exact_negative_count": 0,
+            "lane_live_exact_negative_count": 0,
+            "open_risk_governor_blockers": [],
+            "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0047,
-              "generated_at_utc": "2026-06-14T03:59:38Z",
-              "governor_blockers": [
-                "live_exact_negative_open_risk",
-                "live_exact_review_stale_missing_or_non_executable"
-              ],
-              "governor_status": "open_risk_governor_blocked",
+              "age_hours": 21.0502,
+              "generated_at_utc": "2026-06-17T05:10:58Z",
+              "governor_blockers": [],
+              "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
               "reason": "open_risk_report_fresh",
               "usable": true
             },
             "open_risk_report_present": true,
-            "unresolved_live_exact_negative_count": 1
+            "unresolved_live_exact_negative_count": 0
           },
           "gate": "current_live_exact_risk_clear",
           "label": "Current live-exact risk clear",
-          "passed": false,
+          "passed": true,
           "target": {
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
@@ -5128,15 +4870,12 @@
         "tracked_winner_primary"
       ]
     },
-    "global_live_exact_negative_count": 1,
+    "global_live_exact_negative_count": 0,
     "lane_count": 14,
     "live_policy_change": false,
     "live_validation_lane_count": 0,
-    "open_risk_governor_blockers": [
-      "live_exact_negative_open_risk",
-      "live_exact_review_stale_missing_or_non_executable"
-    ],
-    "open_risk_governor_status": "open_risk_governor_blocked",
+    "open_risk_governor_blockers": [],
+    "open_risk_governor_status": "open_risk_governor_pass",
     "paper_probation_lane_count": 1,
     "parked_lane_count": 11,
     "state_counts": {

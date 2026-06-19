@@ -1,112 +1,43 @@
 {
-  "action_counts": {
-    "negative_mark_hold_or_unknown": 1
-  },
+  "action_counts": {},
   "actionable_position_ids": [],
   "actionable_positions": [],
-  "by_lane": {
-    "volatility_expansion_observation": {
-      "avg_pnl_pct": -33.25,
-      "median_pnl_pct": -33.25,
-      "negative": 1,
-      "positive_or_flat": 0,
-      "priced_or_marked": 1,
-      "rows": 1
-    }
-  },
-  "by_record_class": {
-    "live_exact_tracked": {
-      "avg_pnl_pct": -33.25,
-      "median_pnl_pct": -33.25,
-      "negative": 1,
-      "positive_or_flat": 0,
-      "priced_or_marked": 1,
-      "rows": 1
-    }
-  },
-  "evidence_counts": {
-    "stale_executable_review": 1
-  },
-  "generated_at_utc": "2026-06-14T04:21:25Z",
+  "by_lane": {},
+  "by_record_class": {},
+  "evidence_counts": {},
+  "generated_at_utc": "2026-06-17T05:10:58Z",
   "open_risk_governor": {
-    "blockers": [
-      "live_exact_negative_open_risk",
-      "live_exact_review_stale_missing_or_non_executable"
-    ],
-    "governor_details": [
-      {
-        "action_bucket": "negative_mark_hold_or_unknown",
-        "current_option_price": 6.525,
-        "current_pnl_pct": -33.2543,
-        "evidence_bucket": "stale_executable_review",
-        "exit_execution_basis": "spread_bid_ask",
-        "exit_execution_price": 6.0515,
-        "first_warning": null,
-        "id": 537,
-        "lane": "volatility_expansion_observation",
-        "last_reviewed_at": "2026-06-12T11:45:37.662420-06:00",
-        "mark_pnl_pct": -33.2543,
-        "next_safe_action": "monitor",
-        "price_trigger_ok": true,
-        "pricing_source": "spread_bid_ask_exact",
-        "pricing_state": "priced_spread_exact",
-        "reason": "Position remains inside the stop, target, and exit rules.",
-        "recommendation": "HOLD",
-        "record_class": "live_exact_tracked",
-        "status": "open",
-        "ticker": "QQQ",
-        "warning_count": 0
-      }
-    ],
-    "live_entry_allowed": false,
+    "blockers": [],
+    "governor_details": [],
+    "live_entry_allowed": true,
     "live_exact_executable_close_ready_count": 0,
     "live_exact_executable_close_ready_ids": [],
-    "live_exact_negative_count": 1,
-    "live_exact_negative_ids": [
-      537
-    ],
+    "live_exact_negative_count": 0,
+    "live_exact_negative_ids": [],
     "live_exact_negative_resolved_hold_count": 0,
     "live_exact_negative_resolved_hold_ids": [],
-    "live_exact_negative_unresolved_count": 1,
-    "live_exact_negative_unresolved_ids": [
-      537
-    ],
-    "live_exact_open_count": 1,
-    "live_exact_review_blocked_count": 1,
-    "live_exact_review_blocked_ids": [
-      537
-    ],
+    "live_exact_negative_unresolved_count": 0,
+    "live_exact_negative_unresolved_ids": [],
+    "live_exact_open_count": 0,
+    "live_exact_review_blocked_count": 0,
+    "live_exact_review_blocked_ids": [],
     "live_policy_change": false,
     "next_safe_actions": [
-      "do_not_open_new_scanner_origin_rows_until_governor_passes",
-      "refresh_open_position_reviews_with_live_executable_quotes",
-      "resolve_executable_sell_or_negative_live_exact_rows_before_live_validation"
+      "continue_monitoring_open_risk_before_each_promotion_readback"
     ],
     "read_only": true,
-    "status": "open_risk_governor_blocked"
+    "status": "open_risk_governor_pass"
   },
   "read_only": true,
   "scope": "regular_supervised_open_positions_read_only",
   "stale_review_hours": 24.0,
   "summary": {
-    "avg_pnl_pct": -33.25,
-    "median_pnl_pct": -33.25,
-    "negative": 1,
+    "avg_pnl_pct": null,
+    "median_pnl_pct": null,
+    "negative": 0,
     "positive_or_flat": 0,
-    "priced_or_marked": 1,
-    "rows": 1
+    "priced_or_marked": 0,
+    "rows": 0
   },
-  "top_negative_open_positions": [
-    {
-      "action_bucket": "negative_mark_hold_or_unknown",
-      "evidence_bucket": "stale_executable_review",
-      "id": 537,
-      "lane": "volatility_expansion_observation",
-      "last_reviewed_at": "2026-06-12T11:45:37.662420-06:00",
-      "latest_recommendation": "HOLD",
-      "pnl_pct": -33.25,
-      "record_class": "live_exact_tracked",
-      "ticker": "QQQ"
-    }
-  ]
+  "top_negative_open_positions": []
 }

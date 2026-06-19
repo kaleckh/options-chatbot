@@ -170,6 +170,12 @@ These are the living docs for the current worktree:
   - named-gate defect report for the still-empty fresh executable realized-P&L funnel
 - `docs/regular-options-candidate-outcome-ledger.md`
   - generated unified next-evidence ledger across fresh candidates, paper shortlist, profit-capture queue, open-risk governor, and suggested-trade review blockers
+- `docs/regular-options-trade-qualification.md`
+  - generated read-only trade qualification and profitability triage report combining gateboard, lane promotion, fresh evidence, candidate ledger, paper shortlist, repair, open-risk, suggested-review, historical walk-forward, and robust-search readbacks
+- `docs/regular-options-paper-shadow-evidence-plan.md`
+  - generated read-only row-level plan for collecting paper-shadow/probation exact entry, policy-defined exact exit, fill-attempt, suggested-review, repair-only, and no-chase evidence without creating trades or changing proof, scanner, broker, stop, sizing, live-validation, auto-track, promotion, or database state
+- `docs/regular-options-market-window-evidence-checklist.md`
+  - generated read-only market-window checklist that orders safe refresh commands, exact-entry waits, policy-exit waits, fill-attempt capture, suggested-review-only rows, repair-only rows, and no-chase blocks without creating trades or mutating evidence stores
 - `docs/regular-options-stale-candidate-archive.md`
   - generated read-only archive for no-longer-matched fresh candidates so stale branches leave the monthly queue without creating trades or mutating scanner/DB state
 - `docs/regular-options-suggested-trade-review-plan.md`
@@ -192,6 +198,14 @@ These are the living docs for the current worktree:
   - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
 - `docs/regular-options-historical-walk-forward.md`
   - generated read-only operator workflow that refreshes feature-store and robust-search readbacks, ingests all-planned peer sleeve results, and reports historical walk-forward blockers without consuming protected holdout
+- `docs/regular-options-robust-edge-discovery.md`
+  - generated read-only robust edge discovery and falsification report that ranks historical, paper-shadow, repair, and quarantine candidates against execution-realistic proof, split/holdout, stress, concentration, and forward-freeze gates
+- `docs/regular-options-hypothesis-tournament.md`
+  - generated read-only hypothesis tournament that applies a bounded search budget to current robust-edge, walk-forward, and missed-pick filter candidates, preserving execution-realistic proof, holdout, stress, concentration, and no-live gates
+- `docs/regular-options-evidence-blocker-burndown.md`
+  - generated read-only proof-preserving repair planner that ranks source-quality, unpriced, zero-bid/tradability, exhausted-source, lookahead-only, holdout-depth, PF lower-bound, and no-chase blockers without mutating evidence stores
+- `docs/regular-options-source-replay-pass.md`
+  - generated read-only readback for bounded source-replay-first passes over high-value exact repair blockers, separating derived replay attempts from unsafe/no scoped replay commands, unresolved unpriced rows, and unchanged robust-candidate gates
 - `docs/regular-options-robust-candidate-source-quality-manifest.md`
   - generated read-only manifest classifying high-priority historical robust-candidate source-quality blockers into missing-quote, zero-bid/tradability, chain-native selection, paper-shadow evidence, and statistical/sample gates
 - `docs/regular-options-exact-target-plan.md`
