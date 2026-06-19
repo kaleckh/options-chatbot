@@ -27,9 +27,9 @@ This report is generated from `scripts/build_regular_options_fresh_evidence_loop
 ## Provenance
 
 - Host: `KAESDEVICE`.
-- Commit SHA: `318345349424897ddb60722d145a7ee03fe8db36`.
+- Commit SHA: `0011662146ed48638e2eaf8caf1f0f35df5badbe`.
 - Branch: `main`.
-- Run ID: `regular_options_fresh_evidence_loop:KAESDEVICE:318345349424:2026-06-14T04:27:50Z`.
+- Run ID: `regular_options_fresh_evidence_loop:KAESDEVICE:0011662146ed:2026-06-17T05:10:59Z`.
 
 ## Evidence Boundary
 

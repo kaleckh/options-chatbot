@@ -1,8 +1,8 @@
 # Missed Regular Picks Failure Modes
 
-- Generated: `2026-06-10T06:27:17Z`
+- Generated: `2026-06-18T02:13:48Z`
 - Source report: `data/forward-tracking/missed_regular_picks_outcome_latest.json`
-- Source generated: `2026-06-10T06:27:05Z`
+- Source generated: `2026-06-18T02:13:43Z`
 - Data status: `clean_for_failure_analysis`
 - Rows: `210` total, `4` tracked, `206` untracked
 - Mark coverage: `210` priced / `0` unpriced

@@ -10,8 +10,8 @@ This report is generated from `scripts/build_regular_options_paper_shortlist.py`
 - Invariant violations: `0`.
 - Source queue rows: `97`.
 - Capture bridge statuses: `{"not_tier_a": 82, "requires_fresh_executable_tier_a_match": 15}`.
-- Fresh bridge statuses: `{"not_bridge_eligible": 15}`.
-- Fresh bridge blockers: `{"guardrail_not_clear": 9, "lane_signature_not_matched": 8, "no_tier_a_lane_match": 15}`.
+- Fresh bridge statuses: `{"not_bridge_eligible": 5}`.
+- Fresh bridge blockers: `{"guardrail_not_clear": 5, "lane_signature_not_matched": 3, "no_tier_a_lane_match": 5}`.
 - Live policy change: `False`.
 
 ## Proof Policy
@@ -29,18 +29,8 @@ This report is generated from `scripts/build_regular_options_paper_shortlist.py`
 
 | Symbol | Playbook | Decision | Match | Executable | Bridge | Blockers |
 |---|---|---|---|---|---|---|
-| QQQ | range_breakout_observation | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| QQQ | swing | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| QQQ | volatility_expansion_observation | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| SPY | range_breakout_observation | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| SPY | swing | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| SPY | volatility_expansion_observation | clear | lane_signature | True | not_bridge_eligible | no_tier_a_lane_match |
-| SPY | tracked_winner_primary | blocked | lane_signature | True | not_bridge_eligible | guardrail_not_clear, no_tier_a_lane_match |
-| QQQ | bullish_momentum | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| QQQ | quality90_debit55_canary | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| QQQ | speculative | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| SPY | bullish_momentum | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| SPY | quality90_debit55_canary | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| SPY | short_term | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| SPY | speculative | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| SPY | tracked_winner_observation | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
+| QQQ | volatility_expansion_observation | blocked | lane_signature | True | not_bridge_eligible | guardrail_not_clear, no_tier_a_lane_match |
+| SPY | volatility_expansion_observation | blocked | lane_signature | True | not_bridge_eligible | guardrail_not_clear, no_tier_a_lane_match |
+| RIO | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
+| FCX | ai_commodity_infra_observation | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
+| IWM | volatility_expansion_observation | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |

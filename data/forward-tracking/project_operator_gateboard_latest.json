@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-14T04:27:51Z",
+  "generated_at_utc": "2026-06-17T05:48:07Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -8,7 +8,7 @@
       "do_not_chase_paper_or_historical_signature_rows_without_fresh_exact_bridge",
       "do_not_use_stale_midpoint_eod_manual_or_display_only_marks_as_proof"
     ],
-    "reason_count": 6,
+    "reason_count": 5,
     "reasons": [
       {
         "evidence": {
@@ -29,20 +29,6 @@
       },
       {
         "evidence": {
-          "blockers": [
-            "live_exact_negative_open_risk",
-            "live_exact_review_stale_missing_or_non_executable"
-          ],
-          "live_exact_negative_ids": [
-            537
-          ],
-          "status": "open_risk_governor_blocked"
-        },
-        "reason": "open_risk_governor_blocked_or_missing",
-        "severity": "block_new_scanner_origin_entries"
-      },
-      {
-        "evidence": {
           "exact_exit_bridge_count": 1,
           "paper_probation_bridge_count": 8
         },
@@ -52,9 +38,9 @@
       {
         "evidence": {
           "fresh_bridge_blocker_counts": {
-            "guardrail_not_clear": 9,
-            "lane_signature_not_matched": 8,
-            "no_tier_a_lane_match": 15
+            "guardrail_not_clear": 5,
+            "lane_signature_not_matched": 3,
+            "no_tier_a_lane_match": 5
           },
           "release_gate_status": "no_paper_shortlist_candidates"
         },
@@ -199,8 +185,8 @@
         "paper_probation_lane_count=1",
         "live_validation_lane_count=0",
         "auto_track_lane_count=0",
-        "global_live_exact_negative_count=1",
-        "open_risk_governor_status=open_risk_governor_blocked",
+        "global_live_exact_negative_count=0",
+        "open_risk_governor_status=open_risk_governor_pass",
         "live_policy_change=False"
       ],
       "headline": "No regular lane is live-validation or auto-track eligible.",
@@ -226,14 +212,14 @@
         "eligible_paper_review_candidates=0",
         "scorecard_status=visible_product_profitability_progress_but_proof_still_blocked",
         "paper_gate_status=paper_only_no_live_release",
-        "open_risk_governor_status=open_risk_governor_blocked",
-        "open_risk_governor_blockers=[\"live_exact_negative_open_risk\", \"live_exact_review_stale_missing_or_non_executable\"]",
+        "open_risk_governor_status=open_risk_governor_pass",
+        "open_risk_governor_blockers=[]",
         "suggested_open_rows=1",
         "suggested_attention_trade_count=1",
         "scheduled_scan_heartbeat_status=fresh",
-        "days_since_last_scheduled_scan=0",
+        "days_since_last_scheduled_scan=1",
         "last_scheduled_scan_host=KAESDEVICE",
-        "last_scheduled_scan_commit=6e485e8308a00e145483f7b6613ad90834045a04",
+        "last_scheduled_scan_commit=5a763200037e2ba3deacd5c5b16ab80fceb6a74d",
         "ai_commodity_verified=False",
         "ai_commodity_shared_quote_dates=3/100"
       ],
@@ -275,14 +261,14 @@
   },
   "runtime_use": false,
   "scheduled_scan_health": {
-    "as_of_utc": "2026-06-14T04:27:50Z",
+    "as_of_utc": "2026-06-17T05:48:06Z",
     "blocker": null,
-    "days_since_last_scheduled_scan": 0,
+    "days_since_last_scheduled_scan": 1,
     "heartbeat_available": true,
     "heartbeat_path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\scheduled_scan_heartbeat_latest.json",
-    "last_commit_sha": "6e485e8308a00e145483f7b6613ad90834045a04",
+    "last_commit_sha": "5a763200037e2ba3deacd5c5b16ab80fceb6a74d",
     "last_host": "KAESDEVICE",
-    "last_run_at_utc": "2026-06-12T17:46:27Z",
+    "last_run_at_utc": "2026-06-16T17:46:20Z",
     "last_status": "completed",
     "report_id": "scheduled_scan_heartbeat_health",
     "stale_market_day_limit": 2,
@@ -309,7 +295,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T04:27:50Z",
+      "generated_at_utc": "2026-06-17T05:10:59Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -317,7 +303,7 @@
     "lane_promotion_state": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T03:59:55Z",
+      "generated_at_utc": "2026-06-17T05:24:09Z",
       "path": "data/forward-tracking/lane_promotion_state_latest.json",
       "report_id": "regular_options_lane_promotion_state",
       "status": "lane_promotion_state_readback"
@@ -325,7 +311,7 @@
     "missed_regular_picks_outcome": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T03:59:16Z",
+      "generated_at_utc": "2026-06-17T04:59:00Z",
       "path": "data/forward-tracking/missed_regular_picks_outcome_latest.json",
       "report_id": "missed_regular_picks_outcome",
       "status": null
@@ -333,7 +319,7 @@
     "open_position_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T04:21:25Z",
+      "generated_at_utc": "2026-06-17T05:10:58Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "report_id": null,
       "status": null
@@ -349,7 +335,7 @@
     "paper_shortlist": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-14T04:27:48Z",
+      "generated_at_utc": "2026-06-17T05:10:57Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "report_id": null,
       "status": "paper_shortlist_readback"
@@ -365,14 +351,14 @@
     "scheduled_scan_heartbeat": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-12T17:46:27Z",
+      "generated_at_utc": "2026-06-16T17:46:20Z",
       "path": "data/forward-tracking/scheduled_scan_heartbeat_latest.json",
       "status": "fresh"
     },
     "suggested_trade_close_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-12T22:44:53Z",
+      "generated_at_utc": "2026-06-17T05:10:43Z",
       "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
       "report_id": null,
       "status": null
