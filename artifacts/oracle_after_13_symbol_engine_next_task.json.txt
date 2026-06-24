@@ -1,0 +1,244 @@
+{
+"anti_handwave_audit": {
+"exact_next_action_present": true,
+"generic_advice_removed": true,
+"measurable_threshold_present": true
+},
+"assumption_challenges": [
+{
+"assumption": "The 59-symbol ThetaData OPRA/NBBO repair remains the highest-value approved path after the 13-symbol frozen engine failed.",
+"risk": "If ThetaTerminal is still unavailable or the 59-symbol universe cannot reach shared-date depth, the import retry will not improve candidate-generation or latest-four audit readiness.",
+"verification": "Require a provider status precheck, exact missing-symbol-date manifest, tokened import only for 2024-05-22 through 2026-06-04, and post-import shared-date coverage >=504 before rerunning split-aware audits."
+},
+{
+"assumption": "The prior blocked 59-symbol import can be retried without becoming an uncontrolled data-surface mutation.",
+"risk": "A broad import could contaminate proof boundaries or protected holdout if the date/symbol/source scope drifts.",
+"verification": "Lock the universe to the canonical 59 symbols, source_label=thetadata_opra_nbbo_1m, end_date=2026-06-04, approval-token check, no protected-holdout dates, idempotent duplicate detection, and generated import-batch manifests."
+},
+{
+"assumption": "More historical quote depth can improve the latest-four proof path.",
+"risk": "Quote depth alone still cannot prove profitability; the replay may remain blocked by candidate-generation coverage, strict-new count, PF lower-bound, stress PF, or execution-quality failures.",
+"verification": "After import, require feature rebuild, walk-forward, historical simulated-forward audit, robust-edge evaluation, and countable-throughput review with strict-new, PF lower-bound, latest-four 30-row, and zero non-executable selected-row gates."
+},
+{
+"assumption": "ThetaTerminal provider unavailability is not an earned stop.",
+"risk": "Stopping because a local provider was down would ignore other approved non-live research paths and the user’s explicit continuation goal.",
+"verification": "If provider is still unavailable, park only this source-repair retry and return to GPT-5.5 Pro to pivot to the next approved source family, most likely direct VIX/event/flow input import planning."
+},
+{
+"assumption": "Historical repaired rows can nominate a forward-freeze review candidate but cannot become forward proof.",
+"risk": "A positive repaired historical/latest-four result could be over-read as live or forward-audit profitability.",
+"verification": "All outputs must preserve historical_rows_are_forward_proof=false, accepted_profitability=false, live_entry_allowed=false, auto_track_allowed=false, broker_order_allowed=false, and promotion_ready=false unless a separate future forward strict completed proof artifact reaches 30 rows."
+}
+],
+"branches_to_stop": [
+"frozen_13_symbol_candidate_generation_engine_daily_diagnostics_v1_until_real_reusable_frozen_entrypoint_exists",
+"13_symbol_frozen_candidate_generation_denominator_v2_without_new_engine",
+"13_symbol_frozen_candidate_generation_source_surface_without_new_engine",
+"13_symbol_candidate_generation_surface_audit_without_new_engine",
+"quote_depth_only_month_counting",
+"phase2_forward_paper_shadow_market_window_capture_append_v1_until_new_same_day_phase2_natural_selections_exist",
+"fresh_forward_append_without_candidate_jsonl_or_append_allowed_true",
+"pmcc_diagonal_replay_readiness_without_trend_vix_and_long_dte_surface",
+"momentum_continuation_bounded_replay_without_new_point_in_time_vix_breadth_or_source_inputs",
+"flow_extreme_ratio_backspread_without_trusted_flow_and_vix_source",
+"macro_event_long_strangle_without_event_calendar_and_vix_source",
+"vrp_credit_spread_without_credit_spread_engine_vix_bucket_quote_surface_and_holdout_guard",
+"term_structure_calendar_without_calendar_pricing_term_inputs_and_quote_surface",
+"skew_broken_wing_without_new_source_or_readiness_artifact",
+"dispersion_proxy_hybrid_without_dispersion_proxy_and_vix_source",
+"all_local_quote_surface_replayability_without_new_quote_depth_or_source_state",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof",
+"dashboard_only_visibility_branches"
+],
+"burden_of_proof_check": {
+"current_forward_rows": 0,
+"reason": "Stop is not earned. The forward account is still 0/30 strict completed rows, cohort log is missing, and live/auto-track/broker/promotion remain false. The current historical frontier is exhausted only for the already-tested surface: 44 candidates, 0 countable throughput candidates, 157 base rows, and a 43 strict-new row gap. The allowed branch list still includes scoped source repair/replay and new historical data-surface work, while the 59-symbol ThetaData repair has a concrete provider/source-state blocker rather than a profitability falsification. 
+
+Pasted text
+
+",
+"stop_allowed": false,
+"target_profitable_strict_completed_rows": 30
+},
+"candidate_branches": [
+{
+"branch": "scoped_59_symbol_thetadata_opra_nbbo_import_resume_and_split_audit_v2",
+"expected_value": "Highest. It directly attacks the no-wait historical data-depth blocker: the broad source replay universe has only 260 shared trusted imported quote dates and 11,565 symbol-date gaps, while the proof-valid split needs 20 train months plus 4 latest audit months. If provider availability has changed, this branch can materially improve strict-new executable rows and latest-four audit readiness.",
+"main_uncertainty": "ThetaTerminal availability and whether the canonical 59-symbol universe can reach >=504 shared trusted dates with executable bid/ask quality and candidate-generation depth.",
+"why_not_selected": null
+},
+{
+"branch": "direct_point_in_time_vix_source_import_plan_v1",
+"expected_value": "High cross-branch value because VIX blocks momentum, PMCC, VRP, macro-event, flow, and dispersion branches.",
+"main_uncertainty": "Requires selecting a trustworthy VIX source, known-at policy, threshold policy, and import/write target; this is a separate source family.",
+"why_not_selected": "Not selected first because the 59-symbol ThetaData repair is already scoped, tokened, schema-known, and directly tied to the historical-depth blocker."
+},
+{
+"branch": "fresh_forward_paper_shadow_capture_retry",
+"expected_value": "Highest direct proof value only when real same-day Phase 2 natural selections exist.",
+"main_uncertainty": "The latest valid-window capture staged 0 rows and wrote no candidate JSONL.",
+"why_not_selected": "Not selected until new same-day Phase 2 natural selections exist; repeating an empty capture is not a significant upgrade."
+},
+{
+"branch": "macro_event_calendar_source_import_plan_v1",
+"expected_value": "Medium to high for macro-event straddles/strangles and post-event IV-crush concepts.",
+"main_uncertainty": "Requires external event-calendar source selection and known-at provenance before replay.",
+"why_not_selected": "Not selected before the exact 59-symbol ThetaData repair because current option quote depth is the active no-wait historical blocker."
+},
+{
+"branch": "new_causal_playbook_generation_without_new_source_surface",
+"expected_value": "Low now.",
+"main_uncertainty": "Recent designs repeatedly parked on missing source/input surfaces.",
+"why_not_selected": "Rejected as narrative churn until a new quote/source surface or direct input source is repaired."
+}
+],
+"continue_loop": true,
+"next_codex_task": {
+"objective": "Resume the approved scoped 59-symbol ThetaData OPRA/NBBO import repair with a provider recheck, idempotent missing-symbol-date import, post-import coverage audit, feature rebuild, split-aware historical simulated-forward audit, robust-edge evaluation, and countable-throughput review.",
+"exact_scope": "Approved research/data-repair scope only. Source is local ThetaTerminal v3 at http://127.0.0.1:25503
+. Write target is limited to data/options-validation/options_history.db option_quote_snapshots/import_batches rows for the exact canonical 59-symbol universe and dates 2024-05-22 through 2026-06-04, plus generated audit artifacts under data/profitability-lab and docs. No protected-holdout dates after 2026-06-04, no forward cohort append, no live validation, no auto-track, no broker/order preparation, no scanner/strategy/stops/sizing/proof-bar changes, and no promotion.",
+"implementation_steps": [
+"Update or add a resume wrapper around scripts/run_regular_options_59_symbol_thetadata_opra_import_repair.py so it first performs a provider status check against http://127.0.0.1:25503/v2/system/status
+ and records reachable/unreachable in the repair artifact.",
+"Load the previous 59-symbol repair artifact and reproduce baseline: status=blocked_thetaterminal_source_unavailable, approval_token_valid=true, import_attempted=false, imported_rows=0, shared_trusted_imported_quote_dates.count=260, missing_symbol_date_count=11565, historical_rows_are_forward_proof=false, accepted_profitability=false.",
+"Lock the canonical 59-symbol universe exactly: SPY, QQQ, IWM, AAPL, GOOGL, UNH, LLY, JNJ, XOM, CVX, COP, NEM, DIA, AA, ABBV, AMD, AMT, AMZN, ARM, BA, BAC, C, CAT, CLF, COIN, COST, DE, DIS, EQR, FCX, GS, JPM, KO, LIN, LMT, MCD, META, MSFT, MSTR, NFLX, NKE, NVDA, OXY, PFE, PG, PLD, PLTR, PM, RTX, SBUX, SLB, SMCI, SPG, T, TSLA, V, WELL, WMT, XLK.",
+"Generate a fresh missing_symbol_date_manifest.jsonl for 2024-05-22 through 2026-06-04 using existing trusted source_label=thetadata_opra_nbbo_1m inventory, with one row per deficient symbol/date and the exact deficiency reason.",
+"Run dry-run normalization on at least one old train date, one mid-window date, and one latest-four date for representative index ETF and single-name symbols; fail closed on endpoint, schema, timestamp, contract identity, or bid/ask normalization errors.",
+"If provider and dry-run pass, import only missing or deficient symbol-date slices using approval token APPROVE_SCOPED_59_SYMBOL_THETADATA_OPRA_IMPORT and source_label=thetadata_opra_nbbo_1m; do not delete existing trusted rows.",
+"Use idempotent duplicate detection by source_label, underlying, contract_symbol, quote_date_et, quote_minute_et, bid, ask, last, iv, underlying_price, volume, open_interest, and request/source hash.",
+"Reject and do not use rows with quote_date_et after 2026-06-04, missing as_of_utc, missing quote_date_et, missing quote_minute_et, missing underlying, missing contract_symbol, malformed expiry/option_type/strike, bid<0, ask<0, ask<bid, or missing source_batch_id/import_batch_id.",
+"Retain zero-bid positive-ask rows as execution-quality observations but never repair them as missing data or allow selected candidates depending on zero-bid/untradable rows to pass proof gates.",
+"Write import_batch_manifest.jsonl with batch id, symbol, quote_date_et, attempted rows, imported rows, duplicate rows, rejected rows, warnings_json, source request signature, and imported_at_utc.",
+"After import, generate post_import_coverage.json with shared trusted imported quote dates, per-symbol date coverage, per-symbol/month executable quote coverage, CVX scope-policy status, and protected-holdout overlap count.",
+"Run the regular-options feature-store rebuild as of 2026-06-04 and verify feature.tradable_after_time <= candidate_entry_time for all candidate-generation consumers.",
+"Run regular-options walk-forward, historical simulated-forward audit with 20 train months and 4 audit months, robust-edge evaluation, and countable-throughput frontier review over the repaired source surface.",
+"Generate docs/regular-options-59-symbol-thetadata-opra-import-resume.md plus data/profitability-lab/regular-options-59-symbol-source-repair-resume/latest.json/latest.md summarizing pre-import state, provider state, import deltas, post-import coverage, split-audit metrics, robust-search metrics, throughput metrics, and final blocker/decision.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md only with durable repair/audit status and safety boundaries."
+],
+"allowed_files_or_artifacts": [
+"scripts/run_regular_options_59_symbol_thetadata_opra_import_repair.py",
+"scripts/run_regular_options_59_symbol_thetadata_opra_import_resume.py",
+"tests/test_regular_options_59_symbol_thetadata_opra_import_repair.py",
+"tests/test_regular_options_59_symbol_thetadata_opra_import_resume.py",
+"docs/regular-options-59-symbol-thetadata-opra-import-resume.md",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/latest.json",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/latest.md",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/missing_symbol_date_manifest.jsonl",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/import_batch_manifest.jsonl",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/post_import_coverage.json",
+"data/profitability-lab/regular-options-59-symbol-source-repair/latest.json",
+"data/profitability-lab/regular-options-feature-store/latest.json",
+"data/profitability-lab/regular-options-historical-simulated-forward-audit/latest.json",
+"data/profitability-lab/regular-options-robust-search-evaluation/latest.json",
+"data/profitability-lab/regular-options-countable-throughput-frontier/latest.json",
+"data/profitability-lab/regular-options-base-clean-stack-identity-ledger/latest.json",
+"data/contracts/regular-options-source-quality-scope-policy.json",
+"data/contracts/forward-holdout-contract.json",
+"data/options-validation/options_history.db",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-59-symbol-thetadata-opra-import-resume.md",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/latest.json",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/latest.md",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/missing_symbol_date_manifest.jsonl",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/import_batch_manifest.jsonl",
+"data/profitability-lab/regular-options-59-symbol-source-repair-resume/post_import_coverage.json",
+"updated data/options-validation/options_history.db import_batches and option_quote_snapshots rows only for approved symbol/date slices",
+"updated data/profitability-lab/regular-options-feature-store/latest.json",
+"updated data/profitability-lab/regular-options-historical-simulated-forward-audit/latest.json",
+"updated data/profitability-lab/regular-options-robust-search-evaluation/latest.json",
+"updated data/profitability-lab/regular-options-countable-throughput-frontier/latest.json if the repaired surface changes evaluated candidates"
+],
+"commands_to_run": [
+"npm run options:source-repair:59-symbol-thetadata-opra-import -- --start-date 2024-05-22 --end-date 2026-06-04 --as-of-date 2026-06-04 --source-label thetadata_opra_nbbo_1m --universe SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA,AA,ABBV,AMD,AMT,AMZN,ARM,BA,BAC,C,CAT,CLF,COIN,COST,DE,DIS,EQR,FCX,GS,JPM,KO,LIN,LMT,MCD,META,MSFT,MSTR,NFLX,NKE,NVDA,OXY,PFE,PG,PLD,PLTR,PM,RTX,SBUX,SLB,SMCI,SPG,T,TSLA,V,WELL,WMT,XLK --resume-missing-only --provider-recheck --dry-run --json",
+"npm run options:source-repair:59-symbol-thetadata-opra-import -- --start-date 2024-05-22 --end-date 2026-06-04 --as-of-date 2026-06-04 --source-label thetadata_opra_nbbo_1m --universe SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA,AA,ABBV,AMD,AMT,AMZN,ARM,BA,BAC,C,CAT,CLF,COIN,COST,DE,DIS,EQR,FCX,GS,JPM,KO,LIN,LMT,MCD,META,MSFT,MSTR,NFLX,NKE,NVDA,OXY,PFE,PG,PLD,PLTR,PM,RTX,SBUX,SLB,SMCI,SPG,T,TSLA,V,WELL,WMT,XLK --resume-missing-only --provider-recheck --approval-token APPROVE_SCOPED_59_SYMBOL_THETADATA_OPRA_IMPORT --json",
+"npm run options:features:regular-options -- --as-of-date 2026-06-04 --json",
+"npm run options:replay:regular-options-walk-forward -- --as-of-date 2026-06-04 --min-imported-calendar-dates 505 --json",
+"npm run options:audit:historical-simulated-forward -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --train-months 20 --audit-months 4 --json",
+"npm run options:research:robust-edge -- --as-of-date 2026-06-04 --json",
+"npm run options:research:countable-throughput-frontier -- --as-of-date 2026-06-04 --json",
+"uv run --locked python -m py_compile scripts/run_regular_options_59_symbol_thetadata_opra_import_repair.py scripts/run_regular_options_59_symbol_thetadata_opra_import_resume.py tests/test_regular_options_59_symbol_thetadata_opra_import_repair.py tests/test_regular_options_59_symbol_thetadata_opra_import_resume.py",
+"uv run --locked python -m unittest tests.test_regular_options_59_symbol_thetadata_opra_import_repair tests.test_regular_options_59_symbol_thetadata_opra_import_resume -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Dry-run reproduces prior baseline and writes a missing_symbol_date_manifest with missing_symbol_date_count matching or explaining deviation from the prior 11,565 gaps.",
+"Provider precheck must report theta_terminal.available=true before any import is attempted; if false, import_attempted=false and branch parks as blocked_thetaterminal_source_unavailable_retry.",
+"Import is attempted only with approval-token APPROVE_SCOPED_59_SYMBOL_THETADATA_OPRA_IMPORT and exact source_label=thetadata_opra_nbbo_1m.",
+"No quote_date_et later than 2026-06-04 is imported and protected_holdout_overlap_rows=0.",
+"Canonical 59-symbol universe exactness is enforced; outside_universe_import_rows=0.",
+"Post-import shared trusted imported quote dates across the canonical 59-symbol universe must be >=504 to clear the 59-symbol historical-depth blocker.",
+"Every imported row must have non-null as_of_utc, quote_date_et, quote_minute_et, underlying, contract_symbol, expiry, option_type, strike, bid, ask, and source_batch_id/import_batch_id.",
+"Rows with bid<0, ask<0, ask<bid, malformed contract identity, missing source provenance, or future/as-of violation are rejected and excluded from proof metrics.",
+"Zero-bid positive-ask rows remain retained as execution-quality observations but selected candidates using zero-bid/untradable rows fail closed.",
+"Feature-store rebuild must pass point-in-time gating: feature.tradable_after_time <= candidate_entry_time.",
+"Historical simulated-forward audit must distinguish quote coverage from candidate-generation/selected-trade coverage and must not count quote depth alone as candidate/no-pick proof.",
+"To clear the split-audit readiness blocker, post-import audit must show train_months_covered>=20, audit_months_covered=4, latest_audit_exact_trades>=30, leakage_reject_rows=0, and protected_holdout_overlap_rows=0.",
+"To nominate a forward-freeze review candidate from repaired history, the candidate must clear full_window_exact_rows>=200, strict_new_rows_after_opportunity_dedupe>=43, latest_audit_exact_rows>=30, net_usd_pnl>0, PF>=1.20, bootstrap PF lower bound 5%>1.00, stress PF>=1.05, selected_non_executable_rows=0, unpriced_rows=0, zero_bid_selected_rows=0, and concentration red flags below active thresholds.",
+"Historical_rows_are_forward_proof=false and accepted_profitability=false remain true unless a separate post-freeze forward strict completed proof artifact reaches the 30-row PF/lower-bound gates.",
+"Safety flags remain false: live_validation_enabled=false, auto_track_enabled=false, broker_order_allowed=false, promotion_ready=false, scanner_policy_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false.",
+"Tests prove provider precheck gates import, dry-run required before import, token required, exact universe enforced, protected holdout guard enforced, duplicate import idempotent, malformed bid/ask rows fail closed, zero-bid rows are not repaired as missing, source-quality floor is not lowered, and historical rows are not forward proof."
+],
+"failure_criteria": [
+"Park as blocked_thetaterminal_source_unavailable_retry if http://127.0.0.1:25503/v2/system/status
+ is unreachable or unsafe.",
+"Park as blocked_59_symbol_import_dry_run_failed if representative dry-run normalization has any schema, timestamp, contract, source-label, or bid/ask errors above zero.",
+"Park as blocked_59_symbol_shared_date_coverage_below_504 if post-import common trusted date coverage across the 59-symbol universe is below 504.",
+"Park as blocked_source_quality_floor_failure if candidate surfaces depend on symbols/months below the active executable quote-quality floor without preregistered exclusion.",
+"Park as blocked_candidate_generation_coverage_after_import if quote coverage clears but train/audit candidate-generation or selected-trade coverage remains below 20 train months plus 4 audit months.",
+"Park as historical_candidates_still_blocked_after_59_symbol_repair if robust search and throughput review still find 0 candidates clearing strict-new, PF lower-bound, stress, quote-quality, latest-audit row-count, and concentration gates.",
+"Reject any candidate as diagnostic_only if it uses midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead-only, zero-bid/untradable, or unpriced marks as proof.",
+"Fail as safety_violation if the task imports outside the exact symbol/date/source scope, mutates evidence stores beyond the approved quote import and generated artifacts, consumes protected holdout, creates trades, prepares orders, enables live validation, enables auto-track, touches broker code paths, changes scanner policy, changes strategy logic, changes stops/sizing/proof bars, lowers proof bars, or marks promotion_ready=true."
+],
+"forbidden_actions": [
+"broker orders",
+"order preparation",
+"live validation",
+"auto-track",
+"production scanner release",
+"production scanner policy changes",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"quote import outside the exact approved 59-symbol ThetaData OPRA/NBBO 2024-05-22 through 2026-06-04 scope",
+"options_history.db mutation outside exact approved import batches",
+"evidence-store mutation outside generated repair/audit artifacts",
+"forward cohort append in this task",
+"creating trades",
+"preparing orders",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead-only, zero-bid, or untradable marks as exact executable proof",
+"reclassifying zero-bid or untradable rows as missing provider data",
+"lowering the 90% executable quote-quality floor",
+"using post-2026-06-04 data or protected holdout outcomes",
+"ranking or selecting candidates by protected holdout performance"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro. If the import clears 59-symbol shared-date coverage and split-audit candidate-generation coverage, the next step is split-aware robust candidate review and forward-freeze paper-shadow review only if strict gates clear, with live/broker/auto-track/promotion still false. If provider remains unavailable, park only this retry and pivot to the next approved source family, likely direct VIX or macro-event source repair. If import succeeds but robust search still finds 0 proof-qualified candidates, park the 59-symbol historical data-depth repair path and select the next source-family repair or causal branch."
+},
+"operator_questions": [],
+"selected_branch_id": "scoped_59_symbol_thetadata_opra_nbbo_import_resume_and_split_audit_v2",
+"significant_upgrade_available": true,
+"verdict": "continue",
+"why_this_is_significant": "The project remains 0/30 forward rows and not forward-audit profitable, while the existing historical surface has 0/44 countable throughput candidates. The 13-symbol engine is now parked on missing reusable entrypoint, and PMCC is parked on missing trend/VIX/long-DTE quote surface, so repeating those would not move proof. The approved 59-symbol ThetaData repair is the most concrete remaining non-live path because it can change the historical data-depth blocker that prevents a valid 20-train-month plus 4-latest-month split audit. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+}

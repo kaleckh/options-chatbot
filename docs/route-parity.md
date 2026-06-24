@@ -119,6 +119,12 @@ The mounted browser app is owned by:
   - Next: `src/app/api/tools/[name]/route.ts`
   - FastAPI: `POST /api/tools/{tool_name}`
 
+### Other
+
+- Browser: `GET /api/current-policy-historical-picks`
+  - Next: `src/app/api/current-policy-historical-picks/route.ts`
+  - FastAPI: `GET /api/current-policy-historical-picks`
+
 ## Route Auth And Mutation Inventory
 
 This table is generated from route source signals, not hand-written prose. It shows auth boundaries, write intent labels, and storage/lifecycle contracts for the mounted browser route surface.
@@ -154,6 +160,7 @@ This table is generated from route source signals, not hand-written prose. It sh
 | POST /api/suggested-trades/[id]/close | close | local_operator | x-trading-desk-mutation: close_suggested_trade | suggested_trades_close | sqlite_suggested_trades | python-backend/suggested_trades_repository.py via chat_history.db |
 | GET /api/sectors | read | same_origin_read | none | sectors_read | market_data_cache | python-backend/main.py /api/sectors |
 | POST /api/tools/[name] | tool_dispatch | local_operator | none | tool_dispatch | backend_tool_dispatch | python-backend/tools_routes.py /api/tools/{tool_name} |
+| GET /api/current-policy-historical-picks | read | same_origin_read | none | none | none | backend/domain |
 
 ## Backend-Only Endpoints
 

@@ -8,11 +8,14 @@
   "attention_trades": [
     {
       "action_bucket": "no_stored_review",
+      "contract_symbol": "AAA260408C00462590",
       "current_option_price": null,
       "current_pnl_pct": null,
       "evidence_bucket": "missing_review",
       "exit_execution_basis": null,
       "exit_execution_price": null,
+      "expiry": "2026-04-08",
+      "filled_at": "2026-03-31T09:45:00",
       "first_warning": null,
       "id": 138,
       "lane": "legacy_unlabeled",
@@ -65,7 +68,7 @@
   "evidence_counts": {
     "missing_review": 1
   },
-  "generated_at_utc": "2026-06-17T05:10:43Z",
+  "generated_at_utc": "2026-06-21T16:47:57Z",
   "load_error": null,
   "read_only": true,
   "scope": "suggested_trades_close_risk_read_only",

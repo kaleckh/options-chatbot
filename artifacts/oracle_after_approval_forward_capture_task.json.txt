@@ -1,0 +1,215 @@
+{
+"verdict": "continue",
+"continue_loop": true,
+"significant_upgrade_available": true,
+"selected_branch_id": "phase2_forward_paper_shadow_market_window_capture_append_v1",
+"anti_handwave_audit": {
+"exact_next_action_present": true,
+"generic_advice_removed": true,
+"measurable_threshold_present": true
+},
+"burden_of_proof_check": {
+"current_forward_rows": 0,
+"target_profitable_strict_completed_rows": 30,
+"stop_allowed": false,
+"reason": "Stop is no longer allowed under the expanded approvals. The user has explicitly approved the smallest direct proof-producing gate: guarded fresh forward paper-shadow cohort capture and append during a valid market-data window. Current forward proof remains 0/30, the cohort log is missing, no cohort append has occurred, and live/auto-track/broker/promotion remain false. The loop packet identifies fresh forward paper-shadow collection as a continuation branch because only fresh post-freeze executable rows can become proof-qualified profitability. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+},
+"assumption_challenges": [
+{
+"assumption": "A valid market-window capture can produce real same-day natural selections soon enough to move the 0/30 forward counter.",
+"risk": "The capture runner may return no natural selections, or scan picks may be absent/stale; then no append is allowed and the forward counter remains 0/30.",
+"verification": "Codex must run the existing guarded capture only with explicit market-window flags, validate any candidate JSONL, append only if validation returns append_allowed=true, then run goal-loop accounting and report staged, appended, rejected, and strict completed row counts."
+},
+{
+"assumption": "Appending forward paper-shadow candidate rows is now approved but still not live validation or promotion.",
+"risk": "A cohort append could be misread as broker/live permission or accepted profitability.",
+"verification": "All artifacts must keep live_entry_allowed=false, live_validation_enabled=false, auto_track_allowed=false, broker_order_allowed=false, promotion_ready=false, accepted_profitability=false, and historical_rows_are_forward_proof=false."
+},
+{
+"assumption": "Forward cohort rows can eventually become strict completed proof rows.",
+"risk": "Entry-only rows are not completed realized P&L proof until policy-defined exit evidence and net P&L are captured exactly.",
+"verification": "The task must distinguish staged rows, appended cohort rows, open forward paper-shadow rows, completed strict exact rows, and rejected rows; success is movement in proof accounting, not profitability acceptance unless completed row and PF gates clear."
+},
+{
+"assumption": "The existing capture/validate/append workflow is sufficient and should not be rewritten.",
+"risk": "Changing scanner policy, strategy logic, stops, sizing, or proof bars would contaminate the frozen forward cohort.",
+"verification": "Codex must call the existing npm workflows and may only add a read-only/append-audit wrapper or report if needed; no scanner/strategy/stop/sizing/proof-bar changes are allowed."
+}
+],
+"branches_to_stop": [
+"existing_repository_point_in_time_input_surface_atlas_v1_under_current_repository",
+"all_local_stable_quote_minute_structure_capability_atlas_v1",
+"local_opra_nbbo_structure_capability_matrix_v1_with_13_symbol_fixed_buckets",
+"quote_surface_opening_range_reversal_vertical_v1_until_trusted_underlying_or_opening_bucket_source_changes",
+"quote_derived_synthetic_forward_opening_bucket_surface_v1_until_same_minute_call_put_pair_surface_changes",
+"fixed_13_symbol_quote_structure_matrix",
+"all_local_quote_minute_atlas",
+"opening_range_replay",
+"synthetic_forward_source_surface",
+"13_symbol_frozen_candidate_generation_denominator_v2",
+"13_symbol_frozen_candidate_generation_source_surface",
+"13_symbol_candidate_generation_surface_audit_without_new_engine_or_source",
+"pmcc_diagonal_replay_readiness_without_new_trend_vix_long_dte_surface",
+"flow_extreme_ratio_backspread_without_trusted_flow_and_vix_source",
+"macro_event_long_strangle_without_event_calendar_and_vix_source",
+"vix_bucket_repeats_without_direct_vix_source_or_approved_source_repair",
+"momentum_continuation_replay_without_new_point_in_time_inputs",
+"vrp_credit_spread_without_credit_spread_engine_vix_bucket_quote_surface_and_holdout_guard",
+"term_structure_calendar_without_calendar_pricing_term_inputs_and_quote_surface",
+"skew_broken_wing_without_new_source_or_readiness_artifact",
+"dispersion_proxy_hybrid_without_dispersion_proxy_and_vix_source",
+"dashboard_only_visibility_branches",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"historical_rows_as_forward_profitability_proof",
+"any_p_l_replay_over_the_same_parked_quote_surface_without_new_source_artifact_or_explicit_approval"
+],
+"candidate_branches": [
+{
+"branch": "phase2_forward_paper_shadow_market_window_capture_append_v1",
+"expected_value": "Highest. It is the only newly approved path that can directly create post-freeze forward paper-shadow rows, which are the necessary raw material for the 30 strict completed forward-proof target.",
+"main_uncertainty": "Whether valid market-window scan picks exist and whether they pass validation without duplicate, stale, non-frozen-lane, scanner-hash, missing provenance, or market-window blockers.",
+"why_not_selected": null
+},
+{
+"branch": "scoped_source_repair_import_for_one_named_blocker_v1",
+"expected_value": "High, but indirect. It could clear missing source surfaces such as VIX, underlying/opening bucket, flow, event calendar, or candidate-generation diagnostics.",
+"main_uncertainty": "It requires selecting one source/data blocker and may still only improve historical/latest-four simulated audit readiness, not actual forward proof.",
+"why_not_selected": "Not selected first because forward cohort capture is the smallest direct path from 0/30 toward the user's accepted target."
+},
+{
+"branch": "new_historical_data_surface_longer_lookback_import_audit_v1",
+"expected_value": "High for historical falsification and future candidate nomination if preregistered correctly.",
+"main_uncertainty": "Historical rows still cannot become forward proof, and the import/audit may create another simulated-forward candidate rather than completed post-freeze rows.",
+"why_not_selected": "Not selected first because the user has now approved fresh forward append, which is more directly connected to the 30-row forward target."
+},
+{
+"branch": "protected_holdout_decision",
+"expected_value": "Potentially useful only after a candidate is already near promotion gates.",
+"main_uncertainty": "Protected holdout consumption is still not approved.",
+"why_not_selected": "Not eligible; protected holdout remains forbidden without a separate exact decision."
+}
+],
+"next_codex_task": {
+"objective": "Run and harden the existing Phase 2 regular-options forward paper-shadow capture, validate, guarded append, and goal-loop accounting path during a valid market-data window, using only real same-day scan picks. The task must append only validation-approved forward paper-shadow candidate rows and then report whether the forward strict completed proof counter moved from 0/30.",
+"exact_scope": "Use existing forward-cohort contracts and existing commands for capture, validation, guarded append, and goal-loop accounting. Scope is the frozen Phase 2 regular-options forward cohort only. Allowed mutation is limited to the explicitly approved append-only forward paper-shadow cohort artifact when and only when candidate rows are real same-day market-window rows and validation returns append_allowed=true. Do not alter scanner policy, strategy logic, stops, sizing, proof bars, source quote databases, protected holdout, broker/live/auto-track settings, or promotion state.",
+"implementation_steps": [
+"Load data/contracts/forward-cohort-preregistration.json and confirm the frozen cohort, freeze date, allowed lanes/symbols, eval date, and proof-boundary flags.",
+"Load data/forward-tracking/options_oracle_profit_loop_packet_latest.json and reproduce the baseline: current_forward_rows=0, minimum_required=30, cohort_log_status=missing or current row count, accepted_profitability=false, live_entry_allowed=false, auto_track_allowed=false, broker_order_allowed=false, promotion_ready=false.",
+"Confirm market-window status from the existing workflow only; do not fake or override market-open state. If the market window is not valid, run only the capture command without append and emit status=blocked_market_window_not_open_no_append.",
+"Run the existing passive capture command with explicit market-window flags: npm run options:capture:phase2-forward-paper-shadow -- --market-window-confirmed --market-window-status open --json.",
+"If capture emits no candidate JSONL or reports no natural selections, do not run append; run the goal-loop readback and emit status=no_phase2_natural_selections_no_append.",
+"If capture writes data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl, run validation exactly on that file.",
+"Append only if validation returns append_allowed=true, candidate rows are non-fixture real same-day market-window scan picks, lane/symbol/freeze/scanner-hash/provenance checks pass, and no protected-holdout/live/broker/auto-track flags are set.",
+"If append is allowed, run the guarded append command with the explicit approval token: npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl --approval-token APPROVE_PHASE2_FORWARD_COHORT_APPEND --market-window-confirmed.",
+"After capture/validate/append, run npm run options:goal-loop:paper-shadow -- --json and record staged rows, validation status, appended rows, cohort log row count, strict completed rows, open rows, rejected rows, strict reject counts, net USD P&L if any completed rows exist, PF if computable, PF lower bound if computable, and all safety flags.",
+"Generate a compact audit artifact summarizing the run, including exact command outputs or parsed JSON readbacks, and update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md with durable branch state only.",
+"Do not count entry-only/open rows as completed proof. Completed strict proof rows require exact executable entry quote provenance, policy-defined executable exit evidence, net USD P&L, no non-executable marks, no lookahead, no duplicate IDs, no scanner-hash drift, and no unknown denominator status."
+],
+"allowed_files_or_artifacts": [
+"data/contracts/forward-cohort-preregistration.json",
+"data/contracts/forward-holdout-contract.json",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"data/forward-tracking/options_goal_loop_latest.json",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_capture_latest.json",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_validation_latest.json",
+"data/profitability-lab/regular-options-phase2-forward-paper-shadow-market-window-capture/latest.json",
+"data/profitability-lab/regular-options-phase2-forward-paper-shadow-market-window-capture/latest.md",
+"docs/regular-options-phase2-forward-paper-shadow-market-window-capture.md",
+"docs/forward-cohort-preregistration.md",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json",
+"scripts/run_options_goal_loop.py",
+"scripts/capture_phase2_forward_paper_shadow.py",
+"scripts/validate_phase2_forward_paper_shadow_candidate.py",
+"scripts/append_phase2_forward_paper_shadow.py"
+],
+"expected_artifacts": [
+"docs/regular-options-phase2-forward-paper-shadow-market-window-capture.md",
+"data/profitability-lab/regular-options-phase2-forward-paper-shadow-market-window-capture/latest.json",
+"data/profitability-lab/regular-options-phase2-forward-paper-shadow-market-window-capture/latest.md",
+"data/forward-tracking/options_goal_loop_latest.json",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_capture_latest.json",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_validation_latest.json",
+"data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl if and only if validation append_allowed=true"
+],
+"commands_to_run": [
+"npm run options:capture:phase2-forward-paper-shadow -- --market-window-confirmed --market-window-status open --json",
+"npm run options:validate:phase2-forward-paper-shadow-candidate -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl",
+"npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl --approval-token APPROVE_PHASE2_FORWARD_COHORT_APPEND --market-window-confirmed",
+"npm run options:goal-loop:paper-shadow -- --json",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Baseline is reproduced before action: post_freeze_strict_exact_completed_rows=0, minimum_required=30, accepted_profitability=false, live_entry_allowed=false, auto_track_allowed=false, broker_order_allowed=false, promotion_ready=false.",
+"Capture command is run only with explicit market-window confirmation and records market_window_status=open; if market is not open or status is unknown, append is not run and the result is blocked_market_window_not_open_no_append.",
+"Candidate rows, if any, must come from real same-day market-window scan picks; fixture, test, synthetic, historical, stale, or manually fabricated rows are rejected.",
+"Validation must emit append_allowed=true before append is attempted.",
+"Append is allowed only to data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl and only through the existing guarded append command with APPROVE_PHASE2_FORWARD_COHORT_APPEND.",
+"Every appended row must include required schema fields: row_id, completed_selection_id or equivalent unique selection id, lane, underlying, contract identity, planned entry timestamp, source scan provenance, scanner hash, frozen cohort reference, denominator status, entry evidence placeholder/status, and known market-window provenance.",
+"Rows with non-frozen lane, non-preregistered symbol, duplicate row_id, duplicate completed selection id, scanner_hash_drift, missing source provenance, unknown denominator status, market_window_not_open, pre-freeze timestamp, protected-holdout overlap, or fixture source are rejected and not appended.",
+"After append, goal-loop accounting must report cohort_log_exists=true and cohort_log_row_count increased by exactly the number of validation-approved appended rows.",
+"Completed strict proof count may remain 0 if rows are open; the artifact must distinguish appended/open rows from exact completed realized P&L rows.",
+"Accepted profitability may become true only if post_freeze_strict_exact_completed_rows>=30, net USD P&L>0, PF>1.0, 5% bootstrap PF lower bound>1.0, no strict reject flags, exact executable entry and policy-defined executable exit evidence exist, and no non-executable or lookahead marks are present. Otherwise accepted_profitability=false.",
+"All forbidden safety flags remain false: live_entry_allowed=false, live_validation_enabled=false, auto_track_allowed=false, broker_order_allowed=false, promotion_ready=false, production_scanner_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false, protected_holdout_consumed=false, quotes_imported=false.",
+"Generated report states the exact next row-count gap after the run: strict_rows_remaining_to_minimum = max(0, 30 - post_freeze_strict_exact_completed_rows).",
+"Docs and JSON clearly state that forward paper-shadow cohort append is not live trading, not broker order preparation, not auto-track, not promotion, and not accepted profitability unless strict completed row gates are met."
+],
+"failure_criteria": [
+"Park as blocked_market_window_not_open_no_append if the valid market-data window cannot be confirmed.",
+"Park as no_phase2_natural_selections_no_append if capture produces 0 real same-day natural selections.",
+"Park as blocked_candidate_jsonl_missing if capture reports candidates but does not write the candidate JSONL.",
+"Park as blocked_forward_candidate_validation_failed if validation returns append_allowed=false or any required schema/provenance/frozen-cohort check fails.",
+"Park as blocked_forward_append_guard_failed if append command refuses the approval token, market-window confirmation, duplicate checks, or contract checks.",
+"Reject any run as safety_violation if it creates trades, prepares orders, enables live validation, enables auto-track, touches broker code paths, changes production scanner/strategy/stops/sizing/proof bars, consumes protected holdout, imports quotes, mutates options_history.db, or marks promotion_ready=true.",
+"Do not mark profitability accepted if fewer than 30 strict completed exact rows exist, if net USD P&L is non-positive, if PF lower bound is null or <=1.0, or if any strict reject count is non-zero."
+],
+"forbidden_actions": [
+"broker orders",
+"order preparation",
+"live validation",
+"auto-track",
+"production scanner release",
+"production scanner policy changes",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"options_history.db mutation",
+"evidence database mutation outside the explicitly approved forward cohort append",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"fixture/test/synthetic rows as forward proof",
+"midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead, zero-bid, or untradable marks as exact executable proof",
+"appending without append_allowed=true",
+"appending outside a valid market-data window",
+"changing frozen cohort membership or freeze date"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro for continue/stop. If valid market-window capture appends rows, continue the forward paper-shadow evidence loop until rows close with policy-defined executable exits or until 30 strict completed rows are reached. If capture repeatedly produces no natural selections or validation blocks all rows, pivot to the next newly approved gate: one scoped source repair/import plan for the smallest named blocker. Do not claim profitability unless the 30-row strict completed PF/PF-lower-bound gates clear."
+},
+"operator_questions": [],
+"why_this_is_significant": "This is the first post-stop-exception branch that can directly move the target metric instead of only improving historical diagnostics. The current loop is underpowered because the forward cohort log is missing and strict post-freeze completed rows are 0/30; fresh forward paper-shadow collection is explicitly identified as necessary because only fresh post-freeze executable rows can become proof-qualified profitability. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+}

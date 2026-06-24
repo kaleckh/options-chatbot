@@ -12,7 +12,10 @@ def test_suggested_trade_close_risk_flags_non_executable_sell_and_stale_reviews(
                 "id": 201,
                 "status": "open",
                 "ticker": "AAA",
+                "contract_symbol": "AAA260619C00100000",
                 "direction": "call",
+                "expiry": "2026-06-19",
+                "filled_at": "2026-05-29T13:45:00Z",
                 "last_recommendation": "SELL",
                 "last_reviewed_at": "2026-05-29T14:00:00Z",
                 "last_pnl_pct": -24.0,
@@ -75,6 +78,9 @@ def test_suggested_trade_close_risk_flags_non_executable_sell_and_stale_reviews(
     assert report["attention_trade_ids"] == [201, 202]
     detail = report["attention_trades"][0]
     assert detail["id"] == 201
+    assert detail["contract_symbol"] == "AAA260619C00100000"
+    assert detail["expiry"] == "2026-06-19"
+    assert detail["filled_at"] == "2026-05-29T13:45:00Z"
     assert detail["action_bucket"] == "stored_non_executable_sell"
     assert detail["pricing_state"] == "priced_display_only_last"
     assert detail["next_safe_action"].startswith("do_not_close_suggested_trade")

@@ -4,7 +4,7 @@ This report is generated from `scripts/build_regular_options_suggested_trade_rev
 
 ## Summary
 
-- Status: `suggested_trade_review_plan_ready_blocked_for_market_window`.
+- Status: `suggested_trade_review_plan_ready_for_historical_resolution`.
 - Open suggested-trade rows: `1`.
 - Attention rows: `1`.
 - Close-risk rows: `0`.
@@ -14,21 +14,22 @@ This report is generated from `scripts/build_regular_options_suggested_trade_rev
 - Executable close-ready rows: `0`.
 - Non-executable close-risk rows: `0`.
 - Plan rows: `1`.
-- Market-window-required rows: `1`.
+- Market-window-required rows: `0`.
+- Expired review-resolution rows: `1`.
 - Source evidence counts: `{"missing_review": 1}`.
 - Live policy change: `false`.
 
 ## Review Rows
 
-| Priority | ID | Ticker | Lane | Class | Action | Status | Evidence | P&L | Warning |
-|---:|---:|---|---|---|---|---|---|---:|---|
-| 1 | 138 | AAA | legacy_unlabeled | suggested_trade | `refresh_missing_suggested_trade_review` | `market_window_required_missing_suggested_trade_review` | fresh_explicit_suggested_trade_review,candidate_outcome_ledger_rerun,monthly_profitability_audit_rerun,stored_review_snapshot |  |  |
+| Priority | ID | Ticker | Expiry | Lane | Class | Action | Status | Evidence | P&L | Warning |
+|---:|---:|---|---|---|---|---|---|---|---:|---|
+| 1 | 138 | AAA | 2026-04-08 | legacy_unlabeled | suggested_trade | `resolve_expired_missing_suggested_trade_review` | `expired_missing_review_requires_historical_resolution` | historical_exact_exit_or_expiry_resolution,stored_review_snapshot,candidate_outcome_ledger_rerun,monthly_profitability_audit_rerun |  |  |
 
 ## Next Evidence Queue
 
 | Priority | Action | Count | Reason |
 |---:|---|---:|---|
-| 1 | `execute_suggested_trade_review_plan` | 1 | suggested_trade_attention_rows_need_fresh_explicit_review |
+| 1 | `execute_suggested_trade_review_plan` | 1 | expired_suggested_trade_attention_rows_need_historical_resolution |
 
 ## Boundary
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-suggested-trade-review-plan.md"
 
 READY_STATUS = "suggested_trade_review_plan_ready_blocked_for_market_window"
+READY_HISTORICAL_STATUS = "suggested_trade_review_plan_ready_for_historical_resolution"
 CLEAR_STATUS = "suggested_trade_review_plan_clear"
 MISSING_STATUS = "blocked_missing_inputs"
 INVALID_STATUS = "invalid_live_policy_change"
@@ -74,6 +75,30 @@ def _safe_int(value: Any, default: int = 0) -> int:
         return default
 
 
+def _parse_date(value: Any) -> date | None:
+    if value in (None, ""):
+        return None
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            return None
+
+
+def _expiry_status(detail: dict[str, Any], *, as_of_date: date) -> str:
+    expiry = _parse_date(detail.get("expiry"))
+    if expiry is None:
+        return "unknown"
+    if expiry < as_of_date:
+        return "expired"
+    if expiry == as_of_date:
+        return "expires_today"
+    return "open"
+
+
 def _load_json(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     meta = {
         "path": str(path),
@@ -125,9 +150,10 @@ def _detail_id(detail: dict[str, Any]) -> str:
     )
 
 
-def _plan_action(detail: dict[str, Any]) -> tuple[int, str, str, list[str]]:
+def _plan_action(detail: dict[str, Any], *, as_of_date: date) -> tuple[int, str, str, list[str], bool]:
     action_bucket = _norm(detail.get("action_bucket"))
     evidence_bucket = _norm(detail.get("evidence_bucket"))
+    expiry_status = _expiry_status(detail, as_of_date=as_of_date)
     required_evidence = [
         "fresh_explicit_suggested_trade_review",
         "candidate_outcome_ledger_rerun",
@@ -140,6 +166,7 @@ def _plan_action(detail: dict[str, Any]) -> tuple[int, str, str, list[str]]:
             "review_executable_suggested_trade_close_decision",
             "fresh_executable_review_close_decision_required",
             required_evidence,
+            True,
         )
     if action_bucket == "stored_non_executable_sell":
         required_evidence.append("spread_bid_ask_exact_or_explicit_unpriced_review")
@@ -148,6 +175,7 @@ def _plan_action(detail: dict[str, Any]) -> tuple[int, str, str, list[str]]:
             "refresh_non_executable_suggested_trade_sell_review",
             "market_window_required_non_executable_sell_review",
             required_evidence,
+            True,
         )
     if action_bucket in {"below_configured_stop_mark", "above_configured_target_mark"}:
         required_evidence.append("exact_exit_quote_before_close_decision")
@@ -156,14 +184,29 @@ def _plan_action(detail: dict[str, Any]) -> tuple[int, str, str, list[str]]:
             "refresh_mark_triggered_suggested_trade_review",
             "market_window_required_mark_trigger_review",
             required_evidence,
+            True,
         )
     if evidence_bucket == "missing_review":
+        if expiry_status == "expired":
+            return (
+                1,
+                "resolve_expired_missing_suggested_trade_review",
+                "expired_missing_review_requires_historical_resolution",
+                [
+                    "historical_exact_exit_or_expiry_resolution",
+                    "stored_review_snapshot",
+                    "candidate_outcome_ledger_rerun",
+                    "monthly_profitability_audit_rerun",
+                ],
+                False,
+            )
         required_evidence.append("stored_review_snapshot")
         return (
             1,
             "refresh_missing_suggested_trade_review",
             "market_window_required_missing_suggested_trade_review",
             required_evidence,
+            True,
         )
     if evidence_bucket.startswith("stale_"):
         required_evidence.append("fresh_review_snapshot_replacing_stale_review")
@@ -172,31 +215,41 @@ def _plan_action(detail: dict[str, Any]) -> tuple[int, str, str, list[str]]:
             "refresh_stale_suggested_trade_review",
             "market_window_required_stale_suggested_trade_review",
             required_evidence,
+            True,
         )
     return (
         2,
         "refresh_suggested_trade_review",
         "market_window_required_suggested_trade_review",
         required_evidence,
+        True,
     )
 
 
-def _plan_rows(suggested_risk: dict[str, Any]) -> list[dict[str, Any]]:
+def _plan_rows(suggested_risk: dict[str, Any], *, as_of_date: date) -> list[dict[str, Any]]:
     rows_by_key: dict[str, dict[str, Any]] = {}
     for raw in _as_list(suggested_risk.get("attention_trades")):
         detail = _as_dict(raw)
         if not detail:
             continue
-        priority, action, status, required_evidence = _plan_action(detail)
+        priority, action, status, required_evidence, market_window_required = _plan_action(
+            detail,
+            as_of_date=as_of_date,
+        )
         key = _detail_id(detail)
         existing = rows_by_key.get(key)
+        expired = _expiry_status(detail, as_of_date=as_of_date) == "expired"
         rows_by_key[key] = {
             "priority": min(priority, _safe_int((existing or {}).get("priority"), priority)),
             "suggested_trade_id": detail.get("id"),
             "ticker": detail.get("ticker"),
+            "contract_symbol": detail.get("contract_symbol"),
             "lane": detail.get("lane"),
             "record_class": detail.get("record_class"),
             "status": detail.get("status"),
+            "expiry": detail.get("expiry"),
+            "expiry_status": _expiry_status(detail, as_of_date=as_of_date),
+            "filled_at": detail.get("filled_at"),
             "action": action,
             "resolution_status": status,
             "evidence_bucket": detail.get("evidence_bucket"),
@@ -216,9 +269,12 @@ def _plan_rows(suggested_risk: dict[str, Any]) -> list[dict[str, Any]]:
             "source_next_safe_action": detail.get("next_safe_action"),
             "first_warning": detail.get("first_warning"),
             "reason": detail.get("reason"),
-            "market_window_required": True,
+            "market_window_required": market_window_required,
             "operator_next_step": (
-                "During the next fresh executable quote window, refresh this paper idea's explicit review, "
+                "Resolve this expired paper idea through historical exact exit or expiry evidence before using its P&L; "
+                "then rerun the suggested close-risk, candidate-ledger, and monthly profitability readbacks."
+                if expired
+                else "During the next fresh executable quote window, refresh this paper idea's explicit review, "
                 "then rerun the suggested close-risk, candidate-ledger, and monthly profitability readbacks."
             ),
         }
@@ -255,6 +311,13 @@ def _summary(
     )
     executable_close_ready_count = _safe_int(source_action_counts.get("stored_executable_sell"))
     non_executable_close_risk_count = _safe_int(source_action_counts.get("stored_non_executable_sell"))
+    market_window_required_count = sum(1 for row in plan_rows if row.get("market_window_required"))
+    if not plan_rows:
+        operator_plan_status = "no_suggested_trade_review_rows_to_refresh"
+    elif market_window_required_count == 0:
+        operator_plan_status = "ready_for_historical_suggested_trade_resolution"
+    else:
+        operator_plan_status = "ready_for_fresh_suggested_trade_review_window"
     action_counts = {
         action: sum(1 for row in plan_rows if row.get("action") == action)
         for action in sorted({str(row.get("action")) for row in plan_rows})
@@ -280,11 +343,14 @@ def _summary(
         "source_action_counts": source_action_counts,
         "source_evidence_counts": evidence_counts,
         "plan_row_count": len(plan_rows),
-        "market_window_required_count": sum(1 for row in plan_rows if row.get("market_window_required")),
+        "market_window_required_count": market_window_required_count,
+        "expired_review_resolution_count": sum(
+            1
+            for row in plan_rows
+            if row.get("resolution_status") == "expired_missing_review_requires_historical_resolution"
+        ),
         "action_counts": action_counts,
-        "operator_plan_status": "ready_for_fresh_suggested_trade_review_window"
-        if plan_rows
-        else "no_suggested_trade_review_rows_to_refresh",
+        "operator_plan_status": operator_plan_status,
     }
 
 
@@ -292,7 +358,9 @@ def build_report(
     *,
     suggested_close_risk_path: Path = DEFAULT_SUGGESTED_CLOSE_RISK,
     generated_at_utc: str | None = None,
+    as_of_date: date | None = None,
 ) -> dict[str, Any]:
+    as_of_date = as_of_date or datetime.now(UTC).date()
     suggested_risk, suggested_meta = _load_json(suggested_close_risk_path)
     missing_required: list[str] = []
     if suggested_meta.get("status") != "loaded" or "attention_trades" not in suggested_risk:
@@ -300,14 +368,20 @@ def build_report(
     live_policy_change = _has_live_policy_change(suggested_risk)
     rows: list[dict[str, Any]] = []
     if not missing_required and not live_policy_change:
-        rows = _plan_rows(suggested_risk)
+        rows = _plan_rows(suggested_risk, as_of_date=as_of_date)
 
     if live_policy_change:
         status = INVALID_STATUS
     elif missing_required:
         status = MISSING_STATUS
     elif rows:
-        status = READY_STATUS
+        expired_resolution_count = sum(
+            1
+            for row in rows
+            if row.get("resolution_status") == "expired_missing_review_requires_historical_resolution"
+        )
+        market_window_required_count = sum(1 for row in rows if row.get("market_window_required"))
+        status = READY_HISTORICAL_STATUS if expired_resolution_count and not market_window_required_count else READY_STATUS
     else:
         status = CLEAR_STATUS
 
@@ -326,9 +400,14 @@ def build_report(
                 "priority": 1,
                 "action": PLAN_ACTION,
                 "count": len(rows),
-                "reason": "suggested_trade_attention_rows_need_fresh_explicit_review",
+                "reason": "expired_suggested_trade_attention_rows_need_historical_resolution"
+                if summary.get("market_window_required_count") == 0
+                else "suggested_trade_attention_rows_need_fresh_explicit_review",
                 "operator_next_step": (
-                    "Use the row plan during the next fresh executable quote window; do not auto-close "
+                    "Resolve expired paper ideas from historical exact exit or expiry evidence before using their P&L; "
+                    "do not auto-close or rely on missing, stale, display-only, or non-executable marks."
+                    if summary.get("market_window_required_count") == 0
+                    else "Use the row plan during the next fresh executable quote window; do not auto-close "
                     "or rely on paper-idea P&L from stale, missing, display-only, or non-executable marks."
                 ),
             }
@@ -337,6 +416,7 @@ def build_report(
         "report_id": REPORT_ID,
         "status": status,
         "generated_at_utc": generated_at_utc or _utc_now_iso(),
+        "as_of_date": as_of_date.isoformat(),
         "scope": "regular_options_suggested_trade_review_plan_read_only",
         "schema_version": 1,
         "read_only": True,
@@ -384,13 +464,14 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Non-executable close-risk rows: `{summary.get('non_executable_close_risk_count')}`.",
         f"- Plan rows: `{summary.get('plan_row_count')}`.",
         f"- Market-window-required rows: `{summary.get('market_window_required_count')}`.",
+        f"- Expired review-resolution rows: `{summary.get('expired_review_resolution_count')}`.",
         f"- Source evidence counts: `{_json_inline(summary.get('source_evidence_counts') or {})}`.",
         f"- Live policy change: `{str(bool(summary.get('live_policy_change'))).lower()}`.",
         "",
         "## Review Rows",
         "",
-        "| Priority | ID | Ticker | Lane | Class | Action | Status | Evidence | P&L | Warning |",
-        "|---:|---:|---|---|---|---|---|---|---:|---|",
+        "| Priority | ID | Ticker | Expiry | Lane | Class | Action | Status | Evidence | P&L | Warning |",
+        "|---:|---:|---|---|---|---|---|---|---|---:|---|",
     ]
     for row in _as_list(report.get("plan_rows")):
         row = _as_dict(row)
@@ -404,6 +485,7 @@ def render_markdown(report: dict[str, Any]) -> str:
                     _cell(row.get("priority")),
                     _cell(row.get("suggested_trade_id")),
                     _cell(row.get("ticker")),
+                    _cell(row.get("expiry")),
                     _cell(row.get("lane")),
                     _cell(row.get("record_class")),
                     f"`{_cell(row.get('action'))}`",

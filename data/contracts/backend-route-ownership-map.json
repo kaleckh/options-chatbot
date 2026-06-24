@@ -28,7 +28,7 @@
       "owner_summary": "FastAPI app setup, middleware, router mounting, report caches, and remaining inline route adapters.",
       "path": "python-backend/main.py",
       "role": "fastapi_composition_root",
-      "route_count": 32
+      "route_count": 33
     },
     {
       "adapter_kind": "extracted_router",
@@ -166,7 +166,7 @@
       ],
       "handler": "run_scan_endpoint",
       "lifecycle": "live_scan_run",
-      "line": 2785,
+      "line": 2797,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -218,7 +218,7 @@
       ],
       "handler": "create_position_endpoint",
       "lifecycle": "create",
-      "line": 2853,
+      "line": 2865,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -272,7 +272,7 @@
       ],
       "handler": "list_positions_endpoint",
       "lifecycle": "read",
-      "line": 2969,
+      "line": 2981,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -326,7 +326,7 @@
       ],
       "handler": "review_positions_endpoint",
       "lifecycle": "review",
-      "line": 3014,
+      "line": 3026,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -380,7 +380,7 @@
       ],
       "handler": "close_prefill_endpoint",
       "lifecycle": "read",
-      "line": 3061,
+      "line": 3073,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -425,7 +425,7 @@
       ],
       "handler": "close_position_endpoint",
       "lifecycle": "close",
-      "line": 3105,
+      "line": 3117,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -479,7 +479,7 @@
       ],
       "handler": "create_suggested_trade_endpoint",
       "lifecycle": "create",
-      "line": 3166,
+      "line": 3178,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -533,7 +533,7 @@
       ],
       "handler": "list_suggested_trades_endpoint",
       "lifecycle": "read",
-      "line": 3223,
+      "line": 3235,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -587,7 +587,7 @@
       ],
       "handler": "review_suggested_trades_endpoint",
       "lifecycle": "review",
-      "line": 3264,
+      "line": 3276,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -641,7 +641,7 @@
       ],
       "handler": "close_suggested_trade_endpoint",
       "lifecycle": "close",
-      "line": 3290,
+      "line": 3302,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -695,7 +695,7 @@
       ],
       "handler": "get_recommendations",
       "lifecycle": "position_recommendation_support",
-      "line": 3329,
+      "line": 3341,
       "method": "POST",
       "mutating": true,
       "next_routes": [],
@@ -738,7 +738,7 @@
       ],
       "handler": "roll_picks",
       "lifecycle": "scan_roll_forward_write",
-      "line": 3365,
+      "line": 3377,
       "method": "POST",
       "mutating": true,
       "next_routes": [],
@@ -778,7 +778,7 @@
       ],
       "handler": "get_sector_sentiments",
       "lifecycle": "read",
-      "line": 3404,
+      "line": 3416,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -827,7 +827,7 @@
       ],
       "handler": "get_market_data_cache_stats",
       "lifecycle": "read",
-      "line": 3487,
+      "line": 3499,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -867,7 +867,7 @@
       ],
       "handler": "reset_market_data_cache_stats",
       "lifecycle": "market_data_cache_reset",
-      "line": 3493,
+      "line": 3505,
       "method": "POST",
       "mutating": true,
       "next_routes": [],
@@ -908,7 +908,7 @@
       ],
       "handler": "run_backtest_endpoint",
       "lifecycle": "replay_run",
-      "line": 3502,
+      "line": 3514,
       "method": "POST",
       "mutating": true,
       "next_routes": [
@@ -960,7 +960,7 @@
       ],
       "handler": "run_archived_forward_backtest_endpoint",
       "lifecycle": "archived_forward_replay_run",
-      "line": 3529,
+      "line": 3541,
       "method": "POST",
       "mutating": true,
       "next_routes": [],
@@ -1003,7 +1003,7 @@
       ],
       "handler": "get_last_backtest",
       "lifecycle": "read",
-      "line": 3543,
+      "line": 3555,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1055,7 +1055,7 @@
       ],
       "handler": "get_forward_evidence_report",
       "lifecycle": "read",
-      "line": 3552,
+      "line": 3564,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1107,7 +1107,7 @@
       ],
       "handler": "get_backtest_report",
       "lifecycle": "read",
-      "line": 3561,
+      "line": 3573,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1159,7 +1159,7 @@
       ],
       "handler": "get_metric_truth_report",
       "lifecycle": "read",
-      "line": 3575,
+      "line": 3587,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1211,7 +1211,7 @@
       ],
       "handler": "get_backtest_experiments",
       "lifecycle": "research_experiment_run",
-      "line": 3587,
+      "line": 3599,
       "method": "POST",
       "mutating": true,
       "next_routes": [],
@@ -1254,7 +1254,7 @@
       ],
       "handler": "get_backtest_profitability_forensics",
       "lifecycle": "read",
-      "line": 3601,
+      "line": 3613,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -1297,7 +1297,7 @@
       ],
       "handler": "get_backtest_stability",
       "lifecycle": "read",
-      "line": 3615,
+      "line": 3627,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -1340,7 +1340,7 @@
       ],
       "handler": "get_live_trade_policy",
       "lifecycle": "read",
-      "line": 3634,
+      "line": 3646,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1392,7 +1392,7 @@
       ],
       "handler": "get_playbook_exit_audit",
       "lifecycle": "read",
-      "line": 3659,
+      "line": 3671,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1444,7 +1444,7 @@
       ],
       "handler": "get_backtest_truth_lane_comparison",
       "lifecycle": "read",
-      "line": 3686,
+      "line": 3698,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1496,7 +1496,7 @@
       ],
       "handler": "get_backtest_summary",
       "lifecycle": "read",
-      "line": 3699,
+      "line": 3711,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1545,7 +1545,7 @@
       ],
       "handler": "get_daily_performance",
       "lifecycle": "read",
-      "line": 3724,
+      "line": 3736,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -1585,7 +1585,7 @@
       ],
       "handler": "health",
       "lifecycle": "read",
-      "line": 3746,
+      "line": 3758,
       "method": "GET",
       "mutating": false,
       "next_routes": [],
@@ -1626,7 +1626,7 @@
       ],
       "handler": "get_options_profit_status",
       "lifecycle": "read",
-      "line": 3751,
+      "line": 3763,
       "method": "GET",
       "mutating": false,
       "next_routes": [
@@ -1655,6 +1655,51 @@
     {
       "adapter_kind": "main_inline_route_adapter",
       "adapter_owner_module": "python-backend/main.py",
+      "auth_boundary": "same_origin_read",
+      "contract_ids": [],
+      "declared_in": "python-backend/main.py",
+      "deferred_split": true,
+      "delegate_modules": [],
+      "dependency_style": "module_globals_and_backend_route_context",
+      "does_not_own": [
+        "route payload semantics",
+        "auth behavior",
+        "proof/scanner/replay semantics",
+        "database schema or migrations",
+        "frontend behavior"
+      ],
+      "domain_owners": [
+        "scripts/build_current_policy_historical_picks_audit.py"
+      ],
+      "handler": "get_current_policy_historical_picks",
+      "lifecycle": "read",
+      "line": 3772,
+      "method": "GET",
+      "mutating": false,
+      "next_routes": [
+        {
+          "browser_path": "/api/current-policy-historical-picks",
+          "contract_ids": [],
+          "next_path": "src/app/api/current-policy-historical-picks/route.ts",
+          "route_group": "Other"
+        }
+      ],
+      "owner_docs": [
+        "docs/current-policy-historical-picks-audit.md",
+        "docs/api-and-storage.md"
+      ],
+      "path": "/api/current-policy-historical-picks",
+      "record_class": "none",
+      "registration": "direct_app",
+      "route_family": "current_policy_historical_picks",
+      "route_group": "Other",
+      "router_factory": null,
+      "store": "none",
+      "surface": "mounted_browser"
+    },
+    {
+      "adapter_kind": "main_inline_route_adapter",
+      "adapter_owner_module": "python-backend/main.py",
       "auth_boundary": "backend_bridge_token_when_configured",
       "contract_ids": [
         "backend_only"
@@ -1677,7 +1722,7 @@
       ],
       "handler": "get_proof_summary",
       "lifecycle": "read",
-      "line": 3760,
+      "line": 3783,
       "method": "GET",
       "mutating": false,
       "next_routes": [],

@@ -1,0 +1,197 @@
+{
+  "allowed_symbols": [
+    "IWM",
+    "AAPL",
+    "GOOGL",
+    "UNH",
+    "LLY",
+    "JNJ",
+    "XOM",
+    "CVX",
+    "COP",
+    "NEM"
+  ],
+  "artifacts": {
+    "docs_report": "docs/bullish-pullback-layer-shadow-selection.md",
+    "json": "data/forward-tracking/bullish_pullback_layer_shadow_selection_20260621T202148Z.json",
+    "latest_json": "data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json",
+    "latest_markdown": "data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.md"
+  },
+  "auto_track_allowed": false,
+  "blockers": [],
+  "broker_order_allowed": false,
+  "changed_auto_track_behavior": false,
+  "changed_broker_behavior": false,
+  "changed_live_validation": false,
+  "changed_scanner_policy": false,
+  "changed_sizing": false,
+  "changed_stops": false,
+  "changed_strategy_logic": false,
+  "count_expanded_reference": {
+    "decision": "use_as_count_expanded_paper_shadow_reference",
+    "gate_read": {
+      "blockers": [
+        "below_200_trade_preferred_target",
+        "below_minimum_count_expansion_gate",
+        "unpriced_candidates_remain"
+      ],
+      "minimum_count_improvement_met": false,
+      "preferred_target_met": false,
+      "robust_paper_shadow_met": true,
+      "status": "paper_shadow_layer_strict_blocked"
+    },
+    "layer_id": "layer_5_count_expanded",
+    "metrics": {
+      "avg_pnl_pct": 24.54,
+      "candidate_trade_count": 133,
+      "exact_trade_count": 130,
+      "profit_factor": 2.04,
+      "quote_coverage_pct": 97.7,
+      "rolling_first_test_profit_factor": 2.35,
+      "rolling_status": "passed",
+      "stress_5pct_per_side_profit_factor": 1.53,
+      "unpriced_trade_count": 3
+    },
+    "next_action": "Do not treat strict-proof complete until the 3 WMT/JNJ provider no-match contracts have exact bid/ask rows.",
+    "role": "count_expanded_reference",
+    "source_result_path": "data/options-validation/runs/20260528_224313_sleeve_pf59_coverage_a_refill_v1_intraday.json",
+    "source_robustness_path": null,
+    "status": "count_expanded_reference_blocked_by_unpriced_candidates",
+    "variant_id": "sleeve_pf59_coverage_a_refill_v1"
+  },
+  "generated_at_utc": "2026-06-21T20:21:48Z",
+  "harness_requirements": {
+    "allowed_symbols": [
+      "IWM",
+      "AAPL",
+      "GOOGL",
+      "UNH",
+      "LLY",
+      "JNJ",
+      "XOM",
+      "CVX",
+      "COP",
+      "NEM"
+    ],
+    "assignment_expiration_risk_review_required": true,
+    "denominator_failure_row_handling_required": true,
+    "entry_exit_quote_source": "trusted exact OPRA/NBBO bid/ask only",
+    "exact_entry_quote_required": true,
+    "future_evidence_posture": "future_natural_market_window_paper_shadow_collection_only",
+    "is_broker_order": false,
+    "is_trade_recommendation": false,
+    "leg_level_bid_ask_audit_required": true,
+    "paper_shadow_only": true,
+    "policy_defined_exact_exit_required": true,
+    "selected_layer_id": "layer_4_clean_exact",
+    "selected_variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+    "source_result_path": "data/options-validation/runs/20260528_013303_sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1_intraday.json"
+  },
+  "high_pf_core_reference": {
+    "decision": "use_as_current_core_queue",
+    "gate_read": {
+      "blockers": [
+        "below_200_trade_preferred_target",
+        "below_minimum_count_expansion_gate"
+      ],
+      "minimum_count_improvement_met": false,
+      "preferred_target_met": false,
+      "robust_paper_shadow_met": true,
+      "status": "high_confidence_core_below_count_target"
+    },
+    "layer_id": "layer_0_confidence_core_s_a_b",
+    "metrics": {
+      "avg_pnl_pct": 53.22,
+      "candidate_trade_count": null,
+      "exact_trade_count": 108,
+      "profit_factor": 4.86,
+      "quote_coverage_pct": null,
+      "rolling_first_test_profit_factor": null,
+      "rolling_status": null,
+      "stress_5pct_per_side_profit_factor": null,
+      "unpriced_trade_count": null
+    },
+    "next_action": "Paper-shadow only; keep every candidate proof tied to exact ThetaData OPRA/NBBO bid/ask replay.",
+    "role": "high_pf_core_queue_reference",
+    "source_result_path": "data\\profitability-lab\\bullish-pullback-observation\\confidence\\latest.json",
+    "source_robustness_path": null,
+    "status": "high_pf_core_reference_with_provenance_caveat",
+    "variant_id": "confidence_s_a_b_queue"
+  },
+  "imported_quotes": false,
+  "is_trade_recommendation": false,
+  "live_entry_allowed": false,
+  "mutated_evidence_databases": false,
+  "overall_status": "layer_shadow_selection_ready",
+  "paper_shadow_only": true,
+  "primary_harness_layer": {
+    "decision": "promote_as_clean_paper_shadow_layer",
+    "gate_read": {
+      "blockers": [
+        "below_200_trade_preferred_target",
+        "below_minimum_count_expansion_gate"
+      ],
+      "minimum_count_improvement_met": false,
+      "preferred_target_met": false,
+      "robust_paper_shadow_met": true,
+      "status": "clean_paper_shadow_layer"
+    },
+    "layer_id": "layer_4_clean_exact",
+    "metrics": {
+      "avg_pnl_pct": 28.97,
+      "candidate_trade_count": 129,
+      "exact_trade_count": 129,
+      "profit_factor": 2.2,
+      "quote_coverage_pct": 100.0,
+      "rolling_first_test_profit_factor": 2.51,
+      "rolling_status": "passed",
+      "stress_5pct_per_side_profit_factor": 1.67,
+      "unpriced_trade_count": 0
+    },
+    "next_action": "Use when zero unresolved candidates matters more than raw PF; keep the mixed exit labels visible.",
+    "role": "primary_clean_harness_layer",
+    "source_result_path": "data/options-validation/runs/20260528_013303_sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1_intraday.json",
+    "source_robustness_path": null,
+    "status": "selected_primary_clean_harness_layer",
+    "variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1"
+  },
+  "prohibited_actions": [
+    "do_not_create_trades_from_bullish_pullback_layer_shadow_selection",
+    "do_not_submit_broker_orders_from_bullish_pullback_layer_shadow_selection",
+    "do_not_enable_live_validation_from_bullish_pullback_layer_shadow_selection",
+    "do_not_enable_auto_track_from_bullish_pullback_layer_shadow_selection",
+    "do_not_change_scanner_policy_from_bullish_pullback_layer_shadow_selection",
+    "do_not_change_strategy_logic_from_bullish_pullback_layer_shadow_selection",
+    "do_not_change_stops_from_bullish_pullback_layer_shadow_selection",
+    "do_not_change_sizing_from_bullish_pullback_layer_shadow_selection",
+    "do_not_lower_exact_executable_proof_bars_from_bullish_pullback_layer_shadow_selection",
+    "do_not_mutate_evidence_databases_from_bullish_pullback_layer_shadow_selection",
+    "do_not_import_quotes_from_bullish_pullback_layer_shadow_selection",
+    "do_not_append_forward_cohort_rows_from_bullish_pullback_layer_shadow_selection",
+    "do_not_consume_protected_holdout_from_bullish_pullback_layer_shadow_selection"
+  ],
+  "promotion_ready": false,
+  "read_only": true,
+  "report_id": "bullish_pullback_layer_shadow_selection",
+  "schema_version": 1,
+  "scope": "bullish_pullback_layer_stack_to_paper_shadow_harness_selection",
+  "selection_ready": true,
+  "source_artifacts": {
+    "bullish_pullback_layer_stack": {
+      "age_hours": 548.3,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-05-30T00:04:04Z",
+      "path": "data/profitability-lab/bullish-pullback-observation/layer-stack/latest.json",
+      "reason_codes": [],
+      "required": true,
+      "status": "loaded"
+    }
+  },
+  "target_truth": {
+    "current_best_exact_trades": 130,
+    "gap_to_200": 70,
+    "honest_status": "not_reached",
+    "preferred_target_exact_trades": 200
+  }
+}

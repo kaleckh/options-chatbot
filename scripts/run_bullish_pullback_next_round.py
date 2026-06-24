@@ -530,6 +530,20 @@ VARIANTS: list[dict[str, Any]] = [
         "n_picks": 5,
     },
     {
+        "id": "lane_a_chain_native_ret20_4_stop200_time75_rerun4_v1",
+        "description": (
+            "Research-only alias for the current multilane Lane A source artifact; "
+            "restores the exact playbook id needed for point-in-time replay reconstruction."
+        ),
+        "overrides": {
+            "max_debit_pct_of_width": 50.0,
+            "scan_min_confidence": 70.0,
+            "spread_stop_loss_pct": 200.0,
+            "spread_time_exit_pct": 75.0,
+        },
+        "n_picks": 5,
+    },
+    {
         "id": "lane_a_goal_stop200_time75_shortbid10",
         "description": "Goal experiment: current stop200/time75 Lane A shape with a causal dime minimum short-leg entry bid.",
         "overrides": {
@@ -869,6 +883,7 @@ def run_variants(
     lookback_years: int,
     only: set[str] | None = None,
     as_of_date: date | None = None,
+    min_imported_calendar_dates: int = 252,
 ) -> dict[str, Any]:
     started_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
     rows: list[dict[str, Any]] = []
@@ -887,7 +902,7 @@ def run_variants(
                 playbook=playbook["id"],
                 historical_source_labels="thetadata_opra_nbbo_1m",
                 allow_research_imported_data=False,
-                min_imported_calendar_dates=252,
+                min_imported_calendar_dates=int(min_imported_calendar_dates),
                 save_result=True,
                 as_of_date=as_of_date,
             )
@@ -923,6 +938,7 @@ def run_variants(
             "historical_source_labels": "thetadata_opra_nbbo_1m",
             "pricing_lane": "pessimistic",
             "allow_research_imported_data": False,
+            "min_imported_calendar_dates": int(min_imported_calendar_dates),
             "authoritative_profitability_basis": "exact_contract_only",
             "universe_path": str(UNIVERSE_PATH),
             "cmcsa_active": "CMCSA" in _active_universe_symbols(),
@@ -949,11 +965,17 @@ def main() -> int:
     parser.add_argument("--lookback-years", type=int, default=1)
     parser.add_argument("--only", help="Comma-separated variant ids to run.")
     parser.add_argument("--as-of-date", help="Cap replay entry dates at this YYYY-MM-DD date.")
+    parser.add_argument("--min-imported-calendar-dates", type=int, default=252)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
 
     only = {item.strip() for item in str(args.only or "").split(",") if item.strip()} or None
-    report = run_variants(lookback_years=args.lookback_years, only=only, as_of_date=_parse_date(args.as_of_date))
+    report = run_variants(
+        lookback_years=args.lookback_years,
+        only=only,
+        as_of_date=_parse_date(args.as_of_date),
+        min_imported_calendar_dates=int(args.min_imported_calendar_dates),
+    )
     artifacts = write_report(report)
     payload = {"artifacts": artifacts, "report": report}
     if args.json:

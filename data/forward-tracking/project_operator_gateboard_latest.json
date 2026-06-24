@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-17T05:48:07Z",
+  "generated_at_utc": "2026-06-21T17:22:22Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -217,9 +217,9 @@
         "suggested_open_rows=1",
         "suggested_attention_trade_count=1",
         "scheduled_scan_heartbeat_status=fresh",
-        "days_since_last_scheduled_scan=1",
+        "days_since_last_scheduled_scan=0",
         "last_scheduled_scan_host=KAESDEVICE",
-        "last_scheduled_scan_commit=5a763200037e2ba3deacd5c5b16ab80fceb6a74d",
+        "last_scheduled_scan_commit=e2943762547532510b6ba4bf7863d4fb60d54213",
         "ai_commodity_verified=False",
         "ai_commodity_shared_quote_dates=3/100"
       ],
@@ -261,15 +261,15 @@
   },
   "runtime_use": false,
   "scheduled_scan_health": {
-    "as_of_utc": "2026-06-17T05:48:06Z",
+    "as_of_utc": "2026-06-21T17:22:21Z",
     "blocker": null,
-    "days_since_last_scheduled_scan": 1,
+    "days_since_last_scheduled_scan": 0,
     "heartbeat_available": true,
     "heartbeat_path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\scheduled_scan_heartbeat_latest.json",
-    "last_commit_sha": "5a763200037e2ba3deacd5c5b16ab80fceb6a74d",
+    "last_commit_sha": "e2943762547532510b6ba4bf7863d4fb60d54213",
     "last_host": "KAESDEVICE",
-    "last_run_at_utc": "2026-06-16T17:46:20Z",
-    "last_status": "completed",
+    "last_run_at_utc": "2026-06-19T17:45:06Z",
+    "last_status": "skipped_market_closed",
     "report_id": "scheduled_scan_heartbeat_health",
     "stale_market_day_limit": 2,
     "state": "pass",
@@ -295,7 +295,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T05:10:59Z",
+      "generated_at_utc": "2026-06-21T17:20:30Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -303,7 +303,7 @@
     "lane_promotion_state": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T05:24:09Z",
+      "generated_at_utc": "2026-06-21T17:22:02Z",
       "path": "data/forward-tracking/lane_promotion_state_latest.json",
       "report_id": "regular_options_lane_promotion_state",
       "status": "lane_promotion_state_readback"
@@ -311,7 +311,7 @@
     "missed_regular_picks_outcome": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T04:59:00Z",
+      "generated_at_utc": "2026-06-21T17:20:10Z",
       "path": "data/forward-tracking/missed_regular_picks_outcome_latest.json",
       "report_id": "missed_regular_picks_outcome",
       "status": null
@@ -319,7 +319,7 @@
     "open_position_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T05:10:58Z",
+      "generated_at_utc": "2026-06-21T17:20:19Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "report_id": null,
       "status": null
@@ -335,7 +335,7 @@
     "paper_shortlist": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T05:10:57Z",
+      "generated_at_utc": "2026-06-21T17:21:47Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "report_id": null,
       "status": "paper_shortlist_readback"
@@ -351,14 +351,14 @@
     "scheduled_scan_heartbeat": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-16T17:46:20Z",
+      "generated_at_utc": "2026-06-19T17:45:06Z",
       "path": "data/forward-tracking/scheduled_scan_heartbeat_latest.json",
       "status": "fresh"
     },
     "suggested_trade_close_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-17T05:10:43Z",
+      "generated_at_utc": "2026-06-21T16:47:57Z",
       "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
       "report_id": null,
       "status": null

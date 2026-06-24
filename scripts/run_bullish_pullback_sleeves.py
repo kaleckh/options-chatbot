@@ -2269,6 +2269,7 @@ def run_variants(
     include_themes: bool = False,
     include_tickers: bool = False,
     as_of_date: date | None = None,
+    min_imported_calendar_dates: int = 252,
 ) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     variants = list(VARIANTS)
@@ -2291,7 +2292,7 @@ def run_variants(
                 playbook=playbook["id"],
                 historical_source_labels="thetadata_opra_nbbo_1m",
                 allow_research_imported_data=False,
-                min_imported_calendar_dates=252,
+                min_imported_calendar_dates=int(min_imported_calendar_dates),
                 as_of_date=as_of_date,
                 save_result=True,
             )
@@ -2321,6 +2322,7 @@ def run_variants(
     report = {
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "as_of_date": as_of_date.isoformat() if as_of_date else None,
+        "min_imported_calendar_dates": int(min_imported_calendar_dates),
         "active_universe_count": len(_active_universe_symbols()),
         "cmcsa_active": "CMCSA" in set(_active_universe_symbols()),
         "rows": rows,
@@ -2340,6 +2342,7 @@ def main() -> int:
     parser.add_argument("--include-themes", action="store_true")
     parser.add_argument("--include-tickers", action="store_true")
     parser.add_argument("--as-of-date", default=None, help="Cap imported replay data at this YYYY-MM-DD date.")
+    parser.add_argument("--min-imported-calendar-dates", type=int, default=252)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     report = run_variants(
@@ -2348,6 +2351,7 @@ def main() -> int:
         include_themes=bool(args.include_themes),
         include_tickers=bool(args.include_tickers),
         as_of_date=_parse_date(args.as_of_date),
+        min_imported_calendar_dates=int(args.min_imported_calendar_dates),
     )
     if args.json:
         print(json.dumps(report, indent=2))

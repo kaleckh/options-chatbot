@@ -64,7 +64,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 - Fresh evidence validation outcomes: `{"created": 1, "diagnostic_only": 4, "no_longer_matched": 16, "paper_only": 8, "proof_ineligible": 5}`.
 - Fresh evidence bridge statuses: `{"exact_exit_pnl_required": 1, "non_executable_entry_blocked": 20, "not_evidence_bridge_candidate": 5, "paper_probation_exact_entry_required": 8}`.
 - Paper shortlist release gate: `no_paper_shortlist_candidates`.
-- Profit-capture selection readiness: `{"blocked_guardrail_only": 5, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
+- Profit-capture selection readiness: `{"blocked_guardrail_only": 1, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
 - Open-risk governor status: `open_risk_governor_pass`.
 
 ## Boundary

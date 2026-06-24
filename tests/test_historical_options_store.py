@@ -20,8 +20,10 @@ from historical_options_store import (
     DAILY_QUOTE_MINUTE_ET,
     HistoricalOptionsStore,
     RESEARCH_DATA_TRUST,
+    init_schema,
     import_daily_option_parquet,
     import_historical_option_snapshots,
+    list_entry_contracts_readonly,
     load_import_batches,
 )
 from historical_options_fixtures import (
@@ -524,6 +526,76 @@ class HistoricalOptionsStoreTests(unittest.TestCase):
         )
         self.assertIsNotNone(alpaca_quote)
         self.assertIsNone(theta_quote)
+
+    def test_readonly_entry_contracts_preserve_missing_optional_quote_fields(self):
+        init_schema(self.db_path)
+        with sqlite3.connect(self.db_path) as conn:
+            batch_id = conn.execute(
+                """
+                INSERT INTO import_batches (
+                    source_label, dataset_kind, data_trust, input_path, file_hash,
+                    imported_at_utc, total_rows, imported_rows, duplicate_rows, rejected_rows, warnings_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "thetadata_opra_nbbo_1m",
+                    "intraday_csv",
+                    "trusted",
+                    "fixture.csv",
+                    "abc",
+                    "2026-06-04T00:00:00Z",
+                    1,
+                    1,
+                    0,
+                    0,
+                    "[]",
+                ),
+            ).lastrowid
+            conn.execute(
+                """
+                INSERT INTO option_quote_snapshots (
+                    as_of_utc, quote_date_et, quote_minute_et, snapshot_kind, underlying,
+                    contract_symbol, expiry, option_type, strike, bid, ask, last, iv,
+                    underlying_price, volume, open_interest, source_batch_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "2026-02-03T15:12:00Z",
+                    "2026-02-03",
+                    10 * 60 + 12,
+                    "intraday",
+                    "SPY",
+                    "SPY260220C00500000",
+                    "2026-02-20",
+                    "call",
+                    500.0,
+                    4.1,
+                    4.3,
+                    None,
+                    None,
+                    501.0,
+                    None,
+                    None,
+                    batch_id,
+                ),
+            )
+            conn.commit()
+
+        quotes = list_entry_contracts_readonly(
+            db_path=self.db_path,
+            underlying="SPY",
+            trade_date_et="2026-02-03",
+            option_type="call",
+            source_labels=["thetadata_opra_nbbo_1m"],
+            trusted_only=True,
+            max_as_of_utc="2026-06-04T23:59:59Z",
+        )
+
+        self.assertEqual(len(quotes), 1)
+        self.assertEqual(quotes[0].contract_symbol, "SPY260220C00500000")
+        self.assertIsNone(quotes[0].iv)
+        self.assertIsNone(quotes[0].volume)
+        self.assertIsNone(quotes[0].open_interest)
 
 
 if __name__ == "__main__":

@@ -88,6 +88,82 @@ def _base_payloads(generated_at: str = NOW) -> dict[str, dict]:
                     "requires_fill_attempt_evidence": True,
                 },
                 {
+                    "action_id": "layer_shadow_harness:layer_4_clean_exact",
+                    "priority": 3,
+                    "action_type": "prepare_bullish_pullback_layer_shadow_harness",
+                    "lane_id": "bullish_pullback_observation",
+                    "status": "waiting_for_market_window",
+                    "source_artifact": "bullish_pullback_layer_shadow_selection",
+                    "reason_codes": ["bullish_pullback_layer_stack_selected"],
+                    "market_window_required": True,
+                    "requires_exact_entry_evidence": True,
+                    "requires_exact_exit_evidence": True,
+                    "selected_layer_id": "layer_4_clean_exact",
+                    "selected_variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                    "source_result_path": "data/options-validation/runs/clean.json",
+                    "allowed_symbols": ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+                    "harness_requirements": {
+                        "leg_level_bid_ask_audit_required": True,
+                        "assignment_expiration_risk_review_required": True,
+                    },
+                    "leg_level_bid_ask_audit_required": True,
+                    "assignment_expiration_risk_review_required": True,
+                    "denominator_failure_row_handling_required": True,
+                    "is_trade_recommendation": True,
+                    "is_broker_order": True,
+                },
+                {
+                    "action_id": "execution_safety_preflight:layer_4_clean_exact",
+                    "priority": 3,
+                    "action_type": "bullish_pullback_layer_4_execution_safety_preflight",
+                    "lane_id": "bullish_pullback_observation",
+                    "status": "blocked_execution_safety_preflight",
+                    "source_artifact": "bullish_pullback_layer_execution_safety_audit",
+                    "reason_codes": ["source_run_missing_leg_level_entry_bid_ask"],
+                    "market_window_required": False,
+                    "requires_exact_entry_evidence": True,
+                    "requires_exact_exit_evidence": True,
+                    "selected_layer_id": "layer_4_clean_exact",
+                    "selected_variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                    "source_result_path": "data/options-validation/runs/clean.json",
+                    "execution_safety_audit_status": "blocked_execution_safety_preflight",
+                    "execution_safety_row_counts": {"fatal_blocker_count": 129},
+                    "fatal_reason_counts": {"missing_leg_level_entry_bid_ask": 129},
+                    "preflight_requirements": {"leg_level_bid_ask_audit_required": True},
+                    "leg_level_bid_ask_audit_required": True,
+                    "assignment_expiration_risk_review_required": True,
+                    "denominator_failure_row_handling_required": True,
+                    "is_trade_recommendation": True,
+                    "is_broker_order": True,
+                },
+                {
+                    "action_id": "layer4_forward_capture_protocol:layer_4_clean_exact",
+                    "priority": 3,
+                    "action_type": "bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval",
+                    "lane_id": "bullish_pullback_observation",
+                    "status": "waiting_for_market_window_and_operator_approval",
+                    "source_artifact": "bullish_pullback_layer4_forward_capture_protocol",
+                    "reason_codes": ["capture_protocol_ready", "operator_approval_required"],
+                    "market_window_required": True,
+                    "requires_exact_entry_evidence": True,
+                    "requires_exact_exit_evidence": True,
+                    "selected_layer_id": "layer_4_clean_exact",
+                    "selected_variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                    "source_result_path": "data/options-validation/runs/clean.json",
+                    "allowed_symbols": ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+                    "capture_protocol_status": "protocol_ready_waiting_for_market_window_and_operator_approval",
+                    "historical_executable_economics": {
+                        "historical_side_aware_pf": 3.7414,
+                        "historical_side_aware_pf_lb_5pct": 2.27,
+                        "tradable_executable_rows": 120,
+                    },
+                    "protocol_requirements": {"full_denominator_logging_required": True},
+                    "candidate_validator_read_only": True,
+                    "cohort_append_performed": False,
+                    "is_trade_recommendation": True,
+                    "is_broker_order": True,
+                },
+                {
                     "action_id": "suggested:138",
                     "priority": 5,
                     "action_type": "refresh_suggested_trade_review",
@@ -232,6 +308,81 @@ class RegularOptionsMarketWindowEvidenceChecklistTests(unittest.TestCase):
         fill_steps = [step for step in report["checklist_steps"] if step["step_type"] == "capture_fill_attempt_evidence"]
         self.assertEqual(len(fill_steps), 1)
         self.assertEqual(fill_steps[0]["candidate_id"], "candidate-fill")
+
+    def test_layer_shadow_harness_waits_for_market_window_with_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        harness_steps = [
+            step
+            for step in report["checklist_steps"]
+            if step["step_type"] == "prepare_bullish_pullback_layer_shadow_harness"
+        ]
+        self.assertEqual(len(harness_steps), 1)
+        step = harness_steps[0]
+        self.assertEqual(step["status"], "waiting_for_market_window")
+        self.assertEqual(step["selected_layer_id"], "layer_4_clean_exact")
+        self.assertEqual(step["selected_variant_id"], "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1")
+        self.assertTrue(step["requires_exact_entry_evidence"])
+        self.assertTrue(step["requires_exact_exit_evidence"])
+        self.assertTrue(step["leg_level_bid_ask_audit_required"])
+        self.assertTrue(step["assignment_expiration_risk_review_required"])
+        self.assertFalse(step["is_trade_recommendation"])
+        self.assertFalse(step["is_broker_order"])
+
+    def test_execution_safety_preflight_blocks_before_market_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        preflight_steps = [
+            step
+            for step in report["checklist_steps"]
+            if step["step_type"] == "bullish_pullback_layer_4_execution_safety_preflight"
+        ]
+        self.assertEqual(len(preflight_steps), 1)
+        step = preflight_steps[0]
+        self.assertEqual(step["status"], "blocked_execution_safety_preflight")
+        self.assertFalse(step["market_window_required"])
+        self.assertEqual(step["selected_layer_id"], "layer_4_clean_exact")
+        self.assertEqual(step["execution_safety_row_counts"]["fatal_blocker_count"], 129)
+        self.assertTrue(step["leg_level_bid_ask_audit_required"])
+        self.assertFalse(step["is_trade_recommendation"])
+        command_hints = [row["command_hint"] for row in report["checklist_steps"] if row["step_type"].startswith("refresh_")]
+        self.assertIn("npm run options:audit:bullish-pullback-layer-execution-safety", command_hints)
+        self.assertIn("npm run options:audit:bullish-pullback-layer-executable-economics", command_hints)
+
+    def test_layer4_capture_protocol_waits_for_market_window_and_approval(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        steps = [
+            step
+            for step in report["checklist_steps"]
+            if step["step_type"] == "bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval"
+        ]
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertEqual(step["status"], "waiting_for_market_window_and_operator_approval")
+        self.assertEqual(step["selected_layer_id"], "layer_4_clean_exact")
+        self.assertTrue(step["candidate_validator_read_only"])
+        self.assertFalse(step["cohort_append_performed"])
+        self.assertFalse(step["is_trade_recommendation"])
+        self.assertFalse(step["is_broker_order"])
+        command_hints = [row["command_hint"] for row in report["checklist_steps"] if row["step_type"].startswith("refresh_")]
+        self.assertIn("npm run options:plan:bullish-pullback-layer4-forward-capture", command_hints)
+
+    def test_safe_command_order_ends_with_market_window_approval_preflight(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        commands = [row["command"] for row in report["commands_to_run"]]
+        self.assertEqual(commands[-1], "npm run options:preflight:market-window-approval")
+        self.assertIn("npm run options:audit:bullish-pullback-layer-executable-economics", commands)
+        refresh_steps = [row for row in report["checklist_steps"] if row["step_type"] == "refresh_market_window_approval_preflight"]
+        self.assertEqual(len(refresh_steps), 1)
+        self.assertEqual(refresh_steps[0]["command_hint"], "npm run options:preflight:market-window-approval")
+        self.assertFalse(refresh_steps[0]["is_broker_order"])
+        self.assertFalse(refresh_steps[0]["is_trade_recommendation"])
 
     def test_suggested_trade_138_is_review_only(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -24,6 +24,16 @@ DEFAULT_OPEN_RISK = ROOT / "data" / "forward-tracking" / "regular_open_position_
 DEFAULT_SUGGESTED_CLOSE_RISK = ROOT / "data" / "forward-tracking" / "suggested_trade_close_risk_latest.json"
 DEFAULT_PAPER_SHORTLIST = ROOT / "data" / "profitability-lab" / "regular-options-paper-shortlist" / "latest.json"
 DEFAULT_PROFIT_CAPTURE_QUEUE = ROOT / "data" / "profitability-lab" / "regular-options-profit-capture-queue" / "latest.json"
+DEFAULT_BULLISH_PULLBACK_LAYER_SHADOW_SELECTION = ROOT / "data" / "forward-tracking" / "bullish_pullback_layer_shadow_selection_latest.json"
+DEFAULT_BULLISH_PULLBACK_LAYER_EXECUTION_SAFETY_AUDIT = (
+    ROOT / "data" / "forward-tracking" / "bullish_pullback_layer_execution_safety_audit_latest.json"
+)
+DEFAULT_BULLISH_PULLBACK_LAYER4_FORWARD_CAPTURE_PROTOCOL = (
+    ROOT / "data" / "forward-tracking" / "bullish_pullback_layer4_forward_capture_protocol_latest.json"
+)
+DEFAULT_MARKET_WINDOW_APPROVAL_PREFLIGHT = (
+    ROOT / "data" / "forward-tracking" / "regular_options_market_window_approval_preflight_latest.json"
+)
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "forward-tracking"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-paper-shadow-evidence-plan.md"
 MAX_SOURCE_AGE_HOURS = 96
@@ -411,6 +421,159 @@ def _best_lane_wait_action(best_lane: dict[str, Any] | None, actions: list[dict[
     ]
 
 
+def _layer_shadow_harness_actions(selection: dict[str, Any]) -> list[dict[str, Any]]:
+    if not selection or selection.get("overall_status") != "layer_shadow_selection_ready":
+        return []
+    requirements = _as_dict(selection.get("harness_requirements"))
+    primary = _as_dict(selection.get("primary_harness_layer"))
+    layer_id = _norm(requirements.get("selected_layer_id") or primary.get("layer_id"))
+    variant_id = _norm(requirements.get("selected_variant_id") or primary.get("variant_id"))
+    if not layer_id or not variant_id:
+        return []
+    action = _base_action(
+        action_id="layer_shadow_harness:" + layer_id,
+        priority=3,
+        action_type="prepare_bullish_pullback_layer_shadow_harness",
+        lane_id="bullish_pullback_observation",
+        source_artifact="bullish_pullback_layer_shadow_selection",
+        status="waiting_for_market_window",
+        reason_codes=[
+            "bullish_pullback_layer_stack_selected",
+            "future_natural_market_window_evidence_only",
+            "not_trade_recommendation",
+        ],
+        market_window_required=True,
+        requires_exact_entry_evidence=True,
+        requires_exact_exit_evidence=True,
+        requires_operator_review=True,
+        next_operator_step=(
+            "Use selected bullish-pullback layer "
+            + layer_id
+            + " / "
+            + variant_id
+            + " as the future paper-shadow harness target only when a fresh natural market-window selection appears."
+        ),
+    )
+    action.update(
+        {
+            "selected_layer_id": layer_id,
+            "selected_variant_id": variant_id,
+            "source_result_path": requirements.get("source_result_path") or primary.get("source_result_path"),
+            "allowed_symbols": _as_list(selection.get("allowed_symbols") or requirements.get("allowed_symbols")),
+            "harness_requirements": requirements,
+            "target_truth": selection.get("target_truth"),
+            "count_expanded_reference": selection.get("count_expanded_reference"),
+            "high_pf_core_reference": selection.get("high_pf_core_reference"),
+            "leg_level_bid_ask_audit_required": True,
+            "assignment_expiration_risk_review_required": True,
+            "denominator_failure_row_handling_required": True,
+        }
+    )
+    return [action]
+
+
+def _layer_execution_safety_preflight_actions(audit: dict[str, Any]) -> list[dict[str, Any]]:
+    if not audit or audit.get("report_id") != "bullish_pullback_layer_execution_safety_audit":
+        return []
+    selected = _as_dict(audit.get("selected_layer"))
+    layer_id = _norm(selected.get("layer_id"))
+    variant_id = _norm(selected.get("variant_id"))
+    if not layer_id or not variant_id:
+        return []
+    ready = audit.get("overall_status") == "ready_for_future_market_window_paper_shadow_preflight"
+    action = _base_action(
+        action_id="execution_safety_preflight:" + layer_id,
+        priority=3,
+        action_type="bullish_pullback_layer_4_execution_safety_preflight",
+        lane_id="bullish_pullback_observation",
+        source_artifact="bullish_pullback_layer_execution_safety_audit",
+        status="preflight_ready_waiting_for_market_window" if ready else "blocked_execution_safety_preflight",
+        reason_codes=(
+            ["execution_safety_preflight_ready", "future_natural_market_window_evidence_only"]
+            if ready
+            else _as_list(audit.get("blockers"))
+        ),
+        market_window_required=False,
+        requires_exact_entry_evidence=True,
+        requires_exact_exit_evidence=True,
+        requires_operator_review=True,
+        next_operator_step=(
+            "Resolve blocked leg-level bid/ask execution-safety preflight before using the selected bullish-pullback layer as a market-window paper-shadow harness."
+            if not ready
+            else "Keep this preflight attached as a required check before future natural market-window paper-shadow evidence collection."
+        ),
+    )
+    action.update(
+        {
+            "selected_layer_id": layer_id,
+            "selected_variant_id": variant_id,
+            "source_result_path": selected.get("source_result_path"),
+            "execution_safety_audit_status": audit.get("overall_status"),
+            "execution_safety_row_counts": audit.get("row_counts"),
+            "fatal_reason_counts": audit.get("fatal_reason_counts"),
+            "preflight_requirements": audit.get("preflight_requirements"),
+            "leg_level_bid_ask_audit_required": True,
+            "assignment_expiration_risk_review_required": True,
+            "denominator_failure_row_handling_required": True,
+            "is_trade_recommendation": False,
+            "is_broker_order": False,
+        }
+    )
+    return [action]
+
+
+def _layer4_forward_capture_protocol_actions(protocol: dict[str, Any]) -> list[dict[str, Any]]:
+    if not protocol or protocol.get("report_id") != "bullish_pullback_layer4_forward_capture_protocol":
+        return []
+    selected = _as_dict(protocol.get("selected_harness"))
+    layer_id = _norm(selected.get("layer_id"))
+    variant_id = _norm(selected.get("variant_id"))
+    if not layer_id or not variant_id:
+        return []
+    ready = protocol.get("capture_protocol_status") == "protocol_ready_waiting_for_market_window_and_operator_approval"
+    action = _base_action(
+        action_id="layer4_forward_capture_protocol:" + layer_id,
+        priority=3,
+        action_type="bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval",
+        lane_id="bullish_pullback_observation",
+        source_artifact="bullish_pullback_layer4_forward_capture_protocol",
+        status="waiting_for_market_window_and_operator_approval" if ready else "blocked_capture_protocol",
+        reason_codes=(
+            ["capture_protocol_ready", "future_natural_market_window_evidence_only", "operator_approval_required"]
+            if ready
+            else _as_list(protocol.get("blockers"))
+        ),
+        market_window_required=True,
+        requires_exact_entry_evidence=True,
+        requires_exact_exit_evidence=True,
+        requires_operator_review=True,
+        next_operator_step=(
+            "Use the bullish-pullback layer4 protocol only for future natural paper-shadow denominator rows after a valid market-data window and separate operator approval."
+            if ready
+            else "Resolve blocked bullish-pullback layer4 capture protocol inputs before any future market-window row collection."
+        ),
+    )
+    action.update(
+        {
+            "selected_layer_id": layer_id,
+            "selected_variant_id": variant_id,
+            "source_result_path": selected.get("source_result_path"),
+            "allowed_symbols": _as_list(selected.get("allowed_symbols")),
+            "capture_protocol_status": protocol.get("capture_protocol_status"),
+            "historical_executable_economics": protocol.get("historical_executable_economics"),
+            "protocol_requirements": protocol.get("protocol_requirements"),
+            "candidate_validator_read_only": bool(protocol.get("candidate_validator_read_only")),
+            "cohort_append_performed": bool(protocol.get("cohort_append_performed")),
+            "live_entry_allowed": False,
+            "auto_track_allowed": False,
+            "broker_order_allowed": False,
+            "is_trade_recommendation": False,
+            "is_broker_order": False,
+        }
+    )
+    return [action]
+
+
 def _open_risk_actions(open_risk: dict[str, Any], trade_qualification: dict[str, Any], *, open_risk_blocked: bool) -> list[dict[str, Any]]:
     if not open_risk_blocked:
         return []
@@ -437,7 +600,15 @@ def _counts(actions: list[dict[str, Any]]) -> dict[str, int]:
             1
             for action in actions
             if action.get("action_type")
-            in {"collect_exact_exit_evidence", "collect_exact_entry_evidence", "capture_fill_attempt_evidence", "wait_for_fresh_candidate"}
+            in {
+                "collect_exact_exit_evidence",
+                "collect_exact_entry_evidence",
+                "capture_fill_attempt_evidence",
+                "wait_for_fresh_candidate",
+                "bullish_pullback_layer_4_execution_safety_preflight",
+                "prepare_bullish_pullback_layer_shadow_harness",
+                "bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval",
+            }
         ),
         "market_window_action_count": sum(1 for action in actions if action.get("market_window_required")),
         "waiting_action_count": sum(1 for action in actions if _norm(action.get("status")).startswith("waiting")),
@@ -520,6 +691,10 @@ def build_report(
     suggested_close_risk_path: Path = DEFAULT_SUGGESTED_CLOSE_RISK,
     paper_shortlist_path: Path = DEFAULT_PAPER_SHORTLIST,
     profit_capture_queue_path: Path = DEFAULT_PROFIT_CAPTURE_QUEUE,
+    bullish_pullback_layer_shadow_selection_path: Path = DEFAULT_BULLISH_PULLBACK_LAYER_SHADOW_SELECTION,
+    bullish_pullback_layer_execution_safety_audit_path: Path = DEFAULT_BULLISH_PULLBACK_LAYER_EXECUTION_SAFETY_AUDIT,
+    bullish_pullback_layer4_forward_capture_protocol_path: Path = DEFAULT_BULLISH_PULLBACK_LAYER4_FORWARD_CAPTURE_PROTOCOL,
+    market_window_approval_preflight_path: Path = DEFAULT_MARKET_WINDOW_APPROVAL_PREFLIGHT,
     generated_at_utc: str | None = None,
     max_source_age_hours: int = MAX_SOURCE_AGE_HOURS,
 ) -> dict[str, Any]:
@@ -537,6 +712,10 @@ def build_report(
         "suggested_trade_close_risk": (suggested_close_risk_path, True),
         "paper_shortlist": (paper_shortlist_path, True),
         "profit_capture_queue": (profit_capture_queue_path, True),
+        "bullish_pullback_layer_shadow_selection": (bullish_pullback_layer_shadow_selection_path, False),
+        "bullish_pullback_layer_execution_safety_audit": (bullish_pullback_layer_execution_safety_audit_path, False),
+        "bullish_pullback_layer4_forward_capture_protocol": (bullish_pullback_layer4_forward_capture_protocol_path, False),
+        "regular_options_market_window_approval_preflight": (market_window_approval_preflight_path, False),
     }
     loaded: dict[str, dict[str, Any]] = {}
     source_artifacts: dict[str, dict[str, Any]] = {}
@@ -559,6 +738,9 @@ def build_report(
     actions.extend(_open_risk_actions(loaded["open_position_risk"], trade_qualification, open_risk_blocked=open_blocked))
     actions.extend(_ledger_actions(loaded["candidate_outcome_ledger"], open_risk_blocked=open_blocked))
     actions.extend(_best_lane_wait_action(best_lane, actions))
+    actions.extend(_layer_execution_safety_preflight_actions(loaded["bullish_pullback_layer_execution_safety_audit"]))
+    actions.extend(_layer4_forward_capture_protocol_actions(loaded["bullish_pullback_layer4_forward_capture_protocol"]))
+    actions.extend(_layer_shadow_harness_actions(loaded["bullish_pullback_layer_shadow_selection"]))
     actions.extend(_fill_attempt_actions(loaded["fill_attempt_evidence_capture_plan"], open_risk_blocked=open_blocked))
     actions.extend(_suggested_review_actions(loaded["suggested_trade_review_plan"]))
     actions.extend(_repair_actions(loaded["profit_capture_queue"]))
@@ -586,6 +768,21 @@ def build_report(
             actions=actions,
         ),
         "best_evidence_lane": best_lane,
+        "bullish_pullback_layer_shadow_selection": loaded["bullish_pullback_layer_shadow_selection"]
+        if loaded["bullish_pullback_layer_shadow_selection"].get("overall_status") == "layer_shadow_selection_ready"
+        else None,
+        "bullish_pullback_layer_execution_safety_audit": loaded["bullish_pullback_layer_execution_safety_audit"]
+        if loaded["bullish_pullback_layer_execution_safety_audit"].get("report_id")
+        == "bullish_pullback_layer_execution_safety_audit"
+        else None,
+        "bullish_pullback_layer4_forward_capture_protocol": loaded["bullish_pullback_layer4_forward_capture_protocol"]
+        if loaded["bullish_pullback_layer4_forward_capture_protocol"].get("report_id")
+        == "bullish_pullback_layer4_forward_capture_protocol"
+        else None,
+        "regular_options_market_window_approval_preflight": loaded["regular_options_market_window_approval_preflight"]
+        if loaded["regular_options_market_window_approval_preflight"].get("report_id")
+        == "regular_options_market_window_approval_preflight"
+        else None,
         "live_entry_allowed": bool(trade_qualification.get("live_entry_allowed")) if trade_qualification else False,
         "auto_track_allowed": bool(trade_qualification.get("auto_track_allowed")) if trade_qualification else False,
         "broker_order_allowed": False,
@@ -788,6 +985,22 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--suggested-close-risk", type=Path, default=DEFAULT_SUGGESTED_CLOSE_RISK)
     parser.add_argument("--paper-shortlist", type=Path, default=DEFAULT_PAPER_SHORTLIST)
     parser.add_argument("--profit-capture-queue", type=Path, default=DEFAULT_PROFIT_CAPTURE_QUEUE)
+    parser.add_argument("--bullish-pullback-layer-shadow-selection", type=Path, default=DEFAULT_BULLISH_PULLBACK_LAYER_SHADOW_SELECTION)
+    parser.add_argument(
+        "--bullish-pullback-layer-execution-safety-audit",
+        type=Path,
+        default=DEFAULT_BULLISH_PULLBACK_LAYER_EXECUTION_SAFETY_AUDIT,
+    )
+    parser.add_argument(
+        "--bullish-pullback-layer4-forward-capture-protocol",
+        type=Path,
+        default=DEFAULT_BULLISH_PULLBACK_LAYER4_FORWARD_CAPTURE_PROTOCOL,
+    )
+    parser.add_argument(
+        "--market-window-approval-preflight",
+        type=Path,
+        default=DEFAULT_MARKET_WINDOW_APPROVAL_PREFLIGHT,
+    )
     parser.add_argument("--max-source-age-hours", type=int, default=MAX_SOURCE_AGE_HOURS)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
@@ -811,6 +1024,10 @@ def main(argv: list[str] | None = None) -> int:
         suggested_close_risk_path=args.suggested_close_risk,
         paper_shortlist_path=args.paper_shortlist,
         profit_capture_queue_path=args.profit_capture_queue,
+        bullish_pullback_layer_shadow_selection_path=args.bullish_pullback_layer_shadow_selection,
+        bullish_pullback_layer_execution_safety_audit_path=args.bullish_pullback_layer_execution_safety_audit,
+        bullish_pullback_layer4_forward_capture_protocol_path=args.bullish_pullback_layer4_forward_capture_protocol,
+        market_window_approval_preflight_path=args.market_window_approval_preflight,
         max_source_age_hours=args.max_source_age_hours,
     )
     if not args.no_write:

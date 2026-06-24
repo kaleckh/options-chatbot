@@ -52,7 +52,7 @@ This report is generated from `scripts/lane_promotion_state.py`. It turns the re
 
 ## Input Health
 
-- Lane profitability gate: `{"age_hours": 0.0043, "generated_at_utc": "2026-06-18T02:13:43Z", "latest_intraday_quote_date": "2026-06-08", "mark_unpriced_count": 0, "max_age_hours": 36.0, "reason": "lane_profitability_gate_report_fresh", "tracked_row_count": 4, "tracked_rows_with_stored_pnl": 4, "usable": true}`.
+- Lane profitability gate: `{"age_hours": 0.0313, "generated_at_utc": "2026-06-21T17:20:10Z", "latest_intraday_quote_date": "2026-06-08", "mark_unpriced_count": 0, "max_age_hours": 36.0, "reason": "lane_profitability_gate_report_fresh", "tracked_row_count": 4, "tracked_rows_with_stored_pnl": 4, "usable": true}`.
 - Filter matrix loaded: `True`.
 - Fresh evidence loop loaded: `True`.
 - Open risk loaded: `True`.

@@ -1,0 +1,76 @@
+{
+  "denominator_status_contract": [
+    "candidate_not_generated_missing_flow_input",
+    "candidate_not_generated_missing_vix_bucket",
+    "candidate_rejected_missing_required_flow_fields",
+    "candidate_rejected_missing_vix_bucket",
+    "candidate_rejected_unbounded_or_undefined_risk",
+    "candidate_rejected_missing_leg_quote",
+    "candidate_rejected_zero_bid_or_untradable",
+    "candidate_rejected_crossed_or_stale_quote",
+    "candidate_duplicate_existing_base_stack",
+    "candidate_duplicate_within_research_harness",
+    "candidate_protected_holdout_overlap",
+    "priced_fixture_not_proof_eligible",
+    "readiness_candidate_priced_not_replayed",
+    "no_pick_explicit",
+    "blocked_source_missing"
+  ],
+  "candidates": [
+    {
+      "case_id": "flow_ratio_bridge_clean_fixture",
+      "concept_id": "index_flow_extreme_mean_reversion_ratio_backspread_v1",
+      "structure": "ratio_backspread_bounded",
+      "underlying": "QQQ",
+      "signal_date": "2026-05-29",
+      "planned_entry_timestamp": "2026-05-29T14:25:00Z",
+      "entry_policy": "flow_extreme_entry_v1",
+      "exit_policy": "policy_exit_or_expiry_v1",
+      "candidate_source_id": "fixture_flow_extreme_bridge_v1",
+      "bounded_risk": true,
+      "undefined_risk_allowed": false,
+      "protected_holdout_overlap": false,
+      "fixture_source_not_proof_eligible": true,
+      "denominator_status_mapping": {
+        "candidate_not_generated_missing_flow_input": "missing point-in-time flow source blocks generation",
+        "candidate_not_generated_missing_vix_bucket": "missing VIX bucket blocks generation",
+        "candidate_rejected_missing_required_flow_fields": "required flow fields missing",
+        "candidate_rejected_missing_vix_bucket": "candidate lacks point-in-time VIX bucket",
+        "candidate_rejected_unbounded_or_undefined_risk": "undefined risk is forbidden",
+        "candidate_rejected_missing_leg_quote": "one or more leg quotes missing",
+        "candidate_rejected_zero_bid_or_untradable": "one or more legs untradable",
+        "candidate_rejected_crossed_or_stale_quote": "quote stale or crossed",
+        "candidate_duplicate_existing_base_stack": "identity duplicates clean base stack",
+        "candidate_duplicate_within_research_harness": "identity duplicates another research candidate",
+        "candidate_protected_holdout_overlap": "candidate overlaps protected holdout",
+        "priced_fixture_not_proof_eligible": "fixture pricing is not proof eligible",
+        "readiness_candidate_priced_not_replayed": "candidate mechanics are priced but no replay has run",
+        "no_pick_explicit": "full denominator explicit no-pick row",
+        "blocked_source_missing": "upstream source missing"
+      },
+      "legs": [
+        {
+          "side": "short",
+          "ratio": 1,
+          "option_right": "call",
+          "expiration": "2026-06-03",
+          "strike": 720
+        },
+        {
+          "side": "long",
+          "ratio": 1,
+          "option_right": "call",
+          "expiration": "2026-06-03",
+          "strike": 725
+        },
+        {
+          "side": "long",
+          "ratio": 1,
+          "option_right": "call",
+          "expiration": "2026-06-03",
+          "strike": 735
+        }
+      ]
+    }
+  ]
+}

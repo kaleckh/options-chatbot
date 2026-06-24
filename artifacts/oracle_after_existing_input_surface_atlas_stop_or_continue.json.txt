@@ -1,0 +1,163 @@
+{
+"verdict": "stop_exception",
+"continue_loop": false,
+"significant_upgrade_available": false,
+"selected_branch_id": null,
+"burden_of_proof_check": {
+"current_forward_or_latest_four_strict_row_count": 0,
+"target_profitable_strict_completed_rows": 30,
+"stop_allowed": true,
+"why_stop_is_or_is_not_earned": "Stop_exception is earned under the current approvals, but this is not profitability. Accepted profitability remains false, historical rows remain non-forward proof, and the latest-four/forward-style strict completed row count remains 0/30. The historical frontier is already exhausted under current prohibitions with 44 variants, 0 countable throughput candidates, 157 base rows, and a 43 strict-new row gap. The forward account is also still at 0 post-freeze strict completed rows with live, auto-track, broker, and promotion flags false. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+},
+"stop_exception_scope": {
+"scope": "current repository data and current no-mutation/no-import/no-holdout/no-live/no-broker/no-promotion approvals",
+"not_a_claim": "This is not a claim that no options edge exists, not a claim that the project can never become profitable, and not a claim that historical rows prove failure in live trading.",
+"earned_reason": "The read-only path has now exhausted the current historical surface, the current momentum/current-regime surface, the 13-symbol candidate-generation denominator path, the opening-range and synthetic-forward source workarounds, the fixed-bucket and all-local quote-surface structure feasibility paths, and the repo-wide existing input/source surface atlas. The latest atlas found 0 ready source surfaces and no next research branch; the only full-coverage input family left was already-parked quote surface, while all other meaningful blockers require approval-gated new data, source repair, evidence append, protected holdout decision, or promotion review."
+},
+"approval_required_next_gates_ranked": [
+{
+"gate_id": "fresh_forward_paper_shadow_collection_market_window_append",
+"approval_required": true,
+"why_it_is_smallest": "It is the only path that directly creates rows capable of becoming forward proof. The existing forward cohort/capture pathway is already described as passive and requires valid same-day market-window scan picks, validation, and explicit append approval; it still forbids live trading, auto-track, broker action, proof-bar changes, and promotion. 
+
+Pasted text
+
+",
+"minimum_acceptance_after_approval": "At least 30 strict post-freeze completed exact rows with executable entry and policy-defined executable exit evidence, positive net USD P&L, PF > 1.0, 5% bootstrap PF lower bound > 1.0, no duplicate/scanner-hash/provenance failures, and no non-executable marks.",
+"not_approved_now": "No append, no cohort mutation, no live validation, no broker/order action, and no promotion are approved by this stop_exception."
+},
+{
+"gate_id": "scoped_source_repair_or_replay",
+"approval_required": true,
+"why_it_matters": "Could clear named blockers such as missing candidate-generation diagnostics, missing underlying/opening-bucket surface, missing call-put pair surface, missing VIX/flow/event/term/proxy inputs, or insufficient train-month coverage, but it may require quote import, source repair, or evidence-store mutation.",
+"minimum_acceptance_after_approval": "A scoped repair must name the exact source, date window, symbols, fields, write target, leakage controls, and pass/fail thresholds before execution; repaired rows must not be treated as forward proof."
+},
+{
+"gate_id": "new_historical_data_surface_or_longer_lookback",
+"approval_required": true,
+"why_it_matters": "Could change the sample-size and coverage problem, but it changes the data surface and can invalidate branch-scoped exhaustion verdicts.",
+"minimum_acceptance_after_approval": "Must preregister universe, window, source labels, trusted fields, known-at rules, source-quality floor, train/latest split, strict-new dedupe, PF lower-bound gates, and multiple-hypothesis accounting before any replay claim."
+},
+{
+"gate_id": "protected_holdout_decision",
+"approval_required": true,
+"why_it_matters": "Some historical blockers include holdout depth/PF lower-bound constraints, but protected holdout consumption remains forbidden without explicit approval.",
+"minimum_acceptance_after_approval": "A holdout decision must specify exact rows, one-shot analysis scope, no retuning after inspection, and fail-closed promotion criteria."
+}
+],
+"assumption_challenges": [
+{
+"assumption": "The stop_exception means the project is unprofitable.",
+"risk": "That would overstate the result. The evidence only says the current read-only/no-mutation repository surfaces cannot yet produce proof-qualified profitability.",
+"verification": "Preserve accepted_profitability=false, promotion_ready=false, historical_rows_are_forward_proof=false, and latest-four/forward-style strict completed rows=0/30."
+},
+{
+"assumption": "Dense latest-four quote depth means a replayable proof surface exists.",
+"risk": "The all-local quote-minute atlas found large raw constructible opportunity depth but no replay-feasible surface because train-month and month-floor gates failed.",
+"verification": "Do not run another P&L replay over the parked quote surface unless a new trusted source artifact, new data surface, or approved repair changes the coverage blocker."
+},
+{
+"assumption": "A new causal playbook alone is still a meaningful upgrade.",
+"risk": "The repo-wide input atlas found no ready point-in-time input/source surface to support a new causal branch; design-only work would now be narrative churn unless an approved source/data gate changes inputs.",
+"verification": "Require any future playbook to name a ready source surface or an explicit approval-required data/source repair gate before implementation."
+},
+{
+"assumption": "Existing VIX, flow, event, term-structure, dispersion, PMCC, or opening-bucket blockers can be cleared read-only from current files.",
+"risk": "The existing input surface atlas says they cannot: direct sources are missing or undercovered, proxies cannot honestly clear direct-source blockers, and the only full-coverage surface is already parked quote-only data.",
+"verification": "Park these branches until a new source/artifact or explicit repair/import approval changes the blocker."
+},
+{
+"assumption": "Forward collection can be skipped because historical research is extensive.",
+"risk": "The target is forward-style proof, and the forward account is still 0/30; historical rows cannot replace it.",
+"verification": "The smallest real next gate is explicit approval for fresh forward paper-shadow capture/append during a valid market-data window."
+}
+],
+"branches_to_stop": [
+"existing_repository_point_in_time_input_surface_atlas_v1_under_current_repository",
+"all_local_stable_quote_minute_structure_capability_atlas_v1",
+"local_opra_nbbo_structure_capability_matrix_v1_with_13_symbol_fixed_buckets",
+"quote_surface_opening_range_reversal_vertical_v1_until_trusted_underlying_or_opening_bucket_source_changes",
+"quote_derived_synthetic_forward_opening_bucket_surface_v1_until_same_minute_call_put_pair_surface_changes",
+"13_symbol_frozen_candidate_generation_denominator_v2",
+"13_symbol_frozen_candidate_generation_source_surface",
+"13_symbol_candidate_generation_surface_audit",
+"13_symbol_no_write_runner_support_as_profitability_progress",
+"pmcc_diagonal_replay_readiness_audit_v1_until_point_in_time_trend_vix_or_long_dte_quote_surface_changes",
+"flow_extreme_ratio_backspread_replay_readiness_until_trusted_flow_input_and_vix_bucket_change",
+"flow_extreme_volume_oi_source_rows_until_trusted_volume_oi_source_changes",
+"point_in_time_flow_extreme_input_until_trusted_flow_source_exists",
+"macro_event_long_strangle_replay_readiness_until_macro_event_calendar_and_vix_source_change",
+"point_in_time_vix_bucket_until_vix_source_and_threshold_policy_change",
+"momentum_continuation_bounded_replay_until_point_in_time_breadth_spy_qqq_vix_inputs_change",
+"vrp_credit_spread_replay_readiness_until_pricing_engine_vix_bucket_quote_surface_and_holdout_guard_change",
+"term_structure_calendar_replay_readiness_until_calendar_pricing_term_structure_inputs_quote_surface_and_strict_new_dedupe_change",
+"skew_broken_wing_put_fly_readiness_until_new_source_or_readiness_artifact_changes_blocker",
+"dispersion_proxy_hybrid_replay_readiness_until_dispersion_proxy_inputs_vix_bucket_and_pair_engine_change",
+"dashboard_only_visibility_branches",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"current_regime_momentum_edge_raw_count_retesting",
+"sleeve_next_index_refill_v1_as_count_solution",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof",
+"any_p_l_replay_over_the_same_parked_quote_surface_without_new_source_artifact_or_explicit_approval"
+],
+"candidate_branches": [
+{
+"branch": "fresh_forward_paper_shadow_collection_market_window_append",
+"expected_value": "Highest. It is the only remaining path that can create proof-qualified forward-style rows toward the 30-row target.",
+"main_uncertainty": "Requires real same-day market-window natural selections, validation, and explicit append approval; without row append it cannot increase 0/30.",
+"why_selected": "Not selected as a Codex task under current approvals because cohort append/evidence mutation still requires separate explicit approval."
+},
+{
+"branch": "scoped_source_repair_or_replay",
+"expected_value": "High if approved. It could clear specific source blockers such as missing candidate-generation diagnostics, missing VIX/flow/event inputs, missing underlying/opening buckets, or insufficient train-month quote coverage.",
+"main_uncertainty": "Requires source repair, quote import, or evidence mutation; this changes the data/evidence surface.",
+"why_selected": "Not selected because the user has not explicitly approved mutation/import/repair."
+},
+{
+"branch": "new_historical_data_surface_or_longer_lookback",
+"expected_value": "High if approved because it could provide the missing 20+4 depth and source fields that current repository data lacks.",
+"main_uncertainty": "It changes the historical data surface and requires preregistered split, source-quality, and leakage controls before replay.",
+"why_selected": "Not selected because data-surface changes require explicit approval."
+},
+{
+"branch": "new_causal_playbook_generation_from_current_repository",
+"expected_value": "Low now. Earlier this was allowed and useful, but the existing input-surface atlas found 0 ready source surfaces and no next research branch.",
+"main_uncertainty": "A playbook without a source surface would not move proof-qualified rows or latest-four readiness.",
+"why_selected": "Rejected under current repository data as design-only churn."
+},
+{
+"branch": "dashboard_or_operator_visibility",
+"expected_value": "Low. It may clarify status but cannot improve proof-qualified rows or source coverage by itself.",
+"main_uncertainty": "Could help prevent operator mistakes but does not move toward 30 profitable strict completed rows.",
+"why_selected": "Rejected because dashboard-only visibility is not a significant profitability upgrade."
+}
+],
+"next_codex_task": null,
+"operator_questions": [
+{
+"question": "Approve fresh forward paper-shadow cohort capture and append only during a valid market-data window, using the existing guarded capture/validate/append workflow and no broker/live/auto-track/promotion actions?",
+"why_it_matters": "This is the smallest approval-required gate that can directly move the target from 0/30 toward 30 strict completed forward-style rows.",
+"default_if_unanswered": "No. Research-only questions are approved yes by the user; live/broker/import/mutation/holdout/promotion questions are no unless explicitly approved."
+},
+{
+"question": "Approve a scoped source repair/import plan for one named blocker, with exact source, symbols, date window, fields, write target, and pass/fail thresholds?",
+"why_it_matters": "Current repository data has no ready read-only input surface; clearing missing VIX/flow/event/underlying/candidate-generation/coverage blockers requires an approved data/source change.",
+"default_if_unanswered": "No. Research-only questions are approved yes by the user; live/broker/import/mutation/holdout/promotion questions are no unless explicitly approved."
+},
+{
+"question": "Approve a new historical data surface or longer-lookback import/audit with preregistered split, source-quality, leakage, and multiple-hypothesis controls?",
+"why_it_matters": "The all-local atlas showed insufficient train-month coverage under current trusted rows, and a new data surface is the cleanest way to test whether that is a data-depth artifact.",
+"default_if_unanswered": "No. Research-only questions are approved yes by the user; live/broker/import/mutation/holdout/promotion questions are no unless explicitly approved."
+}
+],
+"why_this_is_significant": "This stop_exception is significant because it prevents further narrative churn. The loop has exhausted current read-only repo surfaces without lowering proof bars: frontier 0/44 countable candidates, forward proof 0/30, local quote-surface replayability parked, and the repo-wide existing input atlas found no ready source surface. The next meaningful step is no longer another research-only Codex slice; it is an explicit approval gate for forward append, scoped source repair/import, or a new data surface."
+}

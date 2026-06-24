@@ -43,10 +43,27 @@ PROHIBITED_ACTIONS = (
 SAFE_COMMANDS = (
     ("npm run options:gateboard", "Refresh operator gateboard and no-live/no-chase readback."),
     ("npm run options:triage:trade-qualification", "Refresh read-only trade qualification."),
+    ("npm run options:plan:bullish-pullback-layer-shadow", "Refresh read-only bullish-pullback layer-shadow harness selection."),
+    (
+        "npm run options:audit:bullish-pullback-layer-execution-safety",
+        "Refresh read-only bullish-pullback layer execution-safety preflight.",
+    ),
+    (
+        "npm run options:audit:bullish-pullback-layer-executable-economics",
+        "Refresh read-only bullish-pullback layer executable-economics audit.",
+    ),
+    (
+        "npm run options:plan:bullish-pullback-layer4-forward-capture",
+        "Refresh read-only bullish-pullback layer4 forward capture protocol.",
+    ),
     ("npm run options:plan:paper-shadow-evidence", "Refresh paper-shadow evidence plan."),
     ("npm run options:plan:fill-attempt-evidence-capture", "Refresh fill-attempt evidence capture plan."),
     ("npm run options:plan:suggested-trade-review", "Refresh suggested-trade review-only plan."),
     ("npm run options:audit:monthly-profitability", "Refresh monthly profitability audit readback."),
+    (
+        "npm run options:preflight:market-window-approval",
+        "Run the final no-write market-window approval preflight before any future approval discussion.",
+    ),
 )
 
 
@@ -259,13 +276,63 @@ def _refresh_steps() -> list[dict[str, Any]]:
         ),
         _base_step(
             step_id="refresh:paper_shadow_plan",
-            priority=3,
+            priority=6,
             step_type="refresh_paper_shadow_plan",
             title="Refresh paper-shadow evidence plan",
             status="ready",
             source_artifact="regular_options_paper_shadow_evidence_plan",
             command_hint="npm run options:plan:paper-shadow-evidence",
             next_operator_step="Refresh evidence rows before using this checklist during a valid market-data window.",
+        ),
+        _base_step(
+            step_id="refresh:bullish_pullback_layer_shadow",
+            priority=3,
+            step_type="refresh_bullish_pullback_layer_shadow_selection",
+            title="Refresh bullish-pullback layer-shadow selection",
+            status="ready",
+            source_artifact="bullish_pullback_layer_shadow_selection",
+            command_hint="npm run options:plan:bullish-pullback-layer-shadow",
+            next_operator_step="Refresh the selected bullish-pullback paper-shadow harness before using the market-window checklist.",
+        ),
+        _base_step(
+            step_id="refresh:bullish_pullback_layer_execution_safety",
+            priority=4,
+            step_type="refresh_bullish_pullback_layer_execution_safety_audit",
+            title="Refresh bullish-pullback execution-safety preflight",
+            status="ready",
+            source_artifact="bullish_pullback_layer_execution_safety_audit",
+            command_hint="npm run options:audit:bullish-pullback-layer-execution-safety",
+            next_operator_step="Refresh the leg-level bid/ask and assignment/expiration preflight before using the selected bullish-pullback harness.",
+        ),
+        _base_step(
+            step_id="refresh:bullish_pullback_layer4_forward_capture_protocol",
+            priority=6,
+            step_type="refresh_bullish_pullback_layer4_forward_capture_protocol",
+            title="Refresh bullish-pullback layer4 forward capture protocol",
+            status="ready",
+            source_artifact="bullish_pullback_layer4_forward_capture_protocol",
+            command_hint="npm run options:plan:bullish-pullback-layer4-forward-capture",
+            next_operator_step="Refresh the read-only protocol before any future market-window candidate validation or approval discussion.",
+        ),
+        _base_step(
+            step_id="refresh:bullish_pullback_layer_executable_economics",
+            priority=5,
+            step_type="refresh_bullish_pullback_layer_executable_economics",
+            title="Refresh bullish-pullback executable economics",
+            status="ready",
+            source_artifact="bullish_pullback_layer_executable_economics",
+            command_hint="npm run options:audit:bullish-pullback-layer-executable-economics",
+            next_operator_step="Refresh the read-only executable-economics audit before any future approval discussion.",
+        ),
+        _base_step(
+            step_id="refresh:market_window_approval_preflight",
+            priority=9,
+            step_type="refresh_market_window_approval_preflight",
+            title="Run market-window approval preflight",
+            status="ready",
+            source_artifact="regular_options_market_window_approval_preflight",
+            command_hint="npm run options:preflight:market-window-approval",
+            next_operator_step="Run the no-write approval preflight as the final command before any future operator approval question.",
         ),
     ]
 
@@ -378,6 +445,113 @@ def _step_from_action(
             command_hint="npm run options:plan:fill-attempt-evidence-capture",
             next_operator_step=next_step or "Capture durable fill-attempt evidence for a fresh selection; do not turn it into a trade action.",
         )
+
+    if action_type == "bullish_pullback_layer_4_execution_safety_preflight":
+        step = _base_step(
+            step_id=f"execution_safety_preflight:{base_id}",
+            priority=34 + sequence,
+            step_type="bullish_pullback_layer_4_execution_safety_preflight",
+            title="Resolve bullish-pullback execution-safety preflight",
+            status=_norm(action.get("status")) or "blocked_execution_safety_preflight",
+            source_artifact=source_artifact,
+            lane_id=lane_id,
+            ticker=ticker,
+            candidate_id=candidate_id,
+            reason_codes=reasons,
+            market_window_required=False,
+            requires_exact_entry_evidence=True,
+            requires_exact_exit_evidence=True,
+            requires_operator_review=True,
+            command_hint="npm run options:audit:bullish-pullback-layer-execution-safety",
+            next_operator_step=next_step
+            or "Resolve leg-level bid/ask execution-safety blockers before market-window paper-shadow collection.",
+        )
+        step.update(
+            {
+                "selected_layer_id": action.get("selected_layer_id"),
+                "selected_variant_id": action.get("selected_variant_id"),
+                "source_result_path": action.get("source_result_path"),
+                "execution_safety_audit_status": action.get("execution_safety_audit_status"),
+                "execution_safety_row_counts": action.get("execution_safety_row_counts"),
+                "fatal_reason_counts": action.get("fatal_reason_counts"),
+                "preflight_requirements": action.get("preflight_requirements"),
+                "leg_level_bid_ask_audit_required": bool(action.get("leg_level_bid_ask_audit_required")),
+                "assignment_expiration_risk_review_required": bool(action.get("assignment_expiration_risk_review_required")),
+                "denominator_failure_row_handling_required": bool(action.get("denominator_failure_row_handling_required")),
+            }
+        )
+        return step
+
+    if action_type == "prepare_bullish_pullback_layer_shadow_harness":
+        status = "blocked_by_open_risk" if open_risk_blocked else _market_wait_status(market_window_status)
+        step = _base_step(
+            step_id=f"layer_shadow_harness:{base_id}",
+            priority=35 + sequence,
+            step_type="prepare_bullish_pullback_layer_shadow_harness",
+            title="Prepare bullish-pullback layer-shadow harness",
+            status=status,
+            source_artifact=source_artifact,
+            lane_id=lane_id,
+            ticker=ticker,
+            candidate_id=candidate_id,
+            reason_codes=reasons,
+            market_window_required=True,
+            requires_exact_entry_evidence=True,
+            requires_exact_exit_evidence=True,
+            requires_operator_review=True,
+            command_hint="npm run options:plan:bullish-pullback-layer-shadow",
+            next_operator_step=next_step
+            or "Use the selected bullish-pullback layer only for future natural paper-shadow evidence collection.",
+        )
+        step.update(
+            {
+                "selected_layer_id": action.get("selected_layer_id"),
+                "selected_variant_id": action.get("selected_variant_id"),
+                "source_result_path": action.get("source_result_path"),
+                "allowed_symbols": _as_list(action.get("allowed_symbols")),
+                "harness_requirements": action.get("harness_requirements"),
+                "leg_level_bid_ask_audit_required": bool(action.get("leg_level_bid_ask_audit_required")),
+                "assignment_expiration_risk_review_required": bool(action.get("assignment_expiration_risk_review_required")),
+                "denominator_failure_row_handling_required": bool(action.get("denominator_failure_row_handling_required")),
+            }
+        )
+        return step
+
+    if action_type == "bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval":
+        status = "blocked_by_open_risk" if open_risk_blocked else "waiting_for_market_window_and_operator_approval"
+        step = _base_step(
+            step_id=f"layer4_forward_capture_protocol:{base_id}",
+            priority=36 + sequence,
+            step_type="bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval",
+            title="Use bullish-pullback layer4 forward capture protocol",
+            status=status,
+            source_artifact=source_artifact,
+            lane_id=lane_id,
+            ticker=ticker,
+            candidate_id=candidate_id,
+            reason_codes=reasons,
+            market_window_required=True,
+            requires_exact_entry_evidence=True,
+            requires_exact_exit_evidence=True,
+            requires_operator_review=True,
+            command_hint="npm run options:plan:bullish-pullback-layer4-forward-capture",
+            next_operator_step=next_step
+            or "Validate future natural paper-shadow denominator rows only after a valid market-data window and separate operator approval.",
+        )
+        step.update(
+            {
+                "selected_layer_id": action.get("selected_layer_id"),
+                "selected_variant_id": action.get("selected_variant_id"),
+                "source_result_path": action.get("source_result_path"),
+                "allowed_symbols": _as_list(action.get("allowed_symbols")),
+                "capture_protocol_status": action.get("capture_protocol_status"),
+                "historical_executable_economics": action.get("historical_executable_economics"),
+                "protocol_requirements": action.get("protocol_requirements"),
+                "candidate_validator_read_only": bool(action.get("candidate_validator_read_only")),
+                "cohort_append_performed": bool(action.get("cohort_append_performed")),
+            }
+        )
+        return step
 
     if action_type == "refresh_suggested_trade_review":
         return _base_step(
@@ -499,7 +673,7 @@ def _overall_status(source_artifacts: dict[str, dict[str, Any]], steps: list[dic
     statuses = {step.get("status") for step in evidence_steps}
     if statuses == {"waiting_for_fresh_candidate"}:
         return "blocked_no_evidence_actions"
-    if "waiting_for_market_window" in statuses:
+    if "waiting_for_market_window" in statuses or "waiting_for_market_window_and_operator_approval" in statuses:
         return "waiting_for_market_window"
     if statuses <= {"waiting_for_policy_exit", "repair_only", "blocked_by_no_chase"}:
         return "waiting_for_policy_exit"
@@ -570,11 +744,11 @@ def build_report(
     steps = sorted(steps, key=lambda item: (int(item.get("priority") or 99), _norm(item.get("step_id"))))
     status_counts = Counter(step.get("status") for step in steps)
     type_counts = Counter(step.get("step_type") for step in steps)
-    blocked_actions = [step for step in steps if _norm(step.get("status")).startswith("blocked_by_")]
+    blocked_actions = [step for step in steps if _norm(step.get("status")).startswith("blocked")]
     waiting_actions = [
         step
         for step in steps
-        if step.get("status") in {"waiting_for_market_window", "waiting_for_policy_exit", "waiting_for_fresh_candidate"}
+        if step.get("status") in {"waiting_for_market_window", "waiting_for_market_window_and_operator_approval", "waiting_for_policy_exit", "waiting_for_fresh_candidate"}
     ]
     review_only_actions = [step for step in steps if step.get("status") == "review_only"]
 
@@ -667,7 +841,7 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     steps = _as_list(report.get("checklist_steps"))
     ready = [step for step in steps if step.get("status") in {"ready", "ready_for_market_window"}]
-    waiting_market = [step for step in steps if step.get("status") == "waiting_for_market_window"]
+    waiting_market = [step for step in steps if step.get("status") in {"waiting_for_market_window", "waiting_for_market_window_and_operator_approval"}]
     waiting_exit = [step for step in steps if step.get("status") == "waiting_for_policy_exit"]
     review_only = [step for step in steps if step.get("status") == "review_only"]
     fill_attempt = [step for step in steps if step.get("step_type") == "capture_fill_attempt_evidence"]

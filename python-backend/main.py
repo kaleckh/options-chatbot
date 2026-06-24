@@ -298,6 +298,9 @@ _LAST_RESULTS_CACHE: dict[tuple[Any, ...], Any] = {}
 _FORWARD_EVIDENCE_REPORT_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 _READONLY_REPORT_OUTPUT_CACHE: dict[tuple[Any, ...], Any] = {}
 _OPTIONS_PROFIT_SYMBOLS = ("SPY", "QQQ")
+_CURRENT_POLICY_HISTORICAL_PICKS_PATH = (
+    Path(ROOT_DIR) / "data" / "forward-tracking" / "current_policy_historical_picks_latest.json"
+)
 _SHARE_SAFE_REVIEW_MAX_AGE = timedelta(minutes=15)
 _ROUTE_CONTEXT = BackendRouteContext(globals())
 
@@ -333,6 +336,15 @@ def _read_json_artifact(path: Path) -> dict[str, Any] | None:
         return None
     except Exception:
         return None
+
+
+def _read_current_policy_historical_picks() -> dict[str, Any]:
+    try:
+        return json.loads(_CURRENT_POLICY_HISTORICAL_PICKS_PATH.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Current-policy historical picks artifact was not found.")
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Current-policy historical picks artifact is invalid JSON.") from exc
 
 
 def _default_profit_side_entry(symbol: str, direction: str) -> dict[str, Any]:
@@ -3755,6 +3767,17 @@ async def get_options_profit_status():
         return await _run_in_worker(_read_only_options_profit_status)
     except Exception as exc:
         raise _internal_server_error(exc, "get_options_profit_status")
+
+
+@app.get("/api/current-policy-historical-picks")
+async def get_current_policy_historical_picks():
+    """Return the latest read-only current-policy historical pick replay artifact."""
+    try:
+        return await _run_in_worker(_read_current_policy_historical_picks)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _internal_server_error(exc, "get_current_policy_historical_picks")
 
 
 @app.get("/api/proof-summary")

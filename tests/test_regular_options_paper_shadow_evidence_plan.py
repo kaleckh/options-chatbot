@@ -160,6 +160,96 @@ def _base_payloads(generated_at: str = NOW) -> dict[str, dict]:
                 }
             ],
         },
+        "bullish_pullback_layer_shadow_selection": {
+            "generated_at_utc": generated_at,
+            "overall_status": "layer_shadow_selection_ready",
+            "selection_ready": True,
+            "allowed_symbols": ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+            "target_truth": {
+                "preferred_target_exact_trades": 200,
+                "current_best_exact_trades": 130,
+                "gap_to_200": 70,
+                "honest_status": "not_reached",
+            },
+            "primary_harness_layer": {
+                "layer_id": "layer_4_clean_exact",
+                "variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                "source_result_path": "data/options-validation/runs/clean.json",
+                "metrics": {"exact_trade_count": 129, "profit_factor": 2.2},
+            },
+            "count_expanded_reference": {"layer_id": "layer_5_count_expanded"},
+            "high_pf_core_reference": {"layer_id": "layer_0_confidence_core_s_a_b"},
+            "harness_requirements": {
+                "selected_layer_id": "layer_4_clean_exact",
+                "selected_variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                "source_result_path": "data/options-validation/runs/clean.json",
+                "allowed_symbols": ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+            },
+        },
+        "bullish_pullback_layer_execution_safety_audit": {
+            "generated_at_utc": generated_at,
+            "report_id": "bullish_pullback_layer_execution_safety_audit",
+            "overall_status": "blocked_execution_safety_preflight",
+            "preflight_ready": False,
+            "selected_layer": {
+                "layer_id": "layer_4_clean_exact",
+                "variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                "source_result_path": "data/options-validation/runs/clean.json",
+            },
+            "row_counts": {
+                "total_selected_rows": 129,
+                "rows_with_leg_level_entry_bid_ask": 0,
+                "rows_with_leg_level_exit_bid_ask": 0,
+                "rows_with_side_aware_entry_price": 0,
+                "rows_with_side_aware_exit_price": 0,
+                "rows_with_assignment_expiration_classification": 129,
+                "rows_missing_policy_exit_condition": 0,
+                "zero_bid_or_untradable_rows": 0,
+                "crossed_or_missing_quote_rows": 129,
+                "fatal_blocker_count": 129,
+            },
+            "fatal_reason_counts": {"missing_leg_level_entry_bid_ask": 129},
+            "blockers": ["source_run_missing_leg_level_entry_bid_ask"],
+            "preflight_requirements": {"leg_level_bid_ask_audit_required": True},
+        },
+        "bullish_pullback_layer4_forward_capture_protocol": {
+            "generated_at_utc": generated_at,
+            "report_id": "bullish_pullback_layer4_forward_capture_protocol",
+            "capture_protocol_status": "protocol_ready_waiting_for_market_window_and_operator_approval",
+            "overall_status": "protocol_ready_waiting_for_market_window_and_operator_approval",
+            "selected_harness": {
+                "lane_id": "bullish_pullback_observation",
+                "layer_id": "layer_4_clean_exact",
+                "variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1",
+                "source_result_path": "data/options-validation/runs/clean.json",
+                "allowed_symbols": ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"],
+            },
+            "historical_executable_economics": {
+                "status": "executable_economics_recomputed_profitable_but_preflight_blocked",
+                "historical_side_aware_pf": 3.7414,
+                "historical_side_aware_pf_lb_5pct": 2.27,
+                "tradable_executable_rows": 120,
+            },
+            "protocol_requirements": {"full_denominator_logging_required": True},
+            "candidate_validator_read_only": True,
+            "cohort_append_performed": False,
+        },
+        "regular_options_market_window_approval_preflight": {
+            "generated_at_utc": generated_at,
+            "report_id": "regular_options_market_window_approval_preflight",
+            "overall_status": "blocked_market_closed",
+            "read_only": True,
+            "append_allowed": False,
+            "cohort_append_performed": False,
+            "broker_order_allowed": False,
+            "live_entry_allowed": False,
+            "auto_track_allowed": False,
+            "promotion_ready": False,
+            "market_window_status": "market_closed",
+            "market_window_valid": False,
+            "operator_approval_granted": False,
+            "next_operator_action": "wait_for_valid_market_window_then_run_preflight_again",
+        },
     }
 
 
@@ -178,6 +268,10 @@ def _write_sources(root: Path, payloads: dict[str, dict] | None = None) -> dict[
         "suggested_close_risk_path": root / "suggested-risk.json",
         "paper_shortlist_path": root / "paper-shortlist.json",
         "profit_capture_queue_path": root / "profit-queue.json",
+        "bullish_pullback_layer_shadow_selection_path": root / "bullish-layer-shadow.json",
+        "bullish_pullback_layer_execution_safety_audit_path": root / "bullish-execution-safety.json",
+        "bullish_pullback_layer4_forward_capture_protocol_path": root / "bullish-layer4-protocol.json",
+        "market_window_approval_preflight_path": root / "market-window-approval-preflight.json",
     }
     key_map = {
         "trade_qualification_path": "trade_qualification",
@@ -192,6 +286,10 @@ def _write_sources(root: Path, payloads: dict[str, dict] | None = None) -> dict[
         "suggested_close_risk_path": "suggested_trade_close_risk",
         "paper_shortlist_path": "paper_shortlist",
         "profit_capture_queue_path": "profit_capture_queue",
+        "bullish_pullback_layer_shadow_selection_path": "bullish_pullback_layer_shadow_selection",
+        "bullish_pullback_layer_execution_safety_audit_path": "bullish_pullback_layer_execution_safety_audit",
+        "bullish_pullback_layer4_forward_capture_protocol_path": "bullish_pullback_layer4_forward_capture_protocol",
+        "market_window_approval_preflight_path": "regular_options_market_window_approval_preflight",
     }
     for arg_name, path in paths.items():
         key = key_map[arg_name]
@@ -282,6 +380,69 @@ class RegularOptionsPaperShadowEvidencePlanTests(unittest.TestCase):
         self.assertEqual(suggested_actions[0]["status"], "review_only")
         self.assertFalse(suggested_actions[0]["is_trade_recommendation"])
 
+    def test_layer_shadow_selection_becomes_future_harness_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        harness_actions = [
+            row
+            for row in report["operator_actions"]
+            if row["action_type"] == "prepare_bullish_pullback_layer_shadow_harness"
+        ]
+        self.assertEqual(len(harness_actions), 1)
+        action = harness_actions[0]
+        self.assertEqual(action["selected_layer_id"], "layer_4_clean_exact")
+        self.assertEqual(action["status"], "waiting_for_market_window")
+        self.assertTrue(action["requires_exact_entry_evidence"])
+        self.assertTrue(action["requires_exact_exit_evidence"])
+        self.assertTrue(action["leg_level_bid_ask_audit_required"])
+        self.assertEqual(action["allowed_symbols"], ["IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM"])
+        self.assertFalse(action["is_trade_recommendation"])
+
+    def test_execution_safety_audit_becomes_blocked_preflight_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        actions = [
+            row
+            for row in report["operator_actions"]
+            if row["action_type"] == "bullish_pullback_layer_4_execution_safety_preflight"
+        ]
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["status"], "blocked_execution_safety_preflight")
+        self.assertFalse(action["market_window_required"])
+        self.assertEqual(action["selected_layer_id"], "layer_4_clean_exact")
+        self.assertEqual(action["execution_safety_row_counts"]["fatal_blocker_count"], 129)
+        self.assertIn("source_run_missing_leg_level_entry_bid_ask", action["reason_codes"])
+        self.assertFalse(action["is_trade_recommendation"])
+
+    def test_layer4_forward_capture_protocol_becomes_approval_wait_action(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        actions = [
+            row
+            for row in report["operator_actions"]
+            if row["action_type"] == "bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval"
+        ]
+        self.assertEqual(len(actions), 1)
+        action = actions[0]
+        self.assertEqual(action["status"], "waiting_for_market_window_and_operator_approval")
+        self.assertEqual(action["selected_layer_id"], "layer_4_clean_exact")
+        self.assertTrue(action["candidate_validator_read_only"])
+        self.assertFalse(action["cohort_append_performed"])
+        self.assertFalse(action["is_trade_recommendation"])
+
+    def test_market_window_approval_preflight_is_loaded_as_operator_surface_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            report = self._build(Path(temp_dir))
+
+        source = report["source_artifacts"]["regular_options_market_window_approval_preflight"]
+        self.assertEqual(source["status"], "loaded")
+        self.assertEqual(report["regular_options_market_window_approval_preflight"]["overall_status"], "blocked_market_closed")
+        self.assertFalse(report["regular_options_market_window_approval_preflight"]["append_allowed"])
+
     def test_quarantined_lane_becomes_no_chase_quarantine(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             report = self._build(Path(temp_dir))
@@ -297,6 +458,9 @@ class RegularOptionsPaperShadowEvidencePlanTests(unittest.TestCase):
             payloads["fill_attempt_evidence_capture_plan"]["plan_rows"] = []
             payloads["suggested_trade_review_plan"]["plan_rows"] = []
             payloads["profit_capture_queue"]["evidence_repair_queue"] = []
+            payloads.pop("bullish_pullback_layer_shadow_selection")
+            payloads.pop("bullish_pullback_layer_execution_safety_audit")
+            payloads.pop("bullish_pullback_layer4_forward_capture_protocol")
             payloads["trade_qualification"]["lane_decisions"] = [
                 {
                     "lane_id": "paper_lane",

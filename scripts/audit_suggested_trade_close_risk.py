@@ -156,9 +156,12 @@ def _detail(row: dict[str, Any], *, now: datetime, stale_hours: float) -> dict[s
     return {
         "id": row.get("id"),
         "ticker": row.get("ticker"),
+        "contract_symbol": row.get("contract_symbol") or _source(row).get("contract_symbol"),
         "lane": canonical_lane(row),
         "record_class": _record_class(row),
         "status": row.get("status"),
+        "expiry": row.get("expiry"),
+        "filled_at": row.get("filled_at"),
         "action_bucket": action_bucket,
         "evidence_bucket": evidence_bucket,
         "last_reviewed_at": row.get("last_reviewed_at") or (review or {}).get("reviewed_at"),

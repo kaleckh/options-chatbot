@@ -1,0 +1,268 @@
+{
+"anti_handwave_audit": {
+"exact_next_action_present": true,
+"generic_advice_removed": true,
+"measurable_threshold_present": true
+},
+"assumption_challenges": [
+{
+"assumption": "The ready VIX repair packet should not be rerun; the next VIX step is a real tokened source import/materialization.",
+"risk": "Selecting another VIX packet would be duplicate work; selecting VIX import without an operator-supplied official CSV and explicit token would violate the import boundary.",
+"verification": "Park the VIX packet as ready-for-import-decision and ask the exact VIX import question; choose a safe read-only fallback until the source file and token approval exist."
+},
+{
+"assumption": "A macro-event calendar source packet is still a meaningful upgrade, not dashboard polish.",
+"risk": "A generic event-source report would not move toward 30 strict rows.",
+"verification": "The artifact must define a parser, required event categories, known-at policy, future tokened import manifest, downstream replay-readiness implications, and pass/fail gates for macro-event and post-event IV-crush branches."
+},
+{
+"assumption": "Scheduled macro events can be point-in-time safe.",
+"risk": "Using event surprises, revised labels, after-release outcomes, or same-day hindsight would leak information.",
+"verification": "Only scheduled event timestamps and source-published/known-at metadata may be eligible; no surprise, actual, consensus, market reaction, or post-event label can be used for candidate generation."
+},
+{
+"assumption": "Macro-event work should be selected before another flow/dispersion/PMCC retry.",
+"risk": "PMCC remains blocked by trend/regime, VIX, and long-DTE quote surface; flow and dispersion remain blocked by missing source rows.",
+"verification": "Select the macro-event source packet because its smallest blocker is explicitly macro_event_calendar_source_missing, while VIX is already at import-decision state and PMCC/flow/dispersion should not repeat without new source artifacts."
+},
+{
+"assumption": "Stop is not earned.",
+"risk": "Stopping while a named source-family blocker can still be converted into a concrete import/replay gate would violate the loop’s stop-is-exceptional rule.",
+"verification": "Continue only with one bounded source-packet slice; if it cannot define a safe macro-event source/import path, park macro-event source repair and then reconsider remaining source families."
+}
+],
+"branches_to_stop": [
+"direct_point_in_time_vix_source_repair_packet_v1",
+"direct_vix_packet_rerun_without_operator_csv_or_import_token",
+"scoped_59_symbol_thetadata_opra_nbbo_import_resume_and_split_audit_v2_until_thetaterminal_or_source_availability_changes",
+"frozen_13_symbol_candidate_generation_engine_daily_diagnostics_v1_until_real_reusable_frozen_entrypoint_exists",
+"13_symbol_frozen_candidate_generation_denominator_v2_without_new_engine",
+"13_symbol_frozen_candidate_generation_source_surface_without_new_engine",
+"13_symbol_candidate_generation_surface_audit_without_new_engine",
+"quote_depth_only_month_counting",
+"phase2_forward_paper_shadow_market_window_capture_append_v1_until_new_same_day_phase2_natural_selections_exist",
+"fresh_forward_append_without_candidate_jsonl_or_append_allowed_true",
+"momentum_continuation_bounded_replay_without_new_point_in_time_vix_breadth_or_source_inputs",
+"pmcc_diagonal_replay_without_trend_vix_and_long_dte_surface",
+"flow_extreme_ratio_backspread_without_trusted_flow_and_vix_source",
+"flow_extreme_volume_oi_source_rows_without_new_trusted_flow_source",
+"vrp_credit_spread_without_vix_pricing_engine_quote_surface_and_protected_holdout_guard",
+"term_structure_calendar_without_calendar_pricing_term_inputs_and_quote_surface",
+"skew_broken_wing_without_new_source_or_readiness_artifact",
+"dispersion_proxy_hybrid_without_dispersion_proxy_and_vix_source",
+"all_local_quote_surface_replayability_without_new_quote_depth_or_source_state",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof",
+"dashboard_only_visibility_branches"
+],
+"burden_of_proof_check": {
+"current_forward_rows": 0,
+"reason": "Stop is not earned. The loop remains at 0/30 strict post-freeze completed rows, with live, auto-track, broker, and promotion flags false; the historical frontier still has 44 candidates, 0 countable throughput candidates, 157 base rows, and a 43-row strict-new gap. Macro-event branches are explicitly blocked on macro_event_calendar_source_missing, while VIX is now at import-decision state rather than replay-ready. The loop contract requires considering scoped source repair, new causal branches, and new option structures before stop_exception. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+ 
+
+Pasted text
+
+",
+"stop_allowed": false,
+"target_profitable_strict_completed_rows": 30
+},
+"candidate_branches": [
+{
+"branch": "macro_event_calendar_source_repair_packet_v1",
+"expected_value": "High. It attacks a named source blocker for macro-event long strangles and post-event IV-crush structures without live trading, broker action, quote import, evidence mutation, protected holdout, or replay.",
+"main_uncertainty": "Whether an operator-supplied official macro-event calendar can later cover CPI, FOMC minutes, FOMC rate decisions, nonfarm payrolls, PCE, and scheduled Fed Chair testimony with known-at-safe timestamps.",
+"why_not_selected": null,
+"frozen_rule": "Create a read-only parser/manifest packet only. Future candidate rules may use scheduled event timestamps known before entry, but no surprise/outcome fields.",
+"eligible_universe": "Future event-volatility branches only: SPY, QQQ, IWM, DIA for long straddles/strangles and post-event IV-crush iron condors/iron butterflies.",
+"inclusion_exclusion_rules": "Include scheduled CPI, FOMC minutes, FOMC rate decisions, nonfarm payrolls, PCE, and scheduled Fed Chair testimony. Exclude actual-vs-consensus surprise, market reaction, revised labels, discretionary manual tags, and unknown-source rows.",
+"leakage_controls": "Event row must have source_published_at_utc and known_at_utc no later than the planned candidate decision time. Same-day entries are allowed only if the event schedule was known before the entry timestamp.",
+"required_data_repairs": "Future tokened macro-event calendar import/materialization from an official or explicitly approved source file; not performed in this task.",
+"minimum_sample_size": "Future replay cannot matter unless event-sourced candidates produce latest-four exact completed rows >=30 and full-window exact rows >=200 where a historical throughput claim is made.",
+"profitability_thresholds": "Future replay still requires net USD P&L >0, PF >=1.20, 5% bootstrap PF lower bound >1.00, stress PF >=1.05, selected_non_executable_rows=0, unpriced_rows=0, zero_bid_selected_rows=0, and concentration below active thresholds.",
+"falsification_result": "Park this source family if no safe schema, category coverage rule, known-at policy, and future tokened import manifest can be defined without leakage."
+},
+{
+"branch": "direct_point_in_time_vix_source_import_materialization_v1",
+"expected_value": "Very high if an official daily VIX CSV is supplied and explicit tokened import is approved, because VIX blocks momentum, PMCC, VRP, macro-event, flow, and dispersion branches.",
+"main_uncertainty": "Requires a real official/operator-supplied VIX CSV and exact import/materialization approval; no replay can run until a real point-in-time VIX source artifact exists.",
+"why_not_selected": "Not selected as the immediate Codex task because it requires a source file and explicit import/materialization approval. The safe fallback is a read-only macro-event source packet.",
+"frozen_rule": "Prior regular-session VIX close only; low <15, mid 15-25, high >25; same-day VIX close cannot be used for same-day entry.",
+"eligible_universe": "SPY, QQQ, IWM, DIA and VIX-dependent index/ETF branches.",
+"inclusion_exclusion_rules": "Direct VIX daily observations only; exclude IV proxies and quote-depth proxies.",
+"leakage_controls": "VIX close for date D tradable no earlier than next regular session.",
+"required_data_repairs": "Tokened import/materialization from data/import-staging/vix/cboe_vix_daily_history.csv.",
+"minimum_sample_size": "Future source must cover >=90% of target dates and latest-four dates with at least 252 prior observations for diagnostics.",
+"profitability_thresholds": "No profitability threshold for source import; downstream replay gates unchanged.",
+"falsification_result": "Park if source file is absent, coverage <90%, known-at unsafe, or leakage rejects >0."
+},
+{
+"branch": "fresh_forward_paper_shadow_capture_retry",
+"expected_value": "Highest direct proof value if real same-day Phase 2 natural selections exist, because only fresh post-freeze completed exact rows can become forward proof.",
+"main_uncertainty": "The latest valid-window capture staged 0 rows and wrote no candidate JSONL.",
+"why_not_selected": "Not selected until new same-day Phase 2 natural selections exist; repeating an empty capture is not a significant upgrade.",
+"frozen_rule": "Existing Phase 2 frozen cohort only; append only real same-day market-window rows with append_allowed=true.",
+"eligible_universe": "Frozen Phase 2 lanes and symbols from forward-cohort preregistration.",
+"inclusion_exclusion_rules": "Reject stale, fixture, pre-freeze, non-frozen-lane, non-preregistered-symbol, duplicate, and unknown-denominator rows.",
+"leakage_controls": "Market-window capture only; no historical rows.",
+"required_data_repairs": "None if natural selections exist; append remains guarded.",
+"minimum_sample_size": "30 strict completed post-freeze rows.",
+"profitability_thresholds": "Net USD P&L >0, PF >1.0, 5% bootstrap PF lower bound >1.0.",
+"falsification_result": "Repeated zero natural selections keeps branch parked until new same-day scan picks exist."
+},
+{
+"branch": "flow_extreme_trusted_flow_source_repair_packet_v1",
+"expected_value": "Medium. Flow-extreme ratio/backspread has pricing and dedupe capability ready, but no trusted flow source rows.",
+"main_uncertainty": "Trusted volume/open-interest rows are null locally, and bid/ask cannot be relabeled as flow.",
+"why_not_selected": "Not selected before macro-event because macro-event source repair has a clearer category schema and supports two event-volatility playbooks.",
+"frozen_rule": "Use prior trusted volume/open-interest or bid/ask-size imbalance only; no plain bid/ask availability as flow.",
+"eligible_universe": "SPY and QQQ flow-extreme branches.",
+"inclusion_exclusion_rules": "Include only trusted point-in-time flow fields; exclude null volume/OI and quote depth fabrication.",
+"leakage_controls": "Prior source date strictly before input date.",
+"required_data_repairs": "Future trusted flow source import or data-trust decision.",
+"minimum_sample_size": "20 train months, 4 latest months, >=30 latest-four exact rows after replay.",
+"profitability_thresholds": "PF/lower-bound/stress/execution gates unchanged.",
+"falsification_result": "Park if no trusted source can produce >=90% date coverage."
+}
+],
+"continue_loop": true,
+"next_codex_task": {
+"objective": "Implement a read-only macro-event calendar source repair packet and parser/known-at validator that converts the macro_event_calendar_source_missing blocker into an exact future import/materialization decision. Do not import event rows or run replay in this task.",
+"exact_scope": "Research-only generated artifacts and tests. Build a source packet for scheduled macro-event calendar rows covering 2024-06-01 through 2026-05-31 as of 2026-06-04, with required categories CPI, FOMC minutes, FOMC rate decision, nonfarm payrolls, PCE, and scheduled Fed Chair testimony. The task may add parser/validator code, fixture CSVs, future import manifest templates, docs, and JSON artifacts. It must not import data, mutate options_history.db, mutate evidence stores, consume protected holdout, run P&L replay, create trades, enable live validation, enable auto-track, touch broker/order paths, change scanner/strategy/stops/sizing/proof bars, or promote any lane.",
+"implementation_steps": [
+"Add scripts/build_regular_options_macro_event_calendar_source_repair_packet.py.",
+"Add tests/test_regular_options_macro_event_calendar_source_repair_packet.py.",
+"Add package.json script options:source-plan:macro-event-calendar.",
+"Create tests/fixtures/macro_events/macro_event_calendar_sample.csv with representative rows for cpi, fomc_minutes, fomc_rate_decision, nonfarm_payrolls, pce, and scheduled_fed_chair_testimony, including at least one before-market event, one during-market event, one after-market event, and one holiday/weekend-adjacent case.",
+"Load current artifacts: data/forward-tracking/options_oracle_profit_loop_packet_latest.json, data/profitability-lab/regular-options-macro-event-calendar/latest.json, data/profitability-lab/regular-options-macro-event-long-strangle-replay-readiness/latest.json, data/profitability-lab/regular-options-preregistered-macro-event-long-strangle-playbook/latest.json, data/profitability-lab/regular-options-preregistered-post-event-iv-crush-iron-condor-playbook/latest.json, data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.json, and data/contracts/forward-holdout-contract.json.",
+"Reproduce baseline: current_forward_rows=0, target_forward_rows=30, macro_event_calendar_status=blocked_macro_event_calendar_source_missing, event_count=0, covered_categories=[], missing_categories include cpi, fomc_minutes, fomc_rate_decision, nonfarm_payrolls, pce, scheduled_fed_chair_testimony, macro_event_long_strangle_status=blocked_macro_event_long_strangle_replay_readiness, accepted_profitability=false.",
+"Define source family scheduled_macro_event_calendar_v1 with required fields: event_id, event_category, scheduled_event_datetime_et, event_window_type, source_name, source_url_or_file_name, source_file_hash, source_row_hash, source_published_at_utc, known_at_utc, tradable_after_et, source_batch_id, revision_status, and proof_exclusion_reason.",
+"Define allowed event categories exactly: cpi, fomc_minutes, fomc_rate_decision, nonfarm_payrolls, pce, scheduled_fed_chair_testimony.",
+"Define known-at policy: scheduled event rows are usable only if source_published_at_utc and known_at_utc are no later than the candidate decision timestamp; actual, surprise, consensus, revised-value, and market-reaction fields are not eligible for candidate generation.",
+"Define tradable-after policy: before-market events may be known for same-day post-open decisions only if known_at precedes entry; during-market events may be used only for decisions after the scheduled release timestamp; after-market events are tradable no earlier than the next regular session.",
+"Validate fixture parsing, category normalization, timestamp timezone handling, event-window classification, source hash calculation, known-at/tradable-after derivation, duplicate event_id rejection, and leakage rejection.",
+"Emit a future import manifest template for an operator-supplied source file at data/import-staging/macro_events/macro_event_calendar.csv, but do not require that file to exist for this planning task.",
+"Emit the exact future tokened import/materialization command and downstream readiness commands, all marked not_run_by_this_task.",
+"Compute readiness implications: list macro_event_long_strangle and post_event_iv_crush_iron_condor as event-calendar-dependent branches, list VIX as a remaining blocker where applicable, and list which blockers would clear if a future event source passes coverage and known-at gates.",
+"Generate docs/regular-options-macro-event-calendar-source-repair-packet.md, data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/latest.json, latest.md, future_import_manifest_template.json, and parser_fixture_validation.json.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md with durable status and future approval gates only."
+],
+"allowed_files_or_artifacts": [
+"scripts/build_regular_options_macro_event_calendar_source_repair_packet.py",
+"tests/test_regular_options_macro_event_calendar_source_repair_packet.py",
+"tests/fixtures/macro_events/macro_event_calendar_sample.csv",
+"docs/regular-options-macro-event-calendar-source-repair-packet.md",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/latest.json",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/latest.md",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/future_import_manifest_template.json",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/parser_fixture_validation.json",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"data/profitability-lab/regular-options-macro-event-calendar/latest.json",
+"data/profitability-lab/regular-options-macro-event-long-strangle-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-preregistered-macro-event-long-strangle-playbook/latest.json",
+"data/profitability-lab/regular-options-preregistered-post-event-iv-crush-iron-condor-playbook/latest.json",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.json",
+"data/contracts/forward-holdout-contract.json",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-macro-event-calendar-source-repair-packet.md",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/latest.json",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/latest.md",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/future_import_manifest_template.json",
+"data/profitability-lab/regular-options-macro-event-calendar-source-repair-packet/parser_fixture_validation.json"
+],
+"commands_to_run": [
+"npm run options:source-plan:macro-event-calendar -- --target-start-date 2024-06-01 --target-end-date 2026-05-31 --as-of-date 2026-06-04 --required-categories cpi,fomc_minutes,fomc_rate_decision,nonfarm_payrolls,pce,scheduled_fed_chair_testimony --no-import --json",
+"uv run --locked python -m py_compile scripts/build_regular_options_macro_event_calendar_source_repair_packet.py tests/test_regular_options_macro_event_calendar_source_repair_packet.py",
+"uv run --locked python -m unittest tests.test_regular_options_macro_event_calendar_source_repair_packet -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Report status is one of macro_event_calendar_source_repair_packet_ready_for_operator_import_decision or blocked_macro_event_calendar_source_repair_packet.",
+"Report reproduces baseline: current_forward_rows=0, target_forward_rows=30, macro_event_calendar_status=blocked_macro_event_calendar_source_missing, event_count=0, covered_categories=[], missing_required_categories include cpi, fomc_minutes, fomc_rate_decision, nonfarm_payrolls, pce, scheduled_fed_chair_testimony, accepted_profitability=false, historical_rows_are_forward_proof=false.",
+"Report identifies downstream branches: low_mid_vix_macro_event_long_strangle_v1 and post_event_iv_crush_index_iron_condor_v1, including remaining non-event blockers for each.",
+"Report defines scheduled_macro_event_calendar_v1 required schema with event_id, event_category, scheduled_event_datetime_et, event_window_type, source_name, source_url_or_file_name, source_file_hash, source_row_hash, source_published_at_utc, known_at_utc, tradable_after_et, source_batch_id, revision_status, and proof_exclusion_reason.",
+"Allowed categories are frozen exactly to cpi, fomc_minutes, fomc_rate_decision, nonfarm_payrolls, pce, and scheduled_fed_chair_testimony.",
+"Known-at policy must reject rows whose source_published_at_utc or known_at_utc is after candidate decision time.",
+"Parser must reject actual, consensus, surprise, revised-value, market-reaction, or P&L outcome fields as candidate-generation inputs.",
+"Future import readiness requires required_fields_present=true, known_at_safe=true, leakage_reject_count=0, protected_holdout_overlap_rows=0, all required categories present, monthly category coverage >=90% for CPI/NFP/PCE, latest-four coverage for CPI/NFP/PCE in 2026-02 through 2026-05, and explicit handling of FOMC/Fed testimony schedule sparsity.",
+"Generated packet must include future tokened import command with required token APPROVE_MACRO_EVENT_CALENDAR_SOURCE_IMPORT and future_import_command_executed=false.",
+"Generated packet must include downstream readiness commands for macro-event long strangle and post-event IV-crush iron condor, both marked not_run_by_this_task.",
+"No P&L replay is performed: p_l_replay_performed=false and realized_pnl_used_for_ranking=false.",
+"All safety flags remain false: quotes_imported=false, evidence_stores_mutated=false, protected_holdout_consumed=false, live_validation_enabled=false, auto_track_enabled=false, broker_order_allowed=false, promotion_ready=false, scanner_policy_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false.",
+"Tests prove fixture parser normalizes timestamps and categories, missing required fields fail, duplicate event_id fails, post-event outcome/surprise fields are excluded, known_at after decision time fails, after-market events become tradable next session, protected-holdout overlap blocks, future import command is generated but not executed, and no source rows are written."
+],
+"failure_criteria": [
+"Park as blocked_no_safe_macro_event_source_policy if the task cannot define required fields, categories, known-at policy, and tradable-after policy without leakage.",
+"Park as blocked_macro_event_parser_contract_unsafe if fixture parsing cannot enforce category normalization, source hashes, timezone handling, event-window classification, duplicate rejection, and known-at derivation.",
+"Park as blocked_macro_event_future_import_scope_unsafe if the future import manifest cannot lock source family, date window, categories, write target, no protected holdout, and token discipline.",
+"Park as blocked_macro_event_packet_only_no_downstream_value if the artifact cannot identify at least two event-calendar-dependent branches whose event-calendar blocker would be cleared by a valid future source.",
+"Fail as safety_violation if the task imports macro-event data, writes real source_rows.jsonl, mutates options_history.db, mutates evidence stores, consumes protected holdout, runs P&L replay, creates trades, prepares orders, enables live validation, enables auto-track, touches broker paths, changes scanner policy, changes strategy logic, changes stops/sizing/proof bars, lowers proof bars, or marks promotion_ready=true."
+],
+"forbidden_actions": [
+"broker orders",
+"order preparation",
+"live validation",
+"auto-track",
+"production scanner release",
+"production scanner policy changes",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"macro-event source import in this task",
+"direct VIX source import in this task",
+"options_history.db mutation",
+"evidence database mutation",
+"source_rows.jsonl write for real macro-event rows",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"P&L replay",
+"using event surprise, consensus miss/beat, realized move, IV crush outcome, or post-event drift as candidate-generation input",
+"using same-day after-release information before its scheduled release time",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead-only, zero-bid, or untradable marks as exact executable proof",
+"reclassifying zero-bid or untradable rows as missing provider data",
+"lowering the 90% executable quote-quality floor"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro. If the macro-event packet is ready, the next decision is the exact operator approval question for non-live tokened macro-event calendar import/materialization, or direct VIX import if that source file is supplied first. If the packet is blocked, park macro-event source repair and pivot to the next source family, likely trusted flow-source repair planning or direct VIX import if approved and supplied. Do not claim profitability or run macro-event/post-event replay branches until real point-in-time macro-event and required VIX source artifacts exist."
+},
+"operator_questions": [
+{
+"question": "Do you approve a future non-live tokened direct VIX source import/materialization from an operator-supplied official daily VIX CSV at data/import-staging/vix/cboe_vix_daily_history.csv, using approval token APPROVE_DIRECT_VIX_SOURCE_IMPORT, with no replay until coverage and known-at gates pass?",
+"why_it_matters": "The VIX packet is already ready for import decision, and a real VIX source would clear a shared blocker for momentum, PMCC, VRP, macro-event, flow, and dispersion branches.",
+"default_if_unanswered": "No. Continue the selected read-only macro-event source packet; do not import or materialize VIX rows."
+},
+{
+"question": "After the macro-event source packet is generated, do you approve a future non-live tokened macro-event calendar import/materialization from an official/operator-approved event calendar CSV at data/import-staging/macro_events/macro_event_calendar.csv?",
+"why_it_matters": "A real macro-event source is required before macro-event long-strangle or post-event IV-crush iron-condor replays can move from readiness blockers to bounded replay decisions.",
+"default_if_unanswered": "No. Packet generation is approved; future source import/materialization is not."
+}
+],
+"selected_branch_id": "macro_event_calendar_source_repair_packet_v1",
+"significant_upgrade_available": true,
+"verdict": "continue",
+"why_this_is_significant": "The project remains 0/30 forward-proof rows and not forward-audit profitable, while the historical surface has 0/44 countable throughput candidates. VIX packet generation is complete but now needs a real source file/import decision; the macro-event calendar blocker is still unresolved and directly blocks both event-volatility and post-event IV-crush option structures. This task opens a concrete, falsifiable source gate without live trading, broker action, import, evidence mutation, protected holdout, scanner changes, proof-bar changes, or promotion. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+}

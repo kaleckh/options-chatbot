@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260617T051109Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260621T172156Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260617T051109Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260621T172156Z.md"
   },
-  "generated_at_utc": "2026-06-17T05:11:09Z",
+  "generated_at_utc": "2026-06-21T17:21:56Z",
   "inputs": {
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-17T05:10:59Z",
+      "generated_at_utc": "2026-06-21T17:20:30Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -19,7 +19,7 @@
     "open_position_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-17T05:10:58Z",
+      "generated_at_utc": "2026-06-21T17:20:19Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "required": false,
       "status": "loaded"
@@ -27,7 +27,7 @@
     "paper_shortlist": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-17T05:10:57Z",
+      "generated_at_utc": "2026-06-21T17:21:47Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
       "required": false,
       "status": "loaded"
@@ -35,7 +35,7 @@
     "profit_capture_queue": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-17T05:10:49Z",
+      "generated_at_utc": "2026-06-21T17:21:48Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
       "required": false,
       "status": "loaded"
@@ -43,7 +43,7 @@
     "suggested_trade_close_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-17T05:10:43Z",
+      "generated_at_utc": "2026-06-21T16:47:57Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\suggested_trade_close_risk_latest.json",
       "required": false,
       "status": "loaded"
@@ -7465,7 +7465,7 @@
       }
     },
     "profit_capture_queue": {
-      "blocked_but_interesting_count": 3,
+      "blocked_but_interesting_count": 1,
       "evidence_repair_priority_counts": {
         "high": 16,
         "low": 43,
@@ -7473,12 +7473,12 @@
         "none": 15
       },
       "fresh_match_bridge_counts": {
-        "not_bridge_eligible": 5
+        "not_bridge_eligible": 1
       },
       "fresh_scan_guardrail_decision_counts": {
-        "blocked": 5
+        "blocked": 1
       },
-      "fresh_scan_match_count": 5,
+      "fresh_scan_match_count": 1,
       "high_priority_evidence_repair_count": 16,
       "live_policy_change": false,
       "quarantine_overlay_count": 5,
@@ -7492,7 +7492,7 @@
         "not_applicable": 43
       },
       "selection_readiness_counts": {
-        "blocked_guardrail_only": 5,
+        "blocked_guardrail_only": 1,
         "do_not_chase": 173,
         "paper_review_candidate": 15,
         "watch_repair_only": 82

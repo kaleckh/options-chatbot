@@ -1,0 +1,227 @@
+{
+"verdict": "continue",
+"continue_loop": true,
+"significant_upgrade_available": true,
+"selected_branch_id": "existing_repository_point_in_time_input_surface_atlas_v1",
+"burden_of_proof_check": {
+"current_forward_or_latest_four_strict_row_count": 0,
+"target_profitable_strict_completed_rows": 30,
+"stop_allowed": false,
+"why_stop_is_or_is_not_earned": "Stop is not earned yet. The fixed 13-symbol structure matrix and all-local all-minute quote atlas now park local quote-surface-only replayability under current trusted rows, but the remaining blocker class is broader: missing point-in-time input/source surfaces for trend, regime, VIX/volatility, flow, event, term-structure, dispersion, underlying/opening-bucket, and candidate-generation diagnostics. The loop packet still lists read-only new causal/source-surface generation as allowed, while current forward proof remains 0/30 and historical frontier has 44 variants with 0 countable throughput candidates, 157 base rows, and a 43 strict-new row gap. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+},
+"assumption_challenges": [
+{
+"assumption": "The repo may still contain unused point-in-time source surfaces even though specific VIX, flow, macro-event, dispersion, PMCC, opening-bucket, and quote-surface branches are blocked.",
+"risk": "If we assume no sources remain without a repo-wide proof inventory, we may stop prematurely despite existing files or DB columns that could support a new causal branch.",
+"verification": "Build a read-only atlas that inventories existing files, DB tables, source rows, known_at/as_of fields, coverage, leakage controls, and 20+4 month readiness for each missing input family."
+},
+{
+"assumption": "A source atlas is a significant upgrade, not dashboard polish.",
+"risk": "A visibility-only report would not move toward 30 strict completed rows.",
+"verification": "Require the artifact to emit either exactly one ready next branch with a bounded no-write command, or a stop_exception_candidate proving no research-only point-in-time input surface remains under current repository data."
+},
+{
+"assumption": "Derived proxy surfaces may be usable if they are point-in-time and preregistered honestly.",
+"risk": "Relabeling option IV, bid/ask, or quote availability as VIX, flow, event, or underlying price would create fake proof.",
+"verification": "The atlas must label direct sources separately from proxies, forbid relabeling proxies as canonical VIX/flow/events, and require a new causal playbook if only a proxy surface is found."
+},
+{
+"assumption": "Local quote-surface-only branches are now branch-exhausted, not globally exhaustive of all research.",
+"risk": "Another replay over the same existing quote surface would likely repeat insufficient train-month or missing-source blockers.",
+"verification": "The next task must not run another replay; it must only validate whether a different point-in-time input surface exists without import, mutation, or holdout consumption."
+},
+{
+"assumption": "Fresh forward evidence remains the best eventual proof source but is not available as a no-mutation Codex task.",
+"risk": "Ignoring forward collection leaves the target at 0/30, but appending rows is still an evidence mutation requiring explicit approval and valid market-window rows.",
+"verification": "The atlas may report forward collection as approval_required, but must select a read-only fallback unless no such fallback remains."
+}
+],
+"branches_to_stop": [
+"all_local_stable_quote_minute_structure_capability_atlas_v1",
+"local_opra_nbbo_structure_capability_matrix_v1_with_13_symbol_fixed_buckets",
+"quote_surface_opening_range_reversal_vertical_v1_until_trusted_underlying_or_opening_bucket_source_changes",
+"quote_derived_synthetic_forward_opening_bucket_surface_v1_until_same_minute_call_put_pair_surface_changes",
+"13_symbol_frozen_candidate_generation_denominator_v2",
+"13_symbol_frozen_candidate_generation_source_surface",
+"13_symbol_candidate_generation_surface_audit",
+"13_symbol_no_write_runner_support_as_profitability_progress",
+"pmcc_diagonal_replay_readiness_audit_v1_until_point_in_time_trend_vix_or_long_dte_quote_surface_changes",
+"flow_extreme_ratio_backspread_replay_readiness_until_trusted_flow_input_and_vix_bucket_change",
+"flow_extreme_volume_oi_source_rows_until_trusted_volume_oi_source_changes",
+"point_in_time_flow_extreme_input_until_trusted_flow_source_exists",
+"macro_event_long_strangle_replay_readiness_until_macro_event_calendar_and_vix_source_change",
+"point_in_time_vix_bucket_until_vix_source_and_threshold_policy_change",
+"momentum_continuation_bounded_replay_until_point_in_time_breadth_spy_qqq_vix_inputs_change",
+"vrp_credit_spread_replay_readiness_until_pricing_engine_vix_bucket_quote_surface_and_holdout_guard_change",
+"term_structure_calendar_replay_readiness_until_calendar_pricing_term_structure_inputs_quote_surface_and_strict_new_dedupe_change",
+"skew_broken_wing_put_fly_readiness_until_new_source_or_readiness_artifact_changes_blocker",
+"dispersion_proxy_hybrid_replay_readiness_until_dispersion_proxy_inputs_vix_bucket_and_pair_engine_change",
+"dashboard_only_visibility_branches",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"current_regime_momentum_edge_raw_count_retesting",
+"sleeve_next_index_refill_v1_as_count_solution",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof"
+],
+"candidate_branches": [
+{
+"branch": "existing_repository_point_in_time_input_surface_atlas_v1",
+"expected_value": "High. It directly addresses the remaining named blocker class after quote-surface-only replayability was exhausted: missing point-in-time inputs. It can find an already-existing proof-safe input surface for a new bounded causal branch, or earn a much stronger stop_exception_candidate without quote import or mutation.",
+"main_uncertainty": "Whether any existing repository file or DB table has trustworthy known_at/as_of coverage for 20 train months, 4 latest audit months, and the required fields for a new causal branch.",
+"why_selected": "Selected because it validates a new source/input surface without repeating blocked VIX, flow, event, term, proxy, underlying, PMCC, or quote-surface replay branches."
+},
+{
+"branch": "fresh_forward_paper_shadow_collection",
+"expected_value": "Highest direct proof value because only fresh post-freeze strict completed rows can become forward proof.",
+"main_uncertainty": "Requires valid market-data window rows and cohort append approval; current proof count remains 0/30.",
+"why_selected": "Not selected for Codex implementation because appending candidate/cohort rows is evidence mutation and still requires separate explicit approval."
+},
+{
+"branch": "quote_import_or_new_historical_data_surface",
+"expected_value": "High if approved because it could clear missing underlying, VIX, event, flow, and train-month coverage blockers.",
+"main_uncertainty": "Changes the data surface and may invalidate branch-scoped stop verdicts.",
+"why_selected": "Not selected because quote import/new data surface is explicitly approval-required; the selected atlas is read-only."
+},
+{
+"branch": "same_type_vertical_or_single_leg_replay_on_current_local_surface",
+"expected_value": "Low after the all-local atlas, despite large latest-four raw opportunity depth.",
+"main_uncertainty": "The all-local atlas already found no replay-feasible surface under 20 train months, 4 latest months, 200 full-window opportunities, and 30 latest-four opportunities after gates.",
+"why_selected": "Not selected because it would repeat quote-surface-only replayability that is now parked under current trusted rows."
+},
+{
+"branch": "new_causal_playbook_generation_without_source_inventory",
+"expected_value": "Medium-low. It could create ideas but risks narrative churn.",
+"main_uncertainty": "Every recent causal branch has been blocked by missing source/input surfaces.",
+"why_selected": "Not selected because the source atlas is the prerequisite falsification slice before designing another playbook."
+}
+],
+"next_codex_task": {
+"objective": "Implement a read-only existing-repository point-in-time input/source surface atlas that inventories whether any already-present local artifact or DB table can clear a named missing-input blocker for a future bounded causal branch. The atlas must not run a replay, compute accepted profitability, import quotes, mutate evidence, consume protected holdout, or promote any lane.",
+"exact_scope": "Read-only scan of existing repository artifacts and data/options-validation/options_history.db for 2024-06-01 through 2026-05-31 as of 2026-06-04. Input families to inventory: underlying/opening-bucket prices and returns, trend/regime, VIX or volatility-regime direct sources, option-IV-derived volatility proxies, flow/liquidity pressure, volume/open-interest, macro/event calendars, earnings/event calendars, term-structure/skew inputs, dispersion/concentration proxies, candidate-generation diagnostics, and forward paper-shadow capture readiness. The task may generate JSON/Markdown diagnostics only under data/profitability-lab and docs. It must not replay P&L or rank anything by realized outcomes.",
+"implementation_steps": [
+"Add scripts/build_regular_options_existing_input_surface_atlas.py.",
+"Add tests/test_regular_options_existing_input_surface_atlas.py.",
+"Add package.json script options:research:existing-input-surface-atlas.",
+"Open data/options-validation/options_history.db in SQLite read-only URI mode and assert read_only_db_open=true.",
+"Load current controlling artifacts: options_oracle_profit_loop_packet_latest.json, regular-options-all-local-quote-minute-structure-capability-atlas/latest.json, regular-options-local-quote-structure-capability-matrix/latest.json, regular-options-quote-surface-opening-range-reversal-replay/latest.json, regular-options-quote-derived-synthetic-forward-surface/latest.json, regular-options-point-in-time-vix-bucket/latest.json, regular-options-point-in-time-flow-extreme-input/latest.json, regular-options-flow-extreme-volume-oi-source-rows/latest.json, regular-options-macro-event-calendar/latest.json, regular-options-point-in-time-dispersion-concentration-proxy/latest.json, regular-options-pmcc-diagonal-replay-readiness/latest.json, regular-options-base-clean-stack-identity-ledger/latest.json, and forward-holdout-contract.json.",
+"Reproduce the governing baseline: accepted_profitability=false, current_forward_or_latest_four_strict_rows=0, target_latest_four_strict_rows=30, historical_rows_are_forward_proof=false, frontier_candidate_count=44, countable_throughput_candidate_found=false, base_identity_hash_count=157, and all_local_quote_surface_replayability_exhausted_under_current_data=true.",
+"Build a source inventory table for existing DB tables, JSONL/JSON artifacts, CSV/Parquet files if present, and generated feature stores under data/, excluding node_modules, build artifacts, caches, and docs-only prose.",
+"For each possible input surface, classify source_type as direct_market_source, derived_point_in_time_proxy, diagnostic_only, docs_only, missing, approval_required_import, or unsafe_mutating_source.",
+"For every candidate source surface, require fields for symbol/date/time, value, source label, known_at/as_of/tradable_after provenance, and a non-future timestamp. Missing known_at/as_of must fail closed unless the source is explicitly same-day market data with deterministic tradable_after_time.",
+"Compute coverage for requested months 2024-06 through 2026-05, train months 2024-06 through 2026-01, and latest-four months 2026-02 through 2026-05.",
+"For underlying/opening-bucket surfaces, report minute-bucket coverage, underlying_price availability, return-field availability, and whether this would clear blocked_missing_quote_surface_underlying_price.",
+"For VIX/volatility surfaces, separate direct VIX/VIXY/VXX-style sources from option-IV-derived proxies. Do not relabel proxies as VIX; if only a proxy exists, mark it eligible only for a new proxy-based playbook.",
+"For flow surfaces, verify volume/open_interest/bid_size/ask_size/quote_depth fields and non-null usable rows. Plain bid/ask availability must remain not_flow_input.",
+"For macro/event and earnings/event surfaces, require event category, event timestamp/date, known_at/source timestamp, category coverage, and no manual hindsight labels.",
+"For term/skew/dispersion surfaces, require enough same-underlying or cross-underlying source rows, known_at/as_of provenance, and explicit formulas that do not use realized P&L or future returns.",
+"For candidate-generation diagnostics, require daily candidate/no-pick/blocker status, frozen universe identity, policy hash, and no post-hoc broad-source filtering.",
+"For fresh forward collection, read existing forward contracts and capture runner status only; classify append as approval_required and do not write candidate or cohort rows.",
+"Emit source_surface_candidates.jsonl with one row per candidate surface and fields: surface_id, input_family, source_type, source_path, required_fields_present, known_at_safe, leakage_reject_count, covered_months, train_months_covered, latest_four_months_covered, date_coverage_pct, latest_four_date_coverage_pct, usable_row_count, approval_required, clears_blockers, remaining_blockers, and next_safe_branch.",
+"Emit exactly one next_research_branch only if a source surface clears all readiness gates and does not require import/mutation/holdout/promotion. Otherwise emit no_research_only_input_surface_upgrade_remaining=true and stop_exception_candidate=true.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md only with the generated read-only result and durable branch-parking guidance."
+],
+"allowed_files_or_artifacts": [
+"scripts/build_regular_options_existing_input_surface_atlas.py",
+"tests/test_regular_options_existing_input_surface_atlas.py",
+"docs/regular-options-existing-input-surface-atlas.md",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/latest.json",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/latest.md",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/source_surface_candidates.jsonl",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/latest.json",
+"data/profitability-lab/regular-options-local-quote-structure-capability-matrix/latest.json",
+"data/profitability-lab/regular-options-quote-surface-opening-range-reversal-replay/latest.json",
+"data/profitability-lab/regular-options-quote-derived-synthetic-forward-surface/latest.json",
+"data/profitability-lab/regular-options-point-in-time-vix-bucket/latest.json",
+"data/profitability-lab/regular-options-point-in-time-flow-extreme-input/latest.json",
+"data/profitability-lab/regular-options-flow-extreme-volume-oi-source-rows/latest.json",
+"data/profitability-lab/regular-options-macro-event-calendar/latest.json",
+"data/profitability-lab/regular-options-point-in-time-dispersion-concentration-proxy/latest.json",
+"data/profitability-lab/regular-options-pmcc-diagonal-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-base-clean-stack-identity-ledger/latest.json",
+"data/contracts/forward-holdout-contract.json",
+"data/contracts/forward-cohort-preregistration.json",
+"data/contracts/regular-options-source-quality-scope-policy.json",
+"data/options-validation/options_history.db",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-existing-input-surface-atlas.md",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/latest.json",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/latest.md",
+"data/profitability-lab/regular-options-existing-input-surface-atlas/source_surface_candidates.jsonl"
+],
+"commands_to_run": [
+"npm run options:research:existing-input-surface-atlas -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --latest-four-months 2026-02,2026-03,2026-04,2026-05 --no-write --json",
+"uv run --locked python -m py_compile scripts/build_regular_options_existing_input_surface_atlas.py tests/test_regular_options_existing_input_surface_atlas.py",
+"uv run --locked python -m unittest tests.test_regular_options_existing_input_surface_atlas -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Report status is one of existing_input_surface_ready_for_branch_selection, blocked_existing_input_surface_atlas, or research_only_input_surfaces_exhausted_under_current_repository.",
+"Report proves read_only_db_open=true, no_write=true, quotes_imported=false, evidence_stores_mutated=false, protected_holdout_consumed=false, scanner_policy_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false, live_validation_enabled=false, auto_track_enabled=false, broker_order_allowed=false, promotion_ready=false, accepted_profitability=false, historical_rows_are_forward_proof=false.",
+"Report reproduces controlling baselines: current_forward_or_latest_four_strict_rows=0, target_latest_four_strict_rows=30, frontier_candidate_count=44, countable_throughput_candidate_found=false, base_identity_hash_count=157, all_local_quote_surface_replayability_exhausted_under_current_data=true, opening_range_blocker=blocked_missing_quote_surface_underlying_price, synthetic_forward_blocker=blocked_missing_call_put_pairs.",
+"source_surface_candidates.jsonl includes candidate rows for at least these input families: underlying_or_opening_bucket, trend_or_regime, direct_vix_or_volatility_regime, option_iv_proxy_volatility_regime, flow_or_liquidity_pressure, volume_open_interest, macro_event_calendar, earnings_event_calendar, term_structure_or_skew, dispersion_or_concentration_proxy, candidate_generation_diagnostics, and fresh_forward_collection_readiness.",
+"No candidate source surface may be marked ready unless train_months_covered>=20, latest_four_months_covered=4, date_coverage_pct>=90.0, latest_four_date_coverage_pct>=90.0, required_fields_present=true, known_at_safe=true, leakage_reject_count=0, protected_holdout_overlap_rows=0, and source_type is direct_market_source or derived_point_in_time_proxy with explicit proxy labeling.",
+"A derived proxy must not clear a direct-source blocker by name. For example, option-IV-derived volatility may not be labeled as VIX, and bid/ask quote availability may not be labeled as flow.",
+"If exactly one ready read-only source surface exists, report emits next_research_branch with input_family, source_path, coverage metrics, cleared blockers, remaining blockers, and a bounded no-write command for a later GPT-5.5 Pro decision.",
+"If multiple ready read-only source surfaces exist, report selects exactly one by preregistered ranking: direct source over proxy, highest latest-four coverage, highest train coverage, strongest known_at provenance, lowest replay dependency on already-parked quote surfaces, then deterministic input_family order.",
+"If no ready read-only source surface exists, report sets no_research_only_input_surface_upgrade_remaining=true, stop_exception_candidate=true, and lists only approval-required next gates: fresh forward cohort append during market window, scoped source repair/replay, quote import/new data surface, protected holdout decision, or promotion review.",
+"Report must not run P&L replay, must not compute passing PF, must not generate trades, must not nominate a lane, and must not count any historical or source-surface row as forward proof.",
+"Tests must prove read-only DB open is enforced, unknown or missing known_at/as_of fails closed, docs-only evidence cannot pass, proxy surfaces cannot be mislabeled as direct VIX/flow/event sources, quote import paths are approval_required, evidence-store mutation paths are forbidden, train months below 20 blocks, latest-four months below 4 blocks, date coverage below 90% blocks, leakage rejects block, and a clean synthetic existing-source fixture can emit existing_input_surface_ready_for_branch_selection without changing trading state."
+],
+"failure_criteria": [
+"Park as blocked_existing_input_surface_inventory_missing if required controlling artifacts cannot be read and the script cannot reproduce the current baseline safely.",
+"Park as blocked_no_known_at_safe_input_surfaces if candidate sources exist but lack known_at/as_of/tradable_after provenance.",
+"Park as blocked_no_20_plus_4_input_surface_coverage if all existing candidate sources fail train_months>=20 or latest_four_months=4.",
+"Park as blocked_only_proxy_surfaces_for_direct_blockers if available surfaces are proxies that cannot honestly clear direct VIX, flow, event, underlying, or candidate-generation blockers.",
+"Park as blocked_only_approval_required_surfaces if the only viable next steps require quote import, evidence mutation, source repair, protected-holdout consumption, forward cohort append, live validation, broker/order action, scanner/strategy/proof-bar changes, or promotion.",
+"Set research_only_input_surfaces_exhausted_under_current_repository=true if no read-only source/input surface remains that can support a materially different next proof-safe branch.",
+"Fail the task if it imports quotes, mutates options_history.db, mutates evidence stores, appends a forward cohort, changes scanner/strategy/stops/sizing/proof bars, consumes protected holdout, enables live validation, enables auto-track, prepares broker orders, creates trades, marks accepted profitability, or promotes a lane."
+],
+"forbidden_actions": [
+"broker orders",
+"live validation",
+"auto-track",
+"production scanner release",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"evidence database mutation",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"creating trades",
+"preparing orders",
+"forward cohort append",
+"P&L replay",
+"ranking source surfaces by realized profitability",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, or non-executable marks as fill or P&L evidence",
+"reclassifying zero-bid or untradable rows as missing data",
+"relabeling proxies as direct VIX, flow, event, or underlying-price proof",
+"repeating parked PMCC, 13-symbol, flow, macro-event, VIX, momentum, VRP, term-structure, skew, opening-range, synthetic-forward, fixed-bucket structure, or all-local quote-minute branches without a new source artifact"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro for continue/stop. If one read-only source surface clears gates, the next decision is a separate bounded no-write causal playbook or replay-readiness slice for exactly that surface. If no read-only source/input surface clears gates and every remaining path is approval-required or already parked, return a stop_exception_candidate under current approvals and ask only for explicit future approval of fresh forward collection, scoped source repair/replay, quote import/new data surface, protected holdout, or promotion."
+},
+"operator_questions": [],
+"why_this_is_significant": "The all-local atlas makes another quote-surface replay low value, but it does not prove the repo lacks all usable point-in-time inputs. The selected atlas is the smallest remaining proof-safe upgrade: it can either find an already-existing source surface for a materially different causal branch or convert the remaining missing-input problem into a concrete stop_exception/approval-gate decision. PMCC illustrates why this matters: it is blocked by missing trend/regime input, blocked VIX bucket, and missing long-DTE quote surface, while readiness itself remains non-replay and non-profitability proof. 
+
+Pasted text
+
+"
+}

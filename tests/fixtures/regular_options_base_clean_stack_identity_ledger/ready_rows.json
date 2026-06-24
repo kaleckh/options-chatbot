@@ -1,0 +1,61 @@
+{
+  "selected_trades": [
+    {
+      "candidate_source_id": "fixture_a",
+      "direction": "long_call_spread",
+      "entry_contract_resolution": "exact_contracts",
+      "entry_date": "2026-05-01",
+      "exact_priced": true,
+      "exit_date": "2026-05-08",
+      "lane_family": "bullish_pullback",
+      "lane_id": "bullish_pullback_core",
+      "long_contract_symbol": "QQQ260508C00490000",
+      "pnl_pct": 0.42,
+      "portfolio_eligible": true,
+      "proof_grade": "exact",
+      "short_contract_symbol": "QQQ260508C00495000",
+      "source_playbook": "bullish_pullback_core_v1",
+      "source_result_path": "fixture/a.json",
+      "strategy_type": "debit_vertical",
+      "ticker": "QQQ"
+    },
+    {
+      "candidate_source_id": "fixture_b",
+      "direction": "long_call_spread",
+      "entry_contract_resolution": "exact_contracts",
+      "entry_date": "2026-05-02",
+      "exact_priced": true,
+      "exit_date": "2026-05-09",
+      "lane_family": "bullish_pullback",
+      "lane_id": "bullish_pullback_core",
+      "long_contract_symbol": "SPY260508C00520000",
+      "pnl_pct": -0.12,
+      "portfolio_eligible": true,
+      "proof_grade": "exact",
+      "short_contract_symbol": "SPY260508C00525000",
+      "source_playbook": "bullish_pullback_core_v1",
+      "source_result_path": "fixture/b.json",
+      "strategy_type": "debit_vertical",
+      "ticker": "SPY"
+    },
+    {
+      "candidate_source_id": "fixture_c",
+      "direction": "long_put_spread",
+      "entry_contract_resolution": "exact_contracts",
+      "entry_date": "2026-05-03",
+      "exact_priced": true,
+      "exit_date": "2026-05-10",
+      "lane_family": "short_term",
+      "lane_id": "bullish_pullback_clean_exact_reference",
+      "long_contract_symbol": "IWM260508P00195000",
+      "pnl_pct": 0.18,
+      "portfolio_eligible": true,
+      "proof_grade": "exact",
+      "short_contract_symbol": "IWM260508P00190000",
+      "source_playbook": "short_term_core_v1",
+      "source_result_path": "fixture/c.json",
+      "strategy_type": "debit_vertical",
+      "ticker": "IWM"
+    }
+  ]
+}

@@ -24,8 +24,8 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 - Execution-alternative quote import plan: `no_quote_demands_to_plan` / `built` / `{"command_group_count": 0, "entry_quote_demand_count": 0, "exact_contract_manifest_count": 0, "exit_quote_demand_count": 0, "operator_command_status": "not_available", "quote_dates": [], "source_coverage_status": "execution_alternative_replay_coverage_readback", "source_quote_demand_manifest_status": "no_missing_quote_demands", "underlyings": [], "unparsed_quote_demand_count": 0}`.
 - Minute-exit quote import plan: `no_minute_exit_quote_seeds_to_plan` / `built` / `{"command_group_count": 0, "entry_only_quote_demand_count": 0, "exact_contract_manifest_count": 0, "operator_command_status": "not_available", "position_linked_quote_demand_count": 0, "quote_dates": [], "replay_pnl_status": "available_in_source_readiness", "source_entry_seed_ready_count": 12, "source_minute_exit_replay_engine_status": "read_only_side_aware_engine_partial", "source_minute_quote_coverage_status": "full", "source_overall_status": "minute_exit_replay_coverage_ready", "source_position_seed_ready_count": 1, "source_readiness_status": "minute_exit_replay_readiness_readback", "source_true_minute_exit_pnl_count": 12, "underlyings": [], "unparsed_quote_demand_count": 0}`.
 - Open-risk resolution plan: `open_risk_resolution_plan_clear` / `built` / `{"action_counts": {}, "display_only_sell_count": 0, "live_entry_allowed": true, "live_exact_negative_count": 0, "live_exact_negative_ids": [], "live_exact_plan_row_count": 0, "market_window_required_count": 0, "open_position_avg_pnl_pct": null, "open_position_median_pnl_pct": null, "open_position_negative_count": 0, "open_position_row_count": 0, "operator_plan_status": "no_rows_to_resolve", "plan_row_count": 0, "source_open_risk_status": "open_risk_governor_pass"}`.
-- Fill-attempt evidence capture plan: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection` / `built_collecting` / `{"lane_counts": {"short_term": 1, "swing": 2, "volatility_expansion_observation": 1}, "ledger_stale_fill_attempt_logged_count": 0, "market_window_required_count": 4, "missing_fill_attempt_evidence_count": 4, "operator_plan_status": "ready_for_fresh_selection_capture", "plan_row_count": 4, "scan_dates": ["2026-06-05"], "source_candidate_ledger_operating_status": "ledger_collect_exact_evidence", "source_fill_attempt_rows": 499, "source_missing_fill_attempt_action_count": 4, "ticker_counts": {"QQQ": 2, "SPY": 2}}`.
-- Suggested-trade review plan: `suggested_trade_review_plan_ready_blocked_for_market_window` / `built_collecting` / `{"attention_trade_count": 1, "close_risk_trade_count": 0, "executable_close_ready_count": 0, "market_window_required_count": 1, "missing_review_count": 1, "non_executable_close_risk_count": 0, "open_suggested_trade_rows": 1, "operator_plan_status": "ready_for_fresh_suggested_trade_review_window", "plan_row_count": 1, "source_action_counts": {"no_stored_review": 1}, "source_evidence_counts": {"missing_review": 1}, "stale_or_missing_review_trade_count": 1, "stale_review_count": 0}`.
+- Fill-attempt evidence capture plan: `fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection` / `built_collecting` / `{"lane_counts": {"short_term": 1, "swing": 2, "volatility_expansion_observation": 1}, "ledger_stale_fill_attempt_logged_count": 0, "market_window_required_count": 4, "missing_fill_attempt_evidence_count": 4, "operator_plan_status": "ready_for_fresh_selection_capture", "plan_row_count": 4, "scan_dates": ["2026-06-05"], "source_candidate_ledger_operating_status": "ledger_collect_exact_evidence", "source_fill_attempt_rows": 501, "source_missing_fill_attempt_action_count": 4, "ticker_counts": {"QQQ": 2, "SPY": 2}}`.
+- Suggested-trade review plan: `suggested_trade_review_plan_ready_for_historical_resolution` / `built_collecting` / `{"attention_trade_count": 1, "close_risk_trade_count": 0, "executable_close_ready_count": 0, "expired_review_resolution_count": 1, "market_window_required_count": 0, "missing_review_count": 1, "non_executable_close_risk_count": 0, "open_suggested_trade_rows": 1, "operator_plan_status": "ready_for_historical_suggested_trade_resolution", "plan_row_count": 1, "source_action_counts": {"no_stored_review": 1}, "source_evidence_counts": {"missing_review": 1}, "stale_or_missing_review_trade_count": 1, "stale_review_count": 0}`.
 - Regime stratification: `regime_robust` / `built_regime_robust` / robust `True` / `{"branch_bucket_count": 26, "branch_count": 2, "branch_regime_failure_count": 0, "branch_regime_robust_count": 2, "eligible_replay_row_count": 234, "evaluable_bucket_count": 27, "failing_bucket_count": 0, "market_context_status": "complete", "minimum_bucket_n_for_robustness": 15, "spy50_missing_count": 0, "vix_missing_count": 0}`.
 - Autoresearch search effort: `available` / `built_advisory` / `{"diagnostic_only": true, "pf_lb_5pct": null, "selection_adjusted_bar": null, "selection_adjusted_confidence": null, "selection_adjustment_formula": null, "selection_adjustment_metric": "pf_lb_5pct", "statistical_confidence": null, "strategy_family": null, "variant_id": null, "variants_searched": null}`.
 - Scheduled scan heartbeat: `fresh`; days since last scheduled scan `1`.
@@ -211,12 +211,12 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 ## Execution Realism
 
-- Fill-attempt rows: `500`.
-- Candidate-shown rows: `15`.
-- Proof-live exact rows: `13`.
-- No-fill / not-submitted / paper-fill-recorded: `6` / `6` / `1`.
-- Fill-discipline snapshots: `4`.
-- Fill-discipline coverage: `26.67%`.
+- Fill-attempt rows: `501`.
+- Candidate-shown rows: `16`.
+- Proof-live exact rows: `14`.
+- No-fill / not-submitted / paper-fill-recorded: `6` / `7` / `1`.
+- Fill-discipline snapshots: `5`.
+- Fill-discipline coverage: `31.25%`.
 - Replay blockers: `[]`.
 - Minute-exit readiness: `minute_exit_replay_coverage_ready`; entry seeds `12`, position seeds `1`, true minute P&L `12`.
 
@@ -252,7 +252,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 ## Suggested-Trade Review Plan
 
-- Status: `suggested_trade_review_plan_ready_blocked_for_market_window` / `built_collecting`.
+- Status: `suggested_trade_review_plan_ready_for_historical_resolution` / `built_collecting`.
 - Open / attention / plan rows: `1` / `1` / `1`.
 - Close-risk / stale-missing rows: `0` / `1`.
 - Missing / stale reviews: `1` / `0`.
@@ -260,7 +260,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 | Priority | ID | Ticker | Lane | Class | Action | Status |
 |---:|---:|---|---|---|---|---|
-| 1 | 138 | AAA | legacy_unlabeled | suggested_trade | `refresh_missing_suggested_trade_review` | `market_window_required_missing_suggested_trade_review` |
+| 1 | 138 | AAA | legacy_unlabeled | suggested_trade | `resolve_expired_missing_suggested_trade_review` | `expired_missing_review_requires_historical_resolution` |
 
 ## Regime Stratification
 
@@ -301,7 +301,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 
 | Priority | Source | Action | Count | Reason |
 |---:|---|---|---:|---|
-| 1 | suggested_trade_review_plan | `execute_suggested_trade_review_plan` | 1 | suggested_trade_attention_rows_need_fresh_explicit_review |
+| 1 | suggested_trade_review_plan | `execute_suggested_trade_review_plan` | 1 | expired_suggested_trade_attention_rows_need_historical_resolution |
 | 2 | candidate_outcome_ledger | `collect_exact_exit_evidence` | 1 | collect_exact_exit_evidence |
 | 4 | lane_disposition | `collect_paper_shadow_exact_evidence` | 1 | profitable_but_not_promotable_lane_needs_fresh_exact_paper_evidence |
 | 4 | candidate_outcome_ledger | `create_or_link_paper_review_row` | 5 | create_or_link_paper_review_row |

@@ -1,0 +1,256 @@
+{
+"anti_handwave_audit": {
+"exact_next_action_present": true,
+"generic_advice_removed": true,
+"measurable_threshold_present": true
+},
+"assumption_challenges": [
+{
+"assumption": "A point-in-time VIX source is now the highest-value next blocker to clear.",
+"risk": "VIX alone will not make any lane profitable; momentum also lacks breadth/QQQ/SPY confirmations, PMCC lacks long-DTE call surface, and flow/dispersion have their own missing inputs.",
+"verification": "Treat this task as a source-repair packet and parser/threshold validator only. It must emit which blocked branches would become partially unblocked, and it must not run replay or claim profitability until later branch-specific gates clear."
+},
+{
+"assumption": "A direct VIX source can be added without lookahead.",
+"risk": "Using same-day VIX close for a same-day entry would leak future information.",
+"verification": "Use prior regular-session VIX close only. Set known_at/tradable_after to the next market session before any candidate entry timestamp. Any row with known_at after candidate time must fail closed."
+},
+{
+"assumption": "Building a source-repair packet is not dashboard polish.",
+"risk": "A report that only describes missing VIX would not move the loop.",
+"verification": "The artifact must include a schema-validated parser fixture, frozen bucket policy, import manifest template, future tokened import command, downstream VIX-bucket materializer command, and explicit pass/fail coverage gates."
+},
+{
+"assumption": "The 59-symbol ThetaTerminal branch should not be retried now.",
+"risk": "Retrying the same provider-down import would waste a loop cycle without changing the source state.",
+"verification": "Park the 59-symbol retry until provider/source availability changes; select a different source family."
+},
+{
+"assumption": "Stop is not yet earned.",
+"risk": "Stopping while VIX remains a cross-branch blocker would ignore an approved, falsifiable source-repair planning step.",
+"verification": "Proceed with exactly one non-live, non-broker, no-import VIX source packet; if it cannot define a safe source/import plan, park VIX-source repair and move to the next source family."
+}
+],
+"branches_to_stop": [
+"scoped_59_symbol_thetadata_opra_nbbo_import_resume_and_split_audit_v2_until_thetaterminal_or_source_availability_changes",
+"frozen_13_symbol_candidate_generation_engine_daily_diagnostics_v1_until_real_reusable_frozen_entrypoint_exists",
+"13_symbol_frozen_candidate_generation_denominator_v2_without_new_engine",
+"13_symbol_frozen_candidate_generation_source_surface_without_new_engine",
+"13_symbol_candidate_generation_surface_audit_without_new_engine",
+"quote_depth_only_month_counting",
+"phase2_forward_paper_shadow_market_window_capture_append_v1_until_new_same_day_phase2_natural_selections_exist",
+"fresh_forward_append_without_candidate_jsonl_or_append_allowed_true",
+"momentum_continuation_bounded_replay_without_new_point_in_time_vix_breadth_or_source_inputs",
+"pmcc_diagonal_replay_without_trend_vix_and_long_dte_quote_surface",
+"flow_extreme_ratio_backspread_without_trusted_flow_and_vix_source",
+"macro_event_long_strangle_without_event_calendar_and_vix_source",
+"vrp_credit_spread_without_vix_pricing_engine_quote_surface_and_protected_holdout_guard",
+"term_structure_calendar_without_calendar_pricing_term_inputs_and_quote_surface",
+"skew_broken_wing_without_new_source_or_readiness_artifact",
+"dispersion_proxy_hybrid_without_dispersion_proxy_and_vix_source",
+"all_local_quote_surface_replayability_without_new_quote_depth_or_source_state",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof",
+"dashboard_only_visibility_branches"
+],
+"burden_of_proof_check": {
+"current_forward_rows": 0,
+"reason": "Stop is not earned. Forward proof remains 0/30 strict completed rows, the cohort log is still missing, and live/auto-track/broker/promotion are false. The historical frontier remains exhausted for the already-tested surface with 44 candidates, 0 countable throughput candidates, 157 base rows, and a 43-row strict-new gap. VIX is still a cross-branch missing input: the point-in-time VIX bucket has 0 source rows and 0.0% coverage, while PMCC, macro-event, momentum, VRP, flow, and dispersion all name VIX or VIX-bucket blockers. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+ 
+
+Pasted text
+
+",
+"stop_allowed": false,
+"target_profitable_strict_completed_rows": 30
+},
+"candidate_branches": [
+{
+"branch": "direct_point_in_time_vix_source_repair_packet_v1",
+"expected_value": "High. VIX blocks multiple existing edge families and option structures: momentum continuation, PMCC diagonals, VRP credit spreads, macro-event volatility, flow-extreme ratio/backspreads, and dispersion hybrids. A source packet can create an exact future approval/import target without running live, broker, replay, or mutation work now.",
+"main_uncertainty": "Whether a direct VIX source can be given enough known-at-safe coverage for 2023-05-22 through 2026-06-04, including prior-history needed for fixed or rolling thresholds, without leakage.",
+"frozen_rule": "Use prior regular-session VIX close only; bucket policy v1: low if prior VIX close < 15, mid if 15 <= prior VIX close <= 25, high if > 25, plus a diagnostic rolling-252 percentile field that may not be used for selection unless separately preregistered.",
+"eligible_universe": "Index and ETF branches that explicitly require VIX regime: SPY, QQQ, IWM, DIA and index-option structures already preregistered in VRP, PMCC, macro-event, flow-extreme, dispersion, and momentum artifacts.",
+"inclusion_exclusion_rules": "Include only direct VIX index daily observations with date, open/high/low/close or close-only source value, source name, source file hash, known_at, and tradable_after. Exclude proxy IV, option quote depth, realized P&L labels, manual hindsight labels, or rows without known_at safety.",
+"leakage_controls": "A VIX close for date D is tradable only on the next market session. Same-day candidate entries may use only the previous market date’s VIX row.",
+"required_data_repairs": "Future explicit approval for source import or source-row write after this packet is reviewed; this task does not import or write source rows.",
+"minimum_sample_size": "Future source must cover at least 90% of requested market dates for 2024-06-01 through 2026-05-31 and provide at least 252 prior observations before 2024-06-01 for threshold diagnostics.",
+"profitability_thresholds": "No profitability threshold in this packet. Later branch replay still needs latest-four exact rows >=30, full-window exact rows >=200 where applicable, strict-new rows >=43 where historical-throughput is claimed, net USD P&L >0, PF >=1.20, bootstrap PF lower bound 5% >1.00, stress PF >=1.05, and 0 non-executable selected rows.",
+"falsification_result": "If no direct VIX source/import plan can satisfy known_at safety, required fields, 90% date coverage, and future tokened command discipline, park direct VIX repair and move to macro-event or other source-family planning.",
+"why_not_selected": null
+},
+{
+"branch": "macro_event_calendar_source_repair_packet_v1",
+"expected_value": "Medium-high for macro-event straddles/strangles and post-event IV-crush iron condors.",
+"main_uncertainty": "It still also needs VIX regime in the current macro-event readiness chain, so VIX is the more cross-cutting first source blocker.",
+"frozen_rule": "Use scheduled CPI, FOMC, NFP, PCE, FOMC minutes, and Fed Chair testimony timestamps known before event date; no surprise/outcome fields.",
+"eligible_universe": "SPY, QQQ, IWM, DIA index/ETF event-volatility branches.",
+"inclusion_exclusion_rules": "Include only scheduled event rows with source timestamp and known_at; exclude post-event surprise labels.",
+"leakage_controls": "Event must be known before planned entry; no outcome fields.",
+"required_data_repairs": "Future macro-event source import or source-row creation approval.",
+"minimum_sample_size": "At least 20 train months, 4 latest audit months, and >=30 latest-four event candidates after structure filters.",
+"profitability_thresholds": "Same strict exact/PF/lower-bound/stress/execution gates as above.",
+"falsification_result": "Park if event coverage or known_at safety fails.",
+"why_not_selected": "Not selected because direct VIX is a broader blocker across more already-preregistered branches."
+},
+{
+"branch": "fresh_forward_paper_shadow_capture_retry",
+"expected_value": "Highest direct proof value if same-day Phase 2 natural selections exist.",
+"main_uncertainty": "Latest capture staged 0 rows and wrote no candidate JSONL; repeating without new same-day selections is low value.",
+"frozen_rule": "Existing Phase 2 frozen cohort only; append only real same-day market-window rows that validate append_allowed=true.",
+"eligible_universe": "Frozen Phase 2 lanes and symbols from forward-cohort preregistration.",
+"inclusion_exclusion_rules": "Reject stale, fixture, pre-freeze, non-frozen-lane, non-preregistered-symbol, duplicate, and unknown-denominator rows.",
+"leakage_controls": "Market-window capture only; no historical rows.",
+"required_data_repairs": "None if natural selections exist; append itself remains guarded.",
+"minimum_sample_size": "30 strict completed post-freeze rows.",
+"profitability_thresholds": "Net USD P&L >0, PF >1.0, bootstrap PF lower bound 5% >1.0.",
+"falsification_result": "Repeated zero natural selections keeps branch parked until new same-day scan picks exist.",
+"why_not_selected": "Not selected now because the latest valid-window capture produced zero appendable rows."
+},
+{
+"branch": "new_historical_data_surface_or_longer_lookback",
+"expected_value": "High if approved because it can repair train-depth gaps.",
+"main_uncertainty": "Changes data surface and requires explicit import/data-surface approval.",
+"frozen_rule": "Predeclare source, universe, dates, known_at rules, split, and multiple-hypothesis accounting before replay.",
+"eligible_universe": "Canonical regular-options research universe only after explicit approval.",
+"inclusion_exclusion_rules": "No protected holdout, no post-as-of leakage, no untrusted marks.",
+"leakage_controls": "As-of gating and protected-holdout guard.",
+"required_data_repairs": "Explicit data import/source approval.",
+"minimum_sample_size": "20 train months, 4 latest months, >=200 full-window exact rows, >=30 latest-four exact rows.",
+"profitability_thresholds": "PF/lower-bound/stress/execution gates unchanged.",
+"falsification_result": "Park if coverage or strict gates fail.",
+"why_not_selected": "Not selected because a non-import VIX packet can be built first and will define the exact future approval gate."
+}
+],
+"continue_loop": true,
+"next_codex_task": {
+"objective": "Implement a read-only direct point-in-time VIX source repair packet and parser/threshold validator that turns the missing VIX blocker into an exact future approval/import decision. Do not import VIX rows or run replay in this task.",
+"exact_scope": "Research-only generated artifacts and tests. Build a source packet for a direct daily VIX index source covering 2023-05-22 through 2026-06-04, where 2023-05-22 through 2024-05-31 provides threshold lookback and 2024-06-01 through 2026-05-31 is the target 20+4 audit window. The task may add parser/validator code, fixture CSVs, future command templates, docs, and JSON artifacts. It must not import data, mutate options_history.db, mutate evidence stores, consume protected holdout, run P&L replay, create trades, enable live validation, enable auto-track, touch broker/order paths, change scanner/strategy/stops/sizing/proof bars, or promote any lane.",
+"implementation_steps": [
+"Add scripts/build_regular_options_direct_vix_source_repair_packet.py.",
+"Add tests/test_regular_options_direct_vix_source_repair_packet.py.",
+"Add package.json script options:source-plan:direct-vix.",
+"Create a tiny fixture at tests/fixtures/vix/cboe_vix_daily_sample.csv with representative columns Date, Open, High, Low, Close and at least one weekend/holiday gap case.",
+"Load current artifacts: data/forward-tracking/options_oracle_profit_loop_packet_latest.json, data/profitability-lab/regular-options-point-in-time-vix-bucket/latest.json, data/profitability-lab/regular-options-momentum-continuation-bounded-replay/latest.json, data/profitability-lab/regular-options-pmcc-diagonal-replay-readiness/latest.json, data/profitability-lab/regular-options-macro-event-long-strangle-replay-readiness/latest.json, data/profitability-lab/regular-options-vrp-credit-spread-replay-readiness/latest.json, data/profitability-lab/regular-options-flow-extreme-ratio-backspread-replay-readiness/latest.json, and data/profitability-lab/regular-options-dispersion-proxy-hybrid-replay-readiness/latest.json.",
+"Reproduce the baseline: current_forward_rows=0, target_forward_rows=30, point_in_time_vix_bucket_status=blocked_point_in_time_vix_source_missing, vix_source_rows_count=0, vix_coverage_pct=0.0, and accepted_profitability=false.",
+"Define source family direct_vix_daily_close with required fields: source_date, vix_open, vix_high, vix_low, vix_close, source_name, source_file_hash, source_row_hash, known_at_utc, tradable_after_et, source_batch_id.",
+"Define known-at policy: VIX close for market date D is known only after the regular session closes and is tradable no earlier than the next market session before regular options candidate entry. Same-day entries may use only prior market date VIX.",
+"Define bucket policy vix_prior_close_fixed_buckets_v1: low if prior_vix_close < 15, mid if 15 <= prior_vix_close <= 25, high if prior_vix_close > 25, and low_mid if prior_vix_close <= 25. Also compute rolling_252_percentile as diagnostic-only using strictly prior rows.",
+"Validate fixture parsing, date normalization, hash calculation, market-day gap handling, known_at/tradable_after derivation, bucket assignment, and leakage rejection.",
+"Emit a future import manifest template for an operator-supplied source file at data/import-staging/vix/cboe_vix_daily_history.csv, but do not require that file to exist for this planning task.",
+"Emit the exact future tokened import command and the downstream VIX-bucket materialization command, both marked not_run_by_this_task.",
+"Compute readiness implications: list each currently blocked branch that would have the VIX blocker cleared if the future source passes coverage and known-at gates, and list remaining non-VIX blockers for each branch.",
+"Generate docs/regular-options-direct-vix-source-repair-packet.md, data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.json, latest.md, future_import_manifest_template.json, and parser_fixture_validation.json.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md with durable status and the exact future operator approval question only."
+],
+"allowed_files_or_artifacts": [
+"scripts/build_regular_options_direct_vix_source_repair_packet.py",
+"tests/test_regular_options_direct_vix_source_repair_packet.py",
+"tests/fixtures/vix/cboe_vix_daily_sample.csv",
+"docs/regular-options-direct-vix-source-repair-packet.md",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.json",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.md",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/future_import_manifest_template.json",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/parser_fixture_validation.json",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"data/profitability-lab/regular-options-point-in-time-vix-bucket/latest.json",
+"data/profitability-lab/regular-options-momentum-continuation-bounded-replay/latest.json",
+"data/profitability-lab/regular-options-pmcc-diagonal-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-macro-event-long-strangle-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-vrp-credit-spread-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-flow-extreme-ratio-backspread-replay-readiness/latest.json",
+"data/profitability-lab/regular-options-dispersion-proxy-hybrid-replay-readiness/latest.json",
+"data/contracts/forward-holdout-contract.json",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-direct-vix-source-repair-packet.md",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.json",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/latest.md",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/future_import_manifest_template.json",
+"data/profitability-lab/regular-options-direct-vix-source-repair-packet/parser_fixture_validation.json"
+],
+"commands_to_run": [
+"npm run options:source-plan:direct-vix -- --lookback-start-date 2023-05-22 --target-start-date 2024-06-01 --target-end-date 2026-05-31 --as-of-date 2026-06-04 --source-family direct_vix_daily_close --no-import --json",
+"uv run --locked python -m py_compile scripts/build_regular_options_direct_vix_source_repair_packet.py tests/test_regular_options_direct_vix_source_repair_packet.py",
+"uv run --locked python -m unittest tests.test_regular_options_direct_vix_source_repair_packet -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Report status is one of direct_vix_source_repair_packet_ready_for_operator_import_decision or blocked_direct_vix_source_repair_packet.",
+"Report reproduces baseline: current_forward_rows=0, target_forward_rows=30, point_in_time_vix_bucket_status=blocked_point_in_time_vix_source_missing, vix_source_rows_count=0, vix_coverage_pct=0.0, historical_rows_are_forward_proof=false, accepted_profitability=false.",
+"Report identifies VIX-blocked branches and remaining blockers: momentum continuation, PMCC diagonal, macro-event long strangle, VRP credit spread, flow-extreme ratio/backspread, and dispersion hybrid.",
+"Report defines direct_vix_daily_close required schema with source_date, vix_open, vix_high, vix_low, vix_close, source_name, source_file_hash, source_row_hash, known_at_utc, tradable_after_et, and source_batch_id.",
+"Known-at policy must state that VIX close for date D is not tradable until the next regular market session and cannot be used for same-day entries.",
+"Bucket policy vix_prior_close_fixed_buckets_v1 must be frozen and outcome-blind: low <15, mid 15-25, high >25, low_mid <=25; any rolling percentile field is diagnostic-only unless separately preregistered.",
+"Future import readiness requires at least 252 prior VIX observations before 2024-06-01, target-window date coverage >=90.0% for 2024-06-01 through 2026-05-31, latest-four date coverage >=90.0% for 2026-02 through 2026-05, known_at_safe=true, leakage_reject_count=0, protected_holdout_overlap_rows=0, and required_fields_present=true.",
+"Generated packet must include a future tokened import command but must mark future_import_command_executed=false.",
+"Generated packet must include a downstream point-in-time VIX bucket materialization command but must mark downstream_vix_bucket_command_executed=false.",
+"No P&L replay is performed; p_l_replay_performed=false, realized_pnl_used_for_ranking=false, and historical_rows_are_forward_proof=false.",
+"All safety flags remain false: quotes_imported=false, evidence_stores_mutated=false, protected_holdout_consumed=false, live_validation_enabled=false, auto_track_enabled=false, broker_order_allowed=false, promotion_ready=false, scanner_policy_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false.",
+"Tests prove: fixture parser normalizes dates; missing required fields fail; same-day VIX close cannot be used for same-day entry; next-session tradable_after is assigned; fixed buckets are deterministic; rolling percentile uses prior rows only; protected-holdout overlap blocks; future import command is generated but not executed; no source rows are written."
+],
+"failure_criteria": [
+"Park as blocked_no_safe_direct_vix_source_policy if the task cannot define direct source fields, known_at policy, or deterministic bucket thresholds without leakage.",
+"Park as blocked_vix_parser_contract_unsafe if fixture parsing cannot enforce required fields, source hashes, date normalization, or known_at/tradable_after derivation.",
+"Park as blocked_vix_future_import_scope_unsafe if the future import manifest cannot lock source family, date window, write target, source hashes, no protected holdout, and token discipline.",
+"Park as blocked_vix_packet_only_no_downstream_value if the artifact cannot identify at least two currently blocked branches whose VIX blocker would be cleared by a valid future source.",
+"Fail as safety_violation if the task imports VIX data, writes source_rows.jsonl, mutates options_history.db, mutates evidence stores, consumes protected holdout, runs P&L replay, creates trades, prepares orders, enables live validation, enables auto-track, touches broker paths, changes scanner policy, changes strategy logic, changes stops/sizing/proof bars, lowers proof bars, or marks promotion_ready=true."
+],
+"forbidden_actions": [
+"broker orders",
+"order preparation",
+"live validation",
+"auto-track",
+"production scanner release",
+"production scanner policy changes",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"direct VIX source import in this task",
+"options_history.db mutation",
+"evidence database mutation",
+"source_rows.jsonl write for real VIX rows",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"P&L replay",
+"using same-day VIX close for same-day entry",
+"using VIX proxy IV or quote depth as direct VIX",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead-only, zero-bid, or untradable marks as exact executable proof",
+"reclassifying zero-bid or untradable rows as missing provider data",
+"lowering the 90% executable quote-quality floor"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro. If the packet is ready, the next decision is the exact operator approval question for a non-live direct VIX source import/materialization. If the packet is blocked, park direct VIX repair and pivot to the next source family, most likely macro-event calendar source repair or a separately approved historical data-surface branch. Do not claim profitability or rerun VIX-blocked replay branches until a real VIX source artifact exists."
+},
+"operator_questions": [
+{
+"question": "After Codex produces the VIX repair packet, do you approve a future non-live, non-broker, tokened direct VIX source import/materialization from an operator-supplied official daily VIX CSV into a generated point-in-time VIX source artifact only, with no protected-holdout consumption and no replay until coverage/known-at gates pass?",
+"why_it_matters": "A real VIX source is required before the VIX-blocked momentum, PMCC, VRP, macro-event, flow, and dispersion branches can move from readiness blockers to bounded replay decisions.",
+"default_if_unanswered": "No. Read-only/research-only packet generation is approved; source import/materialization still requires explicit approval."
+}
+],
+"selected_branch_id": "direct_point_in_time_vix_source_repair_packet_v1",
+"significant_upgrade_available": true,
+"verdict": "continue",
+"why_this_is_significant": "The loop is still 0/30 forward-proof rows, and the current historical surface has 0/44 countable throughput candidates. VIX is one of the few remaining blockers shared across multiple distinct edge families and option structures, while the 13-symbol engine, 59-symbol ThetaTerminal repair, forward capture, PMCC, flow, macro-event, and momentum replay branches are parked until their source states change. A direct VIX repair packet is the narrowest next proof-safe slice that can open a concrete, auditable source-repair gate without live trading, broker action, import, evidence mutation, protected holdout, proof-bar changes, or promotion. 
+
+Pasted text
+
+"
+}

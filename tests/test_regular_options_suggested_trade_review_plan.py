@@ -35,9 +35,12 @@ def _suggested_close_risk_payload() -> dict:
             {
                 "id": 138,
                 "ticker": "AAA",
+                "contract_symbol": "AAA260708C00462590",
                 "lane": "legacy_unlabeled",
                 "record_class": "suggested_trade",
                 "status": "open",
+                "expiry": "2026-07-08",
+                "filled_at": "2026-03-31T09:45:00",
                 "action_bucket": "no_stored_review",
                 "evidence_bucket": "missing_review",
                 "last_reviewed_at": None,
@@ -65,6 +68,7 @@ class RegularOptionsSuggestedTradeReviewPlanTests(unittest.TestCase):
             report = plan.build_report(
                 suggested_close_risk_path=source,
                 generated_at_utc="2026-06-07T02:00:00Z",
+                as_of_date=plan.date.fromisoformat("2026-06-07"),
             )
 
         self.assertEqual(report["status"], plan.READY_STATUS)
@@ -74,8 +78,10 @@ class RegularOptionsSuggestedTradeReviewPlanTests(unittest.TestCase):
         self.assertEqual(report["summary"]["missing_review_count"], 1)
         self.assertEqual(report["summary"]["plan_row_count"], 1)
         self.assertEqual(report["summary"]["market_window_required_count"], 1)
+        self.assertEqual(report["summary"]["expired_review_resolution_count"], 0)
         row = report["plan_rows"][0]
         self.assertEqual(row["suggested_trade_id"], 138)
+        self.assertEqual(row["expiry_status"], "open")
         self.assertEqual(row["action"], "refresh_missing_suggested_trade_review")
         self.assertEqual(row["resolution_status"], "market_window_required_missing_suggested_trade_review")
         self.assertIn("stored_review_snapshot", row["required_evidence"])
@@ -102,6 +108,37 @@ class RegularOptionsSuggestedTradeReviewPlanTests(unittest.TestCase):
         self.assertEqual(report["plan_rows"][0]["priority"], 0)
         self.assertEqual(report["plan_rows"][0]["action"], "review_executable_suggested_trade_close_decision")
         self.assertIn("paper_idea_close_decision_after_executable_review", report["plan_rows"][0]["required_evidence"])
+
+    def test_expired_missing_review_routes_to_historical_resolution(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "suggested.json"
+            payload = _suggested_close_risk_payload()
+            payload["attention_trades"][0]["expiry"] = "2026-04-08"
+            payload["attention_trades"][0]["contract_symbol"] = "AAA260408C00462590"
+            _write_json(source, payload)
+
+            report = plan.build_report(
+                suggested_close_risk_path=source,
+                as_of_date=plan.date.fromisoformat("2026-06-21"),
+            )
+
+        self.assertEqual(report["status"], plan.READY_HISTORICAL_STATUS)
+        self.assertEqual(report["summary"]["market_window_required_count"], 0)
+        self.assertEqual(report["summary"]["expired_review_resolution_count"], 1)
+        self.assertEqual(report["summary"]["overall_status"], plan.READY_HISTORICAL_STATUS)
+        self.assertEqual(report["summary"]["operator_plan_status"], "ready_for_historical_suggested_trade_resolution")
+        row = report["plan_rows"][0]
+        self.assertEqual(row["contract_symbol"], "AAA260408C00462590")
+        self.assertEqual(row["expiry_status"], "expired")
+        self.assertFalse(row["market_window_required"])
+        self.assertEqual(row["action"], "resolve_expired_missing_suggested_trade_review")
+        self.assertEqual(row["resolution_status"], "expired_missing_review_requires_historical_resolution")
+        self.assertIn("historical_exact_exit_or_expiry_resolution", row["required_evidence"])
+        self.assertEqual(
+            report["next_evidence_queue"][0]["reason"],
+            "expired_suggested_trade_attention_rows_need_historical_resolution",
+        )
 
     def test_missing_required_input_blocks_report(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

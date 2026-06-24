@@ -1,0 +1,8 @@
+{
+  "bucket_threshold_source": "direct_vix_daily_close_import_policy_v1",
+  "frozen_at_utc": "2026-06-04T00:00:00Z",
+  "low_max": 15.0,
+  "mid_max": 25.0,
+  "notes": "Point-in-time prior daily VIX close bucket policy. Historical source rows are not profitability proof.",
+  "policy_id": "vix_prior_close_fixed_buckets_v1"
+}

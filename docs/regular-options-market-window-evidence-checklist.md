@@ -12,20 +12,25 @@ No live release. Market-window task: collect/review evidence only for `volatilit
 - Trade recommendation: `false`.
 - Exact realized P&L rows: `0`.
 - Promotion-ready rows: `0`.
-- Checklist steps: `24`.
-- Waiting actions: `13`.
-- Blocked actions: `4`.
+- Checklist steps: `32`.
+- Waiting actions: `15`.
+- Blocked actions: `5`.
 - Review-only actions: `1`.
-- Step counts: `{"capture_fill_attempt_evidence": 4, "collect_exact_entry_evidence": 8, "no_chase_quarantine": 4, "refresh_gateboard": 1, "refresh_paper_shadow_plan": 1, "refresh_suggested_trade_review": 1, "refresh_trade_qualification": 1, "repair_replay_evidence": 3, "wait_for_policy_exit_condition": 1}`.
+- Step counts: `{"bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval": 1, "bullish_pullback_layer_4_execution_safety_preflight": 1, "capture_fill_attempt_evidence": 4, "collect_exact_entry_evidence": 8, "no_chase_quarantine": 4, "prepare_bullish_pullback_layer_shadow_harness": 1, "refresh_bullish_pullback_layer4_forward_capture_protocol": 1, "refresh_bullish_pullback_layer_executable_economics": 1, "refresh_bullish_pullback_layer_execution_safety_audit": 1, "refresh_bullish_pullback_layer_shadow_selection": 1, "refresh_gateboard": 1, "refresh_market_window_approval_preflight": 1, "refresh_paper_shadow_plan": 1, "refresh_suggested_trade_review": 1, "refresh_trade_qualification": 1, "repair_replay_evidence": 3, "wait_for_policy_exit_condition": 1}`.
 
 ## Safe command order
 
 - `1` `npm run options:gateboard`: Refresh operator gateboard and no-live/no-chase readback.
 - `2` `npm run options:triage:trade-qualification`: Refresh read-only trade qualification.
-- `3` `npm run options:plan:paper-shadow-evidence`: Refresh paper-shadow evidence plan.
-- `4` `npm run options:plan:fill-attempt-evidence-capture`: Refresh fill-attempt evidence capture plan.
-- `5` `npm run options:plan:suggested-trade-review`: Refresh suggested-trade review-only plan.
-- `6` `npm run options:audit:monthly-profitability`: Refresh monthly profitability audit readback.
+- `3` `npm run options:plan:bullish-pullback-layer-shadow`: Refresh read-only bullish-pullback layer-shadow harness selection.
+- `4` `npm run options:audit:bullish-pullback-layer-execution-safety`: Refresh read-only bullish-pullback layer execution-safety preflight.
+- `5` `npm run options:audit:bullish-pullback-layer-executable-economics`: Refresh read-only bullish-pullback layer executable-economics audit.
+- `6` `npm run options:plan:bullish-pullback-layer4-forward-capture`: Refresh read-only bullish-pullback layer4 forward capture protocol.
+- `7` `npm run options:plan:paper-shadow-evidence`: Refresh paper-shadow evidence plan.
+- `8` `npm run options:plan:fill-attempt-evidence-capture`: Refresh fill-attempt evidence capture plan.
+- `9` `npm run options:plan:suggested-trade-review`: Refresh suggested-trade review-only plan.
+- `10` `npm run options:audit:monthly-profitability`: Refresh monthly profitability audit readback.
+- `11` `npm run options:preflight:market-window-approval`: Run the final no-write market-window approval preflight before any future approval discussion.
 
 ## Ready now
 
@@ -33,24 +38,31 @@ No live release. Market-window task: collect/review evidence only for `volatilit
 | ---: | --- | --- | --- | --- | --- | --- |
 | `1` | `refresh_gateboard` | `ready` | `` | `` | `` | Refresh the gateboard before any market-window evidence work. |
 | `2` | `refresh_trade_qualification` | `ready` | `` | `` | `` | Confirm no-live, no-auto-track, broker-order blocked state remains intact. |
-| `3` | `refresh_paper_shadow_plan` | `ready` | `` | `` | `` | Refresh evidence rows before using this checklist during a valid market-data window. |
+| `3` | `refresh_bullish_pullback_layer_shadow_selection` | `ready` | `` | `` | `` | Refresh the selected bullish-pullback paper-shadow harness before using the market-window checklist. |
+| `4` | `refresh_bullish_pullback_layer_execution_safety_audit` | `ready` | `` | `` | `` | Refresh the leg-level bid/ask and assignment/expiration preflight before using the selected bullish-pullback harness. |
+| `5` | `refresh_bullish_pullback_layer_executable_economics` | `ready` | `` | `` | `` | Refresh the read-only executable-economics audit before any future approval discussion. |
+| `6` | `refresh_bullish_pullback_layer4_forward_capture_protocol` | `ready` | `` | `` | `` | Refresh the read-only protocol before any future market-window candidate validation or approval discussion. |
+| `6` | `refresh_paper_shadow_plan` | `ready` | `` | `` | `` | Refresh evidence rows before using this checklist during a valid market-data window. |
+| `9` | `refresh_market_window_approval_preflight` | `ready` | `` | `` | `` | Run the no-write approval preflight as the final command before any future operator approval question. |
 
 ## Waiting for market window
 
 | Priority | Type | Status | Lane | Ticker | Row | Next step |
 | ---: | --- | --- | --- | --- | --- | --- |
-| `32` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `QQQ` | `2026-06-05|range_breakout_observation|QQQ|call|2026-06-18|QQQ260618C00740000|QQQ260618C00765000|740.0|765.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `33` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `SPY` | `2026-06-05|range_breakout_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00771000|756.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `34` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `SPY` | `2026-06-05|range_breakout_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `35` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00739000|QQQ260626C00770000|739.0|770.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `36` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00756000|SPY260626C00775000|756.0|775.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `37` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00759000|SPY260626C00775000|759.0|775.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `38` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00771000|756.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `39` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
-| `50` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `short_term` | `QQQ` | `2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `51` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `52` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `53` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `34` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `QQQ` | `2026-06-05|range_breakout_observation|QQQ|call|2026-06-18|QQQ260618C00740000|QQQ260618C00765000|740.0|765.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `35` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `SPY` | `2026-06-05|range_breakout_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00771000|756.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `36` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `range_breakout_observation` | `SPY` | `2026-06-05|range_breakout_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `37` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00739000|QQQ260626C00770000|739.0|770.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `38` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00756000|SPY260626C00775000|756.0|775.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `38` | `bullish_pullback_layer4_capture_protocol_ready_waiting_for_market_window_and_operator_approval` | `waiting_for_market_window_and_operator_approval` | `bullish_pullback_observation` | `` | `` | Use the bullish-pullback layer4 protocol only for future natural paper-shadow denominator rows after a valid market-data window and separate operator approval. |
+| `39` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00759000|SPY260626C00775000|759.0|775.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `40` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00756000|SPY260618C00771000|756.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `41` | `collect_exact_entry_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00758000|SPY260618C00771000|758.0|771.0` | During a valid market-data window, capture fresh executable exact entry evidence for this paper/probation candidate only if it is still freshly selected. |
+| `47` | `prepare_bullish_pullback_layer_shadow_harness` | `waiting_for_market_window` | `bullish_pullback_observation` | `` | `` | Use selected bullish-pullback layer layer_4_clean_exact / sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1 as the future paper-shadow harness target only when a fresh natural market-window selection appears. |
+| `53` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `short_term` | `QQQ` | `2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `54` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `55` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `56` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
 
 ## Waiting for policy exit
 
@@ -62,33 +74,33 @@ No live release. Market-window task: collect/review evidence only for `volatilit
 
 | Priority | Type | Status | Lane | Ticker | Row | Next step |
 | ---: | --- | --- | --- | --- | --- | --- |
-| `64` | `refresh_suggested_trade_review` | `review_only` | `legacy_unlabeled` | `AAA` | `138` | During the next fresh executable quote window, refresh this paper idea's explicit review, then rerun the suggested close-risk, candidate-ledger, and monthly profitability readbacks. |
+| `67` | `refresh_suggested_trade_review` | `review_only` | `legacy_unlabeled` | `AAA` | `138` | Resolve this expired paper idea through historical exact exit or expiry evidence before using its P&L; then rerun the suggested close-risk, candidate-ledger, and monthly profitability readbacks. |
 
 ## Fill-attempt evidence
 
 | Priority | Type | Status | Lane | Ticker | Row | Next step |
 | ---: | --- | --- | --- | --- | --- | --- |
-| `50` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `short_term` | `QQQ` | `2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `51` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `52` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
-| `53` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `53` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `short_term` | `QQQ` | `2026-06-05|short_term|QQQ|call|2026-06-12|QQQ260612C00728000|QQQ260612C00744000|728.0|744.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `54` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `QQQ` | `2026-06-05|swing|QQQ|call|2026-06-26|QQQ260626C00730000|QQQ260626C00750000|730.0|750.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `55` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `swing` | `SPY` | `2026-06-05|swing|SPY|call|2026-06-26|SPY260626C00752000|SPY260626C00770000|752.0|770.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
+| `56` | `capture_fill_attempt_evidence` | `waiting_for_market_window` | `volatility_expansion_observation` | `SPY` | `2026-06-05|volatility_expansion_observation|SPY|call|2026-06-18|SPY260618C00751000|SPY260618C00763000|751.0|763.0` | During the next fresh selection window, rerun the validation path only if this exact candidate is still selected, then require a durable fill-attempt row with exact OPRA/NBBO entry evidence and fill-discipline snapshot. |
 
 ## Repair-only evidence
 
 | Priority | Type | Status | Lane | Ticker | Row | Next step |
 | ---: | --- | --- | --- | --- | --- | --- |
-| `75` | `repair_replay_evidence` | `repair_only` | `bullish_pullback_observation` | `AAPL` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
-| `76` | `repair_replay_evidence` | `repair_only` | `bullish_pullback_observation` | `UNH` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
-| `77` | `repair_replay_evidence` | `repair_only` | `tracked_winner_cheap_debit_continuity_v1` | `DIA` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
+| `78` | `repair_replay_evidence` | `repair_only` | `bullish_pullback_observation` | `AAPL` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
+| `79` | `repair_replay_evidence` | `repair_only` | `bullish_pullback_observation` | `UNH` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
+| `80` | `repair_replay_evidence` | `repair_only` | `tracked_winner_cheap_debit_continuity_v1` | `DIA` | `` | Exact-date rows exist, but status, sample, forward-validation, or clean-disqualifier gates still block Tier A. |
 
 ## Quarantined/no-chase lanes
 
 | Priority | Type | Status | Lane | Ticker | Row | Next step |
 | ---: | --- | --- | --- | --- | --- | --- |
-| `88` | `no_chase_quarantine` | `blocked_by_no_chase` | `bullish_momentum` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
-| `89` | `no_chase_quarantine` | `blocked_by_no_chase` | `bullish_pullback_observation` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
-| `90` | `no_chase_quarantine` | `blocked_by_no_chase` | `short_term` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
-| `91` | `no_chase_quarantine` | `blocked_by_no_chase` | `swing` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
+| `91` | `no_chase_quarantine` | `blocked_by_no_chase` | `bullish_momentum` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
+| `92` | `no_chase_quarantine` | `blocked_by_no_chase` | `bullish_pullback_observation` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
+| `93` | `no_chase_quarantine` | `blocked_by_no_chase` | `short_term` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
+| `94` | `no_chase_quarantine` | `blocked_by_no_chase` | `swing` | `` | `` | Keep this lane parked. Do not chase, promote, or create fresh paper actions from quarantined evidence. |
 
 ## Prohibited actions
 
@@ -172,16 +184,16 @@ No live release. Market-window task: collect/review evidence only for `volatilit
 
 | Source | Status | Age hours | Generated at | Reasons |
 | --- | --- | ---: | --- | --- |
-| `candidate_outcome_ledger` | `loaded` | `20.9` | `2026-06-17T05:11:09Z` | `[]` |
-| `fill_attempt_evidence_capture_plan` | `loaded` | `20.38` | `2026-06-17T05:42:01Z` | `[]` |
-| `fresh_evidence_loop` | `loaded` | `20.9` | `2026-06-17T05:10:59Z` | `[]` |
-| `gateboard` | `loaded` | `20.28` | `2026-06-17T05:48:07Z` | `[]` |
-| `monthly_profitability` | `loaded` | `0.0` | `2026-06-18T02:04:50Z` | `[]` |
-| `open_position_risk` | `loaded` | `20.9` | `2026-06-17T05:10:58Z` | `[]` |
-| `paper_shadow_evidence_plan` | `loaded` | `0.0` | `2026-06-18T02:04:58Z` | `[]` |
-| `suggested_trade_close_risk` | `loaded` | `20.91` | `2026-06-17T05:10:43Z` | `[]` |
-| `suggested_trade_review_plan` | `loaded` | `20.38` | `2026-06-17T05:42:01Z` | `[]` |
-| `trade_qualification` | `loaded` | `0.0` | `2026-06-18T02:04:54Z` | `[]` |
+| `candidate_outcome_ledger` | `loaded` | `3.39` | `2026-06-21T17:21:56Z` | `[]` |
+| `fill_attempt_evidence_capture_plan` | `loaded` | `3.41` | `2026-06-21T17:20:20Z` | `[]` |
+| `fresh_evidence_loop` | `loaded` | `3.41` | `2026-06-21T17:20:30Z` | `[]` |
+| `gateboard` | `loaded` | `3.38` | `2026-06-21T17:22:22Z` | `[]` |
+| `monthly_profitability` | `loaded` | `3.38` | `2026-06-21T17:22:27Z` | `[]` |
+| `open_position_risk` | `loaded` | `3.41` | `2026-06-21T17:20:19Z` | `[]` |
+| `paper_shadow_evidence_plan` | `loaded` | `0.0` | `2026-06-21T20:44:57Z` | `[]` |
+| `suggested_trade_close_risk` | `loaded` | `3.95` | `2026-06-21T16:47:57Z` | `[]` |
+| `suggested_trade_review_plan` | `loaded` | `3.72` | `2026-06-21T17:01:59Z` | `[]` |
+| `trade_qualification` | `loaded` | `3.38` | `2026-06-21T17:22:16Z` | `[]` |
 
 Source status counts: `{"loaded": 10}`.
 

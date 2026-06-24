@@ -1,0 +1,109 @@
+{
+  "append_only": true,
+  "contract_id": "phase2-regular-options-forward-paper-shadow-cohort-schema",
+  "description": "Append-only full-denominator JSONL schema for the Phase 2 regular-options forward paper-shadow cohort. This contract covers only the frozen lanes volatility_expansion_observation and bullish_pullback_observation. It does not authorize live trading, auto-track, broker orders, quote imports, historical repair, strategy changes, scanner changes, stop changes, sizing changes, protected-holdout consumption, or promotion.",
+  "do_not_authorize": [
+    "live_trading",
+    "live_validation",
+    "auto_track",
+    "broker_orders",
+    "quote_import",
+    "historical_row_repair",
+    "scanner_policy_change",
+    "stop_change",
+    "sizing_change",
+    "strategy_logic_change",
+    "protected_holdout_consumption",
+    "promotion"
+  ],
+  "frozen_lane_ids": [
+    "volatility_expansion_observation",
+    "bullish_pullback_observation"
+  ],
+  "ledger_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+  "record_required_fields": [
+    "schema_version",
+    "row_id",
+    "lane_id",
+    "selection_timestamp_utc",
+    "selection_date",
+    "scanner_run_id",
+    "scanner_policy_hash",
+    "denominator_status",
+    "ticker",
+    "contract_or_spread_key"
+  ],
+  "record_optional_fields": [
+    "selection_id",
+    "strategy_type",
+    "direction",
+    "expiration",
+    "long_contract_symbol",
+    "short_contract_symbol",
+    "entry_evidence_status",
+    "entry_quote_source",
+    "entry_quote_timestamp_utc",
+    "entry_bid",
+    "entry_ask",
+    "entry_fill_attempt_status",
+    "exit_evidence_status",
+    "exit_quote_source",
+    "exit_quote_timestamp_utc",
+    "exit_bid",
+    "exit_ask",
+    "policy_exit_condition",
+    "net_pnl_pct",
+    "net_pnl_usd",
+    "policy_drift",
+    "evidence_drift",
+    "notes"
+  ],
+  "denominator_status_values": [
+    "exact_entry_captured",
+    "missed_entry_evidence_window",
+    "zero_bid_untradable",
+    "stale_quote_rejected",
+    "display_only_quote_rejected",
+    "open_waiting_policy_exit",
+    "exact_exit_captured",
+    "missing_exit_evidence",
+    "fill_attempt_failed_or_incomplete"
+  ],
+  "proof_rules": {
+    "count_every_natural_scanner_selection": true,
+    "do_not_drop_failed_or_missing_evidence_rows": true,
+    "exact_completed_forward_pnl_conditional_required_fields": [
+      "entry_quote_source",
+      "entry_quote_timestamp_utc",
+      "entry_bid",
+      "entry_ask",
+      "exit_quote_source",
+      "exit_quote_timestamp_utc",
+      "exit_bid",
+      "exit_ask",
+      "policy_exit_condition",
+      "net_pnl_usd"
+    ],
+    "exact_completed_forward_pnl_requires": [
+      "exact executable entry evidence",
+      "policy-defined exact executable exit evidence",
+      "exact realized net pnl in USD",
+      "trusted entry and exit quote source/timestamp provenance"
+    ],
+    "lookahead_only_rows_are_diagnostic": true,
+    "point_profit_factor_is_not_sufficient": true,
+    "zero_bid_or_untradable_rows_are_execution_failures": true
+  },
+  "review_gates": {
+    "minimum_exact_completed_forward_rows": 30,
+    "preferred_exact_completed_forward_rows": 50,
+    "minimum_pf_lower_bound_after_stress_gt": 1.0,
+    "healthier_pf_lower_bound_after_stress_gte": 1.2,
+    "largest_single_winner_pct_of_net_profit_lt": 25.0,
+    "top_three_winners_pct_of_net_profit_lt": 50.0,
+    "leave_one_trade_out_pf_lower_bound_gt": 1.0,
+    "single_ticker_date_month_dependency_allowed": false,
+    "live_trading_authorized": false
+  },
+  "schema_version": 1
+}

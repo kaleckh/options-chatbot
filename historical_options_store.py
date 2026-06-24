@@ -66,6 +66,14 @@ def _sqlite_connect(path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def _sqlite_readonly_connect(path: str | Path) -> sqlite3.Connection:
+    resolved = Path(path).resolve()
+    conn = sqlite3.connect(f"{resolved.as_uri()}?mode=ro", uri=True, timeout=SQLITE_TIMEOUT_SECONDS)
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _db_path() -> Path:
     override = os.getenv("HISTORICAL_OPTIONS_DB_PATH")
     return Path(override) if override else DEFAULT_HISTORICAL_OPTIONS_DB_PATH
@@ -348,6 +356,38 @@ def _valid_quote_sql_clause(alias: str = "q", *, allow_last_price: bool = True) 
     if allow_last_price:
         return f"({bid_ask_clause} OR ({prefix}last IS NOT NULL AND {prefix}last > 0))"
     return bid_ask_clause
+
+
+def _historical_quote_from_row(row: sqlite3.Row, *, allow_last_price: bool = True) -> Optional[HistoricalQuote]:
+    raw = dict(row)
+    normalized = {
+        "bid": _parse_float(raw.get("bid"), field_name="bid"),
+        "ask": _parse_float(raw.get("ask"), field_name="ask"),
+        "last": _parse_float(raw.get("last"), field_name="last"),
+    }
+    price, basis = _quote_price_with_mode(normalized, allow_last_price=allow_last_price)
+    if price is None or basis is None:
+        return None
+    return HistoricalQuote(
+        as_of_utc=str(raw["as_of_utc"]),
+        quote_date_et=str(raw["quote_date_et"]),
+        quote_minute_et=int(raw["quote_minute_et"]),
+        underlying=str(raw["underlying"]),
+        contract_symbol=str(raw["contract_symbol"]),
+        expiry=str(raw["expiry"]),
+        option_type=str(raw["option_type"]),
+        strike=float(raw["strike"]),
+        price=price,
+        price_basis=basis,
+        underlying_price=_parse_float(raw.get("underlying_price"), field_name="underlying_price"),
+        bid=normalized["bid"],
+        ask=normalized["ask"],
+        last=normalized["last"],
+        iv=_parse_float(raw.get("iv"), field_name="iv"),
+        volume=_parse_int(raw.get("volume"), field_name="volume"),
+        open_interest=_parse_int(raw.get("open_interest"), field_name="open_interest"),
+        snapshot_kind=str(raw.get("snapshot_kind") or INTRADAY_SNAPSHOT_KIND),
+    )
 
 
 def _quote_insert_values(normalized: dict[str, Any], batch_id: int) -> tuple[Any, ...]:
@@ -1886,35 +1926,99 @@ class HistoricalOptionsStore:
         )
 
     def _row_to_quote(self, row: sqlite3.Row, *, allow_last_price: bool = True) -> Optional[HistoricalQuote]:
-        raw = dict(row)
-        normalized = {
-            "bid": _parse_float(raw.get("bid"), field_name="bid"),
-            "ask": _parse_float(raw.get("ask"), field_name="ask"),
-            "last": _parse_float(raw.get("last"), field_name="last"),
-        }
-        price, basis = _quote_price_with_mode(normalized, allow_last_price=allow_last_price)
-        if price is None or basis is None:
-            return None
-        return HistoricalQuote(
-            as_of_utc=str(raw["as_of_utc"]),
-            quote_date_et=str(raw["quote_date_et"]),
-            quote_minute_et=int(raw["quote_minute_et"]),
-            underlying=str(raw["underlying"]),
-            contract_symbol=str(raw["contract_symbol"]),
-            expiry=str(raw["expiry"]),
-            option_type=str(raw["option_type"]),
-            strike=float(raw["strike"]),
-            price=price,
-            price_basis=basis,
-            underlying_price=_parse_float(raw.get("underlying_price"), field_name="underlying_price"),
-            bid=normalized["bid"],
-            ask=normalized["ask"],
-            last=normalized["last"],
-            iv=_parse_float(raw.get("iv"), field_name="iv"),
-            volume=_parse_int(raw.get("volume"), field_name="volume"),
-            open_interest=_parse_int(raw.get("open_interest"), field_name="open_interest"),
-            snapshot_kind=str(raw.get("snapshot_kind") or INTRADAY_SNAPSHOT_KIND),
-        )
+        return _historical_quote_from_row(row, allow_last_price=allow_last_price)
+
+
+def list_entry_contracts_readonly(
+    *,
+    db_path: str | Path | None = None,
+    underlying: str,
+    trade_date_et: str | date,
+    option_type: str,
+    earliest_minute_et: int = ENTRY_QUOTE_MINUTE_ET,
+    window_minutes: int = ENTRY_QUOTE_WINDOW_MINUTES,
+    snapshot_kind: str = INTRADAY_SNAPSHOT_KIND,
+    allow_last_price: bool = False,
+    min_expiry: str | date | None = None,
+    max_expiry: str | date | None = None,
+    source_labels: Sequence[str] | None = None,
+    trusted_only: bool = True,
+    max_as_of_utc: str | datetime | None = None,
+) -> list[HistoricalQuote]:
+    path = Path(db_path) if db_path else _db_path()
+    quote_date_text = trade_date_et.isoformat() if isinstance(trade_date_et, date) else str(trade_date_et)[:10]
+    normalized_underlying = _normalize_underlying(underlying)
+    normalized_option_type = _normalize_option_type(option_type)
+    normalized_snapshot_kind = str(snapshot_kind)
+    end_minute_et = int(earliest_minute_et + window_minutes)
+    clauses = [
+        "q.underlying = ?",
+        "q.snapshot_kind = ?",
+        "q.option_type = ?",
+        "q.quote_date_et = ?",
+        "q.quote_minute_et >= ?",
+        "q.quote_minute_et <= ?",
+    ]
+    params: list[Any] = [
+        normalized_underlying,
+        normalized_snapshot_kind,
+        normalized_option_type,
+        quote_date_text,
+        int(earliest_minute_et),
+        end_minute_et,
+    ]
+    if min_expiry is not None:
+        min_expiry_text = min_expiry.isoformat() if isinstance(min_expiry, date) else str(min_expiry)[:10]
+        clauses.append("q.expiry >= ?")
+        params.append(min_expiry_text)
+    if max_expiry is not None:
+        max_expiry_text = max_expiry.isoformat() if isinstance(max_expiry, date) else str(max_expiry)[:10]
+        clauses.append("q.expiry <= ?")
+        params.append(max_expiry_text)
+    normalized_source_labels = _normalize_source_labels(source_labels)
+    if normalized_source_labels:
+        placeholders = ", ".join("?" for _ in normalized_source_labels)
+        clauses.append(f"b.source_label IN ({placeholders})")
+        params.extend(normalized_source_labels)
+    if trusted_only:
+        clauses.append("b.data_trust = ?")
+        params.append(TRUSTED_DATA_TRUST)
+    if max_as_of_utc is not None:
+        if isinstance(max_as_of_utc, datetime):
+            max_as_of_text = max_as_of_utc.astimezone(UTC).isoformat().replace("+00:00", "Z")
+        else:
+            max_as_of_text = str(max_as_of_utc)
+        clauses.append("q.as_of_utc <= ?")
+        params.append(max_as_of_text)
+    clauses.append(_valid_quote_sql_clause("q", allow_last_price=allow_last_price))
+
+    with closing(_sqlite_readonly_connect(path)) as conn:
+        rows = conn.execute(
+            f"""
+            WITH first_valid_quotes AS (
+                SELECT
+                    q.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY q.contract_symbol
+                        ORDER BY q.quote_minute_et ASC, q.as_of_utc ASC
+                    ) AS quote_rank
+                FROM option_quote_snapshots q
+                JOIN import_batches b ON b.id = q.source_batch_id
+                WHERE {' AND '.join(clauses)}
+            )
+            SELECT *
+            FROM first_valid_quotes
+            WHERE quote_rank = 1
+            ORDER BY expiry ASC, strike ASC, contract_symbol ASC
+            """,
+            tuple(params),
+        ).fetchall()
+    quotes: list[HistoricalQuote] = []
+    for row in rows:
+        quote = _historical_quote_from_row(row, allow_last_price=allow_last_price)
+        if quote is not None:
+            quotes.append(quote)
+    return quotes
 
 
 def load_import_batches(db_path: str | Path | None = None) -> list[dict[str, Any]]:

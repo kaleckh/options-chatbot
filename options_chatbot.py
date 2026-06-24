@@ -33,7 +33,7 @@ from functools import wraps
 from typing import Any, Optional
 import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 import yfinance as yf
 from ai_commodity_universe import ai_commodity_index_like_tickers, ai_commodity_scan_tickers
@@ -4167,6 +4167,472 @@ def _compute_tech_score_live(
     return _compute_tech_score_from_close_series(close_history, option_type, market_open=_market_is_open())
 
 
+def _historical_mode_requested(candidate_generation_date: Any = None, as_of_date: Any = None) -> bool:
+    return bool(candidate_generation_date is not None or as_of_date is not None)
+
+
+def _parse_historical_date(value: Any) -> Optional[date]:
+    if value is None:
+        return None
+    try:
+        return datetime.strptime(str(value)[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+
+
+def _historical_as_of_cutoff_utc(as_of_date: Any) -> Optional[str]:
+    parsed = _parse_historical_date(as_of_date)
+    if parsed is None:
+        return None
+    return f"{parsed.isoformat()}T23:59:59Z"
+
+
+def _historical_entry_quotes(
+    *,
+    ticker: str,
+    trade_type: str,
+    target_dte: int,
+    candidate_generation_date: Any,
+    as_of_date: Any,
+) -> list[Any]:
+    trade_date = _parse_historical_date(candidate_generation_date or as_of_date)
+    if trade_date is None:
+        return []
+    try:
+        from historical_options_store import (
+            ENTRY_QUOTE_MINUTE_ET,
+            ENTRY_QUOTE_WINDOW_MINUTES,
+            INTRADAY_SNAPSHOT_KIND,
+            list_entry_contracts_readonly,
+        )
+    except Exception:
+        return []
+    min_expiry = trade_date + timedelta(days=DTE_MIN)
+    max_expiry = trade_date + timedelta(days=DTE_MAX)
+    try:
+        return list_entry_contracts_readonly(
+            underlying=ticker,
+            trade_date_et=trade_date,
+            option_type=trade_type,
+            earliest_minute_et=ENTRY_QUOTE_MINUTE_ET,
+            window_minutes=ENTRY_QUOTE_WINDOW_MINUTES,
+            snapshot_kind=INTRADAY_SNAPSHOT_KIND,
+            allow_last_price=False,
+            min_expiry=min_expiry,
+            max_expiry=max_expiry,
+            source_labels=["thetadata_opra_nbbo_1m"],
+            trusted_only=True,
+            max_as_of_utc=_historical_as_of_cutoff_utc(as_of_date) if as_of_date is not None else None,
+        )
+    except Exception:
+        return []
+
+
+def _historical_quote_to_option(
+    quote: Any,
+    *,
+    ticker: str,
+    trade_type: str,
+    trade_date: date,
+    stock_price: float,
+    hv30_fallback: float,
+    premium_side: str,
+    delta_target: float,
+) -> Optional[dict[str, Any]]:
+    underlying_price = _finite_float(getattr(quote, "underlying_price", None))
+    _S = underlying_price or _finite_float(stock_price)
+    if _S is None or _S <= 0:
+        return None
+    bid = _finite_float(getattr(quote, "bid", None))
+    ask = _finite_float(getattr(quote, "ask", None))
+    last = _finite_float(getattr(quote, "last", None))
+    if ask is None or ask <= 0 or bid is None or bid < 0 or ask < bid:
+        return None
+    if premium_side == "bid":
+        if bid <= 0:
+            return None
+        premium = bid
+        quote_basis = "bid"
+    else:
+        premium = ask
+        quote_basis = "ask"
+    try:
+        expiry_date = datetime.strptime(str(getattr(quote, "expiry"))[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        return None
+    actual_dte = (expiry_date - trade_date).days
+    if actual_dte < DTE_MIN or actual_dte > DTE_MAX:
+        return None
+    iv_value = _finite_float(getattr(quote, "iv", None))
+    vol_for_delta = iv_value if iv_value is not None and iv_value > 0.01 else float(hv30_fallback or 0.30)
+    greeks = _bs_greeks(_S, float(getattr(quote, "strike")), max(actual_dte, 1) / 365.0, RISK_FREE_RATE, vol_for_delta, trade_type)
+    if not greeks:
+        return None
+    delta_abs = abs(float(greeks.get("delta", 0.0) or 0.0))
+    capture = {
+        "quote_captured_at_utc": str(getattr(quote, "as_of_utc", None) or ""),
+        "quote_captured_at_et": None,
+    }
+    result = {
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "single_leg",
+        "strike": float(getattr(quote, "strike")),
+        "premium": round(float(premium), 4),
+        "bid": round(float(bid), 4) if bid is not None else None,
+        "ask": round(float(ask), 4) if ask is not None else None,
+        "last": round(float(last), 4) if last is not None else None,
+        "expiry": expiry_date.isoformat(),
+        "dte": actual_dte,
+        "delta": round(delta_abs, 3),
+        "iv": iv_value,
+        "volume": getattr(quote, "volume", None),
+        "open_interest": getattr(quote, "open_interest", None),
+        "quote_age_hours": None,
+        "quote_timestamp_utc": str(getattr(quote, "as_of_utc", None) or ""),
+        "quote_timestamp_et": None,
+        "quote_timestamp_source": "historical_options_store",
+        "contract_symbol": str(getattr(quote, "contract_symbol", "") or "").strip().upper() or None,
+        "quote_basis": quote_basis,
+        "quote_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "data_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "market_data_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "options_data_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "source_feed": "opra_nbbo",
+        "quote_freshness_status": "observed",
+        "live_chain": False,
+        "historical_chain": True,
+        "options_snapshot_status": "historical_trusted",
+        "option_chain_status": "historical_trusted",
+        "stock_price": round(float(_S), 4),
+        "underlying_price": round(float(_S), 4),
+        "delta_miss": round(abs(delta_abs - float(delta_target)), 4),
+        **capture,
+    }
+    result["entry_quote_snapshot"] = {
+        **capture,
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "single_leg",
+        "expiry": expiry_date.isoformat(),
+        "strike": result["strike"],
+        "contract_symbol": result["contract_symbol"],
+        "bid": result["bid"],
+        "ask": result["ask"],
+        "last": result["last"],
+        "premium": result["premium"],
+        "quote_basis": quote_basis,
+        "quote_source": result["quote_source"],
+        "data_source": result["data_source"],
+        "source_feed": result["source_feed"],
+        "quote_timestamp_utc": result["quote_timestamp_utc"],
+        "quote_timestamp_source": result["quote_timestamp_source"],
+        "quote_freshness_status": result["quote_freshness_status"],
+        "live_chain": False,
+        "historical_chain": True,
+        "stock_price": result["stock_price"],
+        "iv": result["iv"],
+        "volume": result["volume"],
+        "open_interest": result["open_interest"],
+    }
+    return result
+
+
+def _fetch_historical_best_option(
+    ticker: str,
+    trade_type: str,
+    delta_target: float,
+    target_dte: int,
+    stock_price: float = 0.0,
+    hv30_fallback: float = 0.30,
+    *,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
+    premium_side: str = "ask",
+    return_context: bool = False,
+) -> dict | None:
+    trade_date = _parse_historical_date(candidate_generation_date or as_of_date)
+    if trade_date is None:
+        return None
+    quotes = _historical_entry_quotes(
+        ticker=ticker,
+        trade_type=trade_type,
+        target_dte=target_dte,
+        candidate_generation_date=trade_date.isoformat(),
+        as_of_date=as_of_date,
+    )
+    candidates: list[dict[str, Any]] = []
+    for quote in quotes:
+        option = _historical_quote_to_option(
+            quote,
+            ticker=ticker,
+            trade_type=trade_type,
+            trade_date=trade_date,
+            stock_price=stock_price,
+            hv30_fallback=hv30_fallback,
+            premium_side=premium_side,
+            delta_target=delta_target,
+        )
+        if option is not None:
+            candidates.append(option)
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda item: (
+            abs(float(item.get("dte") or 0) - int(target_dte or 0)),
+            float(item.get("delta_miss") or 999.0),
+            float(item.get("strike") or 0.0),
+        )
+    )
+    best = copy.deepcopy(candidates[0])
+    if return_context:
+        best["chain_context"] = {
+            "historical_chain": True,
+            "source": "historical_options_store_trusted_thetadata_opra_nbbo",
+            "candidate_generation_date": trade_date.isoformat(),
+            "as_of_date": str(as_of_date)[:10] if as_of_date is not None else None,
+            "candidate_count": len(candidates),
+        }
+    return best
+
+
+def _fetch_historical_best_spread(
+    ticker: str,
+    trade_type: str,
+    long_delta_target: float,
+    short_delta_target: float,
+    target_dte: int,
+    stock_price: float = 0.0,
+    hv30_fallback: float = 0.30,
+    max_width_pct: float = 5.0,
+    min_net_debit: float = 0.30,
+    max_debit_pct_of_width: float = 65.0,
+    *,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
+    return_context: bool = False,
+    alternative_count: int = 3,
+    sp: dict | None = None,
+) -> dict | None:
+    trade_date = _parse_historical_date(candidate_generation_date or as_of_date)
+    if trade_date is None:
+        return None
+    quotes = _historical_entry_quotes(
+        ticker=ticker,
+        trade_type=trade_type,
+        target_dte=target_dte,
+        candidate_generation_date=trade_date.isoformat(),
+        as_of_date=as_of_date,
+    )
+    long_pool: list[dict[str, Any]] = []
+    short_pool: list[dict[str, Any]] = []
+    for quote in quotes:
+        long_option = _historical_quote_to_option(
+            quote,
+            ticker=ticker,
+            trade_type=trade_type,
+            trade_date=trade_date,
+            stock_price=stock_price,
+            hv30_fallback=hv30_fallback,
+            premium_side="ask",
+            delta_target=long_delta_target,
+        )
+        short_option = _historical_quote_to_option(
+            quote,
+            ticker=ticker,
+            trade_type=trade_type,
+            trade_date=trade_date,
+            stock_price=stock_price,
+            hv30_fallback=hv30_fallback,
+            premium_side="bid",
+            delta_target=short_delta_target,
+        )
+        if long_option is not None:
+            long_pool.append(long_option)
+        if short_option is not None:
+            short_pool.append(short_option)
+    candidates: list[dict[str, Any]] = []
+    for long_opt in long_pool:
+        for short_opt in short_pool:
+            if long_opt.get("contract_symbol") == short_opt.get("contract_symbol"):
+                continue
+            if long_opt.get("expiry") != short_opt.get("expiry"):
+                continue
+            long_strike = float(long_opt.get("strike") or 0.0)
+            short_strike = float(short_opt.get("strike") or 0.0)
+            if trade_type == "call":
+                if long_strike >= short_strike:
+                    continue
+                spread_width = short_strike - long_strike
+            else:
+                if long_strike <= short_strike:
+                    continue
+                spread_width = long_strike - short_strike
+            _S = _finite_float(stock_price) or _finite_float(long_opt.get("stock_price")) or 0.0
+            if _S > 0 and (spread_width / _S * 100.0) > max_width_pct:
+                continue
+            net_debit = float(long_opt["premium"]) - float(short_opt["premium"])
+            if net_debit <= 0 or net_debit < min_net_debit:
+                continue
+            debit_pct_of_width = net_debit / spread_width * 100.0
+            if debit_pct_of_width > max_debit_pct_of_width:
+                continue
+            entry_execution = executable_vertical_spread_entry(
+                long_leg=long_opt,
+                short_leg=short_opt,
+                slippage_pct=0.0,
+                quote_freshness_status="observed",
+            )
+            entry_debit = _finite_float(entry_execution.get("execution_price"))
+            if entry_debit is None or entry_debit <= 0:
+                continue
+            liquidity = _spread_liquidity_metrics(long_opt, short_opt, entry_execution=entry_execution, sp=sp)
+            delta_miss = round(
+                abs(float(long_opt.get("delta") or 0.0) - float(long_delta_target))
+                + abs(float(short_opt.get("delta") or 0.0) - float(short_delta_target)),
+                4,
+            )
+            candidates.append(
+                {
+                    "long_opt": long_opt,
+                    "short_opt": short_opt,
+                    "spread_width": spread_width,
+                    "net_debit": net_debit,
+                    "entry_execution": entry_execution,
+                    "spread_liquidity": liquidity,
+                    "delta_miss": delta_miss,
+                    "score": (
+                        abs(int(long_opt.get("dte") or 0) - int(target_dte or 0)),
+                        delta_miss,
+                        float(liquidity.get("spread_bid_ask_pct_of_mid") or 999.0),
+                    ),
+                }
+            )
+    if not candidates:
+        return None
+    candidates.sort(key=lambda item: item["score"])
+    selected = candidates[0]
+    long_opt = copy.deepcopy(selected["long_opt"])
+    short_opt = copy.deepcopy(selected["short_opt"])
+    spread_width = float(selected["spread_width"])
+    net_debit = float(selected["net_debit"])
+    max_profit = spread_width - net_debit
+    net_delta = abs(float(long_opt.get("delta") or 0.0)) - abs(float(short_opt.get("delta") or 0.0))
+    entry_execution = selected["entry_execution"]
+    spread_liquidity = selected["spread_liquidity"]
+    spread_alternatives = [
+        {
+            "rank": rank,
+            "long_strike": item["long_opt"].get("strike"),
+            "short_strike": item["short_opt"].get("strike"),
+            "net_debit": round(float(item["net_debit"]), 4),
+            "entry_execution_price": item["entry_execution"].get("execution_price"),
+            "entry_execution_basis": item["entry_execution"].get("execution_basis"),
+            "delta_miss": item["delta_miss"],
+            "spread_bid_ask_pct_of_mid": item["spread_liquidity"].get("spread_bid_ask_pct_of_mid"),
+            "is_illiquid": item["spread_liquidity"].get("is_illiquid"),
+            "liquidity_reasons": item["spread_liquidity"].get("reasons"),
+        }
+        for rank, item in enumerate(candidates[: max(int(alternative_count), 1)], start=1)
+    ]
+    capture = {
+        "quote_captured_at_utc": long_opt.get("quote_captured_at_utc"),
+        "quote_captured_at_et": None,
+    }
+    result = {
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "vertical_spread",
+        "long_leg": {key: long_opt.get(key) for key in (
+            "strike", "premium", "delta", "iv", "bid", "ask", "last", "contract_symbol",
+            "volume", "open_interest", "quote_age_hours", "quote_timestamp_utc",
+            "quote_timestamp_et", "quote_timestamp_source", "quote_basis", "quote_source",
+            "data_source", "source_feed", "quote_freshness_status", "live_chain",
+            "options_snapshot_status", "option_chain_status",
+        )},
+        "short_leg": {key: short_opt.get(key) for key in (
+            "strike", "premium", "delta", "iv", "bid", "ask", "last", "contract_symbol",
+            "volume", "open_interest", "quote_age_hours", "quote_timestamp_utc",
+            "quote_timestamp_et", "quote_timestamp_source", "quote_basis", "quote_source",
+            "data_source", "source_feed", "quote_freshness_status", "live_chain",
+            "options_snapshot_status", "option_chain_status",
+        )},
+        "spread_width": round(spread_width, 4),
+        "net_debit": round(net_debit, 4),
+        "max_profit": round(max_profit, 4),
+        "max_loss": round(net_debit, 4),
+        "net_delta": round(net_delta, 3),
+        "debit_pct_of_width": round(net_debit / spread_width * 100.0, 1),
+        "risk_reward_ratio": round(max_profit / net_debit, 2) if net_debit > 0 else None,
+        "expiry": long_opt.get("expiry"),
+        "dte": long_opt.get("dte"),
+        "live_chain": False,
+        "historical_chain": True,
+        "market_data_provider": "historical_options_store",
+        "market_data_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "options_data_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "quote_source": "historical_options_store_trusted_thetadata_opra_nbbo",
+        "quote_freshness_status": "observed",
+        "quote_age_hours": None,
+        "quote_timestamp_utc": long_opt.get("quote_timestamp_utc"),
+        "quote_timestamp_et": None,
+        "quote_timestamp_source": "historical_options_store",
+        "options_snapshot_status": "historical_trusted",
+        "option_chain_status": "historical_trusted",
+        "entry_execution_price": entry_execution.get("execution_price"),
+        "entry_execution_basis": entry_execution.get("execution_basis"),
+        "entry_profitability_blockers": entry_execution.get("profitability_blockers"),
+        "entry_display_price": entry_execution.get("display_price"),
+        "entry_display_basis": entry_execution.get("display_basis"),
+        "spread_liquidity": spread_liquidity,
+        "spread_bid_ask_pct_of_mid": spread_liquidity.get("spread_bid_ask_pct_of_mid"),
+        "spread_entry_debit": spread_liquidity.get("spread_entry_debit"),
+        "spread_alternatives": spread_alternatives,
+        "liquidity_first_score": None,
+        **capture,
+    }
+    result["entry_quote_snapshot"] = {
+        **capture,
+        "ticker": ticker,
+        "direction": trade_type,
+        "strategy_type": "vertical_spread",
+        "expiry": result["expiry"],
+        "long_leg": copy.deepcopy(result["long_leg"]),
+        "short_leg": copy.deepcopy(result["short_leg"]),
+        "spread_width": result["spread_width"],
+        "net_debit": result["net_debit"],
+        "max_profit": result["max_profit"],
+        "max_loss": result["max_loss"],
+        "net_delta": result["net_delta"],
+        "debit_pct_of_width": result["debit_pct_of_width"],
+        "risk_reward_ratio": result["risk_reward_ratio"],
+        "live_chain": False,
+        "historical_chain": True,
+        "market_data_provider": result["market_data_provider"],
+        "market_data_source": result["market_data_source"],
+        "options_data_source": result["options_data_source"],
+        "quote_source": result["quote_source"],
+        "quote_freshness_status": result["quote_freshness_status"],
+        "quote_timestamp_utc": result["quote_timestamp_utc"],
+        "quote_timestamp_source": result["quote_timestamp_source"],
+        "entry_execution_price": result["entry_execution_price"],
+        "entry_execution_basis": result["entry_execution_basis"],
+        "entry_display_price": result["entry_display_price"],
+        "entry_display_basis": result["entry_display_basis"],
+        "spread_liquidity": copy.deepcopy(spread_liquidity),
+        "spread_alternatives": copy.deepcopy(spread_alternatives),
+    }
+    if return_context:
+        result["chain_context"] = {
+            "historical_chain": True,
+            "source": "historical_options_store_trusted_thetadata_opra_nbbo",
+            "candidate_generation_date": trade_date.isoformat(),
+            "as_of_date": str(as_of_date)[:10] if as_of_date is not None else None,
+            "candidate_count": len(candidates),
+        }
+    return result
+
+
 def _fetch_best_option(
     ticker: str,
     trade_type: str,         # "call" or "put"
@@ -4176,6 +4642,8 @@ def _fetch_best_option(
     hv30_fallback: float = 0.30,
     *,
     return_context: bool = False,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
 ) -> dict | None:
     """
     Fetch the real options chain and return the strike/premium closest to delta_target.
@@ -4186,6 +4654,19 @@ def _fetch_best_option(
     Returns a dict with keys: strike, premium, expiry, dte, delta, iv, live_chain
     Returns None if no valid option could be found at all.
     """
+    if _historical_mode_requested(candidate_generation_date, as_of_date):
+        return _fetch_historical_best_option(
+            ticker,
+            trade_type,
+            delta_target,
+            target_dte,
+            stock_price=stock_price,
+            hv30_fallback=hv30_fallback,
+            candidate_generation_date=candidate_generation_date,
+            as_of_date=as_of_date,
+            return_context=return_context,
+        )
+
     best: dict | None = None
     best_diff = 999.0
     chain_context: dict[str, Any] | None = None
@@ -4973,6 +5454,8 @@ def _fetch_best_spread(
     liquidity_first: bool = True,
     alternative_count: int = 3,
     sp: dict | None = None,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
 ) -> dict | None:
     """
     Fetch two legs from the real options chain for a vertical debit spread.
@@ -4982,6 +5465,25 @@ def _fetch_best_spread(
 
     Returns dict with long_leg, short_leg, spread metrics, or None if no valid spread found.
     """
+    if _historical_mode_requested(candidate_generation_date, as_of_date):
+        return _fetch_historical_best_spread(
+            ticker,
+            trade_type,
+            long_delta_target,
+            short_delta_target,
+            target_dte,
+            stock_price=stock_price,
+            hv30_fallback=hv30_fallback,
+            max_width_pct=max_width_pct,
+            min_net_debit=min_net_debit,
+            max_debit_pct_of_width=max_debit_pct_of_width,
+            candidate_generation_date=candidate_generation_date,
+            as_of_date=as_of_date,
+            return_context=return_context,
+            alternative_count=alternative_count,
+            sp=sp,
+        )
+
     fetch_context = bool(return_context or liquidity_first)
     long_opt = _fetch_best_option(
         ticker, trade_type, long_delta_target, target_dte,
@@ -5567,6 +6069,9 @@ def scan_daily_top_trades(
     allowed_directions: list[str] | tuple[str, ...] | set[str] | str | None = None,
     symbols: list[str] | tuple[str, ...] | set[str] | str | None = None,
     signal_variant: str | None = None,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
+    no_write: bool = False,
 ) -> list:
     """
     Scan DEFAULT_WATCHLIST for the highest-confidence option setups right now.
@@ -5618,6 +6123,23 @@ def scan_daily_top_trades(
             "drop_key": key,
             "details": details or {},
         }
+
+    if no_write:
+        for ticker in scan_symbols:
+            _drop(
+                ticker,
+                "history_or_liquidity",
+                {
+                    "reason": "no_write_scan_blocks_provider_fetches",
+                    "candidate_generation_date": str(candidate_generation_date)[:10] if candidate_generation_date is not None else None,
+                    "as_of_date": str(as_of_date)[:10] if as_of_date is not None else None,
+                    "provider_fetch_allowed": False,
+                    "candidate_execution_label": "blocked_historical_no_write",
+                },
+            )
+        scan_daily_top_trades._last_scan_drop_counts = dict(scan_drop_counts)
+        scan_daily_top_trades._last_scan_drop_reasons = dict(scan_drop_reasons)
+        return []
 
     # Fetch SPY regime data once for all tickers
     _spy_ret5 = 0.0
@@ -5926,6 +6448,8 @@ def scan_daily_top_trades(
                         max_debit_pct_of_width=float(_spread_cfg.get("max_debit_pct_of_width", 65.0)),
                         return_context=True,
                         sp=sp,
+                        candidate_generation_date=candidate_generation_date,
+                        as_of_date=as_of_date,
                     )
                 except Exception:
                     _spread_result = None
@@ -5959,6 +6483,8 @@ def scan_daily_top_trades(
                         stock_price=_live_underlying_price,
                         hv30_fallback=hv30,
                         return_context=True,
+                        candidate_generation_date=candidate_generation_date,
+                        as_of_date=as_of_date,
                     )
                 except TypeError as exc:
                     if "return_context" not in str(exc):
@@ -5970,6 +6496,8 @@ def scan_daily_top_trades(
                         ticker_target_dte,
                         stock_price=_live_underlying_price,
                         hv30_fallback=hv30,
+                        candidate_generation_date=candidate_generation_date,
+                        as_of_date=as_of_date,
                     )
                 if _opt is None:
                     _drop(

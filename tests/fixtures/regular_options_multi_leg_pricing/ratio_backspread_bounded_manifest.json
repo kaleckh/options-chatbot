@@ -1,0 +1,70 @@
+{
+  "fixtures": [
+    {
+      "bounded_risk": true,
+      "collateral_convention": "max_loss_usd_declared_fixture_capability_only",
+      "denominator_status_mapping": {
+        "assignment_or_expiration_blocked": "leg assignment or expiry policy unresolved",
+        "crossed_or_invalid_quote": "bid/ask crossed or invalid",
+        "exact_entry_captured": "all entry legs resolved from trusted bid/ask",
+        "exact_exit_captured": "all exit legs resolved from trusted bid/ask",
+        "malformed_candidate": "fixture missing required static fields",
+        "missing_exit": "policy exit quote missing",
+        "missing_leg_quote": "entry or exit leg quote missing",
+        "no_candidate": "no candidate generated",
+        "open_waiting_policy_exit_or_expiry": "entry captured but policy exit not reached",
+        "protected_holdout_blocked": "candidate overlaps protected holdout",
+        "rejected_flow_input_missing": "flow input missing",
+        "rejected_undefined_risk": "undefined or naked risk rejected",
+        "rejected_vix_bucket": "VIX bucket missing or rejected",
+        "rejected_width_or_liquidity": "spread geometry or liquidity rejected",
+        "stale_or_untrusted_quote": "quote source is stale or untrusted",
+        "zero_bid_or_untradable": "bid/ask non-positive or untradable"
+      },
+      "entry_date": "2026-05-29",
+      "entry_minute_et": 625,
+      "entry_quote_basis": "bid_ask",
+      "exit_date": "2026-05-29",
+      "exit_minute_et": 625,
+      "exit_quote_basis": "bid_ask",
+      "fees_usd": 0,
+      "fixture_id": "qqq_20260529_bounded_call_ratio_backspread_capability_fixture",
+      "legs": [
+        {
+          "contract_symbol": "QQQ260603C00720000",
+          "expiry": "2026-06-03",
+          "leg_id": "short_lower_call",
+          "option_type": "call",
+          "quantity": 1,
+          "side": "short",
+          "strike": 720
+        },
+        {
+          "contract_symbol": "QQQ260603C00725000",
+          "expiry": "2026-06-03",
+          "leg_id": "long_middle_call_a",
+          "option_type": "call",
+          "quantity": 2,
+          "side": "long",
+          "strike": 725
+        },
+        {
+          "contract_symbol": "QQQ260603C00735000",
+          "expiry": "2026-06-03",
+          "leg_id": "short_upper_cap_call",
+          "option_type": "call",
+          "quantity": 1,
+          "side": "short",
+          "strike": 735
+        }
+      ],
+      "max_loss_usd": 2000,
+      "slippage_usd": 0,
+      "structure": "ratio_backspread_bounded",
+      "underlying": "QQQ",
+      "undefined_risk_allowed": false
+    }
+  ],
+  "manifest_id": "regular_options_multi_leg_pricing_ratio_backspread_bounded_fixture_manifest",
+  "proof_eligible": false
+}

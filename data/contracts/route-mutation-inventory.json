@@ -1001,6 +1001,25 @@
       "stores": [
         "backend_tool_dispatch"
       ]
+    },
+    {
+      "auth_boundary": "same_origin_read",
+      "browser_path": "/api/current-policy-historical-picks",
+      "contract_ids": [],
+      "fastapi_path": "/api/current-policy-historical-picks",
+      "intent_labels": [],
+      "lifecycle": "read",
+      "method": "GET",
+      "mutating": false,
+      "next_only": false,
+      "next_only_reason": null,
+      "next_path": "src/app/api/current-policy-historical-picks/route.ts",
+      "owners": [
+        "backend/domain"
+      ],
+      "record_classes": [],
+      "route_group": "Other",
+      "stores": []
     }
   ],
   "non_goals": [

@@ -1331,8 +1331,12 @@ def _fill_attempt_evidence_capture_plan(fill_attempt_evidence_capture_plan: dict
 def _suggested_trade_review_plan(suggested_trade_review_plan: dict[str, Any]) -> dict[str, Any]:
     status = _norm(suggested_trade_review_plan.get("status"))
     summary = _as_dict(suggested_trade_review_plan.get("summary"))
-    if status not in {
+    ready_statuses = {
         "suggested_trade_review_plan_ready_blocked_for_market_window",
+        "suggested_trade_review_plan_ready_for_historical_resolution",
+    }
+    if status not in {
+        *ready_statuses,
         "suggested_trade_review_plan_clear",
         "blocked_missing_inputs",
         "invalid_live_policy_change",
@@ -1344,7 +1348,7 @@ def _suggested_trade_review_plan(suggested_trade_review_plan: dict[str, Any]) ->
             "plan_rows": [],
             "next_evidence_queue": [],
         }
-    if status == "suggested_trade_review_plan_ready_blocked_for_market_window":
+    if status in ready_statuses:
         implementation_status = "built_collecting"
     elif status == "suggested_trade_review_plan_clear":
         implementation_status = "built"
@@ -1364,6 +1368,7 @@ def _suggested_trade_review_plan(suggested_trade_review_plan: dict[str, Any]) ->
             "non_executable_close_risk_count": summary.get("non_executable_close_risk_count"),
             "plan_row_count": summary.get("plan_row_count"),
             "market_window_required_count": summary.get("market_window_required_count"),
+            "expired_review_resolution_count": summary.get("expired_review_resolution_count"),
             "source_action_counts": summary.get("source_action_counts"),
             "source_evidence_counts": summary.get("source_evidence_counts"),
             "operator_plan_status": summary.get("operator_plan_status"),
@@ -1476,7 +1481,10 @@ def _next_evidence_queue(
     )
     suggested_trade_plan_ready = (
         _norm(suggested_trade_review_plan.get("status"))
-        == "suggested_trade_review_plan_ready_blocked_for_market_window"
+        in {
+            "suggested_trade_review_plan_ready_blocked_for_market_window",
+            "suggested_trade_review_plan_ready_for_historical_resolution",
+        }
         and not bool(suggested_trade_review_plan.get("live_policy_change"))
     )
     stale_candidate_archive_complete = (

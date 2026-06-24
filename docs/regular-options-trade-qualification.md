@@ -98,21 +98,21 @@ No live release. Best current action: paper-shadow/evidence collection only.
 
 | Source | Status | Age hours | Generated at | Reasons |
 | --- | --- | ---: | --- | --- |
-| `candidate_outcome_ledger` | `loaded` | `20.9` | `2026-06-17T05:11:09Z` | `[]` |
-| `fill_attempt_evidence_capture_plan` | `loaded` | `20.38` | `2026-06-17T05:42:01Z` | `[]` |
-| `fresh_evidence_loop` | `loaded` | `20.9` | `2026-06-17T05:10:59Z` | `[]` |
-| `gateboard` | `loaded` | `20.28` | `2026-06-17T05:48:07Z` | `[]` |
-| `historical_walk_forward` | `loaded` | `0.0` | `2026-06-18T02:04:44Z` | `[]` |
-| `lane_promotion_state` | `loaded` | `0.26` | `2026-06-18T01:49:14Z` | `[]` |
-| `monthly_profitability` | `loaded` | `0.0` | `2026-06-18T02:04:50Z` | `[]` |
-| `open_position_risk` | `loaded` | `20.9` | `2026-06-17T05:10:58Z` | `[]` |
-| `open_risk_resolution_plan` | `loaded` | `20.9` | `2026-06-17T05:11:05Z` | `[]` |
-| `paper_shortlist` | `loaded` | `20.9` | `2026-06-17T05:10:57Z` | `[]` |
-| `profit_capture_queue` | `loaded` | `20.9` | `2026-06-17T05:10:49Z` | `[]` |
-| `repair_burndown` | `loaded` | `20.9` | `2026-06-17T05:10:49Z` | `[]` |
-| `robust_search_evaluation` | `loaded` | `0.0` | `2026-06-18T02:04:44Z` | `[]` |
-| `suggested_trade_close_risk` | `loaded` | `20.9` | `2026-06-17T05:10:43Z` | `[]` |
-| `suggested_trade_review_plan` | `loaded` | `20.38` | `2026-06-17T05:42:01Z` | `[]` |
+| `candidate_outcome_ledger` | `loaded` | `0.01` | `2026-06-21T17:21:56Z` | `[]` |
+| `fill_attempt_evidence_capture_plan` | `loaded` | `0.03` | `2026-06-21T17:20:20Z` | `[]` |
+| `fresh_evidence_loop` | `loaded` | `0.03` | `2026-06-21T17:20:30Z` | `[]` |
+| `gateboard` | `loaded` | `0.02` | `2026-06-21T17:21:05Z` | `[]` |
+| `historical_walk_forward` | `loaded` | `83.21` | `2026-06-18T06:09:39Z` | `[]` |
+| `lane_promotion_state` | `loaded` | `0.0` | `2026-06-21T17:22:02Z` | `[]` |
+| `monthly_profitability` | `loaded` | `0.02` | `2026-06-21T17:21:09Z` | `[]` |
+| `open_position_risk` | `loaded` | `0.03` | `2026-06-21T17:20:19Z` | `[]` |
+| `open_risk_resolution_plan` | `loaded` | `0.01` | `2026-06-21T17:21:48Z` | `[]` |
+| `paper_shortlist` | `loaded` | `0.01` | `2026-06-21T17:21:47Z` | `[]` |
+| `profit_capture_queue` | `loaded` | `0.01` | `2026-06-21T17:21:48Z` | `[]` |
+| `repair_burndown` | `loaded` | `0.01` | `2026-06-21T17:21:48Z` | `[]` |
+| `robust_search_evaluation` | `loaded` | `83.21` | `2026-06-18T06:09:39Z` | `[]` |
+| `suggested_trade_close_risk` | `loaded` | `0.57` | `2026-06-21T16:47:57Z` | `[]` |
+| `suggested_trade_review_plan` | `loaded` | `0.34` | `2026-06-21T17:01:59Z` | `[]` |
 
 Source status counts: `{"loaded": 15}`.
 

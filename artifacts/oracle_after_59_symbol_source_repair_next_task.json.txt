@@ -1,0 +1,244 @@
+{
+"anti_handwave_audit": {
+"exact_next_action_present": true,
+"generic_advice_removed": true,
+"measurable_threshold_present": true
+},
+"assumption_challenges": [
+{
+"assumption": "The 13-symbol quote surface now has enough historical quote depth, but the proof chain is blocked because daily candidate/no-pick diagnostics are missing.",
+"risk": "If we mistake quote coverage for candidate-generation proof, the latest-four audit could falsely look usable.",
+"verification": "Require a frozen daily candidate-generation engine to produce explicit candidate_generated, explicit_no_pick, or blocker status for every requested market date before any simulated-forward audit can count coverage."
+},
+{
+"assumption": "A frozen candidate-generation engine can be implemented without changing scanner policy or strategy logic.",
+"risk": "If Codex invents selection rules or changes production scanner behavior, the output becomes a new strategy, not a reconstruction of the frozen source surface.",
+"verification": "The task must only expose a no-write adapter around existing runner/selection modules and frozen cohort contracts; if no reusable entrypoint exists, fail closed as blocked_missing_reusable_candidate_generation_entrypoint."
+},
+{
+"assumption": "The 13-symbol engine is higher value than immediately retrying the 59-symbol import.",
+"risk": "If the 13-symbol source surface still produces no candidates, this will not move profitability.",
+"verification": "Success requires 24/24 candidate-generation months, train_months_covered>=20, audit_months_covered=4, latest_audit_exact_trades>=30 after strict filters, and PF lower-bound gates; otherwise the branch is parked."
+},
+{
+"assumption": "ThetaTerminal unavailability should not be treated as a profitability stop.",
+"risk": "A provider outage could halt the loop even though a no-write 13-symbol candidate-generation blocker remains.",
+"verification": "Do not retry the unavailable import inside this task; select a non-live, non-broker, no-import fallback that attacks the named missing_frozen_13_symbol_candidate_generation_engine blocker."
+},
+{
+"assumption": "Historical simulated-forward success would still not be live proof.",
+"risk": "Even if the repaired candidate-generation surface finds positive latest-four results, historical rows could be over-read as forward profitability.",
+"verification": "The artifact must preserve historical_rows_are_forward_proof=false, accepted_profitability=false unless the separate forward strict completed 30-row gate is met, and no live/broker/auto-track/promotion flags."
+}
+],
+"branches_to_stop": [
+"scoped_59_symbol_thetadata_opra_nbbo_import_and_split_audit_v1_until_thetaterminal_reachable_or_batch_source_changes",
+"phase2_forward_paper_shadow_market_window_capture_append_v1_until_new_same_day_phase2_natural_selections_exist",
+"fixed_13_symbol_quote_depth_rechecks_without_candidate_generation_engine",
+"13_symbol_frozen_candidate_generation_denominator_v2_without_new_engine",
+"13_symbol_candidate_generation_surface_audit_without_new_engine",
+"all_local_stable_quote_minute_structure_capability_atlas_v1",
+"local_opra_nbbo_structure_capability_matrix_v1_with_13_symbol_fixed_buckets",
+"quote_surface_opening_range_reversal_vertical_v1_until_trusted_underlying_or_opening_bucket_source_changes",
+"quote_derived_synthetic_forward_opening_bucket_surface_v1_until_same_minute_call_put_pair_surface_changes",
+"momentum_continuation_bounded_replay_without_new_point_in_time_vix_breadth_or_source_inputs",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"sleeve_next_index_refill_v1_as_count_solution",
+"pmcc_diagonal_replay_without_trend_vix_and_long_dte_quote_surface",
+"flow_extreme_ratio_backspread_without_trusted_flow_and_vix_source",
+"macro_event_long_strangle_without_event_calendar_and_vix_source",
+"vrp_credit_spread_without_pricing_engine_vix_bucket_quote_surface_and_holdout_guard",
+"term_structure_calendar_without_calendar_pricing_term_inputs_and_quote_surface",
+"skew_broken_wing_without_new_source_or_readiness_artifact",
+"dispersion_proxy_hybrid_without_dispersion_proxy_and_vix_source",
+"dashboard_only_visibility_branches",
+"historical_rows_as_forward_profitability_proof"
+],
+"burden_of_proof_check": {
+"current_forward_rows": 0,
+"reason": "Stop is not earned. Forward proof remains 0/30, the current historical frontier has 44 candidates with 0 countable throughput candidates, and the 13-symbol proof chain has 24 quote months plus a no-write runner but 0 candidate-generation months because the frozen candidate-generation engine/daily diagnostics are missing. This is a named blocker that can be attacked without live trading, broker action, quote import, protected-holdout consumption, scanner policy changes, or proof-bar relaxation. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+",
+"stop_allowed": false,
+"target_profitable_strict_completed_rows": 30
+},
+"candidate_branches": [
+{
+"branch": "frozen_13_symbol_candidate_generation_engine_daily_diagnostics_v1",
+"expected_value": "High. It directly attacks the current smallest proof blocker: quote history exists, but candidate-generation proof is 0/24 months because daily candidate/no-pick diagnostics are missing.",
+"main_uncertainty": "Whether the existing repo has a reusable frozen no-write candidate-generation entrypoint that can be run historically without changing scanner policy or inventing strategy logic.",
+"why_not_selected": null
+},
+{
+"branch": "retry_59_symbol_thetadata_opra_import",
+"expected_value": "High if ThetaTerminal is reachable, because it could clear the broader 59-symbol source-depth blocker.",
+"main_uncertainty": "The latest scoped repair attempt was blocked by local ThetaTerminal refusing connection; immediate retry could just reproduce provider unavailability.",
+"why_not_selected": "Not selected now because a no-import 13-symbol frozen-engine blocker remains and can be attacked without relying on provider availability."
+},
+{
+"branch": "direct_vix_or_macro_event_source_import",
+"expected_value": "Medium to high for VRP, macro-event, PMCC, skew, and term-structure concepts.",
+"main_uncertainty": "Requires selecting and validating a new source family, known-at provenance, thresholds, and write target.",
+"why_not_selected": "Not selected before the narrower 13-symbol candidate-generation blocker, which already has quote depth and runner support."
+},
+{
+"branch": "fresh_forward_paper_shadow_capture_retry",
+"expected_value": "Highest when real same-day Phase 2 natural selections exist.",
+"main_uncertainty": "The latest confirmed market-window run staged 0 rows and wrote no candidate JSONL.",
+"why_not_selected": "Not selected until new same-day Phase 2 natural selections exist; repeating an empty capture immediately is not a significant upgrade."
+},
+{
+"branch": "new_causal_playbook_generation",
+"expected_value": "Medium only after source feasibility is known.",
+"main_uncertainty": "Recent new playbooks repeatedly parked on missing point-in-time source surfaces; design-only work risks narrative churn.",
+"why_not_selected": "Not selected because the current blocker is concrete and source-chain specific: missing frozen 13-symbol candidate-generation diagnostics."
+}
+],
+"continue_loop": true,
+"next_codex_task": {
+"objective": "Implement a frozen 13-symbol candidate-generation engine and daily diagnostics materializer that converts the existing 13-symbol quote-depth and no-write runner support into explicit point-in-time candidate/no-pick/blocker rows for 2024-06-01 through 2026-05-31 as of 2026-06-04, then reruns the historical simulated-forward audit only if candidate-generation coverage is proven.",
+"exact_scope": "Research-only, no-write except generated artifacts. Use the exact 13-symbol proof set SPY, QQQ, IWM, AAPL, GOOGL, UNH, LLY, JNJ, XOM, CVX, COP, NEM, DIA. Use existing feature-store and options_history.db rows only. Use the frozen Phase 2 forward-cohort contract and existing no-write candidate-generation runner/selection modules. Exclude production scanner policy changes, strategy logic changes, stop/sizing/proof-bar changes, quote import, evidence DB mutation, protected holdout, live validation, auto-track, broker/order preparation, promotion, and post-hoc broad 59-symbol filtering.",
+"implementation_steps": [
+"Add scripts/build_regular_options_13_symbol_frozen_candidate_generation_engine.py.",
+"Add tests/test_regular_options_13_symbol_frozen_candidate_generation_engine.py.",
+"Add package.json script options:research:13-symbol-frozen-candidate-generation-engine.",
+"Load data/contracts/forward-cohort-preregistration.json and data/contracts/forward-holdout-contract.json; assert freeze_date, eval_date, frozen lanes, frozen symbols, and protected-holdout guard are present.",
+"Load data/profitability-lab/regular-options-feature-store/latest.json and assert the 13-symbol feature store has trusted quote depth through as_of_date=2026-06-04 with feature.tradable_after_time <= candidate_entry_time.",
+"Load the prior blocked artifacts and reproduce baseline: candidate_generation_13_symbol_quote_months=24, frozen_source_surface_months_covered=0, denominator_v2 blocked rows=494, latest_four_strict_new_candidates=0, and smallest blocker=missing_frozen_13_symbol_candidate_generation_engine.",
+"Discover the existing no-write candidate-generation runner and reusable selector entrypoints. If no frozen no-write entrypoint exists, fail closed as blocked_missing_reusable_candidate_generation_entrypoint; do not invent selection rules.",
+"For each requested market date from 2024-06-01 through 2026-05-31, run the frozen candidate-generation adapter in no-write mode using only information known by the candidate timestamp and as_of_date=2026-06-04.",
+"Emit daily_candidate_generation.jsonl with explicit candidate_generated, explicit_no_pick, or named blocker status for every requested market date, symbol, and frozen lane/symbol eligibility combination.",
+"Emit selected_candidates.jsonl only for rows naturally generated by the frozen engine, including row_id, candidate_source_id, lane, underlying, contract identity, planned entry timestamp, planned exit policy, policy hash, scanner hash, denominator status, source artifact path, known_at/tradable_after provenance, and opportunity identity fields.",
+"Apply the active CVX zero-bid/tradability source-quality scope policy without lowering the 90% executable quote-quality floor; CVX rows may be excluded only by the preregistered scope rule and must be reported separately.",
+"Reject or block any row with outside-universe underlying, non-frozen lane, pre-freeze acceptance confusion, protected-holdout overlap, future-known input, unknown denominator status, missing provenance, duplicate opportunity identity, or scanner-hash drift.",
+"If daily candidate-generation coverage reaches 24 requested months with explicit no-pick/candidate/blocker status and no leakage, run or update the historical simulated-forward audit to consume this generated source surface via a candidate-generation-source argument.",
+"If the audit consumes the surface, compute train months 2024-06 through 2026-01 and latest audit months 2026-02 through 2026-05, exact executable completed rows, strict-new opportunity-deduped rows against the 157-row base ledger, net USD P&L, PF, 5% bootstrap PF lower bound, stress PF, quote-quality blockers, and concentration red flags.",
+"Generate docs/regular-options-13-symbol-frozen-candidate-generation-engine.md and data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json/latest.md with final decision, blocker counts, and next allowed command.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md only with durable read-only research status and safety boundaries."
+],
+"allowed_files_or_artifacts": [
+"scripts/build_regular_options_13_symbol_frozen_candidate_generation_engine.py",
+"tests/test_regular_options_13_symbol_frozen_candidate_generation_engine.py",
+"scripts/run_regular_options_13_symbol_no_write_candidate_generation.py",
+"scripts/build_regular_options_historical_simulated_forward_audit.py",
+"tests/test_regular_options_historical_simulated_forward_audit.py",
+"docs/regular-options-13-symbol-frozen-candidate-generation-engine.md",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.md",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/daily_candidate_generation.jsonl",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/selected_candidates.jsonl",
+"data/profitability-lab/regular-options-feature-store/latest.json",
+"data/profitability-lab/regular-options-base-clean-stack-identity-ledger/latest.json",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-source-surface/latest.json",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-denominator-v2/latest.json",
+"data/profitability-lab/regular-options-historical-simulated-forward-audit/latest.json",
+"data/contracts/forward-cohort-preregistration.json",
+"data/contracts/forward-holdout-contract.json",
+"data/contracts/regular-options-source-quality-scope-policy.json",
+"data/options-validation/options_history.db",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-13-symbol-frozen-candidate-generation-engine.md",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.md",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/daily_candidate_generation.jsonl",
+"data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/selected_candidates.jsonl",
+"updated data/profitability-lab/regular-options-historical-simulated-forward-audit/latest.json only if the generated candidate surface passes coverage gates",
+"updated docs/regular-options-historical-simulated-forward-audit.md only if the audit consumes the new generated surface"
+],
+"commands_to_run": [
+"npm run options:research:13-symbol-frozen-candidate-generation-engine -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --universe SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA --forward-cohort data/contracts/forward-cohort-preregistration.json --source-feature-store data/profitability-lab/regular-options-feature-store/latest.json --no-write --json",
+"npm run options:audit:historical-simulated-forward -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --train-months 20 --audit-months 4 --candidate-generation-source data/profitability-lab/regular-options-13-symbol-frozen-candidate-generation-engine/latest.json --json",
+"uv run --locked python -m py_compile scripts/build_regular_options_13_symbol_frozen_candidate_generation_engine.py tests/test_regular_options_13_symbol_frozen_candidate_generation_engine.py",
+"uv run --locked python -m unittest tests.test_regular_options_13_symbol_frozen_candidate_generation_engine -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Report status is one of frozen_13_symbol_candidate_generation_engine_ready, blocked_frozen_13_symbol_candidate_generation_engine, historical_simulated_forward_ready_for_review_after_frozen_engine, or rejected_frozen_13_symbol_candidate_generation_surface.",
+"Report reproduces the baseline: current_forward_rows=0, target_forward_rows=30, base_clean_stack_exact_rows=157, candidate_generation_13_symbol_quote_months=24, prior_frozen_source_surface_months_covered=0, prior_denominator_v2_all_rows_blocked=true, accepted_profitability=false, historical_rows_are_forward_proof=false.",
+"No row may be generated outside the exact 13-symbol universe; outside_universe_rows must equal 0.",
+"No row may be generated from a non-frozen lane or a lane/symbol combination outside the forward-cohort contract; non_frozen_lane_rows must equal 0.",
+"Daily candidate-generation coverage is ready only if all 24 requested months have explicit candidate/no-pick/blocker diagnostics, train_months_covered>=20, audit_months_covered=4, missing_daily_diagnostics=0, leakage_reject_rows=0, protected_holdout_overlap_rows=0, and unknown_denominator_status_rows=0.",
+"Candidate rows must include candidate_source_id, lane, underlying, contract identity, planned entry timestamp, planned exit policy, policy hash, scanner hash, source artifact path, known_at/tradable_after provenance, and opportunity identity fields.",
+"The engine must fail closed if it cannot call an existing frozen no-write candidate-generation entrypoint; it must not invent selection logic or change scanner policy.",
+"The audit may run only if candidate-generation coverage is ready; otherwise the artifact must emit the smallest blocker and not compute proof metrics from quote depth alone.",
+"If the audit runs, a forward-freeze review candidate can be nominated only if full_window_exact_rows>=200, strict_new_rows_after_opportunity_dedupe>=43, latest_audit_exact_trades>=30, latest_audit_net_usd_pnl>0, latest_audit_profit_factor>=1.20, latest_audit_bootstrap_pf_lower_bound_5pct>1.00, full_window_bootstrap_pf_lower_bound_5pct>1.00, stress_pf>=1.05, selected_non_executable_rows=0, unpriced_rows=0, zero_bid_selected_rows=0, protected_holdout_overlap_rows=0, and concentration red flags are below thresholds.",
+"Concentration red flags must block nomination if single_trade_profit_share>20%, top_5_trade_profit_share>50%, single_month_profit_share>35%, single_underlying_profit_share>50%, or single_expiration_profit_share>40%.",
+"Historical simulated-forward success must remain historical_rows_are_forward_proof=false and must not set live_entry_allowed, auto_track_allowed, broker_order_allowed, promotion_ready, or accepted_profitability true.",
+"Tests must prove: no-write mode is enforced; outside-universe rows fail; non-frozen lanes fail; missing reusable candidate-generation entrypoint blocks; daily diagnostics below 24 months block; quote coverage alone cannot pass; leakage/as-of violations fail; duplicate opportunity identities fail; CVX source-quality scope is applied without lowering the quote-quality floor; and a clean synthetic fixture can emit frozen_13_symbol_candidate_generation_engine_ready."
+],
+"failure_criteria": [
+"Park as blocked_missing_reusable_candidate_generation_entrypoint if the repo cannot expose a no-write frozen engine without inventing selection rules or changing scanner policy.",
+"Park as blocked_daily_candidate_generation_coverage if fewer than 24 requested months have explicit candidate/no-pick/blocker diagnostics.",
+"Park as blocked_train_or_audit_month_coverage if train_months_covered<20 or audit_months_covered<4.",
+"Park as blocked_latest_audit_rows_below_30 if the generated source surface has fewer than 30 latest-four exact executable completed rows after strict filters.",
+"Reject as rejected_frozen_13_symbol_candidate_generation_surface if generated rows exist but net USD P&L<=0, PF<1.20, PF lower bound<=1.00, stress PF<1.05, or exact execution quality fails.",
+"Park as blocked_source_quality_scope if the only candidate surface depends on CVX or other symbol/months below the executable quote-quality floor without a preregistered exclusion rule.",
+"Fail as safety_violation if the task imports quotes, mutates options_history.db, mutates evidence stores beyond generated artifacts, appends a forward cohort, consumes protected holdout, changes scanner policy, changes strategy logic, changes stops/sizing/proof bars, enables live validation, enables auto-track, touches broker/order code paths, creates trades, or marks promotion_ready=true."
+],
+"forbidden_actions": [
+"broker orders",
+"order preparation",
+"live validation",
+"auto-track",
+"production scanner release",
+"production scanner policy changes",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"options_history.db mutation",
+"evidence database mutation outside generated research artifacts",
+"forward cohort append",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"post-hoc filtering the broad 59-symbol source into 13-symbol proof",
+"inventing point-in-time candidate-generation decisions",
+"changing frozen cohort membership or freeze date",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, lookahead-only, zero-bid, or untradable marks as exact executable proof",
+"reclassifying zero-bid or untradable rows as missing provider data",
+"lowering the 90% executable quote-quality floor"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro. If the engine proves 24/24 candidate-generation months and the audit clears the 30 latest-four exact rows plus PF/lower-bound/stress/execution gates, the next step is a forward-freeze paper-shadow review decision, still with live/broker/auto-track/promotion false. If the engine cannot be built without inventing strategy logic, or produces fewer than 20 train months, 4 audit months, or 30 latest-four exact rows, park the 13-symbol candidate-generation branch and pivot to the next approved source family, most likely a direct VIX/event/flow source import plan or retrying the scoped 59-symbol ThetaData repair only after provider availability changes."
+},
+"operator_questions": [],
+"selected_branch_id": "frozen_13_symbol_candidate_generation_engine_daily_diagnostics_v1",
+"significant_upgrade_available": true,
+"verdict": "continue",
+"why_this_is_significant": "The prior momentum/current-surface work found raw counts but 0 countable profitable candidates; the current 13-symbol proof chain has quote depth and a no-write runner but 0/24 candidate-generation months because the frozen engine/daily diagnostics are missing. Building that engine is the narrowest non-live, non-broker, no-import slice that can convert existing quote depth into a proof-auditable candidate/no-pick surface or definitively retire the 13-symbol historical split path. PMCC and other source-dependent branches stay parked because their readiness artifacts are blocked by missing trend/VIX/long-DTE or comparable missing inputs. 
+
+Pasted text
+
+ 
+
+Pasted text
+
+ 
+
+Pasted text
+
+ 
+
+Pasted text
+
+ 
+
+Pasted text
+
+"
+}

@@ -1,0 +1,217 @@
+{
+"verdict": "continue",
+"continue_loop": true,
+"significant_upgrade_available": true,
+"selected_branch_id": "all_local_stable_quote_minute_structure_capability_atlas_v1",
+"burden_of_proof_check": {
+"current_forward_or_latest_four_strict_row_count": 0,
+"target_profitable_strict_completed_rows": 30,
+"stop_allowed": false,
+"why_stop_is_or_is_not_earned": "Stop is not earned. The proof burden is still 0/30 latest-four or forward-style strict completed rows, and accepted profitability remains false. The historical frontier is exhausted only for the already-tested surface: 44 variants, 0 countable throughput candidates, 157 base exact rows, and 43 strict-new rows still required. The new structure matrix did exhaust the 13-symbol/two-entry-bucket quote-surface replayability path, but it also exposed dense latest-four single-leg and same-type vertical quote depth with weak train-month coverage. That means the next proof-safe question is whether the failure is caused by the fixed 13-symbol universe and fixed 10:40/14:30/15:50 bucket grid, or whether all local OPRA/NBBO quote-surface structures are truly exhausted under current data. See data/forward-tracking/options_oracle_profit_loop_packet_latest.json:177-230 and data/forward-tracking/options_oracle_profit_loop_packet_latest.json:527-533. 
+
+Pasted text
+
+"
+},
+"assumption_challenges": [
+{
+"assumption": "The prior structure matrix proves local quote-surface structures are exhausted.",
+"risk": "It used the 13-symbol proof set and two fixed entry buckets plus one fixed exit bucket. Dense latest-four counts but weak train-month coverage may be a bucket/universe artifact, not a true absence of replayable structures.",
+"verification": "Build an all-local trusted-underlying, all-available-quote-minute capability atlas that selects candidate entry/exit buckets using coverage only, never P&L, and requires 20 train months, 4 latest months, 200 full-window opportunities, and 30 latest-four opportunities before any replay candidate is emitted."
+},
+{
+"assumption": "All-local underlyings can be considered without changing the data surface.",
+"risk": "If the task imports quotes, mutates evidence stores, or treats a newly discovered universe as production-approved, it violates the current boundary.",
+"verification": "The script must read existing options_history.db only in read-only mode, write generated research artifacts only under data/profitability-lab, and mark accepted_profitability=false, historical_rows_are_forward_proof=false, promotion_ready=false, quotes_imported=false, and evidence_stores_mutated=false."
+},
+{
+"assumption": "Searching quote-minute buckets by coverage is not curve-fitting.",
+"risk": "If the atlas ranks buckets by realized P&L or future outcomes, it becomes a hidden parameter search.",
+"verification": "Bucket and structure ranking must use only pre-P&L feasibility metrics: quote availability, executable bid/ask quality, month coverage, strict-new opportunity count, spread diagnostics, and deterministic complexity ordering."
+},
+{
+"assumption": "Single-leg and same-type vertical quote depth can lead to a profitable latest-four replay.",
+"risk": "Capability is not edge. High quote availability may still produce negative PF after side-aware bid/ask, fees, and strict dedupe.",
+"verification": "This task may only nominate a bounded replay candidate. Any later replay must still require latest-four rows >=30, net USD P&L >0, PF and bootstrap PF lower bound above gates, stress PF, no concentration dependency, and no non-executable marks."
+},
+{
+"assumption": "A stop_exception is premature.",
+"risk": "If all-local and all-bucket trusted quote surfaces also fail feasibility, then continuing with more local quote-surface replay branches would become narrative churn.",
+"verification": "If no structure/bucket/universe combination clears the feasibility gates, the artifact must set all_local_quote_surface_replayability_exhausted_under_current_data=true and explicitly park local quote-surface-only replay branches."
+}
+],
+"branches_to_stop": [
+"local_opra_nbbo_structure_capability_matrix_v1_with_13_symbol_fixed_buckets",
+"quote_surface_opening_range_reversal_vertical_v1_until_trusted_underlying_or_opening_bucket_source_changes",
+"quote_derived_synthetic_forward_opening_bucket_surface_v1_until_same_minute_call_put_pair_surface_changes",
+"13_symbol_frozen_candidate_generation_denominator_v2",
+"13_symbol_frozen_candidate_generation_source_surface",
+"13_symbol_candidate_generation_surface_audit",
+"13_symbol_no_write_runner_support_as_profitability_progress",
+"pmcc_diagonal_replay_readiness_audit_v1_until_point_in_time_trend_vix_or_long_dte_quote_surface_changes",
+"flow_extreme_ratio_backspread_replay_readiness_until_trusted_flow_input_and_vix_bucket_change",
+"flow_extreme_volume_oi_source_rows_until_trusted_volume_oi_source_changes",
+"point_in_time_flow_extreme_input_until_trusted_flow_source_exists",
+"macro_event_long_strangle_replay_readiness_until_macro_event_calendar_and_vix_source_change",
+"point_in_time_vix_bucket_until_vix_source_and_threshold_policy_change",
+"momentum_continuation_bounded_replay_until_point_in_time_breadth_spy_qqq_vix_inputs_change",
+"vrp_credit_spread_replay_readiness_until_pricing_engine_vix_bucket_quote_surface_and_holdout_guard_change",
+"term_structure_calendar_replay_readiness_until_calendar_pricing_term_structure_inputs_quote_surface_and_strict_new_dedupe_change",
+"skew_broken_wing_put_fly_readiness_until_new_source_or_readiness_artifact_changes_blocker",
+"dashboard_only_visibility_branches",
+"raw_overlap_aggregation_of_44_frontier_variants",
+"current_regime_momentum_edge_raw_count_retesting",
+"sleeve_next_index_refill_v1_as_count_solution",
+"tracked_winner_count_retuning_without_new_causal_or_source_surface_evidence",
+"historical_rows_as_forward_profitability_proof"
+],
+"candidate_branches": [
+{
+"branch": "all_local_stable_quote_minute_structure_capability_atlas_v1",
+"expected_value": "High. It directly attacks the new blocker from the structure matrix: dense latest-four single-leg and same-type vertical quote depth exists, but fixed-bucket train coverage is weak. This atlas can determine whether another existing trusted local underlying set and quote-minute bucket grid supports a replayable 20+4 month surface without importing quotes or changing proof bars.",
+"main_uncertainty": "Whether existing OPRA/NBBO rows contain stable all-leg executable entry/exit quote coverage across at least 20 train months and 4 latest months for any defined-risk structure after strict-new dedupe and quote-quality gates.",
+"why_selected": "Selected because it is the smallest proof-safe step that can distinguish a real local-data exhaustion verdict from an overly narrow 13-symbol/fixed-bucket failure."
+},
+{
+"branch": "same_type_vertical_premium_shock_replay_v1",
+"expected_value": "Potentially high because same-type verticals had very large full-window and latest-four constructible counts in the prior matrix.",
+"main_uncertainty": "The prior matrix blocked on insufficient train months, so a replay would likely repeat the same blocker unless stable buckets and universe are proven first.",
+"why_selected": "Not selected. It should only run after a coverage-only atlas emits a concrete replay surface."
+},
+{
+"branch": "all_local_single_leg_liquidity_decay_replay_v1",
+"expected_value": "Medium. Single-leg rows are dense and simpler than multi-leg structures, so they may be easier to price exactly.",
+"main_uncertainty": "Single-leg option P&L may be mostly directional/noise without a point-in-time underlying or regime signal, and the previous matrix also blocked single legs on train coverage.",
+"why_selected": "Not selected. It needs the all-local bucket atlas first to avoid another source-surface failure."
+},
+{
+"branch": "fresh_forward_paper_shadow_collection",
+"expected_value": "Highest direct proof value because only fresh post-freeze strict completed rows can become forward proof.",
+"main_uncertainty": "Requires a valid market-data window and cohort append approval; current directive still forbids mutation/append unless separately explicit.",
+"why_selected": "Not selected as this Codex task because a non-mutating read-only capability atlas remains available."
+},
+{
+"branch": "quote_import_or_new_data_surface",
+"expected_value": "High if approved because it could clear missing underlying, VIX, flow, event, long-DTE, and older train-month quote-surface blockers.",
+"main_uncertainty": "It changes the data surface and requires separate explicit operator approval.",
+"why_selected": "Not selected because it is approval-required and a read-only all-local atlas remains available."
+}
+],
+"next_codex_task": {
+"objective": "Implement a read-only all-local stable quote-minute structure capability atlas that inventories every trusted local underlying and all available quote-minute buckets to determine whether any option structure has enough executable bid/ask coverage for a future bounded no-write replay with at least 200 full-window constructible completed opportunities and at least 30 latest-four constructible completed opportunities after strict-new dedupe. This task must not compute accepted profitability or run a P&L replay.",
+"exact_scope": "Read existing data/options-validation/options_history.db in read-only mode only. Inspect trusted OPRA/NBBO option_quote_snapshots from 2024-06-01 through 2026-05-31 as of 2026-06-04 across all local underlyings present in the database. Build coverage-only capability surfaces for single-leg calls/puts, same-expiration same-type verticals, same-expiration butterflies, same-expiration condors, same-type calendars/diagonals, bounded ratio/backspread shapes, straddles/strangles, and iron flies/iron condors. Candidate bucket selection must use quote coverage and quote quality only, not realized P&L. This is not a scanner change, not production strategy logic, not trade creation, not quote import, not evidence mutation, not protected holdout use, not promotion, and not forward proof.",
+"implementation_steps": [
+"Add scripts/build_regular_options_all_local_quote_minute_structure_capability_atlas.py.",
+"Add tests/test_regular_options_all_local_quote_minute_structure_capability_atlas.py.",
+"Add package.json script options:research:all-local-quote-minute-structure-capability-atlas.",
+"Open data/options-validation/options_history.db with SQLite read-only URI mode and assert read_only_db_open=true.",
+"Load data/profitability-lab/regular-options-local-quote-structure-capability-matrix/latest.json and reproduce its controlling result: status=local_quote_surface_only_structures_exhausted_under_current_data, replay_feasible_structure_count=0, next_replay_candidate=null, and fixed-bucket blockers dominated by insufficient_train_months.",
+"Load data/profitability-lab/regular-options-base-clean-stack-identity-ledger/latest.json and assert base_identity_hash_count=157, duplicate_identity_count=0, future_dependency_count=0, and protected_holdout_overlap_count=0.",
+"Discover all trusted local underlyings from option_quote_snapshots using existing trusted source labels only; do not import or repair any quote rows.",
+"Build a quote-minute availability calendar by underlying, date, quote_minute_et, option_type, expiry, DTE bucket, and executable bid/ask status.",
+"Bin quote minutes into deterministic 5-minute ET windows from 09:35 through 15:55, but preserve the actual quote_minute_et used for every representative opportunity.",
+"Construct coverage-only candidate entry/exit bucket pairs using only available quote rows. Entry windows must be before exit windows, exit windows must be same-day, and no pair may be ranked by realized P&L or future outcomes.",
+"For each structure family, DTE bucket, underlying set, entry bucket, and exit bucket, count constructible completed opportunities only when every required leg has executable bid/ask at entry and exit: bid>0, ask>0, ask>=bid, non-stale quote timestamp in the window, source_batch_id present, trusted source, and no as_of/known_at later than the bucket or as_of_date.",
+"Use side-aware feasibility rules: long-entry legs require ask at entry and bid at exit; short-entry legs require bid at entry and ask at exit. Do not mark any row proof-qualified and do not claim P&L.",
+"Apply active source-quality scope policy where available. Symbols or months with executable quote coverage below the active floor must be excluded or fail closed by a preregistered coverage-only rule; never lower the quote-quality floor.",
+"For broad all-local discovery, create deterministic eligible universes by coverage only: all_local_eligible, index_etf_eligible, single_name_eligible, and 13_symbol_reference. Do not choose underlyings based on realized profitability.",
+"For representative opportunity output, cap to one coverage-ranked opportunity per underlying/date/structure/entry/exit/DTE bucket using deterministic quote-quality ordering: lowest max leg spread_pct, highest minimum bid, largest all-leg timestamp freshness, shortest DTE bucket, then stable contract-symbol order.",
+"Compute train months as 2024-06 through 2026-01 and latest-four months as 2026-02, 2026-03, 2026-04, and 2026-05 unless a safer as-of-compatible window is explicitly documented.",
+"Compute full-window constructible opportunities, latest-four constructible opportunities, train_months_covered, latest_four_months_covered, per-month minimum opportunity counts, strict-new opportunity counts after dedupe against the 157-row base ledger, duplicate-within-harness counts, quote-quality reject counts, leakage reject counts, and protected-holdout overlap rows.",
+"Rank replay surfaces by feasibility only: latest_four_strict_new_constructible_count, full_window_strict_new_constructible_count, train_months_covered, latest_four_months_covered, quote_quality_pass_rate, lower structure complexity, and deterministic universe id. Do not use P&L.",
+"Emit exactly one next_replay_candidate only if a surface clears all feasibility gates. Otherwise set all_local_quote_surface_replayability_exhausted_under_current_data=true and name the smallest blocker by structure family.",
+"Update docs/WORKLOG.md, docs/DECISIONS.md, docs/NEXT_STEPS.md, docs/index.md, and docs/PROJECT_CONTEXT.md with the generated read-only result and branch parking guidance only."
+],
+"allowed_files_or_artifacts": [
+"scripts/build_regular_options_all_local_quote_minute_structure_capability_atlas.py",
+"tests/test_regular_options_all_local_quote_minute_structure_capability_atlas.py",
+"docs/regular-options-all-local-quote-minute-structure-capability-atlas.md",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/latest.json",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/latest.md",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/daily_bucket_structure_status.jsonl",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/replay_surface_candidates.jsonl",
+"data/profitability-lab/regular-options-local-quote-structure-capability-matrix/latest.json",
+"data/profitability-lab/regular-options-base-clean-stack-identity-ledger/latest.json",
+"data/profitability-lab/regular-options-quote-surface-opening-range-reversal-replay/latest.json",
+"data/profitability-lab/regular-options-quote-derived-synthetic-forward-surface/latest.json",
+"data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+"data/contracts/regular-options-source-quality-scope-policy.json",
+"data/contracts/forward-holdout-contract.json",
+"data/options-validation/options_history.db",
+"docs/WORKLOG.md",
+"docs/DECISIONS.md",
+"docs/NEXT_STEPS.md",
+"docs/index.md",
+"docs/PROJECT_CONTEXT.md",
+"package.json"
+],
+"expected_artifacts": [
+"docs/regular-options-all-local-quote-minute-structure-capability-atlas.md",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/latest.json",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/latest.md",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/daily_bucket_structure_status.jsonl",
+"data/profitability-lab/regular-options-all-local-quote-minute-structure-capability-atlas/replay_surface_candidates.jsonl"
+],
+"commands_to_run": [
+"npm run options:research:all-local-quote-minute-structure-capability-atlas -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --entry-bucket-candidates all --exit-bucket-candidates all --bucket-width-minutes 5 --min-train-months 20 --min-latest-four-months 4 --min-full-window-opportunities 200 --min-latest-four-opportunities 30 --no-write --json",
+"uv run --locked python -m py_compile scripts/build_regular_options_all_local_quote_minute_structure_capability_atlas.py tests/test_regular_options_all_local_quote_minute_structure_capability_atlas.py",
+"uv run --locked python -m unittest tests.test_regular_options_all_local_quote_minute_structure_capability_atlas -v",
+"npm run verify:docs",
+"git diff --check"
+],
+"acceptance_criteria": [
+"Report status is one of all_local_quote_minute_structure_capability_ready_for_replay_selection, blocked_all_local_quote_minute_structure_capability_atlas, or all_local_quote_surface_replayability_exhausted_under_current_data.",
+"Report proves read_only_db_open=true, no_write=true, quotes_imported=false, evidence_stores_mutated=false, protected_holdout_consumed=false, scanner_policy_changed=false, strategy_logic_changed=false, stops_changed=false, sizing_changed=false, proof_bars_changed=false, live_validation_enabled=false, auto_track_enabled=false, broker_order_allowed=false, promotion_ready=false, accepted_profitability=false, historical_rows_are_forward_proof=false.",
+"Report reproduces the current blocking baseline: current_forward_or_latest_four_strict_rows=0, target_latest_four_strict_rows=30, base_identity_hash_count=157, prior_structure_matrix_status=local_quote_surface_only_structures_exhausted_under_current_data, prior_replay_feasible_structure_count=0, opening_range_blocker=blocked_missing_quote_surface_underlying_price, synthetic_forward_blocker=blocked_missing_call_put_pairs.",
+"Report inventories all trusted local underlyings present in options_history.db and separately reports all_local_eligible, index_etf_eligible, single_name_eligible, and 13_symbol_reference coverage.",
+"Report emits daily_bucket_structure_status.jsonl with explicit status for inspected structure family, underlying/universe segment, date, entry bucket, exit bucket, and DTE bucket combinations.",
+"Every constructible opportunity must have all required legs executable at both entry and exit buckets using bid/ask only; bid<=0, ask<=0, ask<bid, missing bid/ask, stale quote, missing source_batch_id, last-trade-only, model-only, display-only, EOD, manual, synthetic, midpoint fill, or future-known input must fail closed.",
+"Bucket and structure ranking must be coverage-only and P&L-blind. The artifact must include realized_pnl_used_for_ranking=false, future_outcomes_used_for_ranking=false, and p_l_replay_performed=false.",
+"No replay surface may be marked feasible unless full_window_constructible_completed_opportunities_after_dedupe>=200, latest_four_constructible_completed_opportunities_after_dedupe>=30, train_months_covered>=20, latest_four_months_covered=4, each_latest_four_month_opportunities_after_dedupe>=5, protected_holdout_overlap_rows=0, leakage_reject_rows=0, selected_non_executable_leg_count=0, blocked_unknown_rows=0, and active source-quality floor is satisfied or the affected symbol/month is excluded by a preregistered coverage-only rule.",
+"If a replay-feasible surface exists, the artifact emits exactly one next_replay_candidate with structure family, frozen universe, entry bucket, exit bucket, DTE bucket, deterministic leg-selection rule, opportunity identity fields, expected multiple-hypothesis accounting requirement for later replay, and a no-write replay command for a later GPT-5.5 Pro decision.",
+"If no replay-feasible surface exists, the artifact sets all_local_quote_surface_replayability_exhausted_under_current_data=true and lists smallest blockers by structure family, including insufficient_train_months, insufficient_latest_four_months, latest_four_rows_below_30, full_window_rows_below_200, missing_exit_quote_surface, missing_same_minute_multi_leg_quotes, non_executable_quote_quality, leakage_or_asof_violation, or source_quality_floor_failure.",
+"The artifact must not claim profitability, must not compute a passing PF, must not nominate a lane for forward freeze, must not generate trades, and must not count capability opportunities as forward proof.",
+"Tests must prove read-only DB open is enforced, all-local underlying discovery is read-only, P&L cannot influence bucket ranking, zero-bid rows fail closed, crossed quotes fail closed, missing exit quotes fail closed, same-window all-leg matching is required for multi-leg structures, active source-quality floor is applied, strict-new dedupe against the 157-row ledger is applied, latest-four rows below 30 block replay feasibility, full-window rows below 200 block replay feasibility, train months below 20 block replay feasibility, and a clean synthetic fixture can emit all_local_quote_minute_structure_capability_ready_for_replay_selection without changing trading state."
+],
+"failure_criteria": [
+"Park as blocked_missing_trusted_quote_inventory if options_history.db cannot be opened read-only or trusted bid/ask quote rows are unavailable.",
+"Park as blocked_no_stable_quote_minute_buckets if no entry/exit bucket pair reaches 20 train months and 4 latest-four months for any structure family.",
+"Park as blocked_no_structure_reaches_latest_four_30 if bucket coverage exists but no structure family has at least 30 latest-four constructible completed opportunities after strict-new dedupe.",
+"Park as blocked_no_structure_reaches_full_window_200 if latest-four depth exists but no structure has at least 200 full-window constructible completed opportunities after strict-new dedupe.",
+"Park as blocked_missing_exit_quote_surface if entry opportunities exist but exact executable exit bid/ask buckets are missing for enough rows to fail the 30/latest-four or 200/full-window gates.",
+"Park as blocked_non_executable_quote_quality if zero-bid, crossed, stale, missing bid/ask, source_batch_id missing, or non-executable marks dominate representative opportunities.",
+"Park as blocked_source_quality_floor_failure if the only apparently feasible surfaces depend on symbols/months below the active executable quote-quality floor and cannot be excluded by a preregistered coverage-only rule.",
+"Set all_local_quote_surface_replayability_exhausted_under_current_data=true if every structure family fails feasibility under current trusted local quote rows and all-minute bucket search, with no remaining read-only quote-surface branch that can change the result.",
+"Fail the task if it imports quotes, mutates options_history.db, mutates evidence stores, appends a forward cohort, changes scanner/strategy/stops/sizing/proof bars, consumes protected holdout, enables live validation, enables auto-track, prepares broker orders, creates trades, marks accepted profitability, or promotes a lane."
+],
+"forbidden_actions": [
+"broker orders",
+"live validation",
+"auto-track",
+"production scanner release",
+"production strategy changes",
+"stop or sizing changes",
+"proof-bar relaxation",
+"quote import",
+"evidence database mutation",
+"protected holdout consumption",
+"promotion",
+"historical rows as forward proof",
+"creating trades",
+"preparing orders",
+"forward cohort append",
+"using midpoint, stale, EOD, display-only, last-trade, model, manual, synthetic, or non-executable marks as fill or P&L evidence",
+"reclassifying zero-bid or untradable rows as missing data",
+"ranking buckets, structures, or universes by realized P&L",
+"using protected holdout outcomes",
+"repeating parked PMCC, 13-symbol, flow, macro-event, VIX, momentum, VRP, term-structure, skew, opening-range, synthetic-forward, or fixed-bucket structure branches without a new source artifact"
+],
+"stop_condition_after_task": "Send the result back to GPT-5.5 Pro for continue/stop. If at least one surface clears feasibility gates, the next decision is a separate bounded no-write replay for exactly the top-ranked P&L-blind surface. If no surface clears full-window >=200, latest-four >=30, train months >=20, latest-four months=4, strict-new dedupe, exact executable bid/ask, leakage, and source-quality gates, park local quote-surface-only replayability under current data and continue only through a distinct research-only causal/source branch or a separately approved gate for fresh forward collection, scoped source repair/replay, quote import/new data surface, protected holdout, or promotion."
+},
+"operator_questions": [],
+"why_this_is_significant": "The last result does not prove no option structure can be replayed; it proves the 13-symbol fixed-bucket structure matrix found no replay-feasible surface because train-month coverage was insufficient even though latest-four same-type vertical and single-leg quote depth was dense. This selected task directly tests the remaining non-prohibited explanation: whether all local trusted underlyings and all available quote-minute buckets contain a stable executable surface. It either emits a single concrete replay candidate or earns a much stronger local quote-surface exhaustion verdict. PMCC remains parked because its readiness artifact explicitly blocks on missing trend/regime inputs, VIX bucket, and long-DTE quote surface, and forbids proceeding to PMCC replay without those changes. docs/regular-options-pmcc-diagonal-replay-readiness.md:7-14, 24-40, 46-65. 
+
+Pasted text
+
+"
+}

@@ -1410,7 +1410,7 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
             _write_json(
                 plan_path,
                 {
-                    "status": "suggested_trade_review_plan_ready_blocked_for_market_window",
+                    "status": "suggested_trade_review_plan_ready_for_historical_resolution",
                     "generated_at_utc": "2026-06-07T00:00:00Z",
                     "live_policy_change": False,
                     "summary": {
@@ -1423,10 +1423,11 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
                         "executable_close_ready_count": 0,
                         "non_executable_close_risk_count": 0,
                         "plan_row_count": 1,
-                        "market_window_required_count": 1,
+                        "market_window_required_count": 0,
+                        "expired_review_resolution_count": 1,
                         "source_action_counts": {"no_stored_review": 1},
                         "source_evidence_counts": {"missing_review": 1},
-                        "operator_plan_status": "ready_for_fresh_suggested_trade_review_window",
+                        "operator_plan_status": "ready_for_historical_suggested_trade_resolution",
                     },
                     "plan_rows": [
                         {
@@ -1435,8 +1436,8 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
                             "ticker": "AAA",
                             "lane": "legacy_unlabeled",
                             "record_class": "suggested_trade",
-                            "action": "refresh_missing_suggested_trade_review",
-                            "resolution_status": "market_window_required_missing_suggested_trade_review",
+                            "action": "resolve_expired_missing_suggested_trade_review",
+                            "resolution_status": "expired_missing_review_requires_historical_resolution",
                         }
                     ],
                     "next_evidence_queue": [
@@ -1444,7 +1445,7 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
                             "priority": 1,
                             "action": "execute_suggested_trade_review_plan",
                             "count": 1,
-                            "reason": "suggested_trade_attention_rows_need_fresh_explicit_review",
+                            "reason": "expired_suggested_trade_attention_rows_need_historical_resolution",
                         }
                     ],
                 },
@@ -1455,7 +1456,7 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
 
         self.assertEqual(
             report["suggested_trade_review_plan"]["status"],
-            "suggested_trade_review_plan_ready_blocked_for_market_window",
+            "suggested_trade_review_plan_ready_for_historical_resolution",
         )
         self.assertEqual(
             report["summary"]["suggested_trade_review_plan_implementation_status"],
@@ -1463,6 +1464,10 @@ class MonthlyAllLanesProfitabilityAuditTest(unittest.TestCase):
         )
         self.assertEqual(
             report["summary"]["suggested_trade_review_plan_metrics"]["missing_review_count"],
+            1,
+        )
+        self.assertEqual(
+            report["summary"]["suggested_trade_review_plan_metrics"]["expired_review_resolution_count"],
             1,
         )
         actions = [item["action"] for item in report["next_evidence_queue"]]

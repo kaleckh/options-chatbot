@@ -2446,6 +2446,9 @@ def run_supervised_scan(
     min_profit_factor: float = 1.05,
     min_directional_accuracy_pct: float = 50.0,
     enforce_portfolio_caps: bool = True,
+    candidate_generation_date: Any = None,
+    as_of_date: Any = None,
+    no_write: bool = False,
 ) -> dict[str, Any]:
     playbook = get_scan_playbook(playbook_id)
     data_readiness_diagnostics = _data_readiness_diagnostics_for_playbook(playbook)
@@ -2465,6 +2468,12 @@ def run_supervised_scan(
         scan_kwargs["symbols"] = playbook_scan_symbols
     if playbook.get("signal_variant") and _callable_accepts_keyword(scan_func, "signal_variant"):
         scan_kwargs["signal_variant"] = str(playbook.get("signal_variant"))
+    if _callable_accepts_keyword(scan_func, "candidate_generation_date"):
+        scan_kwargs["candidate_generation_date"] = candidate_generation_date
+    if _callable_accepts_keyword(scan_func, "as_of_date"):
+        scan_kwargs["as_of_date"] = as_of_date
+    if _callable_accepts_keyword(scan_func, "no_write"):
+        scan_kwargs["no_write"] = no_write
     if playbook.get("scan_min_confidence") is not None and _callable_accepts_keyword(scan_func, "min_confidence"):
         scan_kwargs["min_confidence"] = float(playbook.get("scan_min_confidence"))
     if playbook.get("scan_min_tech_score") is not None and _callable_accepts_keyword(scan_func, "min_tech_score"):

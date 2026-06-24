@@ -76,6 +76,12 @@ These are the living docs for the current worktree:
   - generated machine-readable candidate lifecycle status/outcome contract
 - `docs/replay-profit-contract.md`
   - canonical replay/profit ownership map for replay readbacks, scanner policy, proof/profit gates, and options-profit status
+- `docs/regular-options-existing-input-surface-atlas.md`
+  - generated read-only inventory of existing point-in-time input/source surfaces; current status is `research_only_input_surfaces_exhausted_under_current_repository`
+- `docs/regular-options-phase2-forward-paper-shadow-market-window-capture.md`
+  - generated audit of the approved Phase 2 forward paper-shadow capture gate; current status is `no_phase2_natural_selections_no_append`
+- `docs/regular-options-59-symbol-thetadata-opra-import-repair.md`
+  - generated scoped 59-symbol ThetaData OPRA/NBBO source-repair preflight; current status is `blocked_thetaterminal_source_unavailable`
 - `docs/repository-contract.md`
   - canonical Trading Desk repository ownership map and structural repository interface contract
 - `docs/trading-desk-record-parity.md`
@@ -114,6 +120,14 @@ These are the living docs for the current worktree:
   - live audit of dead surfaces, sidecars, and remaining monoliths
 - `docs/current-state.md`
   - current options product state
+- `docs/regular-options-multi-leg-side-aware-pricing-capability.md`
+  - generated read-only multi-leg bid/ask pricing capability artifact for bounded ratio/backspread fixtures
+- `docs/regular-options-base-clean-stack-identity-ledger.md`
+  - generated read-only row-level identity ledger for the 157-row clean base stack, used for strict-new duplicate control without creating replay/proof/profitability rows
+- `docs/regular-options-flow-extreme-denominator-dedupe-bridge.md`
+  - generated read-only full-denominator and strict-new dedupe bridge for the flow-extreme ratio/backspread branch, now consuming the base clean stack identity ledger
+- `docs/regular-options-all-local-quote-minute-structure-capability-atlas.md`
+  - generated read-only all-local quote-minute structure capability atlas; current status exhausts local quote-surface-only replayability under current data because all selected surfaces fail the 20-train-month feasibility gate despite dense latest-four quote depth
 - `docs/day-trading-current-state.md`
   - current day-trading and crypto sidecar snapshot, with archive warnings
 - `docs/PROJECT_CONTEXT.md`
@@ -174,6 +188,18 @@ These are the living docs for the current worktree:
   - generated read-only trade qualification and profitability triage report combining gateboard, lane promotion, fresh evidence, candidate ledger, paper shortlist, repair, open-risk, suggested-review, historical walk-forward, and robust-search readbacks
 - `docs/regular-options-paper-shadow-evidence-plan.md`
   - generated read-only row-level plan for collecting paper-shadow/probation exact entry, policy-defined exact exit, fill-attempt, suggested-review, repair-only, and no-chase evidence without creating trades or changing proof, scanner, broker, stop, sizing, live-validation, auto-track, promotion, or database state
+- `docs/bullish-pullback-layer-shadow-selection.md`
+  - generated read-only selector that routes the frozen bullish-pullback layer stack into future paper-shadow harness requirements while preserving no-live, no-broker, no-import, and no-mutation boundaries
+- `docs/regular-options-bullish-pullback-layer-execution-safety-audit.md`
+  - generated read-only preflight for the selected bullish-pullback layer harness, currently blocked because the historical run lacks leg-level entry/exit bid-ask provenance
+- `docs/regular-options-bullish-pullback-layer-executable-economics.md`
+  - generated read-only side-aware executable-economics falsification report for the selected bullish-pullback layer harness, recomputing trusted bid/ask USD P&L without importing quotes or mutating evidence stores
+- `docs/regular-options-bullish-pullback-layer4-forward-capture-protocol.md`
+  - generated read-only future paper-shadow capture protocol for bullish-pullback `layer_4_clean_exact`, with validator and approval-packet boundaries before any market-window evidence row collection
+- `docs/bullish-pullback-layer4-forward-paper-shadow-approval-packet.md`
+  - approval packet template for future bullish-pullback layer4 full-denominator paper-shadow rows; informational only until a valid market-data window and separate operator approval
+- `docs/regular-options-market-window-approval-preflight.md`
+  - generated read-only fail-closed approval preflight for future bullish-pullback layer4 market-window paper-shadow candidate rows, validating current readbacks, market-window state, explicit operator approval, and optional candidate JSONL without appending rows
 - `docs/regular-options-market-window-evidence-checklist.md`
   - generated read-only market-window checklist that orders safe refresh commands, exact-entry waits, policy-exit waits, fill-attempt capture, suggested-review-only rows, repair-only rows, and no-chase blocks without creating trades or mutating evidence stores
 - `docs/regular-options-stale-candidate-archive.md`
@@ -196,12 +222,113 @@ These are the living docs for the current worktree:
   - machine-readable runtime source-quality scope policy consumed by the robust-search evaluator
 - `docs/regular-options-robust-search-evaluation.md`
   - generated read-only chronological train/validation/final-holdout robust-search report for historical exact rows, failing closed on missing regime, ablation, winner-damage, quality, or sample evidence
+- `docs/regular-options-historical-simulated-forward-audit.md`
+  - generated read-only calendar split audit that tests whether current selected historical exact rows support a 20-month train plus latest-4-month simulated-forward audit, while separating quote-history depth from selected-trade depth
+- `docs/regular-options-historical-depth-selected-trades.md`
+  - generated read-only selected-trade calendar-depth readback for the older trusted quote-history window, separating proven selected-entry months from unproven raw quote availability
 - `docs/regular-options-historical-walk-forward.md`
   - generated read-only operator workflow that refreshes feature-store and robust-search readbacks, ingests all-planned peer sleeve results, and reports historical walk-forward blockers without consuming protected holdout
 - `docs/regular-options-robust-edge-discovery.md`
   - generated read-only robust edge discovery and falsification report that ranks historical, paper-shadow, repair, and quarantine candidates against execution-realistic proof, split/holdout, stress, concentration, and forward-freeze gates
 - `docs/regular-options-hypothesis-tournament.md`
   - generated read-only hypothesis tournament that applies a bounded search budget to current robust-edge, walk-forward, and missed-pick filter candidates, preserving execution-realistic proof, holdout, stress, concentration, and no-live gates
+- `docs/regular-options-current-regime-lane-incubator.md`
+  - generated read-only current-regime lane incubator that preregisters lane concepts for current market conditions, ranks proof feasibility, and names approval requirements without creating scanners, changing policy, importing quotes, or promoting lanes
+- `docs/regular-options-current-regime-momentum-edge.md`
+  - generated read-only current-regime momentum edge/throughput test that checks existing momentum-compatible artifacts against the 200-row strict-new count target, economics, coverage, and stress gates without aggregating raw overlapping counts
+- `docs/regular-options-countable-throughput-frontier.md`
+  - generated read-only all-planned throughput frontier and stop-verdict report that separates raw count from strict-new, execution-clean, stress-safe, independently profitable add-on rows
+- `docs/regular-options-causal-falsification-slice.md`
+  - generated read-only preregistered causal falsification slice that stops exhausted raw-count, tracked-winner, clean index/IWM refill, and existing momentum-compatible artifact branches before the next GPT-5.5 Pro loop decision
+- `docs/regular-options-preregistered-momentum-continuation-playbook.md`
+  - generated read-only preregistered design artifact for `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1`, defining causal inputs, permitted universe, exclusions, and future proof path without implementing or replaying the playbook
+- `docs/regular-options-preregistered-vrp-credit-spread-playbook.md`
+- `docs/regular-options-vrp-credit-spread-replay-readiness.md`
+  - generated read-only preregistered design artifact for `low_mid_vix_index_put_credit_spread_vrp_v1`, defining low/mid-VIX index put-credit spread rules, side-aware credit-spread proof formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-preregistered-term-structure-calendar-playbook.md`
+  - generated read-only preregistered design artifact for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, defining low/mid-VIX index calendar/diagonal rules, multi-expiry side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-term-structure-calendar-replay-readiness.md`
+  - generated read-only replay-readiness audit for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, classifying calendar/diagonal entry/exit/expiry pricing, denominator, assignment, roll, term-structure input, quote-surface, holdout, strict-new, and proof-boundary prerequisites without implementing or replaying the playbook
+- `docs/regular-options-preregistered-skew-broken-wing-playbook.md`
+  - generated read-only preregistered design artifact for `low_mid_vix_index_skew_broken_wing_put_fly_v1`, defining low/mid-VIX downside-skew broken-wing put butterfly rules, all-leg side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-preregistered-macro-event-long-strangle-playbook.md`
+  - generated read-only preregistered design artifact for `low_mid_vix_macro_event_long_strangle_v1`, defining scheduled macro-event long straddle/strangle rules, event-calendar requirements, all-long-leg side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-macro-event-calendar.md`
+  - generated read-only point-in-time macro-event calendar validator for scheduled-event research, requiring known-at and source provenance, rejecting outcome/realized/future/P&L leakage fields, and currently blocking because no trusted local source rows exist
+- `docs/regular-options-point-in-time-vix-bucket.md`
+  - generated read-only point-in-time VIX low/mid bucket validator for regular-options research, requiring trusted local source rows, frozen threshold policy, full requested-date coverage, known-at discipline, and no leakage fields before a VIX bucket can clear readiness
+- `docs/regular-options-macro-event-long-strangle-replay-readiness.md`
+  - generated read-only replay-readiness audit for `low_mid_vix_macro_event_long_strangle_v1`, consuming the macro-event calendar and point-in-time VIX bucket artifacts while defining side-aware long-premium formulas, denominator statuses, strict-new identity, holdout guard, and future replay proof conventions without running replay
+- `docs/regular-options-13-symbol-candidate-generation-surface-audit.md`
+  - generated read-only audit of the narrower trusted 13-symbol candidate-generation surface, separating all-month quote availability from missing candidate-generation/no-pick proof, broad 59-symbol source artifacts, non-13 selected rows, CVX scope handling, and validated no-write/as-of/universe-filter runner support
+- `docs/regular-options-13-symbol-candidate-generation-no-write.md`
+  - generated read-only no-write/as-of/universe-filter runner-support artifact for the frozen 13-symbol candidate-generation surface; it proves runner controls only and does not count quote-history-only months or historical rows as profitability proof
+- `docs/regular-options-13-symbol-frozen-daily-candidate-decisions.md`
+  - generated read-only frozen daily candidate/no-pick/blocker decision materializer; it rejects broad or mismatched source artifacts at the materializer boundary and requires explicit `proof_safe=true` before accepted rows can become proof-safe
+- `docs/regular-options-historical-frozen-scanner-replay-adapter.md`
+  - generated bounded read-only historical scanner replay adapter for the frozen Phase 2 lane/symbol/date denominator; it currently emits 6,916 blocked rows and names missing point-in-time scanner inputs instead of inventing selected/no-pick rows
+- `docs/regular-options-13-symbol-frozen-candidate-generation-source-surface.md`
+  - generated read-only frozen 13-symbol candidate-generation source-surface materializer; it consumes the frozen entrypoint, keeps broad selected rows out of proof, and currently proves 0/24 candidate-generation months and 0 selected rows
+- `docs/regular-options-13-symbol-frozen-candidate-generation-entrypoint.md`
+  - generated read-only reusable frozen daily candidate/no-pick entrypoint; it currently emits 6,916 blocked lane/symbol/date rows because daily candidate-generation diagnostics are missing
+- `docs/regular-options-13-symbol-frozen-candidate-generation-denominator-v2.md`
+  - generated read-only daily candidate/no-pick/blocker denominator for the frozen 13-symbol source surface; it currently parks the branch with 494 blocked market-date rows, 0 latest-four strict-new candidates, and smallest blocker `missing_frozen_13_symbol_candidate_generation_engine`
+- `docs/regular-options-13-symbol-frozen-candidate-generation-engine.md`
+  - generated read-only frozen 13-symbol candidate-generation engine/daily diagnostics artifact; it consumes the frozen entrypoint and currently parks on incomplete daily diagnostics with 6,916 blocked lane/symbol/date rows and no selected candidates
+- `docs/regular-options-59-symbol-thetadata-opra-import-resume.md`
+  - generated tokened resume retry for the approved scoped 59-symbol ThetaData OPRA/NBBO source repair; it currently parks on local ThetaTerminal availability with no import attempted, 260 shared trusted dates, and 11,565 remaining symbol-date gaps
+- `docs/regular-options-direct-vix-source-repair-packet.md`
+  - generated read-only direct VIX source repair packet; it defines source schema, known-at policy, fixed prior-close buckets, future tokened import/materialization commands, and cross-branch VIX blocker implications without importing VIX rows or running replay
+- `docs/regular-options-macro-event-calendar-source-repair-packet.md`
+  - generated read-only macro-event calendar source repair packet; it defines scheduled-event schema, known-at/tradable-after policy, frozen categories, future tokened import/materialization command, and macro-event/post-event branch implications without importing event rows or running replay
+- `docs/regular-options-flow-extreme-source-repair-packet.md`
+  - generated read-only flow-extreme volume/OI source repair packet; it defines SPY/QQQ trusted daily volume/open-interest schema, known-at policy, prior-row percentile threshold policy, future tokened import/materialization command, and flow-extreme branch implications without importing flow rows or running replay
+- `docs/regular-options-underlying-daily-source-repair-packet.md`
+  - generated read-only underlying daily OHLCV/adjusted-close source repair packet; it defines the 13-symbol point-in-time daily source schema, strict known-at policy, local `market_data.db:daily_history` insufficiency, future tokened materialization path, and downstream market-regime/frozen-scanner unlock commands without importing source rows or running replay
+- `docs/regular-options-underlying-daily-source-import.md`
+  - generated tokened underlying daily OHLCV/adjusted-close source import report; sample fixture materialization writes generated source rows only, preserves no-replay/no-live/no-broker/no-proof boundaries, and does not clear the full 13-symbol blocker without a trusted full-window source CSV
+- `docs/regular-options-quote-surface-opening-range-reversal-replay.md`
+  - generated read-only quote-surface-only opening-range reversal replay for SPY/QQQ/IWM/DIA; it currently parks the branch with 1,976 blocked daily denominator rows, 0 candidate rows, and smallest blocker `blocked_missing_quote_surface_underlying_price`
+- `docs/regular-options-quote-derived-synthetic-forward-surface.md`
+  - generated read-only synthetic-forward opening-bucket source surface for SPY/QQQ/IWM/DIA; it currently parks the branch with 1,976 symbol-date rows, 7,904 requested bucket checks, 0 ready buckets, and missing same-minute call-put-pair coverage
+- `docs/regular-options-local-quote-structure-capability-matrix.md`
+  - generated read-only local OPRA/NBBO structure capability matrix for the 13-symbol proof set; it currently emits 0 replay-feasible structures because dense latest-four quote-surface rows fail the required 20 train-month coverage gate
+- `docs/regular-options-preregistered-post-event-iv-crush-iron-condor-playbook.md`
+  - generated read-only preregistered design artifact for `post_event_iv_crush_index_iron_condor_v1`, defining scheduled macro-event post-event IV-crush iron condor/butterfly rules, event and IV-premium requirements, four-leg side-aware formulas, max-loss/margin requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-preregistered-flow-extreme-ratio-backspread-playbook.md`
+  - generated read-only preregistered design artifact for `index_flow_extreme_mean_reversion_ratio_backspread_v1`, defining point-in-time flow/overextension ratio-spread and backspread rules, defined-risk/max-loss requirements, multi-leg side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-point-in-time-flow-extreme-input.md`
+  - generated read-only point-in-time flow-extreme input materializer; currently fails closed because no trusted local flow source rows exist, so plain bid/ask quote availability is not relabeled as flow and the flow-extreme branch remains blocked on explicit input-source coverage
+- `docs/regular-options-flow-extreme-volume-oi-source-rows.md`
+  - generated read-only trusted volume/open-interest source-row generator for the flow-extreme ratio/backspread branch; currently fails closed because trusted ThetaData intraday rows have no usable volume/OI aggregates and no point-in-time source rows are written
+- `docs/regular-options-base-clean-stack-identity-ledger.md`
+  - generated read-only row-level identity ledger for the 157-row clean base stack; current status is ready with 157 unique identities and no duplicate/missing/leaky/holdout-overlap rows
+- `docs/regular-options-flow-extreme-denominator-dedupe-bridge.md`
+  - generated read-only denominator/dedupe bridge that now clears flow-extreme full denominator mapping and strict-new dedupe after consuming the base clean stack identity ledger
+- `docs/regular-options-all-local-quote-minute-structure-capability-atlas.md`
+  - generated read-only all-local quote-minute structure capability atlas; current status exhausts local quote-surface-only replayability under current data because all selected surfaces fail the 20-train-month feasibility gate despite dense latest-four quote depth
+- `docs/regular-options-flow-extreme-ratio-backspread-replay-readiness.md`
+  - generated read-only replay-readiness audit for `index_flow_extreme_mean_reversion_ratio_backspread_v1`, checking point-in-time flow/extreme inputs, VIX bucket readiness, side-aware ratio/backspread pricing, max-loss/collateral, assignment/expiration, SPY/QQQ quote surface, denominator mapping, strict-new dedupe, holdout guard, and proof-boundary labeling without running replay
+- `docs/regular-options-preregistered-dispersion-proxy-hybrid-playbook.md`
+  - generated read-only preregistered design artifact for `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`, defining index-versus-constituent dispersion-proxy debit/credit hybrid pair rules, CVX source-quality handling, pair-level side-aware formulas, collateral/max-loss requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-point-in-time-dispersion-concentration-proxy.md`
+  - generated read-only point-in-time dispersion/concentration proxy materializer; currently fails closed because no trusted local proxy source rows exist and the feature store has no underlying return fields, so the dispersion branch remains blocked on explicit input-source coverage
+- `docs/regular-options-dispersion-proxy-hybrid-replay-readiness.md`
+  - generated read-only replay-readiness audit for `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`, checking point-in-time dispersion/concentration inputs, VIX bucket readiness, pair construction, all-leg side-aware pricing, max-loss/collateral, denominator mapping, strict-new dedupe, CVX scope, holdout guard, and proof-boundary labeling without running replay
+- `docs/regular-options-preregistered-pmcc-diagonal-playbook.md`
+  - generated read-only preregistered design artifact for `low_mid_vix_index_pmcc_diagonal_income_v1`, defining PMCC-style call diagonal rules, side-aware entry/roll/exit/expiry formulas, short-call assignment/ex-dividend handling, collateral/max-loss requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-pmcc-diagonal-replay-readiness.md`
+  - generated read-only replay-readiness audit for `low_mid_vix_index_pmcc_diagonal_income_v1`, currently parked on missing point-in-time trend/regime inputs, blocked VIX bucket, and missing trusted long-DTE SPY/QQQ PMCC quote surface
+- `docs/regular-options-preregistered-playbook-readiness-selector.md`
+  - generated read-only selector across completed preregistered playbooks, preserving known VRP and term-structure readiness blockers and emitting the single current research-only implementation/replay approval candidate without implementing, replaying, importing quotes, mutating evidence, or promoting
+- `docs/regular-options-momentum-continuation-research-replay.md`
+  - generated operator-approved research-only replay harness for `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1`, separating full denominator rows, proof-qualified rows, and diagnostic-only old-artifact marks without changing scanner policy, importing quotes, mutating evidence, or promoting
+- `docs/regular-options-momentum-continuation-proof-blocker-resolution.md`
+  - generated read-only proof-blocker resolution audit for the approved momentum-continuation branch, resolving existing trusted side-aware quote pairs where possible while preserving missing point-in-time VIX/breadth blockers and keeping all rows historical research only
+- `docs/regular-options-momentum-continuation-bounded-replay.md`
+  - generated read-only bounded replay gate for the approved momentum-continuation branch, consuming the replay/proof-blocker artifacts and parking the branch at `0` strict rows until point-in-time VIX/breadth inputs or approved data repair change the blocker
+- `docs/research-decisions/options_oracle_profit_loop_packet_latest.md`
+  - generated same-session GPT-5.5 Pro loop packet that requires a continue/stop/significant-upgrade decision, selected branch, concrete Codex task, commands, acceptance criteria, and stop condition
 - `docs/regular-options-evidence-blocker-burndown.md`
   - generated read-only proof-preserving repair planner that ranks source-quality, unpriced, zero-bid/tradability, exhausted-source, lookahead-only, holdout-depth, PF lower-bound, and no-chase blockers without mutating evidence stores
 - `docs/regular-options-source-replay-pass.md`

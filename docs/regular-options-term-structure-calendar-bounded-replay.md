@@ -1,0 +1,50 @@
+# Regular Options Term-Structure Calendar Bounded Replay
+
+This generated report is read-only. It gates a bounded term-structure calendar/diagonal replay behind preregistration, the completed structure harness, existing trusted quote data, strict-new dedupe, and protected-holdout checks.
+
+## Summary
+
+- Status: `blocked_term_structure_calendar_bounded_replay`.
+- Concept: `low_mid_vix_index_calendar_term_structure_dislocation_v1`.
+- Historical replay performed: `false`.
+- Accepted profitability: `false`.
+- Quotes imported: `false`.
+- Protected holdout consumed: `false`.
+
+## Replay Gate Blockers
+
+- `missing_index_calendar_quote_surface`
+- `missing_point_in_time_term_structure_inputs`
+- `missing_preregistered_calendar_diagonal_geometry`
+- `missing_strict_new_dedupe`
+
+## Metrics
+
+- Total denominator rows: `0`.
+- Exact completed rows: `0`.
+- Strict-new exact completed rows: `0`.
+- Strict-new gap closed: `false`.
+- Net USD total: `0`.
+- Point PF: `None`.
+- Quote coverage: `0.0`.
+
+Historical rows in this report are nomination or falsification evidence only. They are not forward proof, not production proof, not live validation, not a trade recommendation, and not promotion-ready.
+
+## Forbidden Actions
+
+- `do_not_create_trades`
+- `do_not_prepare_or_submit_broker_orders`
+- `do_not_enable_live_validation`
+- `do_not_enable_auto_track`
+- `do_not_run_or_change_production_scanners`
+- `do_not_change_scanner_policy`
+- `do_not_change_strategy_logic`
+- `do_not_change_stops`
+- `do_not_change_sizing`
+- `do_not_lower_proof_bars`
+- `do_not_import_quotes`
+- `do_not_mutate_evidence_stores`
+- `do_not_append_forward_cohort_rows`
+- `do_not_consume_protected_holdout`
+- `do_not_promote_any_lane`
+- `do_not_claim_accepted_profitability`

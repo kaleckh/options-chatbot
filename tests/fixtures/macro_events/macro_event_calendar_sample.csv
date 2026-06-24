@@ -1,0 +1,7 @@
+event_id,event_category,scheduled_event_datetime_et,event_window_type,source_name,source_url_or_file_name,source_published_at_utc,known_at_utc,revision_status
+cpi-2026-02,cpi,2026-02-12T08:30:00 America/New_York,before_market,operator_approved_macro_calendar,fixture://macro-events/cpi,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled
+fomc-minutes-2026-02,fomc_minutes,2026-02-18T14:00:00 America/New_York,during_market,operator_approved_macro_calendar,fixture://macro-events/fomc-minutes,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled
+fomc-rate-2026-03,fomc_rate_decision,2026-03-18T14:00:00 America/New_York,during_market,operator_approved_macro_calendar,fixture://macro-events/fomc-rate,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled
+nfp-2026-04,nonfarm payrolls,2026-04-03T08:30:00 America/New_York,before_market,operator_approved_macro_calendar,fixture://macro-events/nfp,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled
+pce-2026-05,pce,2026-05-29T08:30:00 America/New_York,before_market,operator_approved_macro_calendar,fixture://macro-events/pce,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled
+fed-chair-2026-05,scheduled_fed_chair_testimony,2026-05-22T16:30:00 America/New_York,after_market,operator_approved_macro_calendar,fixture://macro-events/fed-chair,2026-01-02T15:00:00Z,2026-01-02T15:00:00Z,scheduled

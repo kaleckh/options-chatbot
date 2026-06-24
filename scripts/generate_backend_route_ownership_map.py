@@ -286,6 +286,14 @@ def _family_for(path: str) -> dict[str, Any]:
             "domain_owners": ("python-backend/proof_contract.py",),
             "deferred_split": False,
         }
+    if path == "/api/current-policy-historical-picks":
+        return {
+            "route_family": "current_policy_historical_picks",
+            "owner_docs": ("docs/current-policy-historical-picks-audit.md", "docs/api-and-storage.md"),
+            "delegate_modules": (),
+            "domain_owners": ("scripts/build_current_policy_historical_picks_audit.py",),
+            "deferred_split": True,
+        }
     if path.startswith("/api/backtest"):
         service_modules = ("python-backend/replay_profit_service.py",) if path != "/api/backtest" else ()
         return {

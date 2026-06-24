@@ -40,23 +40,18 @@ import {
 } from "@/components/predictions/trackedPositionUtils";
 import type { TrackedPosition } from "@/lib/types";
 import {
-  buildCurrentPolicyCohortHealth,
   calcAveragePositionPnlPct,
   closedDataViewLabel,
   getCloseNowPnlPct,
   getRealizedExitPrice,
   getRealizedPnlPct,
-  isCurrentPolicyClosedPosition,
-  isLearnedAwayClosedPosition,
   isProductionProofPosition,
   isRealizedPnlClosedPosition,
   isResearchLearningPosition,
   isTruthGradeClosedPosition,
   matchesClosedDataView,
-  policyCohortHealthStatusLabel,
   summarizePositionOutcomes,
   type ClosedDataView,
-  type PolicyCohortSummary,
 } from "@/lib/trading-desk/positionEvidence";
 
 type TrackedPositionsTabProps = {
@@ -74,11 +69,6 @@ type TrackedPositionsTabProps = {
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
 };
-
-function fmtCohortAvg(summary?: PolicyCohortSummary | null): string {
-  if (!summary) return "\u2014";
-  return `${summary.key} ${fmtPct(summary.avgPnlPct)}`;
-}
 
 function isPickedToday(position: TrackedPosition): boolean {
   return matchesEntryDateFilter(getTradeDateFilterValue(position), "today", "");
@@ -110,13 +100,13 @@ function TodayPicksStrip({
   const dateLabel = entryDateFilterLabel(entryDatePreset, entryDateValue);
   const showingToday = entryDatePreset === "today";
   const sublabel = selectedLaneLabel
-    ? `${selectedLaneLabel} / ${positions.length} picked today`
-    : `${positions.length} picked today`;
+    ? `${selectedLaneLabel} / ${positions.length} open tracked today`
+    : `${positions.length} open tracked today`;
 
   return (
     <section
       className="rounded-lg border border-green/30 bg-green-dim px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-      aria-label="Trades picked today"
+      aria-label="Open tracked rows today"
     >
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-2">
@@ -124,7 +114,7 @@ function TodayPicksStrip({
             <CalendarDays size={15} aria-hidden="true" />
           </span>
           <div className="min-w-0">
-            <div className="text-sm font-semibold text-text-0">Today&apos;s Picks</div>
+            <div className="text-sm font-semibold text-text-0">Today&apos;s Open Tracked Rows</div>
             <div className="truncate text-xs text-text-2">{sublabel}</div>
           </div>
         </div>
@@ -188,7 +178,7 @@ function TodayPicksStrip({
         </div>
       ) : (
         <div className="mt-3 rounded-md border border-border bg-bg-1/70 px-3 py-2 text-sm text-text-2">
-          No open trades picked today.
+          No open tracked rows today.
         </div>
       )}
     </section>
@@ -314,7 +304,7 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
 }: TrackedPositionsTabProps) {
   const dedupedOpenPositions = openPositions;
   const [openFilter, setOpenFilter] = useState<"share-safe" | "all">("all");
-  const [closedDataView, setClosedDataView] = useState<ClosedDataView>("current_policy");
+  const [closedDataView, setClosedDataView] = useState<ClosedDataView>("truth_grade");
   const [entryDatePreset, setEntryDatePreset] = useState<EntryDateFilterPreset>("all");
   const [entryDateValue, setEntryDateValue] = useState("");
   const [laneFilter, setLaneFilter] = useState(ALL_POSITION_LANES);
@@ -351,19 +341,10 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
     [dedupedOpenPositions, laneFilter]
   );
   const realizedPnlClosedPositions = dateLaneClosedPositions.filter(isRealizedPnlClosedPosition);
-  const currentPolicyClosedPositions = dateLaneClosedPositions.filter(isCurrentPolicyClosedPosition);
-  const learnedAwayClosedPositions = dateLaneClosedPositions.filter(isLearnedAwayClosedPosition);
   const truthGradeClosedPositions = dateLaneClosedPositions.filter(isTruthGradeClosedPosition);
   const filteredClosedPositions = dateLaneClosedPositions.filter((position) =>
     matchesClosedDataView(position, closedDataView)
   );
-  const currentPolicyCohortHealth = useMemo(
-    () => buildCurrentPolicyCohortHealth(currentPolicyClosedPositions),
-    [currentPolicyClosedPositions]
-  );
-  const currentPolicyCohortState = closedRowsHasMore
-    ? "Loading"
-    : policyCohortHealthStatusLabel(currentPolicyCohortHealth.overallStatus);
   const positions = view === "open" ? filteredOpenPositions : filteredClosedPositions;
   const shouldOfferClosedPagination = view === "closed" && closedRowsHasMore && !error;
   const shouldAutoLoadNextClosedBatch = shouldOfferClosedPagination && positions.length > 0;
@@ -464,12 +445,12 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-2">
         <div className="max-w-3xl">
           <div className="text-lg font-semibold text-text-0">
-            {view === "open" ? "Open Trades" : "Closed Trades"}
+            {view === "open" ? "Open Tracked Rows" : "Closed Rows"}
           </div>
           <p className="mt-1 text-sm text-text-2">
             {view === "open"
-              ? "Open algorithm trades with live P&L, source signal dates, current status, and close actions."
-              : "Closed algorithm trades for judging accuracy and average outcome."}
+              ? "Open tracked option rows with live P&L, source signal dates, current status, and close actions."
+              : "Closed rows default to strict Truth-grade proof; use filters for broader historical or research review."}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -489,18 +470,17 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
                 aria-pressed={openFilter === "all"}
                 onClick={() => setOpenFilter("all")}
               >
-                All Trades
+                All Rows
               </Button>
             </>
           ) : (
             <div className="inline-flex flex-wrap gap-1 rounded-md border border-border bg-bg-2 p-1">
               {([
-                "current_policy",
-                "learned_away",
-                "realized_pnl",
                 "truth_grade",
+                "realized_pnl",
                 "all",
                 "historical_paper",
+                "research_backfill",
                 "lifecycle_only",
                 "unpriced",
                 "legacy_unclassified",
@@ -549,8 +529,8 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
 
       {!error && view === "open" ? (
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-6">
-          <CompactStat label="Open Trades" value={String(filteredOpenPositions.length)} help="Open rows after the current filters" />
-          <CompactStat label="Last 24h" value={String(recentVisiblePositionCount)} help="Visible trades taken in the last 24 hours" />
+          <CompactStat label="Open Rows" value={String(filteredOpenPositions.length)} help="Open rows after the current filters" />
+          <CompactStat label="Last 24h" value={String(recentVisiblePositionCount)} help="Visible rows taken in the last 24 hours" />
           <CompactStat label="Live Exact" value={String(productionOpenPositions.length)} help="Open production-proof rows after filters" />
           <CompactStat label="Research/Paper" value={String(researchOpenPositions.length)} help="Open research, historical paper, or proof-ineligible rows after filters" />
           <CompactStat label="Avg Live Exact P&L" value={fmtPct(productionOpenPnlPct)} help="Average executable P&L across open production-proof rows only" />
@@ -558,25 +538,12 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
         </div>
       ) : !error ? (
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-6">
-          {closedDataView === "current_policy" ? (
-            <>
-              <CompactStat label="Current Rows" value={`${currentPolicyClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows the current promoted entry policy would still take, with trusted realized P&L" />
-              <CompactStat label="Current Avg" value={fmtPct(currentPolicyCohortHealth.overall.avgPnlPct)} help="Average realized P&L across current-policy rows after filters" />
-              <CompactStat label="Showcase Month" value={fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)} help="Best sufficiently priced current-policy monthly cohort after filters" />
-              <CompactStat label="Recent Month" value={fmtCohortAvg(currentPolicyCohortHealth.recentMonth)} help="Most recent current-policy monthly cohort after filters" />
-              <CompactStat label="Recent Median" value={fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)} help="Median realized P&L for the most recent current-policy monthly cohort" />
-              <CompactStat label="Cohort State" value={currentPolicyCohortState} help="Recent cohort health state; paper-only means the recent cohort broke despite older showcase strength" />
-            </>
-          ) : (
-            <>
-              <CompactStat label="Current Rows" value={String(currentPolicyClosedPositions.length)} help="Closed rows the current promoted entry policy would still take, with trusted realized P&L" />
-              <CompactStat label="Learned Away" value={String(learnedAwayClosedPositions.length)} help="Closed rows the current promoted entry policy would now block or flag" />
-              <CompactStat label="Shown Rows" value={`${filteredClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows shown after evidence, date, and lane filters" />
-              <CompactStat label="Shown Win Rate" value={fmtPct(visibleClosedSummary.winRatePct)} help="Win rate for the currently visible closed rows with realized P&L" />
-              <CompactStat label="Shown Avg P&L" value={fmtPct(visibleClosedSummary.avgPnlPct)} help="Average realized P&L for the currently visible closed rows" />
-              <CompactStat label="Truth Avg P&L" value={fmtPct(truthGradeClosedSummary.avgPnlPct)} help="Production-proof average P&L; this stays strict and may be empty when only historical paper rows are loaded" />
-            </>
-          )}
+          <CompactStat label="Truth Rows" value={String(truthGradeClosedPositions.length)} help="Closed rows that meet strict production-proof evidence requirements" />
+          <CompactStat label="Realized Rows" value={String(realizedPnlClosedPositions.length)} help="Closed rows with executable entry, trusted executable exit, and realized P&L" />
+          <CompactStat label="Shown Rows" value={`${filteredClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows shown after evidence, date, and lane filters" />
+          <CompactStat label="Shown Win Rate" value={fmtPct(visibleClosedSummary.winRatePct)} help="Win rate for the currently visible closed rows with realized P&L" />
+          <CompactStat label="Shown Avg P&L" value={fmtPct(visibleClosedSummary.avgPnlPct)} help="Average realized P&L for the currently visible closed rows" />
+          <CompactStat label="Truth Avg P&L" value={fmtPct(truthGradeClosedSummary.avgPnlPct)} help="Production-proof average P&L; this stays strict and may be empty when only historical paper rows are loaded" />
         </div>
       ) : null}
 
@@ -597,8 +564,8 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
         <div className="bg-bg-2 border border-border rounded-lg px-3 py-1.5 text-xs text-text-2 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
           <span>
             {openFilter === "share-safe"
-              ? `Showing only open trades with fresh live option prices from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenPositionCount} open trade(s) are hidden.`
-              : "Showing all open trades. Live P&L is per trade and does not assume how many contracts anyone bought."}
+              ? `Showing only open rows with fresh live option prices from the last ${SHARE_SAFE_REVIEW_MAX_AGE_MINUTES} minutes. ${hiddenOpenPositionCount} open row(s) are hidden.`
+              : "Showing all open rows. Live P&L is per row and does not assume how many contracts anyone bought."}
             {entryDatePreset !== "all"
               ? ` Entry-date filter is showing ${positions.length} of ${basePositions.length} position(s) from ${entryDateFilterLabel(entryDatePreset, entryDateValue)}.`
               : ""}
@@ -626,12 +593,6 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
           {closedDataView === "truth_grade"
             ? ` ${closedEvidenceHiddenCount} non-truth-grade row(s) are hidden from this strict production-proof view.`
             : ""}
-          {closedDataView === "current_policy"
-            ? ` Raw realized rows: ${realizedPnlClosedPositions.length}; learned-away rows: ${learnedAwayClosedPositions.length}. Cohort state: ${currentPolicyCohortState}; showcase ${fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)}; recent ${fmtCohortAvg(currentPolicyCohortHealth.recentMonth)}, median ${fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)}.`
-            : ""}
-          {closedDataView === "learned_away"
-            ? " These rows stay visible as historical learning data, but current promoted entry guardrails would block them."
-            : ""}
           {closedDataView === "realized_pnl"
             ? ` ${closedEvidenceHiddenCount} row(s) without trusted realized P&L are hidden.`
             : ""}
@@ -645,10 +606,10 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
           <div>
             {view === "open"
               ? (openFilter === "share-safe" && dedupedOpenPositions.length > 0
-                ? "No fresh-priced open trades match that entry date yet. Refresh prices or switch to All Trades."
+                ? "No fresh-priced open rows match that entry date yet. Refresh prices or switch to All Rows."
                 : hiddenByFilterCount > 0
-                  ? "No open trades match those filters."
-                  : "No open trades yet.")
+                  ? "No open rows match those filters."
+                  : "No open rows yet.")
               : !closedRowsLoaded
                 ? "Closed trades have not been loaded yet."
                 : hiddenByFilterCount > 0
@@ -701,6 +662,7 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
           ) : null}
         </>
       )}
+
     </div>
   );
 });
