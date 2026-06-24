@@ -94,6 +94,7 @@ class ArbEngine {
     const totalExposure = plan.legs.reduce((s, l) => s + l.cost, 0);
     const riskCheck = this.risk.checkOrder({
       tokenId: "arb_bundle",
+      eventId: arbOpportunity.slug || arbOpportunity.conditionId || arbOpportunity.title,
       side: "buy",
       size: totalExposure,
       price: 1,
@@ -282,6 +283,8 @@ class ArbEngine {
           action: "BUY YES",
           title: outcome.title,
           tokenId: outcome.yesTokenId,
+          conditionId: outcome.conditionId,
+          eventId: arb.slug || arb.conditionId || arb.title,
           side: "buy",
           price,
           size,
@@ -300,6 +303,8 @@ class ArbEngine {
           action: "BUY NO",
           title: outcome.title,
           tokenId: outcome.noTokenId,
+          conditionId: outcome.conditionId,
+          eventId: arb.slug || arb.conditionId || arb.title,
           side: "buy",
           price,
           size,

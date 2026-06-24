@@ -959,6 +959,8 @@ def run_workflow(
             raise RuntimeError("--run-all-planned requires explicit --as-of-date before replay.")
         if _holdout_metadata_blockers(holdout_contract) or _parse_date(_holdout_start(holdout_contract)) is None:
             raise RuntimeError("--run-all-planned requires readable active forward holdout metadata before replay.")
+        if not write:
+            raise RuntimeError("--run-all-planned is mutating and cannot be combined with --no-write.")
         if _as_of_overlaps_holdout(all_planned_as_of_date.isoformat(), holdout_contract):
             raise RuntimeError("--as-of-date overlaps the protected forward holdout.")
         commands.insert(

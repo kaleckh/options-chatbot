@@ -23,7 +23,6 @@ Primary owner paths:
 - `scripts/run_ai_commodity_opra_progress.py`
 - `data/ai-commodity-infra`
 - `data/ai-commodity-infra/universe.json`
-- `data/ai-commodity-infra/progress/latest.json`
 - `tests/test_ai_commodity_opra_progress.py`
 - `tests/test_ai_commodity_universe.py`
 
@@ -60,10 +59,10 @@ Current guard findings:
 ## Proof Claim Boundary
 
 - Only `alpaca_opra_daily_snapshot` counts for exact AI commodity profitability proof.
-- Latest verification status: `not_verified`.
-- Latest verified flag: `false`.
-- Latest shared quote dates: `{"current": 3, "required": 100}`.
-- Latest completion claim allowed: `false`.
+- Latest verification status: `None`.
+- Latest verified flag: `null`.
+- Latest shared quote dates: `null`.
+- Latest completion claim allowed: `null`.
 
 - Underlying bars, option OHLC bars, historical option trades, last trades, stale snapshots, indicative feeds, midpoint-only fills, tiny samples, and in-sample-only sweeps do not verify this lane.
 - OnclickMedia EOD bid/ask and other non-OPRA-certified datasets are research context only.

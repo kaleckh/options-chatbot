@@ -796,6 +796,46 @@ def test_pending_candidate_validation_runs_log_scan_with_caps(
     assert calls[0]["OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE"] == "1"
 
 
+def test_pending_candidate_validation_writes_disposition_when_market_not_open(
+    tmp_path: Path,
+    monkeypatch: object,
+) -> None:
+    queue = tmp_path / "pending.jsonl"
+    fill_attempts = tmp_path / "fills.jsonl"
+    disposition = tmp_path / "disposition.json"
+    pending = {
+        "audit_generated_at_utc": "2026-06-02T06:39:32Z",
+        "candidate_key": "2026-06-02|swing|SPY|call|2026-06-26||||780.0",
+        "candidate_status": "pending_live_validation",
+        "tracking_approved_lane": True,
+        "playbook_id": "swing",
+        "ticker": "SPY",
+    }
+    queue.write_text(json.dumps(pending) + "\n", encoding="utf8")
+
+    monkeypatch.setattr(validate_pending_scan_candidates, "_market_is_open_now", lambda: False)
+    monkeypatch.setattr(validate_pending_scan_candidates, "load_forward_cohort_preregistration", lambda: None)
+
+    exit_code = validate_pending_scan_candidates.main(
+        [
+            "--date",
+            "2026-06-02",
+            "--queue-file",
+            str(queue),
+            "--fill-attempt-file",
+            str(fill_attempts),
+            "--disposition-file",
+            str(disposition),
+        ]
+    )
+
+    assert exit_code == 0
+    report = json.loads(disposition.read_text(encoding="utf8"))
+    assert report["report_id"] == "pending_scan_candidate_validation_disposition"
+    assert report["summary"]["candidate_count"] == 0
+    assert report["summary"]["outcome_counts"] == {}
+
+
 def test_validation_attempt_resolves_pending_candidate(
     tmp_path: Path,
 ) -> None:

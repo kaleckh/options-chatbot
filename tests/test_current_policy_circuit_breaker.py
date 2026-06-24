@@ -269,10 +269,14 @@ class CurrentPolicyCircuitBreakerTests(unittest.TestCase):
             }
             queue.write_text(json.dumps(candidate) + "\n", encoding="utf8")
 
-            with patch.object(validate_pending, "_market_is_open_now", return_value=True), patch.object(
-                validate_pending,
-                "_run_playbook_validation",
-                side_effect=AssertionError("affected lane should not enter auto-track validation"),
+            with (
+                patch.object(validate_pending, "_market_is_open_now", return_value=True),
+                patch.object(validate_pending, "load_forward_cohort_preregistration", return_value=None),
+                patch.object(
+                    validate_pending,
+                    "_run_playbook_validation",
+                    side_effect=AssertionError("affected lane should not enter auto-track validation"),
+                ),
             ):
                 exit_code = validate_pending.main(
                     [

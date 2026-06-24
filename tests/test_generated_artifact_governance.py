@@ -55,11 +55,18 @@ class GeneratedArtifactGovernanceTests(unittest.TestCase):
             for artifact in self.artifacts.values()
             if artifact["runtime_use"]
         ]
-        self.assertEqual([artifact["path"] for artifact in runtime_artifacts], ["src/lib/generated/proofEvidenceContract.ts"])
-        proof_ts = runtime_artifacts[0]
+        runtime_paths = sorted(artifact["path"] for artifact in runtime_artifacts)
+        self.assertEqual(
+            runtime_paths,
+            ["data/contracts/forward-cohort-preregistration.json", "src/lib/generated/proofEvidenceContract.ts"],
+        )
+        proof_ts = self.artifacts["src/lib/generated/proofEvidenceContract.ts"]
         self.assertEqual(proof_ts["runtime_posture"], "generated_frontend_runtime_policy")
         self.assertEqual(proof_ts["trust_role"], "generated_runtime_bridge")
         self.assertIn("data/contracts/proof-evidence-contract.json", proof_ts["source_inputs"])
+        cohort = self.artifacts["data/contracts/forward-cohort-preregistration.json"]
+        self.assertEqual(cohort["runtime_posture"], "generated_runtime_cohort_freeze_policy")
+        self.assertEqual(cohort["trust_role"], "machine_readable_check")
 
     def test_no_ungoverned_generated_markers_in_narrow_roots(self):
         marker_paths = governance._narrow_generated_marker_paths()

@@ -112,7 +112,11 @@ def _first_value(row: dict[str, Any], source: dict[str, Any], *fields: str) -> A
 
 
 def _first_source_value(row: dict[str, Any], source: dict[str, Any], *fields: str) -> Any:
+    entry_snapshot = _entry_quote_snapshot(row)
     for field in fields:
+        value = entry_snapshot.get(field)
+        if value not in (None, ""):
+            return value
         value = source.get(field)
         if value not in (None, ""):
             return value
@@ -354,6 +358,8 @@ def row_counts_as_production_proof(row: dict[str, Any]) -> bool:
         return False
     if not row_has_trusted_opra_source(row_mapping):
         return False
+    if not classify_quote_evidence(row_mapping).get("production_proof_source_eligible"):
+        return False
     if not row_has_executable_entry(row_mapping):
         return False
     if _row_is_closed(row_mapping):
@@ -432,6 +438,7 @@ def classify_row_evidence(row: dict[str, Any], *, record_class: str = "tracked_p
 
 
 def _quote_evidence_values(row: dict[str, Any], source: dict[str, Any]) -> list[str]:
+    entry_snapshot = _entry_quote_snapshot(row)
     fields = (
         "snapshot_kind",
         "quote_snapshot_kind",
@@ -455,6 +462,9 @@ def _quote_evidence_values(row: dict[str, Any], source: dict[str, Any]) -> list[
         for field in fields
     ] + [
         _normalized(source.get(field))
+        for field in fields
+    ] + [
+        _normalized(entry_snapshot.get(field))
         for field in fields
     ]
     return [value for value in values if value]

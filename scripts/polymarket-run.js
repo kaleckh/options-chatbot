@@ -33,19 +33,28 @@ for (const arg of args) {
 const mode = flags.mode || "scan";
 const loop = flags.loop === "true";
 
+function numberFlag(name, fallback) {
+  const raw = flags[name] ?? fallback;
+  const value = Number(raw);
+  if (!Number.isFinite(value)) {
+    throw new Error("Invalid numeric flag --" + name + "=" + raw);
+  }
+  return value;
+}
+
 const config = {
   mode,
-  scanIntervalMs: Number(flags.interval || 60) * 1000,
+  scanIntervalMs: numberFlag("interval", 60) * 1000,
   mmEnabled: flags.mm !== "false",
   arbEnabled: flags.arb !== "false",
-  arbMinProfitPct: Number(flags.arbMinProfit || 0.05),
-  mmMinVolume24h: Number(flags.mmMinVol || 10000),
-  mmMaxMarkets: Number(flags.mmMax || 5),
-  arbMaxExecutions: Number(flags.arbMax || 3),
+  arbMinProfitPct: numberFlag("arbMinProfit", 0.05),
+  mmMinVolume24h: numberFlag("mmMinVol", 10000),
+  mmMaxMarkets: numberFlag("mmMax", 5),
+  arbMaxExecutions: numberFlag("arbMax", 3),
   risk: {
-    maxTotalExposureUsd: Number(flags.maxExposure || 1000),
-    maxSinglePositionUsd: Number(flags.maxPosition || 200),
-    maxDailyLossUsd: Number(flags.maxDailyLoss || 100),
+    maxTotalExposureUsd: numberFlag("maxExposure", 1000),
+    maxSinglePositionUsd: numberFlag("maxPosition", 200),
+    maxDailyLossUsd: numberFlag("maxDailyLoss", 100),
   },
 };
 

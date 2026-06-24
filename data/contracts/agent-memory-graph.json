@@ -632,12 +632,6 @@
       "type": "implements"
     },
     {
-      "from": "ai_commodity_runner",
-      "reason": "AI commodity runner emits latest proof-lane readback.",
-      "to": "ai_commodity_latest",
-      "type": "generates"
-    },
-    {
       "from": "ai_commodity_isolation_doc",
       "reason": "Isolation contract tells agents when to avoid runner changes.",
       "to": "ai_commodity_runner",
@@ -1550,14 +1544,6 @@
       "read_when": "Touching AI commodity proof lane."
     },
     {
-      "id": "ai_commodity_latest",
-      "kind": "generated_artifact",
-      "label": "AI commodity latest progress",
-      "owner_summary": "Generated AI commodity proof-lane progress readback.",
-      "path": "data/ai-commodity-infra/progress/latest.md",
-      "read_when": "Checking latest AI commodity proof state."
-    },
-    {
       "id": "ai_commodity_isolation_doc",
       "kind": "generated_artifact",
       "label": "AI commodity isolation",
@@ -1895,8 +1881,7 @@
         "ai_commodity_isolation_doc",
         "ai_commodity_isolation_json",
         "next_steps",
-        "ai_commodity_runner",
-        "ai_commodity_latest"
+        "ai_commodity_runner"
       ],
       "summary": "Treat AI commodity as a separate non-browser proof-first lane."
     },

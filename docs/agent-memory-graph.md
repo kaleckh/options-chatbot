@@ -182,7 +182,6 @@ Treat AI commodity as a separate non-browser proof-first lane.
 - `ai_commodity_isolation_json`: AI commodity isolation JSON - `data/contracts/ai-commodity-isolation.json`. Machine-reading AI commodity isolation guard results.
 - `next_steps`: Next steps - `docs/NEXT_STEPS.md`. Checking active blockers and current commands.
 - `ai_commodity_runner`: AI commodity OPRA progress runner - `scripts/run_ai_commodity_opra_progress.py`. Touching AI commodity proof lane.
-- `ai_commodity_latest`: AI commodity latest progress - `data/ai-commodity-infra/progress/latest.md`. Checking latest AI commodity proof state.
 
 ## Final Closure
 
@@ -304,7 +303,6 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `brain_tab` | `code` | `src/components/strategy/BrainTab.tsx` | Strategy profile and changelog surface. |
 | `optimizer_tab` | `code` | `src/components/strategy/OptimizerTab.tsx` | Replay and optimizer result surface. |
 | `ai_commodity_runner` | `script` | `scripts/run_ai_commodity_opra_progress.py` | Separate non-browser AI commodity proof-lane orchestrator. |
-| `ai_commodity_latest` | `generated_artifact` | `data/ai-commodity-infra/progress/latest.md` | Generated AI commodity proof-lane progress readback. |
 | `ai_commodity_isolation_doc` | `generated_artifact` | `docs/ai-commodity-isolation.md` | Generated AI commodity non-browser proof-lane isolation map. |
 | `ai_commodity_isolation_json` | `generated_artifact` | `data/contracts/ai-commodity-isolation.json` | Generated machine-readable AI commodity isolation contract. |
 | `ai_commodity_isolation_generator` | `script` | `scripts/generate_ai_commodity_isolation.py` | Generates checked AI commodity isolation JSON and Markdown. |
@@ -432,7 +430,6 @@ Use this path to prove the 44-point remediation loop is closed without treating 
 | `app_shell` | `consumes` | `navigation_tabs` | App shell consumes typed main navigation tabs. |
 | `strategy_view` | `implements` | `brain_tab` | Strategy Lab profile surface lives in BrainTab. |
 | `strategy_view` | `implements` | `optimizer_tab` | Strategy Lab replay surface lives in OptimizerTab. |
-| `ai_commodity_runner` | `generates` | `ai_commodity_latest` | AI commodity runner emits latest proof-lane readback. |
 | `ai_commodity_isolation_doc` | `bounds` | `ai_commodity_runner` | Isolation contract tells agents when to avoid runner changes. |
 | `ai_commodity_isolation_doc` | `checks` | `storage_ownership_map_doc` | Isolation contract consumes storage-map classification for AI commodity artifacts. |
 | `ai_commodity_isolation_doc` | `checks` | `route_mutation_inventory_json` | Isolation contract consumes route inventory to guard browser/API exposure. |

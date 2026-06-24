@@ -173,8 +173,18 @@ def _spread_exit_snapshot(
     requested_pricing_lane: str,
     trusted_only: bool,
 ) -> dict[str, Any]:
-    long_symbol = str(pick.get("contract_symbol") or "").strip().upper()
-    short_symbol = str(pick.get("short_contract_symbol") or "").strip().upper()
+    long_symbol = str(
+        pick.get("contract_symbol")
+        or pick.get("contractSymbol")
+        or pick.get("option_contract_symbol")
+        or ""
+    ).strip().upper()
+    short_symbol = str(
+        pick.get("short_contract_symbol")
+        or pick.get("shortContractSymbol")
+        or pick.get("short_option_contract_symbol")
+        or ""
+    ).strip().upper()
     if not long_symbol or not short_symbol:
         return {"priced": False, "unpriced_reason": "missing_spread_contract_symbol"}
 

@@ -71,6 +71,9 @@ test("arb plan uses equal shares and estimates profit from the rounded plan", ()
 
   const plan = engine._buildPlan(opportunity, opportunity.outcomes.filter((outcome) => outcome.tradeable));
   assert.equal(new Set(plan.legs.map((leg) => leg.size)).size, 1);
+  assert.equal(new Set(plan.legs.map((leg) => leg.eventId)).size, 1);
+  assert.equal(plan.legs[0].eventId, "complete");
+  assert.ok(plan.legs.every((leg) => leg.conditionId));
   assert.equal(plan.totalCost, 150);
   assert.ok(plan.estimatedProfit > 0);
   assert.ok(plan.estimatedProfitUsd > 0);
@@ -106,6 +109,35 @@ test("arb engine blocks live execution when plan would exceed open order cap", a
   assert.match(result.reason, /^risk:max_open_orders/);
   assert.equal(placeCalls, 0);
   assert.equal(risk.openOrderCount, 0);
+});
+
+test("risk manager rejects non-finite numeric limits", () => {
+  assert.throws(
+    () => new RiskManager({ maxTotalExposureUsd: Number.NaN }),
+    /invalid_risk_config:maxTotalExposureUsd/
+  );
+});
+
+test("risk manager enforces minimum balance and per-event position limit", () => {
+  const risk = new RiskManager({
+    maxTotalExposureUsd: 1000,
+    maxSinglePositionUsd: 1000,
+    maxOpenOrders: 10,
+    minBalanceUsd: 50,
+    maxPositionsPerEvent: 1,
+  });
+  risk.setBalanceUsd(25);
+  assert.match(
+    risk.checkOrder({ eventId: "event-a", tokenId: "token-a", side: "buy", size: 1, price: 0.5 }).reason,
+    /^min_balance/
+  );
+
+  risk.setBalanceUsd(100);
+  risk.positions.set("token-a", { tokenId: "token-a", eventId: "event-a", size: 1, exposure: 0.5 });
+  assert.match(
+    risk.checkOrder({ eventId: "event-a", tokenId: "token-b", side: "buy", size: 1, price: 0.5 }).reason,
+    /^max_positions_per_event/
+  );
 });
 
 test("arb engine blocks non-atomic live execution by default", async () => {
@@ -380,6 +412,56 @@ test("market maker dry run cycle does not cancel live orders", async () => {
   assert.equal(result.results[0].actions[0].dryRun, true);
 });
 
+test("market maker applies finite half spread override", async () => {
+  const risk = new RiskManager({ maxTotalExposureUsd: 100, maxSinglePositionUsd: 100, maxOpenOrders: 5 });
+  const maker = new MarketMaker(risk, { dryRun: true, orderSizeUsd: 10, halfSpreadOverride: 0.01 });
+
+  const result = await maker._quoteMarket(
+    {},
+    "yes-token",
+    {
+      question: "Override spread market",
+      midPrice: 0.5,
+      spread: 0.2,
+    }
+  );
+
+  assert.equal(result.bidPrice, 0.49);
+  assert.equal(result.askPrice, 0.51);
+});
+
+test("market maker passes event identity to per-event risk checks", async () => {
+  const risk = new RiskManager({
+    maxTotalExposureUsd: 100,
+    maxSinglePositionUsd: 100,
+    maxOpenOrders: 5,
+    maxPositionsPerEvent: 1,
+  });
+  risk.positions.set("yes-a", {
+    tokenId: "yes-a",
+    conditionId: "condition-a",
+    eventId: "event-1",
+    size: 1,
+    exposure: 0.5,
+  });
+  const maker = new MarketMaker(risk, { dryRun: true, orderSizeUsd: 10 });
+
+  const result = await maker._quoteMarket(
+    {},
+    "yes-b",
+    {
+      question: "Same event market",
+      midPrice: 0.5,
+      spread: 0.04,
+      conditionId: "condition-b",
+      eventId: "event-1",
+    }
+  );
+
+  assert.deepEqual(result.actions, []);
+  assert.match(risk.rejectLog.at(-1).reason, /^max_positions_per_event/);
+});
+
 test("market maker clamps ask preflight to available inventory", async () => {
   const risk = new RiskManager({ maxTotalExposureUsd: 100, maxSinglePositionUsd: 100, maxOpenOrders: 5 });
   risk.recordFill("yes-token", "buy", 5, 0.4);
@@ -533,4 +615,29 @@ test("market maker treats resolved cancel error payloads as failures", async () 
   assert.equal(result.failed[0].error, "not found");
   assert.equal(risk.openOrders.has("mm-1"), true);
   assert.equal(maker.openOrderIds.has("mm-1"), true);
+});
+
+test("live orchestrator initialization fails closed when balance cannot be verified", async () => {
+  const clientPath = require.resolve("../../src/lib/polymarket/client");
+  const indexPath = require.resolve("../../src/lib/polymarket");
+  const clientModule = require(clientPath);
+  const originalCreateAuthenticatedClient = clientModule.createAuthenticatedClient;
+  delete require.cache[indexPath];
+  clientModule.createAuthenticatedClient = async () => ({
+    address: "0xabc",
+    client: {
+      getBalanceAllowance: async () => {
+        throw new Error("balance unavailable");
+      },
+    },
+  });
+
+  try {
+    const { Orchestrator } = require("../../src/lib/polymarket");
+    const orchestrator = new Orchestrator({ mode: "live" });
+    await assert.rejects(() => orchestrator.initialize(), /balance_check_failed:balance unavailable/);
+  } finally {
+    clientModule.createAuthenticatedClient = originalCreateAuthenticatedClient;
+    delete require.cache[indexPath];
+  }
 });

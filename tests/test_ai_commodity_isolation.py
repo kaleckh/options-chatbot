@@ -66,9 +66,15 @@ class AICommodityIsolationTests(unittest.TestCase):
 
     def test_latest_progress_readback_preserves_proof_source_honesty(self):
         latest = self.contract["latest_progress_readback"]
-        proof_source = latest["proof_source_isolation"]
+        if not latest["available"]:
+            self.assertEqual(
+                latest["missing_json_readback"],
+                "data/ai-commodity-infra/progress/latest.json",
+            )
+            self.assertEqual(latest["path"], "data/ai-commodity-infra/progress/latest.json")
+            return
 
-        self.assertTrue(latest["available"])
+        proof_source = latest["proof_source_isolation"]
         self.assertEqual(latest["proof_source_label"], isolation.PROOF_SOURCE_LABEL)
         self.assertEqual(
             proof_source["exact_profitability_proof_source_labels"],

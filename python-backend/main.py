@@ -1240,15 +1240,30 @@ def _position_contract_signature(record: dict[str, Any]) -> tuple[Any, ...]:
     if contract_symbol is None:
         contract_symbol = source.get("contract_symbol") or source.get("contractSymbol")
 
+    short_contract_symbol = (
+        record.get("short_contract_symbol")
+        or record.get("shortContractSymbol")
+        or record.get("short_option_contract_symbol")
+        or source.get("short_contract_symbol")
+        or source.get("shortContractSymbol")
+        or source.get("short_option_contract_symbol")
+    )
+
+    strategy_type = (
+        source.get("strategy_type")
+        or record.get("strategy_type")
+        or ("vertical_spread" if source.get("short_strike") is not None or short_contract_symbol else "single_leg")
+    )
+
     return (
         str(record.get("ticker") or source.get("ticker") or "").strip().upper() or None,
         str(direction or "").strip().lower() or None,
         str(expiry or "").strip()[:10] or None,
-        str(source.get("strategy_type") or "single_leg").strip().lower() or None,
+        str(strategy_type or "").strip().lower() or None,
         _norm_float(strike),
-        _norm_float(source.get("short_strike")),
+        None if short_contract_symbol else _norm_float(source.get("short_strike")),
         str(contract_symbol or "").strip().upper() or None,
-        str(source.get("short_contract_symbol") or "").strip().upper() or None,
+        str(short_contract_symbol or "").strip().upper() or None,
     )
 
 

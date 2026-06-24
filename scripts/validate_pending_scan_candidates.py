@@ -128,18 +128,36 @@ def main(argv: list[str] | None = None) -> int:
 
     scan_date = _parse_date(args.scan_date)
     stamp = datetime.now().isoformat(timespec="seconds")
+
+    def write_disposition() -> dict[str, Any]:
+        disposition = write_validation_disposition_report(
+            queue_file=args.queue_file,
+            fill_attempt_file=args.fill_attempt_file,
+            output_file=args.disposition_file,
+            scan_date=scan_date.isoformat(),
+        )
+        print(
+            f"{datetime.now().isoformat(timespec='seconds')} "
+            f"validation_disposition_file={args.disposition_file} "
+            f"candidates={disposition['summary']['candidate_count']}"
+        )
+        return disposition
+
     if not is_us_equity_market_day(scan_date):
         print(f"{stamp} skip market-closed pending_validation_date={scan_date.isoformat()}")
+        write_disposition()
         return 0
     grouped = pending_playbooks_for_date(scan_date, queue_file=args.queue_file)
     if not grouped:
         print(f"{stamp} no pending candidates for validation date={scan_date.isoformat()}")
+        write_disposition()
         return 0
     if not _market_is_open_now():
         print(
             f"{stamp} skip market-not-open pending_validation_date={scan_date.isoformat()} "
             f"playbooks={','.join(sorted(grouped))}"
         )
+        write_disposition()
         return 0
 
     print(
@@ -148,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if args.dry_run:
         print("dry-run: pending candidate validation scans not started")
+        write_disposition()
         return 0
 
     breaker_payload: dict[str, Any] = circuit_breaker.load_report(args.circuit_breaker)
@@ -261,17 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         if exit_code != 0:
             failures += 1
             print(f"{datetime.now().isoformat(timespec='seconds')} playbook={playbook_id} failed exit={exit_code}")
-    disposition = write_validation_disposition_report(
-        queue_file=args.queue_file,
-        fill_attempt_file=args.fill_attempt_file,
-        output_file=args.disposition_file,
-        scan_date=scan_date.isoformat(),
-    )
-    print(
-        f"{datetime.now().isoformat(timespec='seconds')} "
-        f"validation_disposition_file={args.disposition_file} "
-        f"candidates={disposition['summary']['candidate_count']}"
-    )
+    write_disposition()
     return 1 if failures else 0
 
 

@@ -11,8 +11,11 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+BACKEND_DIR = ROOT / "python-backend"
+for candidate in (ROOT, BACKEND_DIR):
+    candidate_text = str(candidate)
+    if candidate_text not in sys.path:
+        sys.path.insert(0, candidate_text)
 
 from scripts import pending_audit_candidates as pending  # noqa: E402
 from scripts import replay_short_term_filter_point_in_time as point_in_time  # noqa: E402
@@ -25,6 +28,7 @@ from scripts.candidate_lifecycle import (  # noqa: E402
     is_paper_only_status,
 )
 from scripts.operational_provenance import build_operational_provenance  # noqa: E402
+from proof_contract import classify_quote_evidence  # noqa: E402
 
 
 REPORT_ID = "regular_options_fresh_evidence_loop"
@@ -108,10 +112,18 @@ def _entry_tokens(row: dict[str, Any] | None) -> str:
         row.get("entry_execution_basis"),
         row.get("quote_freshness_status"),
         row.get("options_data_source"),
+        row.get("source_label"),
+        row.get("snapshot_kind"),
+        row.get("data_trust"),
+        row.get("quote_snapshot_kind"),
+        row.get("quote_data_trust"),
         row.get("pricing_evidence_class"),
         row.get("selection_source"),
         selected.get("entry_execution_basis"),
         selected.get("quote_freshness_status"),
+        selected.get("source_label"),
+        selected.get("snapshot_kind"),
+        selected.get("data_trust"),
     ]
     for leg in selected.get("legs") or []:
         if isinstance(leg, dict):
@@ -121,6 +133,9 @@ def _entry_tokens(row: dict[str, Any] | None) -> str:
                     leg.get("quote_source"),
                     leg.get("data_source"),
                     leg.get("source_feed"),
+                    leg.get("source_label"),
+                    leg.get("snapshot_kind"),
+                    leg.get("data_trust"),
                 ]
             )
     return " ".join(_norm(part).lower() for part in parts)
@@ -157,6 +172,9 @@ def _entry_evidence_status(fill_attempt: dict[str, Any] | None) -> tuple[str, li
         or "live_chain_exact_contract" in selection
         or "exact_contract" in pricing
     )
+    quote_evidence = classify_quote_evidence(fill_attempt)
+    if not quote_evidence.get("production_proof_source_eligible"):
+        reasons.append("entry_quote_source_not_production_proof_eligible")
     if not executable_label and not executable_basis:
         reasons.append("entry_execution_not_explicit")
     if not exact_source:

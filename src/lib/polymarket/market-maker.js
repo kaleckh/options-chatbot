@@ -120,7 +120,10 @@ class MarketMaker {
     // Use the scanner's midPrice (from outcomePrices) as the reference.
     // The raw CLOB orderbook for YES tokens can be misleading on extreme-priced
     // markets. The scanner midPrice is more reliable.
-    const halfSpread = Math.max(this.config.minHalfSpread, Math.min(this.config.maxHalfSpread, market.spread / 2));
+    const rawHalfSpread = Number.isFinite(Number(this.config.halfSpreadOverride))
+      ? Number(this.config.halfSpreadOverride)
+      : Number(market.spread) / 2;
+    const halfSpread = Math.max(this.config.minHalfSpread, Math.min(this.config.maxHalfSpread, rawHalfSpread));
 
     // Inventory skew
     const inv = this.inventory.get(tokenId) || { yesShares: 0, noShares: 0 };
@@ -138,9 +141,15 @@ class MarketMaker {
 
     // Check risk for both sides
     const askSize = Math.min(orderSize, inv.yesShares);
-    const bidCheck = this.risk.checkOrder({ tokenId, side: "buy", size: orderSize, price: bidPrice });
+    const orderIdentity = {
+      tokenId,
+      conditionId: market.conditionId,
+      eventId: market.eventId || market.slug || market.conditionId,
+      eventSlug: market.eventSlug || market.slug,
+    };
+    const bidCheck = this.risk.checkOrder({ ...orderIdentity, side: "buy", size: orderSize, price: bidPrice });
     const askCheck = askSize >= 1
-      ? this.risk.checkOrder({ tokenId, side: "sell", size: askSize, price: askPrice })
+      ? this.risk.checkOrder({ ...orderIdentity, side: "sell", size: askSize, price: askPrice })
       : { allowed: false, reason: "no_sell_inventory" };
 
     const actions = [];
@@ -159,7 +168,7 @@ class MarketMaker {
             tickSize: market.tickSize || "0.01",
           });
           const orderId = this._requireOrderId(result);
-          this.risk.recordOrderPlaced({ tokenId, side: "buy", price: bidPrice, size: orderSize, orderId });
+          this.risk.recordOrderPlaced({ ...orderIdentity, side: "buy", price: bidPrice, size: orderSize, orderId });
           this.openOrderIds.add(orderId);
           this.stats.ordersPlaced++;
           actions.push({ side: "bid", price: bidPrice, size: orderSize, orderId });
@@ -183,7 +192,7 @@ class MarketMaker {
             tickSize: market.tickSize || "0.01",
           });
           const orderId = this._requireOrderId(result);
-          this.risk.recordOrderPlaced({ tokenId, side: "sell", price: askPrice, size: askSize, orderId });
+          this.risk.recordOrderPlaced({ ...orderIdentity, side: "sell", price: askPrice, size: askSize, orderId });
           this.openOrderIds.add(orderId);
           this.stats.ordersPlaced++;
           actions.push({ side: "ask", price: askPrice, size: askSize, orderId });

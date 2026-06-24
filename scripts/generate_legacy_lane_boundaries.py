@@ -113,7 +113,6 @@ LANES: tuple[dict[str, Any], ...] = (
         "path_roots": (
             "src/lib/day-trading",
             "tests/day-trading",
-            "src/app/api/day-trading",
             "docs/day-trading-current-state.md",
             "docs/archive/day-trading-product-roadmap.md",
         ),
@@ -128,7 +127,7 @@ LANES: tuple[dict[str, Any], ...] = (
             "Do not add app-facing routes, UI tabs, background automation, performance work, or fresh documentation effort by default.",
         ),
         "hard_rules": (
-            "The current src/app/api/day-trading folders are empty scaffolding, not live routes.",
+            "There are currently no tracked src/app/api/day-trading route handlers in a clean checkout.",
             "Existing engine code and tests may remain without making the lane active.",
             "Reopening requires an explicit user request.",
         ),

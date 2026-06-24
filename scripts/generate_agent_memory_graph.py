@@ -848,14 +848,6 @@ NODES: tuple[dict[str, str], ...] = (
         "owner_summary": "Separate non-browser AI commodity proof-lane orchestrator.",
     },
     {
-        "id": "ai_commodity_latest",
-        "kind": "generated_artifact",
-        "path": "data/ai-commodity-infra/progress/latest.md",
-        "label": "AI commodity latest progress",
-        "read_when": "Checking latest AI commodity proof state.",
-        "owner_summary": "Generated AI commodity proof-lane progress readback.",
-    },
-    {
         "id": "ai_commodity_isolation_doc",
         "kind": "generated_artifact",
         "path": "docs/ai-commodity-isolation.md",
@@ -1099,7 +1091,6 @@ EDGES: tuple[dict[str, str], ...] = (
     {"from": "app_shell", "to": "navigation_tabs", "type": "consumes", "reason": "App shell consumes typed main navigation tabs."},
     {"from": "strategy_view", "to": "brain_tab", "type": "implements", "reason": "Strategy Lab profile surface lives in BrainTab."},
     {"from": "strategy_view", "to": "optimizer_tab", "type": "implements", "reason": "Strategy Lab replay surface lives in OptimizerTab."},
-    {"from": "ai_commodity_runner", "to": "ai_commodity_latest", "type": "generates", "reason": "AI commodity runner emits latest proof-lane readback."},
     {"from": "ai_commodity_isolation_doc", "to": "ai_commodity_runner", "type": "bounds", "reason": "Isolation contract tells agents when to avoid runner changes."},
     {"from": "ai_commodity_isolation_doc", "to": "storage_ownership_map_doc", "type": "checks", "reason": "Isolation contract consumes storage-map classification for AI commodity artifacts."},
     {"from": "ai_commodity_isolation_doc", "to": "route_mutation_inventory_json", "type": "checks", "reason": "Isolation contract consumes route inventory to guard browser/API exposure."},
@@ -1199,7 +1190,7 @@ PLAYBOOKS: tuple[dict[str, Any], ...] = (
         "id": "ai_commodity",
         "heading": "If Touching AI Commodity",
         "summary": "Treat AI commodity as a separate non-browser proof-first lane.",
-        "nodes": ["project_context", "ai_commodity_isolation_doc", "ai_commodity_isolation_json", "next_steps", "ai_commodity_runner", "ai_commodity_latest"],
+        "nodes": ["project_context", "ai_commodity_isolation_doc", "ai_commodity_isolation_json", "next_steps", "ai_commodity_runner"],
     },
     {
         "id": "final_closure",

@@ -49,7 +49,10 @@ class FinalRemediationClosurePackTests(unittest.TestCase):
         self.assertIn("docs/final-remediation-closure-pack.md", generated["closure_artifacts_governed"])
         self.assertIn("data/contracts/final-remediation-closure-pack.json", generated["closure_artifacts_governed"])
         self.assertEqual(generated["missing_closure_artifacts"], [])
-        self.assertEqual(generated["runtime_generated_artifacts"], ["src/lib/generated/proofEvidenceContract.ts"])
+        self.assertEqual(
+            generated["runtime_generated_artifacts"],
+            ["data/contracts/forward-cohort-preregistration.json", "src/lib/generated/proofEvidenceContract.ts"],
+        )
         self.assertEqual(generated["uncovered_artifacts"], [])
         self.assertEqual(generated["hand_editable_artifacts"], [])
 

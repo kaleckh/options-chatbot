@@ -14,7 +14,7 @@ This file is the semantic owner for active, separate, legacy, sidecar, and pause
 | `regular_supervised_options_browser` | `active_browser_product` | `mounted_browser_product` | `src/components/predictions`<br>`src/components/strategy`<br>`src/app/api/scan`<br>`src/app/api/positions`<br>`src/app/api/suggested-trades`<br>`src/app/api/backtest`<br>`python-backend/main.py`<br>`options_chatbot.py`<br>`wfo_optimizer.py` |
 | `legacy_prediction_analytics` | `active_browser_legacy_analytics` | `mounted_inside_trading_desk_analytics` | `src/components/predictions/legacy-tabs.tsx`<br>`src/components/predictions/tradingDeskTabs.ts`<br>`tests/trading-desk/trading-desk-tab-ids.test.js` |
 | `ai_commodity_proof_lane` | `separate_non_browser_proof_lane` | `not_mounted_browser_product` | `scripts/run_ai_commodity_opra_progress.py`<br>`data/ai-commodity-infra`<br>`tests/test_ai_commodity_opra_progress.py` |
-| `day_trading` | `paused_out_of_scope` | `empty_route_scaffolding_only` | `src/lib/day-trading`<br>`tests/day-trading`<br>`src/app/api/day-trading`<br>`docs/day-trading-current-state.md`<br>`docs/archive/day-trading-product-roadmap.md` |
+| `day_trading` | `paused_out_of_scope` | `empty_route_scaffolding_only` | `src/lib/day-trading`<br>`tests/day-trading`<br>`docs/day-trading-current-state.md`<br>`docs/archive/day-trading-product-roadmap.md` |
 | `crypto_options_sidecar` | `paused_out_of_scope` | `not_mounted_browser_product` | `crypto_options`<br>`scripts/run_crypto_scan.bat` |
 | `polymarket_sidecar` | `paused_out_of_scope` | `not_mounted_browser_product` | `src/lib/polymarket`<br>`tests/polymarket` |
 
@@ -34,7 +34,7 @@ This file is the semantic owner for active, separate, legacy, sidecar, and pause
 - Detail owner: `docs/ai-commodity-isolation.md`.
 
 ### Paused day-trading lane
-- The current src/app/api/day-trading folders are empty scaffolding, not live routes.
+- There are currently no tracked src/app/api/day-trading route handlers in a clean checkout.
 - Existing engine code and tests may remain without making the lane active.
 - Reopening requires an explicit user request.
 

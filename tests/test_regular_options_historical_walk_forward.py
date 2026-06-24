@@ -472,6 +472,33 @@ class RegularOptionsHistoricalWalkForwardTests(unittest.TestCase):
                     )
                 run_mock.assert_not_called()
 
+    def test_run_workflow_refuses_run_all_planned_with_no_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            holdout = Path(tmp) / "holdout.json"
+            holdout.write_text(
+                json.dumps(
+                    {
+                        "contract_id": "forward-holdout-contract",
+                        "status": "active",
+                        "protected_range": {
+                            "start_date": "2026-06-05",
+                            "date_basis": "candidate_entry_date",
+                        },
+                    }
+                ),
+                encoding="utf8",
+            )
+            with mock.patch.object(walk_forward.all_planned_sleeves, "run_all_planned_sleeves") as run_mock:
+                with self.assertRaisesRegex(RuntimeError, "cannot be combined with --no-write"):
+                    walk_forward.run_workflow(
+                        write=False,
+                        holdout_contract_path=holdout,
+                        all_planned_report_path=Path(tmp) / "missing-all-planned.json",
+                        run_all_planned=True,
+                        all_planned_as_of_date=date(2026, 6, 4),
+                    )
+                run_mock.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,7 @@ from market_data_service import (
 from options_execution import (
     commission_total_usd,
     executable_option_price,
+    executable_vertical_spread_entry,
     option_pnl_snapshot,
 )
 from repository_contracts import TradingDeskPositionRepository
@@ -40,6 +41,7 @@ from proof_contract import (
     TRUSTED_OPTIONS_SOURCE_LABELS,
     TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS,
     UNTRUSTED_QUOTE_FRESHNESS_TOKENS,
+    classify_quote_evidence,
     scan_pick_has_research_backfill_marker,
 )
 
@@ -531,6 +533,8 @@ def _classify_position_proof(
         proof_missing.append("source_scan_lineage_unverified")
     if not _scan_pick_has_trusted_opra_source(scan_pick):
         proof_missing.append("options_source_not_opra")
+    if not classify_quote_evidence(scan_pick).get("production_proof_source_eligible"):
+        proof_missing.append("options_source_not_production_proof_eligible")
 
     if not proof_missing:
         return True, None, LIVE_SCAN_EXACT_PROOF_CLASS, None
@@ -708,10 +712,16 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
         )
         if short_quote is None or str(short_quote.expiry) != str(long_quote.expiry):
             return None
-        entry_debit = round(float(long_quote.price) - float(short_quote.price), 4)
-        if entry_debit <= 0:
+        spread_entry = executable_vertical_spread_entry(
+            long_leg={"bid": long_quote.bid, "ask": long_quote.ask, "last": long_quote.last},
+            short_leg={"bid": short_quote.bid, "ask": short_quote.ask, "last": short_quote.last},
+            quote_freshness_status="fresh",
+        )
+        entry_debit = _safe_float(spread_entry.get("execution_price"))
+        if entry_debit is None or entry_debit <= 0:
             return None
         spread_width = abs(float(short_quote.strike) - float(long_quote.strike))
+        display_price = _safe_float(spread_entry.get("display_price"))
         return {
             "strategy_type": "vertical_spread",
             "ticker": ticker,
@@ -721,12 +731,14 @@ def _resolve_historical_comparable_pick(scan_pick: dict[str, Any], *, trade_date
             "expiry": str(long_quote.expiry),
             "contract_symbol": long_quote.contract_symbol,
             "short_contract_symbol": short_quote.contract_symbol,
-            "entry_execution_price": entry_debit,
-            "entry_execution_basis": "historical_comparable_spread_mid",
+            "entry_execution_price": round(float(entry_debit), 4),
+            "entry_execution_basis": str(spread_entry.get("execution_basis") or "spread_ask_bid"),
+            "entry_display_price": display_price,
+            "entry_display_basis": spread_entry.get("display_basis"),
             "entry_underlying_price": _safe_float(long_quote.underlying_price) or _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
             "entry_fee_total_usd": commission_total_usd(contracts=1, sides=2),
             "quote_time_et": _format_quote_time_et(long_quote.quote_minute_et),
-            "quote_basis": "mid",
+            "quote_basis": str(spread_entry.get("execution_basis") or "spread_ask_bid"),
             "selection_source": "historical_comparable_exact_contract",
             "promotion_class": "comparable_exact_contract",
             "approximation_only": False,
@@ -849,25 +861,15 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
         short_bid = _safe_float(short_row["bid"].iloc[0])
         short_ask = _safe_float(short_row["ask"].iloc[0])
         short_last = _safe_float(short_row["lastPrice"].iloc[0])
-        long_exec = executable_option_price(
-            side="exit",
-            bid=long_bid,
-            ask=long_ask,
-            last=long_last,
+        spread_entry = executable_vertical_spread_entry(
+            long_leg={"bid": long_bid, "ask": long_ask, "last": long_last},
+            short_leg={"bid": short_bid, "ask": short_ask, "last": short_last},
             quote_freshness_status="fresh",
         )
-        short_exec = executable_option_price(
-            side="entry",
-            bid=short_bid,
-            ask=short_ask,
-            last=short_last,
-            quote_freshness_status="fresh",
-        )
-        long_display = _safe_float(long_exec.get("display_price"))
-        short_display = _safe_float(short_exec.get("display_price"))
-        if long_display is None or short_display is None:
+        entry_debit = _safe_float(spread_entry.get("execution_price"))
+        if entry_debit is None or entry_debit <= 0:
             return None
-        entry_debit = round(max(long_display - short_display, 0.0001), 4)
+        display_price = _safe_float(spread_entry.get("display_price"))
         spread_width = abs(float(fields["short_strike"]) - float(strike))
         return {
             "strategy_type": "vertical_spread",
@@ -878,11 +880,13 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
             "expiry": str(resolved_expiry),
             "contract_symbol": _normalize_contract_symbol(long_row.get("contractSymbol").iloc[0]),
             "short_contract_symbol": _normalize_contract_symbol(short_row.get("contractSymbol").iloc[0]),
-            "entry_execution_price": entry_debit,
-            "entry_execution_basis": "live_comparable_spread_mid",
+            "entry_execution_price": round(float(entry_debit), 4),
+            "entry_execution_basis": str(spread_entry.get("execution_basis") or "spread_ask_bid"),
+            "entry_display_price": display_price,
+            "entry_display_basis": spread_entry.get("display_basis"),
             "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
             "entry_fee_total_usd": commission_total_usd(contracts=1, sides=2),
-            "quote_basis": "mid",
+            "quote_basis": str(spread_entry.get("execution_basis") or "spread_ask_bid"),
             "selection_source": "live_comparable_exact_contract",
             "promotion_class": "comparable_exact_contract",
             "approximation_only": False,

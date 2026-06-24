@@ -245,6 +245,23 @@ class ProofContractTests(unittest.TestCase):
 
         self.assertEqual(contract.classify_quote_evidence(trusted_daily)["quote_evidence_class"], "trusted_daily_eod")
         self.assertFalse(contract.classify_quote_evidence(trusted_daily)["production_proof_source_eligible"])
+        self.assertFalse(contract.row_counts_as_production_proof(trusted_daily))
+        self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(trusted_daily))
+        self.assertFalse(contract.classify_row_evidence(trusted_daily)["production_proof"])
+        nested_daily = self._live_proof_row(
+            source_pick_snapshot={
+                "source_label": "alpaca_opra",
+                "snapshot_kind": "intraday",
+                "data_trust": "trusted",
+                "entry_quote_snapshot": {
+                    "source_label": "alpaca_opra_daily_snapshot",
+                    "snapshot_kind": "daily_eod",
+                    "data_trust": "trusted",
+                },
+            }
+        )
+        self.assertEqual(contract.classify_quote_evidence(nested_daily)["quote_evidence_class"], "trusted_daily_eod")
+        self.assertFalse(contract.row_counts_as_production_proof(nested_daily))
         self.assertEqual(contract.classify_quote_evidence(research_daily)["quote_evidence_class"], "research_eod")
         self.assertEqual(contract.classify_quote_evidence(synthetic)["quote_evidence_class"], "synthetic_research")
 

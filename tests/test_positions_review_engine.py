@@ -451,6 +451,9 @@ class PositionsReviewEngineTests(unittest.TestCase):
                 quote = SimpleNamespace(
                     expiry=date(2026, 6, 19),
                     price=5.0 if kwargs["target_strike"] == 100.0 else 2.0,
+                    bid=4.8 if kwargs["target_strike"] == 100.0 else 1.9,
+                    ask=5.2 if kwargs["target_strike"] == 100.0 else 2.1,
+                    last=None,
                     strike=kwargs["target_strike"],
                     contract_symbol=(
                         "AAA260619C00100000"
@@ -475,6 +478,10 @@ class PositionsReviewEngineTests(unittest.TestCase):
             result = svc._resolve_historical_comparable_pick(scan_pick, trade_date=date(2026, 5, 22))
 
         self.assertIsNotNone(result)
+        self.assertEqual(result["entry_execution_price"], 3.3)
+        self.assertEqual(result["entry_execution_basis"], "spread_ask_bid")
+        self.assertEqual(result["entry_display_price"], 3.0)
+        self.assertEqual(result["entry_display_basis"], "spread_mid")
         self.assertEqual(len(calls), 2)
         for call in calls:
             self.assertEqual(call["snapshot_kind"], svc.DAILY_SNAPSHOT_KIND)

@@ -58,9 +58,11 @@ class Orchestrator {
       // Check balance
       try {
         const balance = await this.client.getBalanceAllowance({ asset_type: "USDC" });
-        console.log("USDC balance: $" + (Number(balance?.balance || 0) / 1e6).toFixed(2));
+        const balanceUsd = Number(balance?.balance || 0) / 1e6;
+        this.risk.setBalanceUsd(balanceUsd);
+        console.log("USDC balance: $" + balanceUsd.toFixed(2));
       } catch (err) {
-        console.log("Could not fetch balance: " + err.message);
+        throw new Error("balance_check_failed:" + err.message);
       }
     }
     console.log("Mode: " + this.config.mode);

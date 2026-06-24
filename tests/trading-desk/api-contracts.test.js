@@ -40,7 +40,7 @@ test("Trading Desk API contracts name request and response envelopes", () => {
 });
 
 test("Trading Desk response contracts preserve tracked versus suggested envelope split", () => {
-  const source = readRepoFile("src/lib/trading-desk/apiContracts.ts");
+  const source = readRepoFile("src/lib/trading-desk/apiContracts.ts").replace(/\r\n/g, "\n");
 
   for (const responseName of [
     "CreateTrackedPositionResponse",

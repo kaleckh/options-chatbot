@@ -18,10 +18,25 @@ const DEFAULT_RISK_CONFIG = {
 class RiskManager {
   constructor(options = {}) {
     this.config = { ...DEFAULT_RISK_CONFIG, ...options };
+    for (const key of [
+      "maxTotalExposureUsd",
+      "maxSinglePositionUsd",
+      "maxOpenOrders",
+      "maxDailyLossUsd",
+      "maxPositionsPerEvent",
+      "minBalanceUsd",
+    ]) {
+      const value = Number(this.config[key]);
+      if (!Number.isFinite(value)) {
+        throw new Error("invalid_risk_config:" + key);
+      }
+      this.config[key] = value;
+    }
     this.positions = new Map();     // conditionId -> { size, avgPrice, side, exposure }
     this.openOrders = new Map();    // orderId -> { exposure, side }
     this.openOrderCount = 0;
     this.dailyPnl = 0;
+    this.balanceUsd = null;
     this.dailyResetAt = null;
     this.killed = this.config.killSwitch;
     this.rejectLog = [];
@@ -58,6 +73,10 @@ class RiskManager {
       return this._reject(order, "daily_loss_limit_reached");
     }
 
+    if (this.balanceUsd !== null && this.balanceUsd < this.config.minBalanceUsd) {
+      return this._reject(order, "min_balance:" + this.balanceUsd.toFixed(2) + "<" + this.config.minBalanceUsd);
+    }
+
     const orderExposure = order.size * order.price;
     const additionalExposure = this._additionalExposure(order, orderExposure);
 
@@ -79,7 +98,48 @@ class RiskManager {
       return this._reject(order, "max_open_orders:" + this.openOrderCount + ">=" + this.config.maxOpenOrders);
     }
 
+    if (this._eventPositionCount(order) >= this.config.maxPositionsPerEvent) {
+      return this._reject(order, "max_positions_per_event:" + this._eventPositionCount(order) + ">=" + this.config.maxPositionsPerEvent);
+    }
+
     return { allowed: true, reason: null };
+  }
+
+  setBalanceUsd(balanceUsd) {
+    const value = Number(balanceUsd);
+    if (!Number.isFinite(value)) {
+      throw new Error("invalid_balance_usd");
+    }
+    this.balanceUsd = value;
+  }
+
+  _eventKey(order) {
+    return String(order.eventId || order.eventSlug || order.conditionId || "").trim();
+  }
+
+  _eventPositionCount(order) {
+    const eventKey = this._eventKey(order);
+    if (!eventKey) {
+      return 0;
+    }
+    const keys = new Set();
+    for (const [key, position] of this.positions.entries()) {
+      const positionEvent = String(position.eventId || position.eventSlug || position.conditionId || "").trim();
+      if (positionEvent === eventKey && Number(position.size || 0) > 0) {
+        keys.add(String(position.tokenId || key));
+      }
+    }
+    for (const orderRecord of this.openOrders.values()) {
+      const orderEvent = String(orderRecord.eventId || orderRecord.eventSlug || orderRecord.conditionId || "").trim();
+      if (orderEvent === eventKey) {
+        keys.add(String(orderRecord.tokenId || ""));
+      }
+    }
+    const tokenId = String(order.tokenId || "").trim();
+    if (tokenId) {
+      keys.delete(tokenId);
+    }
+    return keys.size;
   }
 
   _additionalExposure(order, orderExposure) {
@@ -177,6 +237,9 @@ class RiskManager {
       exposure: reservedExposure,
       side: order.side || null,
       tokenId: order.tokenId || order.conditionId || null,
+      conditionId: order.conditionId || null,
+      eventId: order.eventId || null,
+      eventSlug: order.eventSlug || null,
       size: Number(order.size || 0),
     });
     if (!wasOpen) {
@@ -222,6 +285,7 @@ class RiskManager {
       openOrders: this.openOrderCount,
       openOrderExposure: [...this.openOrders.values()].reduce((sum, order) => sum + Math.abs(order.exposure), 0),
       dailyPnl: this.dailyPnl,
+      balanceUsd: this.balanceUsd,
       positionCount: this.positions.size,
       limits: this.config,
     };

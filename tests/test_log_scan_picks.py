@@ -71,6 +71,15 @@ class _TrackingRepository:
         return created
 
 
+class _OpenPositionsRepository(_TrackingRepository):
+    def __init__(self, open_positions):
+        super().__init__()
+        self.open_positions = list(open_positions)
+
+    def list_positions(self, status=None):
+        return list(self.open_positions)
+
+
 def _make_pick(ticker: str, *, debit: float) -> dict:
     return {
         "ticker": ticker,
@@ -1154,6 +1163,78 @@ class LogScanPicksTests(unittest.TestCase):
         build_position_payload.assert_not_called()
         self.assertEqual(skip_reasons[1], "creation_blocked:position_tracking_mode:paper_review_only,creation_eligible_not_true")
         self.assertIn("position_tracking_mode:paper_review_only", output.getvalue())
+
+    def test_existing_open_contract_detection_matches_short_contract_aliases(self):
+        payload = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-05-15",
+            "source_pick_snapshot": {
+                "ticker": "SPY",
+                "direction": "call",
+                "strategy_type": "vertical_spread",
+                "strike": 500.0,
+                "short_strike": 520.0,
+                "contract_symbol": "SPY260515C00500000",
+                "short_contract_symbol": "SPY260515C00520000",
+            },
+        }
+        existing = {
+            "id": 99,
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-05-15",
+            "source_pick_snapshot": {
+                "ticker": "SPY",
+                "direction": "call",
+                "strategy_type": "vertical_spread",
+                "strike": 500.0,
+                "short_strike": 520.0,
+                "contractSymbol": "SPY260515C00500000",
+                "shortContractSymbol": "SPY260515C00520000",
+            },
+        }
+        repository = _OpenPositionsRepository([existing])
+
+        match = log_scan_picks._find_existing_open_contract(repository, payload)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match["id"], 99)
+
+    def test_existing_open_contract_detection_infers_spread_from_short_contract_alias(self):
+        payload = {
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-05-15",
+            "source_pick_snapshot": {
+                "ticker": "SPY",
+                "direction": "call",
+                "strategy_type": "vertical_spread",
+                "strike": 500.0,
+                "short_strike": 520.0,
+                "contract_symbol": "SPY260515C00500000",
+                "short_contract_symbol": "SPY260515C00520000",
+            },
+        }
+        existing = {
+            "id": 100,
+            "ticker": "SPY",
+            "direction": "call",
+            "expiry": "2026-05-15",
+            "source_pick_snapshot": {
+                "ticker": "SPY",
+                "direction": "call",
+                "strike": 500.0,
+                "contractSymbol": "SPY260515C00500000",
+                "shortContractSymbol": "SPY260515C00520000",
+            },
+        }
+        repository = _OpenPositionsRepository([existing])
+
+        match = log_scan_picks._find_existing_open_contract(repository, payload)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match["id"], 100)
 
     def test_auto_track_requires_explicit_creation_eligible_true(self):
         for value in (None, "true", 1):

@@ -222,6 +222,39 @@ class RegularOptionsFreshEvidenceLoopTests(unittest.TestCase):
         self.assertEqual(row["realized_pnl_status"], "missing_exact_exit_evidence")
         self.assertFalse(row["promotion_discussion_ready"])
 
+    def test_daily_eod_entry_evidence_is_not_promotion_ready(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            queue = root / "pending.jsonl"
+            fills = root / "fills.jsonl"
+            stop_grid = root / "stop-grid.json"
+            queue.write_text(json.dumps(_candidate("SPY")) + "\n", encoding="utf8")
+            daily_fill = _fill("SPY", position_id=11)
+            daily_fill.update(
+                {
+                    "source_label": "alpaca_opra_daily_snapshot",
+                    "snapshot_kind": "daily_eod",
+                    "data_trust": "trusted",
+                }
+            )
+            fills.write_text(json.dumps(daily_fill) + "\n", encoding="utf8")
+            stop_grid.write_text(
+                json.dumps({"rows": [_stop_row(11, 12.5)]}),
+                encoding="utf8",
+            )
+
+            report = evidence_loop.build_report(
+                queue_file=queue,
+                fill_attempt_file=fills,
+                stop_grid_path=stop_grid,
+            )
+
+        row = report["candidates"][0]
+        self.assertEqual(row["entry_evidence_status"], "non_executable")
+        self.assertIn("daily_or_eod_entry_evidence", row["entry_evidence_reasons"])
+        self.assertIn("entry_quote_source_not_production_proof_eligible", row["entry_evidence_reasons"])
+        self.assertFalse(row["promotion_discussion_ready"])
+
     def test_contaminated_exit_basis_tokens_do_not_count_as_exact_pnl(self):
         contaminated = [
             "expired_auto_close",

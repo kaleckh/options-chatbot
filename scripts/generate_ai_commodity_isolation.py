@@ -17,6 +17,7 @@ STORAGE_OWNERSHIP_PATH = ROOT / "data" / "contracts" / "storage-ownership-map.js
 SCANNER_CONTRACT_PATH = ROOT / "data" / "contracts" / "scanner-creation-safety-contract.json"
 LEGACY_BOUNDARIES_PATH = ROOT / "data" / "contracts" / "legacy-lane-boundaries.json"
 LATEST_PROGRESS_PATH = ROOT / "data" / "ai-commodity-infra" / "progress" / "latest.json"
+LATEST_PROGRESS_MD_PATH = ROOT / "data" / "ai-commodity-infra" / "progress" / "latest.md"
 PACKAGE_JSON_PATH = ROOT / "package.json"
 
 PLAYBOOK_ID = "ai_commodity_infra_observation"
@@ -29,7 +30,6 @@ OWNER_PATHS = (
     "scripts/run_ai_commodity_opra_progress.py",
     "data/ai-commodity-infra",
     "data/ai-commodity-infra/universe.json",
-    "data/ai-commodity-infra/progress/latest.json",
     "tests/test_ai_commodity_opra_progress.py",
     "tests/test_ai_commodity_universe.py",
 )
@@ -228,7 +228,12 @@ def _runtime_scanner_snapshot() -> dict[str, Any]:
 
 def _latest_progress_snapshot() -> dict[str, Any]:
     if not LATEST_PROGRESS_PATH.exists():
-        return {"available": False, "path": _relative(LATEST_PROGRESS_PATH)}
+        fallback_path = LATEST_PROGRESS_MD_PATH if LATEST_PROGRESS_MD_PATH.exists() else LATEST_PROGRESS_PATH
+        return {
+            "available": False,
+            "path": _relative(fallback_path),
+            "missing_json_readback": _relative(LATEST_PROGRESS_PATH),
+        }
     report = _read_json(LATEST_PROGRESS_PATH)
     verification = report.get("verification_gate") if isinstance(report.get("verification_gate"), dict) else {}
     isolation = (
@@ -424,7 +429,7 @@ def build_contract() -> dict[str, Any]:
             "data/contracts/route-mutation-inventory.json",
             "data/contracts/storage-ownership-map.json",
             "data/contracts/scanner-creation-safety-contract.json",
-            "data/ai-commodity-infra/progress/latest.json",
+            "data/ai-commodity-infra/progress/latest.json (optional runtime readback)",
             "supervised_scan.py",
         ],
         "lane": {

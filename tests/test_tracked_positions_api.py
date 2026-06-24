@@ -380,6 +380,109 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(persistence["skip_reason"], "duplicate_open_contract")
         self.assertFalse(persistence["recorded"])
 
+    def test_duplicate_spread_create_matches_camel_case_short_contract_alias(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "strategy_type": "vertical_spread",
+                "short_strike": 520.0,
+                "short_contract_symbol": "SPY260619C00520000",
+            }
+        )
+        existing_pick = dict(scan_pick)
+        existing_pick.pop("short_contract_symbol")
+        existing_pick["shortContractSymbol"] = "SPY260619C00520000"
+        create_body = {
+            "creation_mode": "manual_paper",
+            "scan_pick": existing_pick,
+            "fill_price": 4.50,
+            "contracts": 1,
+        }
+        first_response = self.client.post("/api/positions", json=create_body)
+        self.assertEqual(first_response.status_code, 200)
+
+        duplicate_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertTrue(duplicate_response.json()["duplicate"])
+
+    def test_duplicate_spread_create_infers_missing_existing_strategy_type(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "strategy_type": "vertical_spread",
+                "short_strike": 520.0,
+                "short_contract_symbol": "SPY260619C00520000",
+            }
+        )
+        existing_pick = dict(scan_pick)
+        existing_pick.pop("strategy_type")
+        create_body = {
+            "creation_mode": "manual_paper",
+            "scan_pick": existing_pick,
+            "fill_price": 4.50,
+            "contracts": 1,
+        }
+        first_response = self.client.post("/api/positions", json=create_body)
+        self.assertEqual(first_response.status_code, 200)
+
+        duplicate_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertTrue(duplicate_response.json()["duplicate"])
+
+    def test_duplicate_spread_create_matches_existing_short_contract_when_short_strike_missing(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "strategy_type": "vertical_spread",
+                "short_strike": 520.0,
+                "short_contract_symbol": "SPY260619C00520000",
+            }
+        )
+        existing_pick = dict(scan_pick)
+        existing_pick.pop("strategy_type")
+        existing_pick.pop("short_strike")
+        existing_pick.pop("short_contract_symbol")
+        existing_pick["shortContractSymbol"] = "SPY260619C00520000"
+        create_body = {
+            "creation_mode": "manual_paper",
+            "scan_pick": existing_pick,
+            "fill_price": 4.50,
+            "contracts": 1,
+        }
+        first_response = self.client.post("/api/positions", json=create_body)
+        self.assertEqual(first_response.status_code, 200)
+
+        duplicate_response = self.client.post(
+            "/api/positions",
+            json={
+                "creation_mode": "manual_paper",
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertTrue(duplicate_response.json()["duplicate"])
+
     def test_review_positions_reports_position_event_failure(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         create_response = self.client.post(
@@ -644,6 +747,52 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(position["source_scan_event_key"], scan_pick["source_scan_event_key"])
         self.assertEqual(list_events.call_args.kwargs["source_label"], self.backend.ARCHIVED_FORWARD_SOURCE_LABEL)
         self.assertEqual(list_events.call_args.kwargs["tickers"], [scan_pick["ticker"]])
+
+    def test_scanner_origin_create_rejects_daily_eod_quote_source(self):
+        scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
+        scan_pick.update(
+            {
+                "options_data_source": "alpaca_opra_daily_snapshot",
+                "source_label": "alpaca_opra_daily_snapshot",
+                "snapshot_kind": "daily_eod",
+                "data_trust": "trusted",
+            }
+        )
+        archived_event = build_scanner_origin_forward_event(scan_pick)
+        playbook_id = scan_pick.get("playbook_id") or "short_term"
+
+        with (
+            patch.object(self.backend, "list_forward_scan_pick_events", return_value=[archived_event]),
+            patch.object(
+                self.backend,
+                "apply_playbook_guardrails",
+                return_value={"ranked_picks": [dict(scan_pick)]},
+            ),
+            patch(
+                "scripts.lane_profitability_gate.load_lane_gate_report",
+                return_value=build_fresh_lane_gate_report(playbook_id),
+            ),
+            patch(
+                "scripts.lane_promotion_state.load_lane_promotion_report",
+                return_value=build_fresh_lane_promotion_report(playbook_id),
+            ),
+            patch(
+                "scripts.regular_open_risk_governor.load_regular_open_risk_report",
+                return_value=build_fresh_open_risk_report(),
+            ),
+        ):
+            response = self.client.post(
+                "/api/positions",
+                json={
+                    "creation_mode": "scanner",
+                    "scan_pick": scan_pick,
+                    "fill_price": scan_pick["entry_execution_price"],
+                    "contracts": 1,
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("options_source_not_production_proof_eligible", str(response.json()["detail"]))
 
     def test_scanner_origin_create_rejects_paper_probation_lane(self):
         scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)
