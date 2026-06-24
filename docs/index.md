@@ -245,6 +245,8 @@ These are the living docs for the current worktree:
 - `docs/regular-options-preregistered-vrp-credit-spread-playbook.md`
 - `docs/regular-options-vrp-credit-spread-replay-readiness.md`
   - generated read-only preregistered design artifact for `low_mid_vix_index_put_credit_spread_vrp_v1`, defining low/mid-VIX index put-credit spread rules, side-aware credit-spread proof formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-vrp-credit-spread-quote-surface.md`
+  - generated read-only trusted OPRA/NBBO quote-surface proof for the VRP put-credit-spread geometry, checking same-minute same-expiry put strike availability without replay, P&L, quote import, evidence mutation, or promotion
 - `docs/regular-options-preregistered-term-structure-calendar-playbook.md`
   - generated read-only preregistered design artifact for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, defining low/mid-VIX index calendar/diagonal rules, multi-expiry side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-term-structure-calendar-replay-readiness.md`

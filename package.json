@@ -126,6 +126,7 @@
     "options:research:preregistered-momentum-continuation-playbook": "uv run --locked python scripts/build_regular_options_preregistered_momentum_continuation_playbook.py",
     "options:research:preregistered-vrp-credit-spread-playbook": "uv run --locked python scripts/build_regular_options_preregistered_vrp_credit_spread_playbook.py",
     "options:research:vrp-credit-spread-replay-readiness": "uv run --locked python scripts/build_regular_options_vrp_credit_spread_replay_readiness.py",
+    "options:research:vrp-credit-spread-quote-surface": "uv run --locked python scripts/build_regular_options_vrp_credit_spread_quote_surface.py",
     "options:research:vrp-credit-spread-structure-harness": "uv run --locked python scripts/build_regular_options_vrp_credit_spread_structure_harness.py",
     "options:research:vrp-credit-spread-bounded-replay": "uv run --locked python scripts/run_regular_options_vrp_credit_spread_bounded_replay.py",
     "options:research:preregistered-term-structure-calendar-playbook": "uv run --locked python scripts/build_regular_options_preregistered_term_structure_calendar_playbook.py",
