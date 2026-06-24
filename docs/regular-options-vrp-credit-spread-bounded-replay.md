@@ -14,7 +14,6 @@ This generated report is read-only. It gates a bounded VRP put-credit-spread rep
 ## Replay Gate Blockers
 
 - `missing_index_credit_spread_quote_surface`
-- `missing_point_in_time_vix_bucket`
 - `missing_preregistered_candidate_geometry`
 
 ## Metrics

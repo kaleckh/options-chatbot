@@ -14,7 +14,6 @@ This generated report is read-only. It implements deterministic structure math a
 ## Remaining Blockers
 
 - `missing_index_credit_spread_quote_surface`
-- `missing_point_in_time_vix_bucket`
 
 ## Blocker Burndown
 
@@ -27,7 +26,6 @@ This generated report is read-only. It implements deterministic structure math a
 | `missing_index_credit_spread_quote_surface` | `unresolved` | Requires existing point-in-time input or quote-surface artifact; harness does not import data. |
 | `missing_margin_max_loss_convention` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_net_usd_pnl_after_costs` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
-| `missing_point_in_time_vix_bucket` | `unresolved` | Requires existing point-in-time input or quote-surface artifact; harness does not import data. |
 | `missing_proof_boundary_labeling` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 | `missing_protected_holdout_guard` | `resolved_by_harness` | Covered by deterministic structure math, denominator, assignment/expiration, margin, P&L, holdout, and proof-boundary logic. |
 

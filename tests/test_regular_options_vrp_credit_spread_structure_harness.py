@@ -123,6 +123,7 @@ class RegularOptionsVrpCreditSpreadStructureHarnessTests(unittest.TestCase):
             report = harness.build_report(
                 preregistered_playbook_path=_valid_preregistration(tmp),
                 readiness_path=_readiness(tmp),
+                vix_bucket_report_path=tmp / "missing_vix.json",
                 feature_store_report_path=tmp / "missing_feature.json",
                 quote_surface_report_path=tmp / "missing_quote.json",
                 generated_at_utc="2026-06-23T00:00:00Z",
@@ -154,6 +155,29 @@ class RegularOptionsVrpCreditSpreadStructureHarnessTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "ready_for_bounded_read_only_vrp_replay")
         self.assertEqual(report["remaining_blockers"], [])
+
+    def test_ready_vix_bucket_artifact_clears_vix_blocker_without_feature_store_flag(self) -> None:
+        with WorkspaceTempDir(prefix="vrp-structure") as tmp_dir:
+            tmp = Path(tmp_dir)
+            vix = tmp / "vix.json"
+            quote = tmp / "quote.json"
+            _write_json(vix, {"status": "point_in_time_vix_bucket_ready", "blockers": []})
+            _write_json(quote, {"credit_spread_quote_surface_ready": False, "symbols_ready": []})
+            report = harness.build_report(
+                preregistered_playbook_path=_valid_preregistration(tmp),
+                readiness_path=_readiness(tmp),
+                vix_bucket_report_path=vix,
+                feature_store_report_path=tmp / "missing_feature.json",
+                quote_surface_report_path=quote,
+            )
+
+        self.assertEqual(report["status"], "blocked_vrp_credit_spread_structure_harness")
+        self.assertNotIn("missing_point_in_time_vix_bucket", report["remaining_blockers"])
+        self.assertEqual(report["remaining_blockers"], ["missing_index_credit_spread_quote_surface"])
+        self.assertEqual(
+            report["source_artifacts"]["point_in_time_vix_bucket"]["source_status"],
+            "point_in_time_vix_bucket_ready",
+        )
 
     def test_invalid_preregistration_fails_closed(self) -> None:
         with WorkspaceTempDir(prefix="vrp-structure") as tmp_dir:

@@ -24,6 +24,7 @@ DEFAULT_READINESS = ROOT / "data" / "profitability-lab" / "regular-options-vrp-c
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-structure-harness"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-vrp-credit-spread-structure-harness.md"
 DEFAULT_FEATURE_STORE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-feature-store" / "latest.json"
+DEFAULT_VIX_BUCKET_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-vix-bucket" / "latest.json"
 DEFAULT_QUOTE_SURFACE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-quote-surface" / "latest.json"
 
 PROTECTED_HOLDOUT_START = "2026-06-01"
@@ -297,8 +298,19 @@ def _readiness_blockers(readiness_report: dict[str, Any]) -> list[str]:
     return [str(item) for item in _as_list(readiness_report.get("blockers")) if _norm(item)]
 
 
-def _input_surface_assessment(feature_store: dict[str, Any], quote_surface: dict[str, Any]) -> dict[str, Any]:
-    vix_ready = bool(feature_store.get("point_in_time_vix_bucket_ready") or feature_store.get("vix_low_mid_bucket_ready"))
+def _vix_bucket_ready(vix_bucket: dict[str, Any], feature_store: dict[str, Any]) -> bool:
+    return bool(
+        (
+            vix_bucket.get("status") == "point_in_time_vix_bucket_ready"
+            and not _as_list(vix_bucket.get("blockers"))
+        )
+        or feature_store.get("point_in_time_vix_bucket_ready")
+        or feature_store.get("vix_low_mid_bucket_ready")
+    )
+
+
+def _input_surface_assessment(vix_bucket: dict[str, Any], feature_store: dict[str, Any], quote_surface: dict[str, Any]) -> dict[str, Any]:
+    vix_ready = _vix_bucket_ready(vix_bucket, feature_store)
     quote_ready = bool(quote_surface.get("credit_spread_quote_surface_ready"))
     quote_symbols = set(str(item).upper() for item in _as_list(quote_surface.get("symbols_ready")))
     return {
@@ -362,16 +374,18 @@ def build_report(
     *,
     preregistered_playbook_path: Path = DEFAULT_PREREGISTERED_PLAYBOOK,
     readiness_path: Path = DEFAULT_READINESS,
+    vix_bucket_report_path: Path = DEFAULT_VIX_BUCKET_REPORT,
     feature_store_report_path: Path = DEFAULT_FEATURE_STORE_REPORT,
     quote_surface_report_path: Path = DEFAULT_QUOTE_SURFACE_REPORT,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     playbook, playbook_meta = _load_json(preregistered_playbook_path, required=True)
     readiness_report, readiness_meta = _load_json(readiness_path, required=True)
+    vix_bucket, vix_meta = _load_json(vix_bucket_report_path, required=False)
     feature_store, feature_meta = _load_json(feature_store_report_path, required=False)
     quote_surface, quote_meta = _load_json(quote_surface_report_path, required=False)
     prereg_valid, prereg_reasons = _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
-    input_assessment = _input_surface_assessment(feature_store, quote_surface)
+    input_assessment = _input_surface_assessment(vix_bucket, feature_store, quote_surface)
     burndown = _blocker_burndown(_readiness_blockers(readiness_report), input_assessment) if prereg_valid else []
     resolved_statuses = {"resolved_by_harness", "resolved_by_existing_read_only_input"}
     remaining_blockers = [row["blocker"] for row in burndown if row["status"] not in resolved_statuses]
@@ -409,6 +423,7 @@ def build_report(
         "source_artifacts": {
             "preregistered_vrp_credit_spread_playbook": playbook_meta,
             "vrp_credit_spread_replay_readiness": readiness_meta,
+            "point_in_time_vix_bucket": vix_meta,
             "feature_store_report": feature_meta,
             "quote_surface_report": quote_meta,
         },
@@ -498,6 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build a read-only VRP put-credit-spread structure harness.")
     parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
     parser.add_argument("--readiness", type=Path, default=DEFAULT_READINESS)
+    parser.add_argument("--vix-bucket-report", type=Path, default=DEFAULT_VIX_BUCKET_REPORT)
     parser.add_argument("--feature-store-report", type=Path, default=DEFAULT_FEATURE_STORE_REPORT)
     parser.add_argument("--quote-surface-report", type=Path, default=DEFAULT_QUOTE_SURFACE_REPORT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -509,6 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     report = build_report(
         preregistered_playbook_path=args.preregistered_playbook,
         readiness_path=args.readiness,
+        vix_bucket_report_path=args.vix_bucket_report,
         feature_store_report_path=args.feature_store_report,
         quote_surface_report_path=args.quote_surface_report,
     )
