@@ -159,6 +159,20 @@ def _concept(packet: dict[str, Any]) -> dict[str, Any]:
                 "open rows must remain open_waiting_policy_exit until a policy-defined exit condition fires",
             ],
         },
+        "candidate_geometry": {
+            "dte_min": 21,
+            "dte_max": 45,
+            "short_put_moneyness_or_delta": "prefer_abs_delta_closest_to_0.20_between_0.15_and_0.25_else_3_to_7_pct_otm",
+            "long_put_distance": "prefer_5_point_width_else_nearest_available_lower_put_with_width_between_3_and_10_points",
+            "minimum_entry_credit_pct_width": 0.20,
+            "maximum_leg_bid_ask_width_pct_mid": 0.25,
+            "exit_policy": {
+                "profit_take_pct_of_credit": 0.50,
+                "loss_cut_multiple_of_credit": 2.00,
+                "time_exit_dte": 7,
+                "expiration_settlement": "cash_settled_index_intrinsic_value_or_etf_assignment_blocked_without_classification",
+            },
+        },
         "side_aware_pricing_formulas": {
             "entry_credit": "short_put_bid - long_put_ask",
             "exit_debit": "short_put_ask - long_put_bid",
@@ -261,6 +275,10 @@ def _validate_report(report: dict[str, Any]) -> None:
             raise ValueError("concept must remain preregistered_design_only")
         if concept.get("structure") != "defined_risk_put_credit_spreads_only":
             raise ValueError("unexpected structure")
+        geometry = _as_dict(concept.get("candidate_geometry"))
+        for key in ("dte_min", "dte_max", "short_put_moneyness_or_delta", "long_put_distance", "exit_policy"):
+            if geometry.get(key) in (None, ""):
+                raise ValueError(f"missing candidate geometry field {key}")
         for status in DENOMINATOR_STATUSES:
             if status not in concept.get("denominator_statuses", []):
                 raise ValueError(f"missing denominator status {status}")
@@ -318,6 +336,24 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.append("")
         lines.extend(f"- {item}." for item in _as_list(values))
         lines.append("")
+
+    geometry = _as_dict(concept.get("candidate_geometry"))
+    exit_policy = _as_dict(geometry.get("exit_policy"))
+    lines.extend(
+        [
+            "## Candidate Geometry",
+            "",
+            f"- DTE range: `{geometry.get('dte_min')}` to `{geometry.get('dte_max')}`.",
+            f"- Short put selection: `{geometry.get('short_put_moneyness_or_delta')}`.",
+            f"- Long put distance: `{geometry.get('long_put_distance')}`.",
+            f"- Minimum entry credit pct width: `{geometry.get('minimum_entry_credit_pct_width')}`.",
+            f"- Maximum leg bid/ask width pct mid: `{geometry.get('maximum_leg_bid_ask_width_pct_mid')}`.",
+            f"- Profit take: `{exit_policy.get('profit_take_pct_of_credit')}` of credit.",
+            f"- Loss cut: `{exit_policy.get('loss_cut_multiple_of_credit')}` times credit.",
+            f"- Time exit DTE: `{exit_policy.get('time_exit_dte')}`.",
+            "",
+        ]
+    )
 
     lines.extend(["## Side-Aware Pricing", ""])
     for key in ("entry_credit", "exit_debit", "net_pnl_usd", "max_loss_usd"):

@@ -46,6 +46,17 @@ This report is generated from `scripts/build_regular_options_preregistered_vrp_c
 - future replay must predefine profit-take, loss-cut, time-exit, assignment, and expiration handling.
 - open rows must remain open_waiting_policy_exit until a policy-defined exit condition fires.
 
+## Candidate Geometry
+
+- DTE range: `21` to `45`.
+- Short put selection: `prefer_abs_delta_closest_to_0.20_between_0.15_and_0.25_else_3_to_7_pct_otm`.
+- Long put distance: `prefer_5_point_width_else_nearest_available_lower_put_with_width_between_3_and_10_points`.
+- Minimum entry credit pct width: `0.2`.
+- Maximum leg bid/ask width pct mid: `0.25`.
+- Profit take: `0.5` of credit.
+- Loss cut: `2.0` times credit.
+- Time exit DTE: `7`.
+
 ## Side-Aware Pricing
 
 - `entry_credit`: `short_put_bid - long_put_ask`.

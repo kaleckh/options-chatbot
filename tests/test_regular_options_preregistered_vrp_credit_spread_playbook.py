@@ -58,6 +58,13 @@ class PreregisteredVrpCreditSpreadPlaybookTests(unittest.TestCase):
         self.assertEqual(concept["historical_research_window"]["start_date"], "2024-06-01")
         self.assertEqual(concept["historical_research_window"]["end_date"], "2026-05-31")
         self.assertFalse(concept["historical_research_window"]["protected_holdout_consumed"])
+        geometry = concept["candidate_geometry"]
+        self.assertEqual(geometry["dte_min"], 21)
+        self.assertEqual(geometry["dte_max"], 45)
+        self.assertIn("0.20", geometry["short_put_moneyness_or_delta"])
+        self.assertIn("5_point_width", geometry["long_put_distance"])
+        self.assertEqual(geometry["exit_policy"]["profit_take_pct_of_credit"], 0.50)
+        self.assertEqual(geometry["exit_policy"]["time_exit_dte"], 7)
 
     def test_side_aware_formulas_and_denominator_statuses_are_registered(self) -> None:
         with WorkspaceTempDir(prefix="vrp-credit-playbook") as tmp_dir:
@@ -110,6 +117,7 @@ class PreregisteredVrpCreditSpreadPlaybookTests(unittest.TestCase):
             self.assertIn("docs_report", artifacts)
             markdown = (tmp / "docs" / "report.md").read_text(encoding="utf8")
             self.assertIn("Regular Options Preregistered VRP Credit Spread Playbook", markdown)
+            self.assertIn("Candidate Geometry", markdown)
             self.assertIn("Side-Aware Pricing", markdown)
 
 
