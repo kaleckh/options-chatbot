@@ -287,6 +287,8 @@ These are the living docs for the current worktree:
   - generated read-only flow-extreme volume/OI source repair packet; it defines SPY/QQQ trusted daily volume/open-interest schema, known-at policy, prior-row percentile threshold policy, future tokened import/materialization command, and flow-extreme branch implications without importing flow rows or running replay
 - `docs/regular-options-underlying-daily-source-repair-packet.md`
   - generated read-only underlying daily OHLCV/adjusted-close source repair packet; it defines the 13-symbol point-in-time daily source schema, strict known-at policy, local `market_data.db:daily_history` insufficiency, future tokened materialization path, and downstream market-regime/frozen-scanner unlock commands without importing source rows or running replay
+- `docs/regular-options-underlying-daily-source-acquisition.md`
+  - generated read-only staged-source acquisition preflight for the underlying daily OHLCV/adjusted-close source; it currently blocks on missing `data/import-staging/underlying_daily` trusted CSV files and refuses local DB/reconstructed/inferred-known-at shortcuts without writing source rows or running replay
 - `docs/regular-options-underlying-daily-source-import.md`
   - generated tokened underlying daily OHLCV/adjusted-close source import report; sample fixture materialization writes generated source rows only, preserves no-replay/no-live/no-broker/no-proof boundaries, and does not clear the full 13-symbol blocker without a trusted full-window source CSV
 - `docs/regular-options-quote-surface-opening-range-reversal-replay.md`

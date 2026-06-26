@@ -110,7 +110,9 @@ class RegularOptions13SymbolFrozenDailyCandidateDecisionsTests(unittest.TestCase
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["scanner_policy_changed"])
         self.assertFalse(report["quotes_imported"])
-        self.assertIn("missing local read-only command", report["missing_inputs"][0]["missing_command"])
+        self.assertTrue(report["scanner_replay_surface"]["adapter_available"])
+        self.assertEqual(report["scanner_replay_surface"]["decision"], "historical_replay_adapter_available")
+        self.assertIsNone(report["missing_inputs"][0]["missing_command"])
 
     def test_provided_proof_safe_daily_source_can_materialize_ready_rows(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

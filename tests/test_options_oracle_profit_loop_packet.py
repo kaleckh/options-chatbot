@@ -53,6 +53,8 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             "direct_vix_source_repair_packet_path": tmp / "direct-vix-source-repair-packet.json",
             "macro_event_calendar_source_repair_packet_path": tmp / "macro-event-calendar-source-repair-packet.json",
             "flow_extreme_source_repair_packet_path": tmp / "flow-extreme-source-repair-packet.json",
+            "underlying_daily_source_acquisition_path": tmp / "underlying-daily-source-acquisition.json",
+            "underlying_daily_source_import_path": tmp / "underlying-daily-source-import.json",
             "goal_loop_path": tmp / "goal.json",
             "next_steps_path": tmp / "NEXT_STEPS.md",
             "decisions_path": tmp / "DECISIONS.md",
@@ -212,6 +214,36 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                         "would_clear_vix_blocker_if_future_source_passes": True,
                     },
                 ],
+            },
+        )
+        _write_json(
+            paths["underlying_daily_source_acquisition_path"],
+            {
+                "report_id": "regular_options_underlying_daily_source_acquisition_packet",
+                "status": "blocked_underlying_daily_source_acquisition_missing",
+                "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+                "candidate_file_count": 0,
+                "ready_candidate_count": 0,
+                "selected_ready_source_file": None,
+                "blockers": ["trusted_source_csv_missing"],
+                "candidate_blocker_counts": {},
+                "future_import_command": "npm run options:source-import:underlying-daily-history -- --source-file data/import-staging/underlying_daily/point_in_time_underlying_daily_ohlcv_adjusted_v1.csv --approval-token APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT --no-replay --json",
+                "source_rows_written": False,
+                "source_import_command_executed": False,
+            },
+        )
+        _write_json(
+            paths["underlying_daily_source_import_path"],
+            {
+                "report_id": "regular_options_underlying_daily_history_source_import",
+                "status": "blocked_underlying_daily_history_source_import",
+                "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+                "source_row_count": 0,
+                "source_rows_written": False,
+                "source_rows_path": "data/profitability-lab/regular-options-point-in-time-underlying-daily-history/source_rows.jsonl",
+                "blockers": ["fixture_source_file_requires_non_default_source_rows_path"],
+                "accepted_profitability": False,
+                "historical_rows_are_forward_proof": False,
             },
         )
         _write_json(
@@ -1304,6 +1336,31 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             report["current_evidence_summary"]["flow_extreme_branch_implications"][0]["branch"],
             "flow_extreme_ratio_backspread",
         )
+        underlying_acquisition_meta = report["source_artifacts"]["underlying_daily_source_acquisition"]
+        self.assertEqual(underlying_acquisition_meta["status"], "loaded")
+        self.assertEqual(
+            report["current_evidence_summary"]["underlying_daily_source_acquisition_status"],
+            "blocked_underlying_daily_source_acquisition_missing",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["underlying_daily_source_acquisition_blockers"],
+            ["trusted_source_csv_missing"],
+        )
+        self.assertEqual(report["current_evidence_summary"]["underlying_daily_source_acquisition_candidate_file_count"], 0)
+        self.assertEqual(report["current_evidence_summary"]["underlying_daily_source_acquisition_ready_candidate_count"], 0)
+        self.assertIn(
+            "APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT",
+            report["current_evidence_summary"]["underlying_daily_source_acquisition_future_import_command"],
+        )
+        underlying_import_meta = report["source_artifacts"]["underlying_daily_source_import"]
+        self.assertEqual(underlying_import_meta["status"], "loaded")
+        self.assertEqual(
+            report["current_evidence_summary"]["underlying_daily_source_import_status"],
+            "blocked_underlying_daily_history_source_import",
+        )
+        self.assertFalse(report["current_evidence_summary"]["underlying_daily_source_import_source_rows_written"])
+        self.assertIn("blocked_underlying_daily_source_acquisition_missing", report["prompt"])
+        self.assertIn("market_data.db:daily_history", report["prompt"])
         self.assertIn("profitability-first blocker-ranking prompt", report["prompt"])
         self.assertIn("Forward proof blocker", report["prompt"])
         self.assertIn("Do not select trusted_flow_volume_oi_source_repair_packet_v1 again", report["prompt"])

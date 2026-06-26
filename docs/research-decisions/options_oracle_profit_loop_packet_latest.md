@@ -349,7 +349,6 @@ Current momentum-continuation proof-blocker resolution result, if available:
     "missing_point_in_time_breadth_confirmation",
     "missing_point_in_time_qqq_momentum_confirmation",
     "missing_point_in_time_spy_momentum_confirmation",
-    "missing_point_in_time_vix_bucket",
     "net_usd_not_positive_after_resolution",
     "rejected_not_call_debit_spread",
     "rejected_outside_preregistered_universe",
@@ -371,12 +370,16 @@ Current momentum-continuation proof-blocker resolution result, if available:
       "missing_point_in_time_breadth_confirmation": 1291,
       "missing_point_in_time_qqq_momentum_confirmation": 1080,
       "missing_point_in_time_spy_momentum_confirmation": 395,
-      "missing_point_in_time_vix_bucket": 1291,
       "rejected_not_call_debit_spread": 290,
       "rejected_outside_preregistered_universe": 277
     },
     "full_denominator_fail_closed": 1291,
+    "point_in_time_breadth_confirmation_resolved": 0,
     "point_in_time_inputs_resolved": 0,
+    "point_in_time_market_regime_inputs_resolved": 0,
+    "point_in_time_qqq_momentum_confirmation_resolved": 0,
+    "point_in_time_spy_momentum_confirmation_resolved": 0,
+    "point_in_time_vix_bucket_resolved": 1291,
     "proof_qualified_candidate_rows": 0,
     "side_aware_quotes_resolved": 783
   },
@@ -430,7 +433,6 @@ Current momentum-continuation bounded replay gate result, if available:
       "missing_point_in_time_breadth_confirmation": 1291,
       "missing_point_in_time_qqq_momentum_confirmation": 1080,
       "missing_point_in_time_spy_momentum_confirmation": 395,
-      "missing_point_in_time_vix_bucket": 1291,
       "rejected_not_call_debit_spread": 290,
       "rejected_outside_preregistered_universe": 277
     },
@@ -452,7 +454,7 @@ Current momentum-continuation bounded replay gate result, if available:
     "point_in_time_inputs_resolved": 0,
     "proof_qualified_rows_after_resolution": 0,
     "quote_coverage": 0.6065,
-    "replay_gate_blocker_count": 15,
+    "replay_gate_blocker_count": 14,
     "side_aware_diagnostic_metrics": {
       "avg_pnl_usd": 201.07,
       "bootstrap_pf_lower_bound_5pct": null,
@@ -497,7 +499,6 @@ Current momentum-continuation bounded replay gate result, if available:
     "missing_point_in_time_breadth_confirmation",
     "missing_point_in_time_qqq_momentum_confirmation",
     "missing_point_in_time_spy_momentum_confirmation",
-    "missing_point_in_time_vix_bucket",
     "net_usd_not_positive_after_resolution",
     "rejected_not_call_debit_spread",
     "rejected_outside_preregistered_universe",
@@ -804,8 +805,13 @@ Current frozen 13-symbol reusable candidate-generation entrypoint result, if ava
   "accepted_profitability": false,
   "blockers": [
     "candidate_generation_months_0_below_requested_24",
-    "missing_daily_candidate_generation_diagnostics",
-    "source_artifact_universe_not_13_symbol"
+    "missing_historical_entry_underlying_price_surface",
+    "missing_historical_option_chain_selection_surface",
+    "missing_historical_scanner_point_in_time_inputs",
+    "missing_lane_specific_point_in_time_feature_inputs",
+    "missing_point_in_time_earnings_calendar_source",
+    "missing_point_in_time_market_regime_inputs",
+    "underlying_daily_history_source_not_point_in_time"
   ],
   "coverage": {
     "blocked_months": [
@@ -868,7 +874,7 @@ Current frozen 13-symbol reusable candidate-generation entrypoint result, if ava
   },
   "daily_candidate_generation_row_count": 6916,
   "daily_status_counts": {
-    "blocked_missing_daily_candidate_generation_diagnostics": 6916
+    "blocked_missing_historical_scanner_point_in_time_inputs": 6916
   },
   "historical_rows_are_forward_proof": false,
   "no_write": true,
@@ -883,7 +889,13 @@ Current 13-symbol frozen candidate-generation source-surface materializer result
   "blockers": [
     "candidate_generation_months_0_below_requested_24",
     "missing_daily_candidate_generation_diagnostics",
-    "source_artifact_universe_not_13_symbol"
+    "missing_historical_entry_underlying_price_surface",
+    "missing_historical_option_chain_selection_surface",
+    "missing_historical_scanner_point_in_time_inputs",
+    "missing_lane_specific_point_in_time_feature_inputs",
+    "missing_point_in_time_earnings_calendar_source",
+    "missing_point_in_time_market_regime_inputs",
+    "underlying_daily_history_source_not_point_in_time"
   ],
   "calendar_coverage": {
     "calendar_months_covered": [],
@@ -941,8 +953,13 @@ Current frozen 13-symbol candidate-generation engine result, if available:
     "blocked_latest_audit_rows_below_30",
     "blocked_train_or_audit_month_coverage",
     "candidate_generation_months_0_below_requested_24",
-    "missing_daily_candidate_generation_diagnostics",
-    "source_artifact_universe_not_13_symbol"
+    "missing_historical_entry_underlying_price_surface",
+    "missing_historical_option_chain_selection_surface",
+    "missing_historical_scanner_point_in_time_inputs",
+    "missing_lane_specific_point_in_time_feature_inputs",
+    "missing_point_in_time_earnings_calendar_source",
+    "missing_point_in_time_market_regime_inputs",
+    "underlying_daily_history_source_not_point_in_time"
   ],
   "coverage": {
     "audit_months_covered": 0,
@@ -2442,6 +2459,38 @@ Current flow-extreme volume/open-interest source repair packet result, if availa
 
 Interpretation: if the flow-extreme source repair packet status is flow_extreme_source_repair_packet_ready_for_operator_import_decision, do not rerun the same flow-source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real SPY/QQQ option volume/open-interest source import/materialization still needs the exact tokened source-import slice and an operator-supplied trusted daily volume/OI CSV. Do not run flow-extreme replay until real point-in-time flow source rows exist. VIX is no longer the flow blocker. Decide whether the next meaningful slice is that tokened non-live flow-source materialization path or another safe fallback.
 
+Current underlying daily OHLCV source acquisition/import state:
+{
+  "acquisition": {
+    "blockers": [
+      "trusted_source_csv_missing"
+    ],
+    "candidate_blocker_counts": {},
+    "candidate_file_count": 0,
+    "future_import_command": "npm run options:source-import:underlying-daily-history -- --source-file data/import-staging/underlying_daily/point_in_time_underlying_daily_ohlcv_adjusted_v1.csv --approval-token APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT --no-replay --json",
+    "ready_candidate_count": 0,
+    "selected_ready_source_file": null,
+    "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+    "source_import_command_executed": false,
+    "source_rows_written": false,
+    "status": "blocked_underlying_daily_source_acquisition_missing"
+  },
+  "source_import": {
+    "accepted_profitability": false,
+    "blockers": [
+      "fixture_source_file_requires_non_default_source_rows_path"
+    ],
+    "historical_rows_are_forward_proof": false,
+    "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+    "source_row_count": 0,
+    "source_rows_path": "data/profitability-lab/regular-options-point-in-time-underlying-daily-history/source_rows.jsonl",
+    "source_rows_written": false,
+    "status": "blocked_underlying_daily_history_source_import"
+  }
+}
+
+Interpretation: if underlying daily acquisition is `blocked_underlying_daily_source_acquisition_missing`, the current highest-leverage 13-symbol historical scanner blocker is an absent trusted full-window source CSV, not a missing parser or missing importer. Do not rerun the underlying source plan. If acquisition is `blocked_underlying_daily_source_acquisition_invalid`, name the exact parser/coverage/local-provenance blocker. If acquisition is `ready_for_underlying_daily_source_import_approval`, the next material step requires the exact tokened source import command and source materialization approval. Do not treat `market_data.db:daily_history`, local historical reconstruction, inferred known-at rows, or fixture rows as point-in-time proof.
+
 Current goal-loop state:
 {
   "forward_evidence_accounting": {
@@ -2614,7 +2663,7 @@ Required JSON-like output shape:
 Relevant NEXT_STEPS excerpt:
 # Next Steps
 
-Last updated: 2026-06-24
+Last updated: 2026-06-25
 
 ## Active Historical Robust-Search Track
 
@@ -2643,12 +2692,19 @@ Only run the validate/append commands if the capture runner wrote candidate rows
 - `docs/regular-options-historical-depth-selected-trades.md` is the earlier read-only selected-trade calendar-depth readback exposed as `npm run options:build:historical-depth-selected-trades`; it showed why the broad source could not answer the `2024-06` through `2026-05` question. The current proof chain should use the fail-closed frozen source-surface materializer instead of counting broad-source selected rows.
 - `docs/regular-options-point-in-time-selected-trade-depth.md` and `docs/regular-options-point-in-time-candidate-generation.md` are the read-only point-in-time selected-trade depth and candidate-generation proof reports. The current 13-symbol chain consumes the frozen source surface, which proves `0/24` months and no selected rows; zero-selection months outside a proven candidate-generation source cannot be counted as real no-pick months.
 - `docs/regular-options-13-symbol-candidate-generation-no-write.md` is now the read-only no-write/as-of/universe-filter runner-support artifact, exposed as `npm run options:research:13-symbol-no-write-candidate-generation -- --no-write --json`. It proves safe runner controls only; it does not prove candidate-surface coverage or profitability.
-- `docs/regular-options-13-symbol-frozen-candidate-generation-entrypoint.md` is now the GPT-5.5-selected read-only reusable frozen daily candidate/no-pick entrypoint, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --universe SPY,QQQ,IWM,AAPL,GOOGL,UNH,LLY,JNJ,XOM,CVX,COP,NEM,DIA --no-write --json`. Current result is `blocked_frozen_13_symbol_candidate_generation_entrypoint`: it emits `6,916` frozen lane/symbol/date rows, all blocked by `missing_daily_candidate_generation_diagnostics`; candidate-generation months covered remain `0/24`, selected candidates `0`, and old broad selected rows are not converted into proof.
-- `docs/regular-options-13-symbol-frozen-candidate-generation-source-surface.md` is now the read-only frozen 13-symbol source-surface materializer, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-source-surface -- --no-write --json`. Current result is `blocked_13_symbol_frozen_candidate_generation_source_surface`: it consumes the frozen entrypoint, proves `0/24` candidate-generation months and `0` selected rows, and names blockers `candidate_generation_months_0_below_requested_24`, `missing_daily_candidate_generation_diagnostics`, and `source_artifact_universe_not_13_symbol`.
-- `docs/regular-options-13-symbol-frozen-candidate-generation-denominator-v2.md` is 
+- `scanner_asof_contract_and_historical_option_chain_provider_v1` is implemented. The scanner API/as-of/no-write signatures are present, historical option selection uses trusted local `thetadata_opra_nbbo_1m` intraday rows from `data/options-validation/options_history.db` through read-only SQLite, exact bid/ask entry pricing is used where possible, missing IV/volume/open-interest stays `None`, and historical mode fails closed without latest-chain/model fallback when rows are absent. `npm run options:research:historical-frozen-scanner-replay-adapter -- --no-write --json` now clears `scanner_api_missing_historical_no_write_contract` and `scanner_option_selection_missing_historical_as_of_contract`, but still reports `blocked_historical_frozen_scanner_replay_adapter` with `6,916` rows, `0` selected rows, and real input blockers: `underlying_daily_history_source_not_point_in_time`, missing point-in-time market-regime inputs, lane-specific feature inputs, historical entry underlying price, historical option-chain selection surface, and earnings calendar source. Do not rework the scanner/as-of contract unless these tests or signatures regress.
+- `docs/regular-options-13-symbol-frozen-candidate-generation-entrypoint.md` is now the GPT-5.5-selected read-only reusable frozen daily candidate/no-pick entrypoint, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint -- --start-date 2024-0
 
 Relevant DECISIONS excerpt:
 # Decisions
+
+## 2026-06-25: Underlying Daily Acquisition Is A Source Intake Gate, Not Profitability Proof
+
+The next safe blocker-reducing slice for the regular-options profitability loop is not another parser plan and not a local `market_data.db` shortcut. `scripts/build_regular_options_underlying_daily_source_acquisition_packet.py`, exposed as `npm run options:source-acquisition:underlying-daily-history`, now owns the read-only intake preflight for staged trusted `point_in_time_underlying_daily_ohlcv_adjusted_v1` CSVs.
+
+Latest status is `blocked_underlying_daily_source_acquisition_missing`: no CSV exists under `data/import-staging/underlying_daily`, so there are `0` candidate files and `0` ready candidates. The packet reuses the strict source parser/validator, rejects leakage fields, manual/synthetic/source-mark rows, late known-at rows, and local provenance shortcuts such as `market_data.db:daily_history`, historical reconstruction, or inferred known-at policy. It emits the exact future command `npm run options:source-import:underlying-daily-history -- --source-file data/import-staging/underlying_daily/point_in_time_underlying_daily_ohlcv_adjusted_v1.csv --approval-token APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT --no-replay --json` only as a future materialization path.
+
+Durable decision: the acquisition packet is a fail-closed source intake boundary. It writes no source rows, runs no replay, imports no quotes, mutates no evidence stores, consumes no protected holdout, and proves no profitability. The historical frozen scanner adapter now has scanner/as-of/no-write contract blockers cleared, but the 13-symbol historical path remains blocked on missing trusted underlying daily source rows and downstream point-in-time input surfaces until a real full-window source CSV is staged and separately approved for tokened import.
 
 ## 2026-06-24: Frozen 13-Symbol Entrypoint Exists But Daily Candidate Decisions Are Still Missing
 
@@ -2678,15 +2734,7 @@ Durable decision: this task authorizes only a future approval decision, not impo
 
 GPT-5.5 Pro selected `macro_event_calendar_source_repair_packet_v1` after the direct VIX source repair packet reached import-decision state. `scripts/build_regular_options_macro_event_calendar_source_repair_packet.py`, exposed as `npm run options:source-plan:macro-event-calendar`, now owns the read-only macro-event source repair packet.
 
-Latest status is `macro_event_calendar_source_repair_packet_ready_for_operator_import_decision`. The packet reproduces the current macro-event baseline (`macro_event_calendar_status=blocked_macro_event_calendar_source_missing`, `event_count=0`, `covered_categories=[]`), defines `scheduled_macro_event_calendar_v1` required fields and frozen categories (`cpi`, `fomc_minutes`, `fomc_rate_decision`, `nonfarm_payrolls`, `pce`, `scheduled_fed_chair_testimony`), validates a fixture with before-market, during-market, after-market, and holiday/weekend-adjacent cases, rejects surprise/outcome/reaction/P&L fields, and emits a future tokened import/materialization command using `APPROVE_MACRO_EVENT_CALENDAR_SOURCE_IMPORT`. The packet identifies macro-event long strangle and post-event IV-crush iron condor branches whose event-calendar blocker could clear after a valid future source.
-
-Durable decision: this task authorizes only a future approval decision, not import. Macro-event source import/materialization, source-row writes, replay, and profitability claims remain not run. No evidence store mutation, protected-holdout consumption, live validation, auto-track, broker/order action, scanner/strategy/stop/sizing/proof-bar change, or promotion occurred.
-
-## 2026-06-24: Direct VIX Source Repair Packet Is Ready For Future Import Decision
-
-GPT-5.5 Pro selected `direct_point_in_time_vix_source_repair_packet_v1` after the 59-symbol ThetaTerminal resume retry parked. `scripts/build_regular_options_direct_vix_source_repair_packet.py`, exposed as `npm run options:source-plan:direct-vix`, now owns the read-only VIX source repair packet.
-
-Latest status is `direct_vix_source_repair_packet_ready_for_operator_import_decision`. The packet reproduces the current VIX baseline (`point_in_time_vix_bucket_status=blocked_point_in_time_vix_source_missing`, `vix_source_rows_count=0`, `vix_coverage_pct=0.0`), defines `direct_vix_daily_clos
+Latest status is `macro_event_calendar_source_repair_packet_ready_for_operator_import_dec
 
 Relevant PROJECT_CONTEXT excerpt:
 # Project Context

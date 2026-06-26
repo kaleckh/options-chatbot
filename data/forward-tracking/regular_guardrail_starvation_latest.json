@@ -1,53 +1,53 @@
 {
   "commodity_playbooks_excluded": [],
   "errors": [],
-  "generated_at_utc": "2026-06-24T17:05:50Z",
+  "generated_at_utc": "2026-06-25T17:06:12Z",
   "overall": {
-    "candidate_count_total": 2,
+    "candidate_count_total": 1,
     "candidate_decision_counts": {
-      "blocked": 2
+      "blocked": 1
     },
     "playbooks_completed": 3,
     "playbooks_requested": 3,
-    "returned_count_total": 2,
+    "returned_count_total": 1,
     "starvation_playbooks": [
       "ai_commodity_infra_observation"
     ],
     "status": "guardrail_starvation_detected",
     "top_block_reasons": [
       {
-        "count": 2,
-        "value": "Quality score # is below the AI Commodity Infra minimum of #."
-      },
-      {
-        "count": 2,
-        "value": "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
-      },
-      {
         "count": 1,
         "value": "AI Commodity Infra has no trusted daily EOD option history loaded for RIO yet; treat this as discovery-only until Theta history is imported."
       },
       {
         "count": 1,
-        "value": "Spread debit is # of width, above the AI Commodity Infra cap of #."
+        "value": "Quality score # is below the AI Commodity Infra minimum of #."
+      },
+      {
+        "count": 1,
+        "value": "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
       }
     ],
     "top_drop_counts": [
       {
-        "count": 54,
+        "count": 50,
         "value": "momentum"
       },
       {
-        "count": 15,
+        "count": 22,
         "value": "option_liquidity"
       },
       {
-        "count": 9,
+        "count": 8,
+        "value": "history_or_liquidity"
+      },
+      {
+        "count": 5,
         "value": "tech_score"
       },
       {
-        "count": 7,
-        "value": "history_or_liquidity"
+        "count": 1,
+        "value": "ev_floor"
       },
       {
         "count": 0,
@@ -60,10 +60,6 @@
       {
         "count": 0,
         "value": "direction_score"
-      },
-      {
-        "count": 0,
-        "value": "direction_filter"
       }
     ],
     "top_upstream_drop_details": [
@@ -83,21 +79,6 @@
         ]
       },
       {
-        "count": 8,
-        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
-        "drop_key": "option_liquidity",
-        "tickers": [
-          "AA",
-          "ALB",
-          "COPX",
-          "GEV",
-          "SCCO",
-          "TECK",
-          "URA",
-          "XME"
-        ]
-      },
-      {
         "count": 7,
         "detail": "underlying history/liquidity gate; tier=thin",
         "drop_key": "history_or_liquidity",
@@ -112,52 +93,67 @@
         ]
       },
       {
-        "count": 7,
-        "detail": "momentum/trend signal not met",
-        "drop_key": "momentum",
-        "tickers": [
-          "DIA",
-          "IWM",
-          "CARR",
-          "ETN",
-          "MP",
-          "NVT",
-          "TT"
-        ]
-      },
-      {
-        "count": 2,
-        "detail": "illiquid_quote: wide_leg_spread,low_leg_volume",
+        "count": 6,
+        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
         "drop_key": "option_liquidity",
         "tickers": [
-          "IWM",
-          "UNH"
-        ]
-      },
-      {
-        "count": 2,
-        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
-        "drop_key": "option_liquidity",
-        "tickers": [
-          "LLY",
-          "XLK"
-        ]
-      },
-      {
-        "count": 2,
-        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
-        "drop_key": "option_liquidity",
-        "tickers": [
-          "SQM",
+          "AA",
+          "ALB",
+          "COPX",
+          "SCCO",
+          "URA",
           "VST"
         ]
       },
       {
-        "count": 1,
-        "detail": "illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest",
+        "count": 5,
+        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
         "drop_key": "option_liquidity",
         "tickers": [
-          "DIA"
+          "GEV",
+          "MP",
+          "TT",
+          "VRT",
+          "XME"
+        ]
+      },
+      {
+        "count": 4,
+        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
+        "drop_key": "option_liquidity",
+        "tickers": [
+          "RTX",
+          "CARR",
+          "NRG",
+          "TECK"
+        ]
+      },
+      {
+        "count": 3,
+        "detail": "momentum/trend signal not met",
+        "drop_key": "momentum",
+        "tickers": [
+          "DIA",
+          "CEG",
+          "NVT"
+        ]
+      },
+      {
+        "count": 2,
+        "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume",
+        "drop_key": "option_liquidity",
+        "tickers": [
+          "LLY",
+          "PG"
+        ]
+      },
+      {
+        "count": 2,
+        "detail": "illiquid_quote: wide_leg_spread,low_leg_open_interest",
+        "drop_key": "option_liquidity",
+        "tickers": [
+          "DIA",
+          "CCJ"
         ]
       }
     ],
@@ -195,8 +191,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 2377172078.56,
-              "avg_volume_20d": 2456059.0,
+              "avg_dollar_volume_20d": 2374384624.34,
+              "avg_volume_20d": 2459667.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -206,8 +202,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 824546715.24,
-              "avg_volume_20d": 1443585.0,
+              "avg_dollar_volume_20d": 828256007.12,
+              "avg_volume_20d": 1441345.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -217,8 +213,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 224077548.17,
-              "avg_volume_20d": 3386753.0,
+              "avg_dollar_volume_20d": 222160926.54,
+              "avg_volume_20d": 3358258.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -228,8 +224,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 2500617063.35,
-              "avg_volume_20d": 2366289.0,
+              "avg_dollar_volume_20d": 2491053331.33,
+              "avg_volume_20d": 2349269.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -239,8 +235,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 1313400992.44,
-              "avg_volume_20d": 2577885.0,
+              "avg_dollar_volume_20d": 1332726168.24,
+              "avg_volume_20d": 2613962.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -250,8 +246,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 657676876.56,
-              "avg_volume_20d": 1260380.0,
+              "avg_dollar_volume_20d": 668727998.38,
+              "avg_volume_20d": 1286085.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -261,8 +257,8 @@
           {
             "detail": "underlying history/liquidity gate; tier=thin",
             "details": {
-              "avg_dollar_volume_20d": 467771655.28,
-              "avg_volume_20d": 2220460.0,
+              "avg_dollar_volume_20d": 490721162.5,
+              "avg_volume_20d": 2318448.0,
               "eligible": false,
               "history_days": 275,
               "liquidity_tier": "thin"
@@ -275,14 +271,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 55.08,
+              "price": 52.3,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": -22.8355,
-              "ret5": -14.1521,
+              "ret20": -29.8646,
+              "ret5": -16.8125,
               "signal_variant": "pullback_uptrend",
-              "sma20": 71.0135,
-              "sma50": 67.9868
+              "sma20": 70.1985,
+              "sma50": 67.6278
             },
             "ticker": "AA"
           },
@@ -290,14 +286,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 294.3,
+              "price": 293.08,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": -4.7018,
-              "ret5": -0.7152,
+              "ret20": -4.946,
+              "ret5": -2.0585,
               "signal_variant": "pullback_uptrend",
-              "sma20": 302.9985,
-              "sma50": 289.4704
+              "sma20": 302.2725,
+              "sma50": 290.1468
             },
             "ticker": "AAPL"
           },
@@ -305,14 +301,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 234.76,
+              "price": 234.89,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": 8.8363,
-              "ret5": 5.9434,
+              "ret20": 10.2149,
+              "ret5": 5.5828,
               "signal_variant": "pullback_uptrend",
-              "sma20": 220.7965,
-              "sma50": 212.1218
+              "sma20": 221.7495,
+              "sma50": 212.6582
             },
             "ticker": "ABBV"
           },
@@ -320,14 +316,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 519.85,
+              "price": 519.74,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": 11.1955,
-              "ret5": -5.0086,
+              "ret20": 3.1455,
+              "ret5": 2.4542,
               "signal_variant": "pullback_uptrend",
-              "sma20": 506.9592,
-              "sma50": 417.3469
+              "sma20": 509.5762,
+              "sma50": 422.8431
             },
             "ticker": "AMD"
           },
@@ -335,14 +331,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 179.38,
+              "price": 174.46,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": -2.4313,
-              "ret5": -3.4345,
+              "ret20": -5.6718,
+              "ret5": -5.4264,
               "signal_variant": "pullback_uptrend",
-              "sma20": 186.1735,
-              "sma50": 181.581
+              "sma20": 185.95,
+              "sma50": 181.5828
             },
             "ticker": "AMT"
           },
@@ -350,14 +346,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 234.11,
+              "price": 234.27,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": -12.0945,
-              "ret5": -4.8411,
+              "ret20": -11.6929,
+              "ret5": -4.7683,
               "signal_variant": "pullback_uptrend",
-              "sma20": 251.4945,
-              "sma50": 257.083
+              "sma20": 249.884,
+              "sma50": 256.9976
             },
             "ticker": "AMZN"
           },
@@ -365,14 +361,14 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 366.39,
+              "price": 359.08,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": 19.5361,
-              "ret5": -11.1889,
+              "ret20": 11.7863,
+              "ret5": -9.401,
               "signal_variant": "pullback_uptrend",
-              "sma20": 367.7715,
-              "sma50": 269.6902
+              "sma20": 370.7655,
+              "sma50": 274.0394
             },
             "ticker": "ARM"
           },
@@ -380,19 +376,107 @@
             "detail": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 216.71,
+              "price": 220.25,
               "put_entry_momentum_pct": 0.5,
               "required_signal": "close > SMA50, ret20 > 2%, and -4% < ret5 < 0.25%",
-              "ret20": -1.0547,
-              "ret5": -5.3461,
+              "ret20": 0.6167,
+              "ret5": -3.1826,
               "signal_variant": "pullback_uptrend",
-              "sma20": 220.6665,
-              "sma50": 224.291
+              "sma20": 220.551,
+              "sma50": 224.2726
             },
             "ticker": "BA"
           }
         ],
         "option_liquidity": [
+          {
+            "detail": "illiquid_quote: wide_leg_spread,low_leg_open_interest",
+            "details": {
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "low_leg_open_interest"
+              ],
+              "max_quote_age_hours": 0.01,
+              "min_leg_open_interest": 48,
+              "min_leg_volume": 118,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 8.225,
+              "selected_spread_bid_ask_pct_of_mid": 3.34,
+              "selected_spread_width": 20.0,
+              "signal_variant": "pullback_uptrend",
+              "spread_bid_ask_pct_of_mid": 3.34,
+              "worst_leg_bid_ask_spread_pct": 7.79
+            },
+            "ticker": "DIA"
+          },
+          {
+            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume",
+            "details": {
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "wide_spread_entry_slippage",
+                "low_leg_volume"
+              ],
+              "max_quote_age_hours": 0.02,
+              "min_leg_open_interest": 82,
+              "min_leg_volume": 3,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 24.3,
+              "selected_spread_bid_ask_pct_of_mid": 13.17,
+              "selected_spread_width": 80.0,
+              "signal_variant": "pullback_uptrend",
+              "spread_bid_ask_pct_of_mid": 13.17,
+              "worst_leg_bid_ask_spread_pct": 17.94
+            },
+            "ticker": "LLY"
+          },
+          {
+            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume",
+            "details": {
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "wide_spread_entry_slippage",
+                "low_leg_volume"
+              ],
+              "max_quote_age_hours": 0.01,
+              "min_leg_open_interest": 100,
+              "min_leg_volume": 4,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 2.295,
+              "selected_spread_bid_ask_pct_of_mid": 12.42,
+              "selected_spread_width": 7.5,
+              "signal_variant": "pullback_uptrend",
+              "spread_bid_ask_pct_of_mid": 12.42,
+              "worst_leg_bid_ask_spread_pct": 26.87
+            },
+            "ticker": "PG"
+          },
+          {
+            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
+            "details": {
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "wide_spread_entry_slippage",
+                "low_leg_volume",
+                "low_leg_open_interest"
+              ],
+              "max_quote_age_hours": 0.02,
+              "min_leg_open_interest": 17,
+              "min_leg_volume": 1,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 4.15,
+              "selected_spread_bid_ask_pct_of_mid": 28.43,
+              "selected_spread_width": 15.0,
+              "signal_variant": "pullback_uptrend",
+              "spread_bid_ask_pct_of_mid": 28.43,
+              "worst_leg_bid_ask_spread_pct": 62.7
+            },
+            "ticker": "RTX"
+          },
           {
             "detail": "illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest",
             "details": {
@@ -402,106 +486,18 @@
                 "low_leg_volume",
                 "low_leg_open_interest"
               ],
-              "max_quote_age_hours": 0.04,
-              "min_leg_open_interest": 48,
-              "min_leg_volume": 22,
+              "max_quote_age_hours": 0.01,
+              "min_leg_open_interest": 16,
+              "min_leg_volume": 5,
               "reason": "illiquid_quote",
-              "selected_net_debit": 6.935,
-              "selected_spread_bid_ask_pct_of_mid": 4.11,
-              "selected_spread_width": 18.0,
+              "selected_net_debit": 10.95,
+              "selected_spread_bid_ask_pct_of_mid": 9.59,
+              "selected_spread_width": 35.0,
               "signal_variant": "pullback_uptrend",
-              "spread_bid_ask_pct_of_mid": 4.11,
-              "worst_leg_bid_ask_spread_pct": 10.05
-            },
-            "ticker": "DIA"
-          },
-          {
-            "detail": "illiquid_quote: wide_leg_spread,low_leg_volume",
-            "details": {
-              "candidate_execution_label": "rejected_liquidity",
-              "liquidity_reasons": [
-                "wide_leg_spread",
-                "low_leg_volume"
-              ],
-              "max_quote_age_hours": 0.04,
-              "min_leg_open_interest": 551,
-              "min_leg_volume": 46,
-              "reason": "illiquid_quote",
-              "selected_net_debit": 5.435,
-              "selected_spread_bid_ask_pct_of_mid": 0.64,
-              "selected_spread_width": 15.0,
-              "signal_variant": "pullback_uptrend",
-              "spread_bid_ask_pct_of_mid": 0.64,
-              "worst_leg_bid_ask_spread_pct": 2.22
-            },
-            "ticker": "IWM"
-          },
-          {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
-            "details": {
-              "candidate_execution_label": "rejected_liquidity",
-              "liquidity_reasons": [
-                "wide_leg_spread",
-                "wide_spread_entry_slippage",
-                "low_leg_volume",
-                "low_leg_open_interest"
-              ],
-              "max_quote_age_hours": 0.05,
-              "min_leg_open_interest": 22,
-              "min_leg_volume": 4,
-              "reason": "illiquid_quote",
-              "selected_net_debit": 28.65,
-              "selected_spread_bid_ask_pct_of_mid": 12.04,
-              "selected_spread_width": 90.0,
-              "signal_variant": "pullback_uptrend",
-              "spread_bid_ask_pct_of_mid": 12.04,
-              "worst_leg_bid_ask_spread_pct": 29.02
-            },
-            "ticker": "LLY"
-          },
-          {
-            "detail": "illiquid_quote: wide_leg_spread,low_leg_volume",
-            "details": {
-              "candidate_execution_label": "rejected_liquidity",
-              "liquidity_reasons": [
-                "wide_leg_spread",
-                "low_leg_volume"
-              ],
-              "max_quote_age_hours": 0.05,
-              "min_leg_open_interest": 111,
-              "min_leg_volume": 2,
-              "reason": "illiquid_quote",
-              "selected_net_debit": 11.9,
-              "selected_spread_bid_ask_pct_of_mid": 9.24,
-              "selected_spread_width": 40.0,
-              "signal_variant": "pullback_uptrend",
-              "spread_bid_ask_pct_of_mid": 9.24,
-              "worst_leg_bid_ask_spread_pct": 24.28
+              "spread_bid_ask_pct_of_mid": 9.59,
+              "worst_leg_bid_ask_spread_pct": 20.69
             },
             "ticker": "UNH"
-          },
-          {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
-            "details": {
-              "candidate_execution_label": "rejected_liquidity",
-              "liquidity_reasons": [
-                "wide_leg_spread",
-                "wide_spread_entry_slippage",
-                "low_leg_volume",
-                "low_leg_open_interest"
-              ],
-              "max_quote_age_hours": 0.04,
-              "min_leg_open_interest": 19,
-              "min_leg_volume": 1,
-              "reason": "illiquid_quote",
-              "selected_net_debit": 6.645,
-              "selected_spread_bid_ask_pct_of_mid": 17.98,
-              "selected_spread_width": 17.0,
-              "signal_variant": "pullback_uptrend",
-              "spread_bid_ask_pct_of_mid": 17.98,
-              "worst_leg_bid_ask_spread_pct": 41.23
-            },
-            "ticker": "XLK"
           }
         ]
       },
@@ -659,20 +655,27 @@
         },
         {
           "count": 2,
-          "detail": "illiquid_quote: wide_leg_spread,low_leg_volume",
-          "drop_key": "option_liquidity",
-          "tickers": [
-            "IWM",
-            "UNH"
-          ]
-        },
-        {
-          "count": 2,
-          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
+          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume",
           "drop_key": "option_liquidity",
           "tickers": [
             "LLY",
-            "XLK"
+            "PG"
+          ]
+        },
+        {
+          "count": 1,
+          "detail": "illiquid_quote: wide_leg_spread,low_leg_open_interest",
+          "drop_key": "option_liquidity",
+          "tickers": [
+            "DIA"
+          ]
+        },
+        {
+          "count": 1,
+          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
+          "drop_key": "option_liquidity",
+          "tickers": [
+            "RTX"
           ]
         },
         {
@@ -680,7 +683,7 @@
           "detail": "illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest",
           "drop_key": "option_liquidity",
           "tickers": [
-            "DIA"
+            "UNH"
           ]
         }
       ]
@@ -700,8 +703,8 @@
         "history_or_liquidity": 0,
         "iv_crush_penalty": 0,
         "min_history": 0,
-        "momentum": 2,
-        "option_liquidity": 0,
+        "momentum": 1,
+        "option_liquidity": 1,
         "signal_index": 0,
         "stop_cooldown": 0,
         "tech_score": 2,
@@ -714,48 +717,58 @@
             "detail": "momentum/trend signal not met",
             "details": {
               "call_entry_momentum_pct": 0.3,
-              "price": 516.62,
+              "price": 518.52,
               "put_entry_momentum_pct": 0.3,
-              "ret20": 2.0746,
-              "ret5": -0.3511,
+              "ret20": 2.6264,
+              "ret5": -0.56,
               "signal_variant": "momentum",
-              "sma20": 511.3,
-              "sma50": 500.459
+              "sma20": 511.825,
+              "sma50": 501.2064
             },
             "ticker": "DIA"
-          },
+          }
+        ],
+        "option_liquidity": [
           {
-            "detail": "momentum/trend signal not met",
+            "detail": "illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest",
             "details": {
-              "call_entry_momentum_pct": 0.3,
-              "price": 295.32,
-              "put_entry_momentum_pct": 0.3,
-              "ret20": 3.5774,
-              "ret5": 0.2308,
-              "signal_variant": "momentum",
-              "sma20": 289.767,
-              "sma50": 282.0812
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "low_leg_volume",
+                "low_leg_open_interest"
+              ],
+              "max_quote_age_hours": 0.0,
+              "min_leg_open_interest": 0,
+              "min_leg_volume": 30,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 3.675,
+              "selected_spread_bid_ask_pct_of_mid": 1.5,
+              "selected_spread_width": 9.0,
+              "signal_variant": null,
+              "spread_bid_ask_pct_of_mid": 1.5,
+              "worst_leg_bid_ask_spread_pct": 2.9
             },
             "ticker": "IWM"
           }
         ],
         "tech_score": [
           {
-            "detail": "tech_score 47.4 below 65.0",
+            "detail": "tech_score 42.0 below 65.0",
             "details": {
               "min_tech_score": 65.0,
-              "ret5": -4.08,
-              "tech_score": 47.4,
+              "ret5": -2.64,
+              "tech_score": 42.0,
               "trade_type": "put"
             },
             "ticker": "QQQ"
           },
           {
-            "detail": "tech_score 51.5 below 65.0",
+            "detail": "tech_score 52.6 below 65.0",
             "details": {
               "min_tech_score": 65.0,
-              "ret5": -2.82,
-              "tech_score": 51.5,
+              "ret5": -2.28,
+              "tech_score": 52.6,
               "trade_type": "put"
             },
             "ticker": "SPY"
@@ -784,8 +797,8 @@
           "history_or_liquidity": 0,
           "iv_crush_penalty": 0,
           "min_history": 0,
-          "momentum": 2,
-          "option_liquidity": 0,
+          "momentum": 1,
+          "option_liquidity": 1,
           "signal_index": 0,
           "stop_cooldown": 0,
           "tech_score": 2,
@@ -831,17 +844,24 @@
       "top_clear_tickers": [],
       "top_upstream_drop_details": [
         {
-          "count": 2,
+          "count": 1,
           "detail": "momentum/trend signal not met",
           "drop_key": "momentum",
           "tickers": [
-            "DIA",
+            "DIA"
+          ]
+        },
+        {
+          "count": 1,
+          "detail": "illiquid_quote: wide_leg_spread,low_leg_volume,low_leg_open_interest",
+          "drop_key": "option_liquidity",
+          "tickers": [
             "IWM"
           ]
         },
         {
           "count": 1,
-          "detail": "tech_score 47.4 below 65.0",
+          "detail": "tech_score 42.0 below 65.0",
           "drop_key": "tech_score",
           "tickers": [
             "QQQ"
@@ -849,7 +869,7 @@
         },
         {
           "count": 1,
-          "detail": "tech_score 51.5 below 65.0",
+          "detail": "tech_score 52.6 below 65.0",
           "drop_key": "tech_score",
           "tickers": [
             "SPY"
@@ -859,100 +879,80 @@
     },
     {
       "block_rate_pct": 100.0,
-      "candidate_count": 2,
+      "candidate_count": 1,
       "candidate_decision_counts": {
-        "blocked": 2
+        "blocked": 1
       },
       "clear_rate_pct": 0.0,
       "drop_counts": {
         "direction_filter": 0,
         "direction_score": 0,
         "earnings": 0,
-        "ev_floor": 0,
+        "ev_floor": 1,
         "exceptions": 0,
         "guardrails": 0,
-        "history_or_liquidity": 0,
+        "history_or_liquidity": 1,
         "iv_crush_penalty": 0,
         "min_history": 0,
-        "momentum": 5,
-        "option_liquidity": 10,
+        "momentum": 2,
+        "option_liquidity": 16,
         "signal_index": 0,
         "stop_cooldown": 0,
-        "tech_score": 7,
+        "tech_score": 3,
         "ticker_regime_filter": 0,
         "ticker_vol_filter": 0
       },
       "drop_samples_by_key": {
+        "ev_floor": [
+          {
+            "detail": "{'direction_score': #}",
+            "details": {
+              "direction_score": 86.1
+            },
+            "ticker": "SLV"
+          }
+        ],
+        "history_or_liquidity": [
+          {
+            "detail": "underlying history/liquidity gate; tier=thin",
+            "details": {
+              "avg_dollar_volume_20d": 96940321.89,
+              "avg_volume_20d": 1218111.0,
+              "eligible": false,
+              "history_days": 275,
+              "liquidity_tier": "thin"
+            },
+            "ticker": "SQM"
+          }
+        ],
         "momentum": [
           {
             "detail": "momentum/trend signal not met",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 70.75,
+              "price": 267.97,
               "put_entry_momentum_pct": 0.5,
-              "ret20": 12.0526,
-              "ret5": -0.5342,
+              "ret20": -11.1417,
+              "ret5": -0.0112,
               "signal_variant": "momentum",
-              "sma20": 67.8335,
-              "sma50": 65.3536
+              "sma20": 267.589,
+              "sma50": 284.0246
             },
-            "ticker": "CARR"
+            "ticker": "CEG"
           },
           {
             "detail": "momentum/trend signal not met",
             "details": {
               "call_entry_momentum_pct": 0.5,
-              "price": 405.28,
+              "price": 167.55,
               "put_entry_momentum_pct": 0.5,
-              "ret20": 3.5595,
-              "ret5": -0.4373,
+              "ret20": -1.0278,
+              "ret5": 0.1255,
               "signal_variant": "momentum",
-              "sma20": 405.208,
-              "sma50": 405.8092
-            },
-            "ticker": "ETN"
-          },
-          {
-            "detail": "momentum/trend signal not met",
-            "details": {
-              "call_entry_momentum_pct": 0.5,
-              "price": 58.9,
-              "put_entry_momentum_pct": 0.5,
-              "ret20": -8.6255,
-              "ret5": 1.0985,
-              "signal_variant": "momentum",
-              "sma20": 62.0145,
-              "sma50": 62.5988
-            },
-            "ticker": "MP"
-          },
-          {
-            "detail": "momentum/trend signal not met",
-            "details": {
-              "call_entry_momentum_pct": 0.5,
-              "price": 168.37,
-              "put_entry_momentum_pct": 0.5,
-              "ret20": 2.2531,
-              "ret5": -0.3728,
-              "signal_variant": "momentum",
-              "sma20": 168.754,
-              "sma50": 158.6348
+              "sma20": 168.9395,
+              "sma50": 159.391
             },
             "ticker": "NVT"
-          },
-          {
-            "detail": "momentum/trend signal not met",
-            "details": {
-              "call_entry_momentum_pct": 0.5,
-              "price": 474.34,
-              "put_entry_momentum_pct": 0.5,
-              "ret20": 5.1705,
-              "ret5": 0.3809,
-              "signal_variant": "momentum",
-              "sma20": 463.0045,
-              "sma50": 469.1622
-            },
-            "ticker": "TT"
           }
         ],
         "option_liquidity": [
@@ -965,16 +965,16 @@
                 "wide_spread_entry_slippage",
                 "low_leg_open_interest"
               ],
-              "max_quote_age_hours": 0.01,
-              "min_leg_open_interest": 30,
-              "min_leg_volume": 9,
+              "max_quote_age_hours": 0.0,
+              "min_leg_open_interest": 43,
+              "min_leg_volume": 4,
               "reason": "illiquid_quote",
-              "selected_net_debit": 2.565,
-              "selected_spread_bid_ask_pct_of_mid": 15.01,
+              "selected_net_debit": 2.52,
+              "selected_spread_bid_ask_pct_of_mid": 12.7,
               "selected_spread_width": 5.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 15.01,
-              "worst_leg_bid_ask_spread_pct": 13.01
+              "spread_bid_ask_pct_of_mid": 12.7,
+              "worst_leg_bid_ask_spread_pct": 12.58
             },
             "ticker": "AA"
           },
@@ -988,61 +988,81 @@
                 "low_leg_open_interest"
               ],
               "max_quote_age_hours": 0.01,
-              "min_leg_open_interest": 14,
-              "min_leg_volume": 5,
+              "min_leg_open_interest": 17,
+              "min_leg_volume": 6,
               "reason": "illiquid_quote",
-              "selected_net_debit": 4.6,
-              "selected_spread_bid_ask_pct_of_mid": 16.3,
+              "selected_net_debit": 4.925,
+              "selected_spread_bid_ask_pct_of_mid": 10.66,
               "selected_spread_width": 10.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 16.3,
-              "worst_leg_bid_ask_spread_pct": 12.39
+              "spread_bid_ask_pct_of_mid": 10.66,
+              "worst_leg_bid_ask_spread_pct": 8.07
             },
             "ticker": "ALB"
           },
           {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
+            "detail": "illiquid_quote: wide_leg_spread",
             "details": {
               "candidate_execution_label": "rejected_liquidity",
               "liquidity_reasons": [
-                "wide_leg_spread",
-                "wide_spread_entry_slippage",
-                "low_leg_open_interest"
+                "wide_leg_spread"
               ],
-              "max_quote_age_hours": 0.01,
-              "min_leg_open_interest": 2,
-              "min_leg_volume": 4,
+              "max_quote_age_hours": 0.02,
+              "min_leg_open_interest": 180,
+              "min_leg_volume": 5,
               "reason": "illiquid_quote",
-              "selected_net_debit": 2.875,
-              "selected_spread_bid_ask_pct_of_mid": 23.48,
-              "selected_spread_width": 7.0,
+              "selected_net_debit": 2.525,
+              "selected_spread_bid_ask_pct_of_mid": 6.93,
+              "selected_spread_width": 7.5,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 23.48,
-              "worst_leg_bid_ask_spread_pct": 31.88
+              "spread_bid_ask_pct_of_mid": 6.93,
+              "worst_leg_bid_ask_spread_pct": 17.14
             },
-            "ticker": "COPX"
+            "ticker": "BHP"
           },
           {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
+            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
             "details": {
               "candidate_execution_label": "rejected_liquidity",
               "liquidity_reasons": [
                 "wide_leg_spread",
                 "wide_spread_entry_slippage",
+                "low_leg_volume",
                 "low_leg_open_interest"
               ],
-              "max_quote_age_hours": 0.01,
-              "min_leg_open_interest": 48,
-              "min_leg_volume": 4,
+              "max_quote_age_hours": 0.0,
+              "min_leg_open_interest": 0,
+              "min_leg_volume": 0,
               "reason": "illiquid_quote",
-              "selected_net_debit": 29.75,
-              "selected_spread_bid_ask_pct_of_mid": 17.65,
-              "selected_spread_width": 100.0,
+              "selected_net_debit": 2.275,
+              "selected_spread_bid_ask_pct_of_mid": 58.24,
+              "selected_spread_width": 6.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 17.65,
-              "worst_leg_bid_ask_spread_pct": 17.51
+              "spread_bid_ask_pct_of_mid": 58.24,
+              "worst_leg_bid_ask_spread_pct": 89.23
             },
-            "ticker": "GEV"
+            "ticker": "CARR"
+          },
+          {
+            "detail": "illiquid_quote: wide_leg_spread,low_leg_open_interest",
+            "details": {
+              "candidate_execution_label": "rejected_liquidity",
+              "liquidity_reasons": [
+                "wide_leg_spread",
+                "low_leg_open_interest"
+              ],
+              "max_quote_age_hours": 0.0,
+              "min_leg_open_interest": 8,
+              "min_leg_volume": 18,
+              "reason": "illiquid_quote",
+              "selected_net_debit": 3.505,
+              "selected_spread_bid_ask_pct_of_mid": 9.84,
+              "selected_spread_width": 10.0,
+              "signal_variant": null,
+              "spread_bid_ask_pct_of_mid": 9.84,
+              "worst_leg_bid_ask_spread_pct": 13.19
+            },
+            "ticker": "CCJ"
           },
           {
             "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
@@ -1054,17 +1074,17 @@
                 "low_leg_open_interest"
               ],
               "max_quote_age_hours": 0.0,
-              "min_leg_open_interest": 2,
-              "min_leg_volume": 1,
+              "min_leg_open_interest": 7,
+              "min_leg_volume": 2,
               "reason": "illiquid_quote",
-              "selected_net_debit": 6.9,
-              "selected_spread_bid_ask_pct_of_mid": 14.49,
-              "selected_spread_width": 15.0,
+              "selected_net_debit": 2.7,
+              "selected_spread_bid_ask_pct_of_mid": 20.37,
+              "selected_spread_width": 7.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 14.49,
-              "worst_leg_bid_ask_spread_pct": 11.2
+              "spread_bid_ask_pct_of_mid": 20.37,
+              "worst_leg_bid_ask_spread_pct": 27.59
             },
-            "ticker": "SCCO"
+            "ticker": "COPX"
           },
           {
             "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
@@ -1074,139 +1094,76 @@
                 "wide_leg_spread",
                 "wide_spread_entry_slippage"
               ],
-              "max_quote_age_hours": 0.03,
+              "max_quote_age_hours": 0.0,
               "min_leg_open_interest": 50,
-              "min_leg_volume": 2,
+              "min_leg_volume": 8,
               "reason": "illiquid_quote",
-              "selected_net_debit": 2.675,
-              "selected_spread_bid_ask_pct_of_mid": 14.02,
-              "selected_spread_width": 7.5,
+              "selected_net_debit": 37.8,
+              "selected_spread_bid_ask_pct_of_mid": 19.84,
+              "selected_spread_width": 100.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 14.02,
-              "worst_leg_bid_ask_spread_pct": 18.18
+              "spread_bid_ask_pct_of_mid": 19.84,
+              "worst_leg_bid_ask_spread_pct": 20.5
             },
-            "ticker": "SQM"
+            "ticker": "GEV"
           },
           {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
+            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
             "details": {
               "candidate_execution_label": "rejected_liquidity",
               "liquidity_reasons": [
                 "wide_leg_spread",
-                "wide_spread_entry_slippage",
-                "low_leg_open_interest"
+                "wide_spread_entry_slippage"
               ],
-              "max_quote_age_hours": 0.01,
-              "min_leg_open_interest": 1,
-              "min_leg_volume": 1,
+              "max_quote_age_hours": 0.0,
+              "min_leg_open_interest": 72,
+              "min_leg_volume": 3,
               "reason": "illiquid_quote",
-              "selected_net_debit": 2.35,
-              "selected_spread_bid_ask_pct_of_mid": 23.4,
+              "selected_net_debit": 2.095,
+              "selected_spread_bid_ask_pct_of_mid": 14.56,
               "selected_spread_width": 5.0,
               "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 23.4,
-              "worst_leg_bid_ask_spread_pct": 21.05
+              "spread_bid_ask_pct_of_mid": 14.56,
+              "worst_leg_bid_ask_spread_pct": 11.63
             },
-            "ticker": "TECK"
-          },
-          {
-            "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
-            "details": {
-              "candidate_execution_label": "rejected_liquidity",
-              "liquidity_reasons": [
-                "wide_leg_spread",
-                "wide_spread_entry_slippage",
-                "low_leg_open_interest"
-              ],
-              "max_quote_age_hours": 0.03,
-              "min_leg_open_interest": 0,
-              "min_leg_volume": 1,
-              "reason": "illiquid_quote",
-              "selected_net_debit": 1.65,
-              "selected_spread_bid_ask_pct_of_mid": 30.3,
-              "selected_spread_width": 4.0,
-              "signal_variant": null,
-              "spread_bid_ask_pct_of_mid": 30.3,
-              "worst_leg_bid_ask_spread_pct": 34.78
-            },
-            "ticker": "URA"
+            "ticker": "MP"
           }
         ],
         "tech_score": [
           {
-            "detail": "tech_score 50.7 below 65.0",
+            "detail": "tech_score 52.6 below 65.0",
             "details": {
               "min_tech_score": 65.0,
-              "ret5": -10.72,
-              "tech_score": 50.7,
+              "ret5": -0.77,
+              "tech_score": 52.6,
               "trade_type": "put"
             },
-            "ticker": "BHP"
+            "ticker": "ETN"
           },
           {
-            "detail": "tech_score 36.9 below 65.0",
+            "detail": "tech_score 45.9 below 65.0",
             "details": {
               "min_tech_score": 65.0,
-              "ret5": 1.75,
-              "tech_score": 36.9,
-              "trade_type": "call"
-            },
-            "ticker": "CCJ"
-          },
-          {
-            "detail": "tech_score 49.5 below 65.0",
-            "details": {
-              "min_tech_score": 65.0,
-              "ret5": 3.02,
-              "tech_score": 49.5,
-              "trade_type": "call"
-            },
-            "ticker": "CEG"
-          },
-          {
-            "detail": "tech_score 52.4 below 65.0",
-            "details": {
-              "min_tech_score": 65.0,
-              "ret5": -8.17,
-              "tech_score": 52.4,
+              "ret5": -11.85,
+              "tech_score": 45.9,
               "trade_type": "put"
             },
             "ticker": "FCX"
           },
           {
-            "detail": "tech_score 42.7 below 65.0",
+            "detail": "tech_score 40.8 below 65.0",
             "details": {
               "min_tech_score": 65.0,
-              "ret5": 5.57,
-              "tech_score": 42.7,
-              "trade_type": "call"
-            },
-            "ticker": "NRG"
-          },
-          {
-            "detail": "tech_score 44.0 below 65.0",
-            "details": {
-              "min_tech_score": 65.0,
-              "ret5": -3.05,
-              "tech_score": 44.0,
+              "ret5": -2.42,
+              "tech_score": 40.8,
               "trade_type": "put"
             },
             "ticker": "PWR"
-          },
-          {
-            "detail": "tech_score 57.9 below 65.0",
-            "details": {
-              "min_tech_score": 65.0,
-              "ret5": 2.05,
-              "tech_score": 57.9,
-              "trade_type": "call"
-            },
-            "ticker": "VRT"
           }
         ]
       },
       "guardrail_decision_counts": {
-        "blocked": 2,
+        "blocked": 1,
         "caution": 0,
         "clear": 0
       },
@@ -1214,62 +1171,32 @@
       "playbook_id": "ai_commodity_infra_observation",
       "policy_error": null,
       "policy_fail_closed": false,
-      "returned_count": 2,
+      "returned_count": 1,
       "returned_picks": [
         {
           "candidate_execution_label": "executable_opra_paper_candidate",
           "confidence": null,
-          "contract_symbol": "SLV260724P00055000",
-          "debit_pct_of_width": 49.14,
+          "contract_symbol": "RIO260717P00097500",
+          "debit_pct_of_width": 52.5,
           "direction": "put",
           "entry_execution_basis": "spread_ask_bid",
-          "entry_execution_price": 2.457,
-          "expiry": "2026-07-24",
-          "guardrail_decision": "blocked",
-          "guardrail_reasons": [
-            "Quality score 67.7 is below the AI Commodity Infra minimum of 70.0.",
-            "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
-          ],
-          "long_strike": 55.0,
-          "net_debit": 2.22,
-          "promotion_class": "research_bootstrap",
-          "proof_eligible": null,
-          "quality_score": 67.7,
-          "quote_freshness_status": "fresh",
-          "quote_time_et": "2026-06-24T13:05:17.121153-04:00",
-          "quote_time_utc": "2026-06-24T17:05:17.121153Z",
-          "ret5": -12.19,
-          "selection_source": "live_chain_exact_contract",
-          "short_contract_symbol": "SLV260724P00050000",
-          "short_strike": 50.0,
-          "suggested_size_tier": "blocked",
-          "ticker": "SLV"
-        },
-        {
-          "candidate_execution_label": "executable_opra_paper_candidate",
-          "confidence": null,
-          "contract_symbol": "RIO260717P00100000",
-          "debit_pct_of_width": 64.4,
-          "direction": "put",
-          "entry_execution_basis": "spread_ask_bid",
-          "entry_execution_price": 4.83,
+          "entry_execution_price": 2.625,
           "expiry": "2026-07-17",
           "guardrail_decision": "blocked",
           "guardrail_reasons": [
             "AI Commodity Infra has no trusted daily EOD option history loaded for RIO yet; treat this as discovery-only until Theta history is imported.",
             "Quality score 65.3 is below the AI Commodity Infra minimum of 70.0.",
-            "Spread debit is 64.4% of width, above the AI Commodity Infra cap of 55.0%.",
             "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
           ],
-          "long_strike": 100.0,
-          "net_debit": 4.375,
+          "long_strike": 97.5,
+          "net_debit": 2.275,
           "promotion_class": "research_bootstrap",
           "proof_eligible": null,
           "quality_score": 65.3,
           "quote_freshness_status": "fresh",
-          "quote_time_et": "2026-06-24T13:04:07.291199-04:00",
-          "quote_time_utc": "2026-06-24T17:04:07.291199Z",
-          "ret5": -9.74,
+          "quote_time_et": "2026-06-25T13:05:18.999377-04:00",
+          "quote_time_utc": "2026-06-25T17:05:18.999377Z",
+          "ret5": -11.07,
           "selection_source": "live_chain_exact_contract",
           "short_contract_symbol": "RIO260717P00092500",
           "short_strike": 92.5,
@@ -1282,23 +1209,23 @@
           "direction_filter": 0,
           "direction_score": 0,
           "earnings": 0,
-          "ev_floor": 0,
+          "ev_floor": 1,
           "exceptions": 0,
           "guardrails": 0,
-          "history_or_liquidity": 0,
+          "history_or_liquidity": 1,
           "iv_crush_penalty": 0,
           "min_history": 0,
-          "momentum": 5,
-          "option_liquidity": 10,
+          "momentum": 2,
+          "option_liquidity": 16,
           "signal_index": 0,
           "stop_cooldown": 0,
-          "tech_score": 7,
+          "tech_score": 3,
           "ticker_regime_filter": 0,
           "ticker_vol_filter": 0
         },
         "final_trimmed": 0,
         "guardrail_counts": {
-          "blocked": 2,
+          "blocked": 1,
           "caution": 0,
           "clear": 0
         },
@@ -1313,10 +1240,10 @@
         },
         "policy_fail_closed": false,
         "policy_filtered_out": 0,
-        "post_guardrails_visible": 2,
-        "post_policy_visible": 2,
-        "raw_candidates": 2,
-        "returned_picks": 2
+        "post_guardrails_visible": 1,
+        "post_policy_visible": 1,
+        "raw_candidates": 1,
+        "returned_picks": 1
       },
       "scan_symbol_scope": {
         "source": "playbook_scan_tickers",
@@ -1351,77 +1278,43 @@
       "starvation_flag": true,
       "top_block_reasons": [
         {
-          "count": 2,
-          "value": "Quality score # is below the AI Commodity Infra minimum of #."
-        },
-        {
-          "count": 2,
-          "value": "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
-        },
-        {
           "count": 1,
           "value": "AI Commodity Infra has no trusted daily EOD option history loaded for RIO yet; treat this as discovery-only until Theta history is imported."
         },
         {
           "count": 1,
-          "value": "Spread debit is # of width, above the AI Commodity Infra cap of #."
+          "value": "Quality score # is below the AI Commodity Infra minimum of #."
+        },
+        {
+          "count": 1,
+          "value": "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
         }
       ],
       "top_blocked_candidates": [
         {
           "candidate_execution_label": "executable_opra_paper_candidate",
           "confidence": null,
-          "contract_symbol": "SLV260724P00055000",
-          "debit_pct_of_width": 49.14,
+          "contract_symbol": "RIO260717P00097500",
+          "debit_pct_of_width": 52.5,
           "direction": "put",
           "entry_execution_basis": "spread_ask_bid",
-          "entry_execution_price": 2.457,
-          "expiry": "2026-07-24",
-          "guardrail_decision": "blocked",
-          "guardrail_reasons": [
-            "Quality score 67.7 is below the AI Commodity Infra minimum of 70.0.",
-            "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
-          ],
-          "long_strike": 55.0,
-          "net_debit": 2.22,
-          "promotion_class": "research_bootstrap",
-          "proof_eligible": null,
-          "quality_score": 67.7,
-          "quote_freshness_status": "fresh",
-          "quote_time_et": "2026-06-24T13:05:17.121153-04:00",
-          "quote_time_utc": "2026-06-24T17:05:17.121153Z",
-          "ret5": -12.19,
-          "selection_source": "live_chain_exact_contract",
-          "short_contract_symbol": "SLV260724P00050000",
-          "short_strike": 50.0,
-          "suggested_size_tier": "blocked",
-          "ticker": "SLV"
-        },
-        {
-          "candidate_execution_label": "executable_opra_paper_candidate",
-          "confidence": null,
-          "contract_symbol": "RIO260717P00100000",
-          "debit_pct_of_width": 64.4,
-          "direction": "put",
-          "entry_execution_basis": "spread_ask_bid",
-          "entry_execution_price": 4.83,
+          "entry_execution_price": 2.625,
           "expiry": "2026-07-17",
           "guardrail_decision": "blocked",
           "guardrail_reasons": [
             "AI Commodity Infra has no trusted daily EOD option history loaded for RIO yet; treat this as discovery-only until Theta history is imported.",
             "Quality score 65.3 is below the AI Commodity Infra minimum of 70.0.",
-            "Spread debit is 64.4% of width, above the AI Commodity Infra cap of 55.0%.",
             "Lane profitability gate blocked candidate: lane_profitability_gate_report_stale."
           ],
-          "long_strike": 100.0,
-          "net_debit": 4.375,
+          "long_strike": 97.5,
+          "net_debit": 2.275,
           "promotion_class": "research_bootstrap",
           "proof_eligible": null,
           "quality_score": 65.3,
           "quote_freshness_status": "fresh",
-          "quote_time_et": "2026-06-24T13:04:07.291199-04:00",
-          "quote_time_utc": "2026-06-24T17:04:07.291199Z",
-          "ret5": -9.74,
+          "quote_time_et": "2026-06-25T13:05:18.999377-04:00",
+          "quote_time_utc": "2026-06-25T17:05:18.999377Z",
+          "ret5": -11.07,
           "selection_source": "live_chain_exact_contract",
           "short_contract_symbol": "RIO260717P00092500",
           "short_strike": 92.5,
@@ -1432,89 +1325,85 @@
       "top_blocked_tickers": [
         {
           "count": 1,
-          "value": "SLV"
-        },
-        {
-          "count": 1,
           "value": "RIO"
         }
       ],
       "top_clear_tickers": [],
       "top_upstream_drop_details": [
         {
-          "count": 8,
+          "count": 6,
           "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_open_interest",
           "drop_key": "option_liquidity",
           "tickers": [
             "AA",
             "ALB",
             "COPX",
-            "GEV",
             "SCCO",
-            "TECK",
             "URA",
-            "XME"
-          ]
-        },
-        {
-          "count": 5,
-          "detail": "momentum/trend signal not met",
-          "drop_key": "momentum",
-          "tickers": [
-            "CARR",
-            "ETN",
-            "MP",
-            "NVT",
-            "TT"
-          ]
-        },
-        {
-          "count": 2,
-          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
-          "drop_key": "option_liquidity",
-          "tickers": [
-            "SQM",
             "VST"
           ]
         },
         {
+          "count": 5,
+          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage",
+          "drop_key": "option_liquidity",
+          "tickers": [
+            "GEV",
+            "MP",
+            "TT",
+            "VRT",
+            "XME"
+          ]
+        },
+        {
+          "count": 3,
+          "detail": "illiquid_quote: wide_leg_spread,wide_spread_entry_slippage,low_leg_volume,low_leg_open_interest",
+          "drop_key": "option_liquidity",
+          "tickers": [
+            "CARR",
+            "NRG",
+            "TECK"
+          ]
+        },
+        {
+          "count": 2,
+          "detail": "momentum/trend signal not met",
+          "drop_key": "momentum",
+          "tickers": [
+            "CEG",
+            "NVT"
+          ]
+        },
+        {
           "count": 1,
-          "detail": "tech_score 50.7 below 65.0",
-          "drop_key": "tech_score",
+          "detail": "illiquid_quote: wide_leg_spread",
+          "drop_key": "option_liquidity",
           "tickers": [
             "BHP"
           ]
         },
         {
           "count": 1,
-          "detail": "tech_score 36.9 below 65.0",
-          "drop_key": "tech_score",
+          "detail": "illiquid_quote: wide_leg_spread,low_leg_open_interest",
+          "drop_key": "option_liquidity",
           "tickers": [
             "CCJ"
           ]
         },
         {
           "count": 1,
-          "detail": "tech_score 49.5 below 65.0",
+          "detail": "tech_score 52.6 below 65.0",
           "drop_key": "tech_score",
           "tickers": [
-            "CEG"
+            "ETN"
           ]
         },
         {
           "count": 1,
-          "detail": "tech_score 52.4 below 65.0",
+          "detail": "tech_score 45.9 below 65.0",
           "drop_key": "tech_score",
           "tickers": [
             "FCX"
-          ]
-        },
-        {
-          "count": 1,
-          "detail": "tech_score 42.7 below 65.0",
-          "drop_key": "tech_score",
-          "tickers": [
-            "NRG"
           ]
         }
       ]

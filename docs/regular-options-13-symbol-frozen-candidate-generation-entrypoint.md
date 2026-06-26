@@ -26,8 +26,6 @@ This generated artifact exposes a reusable read-only daily candidate/no-pick ent
 - `missing_lane_specific_point_in_time_feature_inputs`
 - `missing_point_in_time_earnings_calendar_source`
 - `missing_point_in_time_market_regime_inputs`
-- `scanner_api_missing_historical_no_write_contract`
-- `scanner_option_selection_missing_historical_as_of_contract`
 - `underlying_daily_history_source_not_point_in_time`
 
 ## Boundary

@@ -50,6 +50,8 @@ DEFAULT_DIRECT_VIX_SOURCE_IMPORT = ROOT / "data" / "profitability-lab" / "regula
 DEFAULT_DIRECT_VIX_SOURCE_REPAIR_PACKET = ROOT / "data" / "profitability-lab" / "regular-options-direct-vix-source-repair-packet" / "latest.json"
 DEFAULT_MACRO_EVENT_CALENDAR_SOURCE_REPAIR_PACKET = ROOT / "data" / "profitability-lab" / "regular-options-macro-event-calendar-source-repair-packet" / "latest.json"
 DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET = ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-source-repair-packet" / "latest.json"
+DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION = ROOT / "data" / "profitability-lab" / "regular-options-underlying-daily-source-acquisition" / "latest.json"
+DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT = ROOT / "data" / "profitability-lab" / "regular-options-underlying-daily-source-import" / "latest.json"
 DEFAULT_GOAL_LOOP = ROOT / "data" / "forward-tracking" / "options_goal_loop_latest.json"
 DEFAULT_NEXT_STEPS = ROOT / "docs" / "NEXT_STEPS.md"
 DEFAULT_DECISIONS = ROOT / "docs" / "DECISIONS.md"
@@ -524,6 +526,8 @@ def build_packet(
     direct_vix_source_repair_packet_path: Path = DEFAULT_DIRECT_VIX_SOURCE_REPAIR_PACKET,
     macro_event_calendar_source_repair_packet_path: Path = DEFAULT_MACRO_EVENT_CALENDAR_SOURCE_REPAIR_PACKET,
     flow_extreme_source_repair_packet_path: Path = DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET,
+    underlying_daily_source_acquisition_path: Path = DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION,
+    underlying_daily_source_import_path: Path = DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT,
     goal_loop_path: Path = DEFAULT_GOAL_LOOP,
     next_steps_path: Path = DEFAULT_NEXT_STEPS,
     decisions_path: Path = DEFAULT_DECISIONS,
@@ -668,6 +672,14 @@ def build_packet(
         flow_extreme_source_repair_packet_path,
         required=False,
     )
+    underlying_daily_source_acquisition, underlying_daily_source_acquisition_meta = _load_json(
+        underlying_daily_source_acquisition_path,
+        required=False,
+    )
+    underlying_daily_source_import, underlying_daily_source_import_meta = _load_json(
+        underlying_daily_source_import_path,
+        required=False,
+    )
     goal_loop, goal_meta = _load_json(goal_loop_path, required=False)
     next_steps, next_meta = _load_text_excerpt(next_steps_path)
     decisions, decisions_meta = _load_text_excerpt(decisions_path)
@@ -712,6 +724,8 @@ def build_packet(
         "direct_vix_source_repair_packet": direct_vix_source_repair_packet_meta,
         "macro_event_calendar_source_repair_packet": macro_event_calendar_source_repair_packet_meta,
         "flow_extreme_source_repair_packet": flow_extreme_source_repair_packet_meta,
+        "underlying_daily_source_acquisition": underlying_daily_source_acquisition_meta,
+        "underlying_daily_source_import": underlying_daily_source_import_meta,
         "goal_loop": goal_meta,
         "next_steps": next_meta,
         "decisions": decisions_meta,
@@ -1192,6 +1206,26 @@ def build_packet(
                     "vix_status": "ready" if vix_bucket_ready else "blocked",
                 }
             ],
+            "underlying_daily_source_acquisition_status": underlying_daily_source_acquisition.get("status"),
+            "underlying_daily_source_acquisition_blockers": underlying_daily_source_acquisition.get("blockers"),
+            "underlying_daily_source_acquisition_candidate_file_count": underlying_daily_source_acquisition.get(
+                "candidate_file_count"
+            ),
+            "underlying_daily_source_acquisition_ready_candidate_count": underlying_daily_source_acquisition.get(
+                "ready_candidate_count"
+            ),
+            "underlying_daily_source_acquisition_selected_ready_source_file": underlying_daily_source_acquisition.get(
+                "selected_ready_source_file"
+            ),
+            "underlying_daily_source_acquisition_future_import_command": underlying_daily_source_acquisition.get(
+                "future_import_command"
+            ),
+            "underlying_daily_source_import_status": underlying_daily_source_import.get("status"),
+            "underlying_daily_source_import_source_rows_written": underlying_daily_source_import.get(
+                "source_rows_written"
+            ),
+            "underlying_daily_source_import_source_row_count": underlying_daily_source_import.get("source_row_count"),
+            "underlying_daily_source_import_blockers": underlying_daily_source_import.get("blockers"),
             "goal_loop_state": goal_loop.get("current_decision_state"),
             "goal_loop_next_safe_action": goal_loop.get("next_safe_action"),
             "goal_loop_forward_accounting": goal_loop.get("forward_evidence_accounting"),
@@ -1241,6 +1275,8 @@ def build_packet(
             current_vix_branch_implications=current_vix_branch_implications,
             macro_event_calendar_source_repair_packet=macro_event_calendar_source_repair_packet,
             flow_extreme_source_repair_packet=flow_extreme_source_repair_packet,
+            underlying_daily_source_acquisition=underlying_daily_source_acquisition,
+            underlying_daily_source_import=underlying_daily_source_import,
             goal_loop=goal_loop,
             next_steps_excerpt=next_steps,
             decisions_excerpt=decisions,
@@ -1303,6 +1339,8 @@ def _render_prompt(
     current_vix_branch_implications: list[dict[str, Any]],
     macro_event_calendar_source_repair_packet: dict[str, Any],
     flow_extreme_source_repair_packet: dict[str, Any],
+    underlying_daily_source_acquisition: dict[str, Any],
+    underlying_daily_source_import: dict[str, Any],
     goal_loop: dict[str, Any],
     next_steps_excerpt: str,
     decisions_excerpt: str,
@@ -1589,6 +1627,11 @@ Current flow-extreme volume/open-interest source repair packet result, if availa
 
 Interpretation: if the flow-extreme source repair packet status is flow_extreme_source_repair_packet_ready_for_operator_import_decision, do not rerun the same flow-source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real SPY/QQQ option volume/open-interest source import/materialization still needs the exact tokened source-import slice and an operator-supplied trusted daily volume/OI CSV. Do not run flow-extreme replay until real point-in-time flow source rows exist. VIX is no longer the flow blocker. Decide whether the next meaningful slice is that tokened non-live flow-source materialization path or another safe fallback.
 
+Current underlying daily OHLCV source acquisition/import state:
+{json.dumps({"acquisition": {"status": underlying_daily_source_acquisition.get("status"), "source_family": underlying_daily_source_acquisition.get("source_family"), "candidate_file_count": underlying_daily_source_acquisition.get("candidate_file_count"), "ready_candidate_count": underlying_daily_source_acquisition.get("ready_candidate_count"), "selected_ready_source_file": underlying_daily_source_acquisition.get("selected_ready_source_file"), "blockers": underlying_daily_source_acquisition.get("blockers"), "candidate_blocker_counts": underlying_daily_source_acquisition.get("candidate_blocker_counts"), "future_import_command": underlying_daily_source_acquisition.get("future_import_command"), "source_rows_written": underlying_daily_source_acquisition.get("source_rows_written"), "source_import_command_executed": underlying_daily_source_acquisition.get("source_import_command_executed")}, "source_import": {"status": underlying_daily_source_import.get("status"), "source_family": underlying_daily_source_import.get("source_family"), "source_row_count": underlying_daily_source_import.get("source_row_count"), "source_rows_written": underlying_daily_source_import.get("source_rows_written"), "source_rows_path": underlying_daily_source_import.get("source_rows_path"), "blockers": underlying_daily_source_import.get("blockers"), "accepted_profitability": underlying_daily_source_import.get("accepted_profitability"), "historical_rows_are_forward_proof": underlying_daily_source_import.get("historical_rows_are_forward_proof")}}, indent=2, sort_keys=True)}
+
+Interpretation: if underlying daily acquisition is `blocked_underlying_daily_source_acquisition_missing`, the current highest-leverage 13-symbol historical scanner blocker is an absent trusted full-window source CSV, not a missing parser or missing importer. Do not rerun the underlying source plan. If acquisition is `blocked_underlying_daily_source_acquisition_invalid`, name the exact parser/coverage/local-provenance blocker. If acquisition is `ready_for_underlying_daily_source_import_approval`, the next material step requires the exact tokened source import command and source materialization approval. Do not treat `market_data.db:daily_history`, local historical reconstruction, inferred known-at rows, or fixture rows as point-in-time proof.
+
 Current goal-loop state:
 {json.dumps({"state": goal_loop.get("current_decision_state"), "next_safe_action": goal_loop.get("next_safe_action"), "forward_evidence_accounting": goal_loop.get("forward_evidence_accounting")}, indent=2, sort_keys=True)}
 
@@ -1743,6 +1786,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--direct-vix-source-repair-packet", type=Path, default=DEFAULT_DIRECT_VIX_SOURCE_REPAIR_PACKET)
     parser.add_argument("--macro-event-calendar-source-repair-packet", type=Path, default=DEFAULT_MACRO_EVENT_CALENDAR_SOURCE_REPAIR_PACKET)
     parser.add_argument("--flow-extreme-source-repair-packet", type=Path, default=DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET)
+    parser.add_argument("--underlying-daily-source-acquisition", type=Path, default=DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION)
+    parser.add_argument("--underlying-daily-source-import", type=Path, default=DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT)
     parser.add_argument("--goal-loop", type=Path, default=DEFAULT_GOAL_LOOP)
     parser.add_argument("--next-steps", type=Path, default=DEFAULT_NEXT_STEPS)
     parser.add_argument("--decisions", type=Path, default=DEFAULT_DECISIONS)
@@ -1793,6 +1838,8 @@ def main(argv: list[str] | None = None) -> int:
         direct_vix_source_repair_packet_path=args.direct_vix_source_repair_packet,
         macro_event_calendar_source_repair_packet_path=args.macro_event_calendar_source_repair_packet,
         flow_extreme_source_repair_packet_path=args.flow_extreme_source_repair_packet,
+        underlying_daily_source_acquisition_path=args.underlying_daily_source_acquisition,
+        underlying_daily_source_import_path=args.underlying_daily_source_import,
         goal_loop_path=args.goal_loop,
         next_steps_path=args.next_steps,
         decisions_path=args.decisions,

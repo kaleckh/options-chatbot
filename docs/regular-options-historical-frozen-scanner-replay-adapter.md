@@ -27,8 +27,6 @@ This generated artifact is a bounded read-only adapter for the frozen Phase 2 la
 | `missing_lane_specific_point_in_time_feature_inputs` | `6916` |
 | `missing_point_in_time_earnings_calendar_source` | `4446` |
 | `missing_point_in_time_market_regime_inputs` | `6916` |
-| `scanner_api_missing_historical_no_write_contract` | `6916` |
-| `scanner_option_selection_missing_historical_as_of_contract` | `6916` |
 | `underlying_daily_history_source_not_point_in_time` | `6916` |
 
 ## Blockers
@@ -40,8 +38,6 @@ This generated artifact is a bounded read-only adapter for the frozen Phase 2 la
 - `missing_lane_specific_point_in_time_feature_inputs`
 - `missing_point_in_time_earnings_calendar_source`
 - `missing_point_in_time_market_regime_inputs`
-- `scanner_api_missing_historical_no_write_contract`
-- `scanner_option_selection_missing_historical_as_of_contract`
 - `underlying_daily_history_source_not_point_in_time`
 
 ## Boundary

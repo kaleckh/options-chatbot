@@ -95,6 +95,7 @@
     "options:source-plan:macro-event-calendar": "uv run --locked python scripts/build_regular_options_macro_event_calendar_source_repair_packet.py",
     "options:source-plan:flow-extreme-volume-oi": "uv run --locked python scripts/build_regular_options_flow_extreme_source_repair_packet.py",
     "options:source-plan:underlying-daily-history": "uv run --locked python scripts/build_regular_options_underlying_daily_source_repair_packet.py",
+    "options:source-acquisition:underlying-daily-history": "uv run --locked python scripts/build_regular_options_underlying_daily_source_acquisition_packet.py",
     "options:source-import:direct-vix": "uv run --locked python scripts/import_regular_options_direct_vix_source.py",
     "options:source-import:macro-event-calendar": "uv run --locked python scripts/import_regular_options_macro_event_calendar.py",
     "options:source-import:flow-extreme-volume-oi": "uv run --locked python scripts/import_regular_options_flow_extreme_volume_oi.py",

@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-06-25: Underlying Daily Acquisition Is A Source Intake Gate, Not Profitability Proof
+
+The next safe blocker-reducing slice for the regular-options profitability loop is not another parser plan and not a local `market_data.db` shortcut. `scripts/build_regular_options_underlying_daily_source_acquisition_packet.py`, exposed as `npm run options:source-acquisition:underlying-daily-history`, now owns the read-only intake preflight for staged trusted `point_in_time_underlying_daily_ohlcv_adjusted_v1` CSVs.
+
+Latest status is `blocked_underlying_daily_source_acquisition_missing`: no CSV exists under `data/import-staging/underlying_daily`, so there are `0` candidate files and `0` ready candidates. The packet reuses the strict source parser/validator, rejects leakage fields, manual/synthetic/source-mark rows, late known-at rows, and local provenance shortcuts such as `market_data.db:daily_history`, historical reconstruction, or inferred known-at policy. It emits the exact future command `npm run options:source-import:underlying-daily-history -- --source-file data/import-staging/underlying_daily/point_in_time_underlying_daily_ohlcv_adjusted_v1.csv --approval-token APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT --no-replay --json` only as a future materialization path.
+
+Durable decision: the acquisition packet is a fail-closed source intake boundary. It writes no source rows, runs no replay, imports no quotes, mutates no evidence stores, consumes no protected holdout, and proves no profitability. The historical frozen scanner adapter now has scanner/as-of/no-write contract blockers cleared, but the 13-symbol historical path remains blocked on missing trusted underlying daily source rows and downstream point-in-time input surfaces until a real full-window source CSV is staged and separately approved for tokened import.
+
 ## 2026-06-24: Frozen 13-Symbol Entrypoint Exists But Daily Candidate Decisions Are Still Missing
 
 GPT-5.5 Pro selected `candidate_generation_repair:frozen_13_symbol_reusable_candidate_generation_entrypoint_v1` after the profitability-first blocker map identified candidate throughput as the highest-leverage blocker. `scripts/regular_options_frozen_candidate_generation_entrypoint.py`, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint`, now owns the reusable read-only/no-write frozen daily candidate/no-pick entrypoint.
