@@ -66,18 +66,18 @@ This is a no-write readiness refresh. It does not stage candidate rows, validate
 
 ## Source Readbacks
 
-- `strict_forward_operator_queue`: `loaded` age `15.18` hours at `data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json`.
-- `gateboard`: `loaded` age `1.77` hours at `data/forward-tracking/project_operator_gateboard_latest.json`.
-- `trade_qualification`: `loaded` age `1.8` hours at `data/forward-tracking/regular_options_trade_qualification_latest.json`.
-- `bullish_pullback_layer_shadow_selection`: `loaded` age `15.21` hours at `data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json`.
-- `bullish_pullback_layer_execution_safety_audit`: `loaded` age `15.21` hours at `data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json`.
-- `bullish_pullback_layer_executable_economics`: `loaded` age `15.2` hours at `data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json`.
-- `bullish_pullback_layer4_forward_capture_protocol`: `loaded` age `15.2` hours at `data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json`.
-- `paper_shadow_evidence_plan`: `loaded` age `1.77` hours at `data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json`.
-- `fill_attempt_evidence_capture_plan`: `loaded` age `1.84` hours at `data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json`.
-- `suggested_trade_review_plan`: `loaded` age `1.84` hours at `data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json`.
-- `monthly_profitability_audit`: `loaded` age `1.8` hours at `data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json`.
-- `market_window_approval_preflight`: `loaded` age `1.77` hours at `data/forward-tracking/regular_options_market_window_approval_preflight_latest.json`.
+- `strict_forward_operator_queue`: `loaded` age `15.29` hours at `data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json`.
+- `gateboard`: `loaded` age `1.87` hours at `data/forward-tracking/project_operator_gateboard_latest.json`.
+- `trade_qualification`: `loaded` age `1.91` hours at `data/forward-tracking/regular_options_trade_qualification_latest.json`.
+- `bullish_pullback_layer_shadow_selection`: `loaded` age `15.32` hours at `data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json`.
+- `bullish_pullback_layer_execution_safety_audit`: `loaded` age `15.32` hours at `data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json`.
+- `bullish_pullback_layer_executable_economics`: `loaded` age `15.3` hours at `data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json`.
+- `bullish_pullback_layer4_forward_capture_protocol`: `loaded` age `15.3` hours at `data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json`.
+- `paper_shadow_evidence_plan`: `loaded` age `1.87` hours at `data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json`.
+- `fill_attempt_evidence_capture_plan`: `loaded` age `1.94` hours at `data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json`.
+- `suggested_trade_review_plan`: `loaded` age `1.94` hours at `data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json`.
+- `monthly_profitability_audit`: `loaded` age `1.91` hours at `data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json`.
+- `market_window_approval_preflight`: `loaded` age `1.87` hours at `data/forward-tracking/regular_options_market_window_approval_preflight_latest.json`.
 - `forward_candidate_throughput_audit`: `loaded` age `0.0` hours at `data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json`.
 
 ## Prohibited Actions

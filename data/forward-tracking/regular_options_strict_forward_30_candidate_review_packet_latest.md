@@ -13,6 +13,8 @@ Status: `candidate_review_waiting_for_real_candidate_jsonl`.
 - Collector status: `waiting_for_valid_market_window`.
 - Scheduler status: `scheduler_ready_for_next_market_window`.
 - Scheduler freshness: `scheduler_health_fresh_for_candidate_review`.
+- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Scan-task health freshness: `scan_task_health_fresh_for_candidate_review`.
 - Candidate batch provenance: `candidate_batch_not_present`.
 
 This packet is review-only. It validates the candidate handoff and renders guarded commands, but it does not append rows or authorize live validation, auto-track, broker orders, quote import, proof-bar changes, promotion, or historical rows as forward proof.
@@ -20,6 +22,7 @@ This packet is review-only. It validates the candidate handoff and renders guard
 ## Operator Commands
 
 - `refresh_scheduler_health`: `npm run options:goal-loop:strict-forward-30-scheduler-health -- --json`
+- `refresh_scan_task_health`: `npm run options:goal-loop:strict-forward-scan-task-health -- --json`
 - `refresh_collector_status`: `npm run options:goal-loop:strict-forward-30-auto-window -- --json`
 - `validate_candidate_jsonl`: `npm run options:validate:phase2-forward-paper-shadow-candidate -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl`
 - `guarded_append_template`: `npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl --approval-token <EXPLICIT_OPERATOR_APPROVAL_TOKEN> --market-window-confirmed`

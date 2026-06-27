@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-scan-task-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T053859Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T054521Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T053859Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T054521Z.md"
   },
   "blockers": [],
   "expected": {
@@ -45,7 +45,7 @@
       "FRI"
     ]
   },
-  "generated_at_utc": "2026-06-27T05:38:59Z",
+  "generated_at_utc": "2026-06-27T05:45:21Z",
   "prohibited_actions": [
     "do_not_append_from_scan_task_health",
     "do_not_enable_live_validation_from_scan_task_health",

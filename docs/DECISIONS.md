@@ -1,10 +1,10 @@
 # Decisions
 
-## 2026-06-27: Completion Monitor Requires Scan-Task Health
+## 2026-06-27: Candidate Review And Completion Require Scan-Task Health
 
-The strict-forward completion monitor must not be able to report fresh dependencies when the scheduled scan feeders are broken. Scheduler health for `\OptionsStrictForward30Collector` proves the repeated collector wrapper is configured, but it does not prove the 11:00 and 11:30 scan tasks still point at the forced frozen-cohort sweep and no-append readback chain.
+Strict-forward review and completion must not be able to report fresh dependencies when the scheduled scan feeders are broken. Scheduler health for `\OptionsStrictForward30Collector` proves the repeated collector wrapper is configured, but it does not prove the 11:00 and 11:30 scan tasks still point at the forced frozen-cohort sweep and no-append readback chain.
 
-Durable decision: `scripts/build_regular_options_strict_forward_30_completion_monitor.py` loads `regular_options_strict_forward_scan_task_health_latest.json`, requires it to be loaded, fresh relative to the collector, and `scan_tasks_ready_for_next_market_window`, and includes its status in the monitor/source artifacts. `scripts/run_strict_forward_30_auto_window_collector.bat`, `scripts/run_scan_picks.bat`, and `scripts/run_scan_picks_safety_net.bat` refresh scan-task health after scheduler health and before candidate review/completion. This is read-only dependency verification; it does not run scans outside approved windows, append rows, enable live validation, enable auto-track, submit broker orders, import quotes, lower proof bars, or count historical rows as forward proof.
+Durable decision: `scripts/build_regular_options_strict_forward_30_candidate_review_packet.py` and `scripts/build_regular_options_strict_forward_30_completion_monitor.py` both load `regular_options_strict_forward_scan_task_health_latest.json`, require it to be loaded, fresh relative to the collector, and `scan_tasks_ready_for_next_market_window`, and include its status in their source artifacts. Candidate review returns `candidate_review_waiting_for_scan_task_health` before any append-ready state if this dependency is missing, stale, or blocked. `scripts/run_strict_forward_30_auto_window_collector.bat`, `scripts/run_scan_picks.bat`, and `scripts/run_scan_picks_safety_net.bat` refresh scan-task health after scheduler health and before candidate review/completion. This is read-only dependency verification; it does not run scans outside approved windows, append rows, enable live validation, enable auto-track, submit broker orders, import quotes, lower proof bars, or count historical rows as forward proof.
 
 ## 2026-06-27: Auto-Window Collection Pauses On Pending Candidate Review
 

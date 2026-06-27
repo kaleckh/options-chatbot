@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-scheduler-health.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T053859Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T054521Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T053859Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T054521Z.md"
   },
   "batch_file": {
     "exists": true,
@@ -40,7 +40,7 @@
     "task_name": "\\OptionsStrictForward30Collector",
     "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat"
   },
-  "generated_at_utc": "2026-06-27T05:38:59Z",
+  "generated_at_utc": "2026-06-27T05:45:21Z",
   "prohibited_actions": [
     "do_not_append_from_scheduler_health",
     "do_not_enable_live_validation_from_scheduler_health",

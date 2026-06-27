@@ -60,6 +60,17 @@ def _scheduler(**overrides):
     return payload
 
 
+def _scan_task_health(**overrides):
+    payload = {
+        "report_id": "regular_options_strict_forward_scan_task_health",
+        "status": "scan_tasks_ready_for_next_market_window",
+        "generated_at_utc": "2026-06-27T01:56:00Z",
+        "blockers": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _validation(append_allowed: bool = True):
     return {
         "overall_status": "candidate_validation_ready" if append_allowed else "candidate_validation_blocked",
@@ -78,9 +89,11 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
         capture = root / "capture.json"
         collector = root / "collector.json"
         scheduler = root / "scheduler.json"
+        scan_task_health = root / "regular_options_strict_forward_scan_task_health_latest.json"
         _write_json(capture, _capture())
         _write_json(collector, _collector())
         _write_json(scheduler, _scheduler())
+        _write_json(scan_task_health, _scan_task_health())
         return {"capture": capture, "collector": collector, "scheduler": scheduler, "candidate": root / "candidate.jsonl"}
 
     def test_no_candidate_jsonl_waits_for_real_candidates(self):
@@ -200,11 +213,31 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
         self.assertEqual(report["scheduler_health_freshness"]["status"], "scheduler_health_older_than_collector")
         self.assertIn("scheduler_health_older_than_collector", report["scheduler_blockers"])
 
+    def test_stale_scan_task_health_waits_for_fresh_scan_task_health(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = self._paths(root)
+            _write_json(paths["collector"], _collector(generated_at_utc="2026-06-27T02:00:00Z"))
+            _write_json(paths["scheduler"], _scheduler(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(root / "regular_options_strict_forward_scan_task_health_latest.json", _scan_task_health(generated_at_utc="2026-06-27T01:59:59Z"))
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_scan_task_health")
+        self.assertEqual(report["scan_task_health_freshness"]["status"], "scan_task_health_older_than_collector")
+        self.assertIn("scan_task_health_older_than_collector", report["scan_task_health_blockers"])
+
     def test_stale_capture_without_nested_capture_waits_for_fresh_capture(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             paths = self._paths(Path(temp_dir))
             _write_json(paths["collector"], _collector(generated_at_utc="2026-06-27T02:00:00Z"))
             _write_json(paths["scheduler"], _scheduler(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(Path(temp_dir) / "regular_options_strict_forward_scan_task_health_latest.json", _scan_task_health(generated_at_utc="2026-06-27T02:00:01Z"))
             _write_json(paths["capture"], _capture(generated_at_utc="2026-06-27T01:59:59Z"))
             report = packet.build_report(
                 candidate_jsonl_path=paths["candidate"],
@@ -222,6 +255,7 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
             paths = self._paths(Path(temp_dir))
             _write_json(paths["capture"], _capture(status="stale_status", generated_at_utc="2026-06-27T01:59:59Z"))
             _write_json(paths["scheduler"], _scheduler(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(Path(temp_dir) / "regular_options_strict_forward_scan_task_health_latest.json", _scan_task_health(generated_at_utc="2026-06-27T02:00:01Z"))
             _write_json(
                 paths["collector"],
                 _collector(
@@ -334,7 +368,9 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
 
             self.assertTrue((root / "out" / "regular_options_strict_forward_30_candidate_review_packet_latest.json").exists())
             self.assertTrue((root / "doc.md").exists())
-            self.assertIn("Candidate batch provenance", (root / "doc.md").read_text(encoding="utf8"))
+            doc = (root / "doc.md").read_text(encoding="utf8")
+            self.assertIn("Candidate batch provenance", doc)
+            self.assertIn("Scan-task health freshness", doc)
             self.assertIn("docs_report", artifacts)
 
 

@@ -5,10 +5,10 @@
   "append_token_required": "APPROVE_PHASE2_FORWARD_COHORT_APPEND",
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-candidate-review-packet.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260627T053859Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260627T054521Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260627T053859Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_20260627T054521Z.md"
   },
   "auto_track_allowed": false,
   "broker_order_allowed": false,
@@ -36,8 +36,8 @@
   "capture_freshness": {
     "blockers": [],
     "capture_latest_generated_at_utc": "2026-06-27T01:53:28Z",
-    "collector_generated_at_utc": "2026-06-27T05:38:59Z",
-    "collector_nested_capture_generated_at_utc": "2026-06-27T05:38:59Z",
+    "collector_generated_at_utc": "2026-06-27T05:45:20Z",
+    "collector_nested_capture_generated_at_utc": "2026-06-27T05:45:20Z",
     "effective_capture_source": "collector_nested_capture_report",
     "fresh": true,
     "status": "collector_nested_capture_fresh_for_candidate_review"
@@ -46,13 +46,14 @@
   "cohort_append_performed": false,
   "collector_candidate_rows_staged": 0,
   "collector_status": "waiting_for_valid_market_window",
-  "generated_at_utc": "2026-06-27T05:38:59Z",
+  "generated_at_utc": "2026-06-27T05:45:21Z",
   "guarded_append_observed": false,
   "historical_rows_are_forward_proof": false,
   "live_entry_allowed": false,
   "operator_commands": {
     "guarded_append_template": "npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl --approval-token <EXPLICIT_OPERATOR_APPROVAL_TOKEN> --market-window-confirmed",
     "refresh_collector_status": "npm run options:goal-loop:strict-forward-30-auto-window -- --json",
+    "refresh_scan_task_health": "npm run options:goal-loop:strict-forward-scan-task-health -- --json",
     "refresh_scheduler_health": "npm run options:goal-loop:strict-forward-30-scheduler-health -- --json",
     "validate_candidate_jsonl": "npm run options:validate:phase2-forward-paper-shadow-candidate -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl"
   },
@@ -116,6 +117,14 @@
       ]
     },
     {
+      "decision": "scan_task_health_blocked",
+      "pass": false,
+      "requirements": [
+        "scan_tasks_ready_for_next_market_window",
+        "scan_task_health_fresh_for_candidate_review"
+      ]
+    },
+    {
       "decision": "capture_freshness_blocked",
       "pass": false,
       "requirements": [
@@ -124,12 +133,21 @@
     }
   ],
   "safety_violations": [],
+  "scan_task_health_blockers": [],
+  "scan_task_health_freshness": {
+    "blockers": [],
+    "collector_generated_at_utc": "2026-06-27T05:45:20Z",
+    "fresh": true,
+    "scan_task_health_generated_at_utc": "2026-06-27T05:45:21Z",
+    "status": "scan_task_health_fresh_for_candidate_review"
+  },
+  "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
   "scheduler_blockers": [],
   "scheduler_health_freshness": {
     "blockers": [],
-    "collector_generated_at_utc": "2026-06-27T05:38:59Z",
+    "collector_generated_at_utc": "2026-06-27T05:45:20Z",
     "fresh": true,
-    "scheduler_generated_at_utc": "2026-06-27T05:38:59Z",
+    "scheduler_generated_at_utc": "2026-06-27T05:45:21Z",
     "status": "scheduler_health_fresh_for_candidate_review"
   },
   "scheduler_status": "scheduler_ready_for_next_market_window",
@@ -143,6 +161,11 @@
     "collector_latest": {
       "path": "data/forward-tracking/regular_options_strict_forward_30_market_window_collector_latest.json",
       "report_status": "waiting_for_valid_market_window",
+      "status": "loaded"
+    },
+    "scan_task_health_latest": {
+      "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
+      "report_status": "scan_tasks_ready_for_next_market_window",
       "status": "loaded"
     },
     "scheduler_health_latest": {

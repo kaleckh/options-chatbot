@@ -24,6 +24,7 @@ DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-strict-forward-30-candida
 DEFAULT_CAPTURE_LATEST = ROOT / "data" / "forward-tracking" / "phase2_regular_options_forward_paper_shadow_capture_latest.json"
 DEFAULT_COLLECTOR_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_30_market_window_collector_latest.json"
 DEFAULT_SCHEDULER_HEALTH_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_30_scheduler_health_latest.json"
+DEFAULT_SCAN_TASK_HEALTH_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_scan_task_health_latest.json"
 
 
 def _utc_now_iso() -> str:
@@ -71,6 +72,12 @@ def _load_json(path: Path) -> dict[str, Any]:
     payload["_source_status"] = "loaded"
     payload["_source_path"] = _rel(path)
     return payload
+
+
+def _default_aux_path(collector_latest_path: Path, default_path: Path) -> Path:
+    if collector_latest_path == DEFAULT_COLLECTOR_LATEST:
+        return default_path
+    return collector_latest_path.parent / default_path.name
 
 
 def _sha256_file(path: Path) -> str | None:
@@ -192,6 +199,60 @@ def _scheduler_freshness(scheduler: dict[str, Any], collector: dict[str, Any]) -
     }
 
 
+def _scan_task_health_freshness(scan_task_health: dict[str, Any], collector: dict[str, Any]) -> dict[str, Any]:
+    scan_generated_at = _norm(scan_task_health.get("generated_at_utc"))
+    collector_generated_at = _norm(collector.get("generated_at_utc"))
+    scan_ts = _parse_utc_iso(scan_generated_at)
+    collector_ts = _parse_utc_iso(collector_generated_at)
+    if scan_task_health.get("_source_status") != "loaded":
+        return {
+            "fresh": False,
+            "status": "scan_task_health_source_not_loaded",
+            "scan_task_health_generated_at_utc": scan_generated_at or None,
+            "collector_generated_at_utc": collector_generated_at or None,
+            "blockers": ["scan_task_health_source_not_loaded"],
+        }
+    if scan_task_health.get("status") != "scan_tasks_ready_for_next_market_window":
+        return {
+            "fresh": False,
+            "status": "scan_task_health_not_ready",
+            "scan_task_health_generated_at_utc": scan_generated_at or None,
+            "collector_generated_at_utc": collector_generated_at or None,
+            "blockers": [f"scan_task_health_not_ready:{_norm(scan_task_health.get('status')) or 'unknown'}"],
+        }
+    if scan_ts is None:
+        return {
+            "fresh": False,
+            "status": "scan_task_health_generated_at_missing_or_malformed",
+            "scan_task_health_generated_at_utc": scan_generated_at or None,
+            "collector_generated_at_utc": collector_generated_at or None,
+            "blockers": ["scan_task_health_generated_at_missing_or_malformed"],
+        }
+    if collector_generated_at and collector_ts is None:
+        return {
+            "fresh": False,
+            "status": "collector_generated_at_malformed",
+            "scan_task_health_generated_at_utc": scan_generated_at,
+            "collector_generated_at_utc": collector_generated_at,
+            "blockers": ["collector_generated_at_malformed"],
+        }
+    if collector_ts is not None and scan_ts < collector_ts:
+        return {
+            "fresh": False,
+            "status": "scan_task_health_older_than_collector",
+            "scan_task_health_generated_at_utc": scan_generated_at,
+            "collector_generated_at_utc": collector_generated_at,
+            "blockers": ["scan_task_health_older_than_collector"],
+        }
+    return {
+        "fresh": True,
+        "status": "scan_task_health_fresh_for_candidate_review",
+        "scan_task_health_generated_at_utc": scan_generated_at,
+        "collector_generated_at_utc": collector_generated_at or None,
+        "blockers": [],
+    }
+
+
 def _candidate_batch_provenance(candidate_path: Path, validation: dict[str, Any], capture: dict[str, Any]) -> dict[str, Any]:
     if not validation.get("candidate_jsonl_exists"):
         return {
@@ -308,6 +369,8 @@ def _status_for(
     *,
     scheduler: dict[str, Any],
     scheduler_freshness: dict[str, Any],
+    scan_task_health: dict[str, Any],
+    scan_task_health_freshness: dict[str, Any],
     capture_freshness: dict[str, Any],
     capture: dict[str, Any],
     collector: dict[str, Any],
@@ -322,6 +385,10 @@ def _status_for(
         return "candidate_review_waiting_for_scheduler_health"
     if not scheduler_freshness.get("fresh"):
         return "candidate_review_waiting_for_scheduler_health"
+    if scan_task_health.get("_source_status") != "loaded" or scan_task_health.get("status") != "scan_tasks_ready_for_next_market_window":
+        return "candidate_review_waiting_for_scan_task_health"
+    if not scan_task_health_freshness.get("fresh"):
+        return "candidate_review_waiting_for_scan_task_health"
     if not capture_freshness.get("fresh"):
         return "candidate_review_waiting_for_fresh_capture_report"
     if guarded_append_observed:
@@ -344,21 +411,27 @@ def build_report(
     capture_latest_path: Path = DEFAULT_CAPTURE_LATEST,
     collector_latest_path: Path = DEFAULT_COLLECTOR_LATEST,
     scheduler_health_latest_path: Path = DEFAULT_SCHEDULER_HEALTH_LATEST,
+    scan_task_health_latest_path: Path | None = None,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     generated_at = generated_at_utc or _utc_now_iso()
+    scan_task_health_latest_path = scan_task_health_latest_path or _default_aux_path(collector_latest_path, DEFAULT_SCAN_TASK_HEALTH_LATEST)
     capture = _load_json(capture_latest_path)
     collector = _load_json(collector_latest_path)
     scheduler = _load_json(scheduler_health_latest_path)
+    scan_task_health = _load_json(scan_task_health_latest_path)
     effective_capture, capture_freshness = _fresh_capture_for_review(capture, collector)
     validation = _candidate_validation(candidate_jsonl_path, generated_at)
     scheduler_freshness = _scheduler_freshness(scheduler, collector)
+    scan_task_health_freshness = _scan_task_health_freshness(scan_task_health, collector)
     candidate_batch_provenance = _candidate_batch_provenance(candidate_jsonl_path, validation, effective_capture)
-    safety_violations = _safety_violations(effective_capture, collector, scheduler)
+    safety_violations = _safety_violations(effective_capture, collector, scheduler, scan_task_health)
     guarded_append_observed = _guarded_append_observed(effective_capture, collector)
     status = _status_for(
         scheduler=scheduler,
         scheduler_freshness=scheduler_freshness,
+        scan_task_health=scan_task_health,
+        scan_task_health_freshness=scan_task_health_freshness,
         capture_freshness=capture_freshness,
         capture=effective_capture,
         collector=collector,
@@ -396,6 +469,12 @@ def build_report(
             *(_as_list(scheduler.get("blockers"))),
             *(_as_list(scheduler_freshness.get("blockers"))),
         ],
+        "scan_task_health_status": scan_task_health.get("status"),
+        "scan_task_health_freshness": scan_task_health_freshness,
+        "scan_task_health_blockers": [
+            *(_as_list(scan_task_health.get("blockers"))),
+            *(_as_list(scan_task_health_freshness.get("blockers"))),
+        ],
         "safety_violations": safety_violations,
         "review_decision_table": [
             {
@@ -424,6 +503,11 @@ def build_report(
                 "requirements": ["scheduler_ready_for_next_market_window", "scheduler_health_fresh_for_candidate_review"],
             },
             {
+                "decision": "scan_task_health_blocked",
+                "pass": status == "candidate_review_waiting_for_scan_task_health",
+                "requirements": ["scan_tasks_ready_for_next_market_window", "scan_task_health_fresh_for_candidate_review"],
+            },
+            {
                 "decision": "capture_freshness_blocked",
                 "pass": status == "candidate_review_waiting_for_fresh_capture_report",
                 "requirements": ["capture_latest_fresh_or_collector_nested_capture_fresh_for_candidate_review"],
@@ -431,6 +515,7 @@ def build_report(
         ],
         "operator_commands": {
             "refresh_scheduler_health": "npm run options:goal-loop:strict-forward-30-scheduler-health -- --json",
+            "refresh_scan_task_health": "npm run options:goal-loop:strict-forward-scan-task-health -- --json",
             "refresh_collector_status": "npm run options:goal-loop:strict-forward-30-auto-window -- --json",
             "validate_candidate_jsonl": f"npm run options:validate:phase2-forward-paper-shadow-candidate -- {_rel(candidate_jsonl_path)}",
             "guarded_append_template": append_command_template,
@@ -460,6 +545,7 @@ def build_report(
             "capture_latest": {"path": _rel(capture_latest_path), "status": capture.get("_source_status"), "report_status": capture.get("status")},
             "collector_latest": {"path": _rel(collector_latest_path), "status": collector.get("_source_status"), "report_status": collector.get("status")},
             "scheduler_health_latest": {"path": _rel(scheduler_health_latest_path), "status": scheduler.get("_source_status"), "report_status": scheduler.get("status")},
+            "scan_task_health_latest": {"path": _rel(scan_task_health_latest_path), "status": scan_task_health.get("_source_status"), "report_status": scan_task_health.get("status")},
         },
         "artifacts": {},
     }
@@ -484,6 +570,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Collector status: `{report.get('collector_status')}`.",
         f"- Scheduler status: `{report.get('scheduler_status')}`.",
         f"- Scheduler freshness: `{_as_dict(report.get('scheduler_health_freshness')).get('status')}`.",
+        f"- Scan-task health status: `{report.get('scan_task_health_status')}`.",
+        f"- Scan-task health freshness: `{_as_dict(report.get('scan_task_health_freshness')).get('status')}`.",
         f"- Candidate batch provenance: `{candidate_batch_provenance.get('status')}`.",
         "",
         "This packet is review-only. It validates the candidate handoff and renders guarded commands, but it does not append rows or authorize live validation, auto-track, broker orders, quote import, proof-bar changes, promotion, or historical rows as forward proof.",
