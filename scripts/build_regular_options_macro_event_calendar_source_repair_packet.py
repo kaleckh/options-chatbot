@@ -366,6 +366,15 @@ def _downstream_implications(
     direct_vix_packet: dict[str, Any],
 ) -> list[dict[str, Any]]:
     macro_blockers = _as_list(macro_long_readiness.get("blockers"))
+    vix_ready = (
+        direct_vix_packet.get("status") == "direct_vix_source_repair_packet_superseded_by_materialized_vix"
+        or direct_vix_packet.get("point_in_time_vix_bucket_ready") is True
+        or direct_vix_packet.get("point_in_time_vix_bucket_status") == "point_in_time_vix_bucket_ready"
+    )
+    post_event_non_event_blockers = ["iv_event_premium_proxy_missing"]
+    if not vix_ready:
+        post_event_non_event_blockers.insert(0, "point_in_time_vix_source_missing")
+    direct_vix_non_event_blockers = [] if vix_ready else ["direct_vix_source_import_materialization_pending"]
     return [
         {
             "branch": "macro_event_long_strangle",
@@ -384,7 +393,7 @@ def _downstream_implications(
             "concept_id": post_event_playbook.get("concept_id"),
             "status": post_event_playbook.get("status"),
             "event_calendar_blockers": ["future_replay_requires_point_in_time_macro_event_calendar"],
-            "remaining_non_event_blockers": ["point_in_time_vix_source_missing", "iv_event_premium_proxy_missing"],
+            "remaining_non_event_blockers": post_event_non_event_blockers,
             "would_clear_event_calendar_blocker_if_future_source_passes": True,
         },
         {
@@ -392,7 +401,7 @@ def _downstream_implications(
             "concept_id": direct_vix_packet.get("source_family"),
             "status": direct_vix_packet.get("status"),
             "event_calendar_blockers": [],
-            "remaining_non_event_blockers": ["direct_vix_source_import_materialization_pending"],
+            "remaining_non_event_blockers": direct_vix_non_event_blockers,
             "would_clear_event_calendar_blocker_if_future_source_passes": False,
         },
     ]
@@ -504,7 +513,7 @@ def build_report(
         "future_import_command": future_import_command,
         "downstream_readiness_commands": {
             "macro_event_long_strangle": "npm run options:research:macro-event-long-strangle-replay-readiness -- --json",
-            "post_event_iv_crush_iron_condor": "future_post_event_iv_crush_readiness_audit_not_implemented_yet",
+            "post_event_iv_crush_iron_condor": "npm run options:research:post-event-iv-crush-replay-readiness -- --json",
         },
         **READ_ONLY_FLAGS,
         "no_import": no_import,

@@ -28,7 +28,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 - Suggested-trade review plan: `suggested_trade_review_plan_ready_for_historical_resolution` / `built_collecting` / `{"attention_trade_count": 1, "close_risk_trade_count": 0, "executable_close_ready_count": 0, "expired_review_resolution_count": 1, "market_window_required_count": 0, "missing_review_count": 1, "non_executable_close_risk_count": 0, "open_suggested_trade_rows": 1, "operator_plan_status": "ready_for_historical_suggested_trade_resolution", "plan_row_count": 1, "source_action_counts": {"no_stored_review": 1}, "source_evidence_counts": {"missing_review": 1}, "stale_or_missing_review_trade_count": 1, "stale_review_count": 0}`.
 - Regime stratification: `regime_robust` / `built_regime_robust` / robust `True` / `{"branch_bucket_count": 26, "branch_count": 2, "branch_regime_failure_count": 0, "branch_regime_robust_count": 2, "eligible_replay_row_count": 234, "evaluable_bucket_count": 27, "failing_bucket_count": 0, "market_context_status": "complete", "minimum_bucket_n_for_robustness": 15, "spy50_missing_count": 0, "vix_missing_count": 0}`.
 - Autoresearch search effort: `available` / `built_advisory` / `{"diagnostic_only": true, "pf_lb_5pct": null, "selection_adjusted_bar": null, "selection_adjusted_confidence": null, "selection_adjustment_formula": null, "selection_adjustment_metric": "pf_lb_5pct", "statistical_confidence": null, "strategy_family": null, "variant_id": null, "variants_searched": null}`.
-- Scheduled scan heartbeat: `fresh`; days since last scheduled scan `1`.
+- Scheduled scan heartbeat: `fresh`; days since last scheduled scan `0`.
 - Quarantine archive: `4` archived, `0` unarchived.
 - Archived rejected rules: `10` archived, `0` unarchived.
 - Next evidence actions: `10`.
@@ -63,7 +63,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 | swing | `quarantine` | `archived_quarantine_lane` | 49 | 0.2 | -20.24 |  | diagnostic_only_until_earn_back | keep diagnostic/no-chase and require earn-back or a frozen entry-time retest |
 | tracked_winner_observation | `retest` | `` | 20 | 0.5 | -8.43 |  | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
 | tracked_winner_primary | `retest` | `` | 20 | 0.5 | -8.43 |  | diagnostic_only_until_earn_back | freeze an entry-time-only retest or collect more exact evidence before lane decisions |
-| volatility_expansion_observation | `paper_shadow` | `` | 24 | 1.83 | 6.74 | paper_probation | probation_candidate_flow_with_self_guardrails | collect fresh exact paper entries and exact realized exits before promotion |
+| volatility_expansion_observation | `paper_shadow` | `` | 24 | 1.83 | 6.74 | diagnostic | probation_candidate_flow_with_self_guardrails | collect fresh exact paper entries and exact realized exits before promotion |
 
 ## Stale Candidate Archive
 
@@ -310,7 +310,7 @@ This report is generated from `scripts/build_monthly_all_lanes_profitability_aud
 | 7 | fill_attempt_evidence_capture_plan | `execute_fill_attempt_evidence_capture_plan` | 4 | fresh_candidates_need_durable_fill_attempt_evidence |
 | 9 | candidate_outcome_ledger | `wait_for_fresh_executable_tier_a_bridge` | 15 | wait_for_fresh_executable_tier_a_bridge |
 | 10 | candidate_outcome_ledger | `repair_historical_evidence` | 39 | repair_historical_evidence |
-| 11 | candidate_outcome_ledger | `respect_guardrail_or_lane_mismatch` | 5 | respect_guardrail_or_lane_mismatch |
+| 11 | candidate_outcome_ledger | `respect_guardrail_or_lane_mismatch` | 2 | respect_guardrail_or_lane_mismatch |
 
 ## Promotion Gate
 

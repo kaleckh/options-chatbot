@@ -22,6 +22,7 @@ DEFAULT_PREREGISTERED_PLAYBOOK = (
 )
 DEFAULT_FEATURE_STORE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-feature-store" / "latest.json"
 DEFAULT_QUOTE_SURFACE_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-skew-broken-wing-quote-surface" / "latest.json"
+DEFAULT_VIX_BUCKET_REPORT = ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-vix-bucket" / "latest.json"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-skew-broken-wing-structure-harness"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-skew-broken-wing-structure-harness.md"
 
@@ -397,8 +398,20 @@ def _preregistration_valid(playbook: dict[str, Any]) -> tuple[bool, list[str]]:
     return not reasons, reasons
 
 
-def _input_surface_assessment(feature_store: dict[str, Any], quote_surface: dict[str, Any]) -> dict[str, Any]:
-    vix_ready = bool(feature_store.get("point_in_time_vix_bucket_ready") or feature_store.get("vix_low_mid_bucket_ready"))
+def _vix_bucket_ready(vix_bucket: dict[str, Any]) -> bool:
+    return (
+        vix_bucket.get("status") == "point_in_time_vix_bucket_ready"
+        and _as_list(vix_bucket.get("blockers")) == []
+        and vix_bucket.get("point_in_time_vix_low_mid_bucket_available") is True
+    )
+
+
+def _input_surface_assessment(feature_store: dict[str, Any], quote_surface: dict[str, Any], vix_bucket: dict[str, Any]) -> dict[str, Any]:
+    vix_ready = bool(
+        feature_store.get("point_in_time_vix_bucket_ready")
+        or feature_store.get("vix_low_mid_bucket_ready")
+        or _vix_bucket_ready(vix_bucket)
+    )
     skew_ready = bool(feature_store.get("point_in_time_downside_skew_ready") or feature_store.get("downside_skew_inputs_ready"))
     quote_ready = bool(quote_surface.get("skew_broken_wing_quote_surface_ready") or quote_surface.get("three_leg_put_bwb_quote_surface_ready"))
     quote_symbols = set(str(item).upper() for item in _as_list(quote_surface.get("symbols_ready")))
@@ -447,13 +460,15 @@ def build_report(
     preregistered_playbook_path: Path = DEFAULT_PREREGISTERED_PLAYBOOK,
     feature_store_report_path: Path = DEFAULT_FEATURE_STORE_REPORT,
     quote_surface_report_path: Path = DEFAULT_QUOTE_SURFACE_REPORT,
+    vix_bucket_report_path: Path = DEFAULT_VIX_BUCKET_REPORT,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     playbook, playbook_meta = _load_json(preregistered_playbook_path, required=True)
     feature_store, feature_meta = _load_json(feature_store_report_path, required=False)
     quote_surface, quote_meta = _load_json(quote_surface_report_path, required=False)
+    vix_bucket, vix_meta = _load_json(vix_bucket_report_path, required=False)
     prereg_valid, prereg_reasons = _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
-    input_assessment = _input_surface_assessment(feature_store, quote_surface)
+    input_assessment = _input_surface_assessment(feature_store, quote_surface, vix_bucket)
     burndown = _blocker_burndown(input_assessment) if prereg_valid else []
     remaining = [row["blocker"] for row in burndown if row["status"] != "satisfied_by_harness"]
     status = "blocked_invalid_skew_broken_wing_preregistration"
@@ -490,6 +505,7 @@ def build_report(
             "preregistered_skew_broken_wing_playbook": playbook_meta,
             "feature_store_report": feature_meta,
             "quote_surface_report": quote_meta,
+            "point_in_time_vix_bucket": vix_meta,
         },
         "proof_boundary": "structure readiness only; not replay, not forward proof, not production proof, not live validation, not a trade recommendation, and not promotion-ready",
         "forbidden_actions": list(FORBIDDEN_ACTIONS),
@@ -575,6 +591,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preregistered-playbook", type=Path, default=DEFAULT_PREREGISTERED_PLAYBOOK)
     parser.add_argument("--feature-store-report", type=Path, default=DEFAULT_FEATURE_STORE_REPORT)
     parser.add_argument("--quote-surface-report", type=Path, default=DEFAULT_QUOTE_SURFACE_REPORT)
+    parser.add_argument("--vix-bucket-report", type=Path, default=DEFAULT_VIX_BUCKET_REPORT)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
     parser.add_argument("--docs-report", type=Path, default=DEFAULT_DOCS_REPORT)
     parser.add_argument("--no-write", action="store_true")
@@ -584,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
         preregistered_playbook_path=args.preregistered_playbook,
         feature_store_report_path=args.feature_store_report,
         quote_surface_report_path=args.quote_surface_report,
+        vix_bucket_report_path=args.vix_bucket_report,
     )
     if not args.no_write:
         report["artifacts"] = write_outputs(report, output_dir=args.output_dir, docs_report=args.docs_report)

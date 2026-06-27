@@ -14,6 +14,8 @@ These are the living docs for the current worktree:
   - target architecture/readability rubric for future remediation loops
 - `docs/project-operating-map.md`
   - generated visual operating model for the project pathways: data, candidates, evidence, profitability, promotion, and operator action
+- `docs/regular-options-profitability-blocker-inventory.md`
+  - current whole-surface regular-options profitability blocker inventory, separating cleared stale VIX blockers from remaining forward, source, input, quote-surface, engine, provider, approval, and market-window blockers
 - `data/contracts/project-pathway-registry.json`
   - generated machine-readable project pathway registry
 - `docs/remediation-loop-map.md`
@@ -202,6 +204,28 @@ These are the living docs for the current worktree:
   - generated read-only fail-closed approval preflight for future bullish-pullback layer4 market-window paper-shadow candidate rows, validating current readbacks, market-window state, explicit operator approval, and optional candidate JSONL without appending rows
 - `docs/regular-options-market-window-evidence-checklist.md`
   - generated read-only market-window checklist that orders safe refresh commands, exact-entry waits, policy-exit waits, fill-attempt capture, suggested-review-only rows, repair-only rows, and no-chase blocks without creating trades or mutating evidence stores
+- `docs/regular-options-strict-forward-operator-queue.md`
+  - generated read-only strict-forward operator queue for the current profitability loop; reports `0/30` strict forward rows, keeps profitability readiness false, parks stale cleanup branches, and routes the next natural-market paper-shadow step through bullish-pullback `layer_4_clean_exact` market-window/operator-approval gates
+- `docs/regular-options-strict-forward-market-window-readiness-refresh.md`
+  - generated no-write readiness refresh for the strict-forward queue; consolidates current readbacks, market-window/preflight state, candidate JSONL existence, append permission, safety flags, and the one-screen operator decision table
+- `docs/regular-options-forward-candidate-throughput-audit.md`
+  - generated read-only throughput audit for Phase 2 scan picks; distinguishes missing frozen-lane scheduled sessions from true same-day candidate starvation
+- `docs/regular-options-strict-forward-30-goal-loop.md`
+  - generated coordinator report for the active `30` strict completed forward-row goal; runs/checks the safe sweep/capture/throughput/readiness sequence while preserving no-fabrication, no-live, no-broker, no-autotrack, no-proof-change, and guarded-append boundaries
+- `docs/regular-options-strict-forward-30-market-window-collector.md`
+  - generated bounded collector for the active `30` strict completed forward-row goal; repeats the strict-forward coordinator only during confirmed open market windows and stops on candidate review, guarded append, safety violation, scan failure, or goal completion
+- `docs/regular-options-strict-forward-30-auto-window-collector.md`
+  - generated scheduler-friendly auto-window wrapper report for the active `30` strict completed forward-row goal; checks the market window before invoking the bounded collector and persists latest wrapper state without appending rows
+- `docs/regular-options-strict-forward-30-scheduler-health.md`
+  - generated Windows Task Scheduler health readback for `\OptionsStrictForward30Collector`; verifies the repeated no-append auto-window collector task is enabled, ready, correctly pointed, and repeating on the expected cadence
+- `docs/regular-options-strict-forward-30-candidate-review-packet.md`
+  - generated read-only candidate handoff packet for the strict-forward `30`-row goal; consolidates capture, collector, scheduler health, candidate JSONL validation, and guarded operator commands without appending rows
+- `docs/regular-options-strict-forward-30-completion-monitor.md`
+  - generated read-only completion monitor for the strict-forward `30`-row goal; recomputes strict completed rows from the Phase 2 cohort report and cross-checks scheduler, candidate-review, collector, and safety state
+- `docs/regular-options-strict-forward-30-lifecycle-audit.md`
+  - generated read-only lifecycle audit for the strict-forward `30`-row goal; separates entry rows waiting for policy exits from strict exact-exit completion rows and documents the append-only completion policy
+- `docs/regular-options-strict-forward-30-exit-completion-stager.md`
+  - generated no-append stager for exact-exit completion candidates; converts open Phase 2 cohort rows plus trusted exit evidence JSONL into guarded-append-ready exact-exit candidate rows
 - `docs/regular-options-stale-candidate-archive.md`
   - generated read-only archive for no-longer-matched fresh candidates so stale branches leave the monthly queue without creating trades or mutating scanner/DB state
 - `docs/regular-options-suggested-trade-review-plan.md`
@@ -251,6 +275,10 @@ These are the living docs for the current worktree:
   - generated read-only preregistered design artifact for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, defining low/mid-VIX index calendar/diagonal rules, multi-expiry side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-term-structure-calendar-replay-readiness.md`
   - generated read-only replay-readiness audit for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, classifying calendar/diagonal entry/exit/expiry pricing, denominator, assignment, roll, term-structure input, quote-surface, holdout, strict-new, and proof-boundary prerequisites without implementing or replaying the playbook
+- `docs/regular-options-term-structure-calendar-structure-harness.md`
+  - generated read-only structure harness for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, now clearing frozen geometry and strict-new dedupe while preserving point-in-time term-structure input and index calendar quote-surface blockers
+- `docs/regular-options-term-structure-calendar-bounded-replay.md`
+  - generated read-only bounded replay gate for `low_mid_vix_index_calendar_term_structure_dislocation_v1`, currently blocked on point-in-time term-structure inputs and index calendar quote surface without running replay or claiming profitability
 - `docs/regular-options-preregistered-skew-broken-wing-playbook.md`
   - generated read-only preregistered design artifact for `low_mid_vix_index_skew_broken_wing_put_fly_v1`, defining low/mid-VIX downside-skew broken-wing put butterfly rules, all-leg side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-preregistered-macro-event-long-strangle-playbook.md`
@@ -258,7 +286,7 @@ These are the living docs for the current worktree:
 - `docs/regular-options-macro-event-calendar.md`
   - generated read-only point-in-time macro-event calendar validator for scheduled-event research, requiring known-at and source provenance, rejecting outcome/realized/future/P&L leakage fields, and currently blocking because no trusted local source rows exist
 - `docs/regular-options-point-in-time-vix-bucket.md`
-  - generated read-only point-in-time VIX low/mid bucket validator for regular-options research, requiring trusted local source rows, frozen threshold policy, full requested-date coverage, known-at discipline, and no leakage fields before a VIX bucket can clear readiness
+  - generated read-only point-in-time VIX low/mid bucket validator for regular-options research; current VIX is ready with trusted local source rows, frozen threshold policy, full requested-date coverage, known-at discipline, and no leakage blockers
 - `docs/regular-options-macro-event-long-strangle-replay-readiness.md`
   - generated read-only replay-readiness audit for `low_mid_vix_macro_event_long_strangle_v1`, consuming the macro-event calendar and point-in-time VIX bucket artifacts while defining side-aware long-premium formulas, denominator statuses, strict-new identity, holdout guard, and future replay proof conventions without running replay
 - `docs/regular-options-13-symbol-candidate-generation-surface-audit.md`
@@ -280,7 +308,7 @@ These are the living docs for the current worktree:
 - `docs/regular-options-59-symbol-thetadata-opra-import-resume.md`
   - generated tokened resume retry for the approved scoped 59-symbol ThetaData OPRA/NBBO source repair; it currently parks on local ThetaTerminal availability with no import attempted, 260 shared trusted dates, and 11,565 remaining symbol-date gaps
 - `docs/regular-options-direct-vix-source-repair-packet.md`
-  - generated read-only direct VIX source repair packet; it defines source schema, known-at policy, fixed prior-close buckets, future tokened import/materialization commands, and cross-branch VIX blocker implications without importing VIX rows or running replay
+  - generated read-only direct VIX source repair packet; current status is superseded by the materialized VIX source and ready point-in-time VIX bucket, with no current VIX blockers or replay/profitability claim
 - `docs/regular-options-macro-event-calendar-source-repair-packet.md`
   - generated read-only macro-event calendar source repair packet; it defines scheduled-event schema, known-at/tradable-after policy, frozen categories, future tokened import/materialization command, and macro-event/post-event branch implications without importing event rows or running replay
 - `docs/regular-options-flow-extreme-source-repair-packet.md`
@@ -299,6 +327,8 @@ These are the living docs for the current worktree:
   - generated read-only local OPRA/NBBO structure capability matrix for the 13-symbol proof set; it currently emits 0 replay-feasible structures because dense latest-four quote-surface rows fail the required 20 train-month coverage gate
 - `docs/regular-options-preregistered-post-event-iv-crush-iron-condor-playbook.md`
   - generated read-only preregistered design artifact for `post_event_iv_crush_index_iron_condor_v1`, defining scheduled macro-event post-event IV-crush iron condor/butterfly rules, event and IV-premium requirements, four-leg side-aware formulas, max-loss/margin requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
+- `docs/regular-options-post-event-iv-crush-replay-readiness.md`
+  - generated read-only replay-readiness audit for `post_event_iv_crush_index_iron_condor_v1`, checking macro-event calendar, IV/event-premium proxy, VIX bucket, four-leg quote surface, side-aware formula contracts, denominator mapping, strict-new dedupe, and holdout guard without running replay
 - `docs/regular-options-preregistered-flow-extreme-ratio-backspread-playbook.md`
   - generated read-only preregistered design artifact for `index_flow_extreme_mean_reversion_ratio_backspread_v1`, defining point-in-time flow/overextension ratio-spread and backspread rules, defined-risk/max-loss requirements, multi-leg side-aware formulas, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-point-in-time-flow-extreme-input.md`
@@ -318,19 +348,19 @@ These are the living docs for the current worktree:
 - `docs/regular-options-point-in-time-dispersion-concentration-proxy.md`
   - generated read-only point-in-time dispersion/concentration proxy materializer; currently fails closed because no trusted local proxy source rows exist and the feature store has no underlying return fields, so the dispersion branch remains blocked on explicit input-source coverage
 - `docs/regular-options-dispersion-proxy-hybrid-replay-readiness.md`
-  - generated read-only replay-readiness audit for `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`, checking point-in-time dispersion/concentration inputs, VIX bucket readiness, pair construction, all-leg side-aware pricing, max-loss/collateral, denominator mapping, strict-new dedupe, CVX scope, holdout guard, and proof-boundary labeling without running replay
+  - generated read-only replay-readiness audit for `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`, currently blocked only on point-in-time dispersion/concentration inputs after clearing VIX, pair construction, all-leg side-aware pricing, max-loss/collateral, denominator mapping, strict-new dedupe, CVX scope, holdout guard, and proof-boundary prerequisites without running replay
 - `docs/regular-options-preregistered-pmcc-diagonal-playbook.md`
   - generated read-only preregistered design artifact for `low_mid_vix_index_pmcc_diagonal_income_v1`, defining PMCC-style call diagonal rules, side-aware entry/roll/exit/expiry formulas, short-call assignment/ex-dividend handling, collateral/max-loss requirements, denominator statuses, engine requirements, and falsification gates without implementing or replaying the playbook
 - `docs/regular-options-pmcc-diagonal-replay-readiness.md`
-  - generated read-only replay-readiness audit for `low_mid_vix_index_pmcc_diagonal_income_v1`, currently parked on missing point-in-time trend/regime inputs, blocked VIX bucket, and missing trusted long-DTE SPY/QQQ PMCC quote surface
+  - generated read-only replay-readiness audit for `low_mid_vix_index_pmcc_diagonal_income_v1`, currently parked on missing point-in-time trend/regime inputs and missing trusted long-DTE SPY/QQQ PMCC quote surface; the VIX bucket is ready
 - `docs/regular-options-preregistered-playbook-readiness-selector.md`
-  - generated read-only selector across completed preregistered playbooks, preserving known VRP and term-structure readiness blockers and emitting the single current research-only implementation/replay approval candidate without implementing, replaying, importing quotes, mutating evidence, or promoting
+  - generated read-only selector across completed preregistered playbooks, now consuming the momentum bounded replay gate and reporting no blocker-free research implementation candidate without implementing, replaying, importing quotes, mutating evidence, or promoting
 - `docs/regular-options-momentum-continuation-research-replay.md`
   - generated operator-approved research-only replay harness for `breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1`, separating full denominator rows, proof-qualified rows, and diagnostic-only old-artifact marks without changing scanner policy, importing quotes, mutating evidence, or promoting
 - `docs/regular-options-momentum-continuation-proof-blocker-resolution.md`
-  - generated read-only proof-blocker resolution audit for the approved momentum-continuation branch, resolving existing trusted side-aware quote pairs where possible while preserving missing point-in-time VIX/breadth blockers and keeping all rows historical research only
+  - generated read-only proof-blocker resolution audit for the approved momentum-continuation branch, resolving existing trusted side-aware quote pairs where possible while preserving missing point-in-time breadth/SPY/QQQ momentum blockers and keeping all rows historical research only; current VIX is cleared
 - `docs/regular-options-momentum-continuation-bounded-replay.md`
-  - generated read-only bounded replay gate for the approved momentum-continuation branch, consuming the replay/proof-blocker artifacts and parking the branch at `0` strict rows until point-in-time VIX/breadth inputs or approved data repair change the blocker
+  - generated read-only bounded replay gate for the approved momentum-continuation branch, consuming the replay/proof-blocker artifacts and parking the branch at `0` strict rows until point-in-time breadth/SPY/QQQ momentum inputs or approved data repair change the blocker; current VIX is cleared
 - `docs/research-decisions/options_oracle_profit_loop_packet_latest.md`
   - generated same-session GPT-5.5 Pro loop packet that requires a continue/stop/significant-upgrade decision, selected branch, concrete Codex task, commands, acceptance criteria, and stop condition
 - `docs/regular-options-evidence-blocker-burndown.md`
@@ -429,6 +459,8 @@ These are the living docs for the current worktree:
   - reusable six-sprint goal prompt for finishing the profitability paper-gate operator workflow with six-subagent review gates
 - `docs/autoresearch/monthly-all-lanes-profitability-goal.md`
   - reusable monthly `/goal` prompt for using the all-lanes profitability command center to drive regular-options lane profitability iteration without changing scanner, broker, proof, stop, sizing, DB, or promotion behavior
+- `docs/autoresearch/memory-graph-dreaming-goal.md`
+  - reusable end-to-end prompt for the computer-wide memory graph and options-local dreaming/control-plane loop
 - `docs/agent-worktree-hygiene.md`
   - agent branch, push, untracked-file, and clean-worktree rules
 

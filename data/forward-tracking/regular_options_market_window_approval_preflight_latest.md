@@ -1,6 +1,6 @@
 # Regular Options Market-Window Approval Preflight
 
-Generated: `2026-06-21T20:50:48Z`.
+Generated: `2026-06-27T03:52:52Z`.
 
 Status: `blocked_market_closed`.
 

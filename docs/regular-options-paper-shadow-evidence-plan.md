@@ -22,7 +22,7 @@ No live release. Next best action: collect paper-shadow exact evidence for volat
 - Lane: `volatility_expansion_observation`.
 - Decision: `paper_shadow_collect`.
 - Disposition: `paper_shadow`.
-- Promotion state: `paper_probation`.
+- Promotion state: `diagnostic`.
 - Profit factor: `1.83`.
 - Average net P&L pct: `6.74`.
 - Fresh exact entry count: `3`.
@@ -98,22 +98,22 @@ No live release. Next best action: collect paper-shadow exact evidence for volat
 
 | Source | Status | Age hours | Generated at | Reasons |
 | --- | --- | ---: | --- | --- |
-| `bullish_pullback_layer4_forward_capture_protocol` | `loaded` | `0.38` | `2026-06-21T20:22:09Z` | `[]` |
-| `bullish_pullback_layer_execution_safety_audit` | `loaded` | `0.38` | `2026-06-21T20:21:52Z` | `[]` |
-| `bullish_pullback_layer_shadow_selection` | `loaded` | `0.39` | `2026-06-21T20:21:48Z` | `[]` |
-| `candidate_outcome_ledger` | `loaded` | `3.38` | `2026-06-21T17:21:56Z` | `[]` |
-| `fill_attempt_evidence_capture_plan` | `loaded` | `3.41` | `2026-06-21T17:20:20Z` | `[]` |
-| `fresh_evidence_loop` | `loaded` | `3.41` | `2026-06-21T17:20:30Z` | `[]` |
-| `gateboard` | `loaded` | `3.38` | `2026-06-21T17:22:22Z` | `[]` |
-| `lane_promotion_state` | `loaded` | `3.38` | `2026-06-21T17:22:02Z` | `[]` |
-| `monthly_profitability` | `loaded` | `3.38` | `2026-06-21T17:22:27Z` | `[]` |
-| `open_position_risk` | `loaded` | `3.41` | `2026-06-21T17:20:19Z` | `[]` |
-| `paper_shortlist` | `loaded` | `3.39` | `2026-06-21T17:21:47Z` | `[]` |
-| `profit_capture_queue` | `loaded` | `3.39` | `2026-06-21T17:21:48Z` | `[]` |
-| `regular_options_market_window_approval_preflight` | `loaded` | `0.0` | `2026-06-21T20:44:57Z` | `[]` |
-| `suggested_trade_close_risk` | `loaded` | `3.95` | `2026-06-21T16:47:57Z` | `[]` |
-| `suggested_trade_review_plan` | `loaded` | `3.72` | `2026-06-21T17:01:59Z` | `[]` |
-| `trade_qualification` | `loaded` | `3.38` | `2026-06-21T17:22:16Z` | `[]` |
+| `bullish_pullback_layer4_forward_capture_protocol` | `loaded` | `13.43` | `2026-06-26T14:27:06Z` | `[]` |
+| `bullish_pullback_layer_execution_safety_audit` | `loaded` | `13.45` | `2026-06-26T14:26:07Z` | `[]` |
+| `bullish_pullback_layer_shadow_selection` | `loaded` | `13.45` | `2026-06-26T14:26:07Z` | `[]` |
+| `candidate_outcome_ledger` | `loaded` | `0.07` | `2026-06-27T03:48:42Z` | `[]` |
+| `fill_attempt_evidence_capture_plan` | `loaded` | `0.07` | `2026-06-27T03:48:43Z` | `[]` |
+| `fresh_evidence_loop` | `loaded` | `0.07` | `2026-06-27T03:48:42Z` | `[]` |
+| `gateboard` | `loaded` | `0.03` | `2026-06-27T03:50:52Z` | `[]` |
+| `lane_promotion_state` | `loaded` | `0.03` | `2026-06-27T03:50:51Z` | `[]` |
+| `monthly_profitability` | `loaded` | `0.03` | `2026-06-27T03:50:51Z` | `[]` |
+| `open_position_risk` | `loaded` | `0.07` | `2026-06-27T03:48:38Z` | `[]` |
+| `paper_shortlist` | `loaded` | `0.07` | `2026-06-27T03:48:42Z` | `[]` |
+| `profit_capture_queue` | `loaded` | `0.07` | `2026-06-27T03:48:39Z` | `[]` |
+| `regular_options_market_window_approval_preflight` | `loaded` | `0.0` | `2026-06-27T03:52:52Z` | `[]` |
+| `suggested_trade_close_risk` | `loaded` | `0.07` | `2026-06-27T03:48:38Z` | `[]` |
+| `suggested_trade_review_plan` | `loaded` | `0.07` | `2026-06-27T03:48:43Z` | `[]` |
+| `trade_qualification` | `loaded` | `0.03` | `2026-06-27T03:50:52Z` | `[]` |
 
 Source status counts: `{"loaded": 16}`.
 

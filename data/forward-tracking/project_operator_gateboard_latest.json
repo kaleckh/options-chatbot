@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-21T17:22:22Z",
+  "generated_at_utc": "2026-06-27T03:53:00Z",
   "generated_by": "scripts/build_project_operator_gateboard.py",
   "no_chase_manifest": {
     "live_policy_change": false,
@@ -22,7 +22,7 @@
       {
         "evidence": {
           "auto_track_lane_count": 0,
-          "paper_probation_lane_count": 1
+          "paper_probation_lane_count": 0
         },
         "reason": "no_live_validation_lanes",
         "severity": "block_live_validation"
@@ -38,9 +38,9 @@
       {
         "evidence": {
           "fresh_bridge_blocker_counts": {
-            "guardrail_not_clear": 5,
-            "lane_signature_not_matched": 3,
-            "no_tier_a_lane_match": 5
+            "guardrail_not_clear": 2,
+            "lane_signature_not_matched": 2,
+            "no_tier_a_lane_match": 2
           },
           "release_gate_status": "no_paper_shortlist_candidates"
         },
@@ -181,8 +181,8 @@
     {
       "details": [
         "lane_count=14",
-        "diagnostic_lane_count=2",
-        "paper_probation_lane_count=1",
+        "diagnostic_lane_count=3",
+        "paper_probation_lane_count=0",
         "live_validation_lane_count=0",
         "auto_track_lane_count=0",
         "global_live_exact_negative_count=0",
@@ -219,7 +219,7 @@
         "scheduled_scan_heartbeat_status=fresh",
         "days_since_last_scheduled_scan=0",
         "last_scheduled_scan_host=KAESDEVICE",
-        "last_scheduled_scan_commit=e2943762547532510b6ba4bf7863d4fb60d54213",
+        "last_scheduled_scan_commit=401d3fdd5f27174cbb9b670d7af987789bfd53b3",
         "ai_commodity_verified=False",
         "ai_commodity_shared_quote_dates=3/100"
       ],
@@ -261,15 +261,15 @@
   },
   "runtime_use": false,
   "scheduled_scan_health": {
-    "as_of_utc": "2026-06-21T17:22:21Z",
+    "as_of_utc": "2026-06-27T03:52:59Z",
     "blocker": null,
     "days_since_last_scheduled_scan": 0,
     "heartbeat_available": true,
     "heartbeat_path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\scheduled_scan_heartbeat_latest.json",
-    "last_commit_sha": "e2943762547532510b6ba4bf7863d4fb60d54213",
+    "last_commit_sha": "401d3fdd5f27174cbb9b670d7af987789bfd53b3",
     "last_host": "KAESDEVICE",
-    "last_run_at_utc": "2026-06-19T17:45:06Z",
-    "last_status": "skipped_market_closed",
+    "last_run_at_utc": "2026-06-26T17:46:32Z",
+    "last_status": "completed",
     "report_id": "scheduled_scan_heartbeat_health",
     "stale_market_day_limit": 2,
     "state": "pass",
@@ -295,7 +295,7 @@
     "fresh_evidence_loop": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-21T17:20:30Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "report_id": "regular_options_fresh_evidence_loop",
       "status": "fresh_evidence_loop_readback"
@@ -303,7 +303,7 @@
     "lane_promotion_state": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-21T17:22:02Z",
+      "generated_at_utc": "2026-06-27T03:50:51Z",
       "path": "data/forward-tracking/lane_promotion_state_latest.json",
       "report_id": "regular_options_lane_promotion_state",
       "status": "lane_promotion_state_readback"
@@ -319,7 +319,7 @@
     "open_position_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-21T17:20:19Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "report_id": null,
       "status": null
@@ -335,7 +335,7 @@
     "paper_shortlist": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-21T17:21:47Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "report_id": null,
       "status": "paper_shortlist_readback"
@@ -351,14 +351,14 @@
     "scheduled_scan_heartbeat": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-19T17:45:06Z",
+      "generated_at_utc": "2026-06-26T17:46:32Z",
       "path": "data/forward-tracking/scheduled_scan_heartbeat_latest.json",
       "status": "fresh"
     },
     "suggested_trade_close_risk": {
       "available": true,
       "error": null,
-      "generated_at_utc": "2026-06-21T16:47:57Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
       "report_id": null,
       "status": null

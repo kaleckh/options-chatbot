@@ -1,0 +1,459 @@
+{
+  "artifacts": {
+    "docs_report": "docs/regular-options-strict-forward-operator-queue.md",
+    "json": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260626T142755Z.json",
+    "latest_json": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json",
+    "latest_markdown": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.md",
+    "markdown": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260626T142755Z.md"
+  },
+  "auto_track_allowed": false,
+  "blocked_or_superseded_branches": [
+    {
+      "blockers": [],
+      "branch_id": "direct_vix_source",
+      "classification": "superseded_cleared",
+      "status": "direct_vix_source_import_materialized",
+      "superseded_by": "point_in_time_vix_bucket_ready"
+    },
+    {
+      "blockers": [],
+      "branch_id": "direct_vix_bucket",
+      "classification": "cleared_current_input",
+      "status": "point_in_time_vix_bucket_ready"
+    },
+    {
+      "blockers": [
+        "blocked_daily_candidate_generation_coverage",
+        "blocked_latest_audit_rows_below_30",
+        "blocked_train_or_audit_month_coverage",
+        "candidate_generation_months_0_below_requested_24",
+        "missing_historical_entry_underlying_price_surface",
+        "missing_historical_option_chain_selection_surface",
+        "missing_historical_scanner_point_in_time_inputs",
+        "missing_lane_specific_point_in_time_feature_inputs",
+        "missing_point_in_time_earnings_calendar_source",
+        "missing_point_in_time_market_regime_inputs",
+        "underlying_daily_history_source_not_point_in_time"
+      ],
+      "branch_id": "candidate_generation_13_symbol_frozen_engine",
+      "candidate_months": 0,
+      "classification": "current_blocker",
+      "selected_rows": 0,
+      "status": "blocked_frozen_13_symbol_candidate_generation_engine"
+    },
+    {
+      "blockers": [
+        "trusted_source_csv_missing"
+      ],
+      "branch_id": "underlying_daily_source_acquisition",
+      "classification": "current_blocker",
+      "ready_candidate_count": 0,
+      "status": "blocked_underlying_daily_source_acquisition_missing"
+    },
+    {
+      "blockers": [
+        "thetaterminal_source_unavailable"
+      ],
+      "branch_id": "source_repair_59_symbol_thetadata_opra",
+      "classification": "current_provider_blocker",
+      "status": "unavailable"
+    },
+    {
+      "blockers": [
+        "missing_index_credit_spread_quote_surface"
+      ],
+      "branch_id": "vrp_credit_spread",
+      "classification": "current_blocker",
+      "status": "blocked_vrp_credit_spread_bounded_replay_gate"
+    },
+    {
+      "blockers": [
+        "missing_index_calendar_quote_surface",
+        "missing_point_in_time_term_structure_inputs"
+      ],
+      "branch_id": "term_structure_calendar",
+      "classification": "current_blocker",
+      "status": "blocked_term_structure_calendar_bounded_replay"
+    },
+    {
+      "blockers": [
+        "missing_dispersion_or_concentration_proxy_inputs"
+      ],
+      "branch_id": "dispersion_proxy_hybrid",
+      "classification": "current_blocker",
+      "status": "blocked_dispersion_proxy_hybrid_replay_readiness"
+    },
+    {
+      "blockers": [
+        "missing_point_in_time_flow_extreme_input"
+      ],
+      "branch_id": "flow_extreme_ratio_backspread",
+      "classification": "current_blocker",
+      "status": "blocked_flow_extreme_ratio_backspread_replay_readiness"
+    },
+    {
+      "blockers": [
+        "bootstrap_pf_lower_bound_not_above_1_after_resolution",
+        "duplicate_within_research_harness",
+        "entry_missing_leg_quote",
+        "exit_missing_leg_quote",
+        "exit_value_negative",
+        "exit_zero_or_nonpositive_bid_ask",
+        "missing_net_usd_pnl",
+        "missing_point_in_time_breadth_confirmation",
+        "missing_point_in_time_qqq_momentum_confirmation",
+        "missing_point_in_time_spy_momentum_confirmation",
+        "net_usd_not_positive_after_resolution",
+        "rejected_not_call_debit_spread",
+        "rejected_outside_preregistered_universe",
+        "strict_rows_below_30_after_resolution"
+      ],
+      "branch_id": "momentum_continuation",
+      "classification": "current_blocker",
+      "status": "blocked_momentum_continuation_bounded_replay"
+    },
+    {
+      "blockers": [],
+      "branch_id": "stale_cleanup_branches",
+      "classification": "superseded_or_exhausted",
+      "notes": [
+        "VIX cleanup is cleared by materialized point-in-time VIX.",
+        "Selector, term mechanics, dispersion mechanics, VRP readiness, skew, and momentum stale-cleanup questions are not the next profitability loop task."
+      ],
+      "status": "do_not_repeat_without_new_artifact_or_source_state_change"
+    },
+    {
+      "blockers": [
+        "missing_point_in_time_downside_skew_inputs",
+        "missing_index_broken_wing_quote_surface"
+      ],
+      "branch_id": "skew_broken_wing",
+      "classification": "current_blocker",
+      "status": "preregistered_design_only"
+    }
+  ],
+  "blockers": [
+    "strict_forward_rows_0_below_30",
+    "operator_approval_required",
+    "valid_market_window_required"
+  ],
+  "broker_order_allowed": false,
+  "cohort_append_performed": false,
+  "evidence_stores_mutated": false,
+  "fresh_forward_capture_status": "approval_and_market_window_blocked",
+  "future_operator_checklist": [
+    {
+      "command": "npm run options:gateboard",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 1,
+      "purpose": "Refresh operator gateboard and no-live/no-chase readback.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:triage:trade-qualification",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 2,
+      "purpose": "Refresh read-only trade qualification.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:plan:bullish-pullback-layer-shadow",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 3,
+      "purpose": "Refresh read-only bullish-pullback layer-shadow harness selection.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:audit:bullish-pullback-layer-execution-safety",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 4,
+      "purpose": "Refresh read-only bullish-pullback layer execution-safety preflight.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:audit:bullish-pullback-layer-executable-economics",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 5,
+      "purpose": "Refresh read-only bullish-pullback layer executable-economics audit.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:plan:bullish-pullback-layer4-forward-capture",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 6,
+      "purpose": "Refresh read-only bullish-pullback layer4 forward capture protocol.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:plan:paper-shadow-evidence",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 7,
+      "purpose": "Refresh paper-shadow evidence plan.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:plan:fill-attempt-evidence-capture",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 8,
+      "purpose": "Refresh fill-attempt evidence capture plan.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:plan:suggested-trade-review",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 9,
+      "purpose": "Refresh suggested-trade review-only plan.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:audit:monthly-profitability",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 10,
+      "purpose": "Refresh monthly profitability audit readback.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:preflight:market-window-approval",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 11,
+      "purpose": "Run the final no-write market-window approval preflight before any future approval discussion.",
+      "read_only": true
+    },
+    {
+      "command": "npm run options:validate:bullish-pullback-layer4-forward-candidate -- path/to/future_real_market_window_candidate_rows.jsonl",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 100,
+      "purpose": "Read-only validation only if a future natural market-window candidate JSONL exists.",
+      "read_only": true
+    },
+    {
+      "command": "do not append from this queue",
+      "current_run_mutates_state": false,
+      "is_broker_order": false,
+      "is_trade_recommendation": false,
+      "priority": 101,
+      "purpose": "A future append would require a separate valid market window, explicit approval token, clean validator readback, and append_allowed=true.",
+      "read_only": true
+    }
+  ],
+  "generated_at_utc": "2026-06-26T14:27:55Z",
+  "historical_executable_economics": {
+    "harness_decision": "profitable_but_preflight_blocked",
+    "historical_side_aware_avg_net_lb_5pct": 235.07,
+    "historical_side_aware_net_usd_total": 45610.0,
+    "historical_side_aware_pf": 3.7414,
+    "historical_side_aware_pf_lb_5pct": 2.27,
+    "row_counts": {
+      "missing_required_quote_rows": 3,
+      "resolved_side_aware_rows": 126,
+      "selected_rows": 129,
+      "source_mark_mismatch_rows": 129,
+      "tradable_executable_rows": 120,
+      "zero_or_untradable_rows": 6
+    },
+    "status": "executable_economics_recomputed_profitable_but_preflight_blocked",
+    "tradable_executable_rows": 120
+  },
+  "historical_rows_are_forward_proof": false,
+  "live_entry_allowed": false,
+  "operator_posture": {
+    "gateboard_status": "safe_blocked_no_live_release",
+    "market_window_checklist_status": "blocked_stale_readbacks",
+    "market_window_status": "unknown",
+    "oracle_packet_status": "ready_for_same_session_gpt55_guidance"
+  },
+  "overall_status": "strict_forward_queue_ready_approval_and_market_window_blocked",
+  "paper_shadow_only": true,
+  "profitability_readiness": false,
+  "prohibited_actions": [
+    "do_not_create_trades_from_strict_forward_operator_queue",
+    "do_not_submit_broker_orders_from_strict_forward_operator_queue",
+    "do_not_enable_live_validation_from_strict_forward_operator_queue",
+    "do_not_enable_auto_track_from_strict_forward_operator_queue",
+    "do_not_change_scanner_policy_from_strict_forward_operator_queue",
+    "do_not_change_strategy_logic_from_strict_forward_operator_queue",
+    "do_not_change_stops_from_strict_forward_operator_queue",
+    "do_not_change_sizing_from_strict_forward_operator_queue",
+    "do_not_lower_exact_executable_proof_bars_from_strict_forward_operator_queue",
+    "do_not_import_quotes_from_strict_forward_operator_queue",
+    "do_not_mutate_evidence_databases_from_strict_forward_operator_queue",
+    "do_not_append_forward_cohort_rows_from_strict_forward_operator_queue",
+    "do_not_consume_protected_holdout_from_strict_forward_operator_queue",
+    "do_not_treat_historical_rows_as_forward_proof",
+    "do_not_reopen_vix_selector_term_dispersion_vrp_cleanup_as_next_step",
+    "do_not_create_trades_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_submit_broker_orders_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_enable_live_validation_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_enable_auto_track_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_change_scanner_policy_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_change_strategy_logic_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_change_stops_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_change_sizing_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_lower_exact_executable_proof_bars_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_mutate_evidence_databases_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_import_quotes_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_append_forward_cohort_rows_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_consume_protected_holdout_from_bullish_pullback_layer4_forward_capture_protocol",
+    "do_not_create_trades_from_market_window_checklist",
+    "do_not_submit_broker_orders_from_market_window_checklist",
+    "do_not_change_stops_from_market_window_checklist",
+    "do_not_change_scanner_policy_from_market_window_checklist",
+    "do_not_change_sizing_from_market_window_checklist",
+    "do_not_enable_live_validation_from_market_window_checklist",
+    "do_not_enable_auto_track_from_market_window_checklist",
+    "do_not_lower_exact_executable_proof_bars_from_market_window_checklist",
+    "do_not_mutate_evidence_databases_from_market_window_checklist",
+    "do_not_treat_suggested_trade_review_as_recommendation",
+    "do_not_create_trades_from_trade_qualification",
+    "do_not_submit_broker_orders_from_trade_qualification",
+    "do_not_change_scanner_policy_from_trade_qualification",
+    "do_not_change_stops_from_trade_qualification",
+    "do_not_change_sizing_from_trade_qualification",
+    "do_not_enable_live_validation_from_trade_qualification",
+    "do_not_enable_auto_track_from_trade_qualification",
+    "do_not_lower_exact_executable_proof_bars_from_trade_qualification",
+    "do_not_mutate_evidence_databases_from_trade_qualification",
+    "do_not_open_live_or_auto_track_rows_from_blocked_readbacks",
+    "do_not_chase_paper_or_historical_signature_rows_without_fresh_exact_bridge",
+    "do_not_use_stale_midpoint_eod_manual_or_display_only_marks_as_proof",
+    "do_not_create_live_row_from_monthly_profitability_audit",
+    "do_not_submit_broker_order_from_monthly_profitability_audit",
+    "do_not_mutate_database_from_monthly_profitability_audit",
+    "do_not_change_scanner_policy_from_monthly_profitability_audit",
+    "do_not_change_stop_policy_from_monthly_profitability_audit",
+    "do_not_change_sizing_from_monthly_profitability_audit",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_monthly_profitability_audit",
+    "do_not_promote_paper_research_or_backfill_rows_to_production_proof",
+    "do_not_create_trades_from_paper_shadow_evidence_plan",
+    "do_not_submit_broker_orders_from_paper_shadow_evidence_plan",
+    "do_not_change_stops_from_paper_shadow_evidence_plan",
+    "do_not_change_scanner_policy_from_paper_shadow_evidence_plan",
+    "do_not_change_sizing_from_paper_shadow_evidence_plan",
+    "do_not_enable_live_validation_from_paper_shadow_evidence_plan",
+    "do_not_enable_auto_track_from_paper_shadow_evidence_plan",
+    "do_not_lower_exact_executable_proof_bars_from_paper_shadow_evidence_plan",
+    "do_not_mutate_evidence_databases_from_paper_shadow_evidence_plan",
+    "do_not_create_live_row_from_fill_attempt_evidence_capture_plan",
+    "do_not_submit_broker_order_from_fill_attempt_evidence_capture_plan",
+    "do_not_mutate_trading_row_database_from_fill_attempt_evidence_capture_plan",
+    "do_not_backfill_broker_fills_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_scanner_policy_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_stop_policy_from_fill_attempt_evidence_capture_plan",
+    "do_not_change_sizing_from_fill_attempt_evidence_capture_plan",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_fill_attempt_evidence_capture_plan",
+    "do_not_promote_fill_attempt_plan_to_production_proof",
+    "do_not_create_live_row_from_suggested_trade_review_plan",
+    "do_not_submit_broker_order_from_suggested_trade_review_plan",
+    "do_not_mutate_suggested_trade_database_from_suggested_trade_review_plan",
+    "do_not_auto_close_from_stale_display_or_missing_review_marks",
+    "do_not_count_suggested_trades_as_production_proof",
+    "do_not_change_scanner_policy_from_suggested_trade_review_plan",
+    "do_not_change_stop_policy_from_suggested_trade_review_plan",
+    "do_not_change_sizing_from_suggested_trade_review_plan",
+    "do_not_lower_exact_opra_nbbo_proof_bar_from_suggested_trade_review_plan",
+    "do_not_promote_suggested_trade_review_plan_to_production_proof"
+  ],
+  "promotion_ready": false,
+  "proof_bars_changed": false,
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_strict_forward_operator_queue",
+  "required_rows": 30,
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "scope": "strict_forward_operator_visibility_queue",
+  "selected_path": {
+    "allowed_symbols": [
+      "IWM",
+      "AAPL",
+      "GOOGL",
+      "UNH",
+      "LLY",
+      "JNJ",
+      "XOM",
+      "CVX",
+      "COP",
+      "NEM"
+    ],
+    "freeze_date": "2026-06-14",
+    "lane_id": "bullish_pullback_observation",
+    "layer_id": "layer_4_clean_exact",
+    "source_result_path": "data/options-validation/runs/20260528_013303_sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1_intraday.json",
+    "variant_id": "sleeve_winner_clean_plus_liquid_no_cat_pm_prior1_timecombo55_50_75_mixed_v1"
+  },
+  "sizing_changed": false,
+  "source_artifacts": {
+    "bullish_pullback_layer4_forward_capture_protocol": {
+      "age_hours": 0.01,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-26T14:27:06Z",
+      "path": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json",
+      "reason_codes": [],
+      "report_id": "bullish_pullback_layer4_forward_capture_protocol",
+      "required": true,
+      "status": "loaded"
+    },
+    "options_oracle_profit_loop_packet": {
+      "age_hours": 8.63,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-26T05:49:59Z",
+      "path": "data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
+      "reason_codes": [],
+      "report_id": "options_oracle_profit_loop_packet",
+      "required": true,
+      "status": "loaded"
+    },
+    "project_operator_gateboard": {
+      "age_hours": 0.03,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-26T14:26:05Z",
+      "path": "data/forward-tracking/project_operator_gateboard_latest.json",
+      "reason_codes": [],
+      "report_id": "project_operator_gateboard",
+      "required": true,
+      "status": "loaded"
+    },
+    "regular_options_market_window_evidence_checklist": {
+      "age_hours": 0.0,
+      "error": null,
+      "exists": true,
+      "generated_at_utc": "2026-06-26T14:27:54Z",
+      "path": "data/forward-tracking/regular_options_market_window_evidence_checklist_latest.json",
+      "reason_codes": [],
+      "report_id": "regular_options_market_window_evidence_checklist",
+      "required": true,
+      "status": "loaded"
+    }
+  },
+  "stops_changed": false,
+  "strategy_logic_changed": false,
+  "strict_forward_rows": 0
+}

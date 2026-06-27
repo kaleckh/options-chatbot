@@ -56,6 +56,7 @@ DENOMINATOR_STATUSES = (
     "exact_exit_captured",
     "missing_exit",
     "protected_holdout_blocked",
+    "duplicate_strict_new_identity",
     "malformed_candidate",
     "replay_gate_blocked",
 )
@@ -241,9 +242,26 @@ def _preregistration_valid(playbook: dict[str, Any]) -> tuple[bool, list[str]]:
 
 
 def _candidate_geometry_ready(playbook: dict[str, Any]) -> bool:
-    geometry = _as_dict(playbook.get("candidate_geometry") or _as_dict(playbook.get("concept")).get("candidate_geometry"))
+    concept = _as_dict(playbook.get("concept"))
+    geometry = _as_dict(playbook.get("candidate_geometry") or concept.get("candidate_geometry"))
     required = ("front_back_expiry_spacing", "strike_delta_or_moneyness_rule", "max_debit", "max_bid_ask_width", "exit_policy")
-    return all(geometry.get(key) not in (None, "") for key in required)
+    if geometry:
+        return all(geometry.get(key) not in (None, "") for key in required)
+
+    frozen = _as_dict(concept.get("frozen_design"))
+    term_selection = [str(item).lower() for item in _as_list(frozen.get("term_structure_selection"))]
+    exit_policy = _as_list(frozen.get("exit_policy"))
+    has_spacing = any("spacing" in item for item in term_selection)
+    has_strike_rule = any(("strike" in item or "delta" in item or "moneyness" in item) for item in term_selection)
+    has_cost_rule = any(("debit" in item or "spread width" in item or "bid/ask" in item) for item in term_selection)
+    return has_spacing and has_strike_rule and has_cost_rule and bool(exit_policy)
+
+
+def _strict_new_dedupe_ready(playbook: dict[str, Any]) -> bool:
+    concept = _as_dict(playbook.get("concept"))
+    requirements = [str(item).lower() for item in _as_list(concept.get("required_future_replay_engine_support"))]
+    has_contract = any("strict-new dedupe" in item and "157-row clean base stack" in item for item in requirements)
+    return has_contract and "duplicate_strict_new_identity" in DENOMINATOR_STATUSES
 
 
 def _input_surface_assessment(feature_store: dict[str, Any], quote_surface: dict[str, Any]) -> dict[str, Any]:
@@ -264,7 +282,7 @@ def _input_surface_assessment(feature_store: dict[str, Any], quote_surface: dict
     }
 
 
-def _blocker_burndown(readiness_blockers: list[str], input_assessment: dict[str, Any], geometry_ready: bool) -> list[dict[str, Any]]:
+def _blocker_burndown(readiness_blockers: list[str], input_assessment: dict[str, Any], geometry_ready: bool, strict_new_ready: bool) -> list[dict[str, Any]]:
     resolved_by_harness = {
         "missing_calendar_diagonal_side_aware_pricing_engine",
         "missing_calendar_diagonal_exit_or_expiry_engine",
@@ -280,9 +298,14 @@ def _blocker_burndown(readiness_blockers: list[str], input_assessment: dict[str,
         for row in input_assessment.values()
         if isinstance(row, dict) and row.get("blocker")
     }
-    if not geometry_ready:
+    if geometry_ready:
+        resolved_by_harness.add("missing_preregistered_calendar_diagonal_geometry")
+    else:
         unresolved.add("missing_preregistered_calendar_diagonal_geometry")
-    unresolved.add("missing_strict_new_dedupe")
+    if strict_new_ready:
+        resolved_by_harness.add("missing_strict_new_dedupe")
+    else:
+        unresolved.add("missing_strict_new_dedupe")
     blocker_ids = sorted(set(readiness_blockers) | resolved_by_harness | unresolved)
     rows: list[dict[str, Any]] = []
     for blocker in blocker_ids:
@@ -310,7 +333,8 @@ def build_report(
     prereg_valid, prereg_reasons = _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
     input_assessment = _input_surface_assessment(feature_store, quote_surface)
     geometry_ready = _candidate_geometry_ready(playbook)
-    burndown = _blocker_burndown([str(item) for item in _as_list(readiness.get("blockers"))], input_assessment, geometry_ready) if prereg_valid else []
+    strict_new_ready = _strict_new_dedupe_ready(playbook)
+    burndown = _blocker_burndown([str(item) for item in _as_list(readiness.get("blockers"))], input_assessment, geometry_ready, strict_new_ready) if prereg_valid else []
     remaining = [row["blocker"] for row in burndown if row["status"] != "satisfied_by_harness"]
     status = "blocked_invalid_term_structure_calendar_preregistration"
     if prereg_valid:
@@ -340,6 +364,7 @@ def build_report(
         },
         "input_surface_assessment": input_assessment,
         "candidate_geometry_ready": geometry_ready,
+        "strict_new_dedupe_ready": strict_new_ready,
         "blocker_burndown": burndown,
         "remaining_blockers": remaining,
         "source_artifacts": {

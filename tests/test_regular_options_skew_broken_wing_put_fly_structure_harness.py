@@ -115,6 +115,7 @@ class RegularOptionsSkewBrokenWingStructureHarnessTests(unittest.TestCase):
                 preregistered_playbook_path=_playbook(tmp),
                 feature_store_report_path=tmp / "missing_feature.json",
                 quote_surface_report_path=tmp / "missing_quote.json",
+                vix_bucket_report_path=tmp / "missing_vix.json",
                 generated_at_utc="2026-06-23T00:00:00Z",
             )
 

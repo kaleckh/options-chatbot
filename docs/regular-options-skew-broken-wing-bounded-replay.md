@@ -15,7 +15,6 @@ This generated report is read-only. It gates a bounded skew broken-wing put-fly 
 
 - `missing_index_broken_wing_quote_surface`
 - `missing_point_in_time_downside_skew_inputs`
-- `missing_point_in_time_vix_bucket`
 
 ## Metrics
 

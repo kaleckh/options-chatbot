@@ -19,7 +19,51 @@ def _write_text(path: Path, text: str) -> None:
 
 
 class RegularOptionsDispersionProxyHybridReplayReadinessTests(unittest.TestCase):
-    def _valid_preregistration(self, tmp: Path) -> Path:
+    def _valid_preregistration(self, tmp: Path, *, full_design: bool = False) -> Path:
+        concept = {"undefined_or_uncapped_pair_risk_allowed": False}
+        if full_design:
+            concept.update(
+                {
+                    "denominator_statuses": [
+                        "rejected_dispersion_proxy_missing",
+                        "rejected_pair_universe_mismatch",
+                        "rejected_undefined_or_uncapped_risk",
+                        "missing_leg_quote",
+                        "zero_bid_or_untradable",
+                        "exact_entry_captured",
+                        "assignment_or_expiration_blocked",
+                        "exact_exit_captured",
+                        "missing_exit",
+                    ],
+                    "frozen_design": {
+                        "pair_universe": ["index leg must be SPY or QQQ"],
+                        "structure_selection": [
+                            "future replay must select exactly one variant by a frozen rule before replay",
+                            "fixed pair sizing, max-loss cap, max bid/ask width, and liquidity thresholds must be frozen before replay",
+                        ],
+                    },
+                    "required_future_replay_engine_support": [
+                        "multi-underlying pair construction",
+                        "side-aware all-leg debit and credit spread entry pricing",
+                        "side-aware all-leg pair exit pricing and expiry settlement",
+                        "pair-level max-loss and collateral convention",
+                        "full denominator mapping including rejected pair-universe and undefined-risk rows",
+                        "strict-new dedupe versus the 157-row clean base stack",
+                    ],
+                    "side_aware_pricing_formulas": {
+                        "credit_side_entry": "sum(credit_short_leg_bid * quantity_sold) - sum(credit_long_leg_ask * quantity_bought)",
+                        "credit_side_exit_debit": "sum(credit_short_leg_ask * quantity_bought_to_close) - sum(credit_long_leg_bid * quantity_sold_to_close)",
+                        "debit_side_entry": "sum(debit_long_leg_ask * quantity_bought) - sum(debit_short_leg_bid * quantity_sold)",
+                        "debit_side_exit_value": "sum(debit_long_leg_bid * quantity_sold_to_close) - sum(debit_short_leg_ask * quantity_bought_to_close)",
+                        "pair_entry_cashflow": "credit_side_entry - debit_side_entry",
+                        "pair_exit_value": "debit_side_exit_value - credit_side_exit_debit",
+                        "pair_max_loss_usd": "policy_defined_worst_case_pair_payoff_after_entry_cashflow_times_100_plus_fees",
+                        "pair_net_pnl_usd": "(pair_exit_or_settlement_value + pair_entry_cashflow) * 100 - fees_and_slippage",
+                        "required_collateral_usd": "derived from pair_max_loss_usd",
+                    },
+                    "proof_boundary": "proof_eligible is false; production proof is forbidden",
+                }
+            )
         path = tmp / "latest.json"
         _write_json(
             path,
@@ -32,7 +76,7 @@ class RegularOptionsDispersionProxyHybridReplayReadinessTests(unittest.TestCase)
                 "historical_replay_performed": False,
                 "lane_implementation_performed": False,
                 "undefined_or_uncapped_pair_risk_allowed": False,
-                "concept": {"undefined_or_uncapped_pair_risk_allowed": False},
+                "concept": concept,
             },
         )
         return path
@@ -205,6 +249,24 @@ production proof is forbidden
         self.assertEqual(report["status"], "dispersion_proxy_hybrid_replay_readiness_ready")
         self.assertEqual(report["blockers"], [])
         self.assertIsNone(report["smallest_next_blocker_clearing_slice"])
+
+    def test_preregistered_design_contract_clears_pair_mechanics_without_replay(self) -> None:
+        with WorkspaceTempDir(prefix="dispersion-readiness") as tmp_dir:
+            tmp = Path(tmp_dir)
+            report = readiness.build_report(
+                preregistered_playbook_path=self._valid_preregistration(tmp, full_design=True),
+                feature_store_path=self._feature_store(tmp),
+                source_quality_policy_path=self._source_quality(tmp),
+                point_in_time_dispersion_concentration_proxy_path=self._blocked_dispersion_proxy(tmp),
+                point_in_time_vix_bucket_path=self._ready_vix(tmp),
+                forward_holdout_contract_path=self._holdout(tmp),
+                evidence_paths=[],
+            )
+
+        self.assertEqual(report["status"], "blocked_dispersion_proxy_hybrid_replay_readiness")
+        self.assertEqual(report["blockers"], ["missing_dispersion_or_concentration_proxy_inputs"])
+        self.assertFalse(report["historical_replay_performed"])
+        self.assertFalse(report["accepted_profitability"])
 
     def test_write_outputs_writes_latest_and_docs(self) -> None:
         with WorkspaceTempDir(prefix="dispersion-readiness") as tmp_dir:

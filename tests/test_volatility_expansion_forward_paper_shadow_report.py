@@ -131,15 +131,15 @@ def _row(index: int, pnl: float | None = None, **overrides) -> dict:
         "ticker": ["SPY", "QQQ", "IWM", "DIA"][index % 4],
         "contract_or_spread_key": f"spread-{index}",
         "entry_evidence_status": "exact_entry_captured",
+        "entry_quote_source": "opra_nbbo",
+        "entry_quote_timestamp_utc": f"2026-06-{18 + (index % 10):02d}T15:00:00Z",
+        "entry_bid": 1.0,
+        "entry_ask": 1.1,
         "exit_evidence_status": "exact_exit_captured" if pnl is not None else "open_waiting_policy_exit",
     }
     if pnl is not None:
         row["net_pnl_pct"] = pnl
         row["net_pnl_usd"] = pnl
-        row["entry_quote_source"] = "opra_nbbo"
-        row["entry_quote_timestamp_utc"] = row["selection_timestamp_utc"]
-        row["entry_bid"] = 1.0
-        row["entry_ask"] = 1.1
         row["exit_quote_source"] = "opra_nbbo"
         row["exit_quote_timestamp_utc"] = f"{row['selection_date']}T19:55:00Z"
         row["exit_bid"] = 1.2
@@ -304,6 +304,33 @@ class VolatilityExpansionForwardPaperShadowReportTests(unittest.TestCase):
         self.assertTrue(validation["append_allowed"])
         self.assertEqual(validation["append_ready_rows"], 1)
 
+    def test_timestamp_fallback_uses_new_york_market_date_for_append_and_acceptance(self) -> None:
+        row = _row(
+            1,
+            12.0,
+            selection_date="",
+            selection_timestamp_utc="2026-06-16T01:25:00Z",
+            entry_quote_timestamp_utc="2026-06-16T01:25:00Z",
+            exit_quote_timestamp_utc="2026-06-16T01:55:00Z",
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            paths = _base_sources(root)
+            schema = json.loads(paths["schema_path"].read_text(encoding="utf8"))
+            schema["record_required_fields"] = [
+                field for field in schema["record_required_fields"] if field != "selection_date"
+            ]
+            _write_json(paths["schema_path"], schema)
+            candidate_rows_path = root / "candidate.jsonl"
+            _write_jsonl(candidate_rows_path, [row])
+            paths["candidate_rows_path"] = candidate_rows_path
+            report = report_builder.build_report(generated_at_utc=NOW, **paths)
+
+        self.assertTrue(report["candidate_append_validation"]["append_allowed"])
+        self.assertEqual(report["candidate_append_validation"]["append_ready_rows"], 1)
+        self.assertEqual(report["acceptance_readiness"]["post_freeze_strict_exact_completed_rows"], 1)
+        self.assertEqual(report["ticker_date_month_concentration"]["date"]["top_group"], "2026-06-15")
+
     def test_candidate_append_validation_rejects_bad_rows_before_append(self) -> None:
         rows = [
             _row(1, 2.0, row_id="dup"),
@@ -387,6 +414,19 @@ class VolatilityExpansionForwardPaperShadowReportTests(unittest.TestCase):
         self.assertEqual(rejects["exact_exit_missing_entry_quote_provenance"], 1)
         self.assertEqual(rejects["exact_exit_missing_exit_quote_provenance"], 1)
         self.assertEqual(rejects["exact_exit_missing_policy_exit_condition"], 1)
+        self.assertFalse(report["candidate_append_validation"]["append_allowed"])
+
+    def test_untrusted_quote_source_blocks_exact_proof_and_append(self) -> None:
+        row = _row(1, 2.0, entry_quote_source="unknown_vendor", exit_quote_source="unknown_vendor")
+        report = self._validate_candidates([row])
+
+        self.assertEqual(report["acceptance_readiness"]["post_freeze_strict_exact_completed_rows"], 0)
+        self.assertEqual(report["strict_reject_counts"]["exact_completed_missing_entry_quote_provenance"], 1)
+        self.assertEqual(report["strict_reject_counts"]["exact_completed_missing_exit_quote_provenance"], 1)
+        rejects = report["candidate_append_validation"]["append_reject_counts"]
+        self.assertEqual(rejects["exact_entry_missing_entry_quote_provenance"], 1)
+        self.assertEqual(rejects["exact_exit_missing_entry_quote_provenance"], 1)
+        self.assertEqual(rejects["exact_exit_missing_exit_quote_provenance"], 1)
         self.assertFalse(report["candidate_append_validation"]["append_allowed"])
 
     def test_non_frozen_lane_and_non_preregistered_symbol_are_counted(self) -> None:

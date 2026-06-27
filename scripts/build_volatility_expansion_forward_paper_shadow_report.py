@@ -9,6 +9,7 @@ from collections import Counter, defaultdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +26,7 @@ DEFAULT_SCHEMA = ROOT / "data" / "contracts" / "volatility-expansion-forward-pap
 DEFAULT_PHASE2_SCHEMA = ROOT / "data" / "contracts" / "phase2-regular-options-forward-paper-shadow-cohort-schema.json"
 PROPOSED_REPORT_PATH = ROOT / "data" / "forward-tracking" / "volatility_expansion_forward_paper_shadow_report_latest.json"
 PROPOSED_PHASE2_REPORT_PATH = ROOT / "data" / "forward-tracking" / "phase2_regular_options_forward_paper_shadow_report_latest.json"
+MARKET_TZ = ZoneInfo("America/New_York")
 
 MIN_COMPLETED_ROWS_FOR_REVIEW = 30
 PREFERRED_COMPLETED_ROWS = 50
@@ -62,6 +64,15 @@ STRICT_NON_PROOF_CLASSES = {
     "lookahead",
     "lookahead_only",
     "lookahead_only_diagnostic",
+}
+
+TRUSTED_EXECUTABLE_QUOTE_SOURCES = {
+    "opra_nbbo",
+    "trusted_opra_nbbo",
+    "trusted_intraday_opra_nbbo",
+    "thetadata_opra_nbbo_1m",
+    "alpaca_opra",
+    "alpaca_opra_daily_snapshot",
 }
 
 PROHIBITED_ACTIONS = (
@@ -327,12 +338,16 @@ def _has_quote_pair(row: dict[str, Any], prefix: str) -> bool:
     return _safe_float(row.get(f"{prefix}_bid")) is not None and _safe_float(row.get(f"{prefix}_ask")) is not None
 
 
+def _has_trusted_executable_quote_source(row: dict[str, Any], prefix: str) -> bool:
+    return _norm_lower(row.get(f"{prefix}_quote_source")) in TRUSTED_EXECUTABLE_QUOTE_SOURCES
+
+
 def _has_exact_entry_provenance(row: dict[str, Any]) -> bool:
-    return bool(_norm(row.get("entry_quote_source")) and _norm(row.get("entry_quote_timestamp_utc")) and _has_quote_pair(row, "entry"))
+    return bool(_has_trusted_executable_quote_source(row, "entry") and _norm(row.get("entry_quote_timestamp_utc")) and _has_quote_pair(row, "entry"))
 
 
 def _has_exact_exit_provenance(row: dict[str, Any]) -> bool:
-    return bool(_norm(row.get("exit_quote_source")) and _norm(row.get("exit_quote_timestamp_utc")) and _has_quote_pair(row, "exit"))
+    return bool(_has_trusted_executable_quote_source(row, "exit") and _norm(row.get("exit_quote_timestamp_utc")) and _has_quote_pair(row, "exit"))
 
 
 def _policy_exit_condition_present(row: dict[str, Any]) -> bool:
@@ -388,6 +403,26 @@ def _strict_evidence_values(row: dict[str, Any]) -> set[str]:
         _norm_lower(row.get("exit_quote_source")),
         _norm_lower(row.get("denominator_status")),
     }
+
+
+def _timestamp_market_date(value: Any) -> str:
+    text = _norm(value)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text[:10]
+    if parsed.tzinfo is None:
+        return parsed.date().isoformat()
+    return parsed.astimezone(MARKET_TZ).date().isoformat()
+
+
+def _selection_date(row: dict[str, Any]) -> str:
+    explicit = _norm(row.get("selection_date"))
+    if explicit:
+        return explicit
+    return _timestamp_market_date(row.get("selection_timestamp_utc"))
 
 
 def _strict_acceptance_snapshot(
@@ -470,7 +505,7 @@ def _strict_acceptance_snapshot(
         if _norm_lower(row.get("denominator_status")) not in DENOMINATOR_STATUSES:
             reject_counts["unknown_denominator_status"] += 1
             row_rejected = True
-        selection_date = _norm(row.get("selection_date") or _norm(row.get("selection_timestamp_utc"))[:10])
+        selection_date = _selection_date(row)
         if freeze_date and (not selection_date or selection_date <= freeze_date):
             reject_counts["pre_freeze_not_acceptance_eligible"] += 1
             row_rejected = True
@@ -559,6 +594,7 @@ def _candidate_append_validation_snapshot(
         "scanner_hash_drift": 0,
         "lookahead_source": 0,
         "exact_entry_missing_exact_entry_evidence": 0,
+        "exact_entry_missing_entry_quote_provenance": 0,
         "exact_exit_missing_exact_entry_evidence": 0,
         "exact_exit_missing_exact_exit_evidence": 0,
         "exact_exit_missing_net_pnl_usd": 0,
@@ -603,7 +639,7 @@ def _candidate_append_validation_snapshot(
         if denominator_status not in DENOMINATOR_STATUSES:
             reject_counts["unknown_denominator_status"] += 1
             row_rejected = True
-        selection_date = _norm(row.get("selection_date") or _norm(row.get("selection_timestamp_utc"))[:10])
+        selection_date = _selection_date(row)
         if freeze_date and (not selection_date or selection_date <= freeze_date):
             reject_counts["pre_freeze_not_append_eligible"] += 1
             row_rejected = True
@@ -617,6 +653,9 @@ def _candidate_append_validation_snapshot(
             row_rejected = True
         if denominator_status in {"exact_entry_captured", "exact_exit_captured", "open_waiting_policy_exit"} and not _is_exact_entry(row):
             reject_counts["exact_entry_missing_exact_entry_evidence"] += 1
+            row_rejected = True
+        if denominator_status in {"exact_entry_captured", "exact_exit_captured", "open_waiting_policy_exit"} and not _has_exact_entry_provenance(row):
+            reject_counts["exact_entry_missing_entry_quote_provenance"] += 1
             row_rejected = True
         if denominator_status == "exact_exit_captured":
             if not _is_exact_entry(row):
@@ -713,9 +752,9 @@ def _group_key(row: dict[str, Any], group: str) -> str:
     if group == "ticker":
         return _norm(row.get("ticker") or row.get("symbol") or "unknown")
     if group == "date":
-        return _norm(row.get("selection_date") or _norm(row.get("selection_timestamp_utc"))[:10] or "unknown")
+        return _selection_date(row) or "unknown"
     if group == "month":
-        date_text = _norm(row.get("selection_date") or _norm(row.get("selection_timestamp_utc"))[:10])
+        date_text = _selection_date(row)
         return date_text[:7] if len(date_text) >= 7 else "unknown"
     return "unknown"
 

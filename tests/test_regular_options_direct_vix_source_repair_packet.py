@@ -43,20 +43,20 @@ class RegularOptionsDirectVixSourceRepairPacketTests(unittest.TestCase):
             self.assertTrue((tmp / "out" / "future_import_manifest_template.json").exists())
             self.assertTrue((tmp / "out" / "parser_fixture_validation.json").exists())
             self.assertTrue((tmp / "doc.md").exists())
+            doc_text = (tmp / "doc.md").read_text(encoding="utf8")
 
         self.assertIn(
             report["status"],
             {
                 "direct_vix_source_repair_packet_ready_for_operator_import_decision",
                 "blocked_direct_vix_source_repair_packet",
+                "direct_vix_source_repair_packet_superseded_by_materialized_vix",
             },
         )
         self.assertEqual(report["source_family"], "direct_vix_daily_close")
         self.assertEqual(report["current_forward_rows"], 0)
         self.assertEqual(report["target_forward_rows"], 30)
-        self.assertEqual(report["point_in_time_vix_bucket_status"], "blocked_point_in_time_vix_source_missing")
-        self.assertEqual(report["vix_source_rows_count"], 0)
-        self.assertEqual(report["vix_coverage_pct"], 0)
+        self.assertIn(report["point_in_time_vix_bucket_status"], {"blocked_point_in_time_vix_source_missing", "point_in_time_vix_bucket_ready"})
         self.assertFalse(report["future_import_command_executed"])
         self.assertFalse(report["downstream_vix_bucket_command_executed"])
         self.assertFalse(report["quotes_imported"])
@@ -66,19 +66,42 @@ class RegularOptionsDirectVixSourceRepairPacketTests(unittest.TestCase):
         self.assertFalse(report["historical_rows_are_forward_proof"])
         self.assertIn("APPROVE_DIRECT_VIX_SOURCE_IMPORT", report["future_import_command"])
         self.assertIn("options:research:point-in-time-vix-bucket", report["downstream_vix_bucket_materialization_command"])
-        self.assertGreaterEqual(
-            sum(
-                1
-                for item in report["vix_blocked_branch_implications"]
-                if item["would_clear_vix_blocker_if_future_source_passes"]
-            ),
-            2,
-        )
+        if report["status"] == "direct_vix_source_repair_packet_superseded_by_materialized_vix":
+            self.assertIn("## Superseded Source Boundary", doc_text)
+            self.assertNotIn("## Future Approval Question", doc_text)
+        if report["status"] != "direct_vix_source_repair_packet_superseded_by_materialized_vix":
+            self.assertGreaterEqual(
+                sum(
+                    1
+                    for item in report["vix_blocked_branch_implications"]
+                    if item["would_clear_vix_blocker_if_future_source_passes"]
+                ),
+                2,
+            )
 
     def test_protected_holdout_overlap_blocks_fixture_validation(self) -> None:
         validation = vix._fixture_validation(vix.DEFAULT_FIXTURE, protected_holdout_start="2024-05-29")
 
         self.assertGreater(validation["protected_holdout_overlap_rows"], 0)
+
+    def test_branch_implications_prefer_replay_gate_blockers(self) -> None:
+        implications = vix._blocked_branch_implications(
+            {
+                "momentum_continuation": {
+                    "status": "blocked_momentum_continuation_bounded_replay",
+                    "blockers": [
+                        "selector_readiness_not_research_only_candidate",
+                        "selector_top_candidate_not_momentum_continuation",
+                    ],
+                    "replay_gate_blockers": ["missing_point_in_time_spy_momentum_confirmation"],
+                }
+            }
+        )
+
+        self.assertEqual(
+            implications[0]["remaining_non_vix_blockers"],
+            ["missing_point_in_time_spy_momentum_confirmation"],
+        )
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -27,6 +28,7 @@ DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-phase2-forward-paper-shad
 
 ALLOWED_LANES = report_builder.PHASE2_FROZEN_LANE_IDS
 NON_EXECUTABLE_SOURCES = {"midpoint", "mid", "eod", "daily_eod", "display", "last", "last_trade", "manual", "model", "synthetic", "lookahead"}
+MARKET_TZ = ZoneInfo("America/New_York")
 
 
 def _utc_now_iso() -> str:
@@ -98,6 +100,27 @@ def _load_rows(path: Path) -> tuple[list[dict[str, Any]], int]:
     return rows, malformed
 
 
+def _parse_utc(value: str) -> datetime:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
+
+
+def _default_selection_date(generated_at_utc: str) -> str:
+    return _parse_utc(generated_at_utc).astimezone(MARKET_TZ).date().isoformat()
+
+
+def _timestamp_market_date(value: Any) -> str:
+    text = _norm(value)
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return text[:10]
+    if parsed.tzinfo is None:
+        return parsed.date().isoformat()
+    return parsed.astimezone(MARKET_TZ).date().isoformat()
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -159,7 +182,19 @@ def _entry_quote_timestamp(row: dict[str, Any]) -> str:
         or row.get("quote_time_utc")
         or snapshot.get("quote_timestamp_utc")
         or snapshot.get("captured_at_utc")
-        or row.get("selection_timestamp_utc")
+    )
+
+
+def _entry_quote_source(row: dict[str, Any]) -> str:
+    snapshot = _as_dict(row.get("entry_quote_snapshot"))
+    return _norm(
+        row.get("entry_quote_source")
+        or row.get("quote_source")
+        or row.get("options_data_source")
+        or snapshot.get("entry_quote_source")
+        or snapshot.get("quote_source")
+        or snapshot.get("options_data_source")
+        or snapshot.get("source_label")
     )
 
 
@@ -172,15 +207,23 @@ def _selection_timestamp(row: dict[str, Any]) -> str:
 
 
 def _selection_date(row: dict[str, Any]) -> str:
-    return _norm(row.get("selection_date") or row.get("scan_date") or _selection_timestamp(row)[:10])
+    explicit = _norm(row.get("selection_date") or row.get("scan_date"))
+    if explicit:
+        return explicit
+    return _timestamp_market_date(_selection_timestamp(row))
 
 
 def _has_non_executable_source(row: dict[str, Any]) -> bool:
+    snapshot = _as_dict(row.get("entry_quote_snapshot"))
     fields = [
         row.get("entry_quote_source"),
         row.get("quote_evidence_class"),
         row.get("entry_evidence_class"),
         row.get("selection_source"),
+        snapshot.get("entry_quote_source"),
+        snapshot.get("quote_source"),
+        snapshot.get("options_data_source"),
+        snapshot.get("source_label"),
     ]
     return any(_norm_lower(value) in NON_EXECUTABLE_SOURCES for value in fields if _norm(value))
 
@@ -217,12 +260,20 @@ def _normalize_row(
         return None, "missing_contract_or_spread_key"
     if _has_non_executable_source(row):
         return None, "non_executable_or_midpoint_source"
+    entry_quote_source = _entry_quote_source(row)
+    if not entry_quote_source:
+        return None, "missing_entry_quote_source"
+    if _norm_lower(entry_quote_source) not in report_builder.TRUSTED_EXECUTABLE_QUOTE_SOURCES:
+        return None, "untrusted_entry_quote_source"
+    entry_quote_timestamp = _entry_quote_timestamp(row)
+    if not entry_quote_timestamp:
+        return None, "missing_entry_quote_timestamp"
 
     status = _norm_lower(row.get("denominator_status")) or "open_waiting_policy_exit"
     if status not in report_builder.DENOMINATOR_STATUSES:
         return None, "unknown_denominator_status"
     selection_timestamp = _selection_timestamp(row) or f"{selection_date}T00:00:00Z"
-    scanner_run_id = _norm(row.get("scanner_run_id") or row.get("source_scan_run_id") or f"phase2_stager:{selection_date}")
+    scanner_run_id = _norm(row.get("scanner_run_id") or row.get("source_scan_run_id") or row.get("scan_run_id") or f"phase2_stager:{selection_date}")
     selection_id = _norm(row.get("selection_id") or f"{lane_id}:{ticker}:{selection_date}:{contract_key}:{scanner_run_id}")
     row_id = _norm(row.get("row_id") or f"phase2:{selection_id}:{status}")
     entry_bid, entry_ask = _leg_prices(row)
@@ -244,8 +295,8 @@ def _normalize_row(
         "long_contract_symbol": _norm(row.get("long_contract_symbol") or row.get("contract_symbol")),
         "short_contract_symbol": _norm(row.get("short_contract_symbol")),
         "entry_evidence_status": _norm(row.get("entry_evidence_status") or "exact_entry_captured"),
-        "entry_quote_source": _norm(row.get("entry_quote_source") or row.get("quote_source") or row.get("options_data_source") or "opra_nbbo"),
-        "entry_quote_timestamp_utc": _entry_quote_timestamp(row) or selection_timestamp,
+        "entry_quote_source": entry_quote_source,
+        "entry_quote_timestamp_utc": entry_quote_timestamp,
         "entry_bid": entry_bid,
         "entry_ask": entry_ask,
         "exit_evidence_status": _norm(row.get("exit_evidence_status") or ("exact_exit_captured" if status == "exact_exit_captured" else "open_waiting_policy_exit")),
@@ -319,7 +370,7 @@ def build_stage_report(
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     generated_at = generated_at_utc or _utc_now_iso()
-    target_selection_date = selection_date or generated_at[:10]
+    target_selection_date = selection_date or _default_selection_date(generated_at)
     if fixture_path is None and (not market_window_confirmed or market_window_status != "open"):
         return _final_report(
             generated_at,

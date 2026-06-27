@@ -6,7 +6,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 
 - Status: `candidate_outcome_ledger_readback`.
 - Operating status: `ledger_collect_exact_evidence`.
-- Ledger rows: `94`.
+- Ledger rows: `91`.
 - Fresh candidates: `34`.
 - Paper-shortlist eligible rows: `0`.
 - Profit-capture paper-review candidates: `15`.
@@ -17,7 +17,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 - Exact-exit bridges: `1`.
 - Open-risk live entry allowed: `True`.
 - Suggested-trade attention rows: `1`.
-- Action counts: `{"capture_missing_fill_attempt_evidence": 4, "capture_paper_only_exact_entry": 8, "collect_exact_exit_evidence": 1, "create_or_link_paper_review_row": 5, "refresh_suggested_trade_review": 1, "repair_historical_evidence": 39, "respect_guardrail_or_lane_mismatch": 5, "wait_for_fresh_executable_tier_a_bridge": 15, "wait_for_fresh_match_or_archive_candidate": 16}`.
+- Action counts: `{"capture_missing_fill_attempt_evidence": 4, "capture_paper_only_exact_entry": 8, "collect_exact_exit_evidence": 1, "create_or_link_paper_review_row": 5, "refresh_suggested_trade_review": 1, "repair_historical_evidence": 39, "respect_guardrail_or_lane_mismatch": 2, "wait_for_fresh_executable_tier_a_bridge": 15, "wait_for_fresh_match_or_archive_candidate": 16}`.
 - Live policy change: `false`.
 
 ## Next Evidence Queue
@@ -32,7 +32,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 | `8` | `wait_for_fresh_match_or_archive_candidate` | `16` | Do not chase old rows. Wait for a fresh scanner match or archive the stale candidate as no-longer-matched. |
 | `9` | `wait_for_fresh_executable_tier_a_bridge` | `15` | Keep clean historical Tier A evidence in paper routing until a fresh executable lane-signature match appears. |
 | `10` | `repair_historical_evidence` | `39` | Use the exact repair burn-down/source replay path before importing more data or treating the row as proof. |
-| `11` | `respect_guardrail_or_lane_mismatch` | `5` | Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion. |
+| `11` | `respect_guardrail_or_lane_mismatch` | `2` | Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion. |
 
 ## Highest Priority Rows
 
@@ -64,7 +64,7 @@ This report is generated from `scripts/build_regular_options_candidate_outcome_l
 - Fresh evidence validation outcomes: `{"created": 1, "diagnostic_only": 4, "no_longer_matched": 16, "paper_only": 8, "proof_ineligible": 5}`.
 - Fresh evidence bridge statuses: `{"exact_exit_pnl_required": 1, "non_executable_entry_blocked": 20, "not_evidence_bridge_candidate": 5, "paper_probation_exact_entry_required": 8}`.
 - Paper shortlist release gate: `no_paper_shortlist_candidates`.
-- Profit-capture selection readiness: `{"blocked_guardrail_only": 1, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
+- Profit-capture selection readiness: `{"blocked_guardrail_only": 2, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
 - Open-risk governor status: `open_risk_governor_pass`.
 
 ## Boundary

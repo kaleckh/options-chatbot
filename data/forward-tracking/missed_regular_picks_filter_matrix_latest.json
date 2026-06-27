@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\missed-regular-picks-filter-matrix.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_20260618T021353Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_20260627T035409Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_20260618T021353Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_filter_matrix_20260627T035409Z.md"
   },
   "baseline_metrics": {
     "avg_net_pnl_pct": -16.54,
@@ -78,7 +78,7 @@
       "Suppress duplicate exact spreads to one risk owner."
     ]
   },
-  "generated_at_utc": "2026-06-18T02:13:53Z",
+  "generated_at_utc": "2026-06-27T03:54:09Z",
   "ranked_scenarios_by_kept_profit_factor": [
     {
       "avg_net_pnl_pct": 34.87,
@@ -997,7 +997,7 @@
     }
   ],
   "scope": "missed_regular_picks_filter_matrix",
-  "source_generated_at_utc": "2026-06-18T02:13:43Z",
+  "source_generated_at_utc": "2026-06-27T03:54:08Z",
   "source_report": "data/forward-tracking/missed_regular_picks_outcome_latest.json",
   "summary": {
     "input_raw_row_count": 210,

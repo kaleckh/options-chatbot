@@ -32,7 +32,7 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 | Status | Rows |
 | --- | ---: |
 | `duplicate_within_research_harness` | 461 |
-| `missing_point_in_time_vix_bucket` | 415 |
+| `missing_point_in_time_breadth_confirmation` | 415 |
 | `rejected_not_call_debit_spread` | 237 |
 | `rejected_outside_preregistered_universe` | 178 |
 
@@ -41,7 +41,6 @@ This report is generated from `scripts/build_regular_options_momentum_continuati
 | Reason | Rows |
 | --- | ---: |
 | `missing_point_in_time_breadth_confirmation` | 1291 |
-| `missing_point_in_time_vix_bucket` | 1291 |
 | `missing_side_aware_exit_bid_ask` | 1291 |
 | `missing_point_in_time_qqq_momentum_confirmation` | 1080 |
 | `spread_diagnostics_marked_diagnostic_only` | 1064 |

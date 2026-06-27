@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\missed-regular-picks-failure-modes.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_20260618T021348Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_20260627T035409Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_20260618T021348Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\missed_regular_picks_failure_modes_20260627T035409Z.md"
   },
   "boundary": {
     "allowed_use": "routing_gate_design_and_forward_paper_validation",
@@ -2338,7 +2338,7 @@
       }
     ]
   },
-  "generated_at_utc": "2026-06-18T02:13:48Z",
+  "generated_at_utc": "2026-06-27T03:54:09Z",
   "guardrail_candidates": {
     "active_lane_blocks": [
       "bullish_momentum",
@@ -3326,7 +3326,7 @@
   },
   "report_id": "missed_regular_picks_failure_modes",
   "scope": "missed_regular_picks_failure_mode_audit",
-  "source_generated_at_utc": "2026-06-18T02:13:43Z",
+  "source_generated_at_utc": "2026-06-27T03:54:08Z",
   "source_report": "data/forward-tracking/missed_regular_picks_outcome_latest.json",
   "summary": {
     "mark_coverage_count": 210,

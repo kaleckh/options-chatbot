@@ -120,10 +120,13 @@ def _entry_quote_snapshot_from_candidate(candidate: dict[str, Any]) -> dict[str,
         "underlying_data_source": candidate.get("underlying_data_source"),
         "options_data_source": candidate.get("options_data_source"),
         "quote_source": candidate.get("quote_source"),
+        "entry_quote_source": candidate.get("entry_quote_source"),
         "quote_freshness_status": candidate.get("quote_freshness_status"),
         "quote_timestamp_utc": candidate.get("quote_timestamp_utc"),
         "quote_timestamp_et": candidate.get("quote_timestamp_et"),
         "quote_timestamp_source": candidate.get("quote_timestamp_source"),
+        "entry_quote_timestamp_utc": candidate.get("entry_quote_timestamp_utc"),
+        "entry_quote_timestamp_et": candidate.get("entry_quote_timestamp_et"),
         "options_snapshot_status": candidate.get("options_snapshot_status"),
         "option_chain_status": candidate.get("option_chain_status"),
         "iv_rank_source": candidate.get("iv_rank_source"),
@@ -6866,6 +6869,14 @@ def scan_daily_top_trades(
                 "quote_timestamp_utc": quote_time_payload.get("quote_timestamp_utc") or _opt.get("quote_timestamp_utc"),
                 "quote_timestamp_et": quote_time_payload.get("quote_timestamp_et") or _opt.get("quote_timestamp_et"),
                 "quote_timestamp_source": quote_time_payload.get("quote_timestamp_source") or _opt.get("quote_timestamp_source"),
+                "entry_quote_source": (
+                    quote_time_payload.get("quote_source")
+                    or quote_time_payload.get("options_data_source")
+                    or quote_time_payload.get("data_source")
+                    or _opt.get("quote_source")
+                    or _opt.get("options_data_source")
+                    or _opt.get("data_source")
+                ),
                 "entry_quote_timestamp_utc": quote_time_payload.get("quote_timestamp_utc") or _opt.get("quote_timestamp_utc") or _opt.get("quote_captured_at_utc"),
                 "entry_quote_timestamp_et": quote_time_payload.get("quote_timestamp_et") or _opt.get("quote_timestamp_et") or _opt.get("quote_captured_at_et"),
                 "profitability_eligibility": profitability["profitability_eligibility"],
@@ -6968,6 +6979,12 @@ def scan_daily_top_trades(
                 )
                 _candidate["entry_quote_timestamp_et"] = (
                     _spread_result.get("quote_timestamp_et") or _spread_result.get("quote_captured_at_et")
+                )
+                _candidate["entry_quote_source"] = (
+                    _spread_result.get("quote_source")
+                    or _spread_result.get("options_data_source")
+                    or _spread_result.get("data_source")
+                    or _candidate.get("entry_quote_source")
                 )
                 _candidate["quote_time_et"] = (
                     _spread_result.get("quote_timestamp_et")

@@ -504,6 +504,8 @@ def build_report(
     vix_bucket, vix_bucket_meta = _load_json(point_in_time_vix_bucket_path, required=False)
     holdout_contract, holdout_meta = _load_json(forward_holdout_contract_path, required=False)
     texts, evidence_meta = _read_evidence(evidence_paths)
+    if playbook:
+        texts[_rel(preregistered_playbook_path)] = json.dumps(playbook, sort_keys=True)
     prereg_valid, prereg_reasons = (
         _preregistration_valid(playbook) if playbook_meta["status"] == "loaded" else (False, ["missing_preregistration_artifact"])
     )

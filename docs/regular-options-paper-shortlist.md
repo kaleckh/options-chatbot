@@ -10,8 +10,8 @@ This report is generated from `scripts/build_regular_options_paper_shortlist.py`
 - Invariant violations: `0`.
 - Source queue rows: `97`.
 - Capture bridge statuses: `{"not_tier_a": 82, "requires_fresh_executable_tier_a_match": 15}`.
-- Fresh bridge statuses: `{"not_bridge_eligible": 5}`.
-- Fresh bridge blockers: `{"guardrail_not_clear": 5, "lane_signature_not_matched": 3, "no_tier_a_lane_match": 5}`.
+- Fresh bridge statuses: `{"not_bridge_eligible": 2}`.
+- Fresh bridge blockers: `{"guardrail_not_clear": 2, "lane_signature_not_matched": 2, "no_tier_a_lane_match": 2}`.
 - Live policy change: `False`.
 
 ## Proof Policy
@@ -29,8 +29,5 @@ This report is generated from `scripts/build_regular_options_paper_shortlist.py`
 
 | Symbol | Playbook | Decision | Match | Executable | Bridge | Blockers |
 |---|---|---|---|---|---|---|
-| QQQ | volatility_expansion_observation | blocked | lane_signature | True | not_bridge_eligible | guardrail_not_clear, no_tier_a_lane_match |
-| SPY | volatility_expansion_observation | blocked | lane_signature | True | not_bridge_eligible | guardrail_not_clear, no_tier_a_lane_match |
 | RIO | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| FCX | ai_commodity_infra_observation | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
-| IWM | volatility_expansion_observation | blocked | symbol_only | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |
+| SLV | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | not_bridge_eligible | guardrail_not_clear, lane_signature_not_matched, no_tier_a_lane_match |

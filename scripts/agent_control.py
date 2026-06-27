@@ -17,6 +17,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT / "data" / "agent-control" / "agent_control.db"
 DEFAULT_EVENTS_PATH = ROOT / "data" / "agent-control" / "events.jsonl"
+DEFAULT_SESSIONS_PATH = ROOT / "data" / "agent-control" / "sessions.jsonl"
 DEFAULT_TENANT_ID = "options-chatbot"
 DEFAULT_REPO_INDEX_MAX_FILES = 2000
 DEFAULT_REPO_INDEX_MAX_FILE_BYTES = 256_000
@@ -69,6 +70,14 @@ OPERATING_MEMORY_TYPES = {
     "artifact",
     "worker_report",
     "lesson",
+    "open_question",
+    "superseded_fact",
+}
+DREAM_PROPOSAL_TYPES = {
+    "lesson",
+    "constraint",
+    "decision",
+    "blocker",
     "open_question",
     "superseded_fact",
 }
@@ -278,6 +287,73 @@ def parse_key_value_filters(raw_filters: list[str] | None, *, field_name: str) -
 
 def _text_sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _read_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    rows: list[dict[str, Any]] = []
+    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise AgentControlError(f"{path} line {line_number} must be valid JSON: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise AgentControlError(f"{path} line {line_number} must be a JSON object")
+        rows.append(parsed)
+    return rows
+
+
+def _resolve_inside_repo(repo_root: Path, target: Path) -> Path:
+    repo_root = repo_root.resolve()
+    resolved = target.resolve() if target.is_absolute() else (repo_root / target).resolve()
+    if resolved != repo_root and repo_root not in resolved.parents:
+        raise AgentControlError(f"path must stay inside repo root: {target}")
+    return resolved
+
+
+def _relative_to_repo(repo_root: Path, target: Path) -> str:
+    return _safe_node_path(str(target.resolve().relative_to(repo_root.resolve())))
+
+
+def _assert_memory_safe_source_path(relative_path: str) -> None:
+    safe_path = _safe_node_path(relative_path)
+    name = Path(safe_path).name.lower()
+    secret_names = {
+        ".env",
+        ".env.local",
+        "credentials.json",
+        "auth.json",
+        "secrets.toml",
+        "config.yaml",
+    }
+    secret_suffixes = (".key", ".pem", ".p12", ".pfx", ".sqlite", ".db")
+    if name in secret_names or name.startswith(".env.") or name.endswith(secret_suffixes):
+        raise AgentControlError(f"memory capture refuses secret or database path: {relative_path}")
+    denied_prefixes = (
+        ".git/",
+        ".next/",
+        ".venv/",
+        "node_modules/",
+        "data/options-validation/",
+        "data/forward-tracking/",
+        "data/ai-commodity-infra/",
+        "data/alpaca-options-strategy-lab/",
+        "data/polymarket/",
+        "data/profitability-lab/",
+    )
+    if any(safe_path == prefix.rstrip("/") or safe_path.startswith(prefix) for prefix in denied_prefixes):
+        raise AgentControlError(f"memory capture refuses high-risk/generated path: {relative_path}")
 
 
 def _safe_node_path(relative_path: str) -> str:
@@ -1708,6 +1784,339 @@ def remember_operating_memory(
             },
         )
         return node
+
+
+def log_session(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    sessions_path: Path = DEFAULT_SESSIONS_PATH,
+    transcript_path: Path,
+    repo_root: Path = ROOT,
+    session_id: str | None = None,
+    title: str = "",
+    summary: str = "",
+    actor: str = "agent",
+    expected_sha256: str | None = None,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    sub_tenant_id: str | None = "operator",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    resolved = _resolve_inside_repo(repo_root, transcript_path)
+    if not resolved.is_file():
+        raise AgentControlError(f"transcript file not found: {resolved}")
+    relative_path = _relative_to_repo(repo_root, resolved)
+    _assert_memory_safe_source_path(relative_path)
+    current_sha256 = _file_sha256(resolved)
+    if expected_sha256 is not None and expected_sha256 != current_sha256:
+        raise AgentControlError(
+            f"transcript hash mismatch for {resolved}: expected {expected_sha256}, got {current_sha256}"
+        )
+    text = resolved.read_text(encoding="utf-8")
+    session_id = session_id or _short_id("S")
+    now = utc_now()
+    payload = {
+        "session_id": session_id,
+        "logged_at": now,
+        "title": title or relative_path,
+        "summary": summary,
+        "actor": actor,
+        "path": relative_path,
+        "source_sha256": current_sha256,
+        "bytes": resolved.stat().st_size,
+        "line_count": len(text.splitlines()),
+        "metadata": metadata or {},
+    }
+    with closing(connect(db_path)) as conn, conn:
+        node = upsert_graph_node(
+            conn,
+            node_id=f"session:{session_id}",
+            kind="episode",
+            title=payload["title"],
+            body=summary or _repo_file_excerpt(text, max_chars=2500),
+            tenant_id=tenant_id,
+            sub_tenant_id=sub_tenant_id,
+            metadata={
+                **(metadata or {}),
+                "source_type": "session_transcript",
+                "session_id": session_id,
+                "actor": actor,
+                "path": relative_path,
+                "source_sha256": current_sha256,
+                "line_count": payload["line_count"],
+                "bytes": payload["bytes"],
+                "logged_at": now,
+            },
+            source_ref=relative_path,
+        )
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="session.logged",
+            payload={"session_id": session_id, "node_id": node["id"], "path": relative_path},
+        )
+    _append_jsonl(sessions_path, payload)
+    payload["graph_node_id"] = f"session:{session_id}"
+    return payload
+
+
+def _parse_dream_entries(raw_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for index, raw in enumerate(raw_entries, start=1):
+        memory_type = str(raw.get("type") or "").strip()
+        if memory_type not in DREAM_PROPOSAL_TYPES:
+            raise AgentControlError(
+                f"dream entry {index} type must be one of: {', '.join(sorted(DREAM_PROPOSAL_TYPES))}"
+            )
+        title = str(raw.get("title") or "").strip()
+        body = str(raw.get("body") or "").strip()
+        if not title or not body:
+            raise AgentControlError(f"dream entry {index} requires title and body")
+        confidence = str(raw.get("confidence") or "inferred").strip()
+        if confidence not in {"observed", "inferred", "unknown"}:
+            raise AgentControlError(f"dream entry {index} confidence must be observed, inferred, or unknown")
+        entries.append(
+            {
+                "id": str(raw.get("id") or f"entry-{index}").strip(),
+                "type": memory_type,
+                "title": title,
+                "body": body,
+                "confidence": confidence,
+                "evidence": raw.get("evidence") or [],
+                "supersedes": raw.get("supersedes") or [],
+                "freshness_days": raw.get("freshness_days"),
+                "metadata": raw.get("metadata") or {},
+            }
+        )
+    return entries
+
+
+def propose_dream(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    proposal_path: Path,
+    repo_root: Path = ROOT,
+    dream_id: str | None = None,
+    title: str = "",
+    tenant_id: str = DEFAULT_TENANT_ID,
+    sub_tenant_id: str | None = "operator",
+    expected_sha256: str | None = None,
+) -> dict[str, Any]:
+    resolved = _resolve_inside_repo(repo_root, proposal_path)
+    if not resolved.is_file():
+        raise AgentControlError(f"dream proposal file not found: {resolved}")
+    relative_path = _relative_to_repo(repo_root, resolved)
+    _assert_memory_safe_source_path(relative_path)
+    current_sha256 = _file_sha256(resolved)
+    if expected_sha256 is not None and expected_sha256 != current_sha256:
+        raise AgentControlError(
+            f"dream proposal hash mismatch for {resolved}: expected {expected_sha256}, got {current_sha256}"
+        )
+    raw = json.loads(resolved.read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise AgentControlError("dream proposal must be a JSON object")
+    entries = _parse_dream_entries(raw.get("entries") or [])
+    dream_id = dream_id or _short_id("DREAM")
+    now = utc_now()
+    proposal = {
+        "dream_id": dream_id,
+        "status": "proposed",
+        "title": title or str(raw.get("title") or relative_path),
+        "summary": str(raw.get("summary") or ""),
+        "proposed_at": now,
+        "path": relative_path,
+        "source_sha256": current_sha256,
+        "entry_count": len(entries),
+        "entries": entries,
+        "evidence": raw.get("evidence") or [],
+    }
+    with closing(connect(db_path)) as conn, conn:
+        node = upsert_graph_node(
+            conn,
+            node_id=f"dream:{dream_id}",
+            kind="memory",
+            title=proposal["title"],
+            body=proposal["summary"],
+            tenant_id=tenant_id,
+            sub_tenant_id=sub_tenant_id,
+            metadata={
+                "source_type": "dream_proposal",
+                "dream_id": dream_id,
+                "proposal_status": "proposed",
+                "source_sha256": current_sha256,
+                "path": relative_path,
+                "entry_count": len(entries),
+                "entries": entries,
+                "evidence": proposal["evidence"],
+                "proposed_at": now,
+                "does_not_authorize_trading_or_evidence_mutation": True,
+            },
+            source_ref=relative_path,
+            upsert=False,
+        )
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="dream.proposed",
+            payload={"dream_id": dream_id, "node_id": node["id"], "entry_count": len(entries)},
+        )
+    proposal["graph_node_id"] = f"dream:{dream_id}"
+    return proposal
+
+
+def accept_dream(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    dream_id: str,
+    accepted_by: str = "CEO",
+    note: str = "",
+) -> dict[str, Any]:
+    dream_node_id = dream_id if dream_id.startswith("dream:") else f"dream:{dream_id}"
+    accepted_at = utc_now()
+    accepted_memory_ids: list[str] = []
+    with closing(connect(db_path)) as conn, conn:
+        proposal = _graph_node_row(conn, dream_node_id)
+        metadata = proposal.get("metadata") or {}
+        if metadata.get("source_type") != "dream_proposal":
+            raise AgentControlError(f"not a dream proposal node: {dream_node_id}")
+        if metadata.get("proposal_status") != "proposed":
+            raise AgentControlError(
+                f"dream proposal {dream_node_id} cannot be accepted from status {metadata.get('proposal_status')}"
+            )
+        entries = _parse_dream_entries(metadata.get("entries") or [])
+        for entry in entries:
+            if entry["confidence"] == "observed" and not entry.get("evidence"):
+                raise AgentControlError(
+                    f"dream entry {entry['id']} cannot be accepted as observed without evidence"
+                )
+            entry_metadata = {
+                **(entry.get("metadata") or {}),
+                "origin": "dreaming",
+                "proposal_origin": "dream",
+                "non_authoritative": True,
+                "dream_id": metadata.get("dream_id"),
+                "dream_node_id": dream_node_id,
+                "source_sha256": metadata.get("source_sha256"),
+                "evidence": entry.get("evidence") or [],
+                "accepted_by": accepted_by,
+                "accepted_at": accepted_at,
+                "does_not_authorize_trading_or_evidence_mutation": True,
+            }
+            node = _upsert_operating_memory(
+                conn,
+                memory_type=entry["type"],
+                title=entry["title"],
+                body=entry["body"],
+                sub_tenant_id=proposal.get("sub_tenant_id"),
+                confidence=entry["confidence"],
+                metadata=entry_metadata,
+                source_ref=dream_node_id,
+                node_id=f"memory:{entry['type']}:dream:{metadata.get('dream_id')}:{entry['id']}",
+                supersedes=[str(item) for item in entry.get("supersedes") or []],
+                freshness_days=entry.get("freshness_days"),
+            )
+            accepted_memory_ids.append(node["id"])
+            upsert_graph_edge(
+                conn,
+                source_node_id=node["id"],
+                relation="derived_from",
+                target_node_id=dream_node_id,
+                metadata={"source_type": "dream_acceptance"},
+                source_ref=dream_node_id,
+            )
+        _update_graph_node_metadata(
+            conn,
+            dream_node_id,
+            {
+                "proposal_status": "accepted",
+                "accepted_by": accepted_by,
+                "accepted_at": accepted_at,
+                "acceptance_note": note,
+                "accepted_memory_ids": accepted_memory_ids,
+            },
+        )
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="dream.accepted",
+            payload={
+                "dream_id": metadata.get("dream_id"),
+                "dream_node_id": dream_node_id,
+                "accepted_by": accepted_by,
+                "accepted_memory_ids": accepted_memory_ids,
+            },
+        )
+    return {
+        "dream_id": metadata.get("dream_id"),
+        "dream_node_id": dream_node_id,
+        "status": "accepted",
+        "accepted_memory_ids": accepted_memory_ids,
+    }
+
+
+def reject_dream(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    dream_id: str,
+    rejected_by: str = "CEO",
+    reason: str = "",
+) -> dict[str, Any]:
+    dream_node_id = dream_id if dream_id.startswith("dream:") else f"dream:{dream_id}"
+    with closing(connect(db_path)) as conn, conn:
+        proposal = _graph_node_row(conn, dream_node_id)
+        metadata = proposal.get("metadata") or {}
+        if metadata.get("source_type") != "dream_proposal":
+            raise AgentControlError(f"not a dream proposal node: {dream_node_id}")
+        if metadata.get("proposal_status") != "proposed":
+            raise AgentControlError(
+                f"dream proposal {dream_node_id} cannot be rejected from status {metadata.get('proposal_status')}"
+            )
+        _update_graph_node_metadata(
+            conn,
+            dream_node_id,
+            {
+                "proposal_status": "rejected",
+                "rejected_by": rejected_by,
+                "rejected_at": utc_now(),
+                "rejection_reason": reason,
+            },
+        )
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="dream.rejected",
+            payload={"dream_id": metadata.get("dream_id"), "dream_node_id": dream_node_id, "reason": reason},
+        )
+    return {"dream_id": metadata.get("dream_id"), "dream_node_id": dream_node_id, "status": "rejected"}
+
+
+def list_dreams(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    status: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    rows = query_graph(
+        db_path=db_path,
+        query="dream",
+        tenant_id=tenant_id,
+        metadata_filter={"source_type": "dream_proposal"},
+        limit=max(limit, 1),
+        max_depth=0,
+    )["graph_context"]["nodes"]
+    dreams = []
+    for node in rows:
+        metadata = node.get("metadata") or {}
+        if status is not None and metadata.get("proposal_status") != status:
+            continue
+        dreams.append(node)
+        if len(dreams) >= limit:
+            break
+    return {"dreams": dreams}
 
 
 def supersede_memory(
@@ -3211,6 +3620,58 @@ def build_parser() -> argparse.ArgumentParser:
     context_pack.add_argument("--prompt-only", action="store_true")
     context_pack.set_defaults(func=_cmd_context_pack)
 
+    session = subparsers.add_parser("session", help="Capture session transcript metadata into runtime memory.")
+    session_sub = session.add_subparsers(dest="session_command", required=True)
+    session_log = session_sub.add_parser("log", help="Log one transcript file with a SHA-256 guard.")
+    _add_common(session_log)
+    session_log.add_argument("--sessions", type=Path, default=DEFAULT_SESSIONS_PATH)
+    session_log.add_argument("--repo-root", type=Path, default=ROOT)
+    session_log.add_argument("--transcript", type=Path, required=True)
+    session_log.add_argument("--session-id")
+    session_log.add_argument("--title", default="")
+    session_log.add_argument("--summary", default="")
+    session_log.add_argument("--actor", default="agent")
+    session_log.add_argument("--expected-sha256")
+    session_log.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    session_log.add_argument("--sub-tenant-id", default="operator")
+    session_log.add_argument("--metadata", default="{}")
+    session_log.set_defaults(func=_cmd_session_log)
+
+    dream = subparsers.add_parser("dream", help="Propose, review, and accept out-of-band memory updates.")
+    dream_sub = dream.add_subparsers(dest="dream_command", required=True)
+    dream_propose = dream_sub.add_parser("propose", help="Store a non-authoritative dream proposal from JSON.")
+    _add_common(dream_propose)
+    dream_propose.add_argument("--repo-root", type=Path, default=ROOT)
+    dream_propose.add_argument("--file", type=Path, required=True)
+    dream_propose.add_argument("--dream-id")
+    dream_propose.add_argument("--title", default="")
+    dream_propose.add_argument("--expected-sha256")
+    dream_propose.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dream_propose.add_argument("--sub-tenant-id", default="operator")
+    dream_propose.set_defaults(func=_cmd_dream_propose)
+
+    dream_accept = dream_sub.add_parser("accept", help="Promote a proposed dream into operating memory.")
+    _add_common(dream_accept)
+    dream_accept.add_argument("dream_id")
+    dream_accept.add_argument("--accepted-by", default="CEO")
+    dream_accept.add_argument("--note", default="")
+    dream_accept.set_defaults(func=_cmd_dream_accept)
+
+    dream_reject = dream_sub.add_parser("reject", help="Reject a proposed dream without promoting memory.")
+    _add_common(dream_reject)
+    dream_reject.add_argument("dream_id")
+    dream_reject.add_argument("--rejected-by", default="CEO")
+    dream_reject.add_argument("--reason", default="")
+    dream_reject.set_defaults(func=_cmd_dream_reject)
+
+    dream_list = dream_sub.add_parser("list", help="List dream proposals.")
+    dream_list.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    dream_list.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dream_list.add_argument("--status", choices=["proposed", "accepted", "rejected"])
+    dream_list.add_argument("--limit", type=int, default=20)
+    dream_list.add_argument("--json", action="store_true")
+    dream_list.set_defaults(func=_cmd_dream_list)
+
     memory = subparsers.add_parser("memory", help="Remember, supersede, audit, and evaluate operating memory.")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
     memory_remember = memory_sub.add_parser("remember", help="Store typed operating memory.")
@@ -3478,6 +3939,77 @@ def _cmd_context_pack(args: argparse.Namespace) -> int:
     if args.prompt_only:
         print(result["prompt_context"])
         return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_session_log(args: argparse.Namespace) -> int:
+    result = log_session(
+        db_path=args.db,
+        events_path=args.events,
+        sessions_path=args.sessions,
+        transcript_path=args.transcript,
+        repo_root=args.repo_root,
+        session_id=args.session_id,
+        title=args.title,
+        summary=args.summary,
+        actor=args.actor,
+        expected_sha256=args.expected_sha256,
+        tenant_id=args.tenant_id,
+        sub_tenant_id=args.sub_tenant_id,
+        metadata=parse_json_object(args.metadata, field_name="metadata"),
+    )
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_propose(args: argparse.Namespace) -> int:
+    result = propose_dream(
+        db_path=args.db,
+        events_path=args.events,
+        proposal_path=args.file,
+        repo_root=args.repo_root,
+        dream_id=args.dream_id,
+        title=args.title,
+        tenant_id=args.tenant_id,
+        sub_tenant_id=args.sub_tenant_id,
+        expected_sha256=args.expected_sha256,
+    )
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_accept(args: argparse.Namespace) -> int:
+    result = accept_dream(
+        db_path=args.db,
+        events_path=args.events,
+        dream_id=args.dream_id,
+        accepted_by=args.accepted_by,
+        note=args.note,
+    )
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_reject(args: argparse.Namespace) -> int:
+    result = reject_dream(
+        db_path=args.db,
+        events_path=args.events,
+        dream_id=args.dream_id,
+        rejected_by=args.rejected_by,
+        reason=args.reason,
+    )
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_list(args: argparse.Namespace) -> int:
+    result = list_dreams(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        status=args.status,
+        limit=args.limit,
+    )
     _emit(result, as_json=True if args.json else False)
     return 0
 

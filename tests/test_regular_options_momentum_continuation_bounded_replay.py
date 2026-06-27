@@ -19,7 +19,7 @@ def _write_jsonl(path: Path, rows: list[dict]) -> None:
     path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf8")
 
 
-def _selector(tmp: Path, *, valid: bool = True) -> Path:
+def _selector(tmp: Path, *, valid: bool = True, top_candidate: bool = True) -> Path:
     row = {
         "concept_id": replay.CONCEPT_ID if valid else "wrong",
         "readiness_status": "candidate_for_research_only_implementation_approval" if valid else "blocked",
@@ -29,8 +29,12 @@ def _selector(tmp: Path, *, valid: bool = True) -> Path:
         path,
         {
             "report_id": "regular_options_preregistered_playbook_readiness_selector",
-            "status": "candidate_selected_for_research_only_implementation_approval",
-            "top_ranked_candidate": row,
+            "status": (
+                "candidate_selected_for_research_only_implementation_approval"
+                if top_candidate
+                else "no_research_implementation_candidate_ready_without_blocker"
+            ),
+            "top_ranked_candidate": row if top_candidate else None,
             "design_inventory": [row],
             "accepted_profitability": False,
         },
@@ -133,9 +137,16 @@ def _candidate(**overrides: object) -> dict:
 
 
 class MomentumContinuationBoundedReplayTests(unittest.TestCase):
-    def _paths(self, tmp: Path, *, selector_valid: bool = True, resolution_candidate: bool = True) -> dict[str, Path]:
+    def _paths(
+        self,
+        tmp: Path,
+        *,
+        selector_valid: bool = True,
+        selector_top_candidate: bool = True,
+        resolution_candidate: bool = True,
+    ) -> dict[str, Path]:
         return {
-            "selector_path": _selector(tmp, valid=selector_valid),
+            "selector_path": _selector(tmp, valid=selector_valid, top_candidate=selector_top_candidate),
             "preregistered_playbook_path": _playbook(tmp),
             "source_replay_path": _source_replay(tmp),
             "proof_blocker_resolution_path": _resolution(tmp, candidate=resolution_candidate),
@@ -149,8 +160,10 @@ class MomentumContinuationBoundedReplayTests(unittest.TestCase):
         self.assertEqual(report["status"], "blocked_momentum_continuation_bounded_replay")
         self.assertFalse(report["accepted_profitability"])
         self.assertFalse(report["historical_rows_are_forward_proof"])
-        self.assertIn("missing_point_in_time_vix_bucket", report["replay_gate_blockers"])
         self.assertIn("missing_point_in_time_breadth_confirmation", report["replay_gate_blockers"])
+        self.assertIn("missing_point_in_time_spy_momentum_confirmation", report["replay_gate_blockers"])
+        self.assertIn("missing_point_in_time_qqq_momentum_confirmation", report["replay_gate_blockers"])
+        self.assertNotIn("missing_point_in_time_vix_bucket", report["replay_gate_blockers"])
         self.assertEqual(report["metrics"]["strict_new_exact_completed_rows"], 0)
         self.assertEqual(report["metrics"]["side_aware_quotes_resolved"], 783)
 
@@ -214,8 +227,19 @@ class MomentumContinuationBoundedReplayTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "blocked_momentum_continuation_bounded_replay")
         self.assertFalse(report["historical_replay_performed"])
-        self.assertIn("selector_top_candidate_not_momentum_continuation", report["replay_gate_blockers"])
+        self.assertIn("selector_inventory_missing_momentum_continuation", report["replay_gate_blockers"])
         self.assertFalse(report["accepted_profitability"])
+
+    def test_selector_without_top_candidate_is_not_a_branch_replay_blocker(self) -> None:
+        with WorkspaceTempDir(prefix="momentum-bounded") as tmp_dir:
+            tmp = Path(tmp_dir)
+            report = replay.build_report(**self._paths(tmp, selector_top_candidate=False, resolution_candidate=False))
+
+        self.assertTrue(report["validations"]["selector_valid"])
+        self.assertEqual(report["validations"]["selector_reasons"], [])
+        self.assertNotIn("selector_top_candidate_not_momentum_continuation", report["replay_gate_blockers"])
+        self.assertNotIn("selector_readiness_not_research_only_candidate", report["replay_gate_blockers"])
+        self.assertIn("missing_point_in_time_breadth_confirmation", report["replay_gate_blockers"])
 
     def test_prior_resolution_blockers_are_carried_forward(self) -> None:
         with WorkspaceTempDir(prefix="momentum-bounded") as tmp_dir:

@@ -116,5 +116,5 @@ This report is generated from `scripts/build_regular_options_repair_burndown.py`
 
 | Source | Status | Generated | Path |
 |---|---|---|---|
-| regular_options_profit_capture_queue | ok | 2026-06-17T05:10:49Z | data/profitability-lab/regular-options-profit-capture-queue/latest.json |
+| regular_options_profit_capture_queue | ok | 2026-06-27T03:48:39Z | data/profitability-lab/regular-options-profit-capture-queue/latest.json |
 | regular_options_repair_attempt_readback | ok | 2026-06-05T01:06:45Z | data/profitability-lab/regular-options-repair-attempts/latest.json |

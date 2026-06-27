@@ -2,10 +2,10 @@
   "appended_forward_cohort_rows": false,
   "artifacts": {
     "docs_report": "docs/regular-options-bullish-pullback-layer-executable-economics.md",
-    "json": "data/forward-tracking/bullish_pullback_layer_executable_economics_20260621T202200Z.json",
+    "json": "data/forward-tracking/bullish_pullback_layer_executable_economics_20260626T142705Z.json",
     "latest_json": "data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json",
     "latest_markdown": "data/forward-tracking/bullish_pullback_layer_executable_economics_latest.md",
-    "markdown": "data/forward-tracking/bullish_pullback_layer_executable_economics_20260621T202200Z.md"
+    "markdown": "data/forward-tracking/bullish_pullback_layer_executable_economics_20260626T142705Z.md"
   },
   "auto_track_allowed": false,
   "blockers": [
@@ -3130,7 +3130,7 @@
       "zero_bid_or_untradable": true
     }
   ],
-  "generated_at_utc": "2026-06-21T20:22:00Z",
+  "generated_at_utc": "2026-06-26T14:27:05Z",
   "harness_decision": "profitable_but_preflight_blocked",
   "imported_quotes": false,
   "is_trade_recommendation": false,
@@ -3194,7 +3194,7 @@
     "execution_safety_audit": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T20:21:52Z",
+      "generated_at_utc": "2026-06-26T14:26:07Z",
       "path": "data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json",
       "report_id": "bullish_pullback_layer_execution_safety_audit",
       "required": true,

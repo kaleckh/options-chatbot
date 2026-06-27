@@ -82,7 +82,7 @@ READINESS_ARTIFACTS = {
     "momentum_continuation": ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay" / "latest.json",
     "pmcc_diagonal": ROOT / "data" / "profitability-lab" / "regular-options-pmcc-diagonal-replay-readiness" / "latest.json",
     "macro_event_long_strangle": ROOT / "data" / "profitability-lab" / "regular-options-macro-event-long-strangle-replay-readiness" / "latest.json",
-    "vrp_credit_spread": ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-replay-readiness" / "latest.json",
+    "vrp_credit_spread": ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-bounded-replay" / "latest.json",
     "flow_extreme_ratio_backspread": ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-ratio-backspread-replay-readiness" / "latest.json",
     "dispersion_proxy_hybrid": ROOT / "data" / "profitability-lab" / "regular-options-dispersion-proxy-hybrid-replay-readiness" / "latest.json",
 }
@@ -250,7 +250,7 @@ def _fixture_validation(path: Path, *, protected_holdout_start: str | None) -> d
 def _blocked_branch_implications(artifacts: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     implications: list[dict[str, Any]] = []
     for branch, payload in artifacts.items():
-        blockers = _as_list(payload.get("blockers")) or _as_list(payload.get("replay_gate_blockers"))
+        blockers = _as_list(payload.get("replay_gate_blockers")) or _as_list(payload.get("blockers"))
         vix_blockers = [item for item in blockers if "vix" in str(item).lower()]
         implications.append(
             {
@@ -285,14 +285,22 @@ def build_report(
     fixture_validation = _fixture_validation(fixture_path, protected_holdout_start=protected_holdout_start)
     implications = _blocked_branch_implications(artifacts)
     vix_unblocked_count = sum(1 for item in implications if item["would_clear_vix_blocker_if_future_source_passes"])
+    vix_bucket_ready = (
+        vix_bucket.get("status") == "point_in_time_vix_bucket_ready"
+        and _as_list(vix_bucket.get("blockers")) == []
+        and vix_bucket.get("point_in_time_vix_low_mid_bucket_available") is True
+    )
     blockers: list[str] = []
-    if source_family != "direct_vix_daily_close":
+    if vix_bucket_ready:
+        status = "direct_vix_source_repair_packet_superseded_by_materialized_vix"
+    elif source_family != "direct_vix_daily_close":
         blockers.append("blocked_no_safe_direct_vix_source_policy")
-    if fixture_validation["errors"] or not fixture_validation["known_at_safe"]:
+    if not vix_bucket_ready and (fixture_validation["errors"] or not fixture_validation["known_at_safe"]):
         blockers.append("blocked_vix_parser_contract_unsafe")
-    if vix_unblocked_count < 2:
+    if not vix_bucket_ready and vix_unblocked_count < 2:
         blockers.append("blocked_vix_packet_only_no_downstream_value")
-    status = "blocked_direct_vix_source_repair_packet" if blockers else "direct_vix_source_repair_packet_ready_for_operator_import_decision"
+    if not vix_bucket_ready:
+        status = "blocked_direct_vix_source_repair_packet" if blockers else "direct_vix_source_repair_packet_ready_for_operator_import_decision"
     future_import_command = (
         "npm run options:source-import:direct-vix -- "
         "--source-file data/import-staging/vix/cboe_vix_daily_history.csv "
@@ -319,6 +327,7 @@ def build_report(
         "current_forward_rows": current.get("current_forward_rows", 0),
         "target_forward_rows": current.get("minimum_profitable_strict_completed_rows", 30),
         "point_in_time_vix_bucket_status": vix_bucket.get("status"),
+        "point_in_time_vix_bucket_ready": vix_bucket_ready,
         "vix_source_rows_count": vix_bucket.get("source_rows_count"),
         "vix_coverage_pct": vix_bucket.get("coverage_pct"),
         "source_schema": {"family": "direct_vix_daily_close", "required_fields": list(REQUIRED_FIELDS)},
@@ -355,6 +364,7 @@ def build_report(
             "protected_holdout_consumption_allowed": False,
             "required_approval_token": "APPROVE_DIRECT_VIX_SOURCE_IMPORT",
             "required_fields": list(REQUIRED_FIELDS),
+            "superseded_by_materialized_vix": vix_bucket_ready,
         },
         "future_import_command": future_import_command,
         "downstream_vix_bucket_materialization_command": downstream_command,
@@ -374,6 +384,14 @@ def build_report(
 
 
 def render_markdown(report: dict[str, Any]) -> str:
+    vix_ready = bool(report.get("point_in_time_vix_bucket_ready"))
+    source_boundary_heading = "## Superseded Source Boundary" if vix_ready else "## Future Approval Question"
+    source_boundary_text = (
+        "No direct VIX source-import approval question is current because the point-in-time VIX bucket is already ready. "
+        "The future command below remains provenance for the materialization boundary only; do not rerun direct VIX import unless a future artifact becomes missing, stale, malformed, or policy-incompatible."
+        if vix_ready
+        else "Approve a future non-live, non-broker, tokened direct VIX source import/materialization from an operator-supplied official daily VIX CSV into a generated point-in-time VIX source artifact only, with no protected-holdout consumption and no replay until coverage and known-at gates pass."
+    )
     lines = [
         "# Regular Options Direct VIX Source Repair Packet",
         "",
@@ -388,9 +406,9 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
         "This is a read-only source-repair packet. It does not import VIX rows, mutate evidence stores, run replay, create trades, enable live validation, enable auto-track, touch broker/order paths, lower proof bars, or promote any lane.",
         "",
-        "## Future Approval Question",
+        source_boundary_heading,
         "",
-        "Approve a future non-live, non-broker, tokened direct VIX source import/materialization from an operator-supplied official daily VIX CSV into a generated point-in-time VIX source artifact only, with no protected-holdout consumption and no replay until coverage and known-at gates pass.",
+        source_boundary_text,
         "",
         "## VIX-Blocked Branches",
         "",

@@ -193,7 +193,7 @@ def _best_lane(trade_qualification: dict[str, Any]) -> dict[str, Any] | None:
         return None
     for row in _as_list(trade_qualification.get("lane_decisions")):
         if isinstance(row, dict) and _norm(row.get("lane_id")) == lane_id:
-            if row.get("decision") == "paper_shadow_collect" and _norm(row.get("promotion_state")) in {"paper_probation", ""}:
+            if row.get("decision") == "paper_shadow_collect" and _norm(row.get("disposition")) in {"paper_shadow", ""}:
                 return {
                     **best,
                     "promotion_state": row.get("promotion_state"),

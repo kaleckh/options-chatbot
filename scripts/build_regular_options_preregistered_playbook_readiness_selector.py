@@ -60,6 +60,7 @@ PLAYBOOKS = (
         "label": "Breadth-confirmed index/QQQ momentum continuation debit spread",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-momentum-continuation-playbook" / "latest.json",
         "expected_structure": "defined_risk_call_debit_spreads_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay" / "latest.json",
         "complexity_score": 1,
         "engine_notes": [
             "defined-risk call debit spread",
@@ -73,7 +74,7 @@ PLAYBOOKS = (
         "label": "Low/mid VIX index put credit spread VRP",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-vrp-credit-spread-playbook" / "latest.json",
         "expected_structure": "defined_risk_put_credit_spreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-replay-readiness" / "latest.json",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-bounded-replay" / "latest.json",
         "complexity_score": 4,
         "engine_notes": ["credit-spread side-aware pricing", "assignment/expiration", "margin/max-loss convention"],
     },
@@ -83,7 +84,7 @@ PLAYBOOKS = (
         "label": "Low/mid VIX index calendar or diagonal term-structure dislocation",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-term-structure-calendar-playbook" / "latest.json",
         "expected_structure": "defined_risk_calendar_or_diagonal_debit_spreads_only",
-        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-replay-readiness" / "latest.json",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-bounded-replay" / "latest.json",
         "complexity_score": 5,
         "engine_notes": ["multi-expiry pricing", "front-leg roll/expiry", "strict-new dedupe"],
     },
@@ -93,6 +94,7 @@ PLAYBOOKS = (
         "label": "Low/mid VIX index skew broken-wing put butterfly",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-skew-broken-wing-playbook" / "latest.json",
         "expected_structure": "defined_risk_broken_wing_put_butterflies_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-skew-broken-wing-bounded-replay" / "latest.json",
         "complexity_score": 6,
         "engine_notes": ["three-leg/four-leg pricing", "skew inputs", "max-loss convention"],
     },
@@ -102,6 +104,7 @@ PLAYBOOKS = (
         "label": "Low/mid VIX macro-event long straddle/strangle",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-macro-event-long-strangle-playbook" / "latest.json",
         "expected_structure": "defined_risk_long_straddles_or_strangles_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-macro-event-long-strangle-replay-readiness" / "latest.json",
         "complexity_score": 5,
         "engine_notes": ["event calendar dependency", "two-leg long premium pricing", "event-window leakage guard"],
     },
@@ -111,6 +114,7 @@ PLAYBOOKS = (
         "label": "Post-event IV-crush index iron condor or iron butterfly",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-post-event-iv-crush-iron-condor-playbook" / "latest.json",
         "expected_structure": "defined_risk_short_iron_condors_or_iron_butterflies_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-post-event-iv-crush-replay-readiness" / "latest.json",
         "complexity_score": 7,
         "engine_notes": ["four-leg credit pricing", "event calendar dependency", "margin/max-loss and assignment/expiration"],
     },
@@ -120,6 +124,7 @@ PLAYBOOKS = (
         "label": "Index flow-extreme mean-reversion ratio/backspread",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-flow-extreme-ratio-backspread-playbook" / "latest.json",
         "expected_structure": "defined_risk_ratio_spreads_or_backspreads_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-ratio-backspread-replay-readiness" / "latest.json",
         "complexity_score": 8,
         "engine_notes": ["ratio/backspread pricing", "undefined-risk rejection", "flow input dependency"],
     },
@@ -129,6 +134,7 @@ PLAYBOOKS = (
         "label": "Index constituent dispersion-proxy debit/credit hybrid",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-dispersion-proxy-hybrid-playbook" / "latest.json",
         "expected_structure": "defined_risk_index_constituent_debit_credit_hybrid_pairs_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-dispersion-proxy-hybrid-replay-readiness" / "latest.json",
         "complexity_score": 9,
         "engine_notes": ["paired index/constituent legs", "pair denominator mapping", "source-quality scope for constituents"],
     },
@@ -138,6 +144,7 @@ PLAYBOOKS = (
         "label": "Low/mid VIX index PMCC-style diagonal income",
         "path": ROOT / "data" / "profitability-lab" / "regular-options-preregistered-pmcc-diagonal-playbook" / "latest.json",
         "expected_structure": "defined_risk_pmcc_style_call_diagonals_only",
+        "readiness_path": ROOT / "data" / "profitability-lab" / "regular-options-pmcc-diagonal-replay-readiness" / "latest.json",
         "complexity_score": 7,
         "engine_notes": ["long-dated/short-dated call diagonal", "roll ledger", "assignment/ex-dividend and max-loss convention"],
     },
@@ -212,7 +219,10 @@ def _artifact_valid(payload: dict[str, Any], spec: dict[str, Any]) -> tuple[bool
 def _readiness_blockers(readiness_payload: dict[str, Any], readiness_meta: dict[str, Any]) -> list[str]:
     if readiness_meta["status"] != "loaded":
         return []
-    return [str(item) for item in _as_list(readiness_payload.get("blockers")) if item]
+    blockers: list[str] = []
+    for key in ("blockers", "remaining_blockers", "replay_gate_blockers"):
+        blockers.extend(str(item) for item in _as_list(readiness_payload.get(key)) if item)
+    return sorted(set(blockers))
 
 
 def _classify_design(spec: dict[str, Any], payload: dict[str, Any], meta: dict[str, Any], readiness_payload: dict[str, Any], readiness_meta: dict[str, Any]) -> dict[str, Any]:

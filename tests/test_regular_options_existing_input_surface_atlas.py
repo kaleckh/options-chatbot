@@ -185,6 +185,55 @@ class ExistingInputSurfaceAtlasTests(unittest.TestCase):
         self.assertFalse(forward["ready_for_branch_selection"])
         self.assertIn("forward_cohort_append_forbidden_in_this_slice", forward["remaining_blockers"])
 
+    def test_ready_vix_bucket_clears_stale_missing_vix_blockers_without_becoming_next_branch(self) -> None:
+        with WorkspaceTempDir(prefix="existing-input-atlas") as tmp_dir:
+            tmp = Path(tmp_dir)
+            db = tmp / "quotes.db"
+            _create_db(db)
+            controls = _control_files(tmp)
+            bucket_rows = []
+            day = date(2024, 6, 1)
+            end = date(2026, 5, 31)
+            while day <= end:
+                if day.weekday() < 5:
+                    bucket_rows.append(
+                        {
+                            "bucket_date_et": day.isoformat(),
+                            "known_at_utc": f"{day.isoformat()}T00:00:00Z",
+                            "point_in_time_valid": True,
+                        }
+                    )
+                day += timedelta(days=1)
+            _write_json(
+                controls["vix_bucket"],
+                {
+                    "status": "point_in_time_vix_bucket_ready",
+                    "blockers": [],
+                    "covered_date_count": len(bucket_rows),
+                    "requested_date_count": len(bucket_rows),
+                    "coverage_pct": 100.0,
+                    "bucket_rows": bucket_rows,
+                },
+            )
+
+            report = atlas.build_report(
+                db_path=db,
+                data_root=tmp,
+                start_date="2024-06-01",
+                end_date="2026-05-31",
+                latest_four_months=("2026-02", "2026-03", "2026-04", "2026-05"),
+                generated_at_utc="2026-06-23T00:00:00Z",
+                control_artifacts=controls,
+            )
+
+        vix = [row for row in report["source_surface_candidates"] if row["surface_id"] == "point_in_time_vix_bucket_artifact"][0]
+        self.assertTrue(vix["required_fields_present"])
+        self.assertTrue(vix["known_at_safe"])
+        self.assertEqual(vix["remaining_blockers"], [])
+        self.assertEqual(vix["latest_four_months_covered"], 4)
+        self.assertEqual(vix["date_coverage_pct"], 100.0)
+        self.assertFalse(vix["ready_for_branch_selection"])
+
     def test_coverage_train_latest_and_leakage_gates_block(self) -> None:
         row = {
             "surface_id": "almost",

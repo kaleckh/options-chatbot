@@ -1,0 +1,99 @@
+{
+  "artifacts": {
+    "docs_report": "docs/regular-options-strict-forward-30-scheduler-health.md",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T053859Z.json",
+    "latest_json": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.json",
+    "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_latest.md",
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_scheduler_health_20260627T053859Z.md"
+  },
+  "batch_file": {
+    "exists": true,
+    "missing_steps": [],
+    "order_blockers": [],
+    "path": "scripts/run_strict_forward_30_auto_window_collector.bat",
+    "prohibited_tokens_present": [],
+    "status": "loaded"
+  },
+  "blockers": [],
+  "expected": {
+    "acceptable_statuses": [
+      "Ready",
+      "Running"
+    ],
+    "batch_steps": [
+      "set OPTIONS_SCAN_AUTO_TRACK=0",
+      "set OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS=1",
+      "set OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE=1",
+      "scripts\\run_regular_options_strict_forward_30_auto_window_collector.py --max-attempts 3 --sleep-seconds 300 --json",
+      "scripts\\build_regular_options_strict_forward_30_scheduler_health.py --json",
+      "scripts\\build_regular_options_strict_forward_scan_task_health.py --json",
+      "scripts\\build_regular_options_strict_forward_30_candidate_review_packet.py --json",
+      "scripts\\build_regular_options_strict_forward_30_exit_evidence_plan.py --json",
+      "scripts\\build_regular_options_strict_forward_30_exit_completion_stager.py --json",
+      "scripts\\build_regular_options_strict_forward_30_lifecycle_audit.py --json",
+      "scripts\\build_regular_options_strict_forward_30_completion_monitor.py --json"
+    ],
+    "execution_time_limit": "00:45:00",
+    "repeat_duration": "6 Hour(s), 30 Minute(s)",
+    "repeat_every": "0 Hour(s), 30 Minute(s)",
+    "scheduled_task_state": "Enabled",
+    "task_name": "\\OptionsStrictForward30Collector",
+    "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat"
+  },
+  "generated_at_utc": "2026-06-27T05:38:59Z",
+  "prohibited_actions": [
+    "do_not_append_from_scheduler_health",
+    "do_not_enable_live_validation_from_scheduler_health",
+    "do_not_enable_auto_track_from_scheduler_health",
+    "do_not_submit_broker_orders_from_scheduler_health",
+    "do_not_import_quotes_from_scheduler_health",
+    "do_not_lower_proof_bars_from_scheduler_health",
+    "do_not_treat_historical_rows_as_forward_proof"
+  ],
+  "query_returncode": 0,
+  "query_stderr": [],
+  "report_id": "regular_options_strict_forward_30_scheduler_health",
+  "safety": {
+    "append_allowed": false,
+    "auto_track_allowed": false,
+    "broker_order_allowed": false,
+    "historical_rows_are_forward_proof": false,
+    "live_entry_allowed": false,
+    "proof_bars_changed": false,
+    "quotes_imported": false
+  },
+  "schema_version": 1,
+  "status": "scheduler_ready_for_next_market_window",
+  "task": {
+    "Author": "N/A",
+    "Comment": "Runs strict-forward 30-row auto-window collector during regular market windows without append/live/autotrack.",
+    "Days": "MON, TUE, WED, THU, FRI",
+    "Delete Task If Not Rescheduled": "Disabled",
+    "End Date": "N/A",
+    "Folder": "\\",
+    "HostName": "KAESDEVICE",
+    "Idle Time": "Disabled",
+    "Last Result": "267011",
+    "Last Run Time": "11/30/1999 12:00:00 AM",
+    "Logon Mode": "Interactive only",
+    "Months": "Every 1 week(s)",
+    "Next Run Time": "6/29/2026 7:35:00 AM",
+    "Power Management": "",
+    "Repeat: Every": "0 Hour(s), 30 Minute(s)",
+    "Repeat: Stop If Still Running": "Disabled",
+    "Repeat: Until: Duration": "6 Hour(s), 30 Minute(s)",
+    "Repeat: Until: Time": "None",
+    "Run As User": "kalec",
+    "Schedule": "Scheduling data is not available in this format.",
+    "Schedule Type": "Weekly",
+    "Scheduled Task State": "Enabled",
+    "Start Date": "6/26/2026",
+    "Start In": "N/A",
+    "Start Time": "7:35:00 AM",
+    "Status": "Ready",
+    "Stop Task If Runs X Hours and X Mins": "00:45:00",
+    "Task To Run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_strict_forward_30_auto_window_collector.bat",
+    "TaskName": "\\OptionsStrictForward30Collector"
+  },
+  "task_name": "\\OptionsStrictForward30Collector"
+}

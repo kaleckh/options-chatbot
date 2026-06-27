@@ -25,8 +25,15 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             "momentum_edge_path": tmp / "momentum.json",
             "momentum_continuation_replay_path": tmp / "momentum-replay.json",
             "momentum_continuation_proof_resolution_path": tmp / "momentum-resolution.json",
+            "momentum_continuation_bounded_replay_path": tmp / "momentum-bounded-replay.json",
+            "preregistered_vrp_playbook_path": tmp / "vrp-playbook.json",
+            "vrp_replay_readiness_path": tmp / "vrp-readiness.json",
+            "vrp_structure_harness_path": tmp / "vrp-structure-harness.json",
+            "vrp_bounded_replay_path": tmp / "vrp-bounded-replay.json",
             "preregistered_term_structure_playbook_path": tmp / "term-structure.json",
             "term_structure_replay_readiness_path": tmp / "term-readiness.json",
+            "term_structure_harness_path": tmp / "term-structure-harness.json",
+            "term_structure_bounded_replay_path": tmp / "term-bounded-replay.json",
             "preregistered_skew_broken_wing_playbook_path": tmp / "skew-broken-wing.json",
             "preregistered_macro_event_long_strangle_playbook_path": tmp / "macro-event-long-strangle.json",
             "macro_event_calendar_path": tmp / "macro-event-calendar.json",
@@ -37,6 +44,7 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             "candidate_generation_13_symbol_frozen_entrypoint_path": tmp / "13-symbol-frozen-entrypoint.json",
             "candidate_generation_13_symbol_frozen_engine_path": tmp / "13-symbol-frozen-engine.json",
             "preregistered_post_event_iv_crush_iron_condor_playbook_path": tmp / "post-event-iv-crush-iron-condor.json",
+            "post_event_iv_crush_replay_readiness_path": tmp / "post-event-iv-crush-readiness.json",
             "preregistered_flow_extreme_ratio_backspread_playbook_path": tmp / "flow-extreme-ratio-backspread.json",
             "flow_extreme_volume_oi_source_rows_path": tmp / "flow-extreme-volume-oi-source-rows.json",
             "point_in_time_flow_extreme_input_path": tmp / "flow-extreme-input.json",
@@ -294,7 +302,7 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                 "future_import_command": "npm run options:source-import:macro-event-calendar -- --source-file data/import-staging/macro_events/macro_event_calendar.csv --approval-token APPROVE_MACRO_EVENT_CALENDAR_SOURCE_IMPORT --no-replay --json",
                 "downstream_readiness_commands": {
                     "macro_event_long_strangle": "npm run options:research:macro-event-long-strangle-replay-readiness -- --json",
-                    "post_event_iv_crush_iron_condor": "future_post_event_iv_crush_readiness_audit_not_implemented_yet",
+                    "post_event_iv_crush_iron_condor": "npm run options:research:post-event-iv-crush-replay-readiness -- --json",
                 },
                 "future_import_command_executed": False,
                 "quotes_imported": False,
@@ -420,6 +428,67 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             },
         )
         _write_json(
+            paths["momentum_continuation_bounded_replay_path"],
+            {
+                "report_id": "regular_options_momentum_continuation_bounded_replay",
+                "status": "blocked_momentum_continuation_bounded_replay",
+                "concept_id": "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1",
+                "accepted_profitability": False,
+                "replay_gate_blockers": [
+                    "missing_point_in_time_spy_momentum_confirmation",
+                    "missing_point_in_time_qqq_momentum_confirmation",
+                    "strict_rows_below_30_after_resolution",
+                ],
+            },
+        )
+        _write_json(
+            paths["preregistered_vrp_playbook_path"],
+            {
+                "report_id": "regular_options_preregistered_vrp_credit_spread_playbook",
+                "status": "preregistered_design_only",
+                "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
+                "structure": "defined_risk_put_credit_spreads_only",
+                "accepted_profitability": False,
+                "historical_replay_performed": False,
+                "lane_implementation_performed": False,
+            },
+        )
+        _write_json(
+            paths["vrp_replay_readiness_path"],
+            {
+                "report_id": "regular_options_vrp_credit_spread_replay_readiness",
+                "status": "blocked_vrp_credit_spread_replay_readiness",
+                "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
+                "accepted_profitability": False,
+                "blockers": [
+                    "missing_credit_spread_side_aware_pricing_engine",
+                    "missing_index_credit_spread_quote_surface",
+                ],
+            },
+        )
+        _write_json(
+            paths["vrp_structure_harness_path"],
+            {
+                "report_id": "regular_options_vrp_credit_spread_structure_harness",
+                "status": "blocked_by_missing_quote_surface",
+                "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
+                "blocker_burndown": [
+                    {"blocker": "missing_credit_spread_side_aware_pricing_engine", "status": "resolved_by_harness"},
+                    {"blocker": "missing_index_credit_spread_quote_surface", "status": "unresolved"},
+                ],
+            },
+        )
+        _write_json(
+            paths["vrp_bounded_replay_path"],
+            {
+                "report_id": "regular_options_vrp_credit_spread_bounded_replay",
+                "status": "blocked_vrp_credit_spread_bounded_replay_gate",
+                "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
+                "accepted_profitability": False,
+                "replay_gate_blockers": ["missing_index_credit_spread_quote_surface"],
+            },
+        )
+        _write_json(
             paths["preregistered_term_structure_playbook_path"],
             {
                 "report_id": "regular_options_preregistered_term_structure_calendar_playbook",
@@ -443,6 +512,35 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                 "lane_implementation_performed": False,
                 "blockers": ["missing_calendar_diagonal_side_aware_pricing_engine"],
                 "allowed_next_step": "send readiness back to GPT-5.5 Pro",
+            },
+        )
+        _write_json(
+            paths["term_structure_harness_path"],
+            {
+                "report_id": "regular_options_term_structure_calendar_structure_harness",
+                "status": "blocked_by_missing_inputs_or_quotes",
+                "concept_id": "low_mid_vix_index_calendar_term_structure_dislocation_v1",
+                "candidate_geometry_ready": True,
+                "strict_new_dedupe_ready": True,
+                "blocker_burndown": [
+                    {"blocker": "missing_calendar_diagonal_side_aware_pricing_engine", "status": "satisfied_by_harness"},
+                    {"blocker": "missing_strict_new_dedupe", "status": "satisfied_by_harness"},
+                    {"blocker": "missing_index_calendar_quote_surface", "status": "unresolved"},
+                    {"blocker": "missing_point_in_time_term_structure_inputs", "status": "unresolved"},
+                ],
+            },
+        )
+        _write_json(
+            paths["term_structure_bounded_replay_path"],
+            {
+                "report_id": "regular_options_term_structure_calendar_bounded_replay",
+                "status": "blocked_term_structure_calendar_bounded_replay",
+                "concept_id": "low_mid_vix_index_calendar_term_structure_dislocation_v1",
+                "accepted_profitability": False,
+                "replay_gate_blockers": [
+                    "missing_index_calendar_quote_surface",
+                    "missing_point_in_time_term_structure_inputs",
+                ],
             },
         )
         _write_json(
@@ -646,10 +744,47 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                 "concept_id": "post_event_iv_crush_index_iron_condor_v1",
                 "structure": "defined_risk_short_iron_condors_or_iron_butterflies_only",
                 "accepted_profitability": False,
+                "generated_at_utc": "2026-06-23T05:51:48Z",
                 "historical_replay_performed": False,
                 "lane_implementation_performed": False,
                 "event_calendar_implemented_in_this_slice": False,
                 "allowed_next_step": "send back to GPT-5.5 Pro",
+            },
+        )
+        _write_json(
+            paths["post_event_iv_crush_replay_readiness_path"],
+            {
+                "report_id": "regular_options_post_event_iv_crush_replay_readiness",
+                "status": "blocked_post_event_iv_crush_replay_readiness",
+                "concept_id": "post_event_iv_crush_index_iron_condor_v1",
+                "structure": "defined_risk_short_iron_condors_or_iron_butterflies_only",
+                "generated_at_utc": "2026-06-23T05:52:48Z",
+                "accepted_profitability": False,
+                "historical_replay_performed": False,
+                "replay_performed": False,
+                "lane_implementation_performed": False,
+                "event_calendar_implemented_in_this_slice": False,
+                "broker_order_allowed": False,
+                "live_validation_enabled": False,
+                "auto_track_enabled": False,
+                "quotes_imported": False,
+                "evidence_stores_mutated": False,
+                "protected_holdout_consumed": False,
+                "scanner_policy_changed": False,
+                "strategy_logic_changed": False,
+                "stops_changed": False,
+                "sizing_changed": False,
+                "proof_bars_changed": False,
+                "promotion_ready": False,
+                "historical_rows_are_forward_proof": False,
+                "undefined_or_uncapped_short_premium_risk_allowed": False,
+                "blockers": [
+                    "macro_event_calendar_source_missing",
+                    "iv_event_premium_proxy_missing",
+                    "missing_index_iron_condor_quote_surface",
+                ],
+                "smallest_next_blocker_clearing_slice": "iv_event_premium_proxy_missing",
+                "allowed_next_step": "send readiness back to GPT-5.5 Pro",
             },
         )
         _write_json(
@@ -916,8 +1051,9 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         self.assertIn("157441.2", report["prompt"])
         self.assertIn("-58847.66", report["prompt"])
         self.assertIn("missing_point_in_time_vix_bucket", report["prompt"])
-        self.assertIn("blocked_term_structure_calendar_replay_readiness", report["prompt"])
-        self.assertIn("missing_calendar_diagonal_side_aware_pricing_engine", report["prompt"])
+        self.assertIn("blocked_term_structure_calendar_bounded_replay", report["prompt"])
+        self.assertIn("missing_index_calendar_quote_surface", report["prompt"])
+        self.assertIn("missing_point_in_time_term_structure_inputs", report["prompt"])
         self.assertIn("low_mid_vix_index_skew_broken_wing_put_fly_v1", report["prompt"])
         self.assertIn("defined_risk_broken_wing_put_butterflies_only", report["prompt"])
         self.assertIn("low_mid_vix_macro_event_long_strangle_v1", report["prompt"])
@@ -944,6 +1080,9 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         self.assertIn("Do not repeat the 13-symbol source-surface/no-write/denominator/engine branch", report["prompt"])
         self.assertIn("post_event_iv_crush_index_iron_condor_v1", report["prompt"])
         self.assertIn("defined_risk_short_iron_condors_or_iron_butterflies_only", report["prompt"])
+        self.assertIn("blocked_post_event_iv_crush_replay_readiness", report["prompt"])
+        self.assertIn("iv_event_premium_proxy_missing", report["prompt"])
+        self.assertIn("missing_index_iron_condor_quote_surface", report["prompt"])
         self.assertIn("index_flow_extreme_mean_reversion_ratio_backspread_v1", report["prompt"])
         self.assertIn("defined_risk_ratio_spreads_or_backspreads_only", report["prompt"])
         self.assertIn("blocked_flow_extreme_volume_oi_source_rows", report["prompt"])
@@ -1006,8 +1145,32 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         )
         self.assertEqual(report["current_evidence_summary"]["momentum_continuation_proof_resolution_side_aware_rows"], 783)
         self.assertEqual(
+            report["current_evidence_summary"]["momentum_continuation_bounded_replay_blockers"],
+            [
+                "missing_point_in_time_spy_momentum_confirmation",
+                "missing_point_in_time_qqq_momentum_confirmation",
+                "strict_rows_below_30_after_resolution",
+            ],
+        )
+        self.assertEqual(
             report["current_evidence_summary"]["term_structure_calendar_replay_readiness_status"],
+            "blocked_term_structure_calendar_bounded_replay",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["term_structure_calendar_replay_readiness_blockers"],
+            ["missing_index_calendar_quote_surface", "missing_point_in_time_term_structure_inputs"],
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["term_structure_calendar_legacy_replay_readiness_status"],
             "blocked_term_structure_calendar_replay_readiness",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["vrp_credit_spread_replay_readiness_blockers"],
+            ["missing_index_credit_spread_quote_surface"],
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["vrp_credit_spread_legacy_replay_readiness_status"],
+            "blocked_vrp_credit_spread_replay_readiness",
         )
         self.assertEqual(
             report["current_evidence_summary"]["preregistered_skew_broken_wing_status"],
@@ -1084,6 +1247,20 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             report["current_evidence_summary"]["preregistered_post_event_iv_crush_iron_condor_status"],
             "preregistered_design_only",
         )
+        self.assertEqual(
+            report["current_evidence_summary"]["post_event_iv_crush_replay_readiness_status"],
+            "blocked_post_event_iv_crush_replay_readiness",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["post_event_iv_crush_replay_readiness_reason_codes"],
+            [],
+        )
+        self.assertIn(
+            "missing_index_iron_condor_quote_surface",
+            report["current_evidence_summary"]["post_event_iv_crush_replay_readiness_blockers"],
+        )
+        post_event_readiness_meta = report["source_artifacts"]["post_event_iv_crush_replay_readiness"]
+        self.assertEqual(post_event_readiness_meta["validated_status"], "blocked_post_event_iv_crush_replay_readiness")
         self.assertEqual(
             report["current_evidence_summary"]["preregistered_flow_extreme_ratio_backspread_status"],
             "preregistered_design_only",
@@ -1266,6 +1443,19 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                 "would_clear_vix_blocker_if_future_source_passes"
             ]
         )
+        momentum_implication = next(
+            item
+            for item in report["current_evidence_summary"]["direct_vix_branch_implications"]
+            if item["branch"] == "momentum_continuation"
+        )
+        self.assertEqual(
+            momentum_implication["remaining_non_vix_blockers"],
+            [
+                "missing_point_in_time_spy_momentum_confirmation",
+                "missing_point_in_time_qqq_momentum_confirmation",
+                "strict_rows_below_30_after_resolution",
+            ],
+        )
         macro_packet_meta = report["source_artifacts"]["macro_event_calendar_source_repair_packet"]
         self.assertEqual(macro_packet_meta["status"], "loaded")
         self.assertEqual(
@@ -1361,7 +1551,36 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         self.assertFalse(report["current_evidence_summary"]["underlying_daily_source_import_source_rows_written"])
         self.assertIn("blocked_underlying_daily_source_acquisition_missing", report["prompt"])
         self.assertIn("market_data.db:daily_history", report["prompt"])
-        self.assertIn("profitability-first blocker-ranking prompt", report["prompt"])
+        self.assertIn("strategic reviewer and next-slice selector", report["prompt"])
+        self.assertIn("Current Fact Table:", report["prompt"])
+        self.assertIn("Evidence precedence:", report["prompt"])
+        self.assertIn("Only real approved forward-cohort rows", report["prompt"])
+        self.assertIn("source-row writes", report["prompt"])
+        self.assertIn("default source_rows materialization", report["prompt"])
+        self.assertIn("cohort-log append", report["prompt"])
+        self.assertIn("VIX is cleared", report["prompt"])
+        self.assertIn("Underlying daily OHLCV is a first-class blocker", report["prompt"])
+        self.assertIn("Do not select another packet-only source plan", report["prompt"])
+        self.assertIn("Approved non-live source materialization may be recommended", report["prompt"])
+        self.assertIn("candidate_file_count=0", report["prompt"])
+        self.assertIn("ready_candidate_count=0", report["prompt"])
+        self.assertIn("selected_ready_source_file=null", report["prompt"])
+        self.assertIn("bullish_pullback_layer4_forward_protocol", report["prompt"])
+        self.assertIn("Re-emitting 6,916 blocked rows", report["prompt"])
+        self.assertIn("priced_exact_rows", report["prompt"])
+        self.assertIn("strict_new_exact_completed_rows", report["prompt"])
+        self.assertIn("side-aware entry/exit", report["prompt"])
+        self.assertIn("Required JSON-like output shape:", report["prompt"])
+        self.assertNotIn("Output JSON-like structure:", report["prompt"])
+        self.assertEqual(report["prompt"].count("Required JSON-like output shape:"), 1)
+        self.assertIn("blocker_map", report["gpt55_required_output_schema"])
+        self.assertIn("ranked_next_tasks", report["gpt55_required_output_schema"])
+        self.assertIn("stale_blockers_ignored", report["gpt55_required_output_schema"])
+        self.assertIn("loop_control_fallback", report["gpt55_required_output_schema"])
+        self.assertIn("approval_required_for_selected_task", report["gpt55_required_output_schema"]["next_codex_task"])
+        self.assertIn("safe_read_only_fallback_if_approval_missing", report["gpt55_required_output_schema"]["next_codex_task"])
+        self.assertIn("source-row writes or default source_rows materialization", report["operator_approval_posture"]["still_requires_separate_explicit_approval"])
+        self.assertIn("cohort-log append", report["operator_approval_posture"]["still_requires_separate_explicit_approval"])
         self.assertIn("Forward proof blocker", report["prompt"])
         self.assertIn("Do not select trusted_flow_volume_oi_source_repair_packet_v1 again", report["prompt"])
         self.assertEqual(report["profitability_target"]["minimum_profitable_strict_completed_rows"], 30)
@@ -1512,6 +1731,61 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                 self.assertIn(
                     expected_status,
                     report["source_artifacts"]["pmcc_diagonal_replay_readiness"]["validation_reason_codes"],
+                )
+
+    def test_post_event_iv_crush_readiness_validation_surfaces_named_packet_status(self) -> None:
+        cases = [
+            (
+                "missing_artifact",
+                None,
+                "missing_post_event_iv_crush_replay_readiness_artifact",
+            ),
+            (
+                "wrong_report_id",
+                {"report_id": "wrong_report"},
+                "invalid_post_event_iv_crush_replay_readiness_report_id",
+            ),
+            (
+                "wrong_concept_id",
+                {"concept_id": "wrong_concept"},
+                "invalid_post_event_iv_crush_replay_readiness_concept_id",
+            ),
+            (
+                "wrong_structure",
+                {"structure": "wrong_structure"},
+                "invalid_post_event_iv_crush_replay_readiness_structure",
+            ),
+            (
+                "stale_artifact",
+                {"generated_at_utc": "2026-06-23T05:00:00Z"},
+                "stale_post_event_iv_crush_replay_readiness_artifact",
+            ),
+            (
+                "unsafe_flags",
+                {"broker_order_allowed": True},
+                "unsafe_post_event_iv_crush_replay_readiness_flags",
+            ),
+        ]
+        for name, patch, expected_status in cases:
+            with self.subTest(name=name):
+                with WorkspaceTempDir(prefix="oracle-loop-packet") as tmp_dir:
+                    paths = self._paths(Path(tmp_dir))
+                    readiness_path = paths["post_event_iv_crush_replay_readiness_path"]
+                    if patch is None:
+                        readiness_path.unlink()
+                    else:
+                        payload = json.loads(readiness_path.read_text(encoding="utf8"))
+                        payload.update(patch)
+                        _write_json(readiness_path, payload)
+                    report = packet.build_packet(generated_at_utc="2026-06-22T00:00:00Z", **paths)
+
+                self.assertEqual(
+                    report["current_evidence_summary"]["post_event_iv_crush_replay_readiness_status"],
+                    expected_status,
+                )
+                self.assertIn(
+                    expected_status,
+                    report["source_artifacts"]["post_event_iv_crush_replay_readiness"]["validation_reason_codes"],
                 )
 
     def test_write_outputs_writes_prompt_and_json(self) -> None:

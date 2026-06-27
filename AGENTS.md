@@ -13,6 +13,14 @@ Before changing code or docs in this repo:
 5. Check `docs/NEXT_STEPS.md` for current blockers and active work.
 6. Confirm commands in `package.json` before running verification.
 
+## Memory Graphs
+
+- Computer-wide memory index: `C:\Users\kalec\projects-memory\MEMORY_GRAPH.md`
+- Options runtime memory: `data/agent-control/agent_control.db`, managed by `npm run agent:control`
+- Startup recovery: `npm run agent:control -- bootstrap --prompt-only`
+
+The computer-wide graph is a pointer/provenance layer only. For this repo, living docs, generated readbacks, code, exact evidence artifacts, gateboard state, and the local `data/agent-control/` runtime graph remain authoritative.
+
 ## Coding Style: Minimal Senior-Dev Mode
 
 Prefer the smallest correct change.

@@ -1,0 +1,72 @@
+{
+  "title": "Memory graph first-pass lessons",
+  "summary": "Distilled lessons from implementing the first computer-wide and options-local memory graph/dreaming loop.",
+  "evidence": [
+    "C:\\Users\\kalec\\projects-memory\\dreams\\end-to-end-memory-graph-prompt.md",
+    "C:\\Users\\kalec\\options-chatbot\\docs\\autoresearch\\memory-graph-dreaming-goal.md",
+    "C:\\Users\\kalec\\options-chatbot\\docs\\agent-control-plane.md",
+    "C:\\Users\\kalec\\options-chatbot\\tests\\test_agent_control.py"
+  ],
+  "entries": [
+    {
+      "id": "end-to-end-artifact-required",
+      "type": "lesson",
+      "title": "End-to-end memory work requires the requested prompt artifact",
+      "body": "Do not stop after building memory infrastructure. When the user asks for an end-to-end prompt or runbook, create the reusable artifact, link it globally, copy it into the target repo, and verify discoverability.",
+      "confidence": "inferred",
+      "evidence": [
+        "docs/autoresearch/memory-graph-dreaming-goal.md",
+        "C:\\Users\\kalec\\projects-memory\\dreams\\end-to-end-memory-graph-prompt.md"
+      ],
+      "freshness_days": 180
+    },
+    {
+      "id": "global-memory-is-provenance",
+      "type": "constraint",
+      "title": "Global memory is not project authority",
+      "body": "The computer-wide projects-memory graph is an index and provenance layer only. Options facts remain authoritative in repo living docs, generated readbacks, code, exact evidence artifacts, gateboard state, and data/agent-control/agent_control.db.",
+      "confidence": "inferred",
+      "evidence": [
+        "C:\\Users\\kalec\\projects-memory\\SCHEMA.md",
+        "docs/agent-control-plane.md"
+      ],
+      "freshness_days": 365
+    },
+    {
+      "id": "dreams-are-non-authoritative",
+      "type": "constraint",
+      "title": "Dreams cannot authorize options actions",
+      "body": "Dream proposals and accepted dream-origin memories are context-improvement records only. They must not authorize trading, evidence mutation, broker paths, scanner policy changes, proof-bar changes, stop or sizing changes, promotion, live validation, or protected-holdout use.",
+      "confidence": "inferred",
+      "evidence": [
+        "docs/DECISIONS.md",
+        "docs/agent-control-plane.md"
+      ],
+      "freshness_days": 365
+    },
+    {
+      "id": "hashes-guard-reread",
+      "type": "lesson",
+      "title": "Use hashes as write guards and provenance, not decoration",
+      "body": "A source hash is valuable when it proves the reviewed source has not changed before capture or promotion. If a hash mismatches, fail closed, reread the source, and redraft the memory update.",
+      "confidence": "inferred",
+      "evidence": [
+        "scripts/agent_control.py",
+        "tests/test_agent_control.py"
+      ],
+      "freshness_days": 180
+    },
+    {
+      "id": "future-cas-hardening",
+      "type": "open_question",
+      "title": "Should runtime graph rows get SQL compare-and-swap hashes",
+      "body": "The first pass added file-level SHA guards for session and dream inputs, but full row-level compare-and-swap versioning for graph_nodes, graph_edges, tasks, and task reports remains a possible hardening step before multi-agent concurrent writes scale further.",
+      "confidence": "inferred",
+      "evidence": [
+        "tests/test_agent_control.py",
+        "scripts/agent_control.py"
+      ],
+      "freshness_days": 90
+    }
+  ]
+}

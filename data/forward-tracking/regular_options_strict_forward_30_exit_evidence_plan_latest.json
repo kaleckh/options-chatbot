@@ -1,0 +1,79 @@
+{
+  "auto_track_allowed": false,
+  "broker_order_allowed": false,
+  "cohort_append_performed": false,
+  "cohort_log_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+  "cohort_source": {
+    "error": null,
+    "exists": false,
+    "malformed_row_count": 0,
+    "path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+    "reason_codes": [
+      "cohort_log_not_created_yet"
+    ],
+    "required": false,
+    "row_count": 0,
+    "status": "missing"
+  },
+  "duplicate_completed_selection_count": 0,
+  "evidence_mutation_allowed": false,
+  "evidence_shape_counts": {},
+  "existing_completed_selection_count": 0,
+  "exit_completion_stager_command": "npm run options:goal-loop:strict-forward-30-exit-completion-stager -- --json",
+  "exit_evidence_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_evidence.jsonl",
+  "exit_evidence_rows_present_count": 0,
+  "exit_evidence_source": {
+    "exists": false,
+    "malformed_row_count": 0,
+    "path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_evidence.jsonl",
+    "row_count": 0,
+    "status": "missing"
+  },
+  "exit_requirements": [],
+  "generated_at_utc": "2026-06-27T05:39:00Z",
+  "guarded_append_after_staging_template": "npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_completion_candidate_rows.jsonl --approval-token APPROVE_PHASE2_FORWARD_COHORT_APPEND --market-window-confirmed",
+  "historical_rows_are_forward_proof": false,
+  "live_entry_allowed": false,
+  "open_forward_entry_count": 0,
+  "open_rows_with_existing_evidence_count": 0,
+  "pending_exit_evidence_count": 0,
+  "prohibited_actions": [
+    "do_not_append_from_exit_evidence_plan",
+    "do_not_write_exit_evidence_from_exit_evidence_plan",
+    "do_not_import_quotes_from_exit_evidence_plan",
+    "do_not_enable_live_validation_from_exit_evidence_plan",
+    "do_not_enable_auto_track_from_exit_evidence_plan",
+    "do_not_submit_broker_orders_from_exit_evidence_plan",
+    "do_not_force_policy_exit_to_manufacture_evidence",
+    "do_not_lower_proof_bars_from_exit_evidence_plan",
+    "do_not_treat_historical_rows_as_forward_proof"
+  ],
+  "promotion_ready": false,
+  "proof_bars_changed": false,
+  "quotes_imported": false,
+  "read_only": false,
+  "report_id": "regular_options_strict_forward_30_exit_evidence_plan",
+  "required_exit_evidence_fields": [
+    "selection_id",
+    "exit_quote_source",
+    "exit_quote_timestamp_utc",
+    "exit_bid",
+    "exit_ask",
+    "policy_exit_condition",
+    "net_pnl_usd"
+  ],
+  "schema_version": 1,
+  "status": "exit_evidence_plan_waiting_for_open_forward_rows",
+  "trusted_executable_quote_sources": [
+    "alpaca_opra",
+    "alpaca_opra_daily_snapshot",
+    "opra_nbbo",
+    "thetadata_opra_nbbo_1m",
+    "trusted_intraday_opra_nbbo",
+    "trusted_opra_nbbo"
+  ],
+  "writes_performed": [
+    "data/forward-tracking/regular_options_strict_forward_30_exit_evidence_plan_latest.json",
+    "docs/regular-options-strict-forward-30-exit-evidence-plan.md"
+  ]
+}

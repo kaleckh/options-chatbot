@@ -184,16 +184,16 @@ No live release. Market-window task: collect/review evidence only for `volatilit
 
 | Source | Status | Age hours | Generated at | Reasons |
 | --- | --- | ---: | --- | --- |
-| `candidate_outcome_ledger` | `loaded` | `3.39` | `2026-06-21T17:21:56Z` | `[]` |
-| `fill_attempt_evidence_capture_plan` | `loaded` | `3.41` | `2026-06-21T17:20:20Z` | `[]` |
-| `fresh_evidence_loop` | `loaded` | `3.41` | `2026-06-21T17:20:30Z` | `[]` |
-| `gateboard` | `loaded` | `3.38` | `2026-06-21T17:22:22Z` | `[]` |
-| `monthly_profitability` | `loaded` | `3.38` | `2026-06-21T17:22:27Z` | `[]` |
-| `open_position_risk` | `loaded` | `3.41` | `2026-06-21T17:20:19Z` | `[]` |
-| `paper_shadow_evidence_plan` | `loaded` | `0.0` | `2026-06-21T20:44:57Z` | `[]` |
-| `suggested_trade_close_risk` | `loaded` | `3.95` | `2026-06-21T16:47:57Z` | `[]` |
-| `suggested_trade_review_plan` | `loaded` | `3.72` | `2026-06-21T17:01:59Z` | `[]` |
-| `trade_qualification` | `loaded` | `3.38` | `2026-06-21T17:22:16Z` | `[]` |
+| `candidate_outcome_ledger` | `loaded` | `0.09` | `2026-06-27T03:48:42Z` | `[]` |
+| `fill_attempt_evidence_capture_plan` | `loaded` | `0.09` | `2026-06-27T03:48:43Z` | `[]` |
+| `fresh_evidence_loop` | `loaded` | `0.09` | `2026-06-27T03:48:42Z` | `[]` |
+| `gateboard` | `loaded` | `0.02` | `2026-06-27T03:53:00Z` | `[]` |
+| `monthly_profitability` | `loaded` | `0.06` | `2026-06-27T03:50:51Z` | `[]` |
+| `open_position_risk` | `loaded` | `0.09` | `2026-06-27T03:48:38Z` | `[]` |
+| `paper_shadow_evidence_plan` | `loaded` | `0.02` | `2026-06-27T03:52:56Z` | `[]` |
+| `suggested_trade_close_risk` | `loaded` | `0.09` | `2026-06-27T03:48:38Z` | `[]` |
+| `suggested_trade_review_plan` | `loaded` | `0.09` | `2026-06-27T03:48:43Z` | `[]` |
+| `trade_qualification` | `loaded` | `0.06` | `2026-06-27T03:50:52Z` | `[]` |
 
 Source status counts: `{"loaded": 10}`.
 

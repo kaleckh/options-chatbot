@@ -106,6 +106,14 @@ class Phase2ForwardPaperShadowCandidateStagerTests(unittest.TestCase):
                 "quote_source": "opra_nbbo",
                 "scan_run_id": "same-day-scan",
                 "entry_execution_price": 4.67,
+                "entry_quote_snapshot": {
+                    "quote_timestamp_utc": "2026-06-23T15:00:00Z",
+                    "quote_source": "opra_nbbo",
+                    "legs": [
+                        {"role": "long", "bid": 6.35, "ask": 6.37},
+                        {"role": "short", "bid": 1.70, "ask": 1.72},
+                    ],
+                },
             }
             _write_jsonl(scan_picks, [source_row])
 
@@ -122,6 +130,83 @@ class Phase2ForwardPaperShadowCandidateStagerTests(unittest.TestCase):
             self.assertEqual(report["status"], "candidate_rows_staged_validation_passed")
             self.assertTrue(report["validation"]["append_allowed"])
             self.assertTrue((root / "candidate.jsonl").exists())
+            staged = json.loads((root / "candidate.jsonl").read_text(encoding="utf8").splitlines()[0])
+            self.assertEqual(staged["scanner_run_id"], "same-day-scan")
+
+    def test_real_mode_rejects_missing_entry_quote_source_instead_of_defaulting_to_opra(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scan_picks = root / "scan_picks.jsonl"
+            source_row = {
+                "scan_date": "2026-06-23",
+                "ticker": "SPY",
+                "playbook_id": "volatility_expansion_observation",
+                "contract_symbol": "SPY260630C00753000",
+                "short_contract_symbol": "SPY260630C00765000",
+                "quote_timestamp_utc": "2026-06-23T15:00:00Z",
+                "scan_run_id": "same-day-scan",
+                "entry_quote_snapshot": {
+                    "quote_timestamp_utc": "2026-06-23T15:00:00Z",
+                    "legs": [
+                        {"role": "long", "bid": 6.35, "ask": 6.37},
+                        {"role": "short", "bid": 1.70, "ask": 1.72},
+                    ],
+                },
+            }
+            _write_jsonl(scan_picks, [source_row])
+
+            report = stager.build_stage_report(
+                source_scan_picks_path=scan_picks,
+                output_path=root / "candidate.jsonl",
+                latest_json_path=root / "latest.json",
+                docs_report_path=root / "report.md",
+                market_window_confirmed=True,
+                market_window_status="open",
+                generated_at_utc=NOW,
+            )
+
+            self.assertEqual(report["status"], "no_phase2_natural_selections")
+            self.assertEqual(report["candidate_rows_staged"], 0)
+            self.assertEqual(report["rejected_counts"]["missing_entry_quote_source"], 1)
+            self.assertFalse((root / "candidate.jsonl").exists())
+
+    def test_real_mode_rejects_untrusted_entry_quote_source(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scan_picks = root / "scan_picks.jsonl"
+            source_row = {
+                "scan_date": "2026-06-23",
+                "ticker": "SPY",
+                "playbook_id": "volatility_expansion_observation",
+                "contract_symbol": "SPY260630C00753000",
+                "short_contract_symbol": "SPY260630C00765000",
+                "quote_timestamp_utc": "2026-06-23T15:00:00Z",
+                "quote_source": "unknown_vendor",
+                "scan_run_id": "same-day-scan",
+                "entry_quote_snapshot": {
+                    "quote_timestamp_utc": "2026-06-23T15:00:00Z",
+                    "legs": [
+                        {"role": "long", "bid": 6.35, "ask": 6.37},
+                        {"role": "short", "bid": 1.70, "ask": 1.72},
+                    ],
+                },
+            }
+            _write_jsonl(scan_picks, [source_row])
+
+            report = stager.build_stage_report(
+                source_scan_picks_path=scan_picks,
+                output_path=root / "candidate.jsonl",
+                latest_json_path=root / "latest.json",
+                docs_report_path=root / "report.md",
+                market_window_confirmed=True,
+                market_window_status="open",
+                generated_at_utc=NOW,
+            )
+
+            self.assertEqual(report["status"], "no_phase2_natural_selections")
+            self.assertEqual(report["candidate_rows_staged"], 0)
+            self.assertEqual(report["rejected_counts"]["untrusted_entry_quote_source"], 1)
+            self.assertFalse((root / "candidate.jsonl").exists())
 
     def test_real_mode_does_not_stage_stale_scan_pick_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -152,6 +237,83 @@ class Phase2ForwardPaperShadowCandidateStagerTests(unittest.TestCase):
             self.assertEqual(report["status"], "no_phase2_natural_selections")
             self.assertEqual(report["candidate_rows_staged"], 0)
             self.assertEqual(report["rejected_counts"]["not_current_market_window_selection"], 1)
+
+    def test_default_selection_date_uses_new_york_market_date_not_utc_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scan_picks = root / "scan_picks.jsonl"
+            source_row = {
+                "scan_date": "2026-06-26",
+                "ticker": "SPY",
+                "playbook_id": "volatility_expansion_observation",
+                "contract_symbol": "SPY260630C00753000",
+                "short_contract_symbol": "SPY260630C00765000",
+                "quote_source": "opra_nbbo",
+                "quote_timestamp_utc": "2026-06-26T19:55:00Z",
+                "scan_run_id": "after-hours-source",
+                "entry_quote_snapshot": {
+                    "quote_timestamp_utc": "2026-06-26T19:55:00Z",
+                    "quote_source": "opra_nbbo",
+                    "legs": [
+                        {"role": "long", "bid": 6.35, "ask": 6.37},
+                        {"role": "short", "bid": 1.70, "ask": 1.72},
+                    ],
+                },
+            }
+            _write_jsonl(scan_picks, [source_row])
+
+            report = stager.build_stage_report(
+                source_scan_picks_path=scan_picks,
+                output_path=root / "candidate.jsonl",
+                latest_json_path=root / "latest.json",
+                docs_report_path=root / "report.md",
+                market_window_confirmed=True,
+                market_window_status="open",
+                generated_at_utc="2026-06-27T03:25:22Z",
+            )
+
+            self.assertEqual(report["status"], "candidate_rows_staged_validation_passed")
+            self.assertEqual(report["candidate_rows_staged"], 1)
+            self.assertTrue((root / "candidate.jsonl").exists())
+
+    def test_row_timestamp_fallback_uses_new_york_market_date_not_utc_date(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            scan_picks = root / "scan_picks.jsonl"
+            source_row = {
+                "ticker": "SPY",
+                "playbook_id": "volatility_expansion_observation",
+                "contract_symbol": "SPY260630C00753000",
+                "short_contract_symbol": "SPY260630C00765000",
+                "quote_source": "opra_nbbo",
+                "selection_timestamp_utc": "2026-06-27T01:25:00Z",
+                "quote_timestamp_utc": "2026-06-27T01:25:00Z",
+                "scanner_run_id": "late-utc-source",
+                "entry_quote_snapshot": {
+                    "quote_timestamp_utc": "2026-06-27T01:25:00Z",
+                    "quote_source": "opra_nbbo",
+                    "legs": [
+                        {"role": "long", "bid": 6.35, "ask": 6.37},
+                        {"role": "short", "bid": 1.70, "ask": 1.72},
+                    ],
+                },
+            }
+            _write_jsonl(scan_picks, [source_row])
+
+            report = stager.build_stage_report(
+                source_scan_picks_path=scan_picks,
+                output_path=root / "candidate.jsonl",
+                latest_json_path=root / "latest.json",
+                docs_report_path=root / "report.md",
+                market_window_confirmed=True,
+                market_window_status="open",
+                generated_at_utc="2026-06-27T03:25:22Z",
+            )
+            staged_rows = [json.loads(line) for line in (root / "candidate.jsonl").read_text(encoding="utf8").splitlines()]
+
+            self.assertEqual(report["status"], "candidate_rows_staged_validation_passed")
+            self.assertEqual(report["candidate_rows_staged"], 1)
+            self.assertEqual(staged_rows[0]["selection_date"], "2026-06-26")
 
     def test_report_counts_selection_lifecycle_once(self) -> None:
         entry = report_fixtures._row(

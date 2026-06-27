@@ -14,7 +14,6 @@ This generated report is read-only. It implements structure-specific broken-wing
 
 - `missing_index_broken_wing_quote_surface`
 - `missing_point_in_time_downside_skew_inputs`
-- `missing_point_in_time_vix_bucket`
 
 ## Blocker Burndown
 
@@ -26,7 +25,6 @@ This generated report is read-only. It implements structure-specific broken-wing
 | `missing_index_broken_wing_quote_surface` | `unresolved` | Required before bounded replay; this harness does not import data or mutate evidence. |
 | `missing_max_loss_margin_convention` | `satisfied_by_harness` | Covered by deterministic BWB pricing, geometry, max-risk, denominator, assignment/expiry, strict-new, holdout, and proof-boundary logic. |
 | `missing_point_in_time_downside_skew_inputs` | `unresolved` | Required before bounded replay; this harness does not import data or mutate evidence. |
-| `missing_point_in_time_vix_bucket` | `unresolved` | Required before bounded replay; this harness does not import data or mutate evidence. |
 | `missing_proof_boundary_labeling` | `satisfied_by_harness` | Covered by deterministic BWB pricing, geometry, max-risk, denominator, assignment/expiry, strict-new, holdout, and proof-boundary logic. |
 | `missing_protected_holdout_guard` | `satisfied_by_harness` | Covered by deterministic BWB pricing, geometry, max-risk, denominator, assignment/expiry, strict-new, holdout, and proof-boundary logic. |
 | `missing_strict_new_identity` | `satisfied_by_harness` | Covered by deterministic BWB pricing, geometry, max-risk, denominator, assignment/expiry, strict-new, holdout, and proof-boundary logic. |

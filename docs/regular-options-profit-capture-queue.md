@@ -7,12 +7,12 @@ This report is generated from `scripts/build_regular_options_profit_capture_queu
 - Status: `research_paper_capture_queue`.
 - Queue rows: `97`.
 - Tier counts: `{"tier_a_clean_exact_capture": 15, "tier_b_profitable_watch_repair": 82}`.
-- Selection readiness: `{"blocked_guardrail_only": 1, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
+- Selection readiness: `{"blocked_guardrail_only": 2, "do_not_chase": 173, "paper_review_candidate": 15, "watch_repair_only": 82}`.
 - Evidence repair priorities: `{"high": 16, "low": 43, "medium": 23, "none": 15}`.
 - Repair actionability: `{"current_source_exhausted": 13, "lookahead_only_not_exact_proof": 23, "needs_status_or_forward_validation_after_repair": 3, "no_repair_needed_clean_exact": 15, "not_applicable": 43}`.
-- Fresh scan matches: `1` with decisions `{"blocked": 1}`.
-- Tier A fresh-match bridge: `0` with statuses `{"not_bridge_eligible": 1}`.
-- Blocked but interesting: `1`.
+- Fresh scan matches: `2` with decisions `{"blocked": 2}`.
+- Tier A fresh-match bridge: `0` with statuses `{"not_bridge_eligible": 2}`.
+- Blocked but interesting: `0`.
 - Quarantine queue rows: `173`.
 - Live policy change: `False`.
 
@@ -76,13 +76,13 @@ This report is generated from `scripts/build_regular_options_profit_capture_queu
 
 | Tier | Readiness | Bridge | Symbol | Playbook | Decision | Match | Executable | Debit % | Quality | Matched sleeves | Reasons |
 |---|---|---|---|---|---|---|---|---:|---:|---|---|
-| blocked_but_interesting | blocked_guardrail_only | not_bridge_eligible | VST | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | 33.6 | 75.3 |  | Lane profitability gate blocked candidate: missing_lane_profitability_gate_report_or_lane_row. |
+| blocked_but_interesting | blocked_guardrail_only | not_bridge_eligible | RIO | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | 57.75 | 66.1 |  | AI Commodity Infra has no trusted daily EOD option history loaded for RIO yet; treat this as discovery-only until Theta history is imported.; Quality score 66.1 is below the AI Commodity Infra minimum of 70.0.; Spread debit is 57.8% of width, above the AI Commodity Infra cap of 55.0%.; Lane profitability gate blocked candidate: lane_profitability_gate_report_stale. |
+| blocked_but_interesting | blocked_guardrail_only | not_bridge_eligible | SLV | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | 42.3 | 50.5 |  | Quality score 50.5 is below the AI Commodity Infra minimum of 70.0.; Lane profitability gate blocked candidate: lane_profitability_gate_report_stale. |
 
 ## Blocked But Interesting
 
 | Tier | Readiness | Bridge | Symbol | Playbook | Decision | Match | Executable | Debit % | Quality | Matched sleeves | Reasons |
 |---|---|---|---|---|---|---|---|---:|---:|---|---|
-| blocked_but_interesting | blocked_guardrail_only | not_bridge_eligible | VST | ai_commodity_infra_observation | blocked | no_symbol_sleeve | True | 33.6 | 75.3 |  | Lane profitability gate blocked candidate: missing_lane_profitability_gate_report_or_lane_row. |
 
 ## Evidence Repair Queue
 
@@ -140,5 +140,5 @@ This report is generated from `scripts/build_regular_options_profit_capture_queu
 |---|---|---|---|
 | regular_options_symbol_sleeves | ok | 2026-06-14T01:29:49Z | data/profitability-lab/regular-options-symbol-sleeves/latest.json |
 | current_policy_historical_picks | ok | 2026-06-01T05:47:42Z | data/forward-tracking/current_policy_historical_picks_latest.json |
-| regular_guardrail_starvation | ok | 2026-06-18T17:05:50Z | data/forward-tracking/regular_guardrail_starvation_latest.json |
+| regular_guardrail_starvation | ok | 2026-06-26T17:04:08Z | data/forward-tracking/regular_guardrail_starvation_latest.json |
 | regular_options_repair_attempt_readback | ok | 2026-06-05T01:06:45Z | data/profitability-lab/regular-options-repair-attempts/latest.json |

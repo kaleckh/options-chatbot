@@ -422,7 +422,9 @@ def build_report(
                 "branch": "direct_vix_source_repair",
                 "status": direct_vix.get("status"),
                 "flow_blockers": [],
-                "remaining_non_flow_blockers": ["direct_vix_source_import_materialization_pending"],
+                "remaining_non_flow_blockers": []
+                if direct_vix.get("status") == "direct_vix_source_repair_packet_superseded_by_materialized_vix"
+                else ["direct_vix_source_import_materialization_pending"],
                 "would_clear_flow_blocker_if_future_source_passes": False,
             },
         ],

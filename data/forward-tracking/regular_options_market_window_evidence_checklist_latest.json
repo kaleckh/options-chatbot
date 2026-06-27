@@ -9,10 +9,12 @@
     "lane_id": "volatility_expansion_observation",
     "operator_action": "paper-shadow evidence collection only; capture fresh exact entries and policy-defined exact exits.",
     "profit_factor": 1.83,
-    "promotion_state": "paper_probation",
+    "promotion_state": "diagnostic",
     "reason_codes": [
       "fresh_paper_cohort",
       "fresh_paper_cohort_insufficient",
+      "lane_profitability_gate_report_unusable",
+      "lane_profitability_report_clean",
       "walk_forward_holdout_depth",
       "walk_forward_holdout_too_small_or_failed",
       "no_chase_active",
@@ -141,6 +143,8 @@
         "fresh_paper_cohort",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
+        "lane_profitability_gate_report_unusable",
+        "lane_profitability_report_clean",
         "profit_factor_below_lane_gate",
         "profitable_lane_gate",
         "recent_cohort_circuit_breaker_active",
@@ -1197,6 +1201,8 @@
         "fresh_paper_cohort",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
+        "lane_profitability_gate_report_unusable",
+        "lane_profitability_report_clean",
         "profit_factor_below_lane_gate",
         "profitable_lane_gate",
         "recent_cohort_circuit_breaker_active",
@@ -1415,7 +1421,7 @@
     "waiting_action_count": 15
   },
   "exact_realized_pnl_count": 0,
-  "generated_at_utc": "2026-06-21T20:45:05Z",
+  "generated_at_utc": "2026-06-27T03:54:10Z",
   "is_trade_recommendation": false,
   "live_entry_allowed": false,
   "market_window_status": "unknown",
@@ -1535,10 +1541,10 @@
   "scope": "regular_options_market_window_evidence_capture_checklist",
   "source_artifacts": {
     "candidate_outcome_ledger": {
-      "age_hours": 3.39,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:56Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_candidate_outcome_ledger_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_candidate_outcome_ledger",
@@ -1546,10 +1552,10 @@
       "status": "loaded"
     },
     "fill_attempt_evidence_capture_plan": {
-      "age_hours": 3.41,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:20Z",
+      "generated_at_utc": "2026-06-27T03:48:43Z",
       "path": "data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_fill_attempt_evidence_capture_plan",
@@ -1557,10 +1563,10 @@
       "status": "loaded"
     },
     "fresh_evidence_loop": {
-      "age_hours": 3.41,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:30Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_fresh_evidence_loop",
@@ -1568,10 +1574,10 @@
       "status": "loaded"
     },
     "gateboard": {
-      "age_hours": 3.38,
+      "age_hours": 0.02,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:22:22Z",
+      "generated_at_utc": "2026-06-27T03:53:00Z",
       "path": "data/forward-tracking/project_operator_gateboard_latest.json",
       "reason_codes": [],
       "report_id": "project_operator_gateboard",
@@ -1579,10 +1585,10 @@
       "status": "loaded"
     },
     "monthly_profitability": {
-      "age_hours": 3.38,
+      "age_hours": 0.06,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:22:27Z",
+      "generated_at_utc": "2026-06-27T03:50:51Z",
       "path": "data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json",
       "reason_codes": [],
       "report_id": "monthly_all_lanes_profitability_audit",
@@ -1590,10 +1596,10 @@
       "status": "loaded"
     },
     "open_position_risk": {
-      "age_hours": 3.41,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:19Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "reason_codes": [],
       "report_id": "open_position_risk",
@@ -1601,10 +1607,10 @@
       "status": "loaded"
     },
     "paper_shadow_evidence_plan": {
-      "age_hours": 0.0,
+      "age_hours": 0.02,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T20:44:57Z",
+      "generated_at_utc": "2026-06-27T03:52:56Z",
       "path": "data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_paper_shadow_evidence_plan",
@@ -1612,10 +1618,10 @@
       "status": "loaded"
     },
     "suggested_trade_close_risk": {
-      "age_hours": 3.95,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T16:47:57Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
       "reason_codes": [],
       "report_id": "suggested_trade_close_risk",
@@ -1623,10 +1629,10 @@
       "status": "loaded"
     },
     "suggested_trade_review_plan": {
-      "age_hours": 3.72,
+      "age_hours": 0.09,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:01:59Z",
+      "generated_at_utc": "2026-06-27T03:48:43Z",
       "path": "data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_suggested_trade_review_plan",
@@ -1634,10 +1640,10 @@
       "status": "loaded"
     },
     "trade_qualification": {
-      "age_hours": 3.38,
+      "age_hours": 0.06,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:22:16Z",
+      "generated_at_utc": "2026-06-27T03:50:52Z",
       "path": "data/forward-tracking/regular_options_trade_qualification_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_trade_qualification",

@@ -1289,6 +1289,176 @@ class AgentControlTests(unittest.TestCase):
         self.assertGreaterEqual(digest["graph_counts"]["blocker"], 1)
         self.assertEqual(digest["recent_events"][0]["event_type"], "task.reported")
 
+    def test_session_log_requires_matching_hash_and_safe_path(self):
+        repo_root = self.root / "session-repo"
+        self._write_repo_file(repo_root, "docs/session.md", "# Session\nUseful lesson.\n")
+        transcript = repo_root / "docs/session.md"
+        expected_hash = agent_control._file_sha256(transcript)
+
+        logged = agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="session-safe",
+            title="Safe session",
+            summary="Captured useful lesson.",
+            expected_sha256=expected_hash,
+        )
+
+        self.assertEqual(logged["source_sha256"], expected_hash)
+        session_graph = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Safe session",
+            metadata_filter={"source_type": "session_transcript"},
+            max_depth=0,
+        )
+        self.assertEqual(session_graph["graph_context"]["seed_node_ids"], ["session:session-safe"])
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.log_session(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                transcript_path=Path("docs/session.md"),
+                repo_root=repo_root,
+                expected_sha256="0" * 64,
+            )
+
+        self._write_repo_file(repo_root, ".env", "SECRET=value\n")
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.log_session(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                transcript_path=Path(".env"),
+                repo_root=repo_root,
+            )
+
+    def test_dream_propose_accept_and_reject_lifecycle(self):
+        repo_root = self.root / "dream-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/dream.json",
+            json.dumps(
+                {
+                    "title": "Nightly memory cleanup",
+                    "summary": "Deduplicate bootstrap lessons.",
+                    "entries": [
+                        {
+                            "id": "bootstrap-lesson",
+                            "type": "lesson",
+                            "title": "Run bootstrap before graph queries",
+                            "body": "Fresh agent sessions should recover checkpoint and gateboard context before assigning workers.",
+                            "confidence": "inferred",
+                            "evidence": ["session:session-safe"],
+                        }
+                    ],
+                }
+            ),
+        )
+        proposal_path = repo_root / "docs/dream.json"
+        proposal_hash = agent_control._file_sha256(proposal_path)
+
+        proposed = agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/dream.json"),
+            repo_root=repo_root,
+            dream_id="nightly-1",
+            expected_sha256=proposal_hash,
+        )
+        accepted = agent_control.accept_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dream_id="nightly-1",
+            accepted_by="CEO",
+        )
+
+        self.assertEqual(proposed["entry_count"], 1)
+        self.assertEqual(accepted["status"], "accepted")
+        self.assertEqual(
+            accepted["accepted_memory_ids"],
+            ["memory:lesson:dream:nightly-1:bootstrap-lesson"],
+        )
+        memory = agent_control.query_graph(
+            db_path=self.db_path,
+            query="bootstrap graph queries",
+            metadata_filter={"origin": "dreaming", "non_authoritative": True},
+            memory_type="lesson",
+            max_depth=1,
+        )
+        self.assertEqual(memory["graph_context"]["seed_node_ids"], accepted["accepted_memory_ids"])
+        node = next(node for node in memory["graph_context"]["nodes"] if node["id"] == accepted["accepted_memory_ids"][0])
+        self.assertEqual(node["metadata"]["confidence"], "inferred")
+        self.assertTrue(node["metadata"]["does_not_authorize_trading_or_evidence_mutation"])
+
+        self._write_repo_file(
+            repo_root,
+            "docs/reject-dream.json",
+            json.dumps(
+                {
+                    "title": "Reject me",
+                    "entries": [
+                        {
+                            "type": "open_question",
+                            "title": "Speculative question",
+                            "body": "This should remain unaccepted.",
+                        }
+                    ],
+                }
+            ),
+        )
+        agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/reject-dream.json"),
+            repo_root=repo_root,
+            dream_id="nightly-2",
+        )
+        rejected = agent_control.reject_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dream_id="nightly-2",
+            reason="Weak evidence.",
+        )
+        self.assertEqual(rejected["status"], "rejected")
+        listed = agent_control.list_dreams(db_path=self.db_path, status="rejected")
+        self.assertEqual([node["id"] for node in listed["dreams"]], ["dream:nightly-2"])
+
+    def test_dream_accept_rejects_observed_without_evidence(self):
+        repo_root = self.root / "observed-dream-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/dream.json",
+            json.dumps(
+                {
+                    "title": "Unsupported observation",
+                    "entries": [
+                        {
+                            "id": "unsupported",
+                            "type": "lesson",
+                            "title": "Unsupported observed lesson",
+                            "body": "Observed claims need evidence.",
+                            "confidence": "observed",
+                        }
+                    ],
+                }
+            ),
+        )
+        agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/dream.json"),
+            repo_root=repo_root,
+            dream_id="unsupported-observed",
+        )
+
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.accept_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                dream_id="unsupported-observed",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

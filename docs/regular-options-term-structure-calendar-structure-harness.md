@@ -11,8 +11,6 @@ This generated report is read-only. It implements structure-specific calendar/di
 
 - `missing_index_calendar_quote_surface`
 - `missing_point_in_time_term_structure_inputs`
-- `missing_preregistered_calendar_diagonal_geometry`
-- `missing_strict_new_dedupe`
 
 ## Blocker Burndown
 
@@ -25,11 +23,11 @@ This generated report is read-only. It implements structure-specific calendar/di
 | `missing_index_calendar_quote_surface` | `unresolved` | Required before any bounded replay; no data import or policy change was performed. |
 | `missing_net_usd_pnl_after_costs` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
 | `missing_point_in_time_term_structure_inputs` | `unresolved` | Required before any bounded replay; no data import or policy change was performed. |
-| `missing_preregistered_calendar_diagonal_geometry` | `unresolved` | Required before any bounded replay; no data import or policy change was performed. |
+| `missing_preregistered_calendar_diagonal_geometry` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
 | `missing_proof_boundary_labeling` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
 | `missing_protected_holdout_guard` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
 | `missing_roll_or_expiry_policy` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
-| `missing_strict_new_dedupe` | `unresolved` | Required before any bounded replay; no data import or policy change was performed. |
+| `missing_strict_new_dedupe` | `satisfied_by_harness` | Covered by deterministic structure math, denominator, assignment/expiry, roll, P&L, holdout, and proof-boundary logic. |
 
 ## Forbidden Actions
 

@@ -1,0 +1,162 @@
+{
+  "artifacts": {
+    "docs_report": "docs/regular-options-strict-forward-scan-task-health.md",
+    "json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T053859Z.json",
+    "latest_json": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
+    "latest_markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.md",
+    "markdown": "data/forward-tracking/regular_options_strict_forward_scan_task_health_20260627T053859Z.md"
+  },
+  "blockers": [],
+  "expected": {
+    "acceptable_statuses": [
+      "Ready",
+      "Running"
+    ],
+    "batch_steps": [
+      "set OPTIONS_SCAN_AUTO_TRACK=0",
+      "set OPTIONS_SCAN_ENFORCE_PORTFOLIO_CAPS=1",
+      "set OPTIONS_ENFORCE_LANE_PROFITABILITY_GATE=1",
+      "scripts\\run_forward_cohort_scan_sweep.py --force",
+      "scripts\\run_regular_options_strict_forward_30_auto_window_collector.py --skip-scan-sweep --json",
+      "scripts\\build_regular_options_strict_forward_30_scheduler_health.py --json",
+      "scripts\\build_regular_options_strict_forward_scan_task_health.py --json",
+      "scripts\\build_regular_options_strict_forward_30_candidate_review_packet.py --json",
+      "scripts\\build_regular_options_strict_forward_30_exit_evidence_plan.py --json",
+      "scripts\\build_regular_options_strict_forward_30_exit_completion_stager.py --json",
+      "scripts\\build_regular_options_strict_forward_30_lifecycle_audit.py --json",
+      "scripts\\build_regular_options_strict_forward_30_completion_monitor.py --json"
+    ],
+    "scheduled_task_state": "Enabled",
+    "tasks": {
+      "\\OptionsScanPicks": {
+        "start_time": "11:00:00 AM",
+        "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_scan_picks.bat"
+      },
+      "\\OptionsScanPicksSafetyNet": {
+        "start_time": "11:30:00 AM",
+        "task_to_run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_scan_picks_safety_net.bat"
+      }
+    },
+    "weekdays_required": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ]
+  },
+  "generated_at_utc": "2026-06-27T05:38:59Z",
+  "prohibited_actions": [
+    "do_not_append_from_scan_task_health",
+    "do_not_enable_live_validation_from_scan_task_health",
+    "do_not_enable_auto_track_from_scan_task_health",
+    "do_not_submit_broker_orders_from_scan_task_health",
+    "do_not_import_quotes_from_scan_task_health",
+    "do_not_lower_proof_bars_from_scan_task_health",
+    "do_not_treat_historical_rows_as_forward_proof"
+  ],
+  "report_id": "regular_options_strict_forward_scan_task_health",
+  "safety": {
+    "append_allowed": false,
+    "auto_track_allowed": false,
+    "broker_order_allowed": false,
+    "historical_rows_are_forward_proof": false,
+    "live_entry_allowed": false,
+    "proof_bars_changed": false,
+    "quotes_imported": false
+  },
+  "schema_version": 1,
+  "status": "scan_tasks_ready_for_next_market_window",
+  "task_reports": {
+    "\\OptionsScanPicks": {
+      "batch_file": {
+        "exists": true,
+        "missing_steps": [],
+        "order_blockers": [],
+        "path": "scripts/run_scan_picks.bat",
+        "prohibited_tokens_present": [],
+        "status": "loaded"
+      },
+      "blockers": [],
+      "query_returncode": 0,
+      "query_stderr": [],
+      "status": "ready",
+      "task": {
+        "Author": "KAESDEVICE\\kalec",
+        "Comment": "N/A",
+        "Days": "MON, TUE, WED, THU, FRI",
+        "Delete Task If Not Rescheduled": "Disabled",
+        "End Date": "N/A",
+        "Folder": "\\",
+        "HostName": "KAESDEVICE",
+        "Idle Time": "Disabled",
+        "Last Result": "0",
+        "Last Run Time": "6/26/2026 11:00:00 AM",
+        "Logon Mode": "Interactive only",
+        "Months": "Every 1 week(s)",
+        "Next Run Time": "6/29/2026 11:00:00 AM",
+        "Power Management": "Stop On Battery Mode, No Start On Batteries",
+        "Repeat: Every": "Disabled",
+        "Repeat: Stop If Still Running": "Disabled",
+        "Repeat: Until: Duration": "Disabled",
+        "Repeat: Until: Time": "Disabled",
+        "Run As User": "kalec",
+        "Schedule": "Scheduling data is not available in this format.",
+        "Schedule Type": "Weekly",
+        "Scheduled Task State": "Enabled",
+        "Start Date": "4/22/2026",
+        "Start In": "N/A",
+        "Start Time": "11:00:00 AM",
+        "Status": "Ready",
+        "Stop Task If Runs X Hours and X Mins": "72:00:00",
+        "Task To Run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_scan_picks.bat",
+        "TaskName": "\\OptionsScanPicks"
+      }
+    },
+    "\\OptionsScanPicksSafetyNet": {
+      "batch_file": {
+        "exists": true,
+        "missing_steps": [],
+        "order_blockers": [],
+        "path": "scripts/run_scan_picks_safety_net.bat",
+        "prohibited_tokens_present": [],
+        "status": "loaded"
+      },
+      "blockers": [],
+      "query_returncode": 0,
+      "query_stderr": [],
+      "status": "ready",
+      "task": {
+        "Author": "N/A",
+        "Comment": "Runs the options scan if the normal daily scan did not write a ledger session.",
+        "Days": "MON, TUE, WED, THU, FRI",
+        "Delete Task If Not Rescheduled": "Disabled",
+        "End Date": "N/A",
+        "Folder": "\\",
+        "HostName": "KAESDEVICE",
+        "Idle Time": "Disabled",
+        "Last Result": "0",
+        "Last Run Time": "6/26/2026 11:30:00 AM",
+        "Logon Mode": "Interactive only",
+        "Months": "Every 1 week(s)",
+        "Next Run Time": "6/29/2026 11:30:00 AM",
+        "Power Management": "Stop On Battery Mode, No Start On Batteries",
+        "Repeat: Every": "Disabled",
+        "Repeat: Stop If Still Running": "Disabled",
+        "Repeat: Until: Duration": "Disabled",
+        "Repeat: Until: Time": "Disabled",
+        "Run As User": "kalec",
+        "Schedule": "Scheduling data is not available in this format.",
+        "Schedule Type": "Weekly",
+        "Scheduled Task State": "Enabled",
+        "Start Date": "5/5/2026",
+        "Start In": "N/A",
+        "Start Time": "11:30:00 AM",
+        "Status": "Ready",
+        "Stop Task If Runs X Hours and X Mins": "00:45:00",
+        "Task To Run": "C:\\Users\\kalec\\options-chatbot\\scripts\\run_scan_picks_safety_net.bat",
+        "TaskName": "\\OptionsScanPicksSafetyNet"
+      }
+    }
+  }
+}

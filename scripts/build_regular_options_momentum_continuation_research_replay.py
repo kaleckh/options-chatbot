@@ -24,6 +24,9 @@ DEFAULT_ALL_PLANNED = (
     ROOT / "data" / "profitability-lab" / "regular-options-autoresearch" / "all-planned-sleeves" / "latest.json"
 )
 DEFAULT_GOAL_LOOP = ROOT / "data" / "forward-tracking" / "options_goal_loop_latest.json"
+DEFAULT_POINT_IN_TIME_VIX_BUCKET = (
+    ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-vix-bucket" / "latest.json"
+)
 DEFAULT_RUNS_DIR = ROOT / "data" / "options-validation" / "runs"
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-research-replay"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-momentum-continuation-research-replay.md"
@@ -129,6 +132,30 @@ def _parse_date(value: Any) -> date | None:
         return date.fromisoformat(str(value)[:10])
     except ValueError:
         return None
+
+
+def _vix_artifact_ready(payload: dict[str, Any]) -> bool:
+    return (
+        payload.get("status") == "point_in_time_vix_bucket_ready"
+        and _as_list(payload.get("blockers")) == []
+        and payload.get("point_in_time_vix_low_mid_bucket_available") is True
+    )
+
+
+def _vix_bucket_index(payload: dict[str, Any]) -> set[str]:
+    if not _vix_artifact_ready(payload):
+        return set()
+    dates: set[str] = set()
+    for item in _as_list(payload.get("bucket_rows")):
+        row = _as_dict(item)
+        if (
+            row.get("point_in_time_valid") is True
+            and row.get("source_provenance_status") == "trusted_local_or_contract_declared"
+            and str(row.get("vix_bucket") or "").lower() in {"low", "mid", "high"}
+            and row.get("bucket_date_et")
+        ):
+            dates.add(str(row["bucket_date_et"]))
+    return dates
 
 
 def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -274,6 +301,7 @@ def _row_reasons(
     *,
     run: dict[str, Any],
     seen_keys: set[str],
+    vix_bucket_dates: set[str],
 ) -> list[str]:
     reasons: list[str] = []
     ticker = str(row.get("ticker") or "").upper()
@@ -295,7 +323,7 @@ def _row_reasons(
         reasons.append("missing_side_aware_entry_bid_ask")
     if not _has_side_aware_exit(row):
         reasons.append("missing_side_aware_exit_bid_ask")
-    if not _has_any_key(row, ("vix",)):
+    if not _has_any_key(row, ("vix",)) and str(row.get("date") or row.get("entry_date") or "")[:10] not in vix_bucket_dates:
         reasons.append("missing_point_in_time_vix_bucket")
     if not _has_any_key(row, ("breadth", "advance_decline", "adv_dec")):
         reasons.append("missing_point_in_time_breadth_confirmation")
@@ -335,8 +363,8 @@ def _denominator_status(reasons: list[str]) -> str:
     return "exact_entry_and_policy_exit_captured"
 
 
-def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path, seen_keys: set[str]) -> dict[str, Any]:
-    reasons = _row_reasons(row, run=run, seen_keys=seen_keys)
+def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path, seen_keys: set[str], vix_bucket_dates: set[str]) -> dict[str, Any]:
+    reasons = _row_reasons(row, run=run, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates)
     status = _denominator_status(reasons)
     key = _dedupe_key(row)
     seen_keys.add(key)
@@ -372,10 +400,11 @@ def _denominator_row(row: dict[str, Any], *, run: dict[str, Any], run_path: Path
     }
 
 
-def _load_run_denominator_rows(run_paths: list[Path]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _load_run_denominator_rows(run_paths: list[Path], *, vix_bucket_dates: set[str] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     rows: list[dict[str, Any]] = []
     metas: list[dict[str, Any]] = []
     seen_keys: set[str] = set()
+    vix_bucket_dates = vix_bucket_dates or set()
     for path in run_paths:
         run, meta = _load_json(path, required=False)
         meta["trade_count"] = len(_as_list(run.get("trades")))
@@ -386,10 +415,10 @@ def _load_run_denominator_rows(run_paths: list[Path]) -> tuple[list[dict[str, An
             continue
         for trade in _as_list(run.get("trades")):
             source = _as_dict(trade)
-            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys))
+            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates))
         for trade in _as_list(run.get("unpriced_trades")):
             source = _as_dict(trade)
-            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys))
+            rows.append(_denominator_row(source, run=run, run_path=path, seen_keys=seen_keys, vix_bucket_dates=vix_bucket_dates))
     return rows, metas
 
 
@@ -482,6 +511,7 @@ def build_report(
     selector_path: Path = DEFAULT_SELECTOR,
     all_planned_path: Path = DEFAULT_ALL_PLANNED,
     goal_loop_path: Path = DEFAULT_GOAL_LOOP,
+    point_in_time_vix_bucket_path: Path = DEFAULT_POINT_IN_TIME_VIX_BUCKET,
     runs_dir: Path = DEFAULT_RUNS_DIR,
     run_paths: list[Path] | None = None,
     generated_at_utc: str | None = None,
@@ -490,8 +520,10 @@ def build_report(
     selector, selector_meta = _load_json(selector_path, required=True)
     all_planned, all_planned_meta = _load_json(all_planned_path, required=True)
     goal_loop, goal_loop_meta = _load_json(goal_loop_path, required=False)
+    point_in_time_vix_bucket, vix_meta = _load_json(point_in_time_vix_bucket_path, required=False)
+    vix_bucket_dates = _vix_bucket_index(point_in_time_vix_bucket)
     selected_paths = run_paths if run_paths is not None else _candidate_run_paths(all_planned, runs_dir)
-    denominator_rows, run_metas = _load_run_denominator_rows(selected_paths)
+    denominator_rows, run_metas = _load_run_denominator_rows(selected_paths, vix_bucket_dates=vix_bucket_dates)
     proof_rows = [row for row in denominator_rows if row.get("proof_qualified") is True]
     diagnostic_priced = [row for row in denominator_rows if row.get("diagnostic_net_pnl_usd") is not None]
     status_counts = Counter(str(row.get("denominator_status")) for row in denominator_rows)
@@ -535,6 +567,7 @@ def build_report(
             "readiness_selector": selector_meta,
             "all_planned_sleeves": all_planned_meta,
             "goal_loop": goal_loop_meta,
+            "point_in_time_vix_bucket": vix_meta,
             "run_artifacts": run_metas,
         },
         "source_validations": {
@@ -545,6 +578,8 @@ def build_report(
             "selector_top_candidate_matches": _as_dict(selector.get("top_ranked_candidate")).get("concept_id") == CONCEPT_ID,
             "run_artifact_count": len(run_metas),
             "trusted_intraday_run_artifact_count": sum(1 for item in run_metas if item.get("trusted_intraday_source")),
+            "point_in_time_vix_bucket_ready": _vix_artifact_ready(point_in_time_vix_bucket),
+            "point_in_time_vix_bucket_date_count": len(vix_bucket_dates),
         },
         "eligible_universe": sorted(PERMITTED_RESEARCH_UNIVERSE),
         "index_breadth_carriers": sorted(INDEX_BREADTH_CARRIERS),
@@ -729,6 +764,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--selector", type=Path, default=DEFAULT_SELECTOR)
     parser.add_argument("--all-planned", type=Path, default=DEFAULT_ALL_PLANNED)
     parser.add_argument("--goal-loop", type=Path, default=DEFAULT_GOAL_LOOP)
+    parser.add_argument("--point-in-time-vix-bucket", type=Path, default=DEFAULT_POINT_IN_TIME_VIX_BUCKET)
     parser.add_argument("--runs-dir", type=Path, default=DEFAULT_RUNS_DIR)
     parser.add_argument("--run", action="append", type=Path, dest="run_paths", default=None)
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
@@ -742,6 +778,7 @@ def main(argv: list[str] | None = None) -> int:
         selector_path=args.selector,
         all_planned_path=args.all_planned,
         goal_loop_path=args.goal_loop,
+        point_in_time_vix_bucket_path=args.point_in_time_vix_bucket,
         runs_dir=args.runs_dir,
         run_paths=args.run_paths,
     )

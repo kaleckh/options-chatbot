@@ -161,12 +161,14 @@ def _run_provenance(scan_result: dict[str, Any] | None = None) -> dict[str, Any]
 
 def _provenance_fields(scan_result: dict[str, Any] | None = None) -> dict[str, Any]:
     provenance = _run_provenance(scan_result)
+    run_id = provenance.get("run_id")
     return {
         "scan_host": provenance.get("host"),
         "scan_commit_sha": provenance.get("commit_sha"),
         "scan_short_commit_sha": provenance.get("short_commit_sha"),
         "scan_branch": provenance.get("branch"),
-        "scan_run_id": provenance.get("run_id"),
+        "scan_run_id": run_id,
+        "scanner_run_id": run_id,
     }
 
 
@@ -710,6 +712,9 @@ def _build_log_record(
         "quote_timestamp_utc": pick.get("quote_timestamp_utc"),
         "quote_timestamp_et": pick.get("quote_timestamp_et"),
         "quote_timestamp_source": pick.get("quote_timestamp_source"),
+        "entry_quote_source": pick.get("entry_quote_source"),
+        "entry_quote_timestamp_utc": pick.get("entry_quote_timestamp_utc"),
+        "entry_quote_timestamp_et": pick.get("entry_quote_timestamp_et"),
         "iv_rank_source": pick.get("iv_rank_source"),
         "iv_rank_proof_grade": pick.get("iv_rank_proof_grade"),
         "iv_rank_quality_flag": pick.get("iv_rank_quality_flag"),
@@ -1228,6 +1233,7 @@ def _record_forward_ledger_snapshot(
         for cohort_id in requested_cohort_ids
         if scan_funnel is not None
     }
+    scan_drop_reasons = _safe_dict(scan_result.get("scan_drop_reasons"))
 
     snapshot = build_forward_scan_snapshot(
         picks=list(scan_result.get("picks") or []),
@@ -1252,6 +1258,7 @@ def _record_forward_ledger_snapshot(
         evidence_class="live_production",
         is_fixture=False,
         policy_artifact_id="scheduled_scan",
+        symbol_diagnostics={"scan_drop_reasons": scan_drop_reasons} if scan_drop_reasons else {},
     )
     snapshot["operational_provenance"] = _run_provenance(scan_result)
     try:

@@ -1,5 +1,5 @@
 {
-  "generated_at_utc": "2026-06-21T17:22:02Z",
+  "generated_at_utc": "2026-06-27T03:50:51Z",
   "input_health": {
     "current_policy_circuit_breaker_loaded": true,
     "filter_matrix_loaded": true,
@@ -28,15 +28,11 @@
     },
     "fresh_evidence_loop_loaded": true,
     "lane_profitability_gate": {
-      "age_hours": 0.0313,
+      "age_hours": 130.5115,
       "generated_at_utc": "2026-06-21T17:20:10Z",
-      "latest_intraday_quote_date": "2026-06-08",
-      "mark_unpriced_count": 0,
       "max_age_hours": 36.0,
-      "reason": "lane_profitability_gate_report_fresh",
-      "tracked_row_count": 4,
-      "tracked_rows_with_stored_pnl": 4,
-      "usable": true
+      "reason": "lane_profitability_gate_report_stale",
+      "usable": false
     },
     "open_risk_governor": {
       "blockers": [],
@@ -45,8 +41,8 @@
     },
     "open_risk_loaded": true,
     "open_risk_report": {
-      "age_hours": 0.0288,
-      "generated_at_utc": "2026-06-21T17:20:19Z",
+      "age_hours": 0.037,
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "governor_blockers": [],
       "governor_status": "open_risk_governor_pass",
       "max_age_hours": 24.0,
@@ -58,14 +54,15 @@
     "circuit_breaker_generated_at_utc": "2026-06-14T03:59:45Z",
     "filter_matrix_generated_at_utc": "2026-06-18T02:13:53Z",
     "forward_cohort_preregistration_path": "data\\contracts\\forward-cohort-preregistration.json",
-    "fresh_evidence_generated_at_utc": "2026-06-21T17:20:30Z",
+    "fresh_evidence_generated_at_utc": "2026-06-27T03:48:42Z",
     "lane_gate_report_generated_at_utc": "2026-06-21T17:20:10Z",
-    "open_risk_generated_at_utc": "2026-06-21T17:20:19Z"
+    "open_risk_generated_at_utc": "2026-06-27T03:48:38Z"
   },
   "lane_state_rows": [
     {
       "blockers": [
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient"
@@ -76,6 +73,7 @@
       "configured_tracking_mode": "disabled",
       "failed_promotion_gates": [
         "regular_auto_track_scope",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort"
@@ -102,10 +100,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -166,8 +165,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -231,6 +230,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -241,6 +241,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -267,10 +268,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -331,8 +333,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -396,6 +398,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -406,6 +409,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -432,10 +436,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -496,8 +501,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -561,6 +566,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -571,6 +577,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -597,10 +604,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -661,8 +669,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -723,16 +731,18 @@
     },
     {
       "blockers": [
+        "lane_profitability_gate_report_unusable",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient",
         "recent_cohort_circuit_breaker_active"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
-      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "candidate_status_reason": "lane_profitability_gate_report_unusable",
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort",
@@ -759,10 +769,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -823,8 +834,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -889,6 +900,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -899,6 +911,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -935,10 +948,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -999,8 +1013,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1064,6 +1078,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -1074,6 +1089,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -1110,10 +1126,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -1174,8 +1191,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1239,6 +1256,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -1249,6 +1267,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -1275,10 +1294,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -1339,8 +1359,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1404,6 +1424,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "recent_cohort_circuit_breaker_active",
         "walk_forward_holdout_too_small_or_failed"
@@ -1415,6 +1436,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "recent_cohort_circuit_breaker_clear",
         "regular_auto_track_scope",
@@ -1452,10 +1474,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -1516,8 +1539,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1582,6 +1605,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -1592,6 +1616,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -1618,10 +1643,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -1682,8 +1708,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1747,6 +1773,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -1757,6 +1784,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -1793,10 +1821,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -1857,8 +1886,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -1922,6 +1951,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -1932,6 +1962,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -1968,10 +1999,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2032,8 +2064,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2097,6 +2129,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -2107,6 +2140,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -2143,10 +2177,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2207,8 +2242,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2269,14 +2304,16 @@
     },
     {
       "blockers": [
+        "lane_profitability_gate_report_unusable",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient"
       ],
-      "candidate_status": "pending_paper_exact_evidence",
-      "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_profitability_gate_report_unusable",
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
+        "lane_profitability_report_clean",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort"
       ],
@@ -2311,10 +2348,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2374,8 +2412,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2431,7 +2469,7 @@
       "live_policy_change": false,
       "playbook_id": "volatility_expansion_observation",
       "playbook_label": "Volatility Expansion Observation",
-      "promotion_state": "paper_probation",
+      "promotion_state": "diagnostic",
       "tracking_mode": "auto_track"
     }
   ],
@@ -2439,6 +2477,7 @@
     "ai_commodity_infra_observation": {
       "blockers": [
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient"
@@ -2449,6 +2488,7 @@
       "configured_tracking_mode": "disabled",
       "failed_promotion_gates": [
         "regular_auto_track_scope",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort"
@@ -2475,10 +2515,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2539,8 +2580,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2604,6 +2645,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -2614,6 +2656,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -2640,10 +2683,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2704,8 +2748,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2769,6 +2813,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -2779,6 +2824,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -2805,10 +2851,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -2869,8 +2916,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -2934,6 +2981,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -2944,6 +2992,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -2970,10 +3019,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3034,8 +3084,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3096,16 +3146,18 @@
     },
     "bullish_pullback_observation": {
       "blockers": [
+        "lane_profitability_gate_report_unusable",
         "lane_not_profitable_enough_for_probation",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient",
         "recent_cohort_circuit_breaker_active"
       ],
       "candidate_status": "diagnostic_only_lane_promotion_state",
-      "candidate_status_reason": "lane_not_profitable_enough_for_probation",
+      "candidate_status_reason": "lane_profitability_gate_report_unusable",
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort",
@@ -3132,10 +3184,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3196,8 +3249,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3262,6 +3315,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -3272,6 +3326,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -3308,10 +3363,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3372,8 +3428,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3437,6 +3493,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -3447,6 +3504,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -3483,10 +3541,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3547,8 +3606,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3612,6 +3671,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -3622,6 +3682,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -3648,10 +3709,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3712,8 +3774,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3777,6 +3839,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "recent_cohort_circuit_breaker_active",
         "walk_forward_holdout_too_small_or_failed"
@@ -3788,6 +3851,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "recent_cohort_circuit_breaker_clear",
         "regular_auto_track_scope",
@@ -3825,10 +3889,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -3889,8 +3954,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -3955,6 +4020,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -3965,6 +4031,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -3991,10 +4058,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -4055,8 +4123,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -4120,6 +4188,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -4130,6 +4199,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -4166,10 +4236,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -4230,8 +4301,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -4295,6 +4366,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -4305,6 +4377,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -4341,10 +4414,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -4405,8 +4479,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -4470,6 +4544,7 @@
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
         "lane_outside_regular_auto_track_scope",
+        "lane_profitability_gate_report_unusable",
         "parked_outside_forward_cohort",
         "walk_forward_holdout_too_small_or_failed"
       ],
@@ -4480,6 +4555,7 @@
       "failed_promotion_gates": [
         "forward_cohort_membership",
         "fresh_paper_cohort",
+        "lane_profitability_report_clean",
         "profitable_lane_gate",
         "regular_auto_track_scope",
         "walk_forward_holdout_depth"
@@ -4516,10 +4592,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -4580,8 +4657,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -4642,14 +4719,16 @@
     },
     "volatility_expansion_observation": {
       "blockers": [
+        "lane_profitability_gate_report_unusable",
         "walk_forward_holdout_too_small_or_failed",
         "fresh_paper_cohort_insufficient"
       ],
-      "candidate_status": "pending_paper_exact_evidence",
-      "candidate_status_reason": "promotion_requires_fresh_walk_forward_paper_and_risk_gates",
+      "candidate_status": "diagnostic_only_lane_promotion_state",
+      "candidate_status_reason": "lane_profitability_gate_report_unusable",
       "configured_fresh_live_validation_enabled": true,
       "configured_tracking_mode": "auto_track",
       "failed_promotion_gates": [
+        "lane_profitability_report_clean",
         "walk_forward_holdout_depth",
         "fresh_paper_cohort"
       ],
@@ -4684,10 +4763,11 @@
           "target": "regular auto_track lane with fresh validation enabled"
         },
         {
-          "current": "lane_profitability_gate_report_fresh",
+          "blocker": "lane_profitability_gate_report_unusable",
+          "current": "lane_profitability_gate_report_stale",
           "gate": "lane_profitability_report_clean",
           "label": "Lane profitability report clean",
-          "passed": true,
+          "passed": false,
           "target": "fresh usable report with zero unpriced rows and complete tracked P&L"
         },
         {
@@ -4747,8 +4827,8 @@
             "open_risk_governor_blockers": [],
             "open_risk_governor_status": "open_risk_governor_pass",
             "open_risk_report_health": {
-              "age_hours": 0.0288,
-              "generated_at_utc": "2026-06-21T17:20:19Z",
+              "age_hours": 0.037,
+              "generated_at_utc": "2026-06-27T03:48:38Z",
               "governor_blockers": [],
               "governor_status": "open_risk_governor_pass",
               "max_age_hours": 24.0,
@@ -4804,7 +4884,7 @@
       "live_policy_change": false,
       "playbook_id": "volatility_expansion_observation",
       "playbook_label": "Volatility Expansion Observation",
-      "promotion_state": "paper_probation",
+      "promotion_state": "diagnostic",
       "tracking_mode": "auto_track"
     }
   },
@@ -4843,10 +4923,9 @@
   "summary": {
     "auto_track_lane_count": 0,
     "candidate_status_counts": {
-      "diagnostic_only_lane_promotion_state": 13,
-      "pending_paper_exact_evidence": 1
+      "diagnostic_only_lane_promotion_state": 14
     },
-    "diagnostic_lane_count": 2,
+    "diagnostic_lane_count": 3,
     "forward_cohort": {
       "active": true,
       "eval_date": "2026-07-28",
@@ -4876,11 +4955,10 @@
     "live_validation_lane_count": 0,
     "open_risk_governor_blockers": [],
     "open_risk_governor_status": "open_risk_governor_pass",
-    "paper_probation_lane_count": 1,
+    "paper_probation_lane_count": 0,
     "parked_lane_count": 11,
     "state_counts": {
-      "diagnostic": 2,
-      "paper_probation": 1,
+      "diagnostic": 3,
       "parked": 11
     }
   }

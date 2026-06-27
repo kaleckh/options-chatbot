@@ -21,17 +21,35 @@ This artifact is the reusable same-session GPT-5.5 Pro handoff for the regular-o
 ## Prompt
 
 ```text
-Replace the current 5.5 Pro handoff prompt with this profitability-first blocker-ranking prompt before continuing the loop.
+You are GPT-5.5 Pro acting as strategic reviewer and next-slice selector for the regular-options profitability loop. Codex will implement and verify exactly one selected task.
 
-We are running an options-profitability loop. The user's goal is profit: at least 30 profitable strict completed forward-audit trades in the latest approximately 4-month/post-freeze audit window.
+Goal: make the regular-options workflow profitable under proof-qualified criteria: at least 30 profitable strict completed forward-audit rows in the latest post-freeze/approximately four-month audit window.
 
 Current state:
 - We are not forward-audit profitable.
 - Strict completed forward proof is currently 0/30.
-- Historical rows, dashboard rows, midpoint/stale/EOD/last/model/manual/synthetic/lookahead rows, and old-algorithm picks are not accepted profitability proof.
+- Only real approved forward-cohort rows with exact executable entry and exit evidence may count toward the 30 strict completed forward-audit target. Historical, replay, simulated-forward, dashboard, research/backfill, old-algorithm, midpoint/stale/EOD/last/model/manual/synthetic/lookahead, diagnostic, or repaired historical rows may rank hypotheses but must not be counted as accepted forward profitability.
 - Codex can implement, test, inspect the repo, build artifacts, run read-only research, and run non-live/non-broker source-planning tasks.
-- The user approves non-live, non-broker research/source-planning work.
+- The user approves read-only non-live, non-broker research/source-planning work. That approval does not authorize quote import, source-row writes, default source_rows materialization, evidence-store mutation, cohort-log append, protected-holdout use, live validation, auto-track, broker/order actions, promotion, or production scanner/strategy/stop/sizing/proof-bar changes.
 - Broker orders, live validation, auto-track, protected-holdout consumption, promotion, production scanner/strategy/stop/sizing/proof-bar changes, and real source/evidence mutation still require exact explicit approval.
+
+Current Fact Table:
+- Forward proof: strict completed forward rows are 0/30; promotion_ready, live_entry_allowed, auto_track_allowed, and broker_order_allowed are false.
+- Phase 2 forward capture: latest real run produced 0 staged rows, no candidate JSONL, and no cohort log unless a newer current artifact says otherwise.
+- Historical rows remain research evidence only; they are not forward profitability proof.
+- VIX is cleared when current artifacts show `direct_vix_source_import_materialized` / `point_in_time_vix_bucket_ready` with 505/505 coverage. Do not rank VIX as missing unless a newer artifact is stale, malformed, or policy-incompatible.
+- 59-symbol ThetaData repair is parked on provider/source availability when the current artifact is `blocked_thetaterminal_source_unavailable_retry`; do not select another retry unless a fresh provider/source check proves availability changed.
+- 13-symbol historical scanner path remains blocked when current artifacts show 0/24 candidate-generation months and 0 selected rows; quote depth alone is not candidate-generation proof.
+- Underlying daily OHLCV is a first-class blocker: acquisition is `blocked_underlying_daily_source_acquisition_missing` when no trusted full-window CSV is staged. The parser/import path exists; do not rerun a packet-only plan for this blocker.
+- Macro-event calendar and flow volume/OI source packets are ready for operator import decision when their current statuses say so, but real trusted CSV/source materialization is still missing.
+- Bullish pullback layer4 is a relevant existing economics branch when current docs/artifacts show it: executable economics were profitable but preflight/forward protocol remains blocked or waiting for natural full-denominator market-window capture and explicit approval. Compare it against source-repair branches instead of omitting it.
+
+Evidence precedence:
+1. Current Fact Table overrides older embedded blocker text.
+2. Latest structured artifact statuses override pasted docs.
+3. Older artifact blockers that still name VIX as missing are stale if current VIX is `point_in_time_vix_bucket_ready`.
+4. If pasted NEXT_STEPS says ThetaTerminal is generally reachable but the structured 59-symbol repair artifact says `blocked_thetaterminal_source_unavailable_retry`, do not select another 59-symbol retry unless current provider/source availability changed.
+5. Historical/dashboard/replay rows can guide ranking but cannot satisfy forward proof.
 
 Your job:
 Do not optimize for documentation completeness. Do not choose the safest artifact by default. Optimize for the shortest honest path to 30 profitable strict completed forward-audit trades.
@@ -47,12 +65,16 @@ Before selecting a task, produce a blocker map with these categories:
 - Is the current algorithm generating enough eligible candidates?
 - If candidate generation is missing/broken, what exact repair unlocks real rows fastest?
 - Do not accept quote-depth-only coverage as candidate-generation proof.
+- Explicitly evaluate `bullish_pullback_layer4_forward_protocol` as a promising-but-not-proof-complete branch if current docs/artifacts show it. Treat executable economics as research support only until natural market-window/operator-approved forward capture produces proof-qualified rows.
 
 3. Data/source blocker
 - Which missing point-in-time sources block the most downstream profitable tests?
-- Current or recently cleared source blockers include VIX, macro-event calendar, flow volume/OI, dispersion/concentration, trend/regime, and possibly broader OPRA/NBBO coverage. Use the attached current artifacts: if VIX is `point_in_time_vix_bucket_ready`, do not rank VIX as still missing.
-- Rank source repairs by downstream unlock value and time-to-test.
-- Do not select another packet-only source plan unless it is the highest-leverage blocker to running a real replay or forward audit.
+- Explicitly evaluate `underlying_daily_point_in_time_source` as a first-class blocker for frozen scanner/candidate generation and historical simulated-forward audit.
+- VIX is cleared in current artifacts when the VIX bucket is ready; stale branch blockers naming missing VIX must be refreshed and ranked by their remaining non-VIX blockers.
+- Macro-event and flow volume/OI are not missing parser/plan work if their packet statuses are ready; they are missing trusted input CSV/source-row materialization.
+- Rank source repairs by downstream unlock value, time-to-test, and whether a trusted source file is actually staged and ready.
+- Do not select packet-only source planning for a source family whose packet is already ready.
+- Do not select source import/materialization unless the corresponding acquisition/readiness artifact identifies a ready trusted source file and the task names the exact required approval/token boundary.
 
 4. Replay/engine blocker
 - Which strategies cannot be honestly tested because pricing/replay engine support is missing?
@@ -81,6 +103,12 @@ Then rank all possible next tasks by:
 - overfit/leakage/data-integrity risk,
 - whether it can be done now without live/broker action.
 
+Before selecting the task, answer:
+- Is there an already-profitable executable historical/economics branch whose main blocker is forward capture rather than edge quality? If yes, why is it not rank 1?
+- What is the shortest honest path to the first 5 strict forward-audit rows?
+- Can the selected branch plausibly reach 30 completed strict rows in the latest-four/post-freeze window, given observed or expected candidate cadence?
+- Which measurable blocker changes in one Codex turn: staged/validated forward rows, candidate-generation months covered, selected strict-new candidates, replayable exact rows, latest-four audit rows, or PF lower-bound?
+
 Return exactly one next Codex task.
 
 The selected task must include:
@@ -95,6 +123,17 @@ The selected task must include:
 - what downstream replay/audit becomes possible if it passes,
 - what branch should be stopped if it fails.
 
+For every serious branch considered, assign one branch status:
+- `continue_now`: Codex can execute the next slice under current approvals.
+- `approval_blocked`: promising, but requires exact explicit operator approval before execution.
+- `source_blocked`: requires a real external source file or provider state change.
+- `market_window_blocked`: requires a valid market window and explicit operator confirmation.
+- `parked_until_state_change`: do not rerun until a named artifact/status/threshold changes.
+- `falsified_under_current_data`: stop this branch under current evidence.
+- `exhausted_under_current_data`: no significant upgrade remains without a named new data/source/engine condition.
+
+Stopping a branch is not stopping the global loop. Use `stop_exception` only if all meaningful branches are exhausted or blocked by external input/approval/source availability.
+
 Hard rules:
 - Do not repeat a branch already marked parked unless new source state changed.
 - Do not select macro_event_calendar_source_repair_packet_v1 again; it is already implemented and verified.
@@ -102,60 +141,14 @@ Hard rules:
 - Do not select trusted_flow_volume_oi_source_repair_packet_v1 again if the attached/current artifact status is flow_extreme_source_repair_packet_ready_for_operator_import_decision; it is already implemented and verified.
 - Do not select the 59-symbol ThetaTerminal retry again until provider/source availability changes.
 - Do not select historical dashboard/picks visibility unless it directly affects forward capture.
-- Do not claim profitability from historical rows alone.
+- Do not select another packet-only source plan for a blocker that already has a verified source packet, parser/import contract, and approval boundary. Packet-only work is allowed only for a newly identified blocker that lacks a safe parser, approval boundary, or measurable acceptance criteria.
+- Do not select an import/materialization command unless the needed trusted source file exists or the selected task explicitly asks the operator for the exact approval/source file and provides a safe read-only fallback. Approved non-live source materialization may be recommended when it is the shortest path to a replay or forward audit, but the task must name the source file, approval token, write target, forbidden writes, and pass/fail thresholds.
+- Do not select any tokened source import/materialization task when the corresponding acquisition artifact reports `candidate_file_count=0`, `ready_candidate_count=0`, or `selected_ready_source_file=null`. In that case, name the missing trusted source file as an external blocker and choose a different executable Codex task or return a concrete operator source-supply question.
+- Do not use local shortcut sources as proof-grade point-in-time inputs: `market_data.db:daily_history`, historical reconstruction, inferred known-at policy, fixture/sample rows, manual rows, synthetic rows, source-mark rows, midpoint/EOD/last/model rows, or lookahead rows.
+- Do not select any 13-symbol runner-support, no-write-runner, source-surface, denominator, entrypoint, engine-diagnostics, atlas, or dashboard task unless it can change these metrics: `candidate_generation_months_covered_count`, `selected_candidate_row_count`, `latest_four_strict_new_candidates`, and `historical_simulated_forward_audit_command`. Re-emitting 6,916 blocked rows with `missing_daily_candidate_generation_diagnostics` is a failed repeat and should stop that branch until a real daily frozen candidate-decision source or required point-in-time input source changes.
+- For any replay/engine task, acceptance criteria must include `denominator_rows`, `priced_exact_rows`, `strict_new_exact_completed_rows`, side-aware entry/exit pricing basis, fees/slippage, assignment/expiration/max-loss/collateral handling where structure-specific, strict-new dedupe, protected-holdout guard, net USD P&L, PF, and latest-four/post-freeze row counts. If `priced_exact_rows=0`, the task must name the single smallest next blocker and the branch stop condition.
+- Do not claim accepted profitability from historical rows alone or in combination with simulated-forward/research rows. Accepted profitability requires strict completed forward-audit rows from the approved forward cohort path.
 - Do not stop unless you prove no meaningful upgrade remains across forward capture, source repair/materialization, candidate-generation repair, replay engine support, new option structures, and longer/lookback audits.
-
-Output JSON-like structure:
-{
-  "verdict": "continue|stop_exception",
-  "continue_loop": true/false,
-  "current_profitability_state": {
-    "forward_strict_completed_rows": number,
-    "target_rows": 30,
-    "accepted_profitability": true/false,
-    "main_reason_not_profitable": "string"
-  },
-  "blocker_map": {
-    "forward_proof": [],
-    "candidate_generation": [],
-    "data_sources": [],
-    "replay_engine": [],
-    "strategy_edges": [],
-    "historical_audit": [],
-    "dashboard_operator": []
-  },
-  "ranked_next_tasks": [
-    {
-      "rank": 1,
-      "task_id": "string",
-      "expected_profitability_impact": "string",
-      "downstream_unlocks": [],
-      "time_to_test": "string",
-      "why_not_selected_if_applicable": null
-    }
-  ],
-  "selected_branch_id": "string",
-  "next_codex_task": {
-    "objective": "string",
-    "why_highest_leverage": "string",
-    "exact_scope": "string",
-    "allowed_files_or_artifacts": [],
-    "forbidden_actions": [],
-    "implementation_steps": [],
-    "commands_to_run": [],
-    "acceptance_criteria": [],
-    "failure_criteria": [],
-    "downstream_enabled_if_passes": [],
-    "branch_stop_condition_if_fails": "string"
-  },
-  "branches_to_stop": [],
-  "operator_questions": [],
-  "anti_handwave_audit": {
-    "exact_next_action_present": true,
-    "measurable_threshold_present": true,
-    "generic_advice_removed": true
-  }
-}
 
 Current repo evidence appendix follows. Use this evidence for the blocker map and next-task ranking; do not ignore completed/parked artifacts.
 
@@ -174,6 +167,8 @@ Operator approval posture:
     "auto-track enablement",
     "production scanner, strategy, stop, sizing, or proof-bar changes",
     "quote import",
+    "source-row writes or default source_rows materialization",
+    "cohort-log append",
     "protected-holdout consumption",
     "promotion",
     "unsafe evidence-store mutation"
@@ -250,7 +245,7 @@ Current approved momentum-continuation research replay result, if available:
   "denominator_rows": 1291,
   "denominator_status_counts": {
     "duplicate_within_research_harness": 461,
-    "missing_point_in_time_vix_bucket": 415,
+    "missing_point_in_time_breadth_confirmation": 415,
     "rejected_not_call_debit_spread": 237,
     "rejected_outside_preregistered_universe": 178
   },
@@ -286,10 +281,6 @@ Current approved momentum-continuation research replay result, if available:
   "top_blockers": [
     {
       "reason": "missing_point_in_time_breadth_confirmation",
-      "row_count": 1291
-    },
-    {
-      "reason": "missing_point_in_time_vix_bucket",
       "row_count": 1291
     },
     {
@@ -487,7 +478,7 @@ Current momentum-continuation bounded replay gate result, if available:
     },
     "total_denominator_rows": 1291
   },
-  "next_oracle_instruction": "Return this bounded replay result to the same GPT-5.5 Pro session. If blockers remain, do not repeat this momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time VIX/breadth input surface or explicit approved data repair changes the blocker. Select the next materially different, falsifiable branch that can move toward at least 30 profitable strict completed forward-audit rows.",
+  "next_oracle_instruction": "Return this bounded replay result to the same GPT-5.5 Pro session. If blockers remain, do not repeat this momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time breadth/momentum input surface or explicit approved data repair changes the blocker. Select the next materially different, falsifiable branch that can move toward at least 30 profitable strict completed forward-audit rows.",
   "replay_gate_blockers": [
     "bootstrap_pf_lower_bound_not_above_1_after_resolution",
     "duplicate_within_research_harness",
@@ -522,18 +513,12 @@ Current VRP credit-spread replay readiness result, if available:
   "accepted_profitability": false,
   "allowed_next_step": "Return this readiness artifact to GPT-5.5 Pro for a continue/stop decision. If blocked, GPT-5.5 Pro should decide whether a named blocker needs operator approval or whether another read-only option-structure branch remains.",
   "blockers": [
-    "missing_credit_spread_side_aware_pricing_engine",
-    "missing_credit_spread_side_aware_exit_pricing_engine",
-    "missing_full_denominator_status_mapping",
-    "missing_assignment_expiration_classifier",
-    "missing_margin_max_loss_convention",
-    "missing_index_credit_spread_quote_surface",
-    "missing_protected_holdout_guard"
+    "missing_index_credit_spread_quote_surface"
   ],
   "concept_id": "low_mid_vix_index_put_credit_spread_vrp_v1",
   "historical_replay_performed": false,
   "lane_implementation_performed": false,
-  "status": "blocked_vrp_credit_spread_replay_readiness"
+  "status": "blocked_vrp_credit_spread_bounded_replay_gate"
 }
 
 Current preregistered term-structure calendar/diagonal playbook result, if available:
@@ -552,19 +537,13 @@ Current term-structure calendar/diagonal replay readiness result, if available:
   "accepted_profitability": false,
   "allowed_next_step": "Return this readiness artifact to GPT-5.5 Pro for a continue/stop decision. If ready, the next step is an exact operator approval question for one research-only implementation/replay harness. If blocked, GPT-5.5 Pro should decide whether a named blocker needs approval or whether another read-only option-structure branch remains.",
   "blockers": [
-    "missing_calendar_diagonal_side_aware_pricing_engine",
-    "missing_calendar_diagonal_exit_or_expiry_engine",
-    "missing_full_denominator_status_mapping",
-    "missing_front_leg_assignment_expiration_classifier",
-    "missing_roll_or_expiry_policy",
-    "missing_point_in_time_term_structure_inputs",
     "missing_index_calendar_quote_surface",
-    "missing_strict_new_dedupe"
+    "missing_point_in_time_term_structure_inputs"
   ],
   "concept_id": "low_mid_vix_index_calendar_term_structure_dislocation_v1",
   "historical_replay_performed": false,
   "lane_implementation_performed": false,
-  "status": "blocked_term_structure_calendar_replay_readiness"
+  "status": "blocked_term_structure_calendar_bounded_replay"
 }
 
 Current preregistered skew broken-wing playbook result, if available:
@@ -1675,13 +1654,7 @@ Current dispersion-proxy hybrid replay-readiness result, if available:
   "accepted_profitability": false,
   "allowed_next_step": "Return this readiness artifact to GPT-5.5 Pro for continue/stop. If ready, the next slice is a separate bounded no-write replay decision. If blocked, park this branch on the exact blockers and select another research-only structure-readiness branch.",
   "blockers": [
-    "missing_dispersion_or_concentration_proxy_inputs",
-    "point_in_time_vix_bucket_blocked",
-    "missing_pair_construction_engine",
-    "missing_side_aware_all_leg_pair_pricing",
-    "missing_pair_max_loss_or_collateral_convention",
-    "missing_full_denominator_mapping",
-    "missing_strict_new_dedupe"
+    "missing_dispersion_or_concentration_proxy_inputs"
   ],
   "concept_id": "index_constituent_dispersion_proxy_defined_risk_hybrid_v1",
   "historical_replay_performed": false,
@@ -1719,7 +1692,7 @@ Current PMCC diagonal replay-readiness result, if available:
     "expected_concept_id": "low_mid_vix_index_pmcc_diagonal_income_v1",
     "expected_report_id": "regular_options_pmcc_diagonal_replay_readiness",
     "expected_structure": "defined_risk_pmcc_style_call_diagonals_only",
-    "generated_at_utc": "2026-06-24T02:40:43Z",
+    "generated_at_utc": "2026-06-26T04:26:13Z",
     "playbook_generated_at_utc": "2026-06-23T06:22:04Z",
     "raw_status": "blocked_pmcc_diagonal_replay_readiness",
     "reason_codes": [],
@@ -1817,6 +1790,22 @@ Current direct point-in-time VIX source state:
       "would_clear_vix_blocker_if_future_source_passes": false
     },
     {
+      "branch": "post_event_iv_crush_iron_condor",
+      "remaining_non_vix_blockers": [
+        "insufficient_full_window_rows",
+        "insufficient_latest_four_months",
+        "insufficient_latest_four_rows",
+        "insufficient_train_months",
+        "iv_event_premium_proxy_missing",
+        "macro_event_calendar_category_coverage_missing",
+        "macro_event_calendar_source_missing",
+        "missing_required_macro_event_categories"
+      ],
+      "source_status": "blocked_post_event_iv_crush_replay_readiness",
+      "vix_status": "ready",
+      "would_clear_vix_blocker_if_future_source_passes": false
+    },
+    {
       "branch": "flow_extreme_ratio_backspread",
       "remaining_non_vix_blockers": [
         "missing_point_in_time_flow_extreme_input"
@@ -1838,22 +1827,31 @@ Current direct point-in-time VIX source state:
     {
       "branch": "vrp_credit_spread",
       "remaining_non_vix_blockers": [
-        "missing_credit_spread_side_aware_pricing_engine",
-        "missing_credit_spread_side_aware_exit_pricing_engine",
-        "missing_full_denominator_status_mapping",
-        "missing_assignment_expiration_classifier",
-        "missing_margin_max_loss_convention",
-        "missing_index_credit_spread_quote_surface",
-        "missing_protected_holdout_guard"
+        "missing_index_credit_spread_quote_surface"
       ],
-      "source_status": "blocked_vrp_credit_spread_replay_readiness",
+      "source_status": "blocked_vrp_credit_spread_bounded_replay_gate",
       "vix_status": "ready",
       "would_clear_vix_blocker_if_future_source_passes": false
     },
     {
       "branch": "momentum_continuation",
       "note": "Refresh this artifact before ranking if it still predates the VIX source import.",
-      "remaining_non_vix_blockers": [],
+      "remaining_non_vix_blockers": [
+        "bootstrap_pf_lower_bound_not_above_1_after_resolution",
+        "duplicate_within_research_harness",
+        "entry_missing_leg_quote",
+        "exit_missing_leg_quote",
+        "exit_value_negative",
+        "exit_zero_or_nonpositive_bid_ask",
+        "missing_net_usd_pnl",
+        "missing_point_in_time_breadth_confirmation",
+        "missing_point_in_time_qqq_momentum_confirmation",
+        "missing_point_in_time_spy_momentum_confirmation",
+        "net_usd_not_positive_after_resolution",
+        "rejected_not_call_debit_spread",
+        "rejected_outside_preregistered_universe",
+        "strict_rows_below_30_after_resolution"
+      ],
       "source_status": "blocked_momentum_continuation_bounded_replay",
       "vix_status": "ready",
       "would_clear_vix_blocker_if_future_source_passes": false
@@ -1862,12 +1860,7 @@ Current direct point-in-time VIX source state:
       "branch": "dispersion_proxy_hybrid",
       "note": "Refresh this artifact before ranking if it still predates the VIX source import.",
       "remaining_non_vix_blockers": [
-        "missing_dispersion_or_concentration_proxy_inputs",
-        "missing_pair_construction_engine",
-        "missing_side_aware_all_leg_pair_pricing",
-        "missing_pair_max_loss_or_collateral_convention",
-        "missing_full_denominator_mapping",
-        "missing_strict_new_dedupe"
+        "missing_dispersion_or_concentration_proxy_inputs"
       ],
       "source_status": "blocked_dispersion_proxy_hybrid_replay_readiness",
       "vix_status": "ready",
@@ -1897,9 +1890,10 @@ Current direct point-in-time VIX source state:
     ],
     "source_family": "direct_vix_daily_close",
     "source_file": "data/import-staging/vix/cboe_vix_daily_history.csv",
+    "superseded_by_materialized_vix": true,
     "write_target": "generated point-in-time VIX source artifact only"
   },
-  "legacy_source_repair_packet_status": "direct_vix_source_repair_packet_ready_for_operator_import_decision",
+  "legacy_source_repair_packet_status": "direct_vix_source_repair_packet_superseded_by_materialized_vix",
   "source_import": {
     "accepted_profitability": false,
     "downstream_vix_bucket_status": "point_in_time_vix_bucket_ready",
@@ -1947,11 +1941,7 @@ Current macro-event calendar source repair packet result, if available:
       "event_calendar_blockers": [
         "macro_event_calendar_source_missing"
       ],
-      "remaining_non_event_blockers": [
-        "point_in_time_vix_source_missing",
-        "missing_vix_bucket_threshold_policy",
-        "vix_bucket_date_coverage_incomplete"
-      ],
+      "remaining_non_event_blockers": [],
       "status": "blocked_macro_event_long_strangle_replay_readiness",
       "would_clear_event_calendar_blocker_if_future_source_passes": true
     },
@@ -1962,7 +1952,6 @@ Current macro-event calendar source repair packet result, if available:
         "future_replay_requires_point_in_time_macro_event_calendar"
       ],
       "remaining_non_event_blockers": [
-        "point_in_time_vix_source_missing",
         "iv_event_premium_proxy_missing"
       ],
       "status": "preregistered_design_only",
@@ -1972,10 +1961,8 @@ Current macro-event calendar source repair packet result, if available:
       "branch": "direct_vix_source_repair",
       "concept_id": "direct_vix_daily_close",
       "event_calendar_blockers": [],
-      "remaining_non_event_blockers": [
-        "direct_vix_source_import_materialization_pending"
-      ],
-      "status": "direct_vix_source_repair_packet_ready_for_operator_import_decision",
+      "remaining_non_event_blockers": [],
+      "status": "direct_vix_source_repair_packet_superseded_by_materialized_vix",
       "would_clear_event_calendar_blocker_if_future_source_passes": false
     }
   ],
@@ -1996,7 +1983,7 @@ Current macro-event calendar source repair packet result, if available:
   },
   "downstream_readiness_commands": {
     "macro_event_long_strangle": "npm run options:research:macro-event-long-strangle-replay-readiness -- --json",
-    "post_event_iv_crush_iron_condor": "future_post_event_iv_crush_readiness_audit_not_implemented_yet"
+    "post_event_iv_crush_iron_condor": "npm run options:research:post-event-iv-crush-replay-readiness -- --json"
   },
   "evidence_stores_mutated": false,
   "fixture_validation": {
@@ -2210,7 +2197,7 @@ Current macro-event calendar source repair packet result, if available:
   }
 }
 
-Interpretation: if the macro-event calendar source repair packet status is macro_event_calendar_source_repair_packet_ready_for_operator_import_decision, do not rerun the same macro-event source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real macro-event source import/materialization still needs the exact tokened source-import slice and an operator-supplied official macro-event calendar CSV. Do not run macro-event or post-event replay until a real point-in-time macro-event source artifact exists. Decide whether the next meaningful slice is that tokened non-live source materialization path, a readiness audit for post-event IV-crush, direct VIX materialization if source is supplied, or another safe fallback.
+Interpretation: if the macro-event calendar source repair packet status is macro_event_calendar_source_repair_packet_ready_for_operator_import_decision, do not rerun the same macro-event source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real macro-event source import/materialization still needs the exact tokened source-import slice and an operator-supplied official macro-event calendar CSV. Do not run macro-event or post-event replay until a real point-in-time macro-event source artifact exists. VIX is already materialized and must not be selected as the next slice. Decide whether the next meaningful slice is that tokened non-live source materialization path, a readiness audit for post-event IV-crush, or another safe fallback.
 
 Current flow-extreme volume/open-interest source repair packet result, if available:
 {
@@ -2222,19 +2209,15 @@ Current flow-extreme volume/open-interest source repair packet result, if availa
       "flow_blockers": [
         "missing_point_in_time_flow_extreme_input"
       ],
-      "remaining_non_flow_blockers": [
-        "missing_point_in_time_vix_bucket"
-      ],
+      "remaining_non_flow_blockers": [],
       "status": "blocked_flow_extreme_ratio_backspread_replay_readiness",
       "would_clear_flow_blocker_if_future_source_passes": true
     },
     {
       "branch": "direct_vix_source_repair",
       "flow_blockers": [],
-      "remaining_non_flow_blockers": [
-        "direct_vix_source_import_materialization_pending"
-      ],
-      "status": "direct_vix_source_repair_packet_ready_for_operator_import_decision",
+      "remaining_non_flow_blockers": [],
+      "status": "direct_vix_source_repair_packet_superseded_by_materialized_vix",
       "would_clear_flow_blocker_if_future_source_passes": false
     }
   ],
@@ -2594,7 +2577,10 @@ Required JSON-like output shape:
   "anti_handwave_audit": {
     "exact_next_action_present": "boolean",
     "generic_advice_removed": "boolean",
-    "measurable_threshold_present": "boolean"
+    "measurable_threshold_present": "boolean",
+    "packet_only_justified_or_rejected": "boolean",
+    "ranked_existing_forward_capture_paths": "boolean",
+    "stale_artifacts_overridden_by_current_fact_table": "boolean"
   },
   "assumption_challenges": [
     {
@@ -2603,6 +2589,15 @@ Required JSON-like output shape:
       "verification": "string"
     }
   ],
+  "blocker_map": {
+    "candidate_generation": [],
+    "dashboard_operator": [],
+    "data_sources": [],
+    "forward_proof": [],
+    "historical_audit": [],
+    "replay_engine": [],
+    "strategy_edges": []
+  },
   "branches_to_stop": [
     "branch ids or candidate ids to avoid repeating"
   ],
@@ -2621,6 +2616,16 @@ Required JSON-like output shape:
     }
   ],
   "continue_loop": "boolean",
+  "current_profitability_state": {
+    "accepted_profitability": "boolean",
+    "forward_strict_completed_rows": "number",
+    "main_reason_not_profitable": "string",
+    "target_rows": 30
+  },
+  "loop_control_fallback": {
+    "needed_if_selected_branch_blocked_by_approval_or_missing_source": "string",
+    "safe_fallback_task": "string|null"
+  },
   "next_codex_task": {
     "acceptance_criteria": [
       "measurable pass/fail criteria"
@@ -2628,23 +2633,31 @@ Required JSON-like output shape:
     "allowed_files_or_artifacts": [
       "paths or artifact families"
     ],
+    "approval_required_before_followup": [],
+    "approval_required_for_selected_task": "boolean",
+    "branch_status": "continue_now",
     "commands_to_run": [
       "exact commands"
     ],
     "exact_scope": "files/modules/artifacts included and excluded",
+    "executable_under_current_approval": "boolean",
     "expected_artifacts": [
       "files or readbacks expected after Codex runs"
     ],
     "failure_criteria": [
       "what result rejects or parks this branch"
     ],
+    "fallback_reason_if_top_rank_blocked": "string|null",
     "forbidden_actions": [
       "actions that remain forbidden"
     ],
     "implementation_steps": [
       "ordered steps"
     ],
+    "must_not_count_as_forward_profitability": true,
     "objective": "one concrete implementation or verification task",
+    "proof_boundary_statement": "This task cannot produce accepted profitability or promotion unless strict forward-audit evidence is later collected through the approved forward cohort path.",
+    "safe_read_only_fallback_if_approval_missing": "string|null",
     "stop_condition_after_task": "what would make this branch exhausted"
   },
   "operator_questions": [
@@ -2654,8 +2667,27 @@ Required JSON-like output shape:
       "why_it_matters": "string"
     }
   ],
+  "ranked_next_tasks": [
+    {
+      "approval_required": "none|string",
+      "branch_status": "continue_now|approval_blocked|source_blocked|market_window_blocked|parked_until_state_change|falsified_under_current_data|exhausted_under_current_data",
+      "downstream_unlocks": [],
+      "expected_profitability_impact": "string",
+      "rank": "number",
+      "task_id": "string",
+      "time_to_test": "string",
+      "why_not_selected_if_applicable": "string|null"
+    }
+  ],
   "selected_branch_id": "string|null",
   "significant_upgrade_available": "boolean",
+  "stale_blockers_ignored": [
+    {
+      "blocker": "string",
+      "current_replacing_fact": "string",
+      "why_stale": "string"
+    }
+  ],
   "verdict": "continue|stop_exception",
   "why_this_is_significant": "short explanation tied to profitability proof"
 }
@@ -2663,11 +2695,12 @@ Required JSON-like output shape:
 Relevant NEXT_STEPS excerpt:
 # Next Steps
 
-Last updated: 2026-06-25
+Last updated: 2026-06-26
 
 ## Active Historical Robust-Search Track
 
 Current read:
+- `docs/regular-options-profitability-blocker-inventory.md` is the current whole-surface blocker inventory. It records direct VIX as cleared and keeps the profitability goal open on remaining forward, candidate-generation, source/input, quote-surface, engine, provider, approval, and market-window blockers.
 - Phase 2 forward proof remains the active forward-audit target and is not profitable yet: `0/30` strict post-freeze completed rows, missing real cohort log, `promotion_ready=false`, and live/auto-track/broker flags false. The passive capture runner is now the preferred forward-only command because it wraps staging, validation, and guarded optional append while reading existing `scan_picks.jsonl` only. The latest real run returned `no_phase2_natural_selections_no_append`: `0` staged rows, no candidate JSONL, and no cohort log. During a valid open market window, the next forward-only attempt is:
 
 ```powershell
@@ -2678,13 +2711,14 @@ npm run options:goal-loop:paper-shadow -- --json
 ```
 
 Only run the validate/append commands if the capture runner wrote candidate rows from real same-day market-window scan picks and validation reports `append_allowed=true`; never append fixture/test/synthetic rows.
+- Memory ops: recover agent runtime context with `npm run memory:bootstrap`, audit it with `npm run memory:audit`, and review dream proposals with `npm run memory:dreams`. Dreaming is for context improvement only; it does not authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, or live validation.
 - the forward cohort remains frozen and passive; do not use historical rows as fresh forward promotion proof.
 - the no-wait profitability track is to extend trusted historical ThetaData OPRA/NBBO coverage, then run a split-aware robust-search evaluation before nominating any new lane for forward tracking.
 - trusted `thetadata_opra_nbbo_1m` intraday coverage for the 13-symbol proof/import set (`SPY`, `QQQ`, `IWM`, `AAPL`, `GOOGL`, `UNH`, `LLY`, `JNJ`, `XOM`, `CVX`, `COP`, `NEM`, `DIA`) is now `505` shared dates from `2024-05-22` through `2026-06-04`; the 504-date two-year feature-store depth target is met.
 - paid-data readiness is still `not_ready` after batch `2147` because `CVX` executable quote coverage is `88.66%`, below the `90%` floor; do not use the 13-symbol surface for a nomination until this clears or the lane explicitly excludes/fails the affected symbol under a preregistered rule.
 - `docs/regular-options-cvx-executable-coverage.md` diagnoses the CVX issue as observed zero-bid tradability, not missing provider data: `495,306` trusted rows, `505` dates, `56,191` non-executable rows, `100.0%` of non-executable rows are zero-bid/positive-ask, `0` missing bid/ask rows, `0` crossed quotes, and the current multilane source report contains `3` selected CVX historical trades plus `1` suppressed duplicate.
 - `data/contracts/regular-options-source-quality-scope-policy.json` is active and applies the `cvx_zero_bid_tradability_candidate_scope_v1` rule, excluding the `3` matching CVX `bullish_pullback_core` rows from historical nomination metrics without lowering the quote-quality floor.
-- ThetaTerminal v3 is reachable at `http://127.0.0.1:25503`; the old-date dry-run for `2024-05-22` returned `20,958` normalized rows with `0` errors.
+- ThetaTerminal has been reachable in earlier checks, but the current scoped 59-symbol repair artifact is authoritative for this blocker and reports `blocked_thetaterminal_source_unavailable_retry`; do not retry that branch until a fresh provider/source check changes the current artifact.
 - batches `2130` through `2146` imported `2024-05-22` through `2025-05-14` for the 13-symbol set with `5,805,236` trusted intraday rows, `0` duplicates, and `0` rejects. Batch `2147` then imported the scoped post-repair exact missing rows for the four coverage-repair variants: `17` trusted intraday rows, `0` duplicates, `0` rejects, `0` dry-run/import errors, and `0` lookahead-only rows.
 - `docs/regular-options-feature-store.md` is now the point-in-time feature-store readback: `12,149,436` trusted intraday rows, all `13` symbols available, `505` shared quote dates, and joins require `feature.tradable_after_time <= candidate_entry_time`.
 - `docs/regular-options-robust-search-evaluation.md` is now the split-aware historical robust-search report. Current result is `historical_candidates_blocked`: `231` exact rows accepted after `3` CVX source-quality scope exclusions, `0` / `3` candidates ready, regime robustness passed, feature-store gate passed, combined final holdout `28` trades with bootstrap PF lower bound `0.61`, and blockers include final holdout below `30`, final PF-LB below the selection-adjusted bar, paper-shadow/source-quality blockers, and lane-specific unpriced/zero-bid blockers.
@@ -2692,49 +2726,54 @@ Only run the validate/append commands if the capture runner wrote candidate rows
 - `docs/regular-options-historical-depth-selected-trades.md` is the earlier read-only selected-trade calendar-depth readback exposed as `npm run options:build:historical-depth-selected-trades`; it showed why the broad source could not answer the `2024-06` through `2026-05` question. The current proof chain should use the fail-closed frozen source-surface materializer instead of counting broad-source selected rows.
 - `docs/regular-options-point-in-time-selected-trade-depth.md` and `docs/regular-options-point-in-time-candidate-generation.md` are the read-only point-in-time selected-trade depth and candidate-generation proof reports. The current 13-symbol chain consumes the frozen source surface, which proves `0/24` months and no selected rows; zero-selection months outside a proven candidate-generation source cannot be counted as real no-pick months.
 - `docs/regular-options-13-symbol-candidate-generation-no-write.md` is now the read-only no-write/as-of/universe-filter runner-support artifact, exposed as `npm run options:research:13-symbol-no-write-candidate-generation -- --no-write --json`. It proves safe runner controls only; it does not prove candidate-surface coverage or profitability.
-- `scanner_asof_contract_and_historical_option_chain_provider_v1` is implemented. The scanner API/as-of/no-write signatures are present, historical option selection uses trusted local `thetadata_opra_nbbo_1m` intraday rows from `data/options-validation/options_history.db` through read-only SQLite, exact bid/ask entry pricing is used where possible, missing IV/volume/open-interest stays `None`, and historical mode fails closed without latest-chain/model fallback when rows are absent. `npm run options:research:historical-frozen-scanner-replay-adapter -- --no-write --json` now clears `scanner_api_missing_historical_no_write_contract` and `scanner_option_selection_missing_historical_as_of_contract`, but still reports `blocked_historical_frozen_scanner_replay_adapter` with `6,916` rows, `0` selected rows, and real input blockers: `underlying_daily_history_source_not_point_in_time`, missing point-in-time market-regime inputs, lane-specific feature inputs, historical entry underlying price, historical option-chain selection surface, and earnings calendar source. Do not rework the scanner/as-of contract unless these tests or signatures regress.
-- `docs/regular-options-13-symbol-frozen-candidate-generation-entrypoint.md` is now the GPT-5.5-selected read-only reusable frozen daily candidate/no-pick entrypoint, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint -- --start-date 2024-0
+- `scanner_asof_contract_and_historical_option_chain_provider_v1` is implemented. The scanner API/as-of/no-write signatures are present, historical option selection uses trusted local `thetadata_opra_nbbo_1m` intraday rows from `data/options-validation/options_history.db` through read-only SQLite, exact bid/ask entry pricing is used where possible, missing IV/volume/open-interest stays `None`, and historical mode fails closed without latest-chain/model fallback when rows are absent. `npm run options:research:historical-frozen-scanner-replay-adapter -- --no-write --json` now clears `scanner_api_missing_historical_no_write_contract`
 
 Relevant DECISIONS excerpt:
 # Decisions
 
-## 2026-06-25: Underlying Daily Acquisition Is A Source Intake Gate, Not Profitability Proof
+## 2026-06-26: Oracle Packet Ranks VRP And Term Through Current Bounded Gates
 
-The next safe blocker-reducing slice for the regular-options profitability loop is not another parser plan and not a local `market_data.db` shortcut. `scripts/build_regular_options_underlying_daily_source_acquisition_packet.py`, exposed as `npm run options:source-acquisition:underlying-daily-history`, now owns the read-only intake preflight for staged trusted `point_in_time_underlying_daily_ohlcv_adjusted_v1` CSVs.
+The Oracle profitability loop packet must not rank older VRP or term-structure replay-readiness artifacts when newer structure harness and bounded replay gates exist. Those older artifacts still have provenance value, but their engine blocker arrays are stale relative to the current harness/bounded gates.
 
-Latest status is `blocked_underlying_daily_source_acquisition_missing`: no CSV exists under `data/import-staging/underlying_daily`, so there are `0` candidate files and `0` ready candidates. The packet reuses the strict source parser/validator, rejects leakage fields, manual/synthetic/source-mark rows, late known-at rows, and local provenance shortcuts such as `market_data.db:daily_history`, historical reconstruction, or inferred known-at policy. It emits the exact future command `npm run options:source-import:underlying-daily-history -- --source-file data/import-staging/underlying_daily/point_in_time_underlying_daily_ohlcv_adjusted_v1.csv --approval-token APPROVE_UNDERLYING_DAILY_HISTORY_SOURCE_IMPORT --no-replay --json` only as a future materialization path.
+Durable decision: `scripts/build_options_oracle_profit_loop_packet.py` loads `regular-options-vrp-credit-spread-structure-harness`, `regular-options-vrp-credit-spread-bounded-replay`, `regular-options-term-structure-calendar-structure-harness`, and `regular-options-term-structure-calendar-bounded-replay`. The current packet blocker arrays use the bounded replay gates: VRP remains blocked only on `missing_index_credit_spread_quote_surface`; term structure remains blocked only on `missing_index_calendar_quote_surface` and `missing_point_in_time_term_structure_inputs`. This is not replay, not accepted profitability, not quote import, not evidence mutation, not live/broker/auto-track permission, not holdout use, not proof-bar change, and not promotion.
 
-Durable decision: the acquisition packet is a fail-closed source intake boundary. It writes no source rows, runs no replay, imports no quotes, mutates no evidence stores, consumes no protected holdout, and proves no profitability. The historical frozen scanner adapter now has scanner/as-of/no-write contract blockers cleared, but the 13-symbol historical path remains blocked on missing trusted underlying daily source rows and downstream point-in-time input surfaces until a real full-window source CSV is staged and separately approved for tokened import.
+## 2026-06-26: Dispersion Pair Mechanics Are Cleared As Readiness Blockers
 
-## 2026-06-24: Frozen 13-Symbol Entrypoint Exists But Daily Candidate Decisions Are Still Missing
+The dispersion-proxy hybrid readiness audit no longer treats pair construction, side-aware all-leg pair pricing, pair max-loss/collateral convention, full denominator mapping, or strict-new dedupe as current blockers when the preregistered dispersion playbook is loaded. The playbook already freezes those design/formula/denominator contracts, and the readiness artifact now includes the preregistration artifact in its evidence search.
 
-GPT-5.5 Pro selected `candidate_generation_repair:frozen_13_symbol_reusable_candidate_generation_entrypoint_v1` after the profitability-first blocker map identified candidate throughput as the highest-leverage blocker. `scripts/regular_options_frozen_candidate_generation_entrypoint.py`, exposed as `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint`, now owns the reusable read-only/no-write frozen daily candidate/no-pick entrypoint.
+Durable decision: `index_constituent_dispersion_proxy_defined_risk_hybrid_v1` remains blocked only on `missing_dispersion_or_concentration_proxy_inputs` until a trusted point-in-time dispersion/concentration source exists. This is not replay, not accepted profitability, not quote import, not evidence mutation, not live/broker/auto-track permission, not holdout use, not proof-bar change, and not promotion.
 
-Latest status is `blocked_frozen_13_symbol_candidate_generation_entrypoint`: the artifact emits `6,916` lane/symbol/date rows across the frozen Phase 2 13-symbol cohort from `2024-06-01` through `2026-05-31`, but all rows are blocked by `missing_daily_candidate_generation_diagnostics`; the source is still not an exact frozen 13-symbol daily decision source, covered months are `0/24`, and selected candidates are `0`. The frozen source-surface materializer now consumes this entrypoint, and the historical simulated-forward audit now defaults to the frozen source surface instead of the old broad selected-trade source. Current audit status remains `blocked_historical_simulated_forward_audit` with `0` selected rows, `0` train months, `0` audit months, and `0/30` exact audit trades.
+## 2026-06-26: Term-Structure Geometry And Strict-New Are Cleared As Local Harness Blockers
 
-Durable decision: the reusable entrypoint is implemented, but it does not clear candidate-generation proof. Do not claim historical or forward profitability from old broad selected rows, dashboard rows, or quote-depth-only rows. The next same-session Oracle loop should treat the remaining blocker as real daily candidate-generation/source repair, source materialization, replay-engine work, or another ranked profitability path. No broker orders, live validation, auto-track, quote import, evidence mutation, protected-holdout consumption, production scanner/strategy/stop/sizing/proof-bar change, or promotion occurred.
+The term-structure calendar/diagonal branch no longer treats `missing_preregistered_calendar_diagonal_geometry` or `missing_strict_new_dedupe` as current blockers. The preregistered playbook already carries frozen geometry through `concept.frozen_design.term_structure_selection` plus `exit_policy`, and the bounded replay gate already has duplicate strict-new identity handling against the 157-row clean base stack.
 
-## 2026-06-24: Direct VIX Source Is Materialized; Macro And Flow Need Trusted Source Files
+Durable decision: the structure harness must recognize the real preregistered playbook shape, surface `candidate_geometry_ready=true` and `strict_new_dedupe_ready=true`, and mark those stale blockers as satisfied by harness. The branch remains blocked on real source/quote blockers only: `missing_point_in_time_term_structure_inputs` and `missing_index_calendar_quote_surface`. This is not replay, not accepted profitability, not quote import, not evidence mutation, not live/broker/auto-track permission, not holdout use, not proof-bar change, and not promotion.
 
-The direct VIX source repair packet is no longer merely an import-decision artifact. `scripts/import_regular_options_direct_vix_source.py`, exposed as `npm run options:source-import:direct-vix`, materialized official Cboe VIX daily history into `data/profitability-lab/regular-options-point-in-time-vix-bucket/source_rows.jsonl` under the token `APPROVE_DIRECT_VIX_SOURCE_IMPORT`, wrote the frozen VIX bucket policy at `data/contracts/regular-options-vix-bucket-policy.json`, and did not mutate `options_history.db`.
+## 2026-06-26: Profitability Blocker Goal Requires Whole-Surface Inventory And Agent Consensus
 
-Latest direct VIX readback is `direct_vix_source_import_materialized`; the downstream point-in-time VIX bucket is `point_in_time_vix_bucket_ready` with `505` / `505` requested feature-store dates covered, `100.0%` coverage, `0` late-known-at rows, `0` leakage rejects, and no blockers. VIX should no longer be named as a blocker for macro-event, flow-extreme, PMCC, momentum, dispersion, skew, or VRP readiness unless a future artifact becomes missing, stale, malformed, or policy-incompatible.
+The current blocker-removal goal is not satisfied by clearing stale VIX text alone. `docs/regular-options-profitability-blocker-inventory.md` is now the current whole-surface inventory for regular-options profitability blockers.
 
-`scripts/import_regular_options_macro_event_calendar.py` and `scripts/import_regular_options_flow_extreme_volume_oi.py` now provide exact tokened materialization paths for the next easy source repairs, but they still require trusted input CSVs. Macro-event remains blocked by missing scheduled-event source rows, and flow-extreme remains blocked by missing trusted SPY/QQQ daily option volume/open-interest source rows. These importers do not authorize broker orders, live validation, auto-track, protected-holdout consumption, production scanner/strategy/stop/sizing/proof-bar changes, evidence DB mutation outside their generated source-row artifacts, promotion, or treating historical rows as forward proof.
+Durable decision: direct VIX is cleared by current artifacts (`direct_vix_source_import_materialized` and `point_in_time_vix_bucket_ready` with `505` / `505` coverage), and stale VIX propagation has been patched in current source/selector/replay readbacks. The remaining profitability blockers are non-VIX: `0/30` strict forward proof, missing real forward cohort rows, frozen 13-symbol candidate generation at `0/24` months and `0` selected rows, missing trusted underlying/opening, macro-event, flow, dispersion/concentration, trend/regime, breadth/momentum inputs, missing quote surfaces for VRP/skew/term/PMCC structures, incomplete replay/engine surfaces, ThetaTerminal/source availability, explicit source/materialization approval boundaries, and future market-window forward capture.
 
-## 2026-06-24: Flow-Extreme Volume/OI Source Repair Packet Is Ready For Future Import Decision
+The preregistered selector must consume current readiness gates, including momentum bounded replay, before ranking a blocker-free candidate. A blocker-removal goal is complete only when all locally removable blockers are fixed, remaining blockers are explicitly categorized, verification passes, and the six-agent debate agrees that the done/not-done conclusion is evidence-backed. Source, approval, provider, and market-window blockers cannot be erased by rewriting docs.
 
-GPT-5.5 Pro selected `trusted_flow_volume_oi_source_repair_packet_v1` after the macro-event calendar source repair packet reached import-decision state. `scripts/build_regular_options_flow_extreme_source_repair_packet.py`, exposed as `npm run options:source-plan:flow-extreme-volume-oi`, now owns the read-only flow-extreme volume/open-interest source repair packet.
+## 2026-06-26: Post-Event IV-Crush Readiness Gap Is Now A Concrete Blocker Audit
 
-Latest status is `flow_extreme_source_repair_packet_ready_for_operator_import_decision`. The packet reproduces the current flow baseline (`point_in_time_flow_extreme_input_status=blocked_point_in_time_flow_extreme_input`, `flow_extreme_volume_oi_source_rows_status=blocked_flow_extreme_volume_oi_source_rows`, `covered_month_count=0`, `date_coverage_pct=0.0`), defines `trusted_option_volume_open_interest_daily_v1` required fields for SPY/QQQ only, rejects same-day aggregate use for same-day entries, freezes the prior-row percentile policy, validates late-known-at and missing-value fixture rejects, and emits a future tokened import/materialization command using `APPROVE_FLOW_EXTREME_VOLUME_OI_SOURCE_IMPORT`.
+`scripts/build_regular_options_post_event_iv_crush_replay_readiness.py`, exposed as `npm run options:research:post-event-iv-crush-replay-readiness`, now owns the read-only readiness audit for `post_event_iv_crush_index_iron_condor_v1`. The preregistered selector and Oracle packet consume and validate this artifact, so the branch is no longer blocked by a missing structure-specific readiness audit.
 
-Durable decision: this task authorizes only a future approval decision, not import. Flow source import/materialization, source-row writes, downstream flow input materialization, replay, and profitability claims remain not run. No evidence store mutation, protected-holdout consumption, live validation, auto-track, broker/order action, scanner/strategy/stop/sizing/proof-bar change, or promotion occurred. The same-session Oracle handoff prompt now starts with the profitability-first blocker-ranking prompt and explicitly forbids repeating the completed VIX, macro-event, flow-source, and ThetaTerminal retry branches unless source state changes.
+Durable decision: the current blockers for this branch are non-VIX blockers: missing macro-event calendar source/category coverage, missing IV/event-premium proxy, and insufficient full-window/latest-four/train-month quote-surface coverage for four-leg iron condor/butterfly replay. The artifact is not replay, not accepted profitability, not source or quote import, not evidence mutation, not live validation, not auto-track, not broker permission, not holdout use, not scanner/strategy/proof-bar change, and not promotion.
 
-## 2026-06-24: Macro-Event Calendar Source Repair Packet Is Ready For Future Import Decision
+## 2026-06-26: Dreaming Is Reviewable Memory, Not Options Proof
 
-GPT-5.5 Pro selected `macro_event_calendar_source_repair_packet_v1` after the direct VIX source repair packet reached import-decision state. `scripts/build_regular_options_macro_event_calendar_source_repair_packet.py`, exposed as `npm run options:source-plan:macro-event-calendar`, now owns the read-only macro-event source repair packet.
+The local agent control plane now supports session transcript provenance and out-of-band dream proposals, while `C:\Users\kalec\projects-memory` provides a computer-wide memory index and schema. The options repo keeps `data/agent-control/agent_control.db` as its authoritative runtime graph; the global graph is only a pointer/provenance layer.
 
-Latest status is `macro_event_calendar_source_repair_packet_ready_for_operator_import_dec
+Durable decision: dream proposals are non-authoritative until accepted through `npm run agent:control -- dream accept`. Accepted dream entries become visibly marked operating memory with `origin=dreaming`, `non_authoritative=true`, and `does_not_authorize_trading_or_evidence_mutation=true`. They cannot prove profitability, approve evidence mutation, change scanner policy, promote lanes, open broker-paper or live-capital paths, consume holdout, or override living docs, generated readbacks, gateboard state, exact OPRA/NBBO evidence, or code.
+
+## 2026-06-25: Oracle Profitability Prompt Must Rank Current Evidence, Not Stale Packets
+
+The same-session GPT-5.5 profitability loop packet is now an approval-aware reviewer and next-slice selector, not a generic handoff prompt. `scripts/build_options_oracle_profit_loop_packet.py`, exposed as `npm run options:oracle-loop:packet`, starts with a current fact table and evidence-precedence rules so stale embedded blockers cannot outrank newer structured artifacts.
+
+Durable decision: the packet must preserve strict forward proof at `0/30` until real approved forward-cohort rows with exact executable entry and exit evidence exist. Historical, replay, simulated-forward, dashboard, research/backfill, midpoint, stale, EOD, last, model, manual, synthetic, lookahead, diagnostic, or repaired historical rows can rank hypotheses but cannot count as accepted profitability. Current VIX-ready artifacts override older missing-VIX text; 59-symbol ThetaTerminal retry stays parked until provider/source state changes; 13-symbol quote depth remains insufficient without candidate-generation proof; underlying daily OHLCV is a first-class blocker but cannot be solved by another packet-only plan or local `market_data.db` shortcut; and bullish-pullback `layer_4_clean_exact` must be expl
 
 Relevant PROJECT_CONTEXT excerpt:
 # Project Context

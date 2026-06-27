@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-trade-qualification.md",
-    "json": "data/forward-tracking/regular_options_trade_qualification_20260621T172216Z.json",
+    "json": "data/forward-tracking/regular_options_trade_qualification_20260627T035052Z.json",
     "latest_json": "data/forward-tracking/regular_options_trade_qualification_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_trade_qualification_latest.md",
-    "markdown": "data/forward-tracking/regular_options_trade_qualification_20260621T172216Z.md"
+    "markdown": "data/forward-tracking/regular_options_trade_qualification_20260627T035052Z.md"
   },
   "auto_track_allowed": false,
   "best_current_lane_if_any": {
@@ -19,7 +19,7 @@
   "broker_order_allowed": false,
   "exact_realized_pnl_count": 0,
   "fresh_exact_entry_count": 6,
-  "generated_at_utc": "2026-06-21T17:22:16Z",
+  "generated_at_utc": "2026-06-27T03:50:52Z",
   "historical_signatures": {
     "actionability": "historical robust-search and walk-forward results can nominate or reject future forward candidates, but are not fresh forward proof by themselves.",
     "robust_search_status": "historical_candidates_blocked",
@@ -110,10 +110,12 @@
       "next_operator_action": "Collect fresh exact entry and exact realized exit evidence; do not route live.",
       "priced_rows": 24,
       "profit_factor": 1.83,
-      "promotion_state": "paper_probation",
+      "promotion_state": "diagnostic",
       "reason_codes": [
         "fresh_paper_cohort",
         "fresh_paper_cohort_insufficient",
+        "lane_profitability_gate_report_unusable",
+        "lane_profitability_report_clean",
         "walk_forward_holdout_depth",
         "walk_forward_holdout_too_small_or_failed",
         "no_chase_active",
@@ -167,6 +169,8 @@
         "fresh_paper_cohort",
         "fresh_paper_cohort_insufficient",
         "lane_not_profitable_enough_for_probation",
+        "lane_profitability_gate_report_unusable",
+        "lane_profitability_report_clean",
         "profit_factor_below_lane_gate",
         "profitable_lane_gate",
         "recent_cohort_circuit_breaker_active",
@@ -358,10 +362,10 @@
   "scope": "regular_options_trade_qualification_profitability_triage",
   "source_artifacts": {
     "candidate_outcome_ledger": {
-      "age_hours": 0.01,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:56Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_candidate_outcome_ledger_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_candidate_outcome_ledger",
@@ -369,10 +373,10 @@
       "status": "loaded"
     },
     "fill_attempt_evidence_capture_plan": {
-      "age_hours": 0.03,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:20Z",
+      "generated_at_utc": "2026-06-27T03:48:43Z",
       "path": "data/forward-tracking/regular_options_fill_attempt_evidence_capture_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_fill_attempt_evidence_capture_plan",
@@ -380,10 +384,10 @@
       "status": "loaded"
     },
     "fresh_evidence_loop": {
-      "age_hours": 0.03,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:30Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_fresh_evidence_loop_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_fresh_evidence_loop",
@@ -391,10 +395,10 @@
       "status": "loaded"
     },
     "gateboard": {
-      "age_hours": 0.02,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:05Z",
+      "generated_at_utc": "2026-06-27T03:50:52Z",
       "path": "data/forward-tracking/project_operator_gateboard_latest.json",
       "reason_codes": [],
       "report_id": "project_operator_gateboard",
@@ -402,10 +406,10 @@
       "status": "loaded"
     },
     "historical_walk_forward": {
-      "age_hours": 83.21,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-18T06:09:39Z",
+      "generated_at_utc": "2026-06-27T03:50:47Z",
       "path": "data/profitability-lab/regular-options-historical-walk-forward/latest.json",
       "reason_codes": [],
       "report_id": "regular_options_historical_walkforward",
@@ -416,7 +420,7 @@
       "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:22:02Z",
+      "generated_at_utc": "2026-06-27T03:50:51Z",
       "path": "data/forward-tracking/lane_promotion_state_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_lane_promotion_state",
@@ -424,10 +428,10 @@
       "status": "loaded"
     },
     "monthly_profitability": {
-      "age_hours": 0.02,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:09Z",
+      "generated_at_utc": "2026-06-27T03:50:51Z",
       "path": "data/forward-tracking/monthly_all_lanes_profitability_audit_latest.json",
       "reason_codes": [],
       "report_id": "monthly_all_lanes_profitability_audit",
@@ -435,10 +439,10 @@
       "status": "loaded"
     },
     "open_position_risk": {
-      "age_hours": 0.03,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:19Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/regular_open_position_risk_latest.json",
       "reason_codes": [],
       "report_id": "open_position_risk",
@@ -446,10 +450,10 @@
       "status": "loaded"
     },
     "open_risk_resolution_plan": {
-      "age_hours": 0.01,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:48Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/forward-tracking/regular_options_open_risk_resolution_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_open_risk_resolution_plan",
@@ -457,10 +461,10 @@
       "status": "loaded"
     },
     "paper_shortlist": {
-      "age_hours": 0.01,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:47Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "data/profitability-lab/regular-options-paper-shortlist/latest.json",
       "reason_codes": [],
       "report_id": "paper_shortlist",
@@ -468,10 +472,10 @@
       "status": "loaded"
     },
     "profit_capture_queue": {
-      "age_hours": 0.01,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:48Z",
+      "generated_at_utc": "2026-06-27T03:48:39Z",
       "path": "data/profitability-lab/regular-options-profit-capture-queue/latest.json",
       "reason_codes": [],
       "report_id": "profit_capture_queue",
@@ -479,10 +483,10 @@
       "status": "loaded"
     },
     "repair_burndown": {
-      "age_hours": 0.01,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:48Z",
+      "generated_at_utc": "2026-06-27T03:48:40Z",
       "path": "data/profitability-lab/regular-options-repair-burndown/latest.json",
       "reason_codes": [],
       "report_id": "repair_burndown",
@@ -490,10 +494,10 @@
       "status": "loaded"
     },
     "robust_search_evaluation": {
-      "age_hours": 83.21,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-18T06:09:39Z",
+      "generated_at_utc": "2026-06-27T03:50:49Z",
       "path": "data/profitability-lab/regular-options-robust-search-evaluation/latest.json",
       "reason_codes": [],
       "report_id": "regular_options_robust_search_evaluation",
@@ -501,10 +505,10 @@
       "status": "loaded"
     },
     "suggested_trade_close_risk": {
-      "age_hours": 0.57,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T16:47:57Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "data/forward-tracking/suggested_trade_close_risk_latest.json",
       "reason_codes": [],
       "report_id": "suggested_trade_close_risk",
@@ -512,10 +516,10 @@
       "status": "loaded"
     },
     "suggested_trade_review_plan": {
-      "age_hours": 0.34,
+      "age_hours": 0.04,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:01:59Z",
+      "generated_at_utc": "2026-06-27T03:48:43Z",
       "path": "data/forward-tracking/regular_options_suggested_trade_review_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_suggested_trade_review_plan",

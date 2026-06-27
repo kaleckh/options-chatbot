@@ -1,0 +1,66 @@
+{
+  "append_allowed_by_validation": false,
+  "append_validation": {
+    "append_allowed": false,
+    "append_ready_rows": 0,
+    "append_reject_counts": {},
+    "append_rejected_rows": 0
+  },
+  "auto_track_allowed": false,
+  "broker_order_allowed": false,
+  "candidate_row_ids": [],
+  "candidate_rows_staged": 0,
+  "cohort_append_performed": false,
+  "cohort_log_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+  "cohort_read_only": true,
+  "cohort_source": {
+    "error": null,
+    "exists": false,
+    "malformed_row_count": 0,
+    "path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_cohort.jsonl",
+    "reason_codes": [
+      "cohort_log_not_created_yet"
+    ],
+    "required": false,
+    "row_count": 0,
+    "status": "missing"
+  },
+  "existing_completed_selection_count": 0,
+  "exit_evidence_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_evidence.jsonl",
+  "exit_evidence_source": {
+    "exists": false,
+    "malformed_row_count": 0,
+    "path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_evidence.jsonl",
+    "row_count": 0,
+    "status": "missing"
+  },
+  "generated_at_utc": "2026-06-27T05:39:00Z",
+  "guarded_append_template": "npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_completion_candidate_rows.jsonl --approval-token APPROVE_PHASE2_FORWARD_COHORT_APPEND --market-window-confirmed",
+  "historical_rows_are_forward_proof": false,
+  "live_entry_allowed": false,
+  "no_write": false,
+  "open_forward_entry_count": 0,
+  "output_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_exit_completion_candidate_rows.jsonl",
+  "prohibited_actions": [
+    "do_not_append_from_exit_completion_stager",
+    "do_not_enable_live_validation_from_exit_completion_stager",
+    "do_not_enable_auto_track_from_exit_completion_stager",
+    "do_not_submit_broker_orders_from_exit_completion_stager",
+    "do_not_import_quotes_from_exit_completion_stager",
+    "do_not_lower_proof_bars_from_exit_completion_stager",
+    "do_not_treat_historical_rows_as_forward_proof"
+  ],
+  "promotion_ready": false,
+  "proof_bars_changed": false,
+  "quotes_imported": false,
+  "read_only": false,
+  "reject_counts": {},
+  "report_id": "regular_options_strict_forward_30_exit_completion_stager",
+  "row_results": [],
+  "schema_version": 1,
+  "status": "exit_completion_waiting_for_open_forward_rows",
+  "writes_performed": [
+    "data/forward-tracking/regular_options_strict_forward_30_exit_completion_stager_latest.json",
+    "docs/regular-options-strict-forward-30-exit-completion-stager.md"
+  ]
+}

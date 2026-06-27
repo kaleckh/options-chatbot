@@ -1,6 +1,6 @@
 # Regular Options Momentum Continuation Bounded Replay
 
-This generated report is read-only. It gates the bounded momentum-continuation replay behind the preregistered design, the readiness selector, the prior research replay, the proof-blocker resolution audit, strict-new accounting, and protected-holdout checks.
+This generated report is read-only. It gates the bounded momentum-continuation replay behind the preregistered design inventory, the prior research replay, the proof-blocker resolution audit, strict-new accounting, and protected-holdout checks.
 
 ## Summary
 
@@ -43,7 +43,7 @@ Historical positive diagnostics are not accepted profitability. They are only ev
 
 ## Next Oracle Instruction
 
-Return this bounded replay result to the same GPT-5.5 Pro session. If blockers remain, do not repeat this momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time VIX/breadth input surface or explicit approved data repair changes the blocker. Select the next materially different, falsifiable branch that can move toward at least 30 profitable strict completed forward-audit rows.
+Return this bounded replay result to the same GPT-5.5 Pro session. If blockers remain, do not repeat this momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time breadth/momentum input surface or explicit approved data repair changes the blocker. Select the next materially different, falsifiable branch that can move toward at least 30 profitable strict completed forward-audit rows.
 
 ## Forbidden Actions
 

@@ -4,10 +4,10 @@
   "artifacts": {
     "approval_packet": "docs/bullish-pullback-layer4-forward-paper-shadow-approval-packet.md",
     "docs_report": "docs/regular-options-bullish-pullback-layer4-forward-capture-protocol.md",
-    "json": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_20260621T202209Z.json",
+    "json": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_20260626T142706Z.json",
     "latest_json": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.json",
     "latest_markdown": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_latest.md",
-    "markdown": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_20260621T202209Z.md"
+    "markdown": "data/forward-tracking/bullish_pullback_layer4_forward_capture_protocol_20260626T142706Z.md"
   },
   "auto_track_allowed": false,
   "blockers": [],
@@ -59,7 +59,7 @@
     },
     "status": "blocked_execution_safety_preflight"
   },
-  "generated_at_utc": "2026-06-21T20:22:09Z",
+  "generated_at_utc": "2026-06-26T14:27:06Z",
   "historical_executable_economics": {
     "harness_decision": "profitable_but_preflight_blocked",
     "historical_side_aware_avg_net_lb_5pct": 235.07,
@@ -165,7 +165,7 @@
       "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T20:22:00Z",
+      "generated_at_utc": "2026-06-26T14:27:05Z",
       "path": "data/forward-tracking/bullish_pullback_layer_executable_economics_latest.json",
       "reason_codes": [],
       "report_id": "bullish_pullback_layer_executable_economics",
@@ -173,10 +173,10 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_execution_safety_audit": {
-      "age_hours": 0.0,
+      "age_hours": 0.02,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T20:21:52Z",
+      "generated_at_utc": "2026-06-26T14:26:07Z",
       "path": "data/forward-tracking/bullish_pullback_layer_execution_safety_audit_latest.json",
       "reason_codes": [],
       "report_id": "bullish_pullback_layer_execution_safety_audit",
@@ -184,10 +184,10 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_shadow_selection": {
-      "age_hours": 0.01,
+      "age_hours": 0.02,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T20:21:48Z",
+      "generated_at_utc": "2026-06-26T14:26:07Z",
       "path": "data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json",
       "reason_codes": [],
       "report_id": "bullish_pullback_layer_shadow_selection",

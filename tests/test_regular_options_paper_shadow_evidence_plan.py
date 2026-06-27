@@ -475,6 +475,19 @@ class RegularOptionsPaperShadowEvidencePlanTests(unittest.TestCase):
         self.assertEqual(report["overall_status"], "waiting_for_fresh_candidates")
         self.assertTrue(any(row["action_type"] == "wait_for_fresh_candidate" for row in report["operator_actions"]))
 
+    def test_paper_shadow_collect_lane_with_diagnostic_promotion_state_is_still_actionable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            payloads = _base_payloads()
+            payloads["trade_qualification"]["lane_decisions"][0]["promotion_state"] = "diagnostic"
+            payloads["trade_qualification"]["lane_decisions"][0]["disposition"] = "paper_shadow"
+            report = self._build(Path(temp_dir), payloads)
+
+        self.assertEqual(report["overall_status"], "paper_shadow_evidence_collecting")
+        self.assertEqual(report["best_evidence_lane"]["lane_id"], "paper_lane")
+        self.assertEqual(report["best_evidence_lane"]["promotion_state"], "diagnostic")
+        self.assertEqual(report["best_evidence_lane"]["disposition"], "paper_shadow")
+        self.assertTrue(any(row["lane_id"] == "paper_lane" for row in report["operator_actions"]))
+
     def test_stale_source_artifact_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             payloads = _base_payloads(generated_at="2026-06-10T00:00:00Z")

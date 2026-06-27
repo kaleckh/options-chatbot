@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -43,6 +44,16 @@ def _rel(path: Path) -> str:
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def _sha256_file(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _write_outputs(report: dict[str, Any], latest_json_path: Path, docs_report_path: Path) -> None:
@@ -121,6 +132,7 @@ def build_capture_report(
         "append_report": append_report,
         "candidate_rows_staged": staged_count,
         "candidate_jsonl_exists": candidate_output_path.exists(),
+        "candidate_batch_sha256": _sha256_file(candidate_output_path),
         "cohort_log_exists": cohort_log_path.exists(),
         "cohort_append_performed": bool(append_report and append_report.get("cohort_append_performed")),
         "scanner_executed": False,

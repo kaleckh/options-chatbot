@@ -1,17 +1,17 @@
 {
   "artifacts": {
     "docs_report": "C:\\Users\\kalec\\options-chatbot\\docs\\regular-options-candidate-outcome-ledger.md",
-    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260621T172156Z.json",
+    "json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260627T034842Z.json",
     "latest_json": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.json",
     "latest_markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_latest.md",
-    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260621T172156Z.md"
+    "markdown": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_candidate_outcome_ledger_20260627T034842Z.md"
   },
-  "generated_at_utc": "2026-06-21T17:21:56Z",
+  "generated_at_utc": "2026-06-27T03:48:42Z",
   "inputs": {
     "fresh_evidence_loop": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:30Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_options_fresh_evidence_loop_latest.json",
       "required": true,
       "status": "loaded"
@@ -19,7 +19,7 @@
     "open_position_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:20:19Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\regular_open_position_risk_latest.json",
       "required": false,
       "status": "loaded"
@@ -27,7 +27,7 @@
     "paper_shortlist": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:47Z",
+      "generated_at_utc": "2026-06-27T03:48:42Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-paper-shortlist\\latest.json",
       "required": false,
       "status": "loaded"
@@ -35,7 +35,7 @@
     "profit_capture_queue": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T17:21:48Z",
+      "generated_at_utc": "2026-06-27T03:48:39Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\profitability-lab\\regular-options-profit-capture-queue\\latest.json",
       "required": false,
       "status": "loaded"
@@ -43,7 +43,7 @@
     "suggested_trade_close_risk": {
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-21T16:47:57Z",
+      "generated_at_utc": "2026-06-27T03:48:38Z",
       "path": "C:\\Users\\kalec\\options-chatbot\\data\\forward-tracking\\suggested_trade_close_risk_latest.json",
       "required": false,
       "status": "loaded"
@@ -6809,43 +6809,6 @@
       "fresh_executable_quote_window": true,
       "guardrail_decision": "blocked",
       "lane_id": "ai_commodity_infra_observation",
-      "ledger_key": "paper_shortlist:bridge:ai_commodity_infra_observation|FCX|symbol_only",
-      "live_policy_change": false,
-      "match_type": "symbol_only",
-      "matched_tier_a_lanes": [],
-      "next_evidence_action": "respect_guardrail_or_lane_mismatch",
-      "operator_next_step": "Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion.",
-      "playbook_id": "ai_commodity_infra_observation",
-      "prohibited_actions": [
-        "do_not_create_live_row_from_candidate_outcome_ledger",
-        "do_not_submit_broker_order_from_candidate_outcome_ledger",
-        "do_not_change_scanner_policy_from_candidate_outcome_ledger",
-        "do_not_lower_exact_opra_nbbo_proof_bar_from_candidate_outcome_ledger",
-        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
-      ],
-      "required_next_evidence": [
-        "fresh_executable_tier_a_lane_signature_match"
-      ],
-      "row_type": "paper_shortlist_bridge",
-      "source_report": "paper_shortlist",
-      "symbol": "FCX",
-      "ticker": "FCX"
-    },
-    {
-      "action_label": "Respect guardrail/lane mismatch",
-      "action_priority": 11,
-      "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-      "blocking_reasons": [
-        "guardrail_not_clear",
-        "lane_signature_not_matched",
-        "no_tier_a_lane_match"
-      ],
-      "bridge_status": "not_bridge_eligible",
-      "direction": null,
-      "expiry": null,
-      "fresh_executable_quote_window": true,
-      "guardrail_decision": "blocked",
-      "lane_id": "ai_commodity_infra_observation",
       "ledger_key": "paper_shortlist:bridge:ai_commodity_infra_observation|RIO|no_symbol_sleeve",
       "live_policy_change": false,
       "match_type": "no_symbol_sleeve",
@@ -6882,14 +6845,14 @@
       "expiry": null,
       "fresh_executable_quote_window": true,
       "guardrail_decision": "blocked",
-      "lane_id": "volatility_expansion_observation",
-      "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|IWM|symbol_only",
+      "lane_id": "ai_commodity_infra_observation",
+      "ledger_key": "paper_shortlist:bridge:ai_commodity_infra_observation|SLV|no_symbol_sleeve",
       "live_policy_change": false,
-      "match_type": "symbol_only",
+      "match_type": "no_symbol_sleeve",
       "matched_tier_a_lanes": [],
       "next_evidence_action": "respect_guardrail_or_lane_mismatch",
       "operator_next_step": "Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion.",
-      "playbook_id": "volatility_expansion_observation",
+      "playbook_id": "ai_commodity_infra_observation",
       "prohibited_actions": [
         "do_not_create_live_row_from_candidate_outcome_ledger",
         "do_not_submit_broker_order_from_candidate_outcome_ledger",
@@ -6902,80 +6865,8 @@
       ],
       "row_type": "paper_shortlist_bridge",
       "source_report": "paper_shortlist",
-      "symbol": "IWM",
-      "ticker": "IWM"
-    },
-    {
-      "action_label": "Respect guardrail/lane mismatch",
-      "action_priority": 11,
-      "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-      "blocking_reasons": [
-        "guardrail_not_clear",
-        "no_tier_a_lane_match"
-      ],
-      "bridge_status": "not_bridge_eligible",
-      "direction": null,
-      "expiry": null,
-      "fresh_executable_quote_window": true,
-      "guardrail_decision": "blocked",
-      "lane_id": "volatility_expansion_observation",
-      "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|QQQ|lane_signature",
-      "live_policy_change": false,
-      "match_type": "lane_signature",
-      "matched_tier_a_lanes": [],
-      "next_evidence_action": "respect_guardrail_or_lane_mismatch",
-      "operator_next_step": "Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion.",
-      "playbook_id": "volatility_expansion_observation",
-      "prohibited_actions": [
-        "do_not_create_live_row_from_candidate_outcome_ledger",
-        "do_not_submit_broker_order_from_candidate_outcome_ledger",
-        "do_not_change_scanner_policy_from_candidate_outcome_ledger",
-        "do_not_lower_exact_opra_nbbo_proof_bar_from_candidate_outcome_ledger",
-        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
-      ],
-      "required_next_evidence": [
-        "fresh_executable_tier_a_lane_signature_match"
-      ],
-      "row_type": "paper_shortlist_bridge",
-      "source_report": "paper_shortlist",
-      "symbol": "QQQ",
-      "ticker": "QQQ"
-    },
-    {
-      "action_label": "Respect guardrail/lane mismatch",
-      "action_priority": 11,
-      "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-      "blocking_reasons": [
-        "guardrail_not_clear",
-        "no_tier_a_lane_match"
-      ],
-      "bridge_status": "not_bridge_eligible",
-      "direction": null,
-      "expiry": null,
-      "fresh_executable_quote_window": true,
-      "guardrail_decision": "blocked",
-      "lane_id": "volatility_expansion_observation",
-      "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|SPY|lane_signature",
-      "live_policy_change": false,
-      "match_type": "lane_signature",
-      "matched_tier_a_lanes": [],
-      "next_evidence_action": "respect_guardrail_or_lane_mismatch",
-      "operator_next_step": "Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion.",
-      "playbook_id": "volatility_expansion_observation",
-      "prohibited_actions": [
-        "do_not_create_live_row_from_candidate_outcome_ledger",
-        "do_not_submit_broker_order_from_candidate_outcome_ledger",
-        "do_not_change_scanner_policy_from_candidate_outcome_ledger",
-        "do_not_lower_exact_opra_nbbo_proof_bar_from_candidate_outcome_ledger",
-        "do_not_treat_midpoint_stale_eod_or_manual_rows_as_production_proof"
-      ],
-      "required_next_evidence": [
-        "fresh_executable_tier_a_lane_signature_match"
-      ],
-      "row_type": "paper_shortlist_bridge",
-      "source_report": "paper_shortlist",
-      "symbol": "SPY",
-      "ticker": "SPY"
+      "symbol": "SLV",
+      "ticker": "SLV"
     }
   ],
   "next_evidence_queue": [
@@ -7302,18 +7193,10 @@
     {
       "action_label": "Respect guardrail/lane mismatch",
       "action_priority": 11,
-      "count": 5,
+      "count": 2,
       "next_evidence_action": "respect_guardrail_or_lane_mismatch",
       "operator_next_step": "Keep blocked, symbol-only, or lane-mismatch rows out of paper shortlist and live promotion.",
       "sample_rows": [
-        {
-          "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-          "lane_id": "ai_commodity_infra_observation",
-          "ledger_key": "paper_shortlist:bridge:ai_commodity_infra_observation|FCX|symbol_only",
-          "row_type": "paper_shortlist_bridge",
-          "source_report": "paper_shortlist",
-          "ticker": "FCX"
-        },
         {
           "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
           "lane_id": "ai_commodity_infra_observation",
@@ -7324,27 +7207,11 @@
         },
         {
           "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-          "lane_id": "volatility_expansion_observation",
-          "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|IWM|symbol_only",
+          "lane_id": "ai_commodity_infra_observation",
+          "ledger_key": "paper_shortlist:bridge:ai_commodity_infra_observation|SLV|no_symbol_sleeve",
           "row_type": "paper_shortlist_bridge",
           "source_report": "paper_shortlist",
-          "ticker": "IWM"
-        },
-        {
-          "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-          "lane_id": "volatility_expansion_observation",
-          "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|QQQ|lane_signature",
-          "row_type": "paper_shortlist_bridge",
-          "source_report": "paper_shortlist",
-          "ticker": "QQQ"
-        },
-        {
-          "action_reason": "fresh_scan_row_failed_guardrail_or_lane_signature_bridge",
-          "lane_id": "volatility_expansion_observation",
-          "ledger_key": "paper_shortlist:bridge:volatility_expansion_observation|SPY|lane_signature",
-          "row_type": "paper_shortlist_bridge",
-          "source_report": "paper_shortlist",
-          "ticker": "SPY"
+          "ticker": "SLV"
         }
       ]
     }
@@ -7441,18 +7308,18 @@
       },
       "eligible_count": 0,
       "fresh_bridge_blocker_counts": {
-        "guardrail_not_clear": 5,
-        "lane_signature_not_matched": 3,
-        "no_tier_a_lane_match": 5
+        "guardrail_not_clear": 2,
+        "lane_signature_not_matched": 2,
+        "no_tier_a_lane_match": 2
       },
       "fresh_bridge_status_counts": {
-        "not_bridge_eligible": 5
+        "not_bridge_eligible": 2
       },
       "invariant_violation_count": 0,
       "live_policy_change": false,
       "release_gate_status": "no_paper_shortlist_candidates",
       "selection_readiness_counts": {
-        "blocked_guardrail_only": 5,
+        "blocked_guardrail_only": 2,
         "do_not_chase": 173,
         "paper_review_candidate": 15,
         "watch_repair_only": 82
@@ -7465,7 +7332,7 @@
       }
     },
     "profit_capture_queue": {
-      "blocked_but_interesting_count": 1,
+      "blocked_but_interesting_count": 0,
       "evidence_repair_priority_counts": {
         "high": 16,
         "low": 43,
@@ -7473,12 +7340,12 @@
         "none": 15
       },
       "fresh_match_bridge_counts": {
-        "not_bridge_eligible": 1
+        "not_bridge_eligible": 2
       },
       "fresh_scan_guardrail_decision_counts": {
-        "blocked": 1
+        "blocked": 2
       },
-      "fresh_scan_match_count": 1,
+      "fresh_scan_match_count": 2,
       "high_priority_evidence_repair_count": 16,
       "live_policy_change": false,
       "quarantine_overlay_count": 5,
@@ -7492,7 +7359,7 @@
         "not_applicable": 43
       },
       "selection_readiness_counts": {
-        "blocked_guardrail_only": 1,
+        "blocked_guardrail_only": 2,
         "do_not_chase": 173,
         "paper_review_candidate": 15,
         "watch_repair_only": 82
@@ -7524,7 +7391,7 @@
       "create_or_link_paper_review_row": 5,
       "refresh_suggested_trade_review": 1,
       "repair_historical_evidence": 39,
-      "respect_guardrail_or_lane_mismatch": 5,
+      "respect_guardrail_or_lane_mismatch": 2,
       "wait_for_fresh_executable_tier_a_bridge": 15,
       "wait_for_fresh_match_or_archive_candidate": 16
     },
@@ -7534,7 +7401,7 @@
     "input_status_counts": {
       "loaded": 5
     },
-    "ledger_row_count": 94,
+    "ledger_row_count": 91,
     "live_policy_change": false,
     "missing_realized_pnl_count": 1,
     "open_risk_live_entry_allowed": true,
@@ -7546,7 +7413,7 @@
     "priority_counts": {
       "1": 1,
       "10": 39,
-      "11": 5,
+      "11": 2,
       "2": 1,
       "4": 5,
       "5": 8,
@@ -7560,12 +7427,12 @@
     "row_type_counts": {
       "candidate": 34,
       "operator_blocker": 1,
-      "paper_shortlist_bridge": 5,
+      "paper_shortlist_bridge": 2,
       "profit_capture_candidate": 54
     },
     "source_counts": {
       "fresh_evidence_loop": 34,
-      "paper_shortlist": 5,
+      "paper_shortlist": 2,
       "profit_capture_queue": 54,
       "suggested_trade_close_risk": 1
     },

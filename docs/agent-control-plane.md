@@ -211,6 +211,42 @@ npm run verify:memory
 
 The eval verifies current gateboard blocker recovery when blockers exist and treats a seeded clean gateboard with no no-chase reasons as a passing no-blocker state.
 
+## Sessions And Dreaming
+
+The control plane supports an out-of-band self-improvement loop without making dream output authoritative by default.
+
+Session transcript capture records provenance for a local transcript file:
+
+```powershell
+npm run agent:control -- session log `
+  --transcript data/agent-control/transcripts/2026-06-26-memory-sprint.md `
+  --title "Memory sprint" `
+  --summary "Implemented runtime memory graph dreaming." `
+  --expected-sha256 "<sha256>" `
+  --json
+```
+
+The command records a `session:<id>` episode node and appends a compact row to `data/agent-control/sessions.jsonl`. It refuses obvious secret, database, generated evidence, broker, and high-risk data paths. The SHA-256 guard is optimistic provenance: if `--expected-sha256` is supplied and the source file changed, the write fails and the caller must reread before logging.
+
+Dreaming is a reviewable proposal workflow:
+
+```powershell
+npm run agent:control -- dream propose `
+  --file data/agent-control/dreams/2026-06-26-nightly.json `
+  --expected-sha256 "<sha256>" `
+  --json
+
+npm run agent:control -- dream accept DREAM-20260626-abcdef12 --accepted-by CEO --json
+npm run agent:control -- dream reject DREAM-20260626-abcdef12 --reason "Weak evidence." --json
+npm run agent:control -- dream list --json
+```
+
+Dream proposal JSON contains a title, summary, optional evidence, and entries with `type`, `title`, `body`, optional `confidence`, optional `evidence`, optional `supersedes`, and optional `freshness_days`. Accepted entries flow through the existing operating-memory path as `origin=dreaming`, `proposal_origin=dream`, `non_authoritative=true`, and `does_not_authorize_trading_or_evidence_mutation=true`. Dream entries default to `confidence=inferred`; `confidence=observed` is accepted only when the entry carries evidence.
+
+Dream acceptance is a memory review gate only. It does not prove profitability, approve evidence mutation, change scanner policy, promote lanes, open broker-paper or live-capital paths, or override living docs, generated readbacks, gateboard state, exact OPRA/NBBO evidence, or code. Reject stale or weak dream proposals instead of letting speculative context accumulate.
+
+Computer-wide memory lives at `C:\Users\kalec\projects-memory`. That directory is an index, schema, transcript/dream catalog, and project pointer layer for tools across the machine. For options facts, `data/agent-control/agent_control.db`, living docs, generated readbacks, and repo code remain authoritative.
+
 ## CEO Workflow
 
 The CEO session owns integration. Worker terminals are allowed when the CEO judges the task large enough to benefit from them; the user does not need to approve each terminal.

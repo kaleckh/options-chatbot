@@ -13,7 +13,7 @@
   ],
   "artifacts": {
     "docs_report": "docs/bullish-pullback-layer-shadow-selection.md",
-    "json": "data/forward-tracking/bullish_pullback_layer_shadow_selection_20260621T202148Z.json",
+    "json": "data/forward-tracking/bullish_pullback_layer_shadow_selection_20260626T142607Z.json",
     "latest_json": "data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.json",
     "latest_markdown": "data/forward-tracking/bullish_pullback_layer_shadow_selection_latest.md"
   },
@@ -59,7 +59,7 @@
     "status": "count_expanded_reference_blocked_by_unpriced_candidates",
     "variant_id": "sleeve_pf59_coverage_a_refill_v1"
   },
-  "generated_at_utc": "2026-06-21T20:21:48Z",
+  "generated_at_utc": "2026-06-26T14:26:07Z",
   "harness_requirements": {
     "allowed_symbols": [
       "IWM",
@@ -178,7 +178,7 @@
   "selection_ready": true,
   "source_artifacts": {
     "bullish_pullback_layer_stack": {
-      "age_hours": 548.3,
+      "age_hours": 662.37,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-05-30T00:04:04Z",

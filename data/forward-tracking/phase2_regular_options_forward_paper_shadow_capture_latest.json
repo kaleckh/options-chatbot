@@ -26,11 +26,11 @@
     "create_position",
     "auto_track"
   ],
-  "generated_at_utc": "2026-06-24T00:30:17Z",
+  "generated_at_utc": "2026-06-27T01:53:28Z",
   "imported_quotes": false,
   "live_entry_allowed": false,
-  "market_window_confirmed": true,
-  "market_window_status": "open",
+  "market_window_confirmed": false,
+  "market_window_status": "unknown",
   "promotion_ready": false,
   "protected_holdout_consumed": false,
   "reason_codes": [
@@ -49,7 +49,7 @@
     "cohort_append_performed": false,
     "docs_report_path": "docs/regular-options-phase2-forward-paper-shadow-candidate-row-stager.md",
     "evidence_stores_mutated": false,
-    "generated_at_utc": "2026-06-24T00:30:17Z",
+    "generated_at_utc": "2026-06-27T01:53:28Z",
     "latest_json_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows_latest.json",
     "live_entry_allowed": false,
     "no_write": false,
@@ -58,31 +58,23 @@
     "protected_holdout_consumed": false,
     "quotes_imported": false,
     "reason_codes": [
-      "no_phase2_natural_selections"
+      "market_window_not_confirmed"
     ],
-    "rejected_counts": {
-      "non_phase2_lane": 468,
-      "non_preregistered_symbol": 50,
-      "not_current_market_window_selection": 1,
-      "pre_freeze_selection": 31
-    },
+    "rejected_counts": {},
     "report_id": "phase2_regular_options_forward_paper_shadow_candidate_row_stager",
     "scanner_policy_changed": false,
     "schema_version": 1,
     "selection_ids": [],
     "source_mode": "scan_picks",
     "source_path": "data/forward-tracking/scan_picks.jsonl",
-    "status": "no_phase2_natural_selections",
+    "status": "blocked_market_window_not_confirmed",
     "strategy_logic_changed": false,
     "target_allowed_lanes": [
       "volatility_expansion_observation",
       "bullish_pullback_observation"
     ],
     "validation": {},
-    "writes_performed": [
-      "data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows_latest.json",
-      "docs/regular-options-phase2-forward-paper-shadow-candidate-row-stager.md"
-    ]
+    "writes_performed": []
   },
   "status": "no_phase2_natural_selections_no_append",
   "writes_performed": [

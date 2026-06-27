@@ -15,8 +15,6 @@ This generated report is read-only. It gates a bounded term-structure calendar/d
 
 - `missing_index_calendar_quote_surface`
 - `missing_point_in_time_term_structure_inputs`
-- `missing_preregistered_calendar_diagonal_geometry`
-- `missing_strict_new_dedupe`
 
 ## Metrics
 

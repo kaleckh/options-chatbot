@@ -14,7 +14,7 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf8")
 
 
-def _playbook(tmp: Path, *, geometry: bool = False) -> Path:
+def _playbook(tmp: Path, *, geometry: bool = False, strict_new: bool = False, real_shape: bool = False) -> Path:
     payload = {
         "report_id": "regular_options_preregistered_term_structure_calendar_playbook",
         "status": "preregistered_design_only",
@@ -29,6 +29,24 @@ def _playbook(tmp: Path, *, geometry: bool = False) -> Path:
             "max_debit": 4.0,
             "max_bid_ask_width": 0.25,
             "exit_policy": "time_exit_or_front_expiry",
+        }
+    if strict_new:
+        payload["concept"] = {
+            "required_future_replay_engine_support": [
+                "strict-new dedupe versus the 157-row clean base stack",
+            ],
+        }
+    if real_shape:
+        concept = payload.setdefault("concept", {})
+        concept["frozen_design"] = {
+            "term_structure_selection": [
+                "front and back expirations must use fixed spacing frozen before replay",
+                "long back-month option and short front-month option must use fixed strike, delta, or moneyness rules frozen before replay",
+                "minimum term-structure dislocation, max spread width/debit, max bid/ask width, and liquidity thresholds must be frozen before replay",
+            ],
+            "exit_policy": [
+                "future replay must predefine profit-take, loss-cut, time-exit, front-leg expiry, roll, assignment, and expiration handling",
+            ],
         }
     path = tmp / "playbook.json"
     _write_json(path, payload)
@@ -130,14 +148,47 @@ class RegularOptionsTermStructureCalendarStructureHarnessTests(unittest.TestCase
             readiness = tmp / "readiness.json"
             _write_json(readiness, {"status": "blocked", "blockers": []})
             report = harness.build_report(
-                preregistered_playbook_path=_playbook(tmp, geometry=True),
+                preregistered_playbook_path=_playbook(tmp, geometry=True, strict_new=True),
                 readiness_path=readiness,
                 feature_store_report_path=feature,
                 quote_surface_report_path=quote,
             )
 
-        self.assertEqual(report["status"], "blocked_term_structure_calendar_structure_harness")
-        self.assertEqual(report["remaining_blockers"], ["missing_strict_new_dedupe"])
+        self.assertEqual(report["status"], "term_structure_calendar_structure_harness_ready")
+        self.assertEqual(report["remaining_blockers"], [])
+        self.assertTrue(report["strict_new_dedupe_ready"])
+
+    def test_real_preregistered_shape_clears_geometry_and_strict_new_contract(self) -> None:
+        with WorkspaceTempDir(prefix="term-harness") as tmp_dir:
+            tmp = Path(tmp_dir)
+            feature = tmp / "feature.json"
+            quote = tmp / "quote.json"
+            _write_json(feature, {"point_in_time_term_structure_inputs_ready": True, "point_in_time_vix_bucket_ready": True})
+            _write_json(quote, {"calendar_diagonal_quote_surface_ready": True, "symbols_ready": ["SPY", "QQQ"]})
+            readiness = tmp / "readiness.json"
+            _write_json(
+                readiness,
+                {
+                    "status": "blocked",
+                    "blockers": [
+                        "missing_preregistered_calendar_diagonal_geometry",
+                        "missing_strict_new_dedupe",
+                    ],
+                },
+            )
+            report = harness.build_report(
+                preregistered_playbook_path=_playbook(tmp, real_shape=True, strict_new=True),
+                readiness_path=readiness,
+                feature_store_report_path=feature,
+                quote_surface_report_path=quote,
+            )
+
+        self.assertTrue(report["candidate_geometry_ready"])
+        self.assertTrue(report["strict_new_dedupe_ready"])
+        self.assertEqual(report["remaining_blockers"], [])
+        burndown = {row["blocker"]: row["status"] for row in report["blocker_burndown"]}
+        self.assertNotEqual(burndown["missing_preregistered_calendar_diagonal_geometry"], "unresolved")
+        self.assertEqual(burndown["missing_strict_new_dedupe"], "satisfied_by_harness")
 
     def test_invalid_preregistration_fails_closed(self) -> None:
         with WorkspaceTempDir(prefix="term-harness") as tmp_dir:

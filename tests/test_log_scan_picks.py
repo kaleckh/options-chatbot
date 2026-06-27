@@ -842,6 +842,12 @@ class LogScanPicksTests(unittest.TestCase):
                     "policy_fail_closed": False,
                     "truth_lane": "archived_forward_daily",
                     "playbook": {"id": "short_term", "label": "Short Term"},
+                    "scan_drop_reasons": {
+                        "SPY": {
+                            "drop_key": "momentum",
+                            "details": {"ret5": -1.25, "required_signal": "test"},
+                        }
+                    },
                 }
 
             with (
@@ -890,6 +896,10 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(latest_snapshot["candidate_audit_picks"][0]["ticker"], "BLOCKED")
             self.assertEqual(latest_snapshot["evidence_class"], "live_production")
             self.assertEqual(latest_snapshot["run_mode"], "scheduled_scan")
+            self.assertEqual(
+                latest_snapshot["symbol_diagnostics"]["scan_drop_reasons"]["SPY"]["drop_key"],
+                "momentum",
+            )
 
     def test_main_skips_logging_when_supervised_scan_fails_closed(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1260,6 +1270,10 @@ class LogScanPicksTests(unittest.TestCase):
                     "creation_blockers": [],
                     "quote_time_et": "2026-04-14T11:00:00-04:00",
                     "quote_time_utc": "2026-04-14T15:00:00Z",
+                    "quote_source": "alpaca_opra",
+                    "entry_quote_source": "alpaca_opra",
+                    "entry_quote_timestamp_utc": "2026-04-14T15:00:00Z",
+                    "entry_quote_timestamp_et": "2026-04-14T11:00:00-04:00",
                     "quote_freshness_status": "fresh",
                     "entry_execution_price": 5.0,
                     "entry_execution_basis": "spread_ask_bid",
@@ -1347,6 +1361,10 @@ class LogScanPicksTests(unittest.TestCase):
             self.assertEqual(rows[0]["scan_commit_sha"], "abcdef1234567890")
             self.assertEqual(rows[0]["scan_branch"], "main")
             self.assertEqual(rows[0]["scan_run_id"], "scheduled_scan:2026-04-14:test")
+            self.assertEqual(rows[0]["scanner_run_id"], "scheduled_scan:2026-04-14:test")
+            self.assertEqual(rows[0]["entry_quote_source"], "alpaca_opra")
+            self.assertEqual(rows[0]["entry_quote_timestamp_utc"], "2026-04-14T15:00:00Z")
+            self.assertEqual(rows[0]["entry_quote_timestamp_et"], "2026-04-14T11:00:00-04:00")
             fill_rows = log_scan_picks._load_log_rows(log_file=log_dir / "fill_attempts.jsonl")
             self.assertEqual(len(fill_rows), 1)
             self.assertEqual(fill_rows[0]["fill_status"], "auto_tracked")

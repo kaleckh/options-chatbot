@@ -113,6 +113,13 @@ class RegularOptionsMacroEventCalendarSourceRepairPacketTests(unittest.TestCase)
             ),
             2,
         )
+        direct_vix = next(item for item in report["downstream_branch_implications"] if item["branch"] == "direct_vix_source_repair")
+        post_event = next(
+            item for item in report["downstream_branch_implications"] if item["branch"] == "post_event_iv_crush_iron_condor"
+        )
+        if direct_vix["status"] == "direct_vix_source_repair_packet_superseded_by_materialized_vix":
+            self.assertEqual(direct_vix["remaining_non_event_blockers"], [])
+            self.assertNotIn("point_in_time_vix_source_missing", post_event["remaining_non_event_blockers"])
 
     def test_protected_holdout_overlap_blocks_fixture_validation(self) -> None:
         validation = packet._fixture_validation(packet.DEFAULT_FIXTURE, protected_holdout_start="2026-05-01")

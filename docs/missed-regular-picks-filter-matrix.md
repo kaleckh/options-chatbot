@@ -1,8 +1,8 @@
 # Missed Regular Picks Filter Matrix
 
-- Generated: `2026-06-18T02:13:53Z`
+- Generated: `2026-06-27T03:54:09Z`
 - Source report: `data/forward-tracking/missed_regular_picks_outcome_latest.json`
-- Source generated: `2026-06-18T02:13:43Z`
+- Source generated: `2026-06-27T03:54:08Z`
 - Priced untracked rows: `206`
 - Quote evidence class: `trusted_intraday_opra_nbbo`
 - Row evidence group: `research_backfill`

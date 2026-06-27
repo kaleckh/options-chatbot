@@ -56,9 +56,9 @@ Fatal reason counts: `{"missing_leg_level_exit_bid_ask": 3, "missing_side_aware_
 
 | Source | Status | Age hours | Generated at | Reasons |
 | --- | --- | ---: | --- | --- |
-| `bullish_pullback_layer_shadow_selection` | `loaded` | `0.0` | `2026-06-21T20:21:48Z` | `[]` |
-| `bullish_pullback_layer_stack` | `loaded` | `548.3` | `2026-05-30T00:04:04Z` | `[]` |
-| `selected_layer_source_run` | `loaded` | `588.81` | `2026-05-28T01:33:03` | `[]` |
+| `bullish_pullback_layer_shadow_selection` | `loaded` | `0.0` | `2026-06-26T14:26:07Z` | `[]` |
+| `bullish_pullback_layer_stack` | `loaded` | `662.37` | `2026-05-30T00:04:04Z` | `[]` |
+| `selected_layer_source_run` | `loaded` | `702.88` | `2026-05-28T01:33:03` | `[]` |
 
 ## Non-Goals
 

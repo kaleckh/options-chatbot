@@ -20,8 +20,12 @@ DEFAULT_MOMENTUM_CONTINUATION_PROOF_RESOLUTION = ROOT / "data" / "profitability-
 DEFAULT_MOMENTUM_CONTINUATION_BOUNDED_REPLAY = ROOT / "data" / "profitability-lab" / "regular-options-momentum-continuation-bounded-replay" / "latest.json"
 DEFAULT_PREREGISTERED_VRP_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-vrp-credit-spread-playbook" / "latest.json"
 DEFAULT_VRP_REPLAY_READINESS = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-replay-readiness" / "latest.json"
+DEFAULT_VRP_STRUCTURE_HARNESS = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-structure-harness" / "latest.json"
+DEFAULT_VRP_BOUNDED_REPLAY = ROOT / "data" / "profitability-lab" / "regular-options-vrp-credit-spread-bounded-replay" / "latest.json"
 DEFAULT_TERM_STRUCTURE_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-term-structure-calendar-playbook" / "latest.json"
 DEFAULT_TERM_STRUCTURE_REPLAY_READINESS = ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-replay-readiness" / "latest.json"
+DEFAULT_TERM_STRUCTURE_HARNESS = ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-structure-harness" / "latest.json"
+DEFAULT_TERM_STRUCTURE_BOUNDED_REPLAY = ROOT / "data" / "profitability-lab" / "regular-options-term-structure-calendar-bounded-replay" / "latest.json"
 DEFAULT_PREREGISTERED_SKEW_BROKEN_WING_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-skew-broken-wing-playbook" / "latest.json"
 DEFAULT_PREREGISTERED_MACRO_EVENT_LONG_STRANGLE_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-macro-event-long-strangle-playbook" / "latest.json"
 DEFAULT_MACRO_EVENT_CALENDAR = ROOT / "data" / "profitability-lab" / "regular-options-macro-event-calendar" / "latest.json"
@@ -32,6 +36,7 @@ DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_SOURCE_SURFACE = ROOT / "data" / "
 DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENTRYPOINT = ROOT / "data" / "profitability-lab" / "regular-options-13-symbol-frozen-candidate-generation-entrypoint" / "latest.json"
 DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENGINE = ROOT / "data" / "profitability-lab" / "regular-options-13-symbol-frozen-candidate-generation-engine" / "latest.json"
 DEFAULT_PREREGISTERED_POST_EVENT_IV_CRUSH_IRON_CONDOR_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-post-event-iv-crush-iron-condor-playbook" / "latest.json"
+DEFAULT_POST_EVENT_IV_CRUSH_REPLAY_READINESS = ROOT / "data" / "profitability-lab" / "regular-options-post-event-iv-crush-replay-readiness" / "latest.json"
 DEFAULT_PREREGISTERED_FLOW_EXTREME_RATIO_BACKSPREAD_PLAYBOOK = ROOT / "data" / "profitability-lab" / "regular-options-preregistered-flow-extreme-ratio-backspread-playbook" / "latest.json"
 DEFAULT_FLOW_EXTREME_VOLUME_OI_SOURCE_ROWS = ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-volume-oi-source-rows" / "latest.json"
 DEFAULT_POINT_IN_TIME_FLOW_EXTREME_INPUT = ROOT / "data" / "profitability-lab" / "regular-options-point-in-time-flow-extreme-input" / "latest.json"
@@ -120,6 +125,8 @@ OPERATOR_APPROVAL_POSTURE = {
         "auto-track enablement",
         "production scanner, strategy, stop, sizing, or proof-bar changes",
         "quote import",
+        "source-row writes or default source_rows materialization",
+        "cohort-log append",
         "protected-holdout consumption",
         "promotion",
         "unsafe evidence-store mutation",
@@ -176,6 +183,21 @@ GPT_OUTPUT_SCHEMA = {
     "continue_loop": "boolean",
     "significant_upgrade_available": "boolean",
     "selected_branch_id": "string|null",
+    "current_profitability_state": {
+        "forward_strict_completed_rows": "number",
+        "target_rows": 30,
+        "accepted_profitability": "boolean",
+        "main_reason_not_profitable": "string",
+    },
+    "blocker_map": {
+        "forward_proof": [],
+        "candidate_generation": [],
+        "data_sources": [],
+        "replay_engine": [],
+        "strategy_edges": [],
+        "historical_audit": [],
+        "dashboard_operator": [],
+    },
     "burden_of_proof_check": {
         "current_forward_rows": "number",
         "target_profitable_strict_completed_rows": "number",
@@ -204,9 +226,24 @@ GPT_OUTPUT_SCHEMA = {
             "why_not_selected": "string|null",
         }
     ],
+    "ranked_next_tasks": [
+        {
+            "rank": "number",
+            "task_id": "string",
+            "branch_status": "continue_now|approval_blocked|source_blocked|market_window_blocked|parked_until_state_change|falsified_under_current_data|exhausted_under_current_data",
+            "approval_required": "none|string",
+            "expected_profitability_impact": "string",
+            "downstream_unlocks": [],
+            "time_to_test": "string",
+            "why_not_selected_if_applicable": "string|null",
+        }
+    ],
     "next_codex_task": {
         "objective": "one concrete implementation or verification task",
         "exact_scope": "files/modules/artifacts included and excluded",
+        "executable_under_current_approval": "boolean",
+        "branch_status": "continue_now",
+        "fallback_reason_if_top_rank_blocked": "string|null",
         "allowed_files_or_artifacts": ["paths or artifact families"],
         "forbidden_actions": ["actions that remain forbidden"],
         "commands_to_run": ["exact commands"],
@@ -215,6 +252,22 @@ GPT_OUTPUT_SCHEMA = {
         "failure_criteria": ["what result rejects or parks this branch"],
         "expected_artifacts": ["files or readbacks expected after Codex runs"],
         "stop_condition_after_task": "what would make this branch exhausted",
+        "approval_required_for_selected_task": "boolean",
+        "approval_required_before_followup": [],
+        "safe_read_only_fallback_if_approval_missing": "string|null",
+        "must_not_count_as_forward_profitability": True,
+        "proof_boundary_statement": "This task cannot produce accepted profitability or promotion unless strict forward-audit evidence is later collected through the approved forward cohort path.",
+    },
+    "stale_blockers_ignored": [
+        {
+            "blocker": "string",
+            "why_stale": "string",
+            "current_replacing_fact": "string",
+        }
+    ],
+    "loop_control_fallback": {
+        "needed_if_selected_branch_blocked_by_approval_or_missing_source": "string",
+        "safe_fallback_task": "string|null",
     },
     "why_this_is_significant": "short explanation tied to profitability proof",
     "branches_to_stop": ["branch ids or candidate ids to avoid repeating"],
@@ -222,6 +275,9 @@ GPT_OUTPUT_SCHEMA = {
         "generic_advice_removed": "boolean",
         "exact_next_action_present": "boolean",
         "measurable_threshold_present": "boolean",
+        "ranked_existing_forward_capture_paths": "boolean",
+        "packet_only_justified_or_rejected": "boolean",
+        "stale_artifacts_overridden_by_current_fact_table": "boolean",
     },
 }
 
@@ -329,6 +385,34 @@ PMCC_DIAGONAL_READINESS_REQUIRED_FALSE_FLAGS = (
     "promotion_ready",
     "historical_rows_are_forward_proof",
     "undefined_or_uncapped_short_call_risk_allowed",
+)
+
+POST_EVENT_IV_CRUSH_READINESS_EXPECTED = {
+    "report_id": "regular_options_post_event_iv_crush_replay_readiness",
+    "concept_id": "post_event_iv_crush_index_iron_condor_v1",
+    "structure": "defined_risk_short_iron_condors_or_iron_butterflies_only",
+}
+
+POST_EVENT_IV_CRUSH_READINESS_REQUIRED_FALSE_FLAGS = (
+    "accepted_profitability",
+    "historical_replay_performed",
+    "replay_performed",
+    "lane_implementation_performed",
+    "event_calendar_implemented_in_this_slice",
+    "broker_order_allowed",
+    "live_validation_enabled",
+    "auto_track_enabled",
+    "quotes_imported",
+    "evidence_stores_mutated",
+    "protected_holdout_consumed",
+    "scanner_policy_changed",
+    "strategy_logic_changed",
+    "stops_changed",
+    "sizing_changed",
+    "proof_bars_changed",
+    "promotion_ready",
+    "historical_rows_are_forward_proof",
+    "undefined_or_uncapped_short_premium_risk_allowed",
 )
 
 
@@ -454,6 +538,59 @@ def _validate_pmcc_diagonal_readiness_artifact(
     }
 
 
+def _validate_post_event_iv_crush_readiness_artifact(
+    *,
+    readiness: dict[str, Any],
+    readiness_meta: dict[str, Any],
+    playbook_meta: dict[str, Any],
+) -> dict[str, Any]:
+    reason_codes: list[str] = []
+    meta_status = readiness_meta.get("status")
+    if meta_status == "missing":
+        reason_codes.append("missing_post_event_iv_crush_replay_readiness_artifact")
+    elif meta_status != "loaded":
+        reason_codes.append("malformed_post_event_iv_crush_replay_readiness_artifact")
+
+    if meta_status == "loaded":
+        if readiness.get("report_id") != POST_EVENT_IV_CRUSH_READINESS_EXPECTED["report_id"]:
+            reason_codes.append("invalid_post_event_iv_crush_replay_readiness_report_id")
+        if readiness.get("concept_id") != POST_EVENT_IV_CRUSH_READINESS_EXPECTED["concept_id"]:
+            reason_codes.append("invalid_post_event_iv_crush_replay_readiness_concept_id")
+        if readiness.get("structure") != POST_EVENT_IV_CRUSH_READINESS_EXPECTED["structure"]:
+            reason_codes.append("invalid_post_event_iv_crush_replay_readiness_structure")
+
+        readiness_generated_at = _parse_iso_datetime(readiness.get("generated_at_utc"))
+        playbook_generated_at = _parse_iso_datetime(playbook_meta.get("generated_at_utc"))
+        if readiness_generated_at is None or (
+            playbook_generated_at is not None and readiness_generated_at < playbook_generated_at
+        ):
+            reason_codes.append("stale_post_event_iv_crush_replay_readiness_artifact")
+
+        unsafe_flags = [
+            flag
+            for flag in POST_EVENT_IV_CRUSH_READINESS_REQUIRED_FALSE_FLAGS
+            if readiness.get(flag) is not False
+        ]
+        if unsafe_flags:
+            reason_codes.append("unsafe_post_event_iv_crush_replay_readiness_flags")
+    else:
+        unsafe_flags = []
+
+    return {
+        "validated_status": reason_codes[0]
+        if reason_codes
+        else readiness.get("status", "loaded_post_event_iv_crush_replay_readiness"),
+        "raw_status": readiness.get("status"),
+        "reason_codes": reason_codes,
+        "unsafe_flags": unsafe_flags,
+        "expected_report_id": POST_EVENT_IV_CRUSH_READINESS_EXPECTED["report_id"],
+        "expected_concept_id": POST_EVENT_IV_CRUSH_READINESS_EXPECTED["concept_id"],
+        "expected_structure": POST_EVENT_IV_CRUSH_READINESS_EXPECTED["structure"],
+        "generated_at_utc": readiness.get("generated_at_utc"),
+        "playbook_generated_at_utc": playbook_meta.get("generated_at_utc"),
+    }
+
+
 def _load_text_excerpt(path: Path, *, max_chars: int = 8000) -> tuple[str, dict[str, Any]]:
     meta = {"path": _rel(path), "exists": path.exists(), "status": "missing", "excerpt_chars": 0}
     if not path.exists():
@@ -496,8 +633,12 @@ def build_packet(
     momentum_continuation_bounded_replay_path: Path = DEFAULT_MOMENTUM_CONTINUATION_BOUNDED_REPLAY,
     preregistered_vrp_playbook_path: Path = DEFAULT_PREREGISTERED_VRP_PLAYBOOK,
     vrp_replay_readiness_path: Path = DEFAULT_VRP_REPLAY_READINESS,
+    vrp_structure_harness_path: Path = DEFAULT_VRP_STRUCTURE_HARNESS,
+    vrp_bounded_replay_path: Path = DEFAULT_VRP_BOUNDED_REPLAY,
     preregistered_term_structure_playbook_path: Path = DEFAULT_TERM_STRUCTURE_PLAYBOOK,
     term_structure_replay_readiness_path: Path = DEFAULT_TERM_STRUCTURE_REPLAY_READINESS,
+    term_structure_harness_path: Path = DEFAULT_TERM_STRUCTURE_HARNESS,
+    term_structure_bounded_replay_path: Path = DEFAULT_TERM_STRUCTURE_BOUNDED_REPLAY,
     preregistered_skew_broken_wing_playbook_path: Path = DEFAULT_PREREGISTERED_SKEW_BROKEN_WING_PLAYBOOK,
     preregistered_macro_event_long_strangle_playbook_path: Path = DEFAULT_PREREGISTERED_MACRO_EVENT_LONG_STRANGLE_PLAYBOOK,
     macro_event_calendar_path: Path = DEFAULT_MACRO_EVENT_CALENDAR,
@@ -508,6 +649,7 @@ def build_packet(
     candidate_generation_13_symbol_frozen_entrypoint_path: Path = DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENTRYPOINT,
     candidate_generation_13_symbol_frozen_engine_path: Path = DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENGINE,
     preregistered_post_event_iv_crush_iron_condor_playbook_path: Path = DEFAULT_PREREGISTERED_POST_EVENT_IV_CRUSH_IRON_CONDOR_PLAYBOOK,
+    post_event_iv_crush_replay_readiness_path: Path = DEFAULT_POST_EVENT_IV_CRUSH_REPLAY_READINESS,
     preregistered_flow_extreme_ratio_backspread_playbook_path: Path = DEFAULT_PREREGISTERED_FLOW_EXTREME_RATIO_BACKSPREAD_PLAYBOOK,
     flow_extreme_volume_oi_source_rows_path: Path = DEFAULT_FLOW_EXTREME_VOLUME_OI_SOURCE_ROWS,
     point_in_time_flow_extreme_input_path: Path = DEFAULT_POINT_IN_TIME_FLOW_EXTREME_INPUT,
@@ -543,8 +685,12 @@ def build_packet(
     momentum_bounded, momentum_bounded_meta = _load_json(momentum_continuation_bounded_replay_path, required=False)
     vrp_playbook, vrp_playbook_meta = _load_json(preregistered_vrp_playbook_path, required=False)
     vrp_readiness, vrp_readiness_meta = _load_json(vrp_replay_readiness_path, required=False)
+    vrp_structure_harness, vrp_structure_harness_meta = _load_json(vrp_structure_harness_path, required=False)
+    vrp_bounded, vrp_bounded_meta = _load_json(vrp_bounded_replay_path, required=False)
     term_structure_playbook, term_structure_playbook_meta = _load_json(preregistered_term_structure_playbook_path, required=False)
     term_structure_readiness, term_structure_readiness_meta = _load_json(term_structure_replay_readiness_path, required=False)
+    term_structure_harness, term_structure_harness_meta = _load_json(term_structure_harness_path, required=False)
+    term_structure_bounded, term_structure_bounded_meta = _load_json(term_structure_bounded_replay_path, required=False)
     skew_broken_wing_playbook, skew_broken_wing_playbook_meta = _load_json(preregistered_skew_broken_wing_playbook_path, required=False)
     macro_event_long_strangle_playbook, macro_event_long_strangle_playbook_meta = _load_json(
         preregistered_macro_event_long_strangle_playbook_path,
@@ -578,6 +724,21 @@ def build_packet(
         preregistered_post_event_iv_crush_iron_condor_playbook_path,
         required=False,
     )
+    post_event_iv_crush_readiness, post_event_iv_crush_readiness_meta = _load_json(
+        post_event_iv_crush_replay_readiness_path,
+        required=False,
+    )
+    post_event_iv_crush_readiness_validation = _validate_post_event_iv_crush_readiness_artifact(
+        readiness=post_event_iv_crush_readiness,
+        readiness_meta=post_event_iv_crush_readiness_meta,
+        playbook_meta=post_event_iv_crush_iron_condor_playbook_meta,
+    )
+    post_event_iv_crush_readiness_meta = {
+        **post_event_iv_crush_readiness_meta,
+        "validated_status": post_event_iv_crush_readiness_validation["validated_status"],
+        "validation_reason_codes": post_event_iv_crush_readiness_validation["reason_codes"],
+        "unsafe_flags": post_event_iv_crush_readiness_validation["unsafe_flags"],
+    }
     flow_extreme_ratio_backspread_playbook, flow_extreme_ratio_backspread_playbook_meta = _load_json(
         preregistered_flow_extreme_ratio_backspread_playbook_path,
         required=False,
@@ -694,8 +855,12 @@ def build_packet(
         "momentum_continuation_bounded_replay": momentum_bounded_meta,
         "preregistered_vrp_credit_spread_playbook": vrp_playbook_meta,
         "vrp_credit_spread_replay_readiness": vrp_readiness_meta,
+        "vrp_credit_spread_structure_harness": vrp_structure_harness_meta,
+        "vrp_credit_spread_bounded_replay": vrp_bounded_meta,
         "preregistered_term_structure_calendar_playbook": term_structure_playbook_meta,
         "term_structure_calendar_replay_readiness": term_structure_readiness_meta,
+        "term_structure_calendar_structure_harness": term_structure_harness_meta,
+        "term_structure_calendar_bounded_replay": term_structure_bounded_meta,
         "preregistered_skew_broken_wing_playbook": skew_broken_wing_playbook_meta,
         "preregistered_macro_event_long_strangle_playbook": macro_event_long_strangle_playbook_meta,
         "macro_event_calendar": macro_event_calendar_meta,
@@ -706,6 +871,7 @@ def build_packet(
         "candidate_generation_13_symbol_frozen_entrypoint": candidate_generation_13_symbol_frozen_entrypoint_meta,
         "candidate_generation_13_symbol_frozen_engine": candidate_generation_13_symbol_frozen_engine_meta,
         "preregistered_post_event_iv_crush_iron_condor_playbook": post_event_iv_crush_iron_condor_playbook_meta,
+        "post_event_iv_crush_replay_readiness": post_event_iv_crush_readiness_meta,
         "preregistered_flow_extreme_ratio_backspread_playbook": flow_extreme_ratio_backspread_playbook_meta,
         "flow_extreme_volume_oi_source_rows": flow_extreme_volume_oi_source_rows_meta,
         "point_in_time_flow_extreme_input": point_in_time_flow_extreme_input_meta,
@@ -761,6 +927,30 @@ def build_packet(
         "late_known_at_count": point_in_time_vix_bucket.get("late_known_at_count"),
         "leakage_reject_count": point_in_time_vix_bucket.get("leakage_reject_count"),
     }
+    vrp_packet_readiness = dict(vrp_readiness)
+    if vrp_bounded_meta.get("status") == "loaded":
+        vrp_packet_readiness.update(
+            {
+                "status": vrp_bounded.get("status"),
+                "blockers": _as_list(vrp_bounded.get("replay_gate_blockers")),
+                "replay_gate_blockers": _as_list(vrp_bounded.get("replay_gate_blockers")),
+                "effective_gate_source": "regular_options_vrp_credit_spread_bounded_replay",
+                "legacy_replay_readiness_status": vrp_readiness.get("status"),
+                "structure_harness_status": vrp_structure_harness.get("status"),
+            }
+        )
+    term_structure_packet_readiness = dict(term_structure_readiness)
+    if term_structure_bounded_meta.get("status") == "loaded":
+        term_structure_packet_readiness.update(
+            {
+                "status": term_structure_bounded.get("status"),
+                "blockers": _as_list(term_structure_bounded.get("replay_gate_blockers")),
+                "replay_gate_blockers": _as_list(term_structure_bounded.get("replay_gate_blockers")),
+                "effective_gate_source": "regular_options_term_structure_calendar_bounded_replay",
+                "legacy_replay_readiness_status": term_structure_readiness.get("status"),
+                "structure_harness_status": term_structure_harness.get("status"),
+            }
+        )
     current_vix_branch_implications = [
         {
             "branch": "macro_event_long_strangle",
@@ -768,6 +958,13 @@ def build_packet(
             "remaining_non_vix_blockers": _without_vix_blockers(macro_event_long_strangle_readiness.get("blockers")),
             "would_clear_vix_blocker_if_future_source_passes": not vix_bucket_ready,
             "source_status": macro_event_long_strangle_readiness.get("status"),
+        },
+        {
+            "branch": "post_event_iv_crush_iron_condor",
+            "vix_status": "ready" if vix_bucket_ready else "blocked",
+            "remaining_non_vix_blockers": _without_vix_blockers(post_event_iv_crush_readiness.get("blockers")),
+            "would_clear_vix_blocker_if_future_source_passes": not vix_bucket_ready,
+            "source_status": post_event_iv_crush_readiness.get("status"),
         },
         {
             "branch": "flow_extreme_ratio_backspread",
@@ -786,14 +983,16 @@ def build_packet(
         {
             "branch": "vrp_credit_spread",
             "vix_status": "ready" if vix_bucket_ready else "blocked",
-            "remaining_non_vix_blockers": _without_vix_blockers(vrp_readiness.get("blockers")),
+            "remaining_non_vix_blockers": _without_vix_blockers(vrp_packet_readiness.get("blockers")),
             "would_clear_vix_blocker_if_future_source_passes": not vix_bucket_ready,
-            "source_status": vrp_readiness.get("status"),
+            "source_status": vrp_packet_readiness.get("status"),
         },
         {
             "branch": "momentum_continuation",
             "vix_status": "ready" if vix_bucket_ready else "blocked",
-            "remaining_non_vix_blockers": _without_vix_blockers(momentum_bounded.get("blockers")),
+            "remaining_non_vix_blockers": _without_vix_blockers(
+                _as_list(momentum_bounded.get("replay_gate_blockers")) or momentum_bounded.get("blockers")
+            ),
             "would_clear_vix_blocker_if_future_source_passes": not vix_bucket_ready,
             "source_status": momentum_bounded.get("status"),
             "note": "Refresh this artifact before ranking if it still predates the VIX source import.",
@@ -861,12 +1060,22 @@ def build_packet(
             "momentum_continuation_bounded_replay_blockers": momentum_bounded.get("replay_gate_blockers"),
             "preregistered_vrp_credit_spread_status": vrp_playbook.get("status"),
             "preregistered_vrp_credit_spread_concept_id": vrp_playbook.get("concept_id"),
-            "vrp_credit_spread_replay_readiness_status": vrp_readiness.get("status"),
-            "vrp_credit_spread_replay_readiness_blockers": vrp_readiness.get("blockers"),
+            "vrp_credit_spread_replay_readiness_status": vrp_packet_readiness.get("status"),
+            "vrp_credit_spread_replay_readiness_blockers": vrp_packet_readiness.get("blockers"),
+            "vrp_credit_spread_effective_gate_source": vrp_packet_readiness.get("effective_gate_source"),
+            "vrp_credit_spread_legacy_replay_readiness_status": vrp_packet_readiness.get(
+                "legacy_replay_readiness_status"
+            ),
             "preregistered_term_structure_calendar_status": term_structure_playbook.get("status"),
             "preregistered_term_structure_calendar_concept_id": term_structure_playbook.get("concept_id"),
-            "term_structure_calendar_replay_readiness_status": term_structure_readiness.get("status"),
-            "term_structure_calendar_replay_readiness_blockers": term_structure_readiness.get("blockers"),
+            "term_structure_calendar_replay_readiness_status": term_structure_packet_readiness.get("status"),
+            "term_structure_calendar_replay_readiness_blockers": term_structure_packet_readiness.get("blockers"),
+            "term_structure_calendar_effective_gate_source": term_structure_packet_readiness.get(
+                "effective_gate_source"
+            ),
+            "term_structure_calendar_legacy_replay_readiness_status": term_structure_packet_readiness.get(
+                "legacy_replay_readiness_status"
+            ),
             "preregistered_skew_broken_wing_status": skew_broken_wing_playbook.get("status"),
             "preregistered_skew_broken_wing_concept_id": skew_broken_wing_playbook.get("concept_id"),
             "preregistered_macro_event_long_strangle_status": macro_event_long_strangle_playbook.get("status"),
@@ -937,6 +1146,14 @@ def build_packet(
             ),
             "preregistered_post_event_iv_crush_iron_condor_status": post_event_iv_crush_iron_condor_playbook.get("status"),
             "preregistered_post_event_iv_crush_iron_condor_concept_id": post_event_iv_crush_iron_condor_playbook.get("concept_id"),
+            "post_event_iv_crush_replay_readiness_status": post_event_iv_crush_readiness_validation["validated_status"],
+            "post_event_iv_crush_replay_readiness_raw_status": post_event_iv_crush_readiness_validation["raw_status"],
+            "post_event_iv_crush_replay_readiness_reason_codes": post_event_iv_crush_readiness_validation["reason_codes"],
+            "post_event_iv_crush_replay_readiness_generated_at_utc": post_event_iv_crush_readiness_validation["generated_at_utc"],
+            "post_event_iv_crush_replay_readiness_blockers": post_event_iv_crush_readiness.get("blockers"),
+            "post_event_iv_crush_replay_readiness_smallest_next_blocker": post_event_iv_crush_readiness.get(
+                "smallest_next_blocker_clearing_slice"
+            ),
             "preregistered_flow_extreme_ratio_backspread_status": flow_extreme_ratio_backspread_playbook.get("status"),
             "preregistered_flow_extreme_ratio_backspread_concept_id": flow_extreme_ratio_backspread_playbook.get("concept_id"),
             "flow_extreme_volume_oi_source_rows_status": flow_extreme_volume_oi_source_rows.get("status"),
@@ -1241,9 +1458,9 @@ def build_packet(
             momentum_resolution=momentum_resolution,
             momentum_bounded=momentum_bounded,
             vrp_playbook=vrp_playbook,
-            vrp_readiness=vrp_readiness,
+            vrp_readiness=vrp_packet_readiness,
             term_structure_playbook=term_structure_playbook,
-            term_structure_readiness=term_structure_readiness,
+            term_structure_readiness=term_structure_packet_readiness,
             skew_broken_wing_playbook=skew_broken_wing_playbook,
             macro_event_long_strangle_playbook=macro_event_long_strangle_playbook,
             macro_event_calendar=macro_event_calendar,
@@ -1347,17 +1564,35 @@ def _render_prompt(
     context_excerpt: str,
 ) -> str:
     frontier_summary = _frontier_summary(frontier)
-    return f"""Replace the current 5.5 Pro handoff prompt with this profitability-first blocker-ranking prompt before continuing the loop.
+    return f"""You are GPT-5.5 Pro acting as strategic reviewer and next-slice selector for the regular-options profitability loop. Codex will implement and verify exactly one selected task.
 
-We are running an options-profitability loop. The user's goal is profit: at least 30 profitable strict completed forward-audit trades in the latest approximately 4-month/post-freeze audit window.
+Goal: make the regular-options workflow profitable under proof-qualified criteria: at least 30 profitable strict completed forward-audit rows in the latest post-freeze/approximately four-month audit window.
 
 Current state:
 - We are not forward-audit profitable.
 - Strict completed forward proof is currently 0/30.
-- Historical rows, dashboard rows, midpoint/stale/EOD/last/model/manual/synthetic/lookahead rows, and old-algorithm picks are not accepted profitability proof.
+- Only real approved forward-cohort rows with exact executable entry and exit evidence may count toward the 30 strict completed forward-audit target. Historical, replay, simulated-forward, dashboard, research/backfill, old-algorithm, midpoint/stale/EOD/last/model/manual/synthetic/lookahead, diagnostic, or repaired historical rows may rank hypotheses but must not be counted as accepted forward profitability.
 - Codex can implement, test, inspect the repo, build artifacts, run read-only research, and run non-live/non-broker source-planning tasks.
-- The user approves non-live, non-broker research/source-planning work.
+- The user approves read-only non-live, non-broker research/source-planning work. That approval does not authorize quote import, source-row writes, default source_rows materialization, evidence-store mutation, cohort-log append, protected-holdout use, live validation, auto-track, broker/order actions, promotion, or production scanner/strategy/stop/sizing/proof-bar changes.
 - Broker orders, live validation, auto-track, protected-holdout consumption, promotion, production scanner/strategy/stop/sizing/proof-bar changes, and real source/evidence mutation still require exact explicit approval.
+
+Current Fact Table:
+- Forward proof: strict completed forward rows are 0/30; promotion_ready, live_entry_allowed, auto_track_allowed, and broker_order_allowed are false.
+- Phase 2 forward capture: latest real run produced 0 staged rows, no candidate JSONL, and no cohort log unless a newer current artifact says otherwise.
+- Historical rows remain research evidence only; they are not forward profitability proof.
+- VIX is cleared when current artifacts show `direct_vix_source_import_materialized` / `point_in_time_vix_bucket_ready` with 505/505 coverage. Do not rank VIX as missing unless a newer artifact is stale, malformed, or policy-incompatible.
+- 59-symbol ThetaData repair is parked on provider/source availability when the current artifact is `blocked_thetaterminal_source_unavailable_retry`; do not select another retry unless a fresh provider/source check proves availability changed.
+- 13-symbol historical scanner path remains blocked when current artifacts show 0/24 candidate-generation months and 0 selected rows; quote depth alone is not candidate-generation proof.
+- Underlying daily OHLCV is a first-class blocker: acquisition is `blocked_underlying_daily_source_acquisition_missing` when no trusted full-window CSV is staged. The parser/import path exists; do not rerun a packet-only plan for this blocker.
+- Macro-event calendar and flow volume/OI source packets are ready for operator import decision when their current statuses say so, but real trusted CSV/source materialization is still missing.
+- Bullish pullback layer4 is a relevant existing economics branch when current docs/artifacts show it: executable economics were profitable but preflight/forward protocol remains blocked or waiting for natural full-denominator market-window capture and explicit approval. Compare it against source-repair branches instead of omitting it.
+
+Evidence precedence:
+1. Current Fact Table overrides older embedded blocker text.
+2. Latest structured artifact statuses override pasted docs.
+3. Older artifact blockers that still name VIX as missing are stale if current VIX is `point_in_time_vix_bucket_ready`.
+4. If pasted NEXT_STEPS says ThetaTerminal is generally reachable but the structured 59-symbol repair artifact says `blocked_thetaterminal_source_unavailable_retry`, do not select another 59-symbol retry unless current provider/source availability changed.
+5. Historical/dashboard/replay rows can guide ranking but cannot satisfy forward proof.
 
 Your job:
 Do not optimize for documentation completeness. Do not choose the safest artifact by default. Optimize for the shortest honest path to 30 profitable strict completed forward-audit trades.
@@ -1373,12 +1608,16 @@ Before selecting a task, produce a blocker map with these categories:
 - Is the current algorithm generating enough eligible candidates?
 - If candidate generation is missing/broken, what exact repair unlocks real rows fastest?
 - Do not accept quote-depth-only coverage as candidate-generation proof.
+- Explicitly evaluate `bullish_pullback_layer4_forward_protocol` as a promising-but-not-proof-complete branch if current docs/artifacts show it. Treat executable economics as research support only until natural market-window/operator-approved forward capture produces proof-qualified rows.
 
 3. Data/source blocker
 - Which missing point-in-time sources block the most downstream profitable tests?
-- Current or recently cleared source blockers include VIX, macro-event calendar, flow volume/OI, dispersion/concentration, trend/regime, and possibly broader OPRA/NBBO coverage. Use the attached current artifacts: if VIX is `point_in_time_vix_bucket_ready`, do not rank VIX as still missing.
-- Rank source repairs by downstream unlock value and time-to-test.
-- Do not select another packet-only source plan unless it is the highest-leverage blocker to running a real replay or forward audit.
+- Explicitly evaluate `underlying_daily_point_in_time_source` as a first-class blocker for frozen scanner/candidate generation and historical simulated-forward audit.
+- VIX is cleared in current artifacts when the VIX bucket is ready; stale branch blockers naming missing VIX must be refreshed and ranked by their remaining non-VIX blockers.
+- Macro-event and flow volume/OI are not missing parser/plan work if their packet statuses are ready; they are missing trusted input CSV/source-row materialization.
+- Rank source repairs by downstream unlock value, time-to-test, and whether a trusted source file is actually staged and ready.
+- Do not select packet-only source planning for a source family whose packet is already ready.
+- Do not select source import/materialization unless the corresponding acquisition/readiness artifact identifies a ready trusted source file and the task names the exact required approval/token boundary.
 
 4. Replay/engine blocker
 - Which strategies cannot be honestly tested because pricing/replay engine support is missing?
@@ -1407,6 +1646,12 @@ Then rank all possible next tasks by:
 - overfit/leakage/data-integrity risk,
 - whether it can be done now without live/broker action.
 
+Before selecting the task, answer:
+- Is there an already-profitable executable historical/economics branch whose main blocker is forward capture rather than edge quality? If yes, why is it not rank 1?
+- What is the shortest honest path to the first 5 strict forward-audit rows?
+- Can the selected branch plausibly reach 30 completed strict rows in the latest-four/post-freeze window, given observed or expected candidate cadence?
+- Which measurable blocker changes in one Codex turn: staged/validated forward rows, candidate-generation months covered, selected strict-new candidates, replayable exact rows, latest-four audit rows, or PF lower-bound?
+
 Return exactly one next Codex task.
 
 The selected task must include:
@@ -1421,6 +1666,17 @@ The selected task must include:
 - what downstream replay/audit becomes possible if it passes,
 - what branch should be stopped if it fails.
 
+For every serious branch considered, assign one branch status:
+- `continue_now`: Codex can execute the next slice under current approvals.
+- `approval_blocked`: promising, but requires exact explicit operator approval before execution.
+- `source_blocked`: requires a real external source file or provider state change.
+- `market_window_blocked`: requires a valid market window and explicit operator confirmation.
+- `parked_until_state_change`: do not rerun until a named artifact/status/threshold changes.
+- `falsified_under_current_data`: stop this branch under current evidence.
+- `exhausted_under_current_data`: no significant upgrade remains without a named new data/source/engine condition.
+
+Stopping a branch is not stopping the global loop. Use `stop_exception` only if all meaningful branches are exhausted or blocked by external input/approval/source availability.
+
 Hard rules:
 - Do not repeat a branch already marked parked unless new source state changed.
 - Do not select macro_event_calendar_source_repair_packet_v1 again; it is already implemented and verified.
@@ -1428,60 +1684,14 @@ Hard rules:
 - Do not select trusted_flow_volume_oi_source_repair_packet_v1 again if the attached/current artifact status is flow_extreme_source_repair_packet_ready_for_operator_import_decision; it is already implemented and verified.
 - Do not select the 59-symbol ThetaTerminal retry again until provider/source availability changes.
 - Do not select historical dashboard/picks visibility unless it directly affects forward capture.
-- Do not claim profitability from historical rows alone.
+- Do not select another packet-only source plan for a blocker that already has a verified source packet, parser/import contract, and approval boundary. Packet-only work is allowed only for a newly identified blocker that lacks a safe parser, approval boundary, or measurable acceptance criteria.
+- Do not select an import/materialization command unless the needed trusted source file exists or the selected task explicitly asks the operator for the exact approval/source file and provides a safe read-only fallback. Approved non-live source materialization may be recommended when it is the shortest path to a replay or forward audit, but the task must name the source file, approval token, write target, forbidden writes, and pass/fail thresholds.
+- Do not select any tokened source import/materialization task when the corresponding acquisition artifact reports `candidate_file_count=0`, `ready_candidate_count=0`, or `selected_ready_source_file=null`. In that case, name the missing trusted source file as an external blocker and choose a different executable Codex task or return a concrete operator source-supply question.
+- Do not use local shortcut sources as proof-grade point-in-time inputs: `market_data.db:daily_history`, historical reconstruction, inferred known-at policy, fixture/sample rows, manual rows, synthetic rows, source-mark rows, midpoint/EOD/last/model rows, or lookahead rows.
+- Do not select any 13-symbol runner-support, no-write-runner, source-surface, denominator, entrypoint, engine-diagnostics, atlas, or dashboard task unless it can change these metrics: `candidate_generation_months_covered_count`, `selected_candidate_row_count`, `latest_four_strict_new_candidates`, and `historical_simulated_forward_audit_command`. Re-emitting 6,916 blocked rows with `missing_daily_candidate_generation_diagnostics` is a failed repeat and should stop that branch until a real daily frozen candidate-decision source or required point-in-time input source changes.
+- For any replay/engine task, acceptance criteria must include `denominator_rows`, `priced_exact_rows`, `strict_new_exact_completed_rows`, side-aware entry/exit pricing basis, fees/slippage, assignment/expiration/max-loss/collateral handling where structure-specific, strict-new dedupe, protected-holdout guard, net USD P&L, PF, and latest-four/post-freeze row counts. If `priced_exact_rows=0`, the task must name the single smallest next blocker and the branch stop condition.
+- Do not claim accepted profitability from historical rows alone or in combination with simulated-forward/research rows. Accepted profitability requires strict completed forward-audit rows from the approved forward cohort path.
 - Do not stop unless you prove no meaningful upgrade remains across forward capture, source repair/materialization, candidate-generation repair, replay engine support, new option structures, and longer/lookback audits.
-
-Output JSON-like structure:
-{{
-  "verdict": "continue|stop_exception",
-  "continue_loop": true/false,
-  "current_profitability_state": {{
-    "forward_strict_completed_rows": number,
-    "target_rows": 30,
-    "accepted_profitability": true/false,
-    "main_reason_not_profitable": "string"
-  }},
-  "blocker_map": {{
-    "forward_proof": [],
-    "candidate_generation": [],
-    "data_sources": [],
-    "replay_engine": [],
-    "strategy_edges": [],
-    "historical_audit": [],
-    "dashboard_operator": []
-  }},
-  "ranked_next_tasks": [
-    {{
-      "rank": 1,
-      "task_id": "string",
-      "expected_profitability_impact": "string",
-      "downstream_unlocks": [],
-      "time_to_test": "string",
-      "why_not_selected_if_applicable": null
-    }}
-  ],
-  "selected_branch_id": "string",
-  "next_codex_task": {{
-    "objective": "string",
-    "why_highest_leverage": "string",
-    "exact_scope": "string",
-    "allowed_files_or_artifacts": [],
-    "forbidden_actions": [],
-    "implementation_steps": [],
-    "commands_to_run": [],
-    "acceptance_criteria": [],
-    "failure_criteria": [],
-    "downstream_enabled_if_passes": [],
-    "branch_stop_condition_if_fails": "string"
-  }},
-  "branches_to_stop": [],
-  "operator_questions": [],
-  "anti_handwave_audit": {{
-    "exact_next_action_present": true,
-    "measurable_threshold_present": true,
-    "generic_advice_removed": true
-  }}
-}}
 
 Current repo evidence appendix follows. Use this evidence for the blocker map and next-task ranking; do not ignore completed/parked artifacts.
 
@@ -1620,7 +1830,7 @@ Interpretation: when the current VIX state shows `direct_vix_source_import_mater
 Current macro-event calendar source repair packet result, if available:
 {json.dumps({"status": macro_event_calendar_source_repair_packet.get("status"), "source_family": macro_event_calendar_source_repair_packet.get("source_family"), "blockers": macro_event_calendar_source_repair_packet.get("blockers"), "current_macro_event_source_baseline": {"macro_event_calendar_status": macro_event_calendar_source_repair_packet.get("macro_event_calendar_status"), "event_count": macro_event_calendar_source_repair_packet.get("event_count"), "covered_categories": macro_event_calendar_source_repair_packet.get("covered_categories"), "missing_required_categories": macro_event_calendar_source_repair_packet.get("missing_required_categories"), "current_forward_rows": macro_event_calendar_source_repair_packet.get("current_forward_rows"), "target_forward_rows": macro_event_calendar_source_repair_packet.get("target_forward_rows")}, "known_at_policy": macro_event_calendar_source_repair_packet.get("known_at_policy"), "tradable_after_policy": macro_event_calendar_source_repair_packet.get("tradable_after_policy"), "fixture_validation": macro_event_calendar_source_repair_packet.get("fixture_validation"), "future_import_manifest_template": macro_event_calendar_source_repair_packet.get("future_import_manifest_template"), "future_import_command": macro_event_calendar_source_repair_packet.get("future_import_command"), "downstream_readiness_commands": macro_event_calendar_source_repair_packet.get("downstream_readiness_commands"), "branch_implications": macro_event_calendar_source_repair_packet.get("downstream_branch_implications"), "future_import_command_executed": macro_event_calendar_source_repair_packet.get("future_import_command_executed"), "quotes_imported": macro_event_calendar_source_repair_packet.get("quotes_imported"), "evidence_stores_mutated": macro_event_calendar_source_repair_packet.get("evidence_stores_mutated"), "protected_holdout_consumed": macro_event_calendar_source_repair_packet.get("protected_holdout_consumed"), "accepted_profitability": macro_event_calendar_source_repair_packet.get("accepted_profitability"), "historical_rows_are_forward_proof": macro_event_calendar_source_repair_packet.get("historical_rows_are_forward_proof")}, indent=2, sort_keys=True)}
 
-Interpretation: if the macro-event calendar source repair packet status is macro_event_calendar_source_repair_packet_ready_for_operator_import_decision, do not rerun the same macro-event source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real macro-event source import/materialization still needs the exact tokened source-import slice and an operator-supplied official macro-event calendar CSV. Do not run macro-event or post-event replay until a real point-in-time macro-event source artifact exists. Decide whether the next meaningful slice is that tokened non-live source materialization path, a readiness audit for post-event IV-crush, direct VIX materialization if source is supplied, or another safe fallback.
+Interpretation: if the macro-event calendar source repair packet status is macro_event_calendar_source_repair_packet_ready_for_operator_import_decision, do not rerun the same macro-event source packet. The operator has provided standing yes for non-live/non-broker research/source questions, but any real macro-event source import/materialization still needs the exact tokened source-import slice and an operator-supplied official macro-event calendar CSV. Do not run macro-event or post-event replay until a real point-in-time macro-event source artifact exists. VIX is already materialized and must not be selected as the next slice. Decide whether the next meaningful slice is that tokened non-live source materialization path, a readiness audit for post-event IV-crush, or another safe fallback.
 
 Current flow-extreme volume/open-interest source repair packet result, if available:
 {json.dumps({"status": flow_extreme_source_repair_packet.get("status"), "source_family": flow_extreme_source_repair_packet.get("source_family"), "blockers": flow_extreme_source_repair_packet.get("blockers"), "current_flow_source_baseline": {"point_in_time_flow_extreme_input_status": flow_extreme_source_repair_packet.get("point_in_time_flow_extreme_input_status"), "flow_extreme_volume_oi_source_rows_status": flow_extreme_source_repair_packet.get("flow_extreme_volume_oi_source_rows_status"), "covered_month_count": flow_extreme_source_repair_packet.get("covered_month_count"), "date_coverage_pct": flow_extreme_source_repair_packet.get("date_coverage_pct"), "flow_extreme_ratio_backspread_replay_readiness_status": flow_extreme_source_repair_packet.get("flow_extreme_ratio_backspread_replay_readiness_status"), "current_forward_rows": flow_extreme_source_repair_packet.get("current_forward_rows"), "target_forward_rows": flow_extreme_source_repair_packet.get("target_forward_rows")}, "known_at_policy": flow_extreme_source_repair_packet.get("known_at_policy"), "threshold_policy": flow_extreme_source_repair_packet.get("threshold_policy"), "fixture_validation": flow_extreme_source_repair_packet.get("fixture_validation"), "future_import_manifest_template": flow_extreme_source_repair_packet.get("future_import_manifest_template"), "future_import_command": flow_extreme_source_repair_packet.get("future_import_command"), "downstream_readiness_commands": flow_extreme_source_repair_packet.get("downstream_readiness_commands"), "branch_implications": flow_extreme_source_repair_packet.get("downstream_branch_implications"), "future_import_command_executed": flow_extreme_source_repair_packet.get("future_import_command_executed"), "quotes_imported": flow_extreme_source_repair_packet.get("quotes_imported"), "evidence_stores_mutated": flow_extreme_source_repair_packet.get("evidence_stores_mutated"), "protected_holdout_consumed": flow_extreme_source_repair_packet.get("protected_holdout_consumed"), "accepted_profitability": flow_extreme_source_repair_packet.get("accepted_profitability"), "historical_rows_are_forward_proof": flow_extreme_source_repair_packet.get("historical_rows_are_forward_proof")}, indent=2, sort_keys=True)}
@@ -1756,8 +1966,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--momentum-continuation-bounded-replay", type=Path, default=DEFAULT_MOMENTUM_CONTINUATION_BOUNDED_REPLAY)
     parser.add_argument("--preregistered-vrp-playbook", type=Path, default=DEFAULT_PREREGISTERED_VRP_PLAYBOOK)
     parser.add_argument("--vrp-replay-readiness", type=Path, default=DEFAULT_VRP_REPLAY_READINESS)
+    parser.add_argument("--vrp-structure-harness", type=Path, default=DEFAULT_VRP_STRUCTURE_HARNESS)
+    parser.add_argument("--vrp-bounded-replay", type=Path, default=DEFAULT_VRP_BOUNDED_REPLAY)
     parser.add_argument("--preregistered-term-structure-playbook", type=Path, default=DEFAULT_TERM_STRUCTURE_PLAYBOOK)
     parser.add_argument("--term-structure-replay-readiness", type=Path, default=DEFAULT_TERM_STRUCTURE_REPLAY_READINESS)
+    parser.add_argument("--term-structure-harness", type=Path, default=DEFAULT_TERM_STRUCTURE_HARNESS)
+    parser.add_argument("--term-structure-bounded-replay", type=Path, default=DEFAULT_TERM_STRUCTURE_BOUNDED_REPLAY)
     parser.add_argument("--preregistered-skew-broken-wing-playbook", type=Path, default=DEFAULT_PREREGISTERED_SKEW_BROKEN_WING_PLAYBOOK)
     parser.add_argument("--preregistered-macro-event-long-strangle-playbook", type=Path, default=DEFAULT_PREREGISTERED_MACRO_EVENT_LONG_STRANGLE_PLAYBOOK)
     parser.add_argument("--macro-event-calendar", type=Path, default=DEFAULT_MACRO_EVENT_CALENDAR)
@@ -1768,6 +1982,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate-generation-13-symbol-frozen-entrypoint", type=Path, default=DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENTRYPOINT)
     parser.add_argument("--candidate-generation-13-symbol-frozen-engine", type=Path, default=DEFAULT_13_SYMBOL_FROZEN_CANDIDATE_GENERATION_ENGINE)
     parser.add_argument("--preregistered-post-event-iv-crush-iron-condor-playbook", type=Path, default=DEFAULT_PREREGISTERED_POST_EVENT_IV_CRUSH_IRON_CONDOR_PLAYBOOK)
+    parser.add_argument("--post-event-iv-crush-replay-readiness", type=Path, default=DEFAULT_POST_EVENT_IV_CRUSH_REPLAY_READINESS)
     parser.add_argument("--preregistered-flow-extreme-ratio-backspread-playbook", type=Path, default=DEFAULT_PREREGISTERED_FLOW_EXTREME_RATIO_BACKSPREAD_PLAYBOOK)
     parser.add_argument("--flow-extreme-volume-oi-source-rows", type=Path, default=DEFAULT_FLOW_EXTREME_VOLUME_OI_SOURCE_ROWS)
     parser.add_argument("--point-in-time-flow-extreme-input", type=Path, default=DEFAULT_POINT_IN_TIME_FLOW_EXTREME_INPUT)
@@ -1808,8 +2023,12 @@ def main(argv: list[str] | None = None) -> int:
         momentum_continuation_bounded_replay_path=args.momentum_continuation_bounded_replay,
         preregistered_vrp_playbook_path=args.preregistered_vrp_playbook,
         vrp_replay_readiness_path=args.vrp_replay_readiness,
+        vrp_structure_harness_path=args.vrp_structure_harness,
+        vrp_bounded_replay_path=args.vrp_bounded_replay,
         preregistered_term_structure_playbook_path=args.preregistered_term_structure_playbook,
         term_structure_replay_readiness_path=args.term_structure_replay_readiness,
+        term_structure_harness_path=args.term_structure_harness,
+        term_structure_bounded_replay_path=args.term_structure_bounded_replay,
         preregistered_skew_broken_wing_playbook_path=args.preregistered_skew_broken_wing_playbook,
         preregistered_macro_event_long_strangle_playbook_path=args.preregistered_macro_event_long_strangle_playbook,
         macro_event_calendar_path=args.macro_event_calendar,
@@ -1820,6 +2039,7 @@ def main(argv: list[str] | None = None) -> int:
         candidate_generation_13_symbol_frozen_entrypoint_path=args.candidate_generation_13_symbol_frozen_entrypoint,
         candidate_generation_13_symbol_frozen_engine_path=args.candidate_generation_13_symbol_frozen_engine,
         preregistered_post_event_iv_crush_iron_condor_playbook_path=args.preregistered_post_event_iv_crush_iron_condor_playbook,
+        post_event_iv_crush_replay_readiness_path=args.post_event_iv_crush_replay_readiness,
         preregistered_flow_extreme_ratio_backspread_playbook_path=args.preregistered_flow_extreme_ratio_backspread_playbook,
         flow_extreme_volume_oi_source_rows_path=args.flow_extreme_volume_oi_source_rows,
         point_in_time_flow_extreme_input_path=args.point_in_time_flow_extreme_input,

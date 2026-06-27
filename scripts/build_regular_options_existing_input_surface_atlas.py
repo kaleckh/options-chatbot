@@ -256,6 +256,8 @@ def _candidate_ready(row: dict[str, Any]) -> bool:
         return False
     if row.get("input_family") == "fresh_forward_collection_readiness":
         return False
+    if row.get("input_family") == "direct_vix_or_volatility_regime" and not row.get("next_safe_branch"):
+        return False
     if row.get("source_type") not in {"direct_market_source", "derived_point_in_time_proxy"}:
         return False
     if row.get("source_type") == "derived_point_in_time_proxy":
@@ -393,8 +395,20 @@ def _artifact_candidate(
         for day in window.requested_dates:
             if day[:7] in covered_months:
                 covered_dates.add(day)
+    if not covered_dates:
+        for row in _as_list(payload.get("bucket_rows")):
+            row_dict = _as_dict(row)
+            bucket_date = str(row_dict.get("bucket_date_et") or "")
+            if bucket_date in set(window.requested_dates):
+                covered_dates.add(bucket_date)
     cov = _coverage(covered_dates, window)
-    required_fields_present = bool(coverage_obj) and not _as_list(payload.get("blockers"))
+    payload_blockers = [str(value) for value in _as_list(payload.get("blockers"))]
+    status = str(payload.get("status") or "")
+    has_coverage_signal = bool(coverage_obj) or bool(covered_dates) or (
+        int(payload.get("covered_date_count") or 0) > 0
+        and int(payload.get("requested_date_count") or 0) > 0
+    )
+    required_fields_present = has_coverage_signal and not payload_blockers and not status.startswith("blocked_")
     source = source_type or _source_type_for_path(path)
     if not path.exists():
         source = "missing"
@@ -407,10 +421,17 @@ def _artifact_candidate(
         "known_at_safe": required_fields_present and bool(payload.get("point_in_time_valid") or "point_in_time" in str(payload.get("status", ""))),
         "leakage_reject_count": int(payload.get("leakage_reject_count") or 0),
         "protected_holdout_overlap_rows": int(payload.get("protected_holdout_overlap_rows") or payload.get("holdout_overlap_count") or 0),
-        "usable_row_count": int(coverage_obj.get("covered_date_count") or payload.get("source_row_count") or payload.get("row_count") or 0),
+        "usable_row_count": int(
+            coverage_obj.get("covered_date_count")
+            or payload.get("covered_date_count")
+            or payload.get("source_row_count")
+            or payload.get("row_count")
+            or len(covered_dates)
+            or 0
+        ),
         "approval_required": approval_required,
         "clears_blockers": [],
-        "remaining_blockers": list(blockers) + [str(value) for value in _as_list(payload.get("blockers"))],
+        "remaining_blockers": list(blockers) + payload_blockers,
         "next_safe_branch": None,
         **cov,
     }
@@ -602,7 +623,7 @@ def build_report(
                 payload=artifacts["vix_bucket"],
                 window=window,
                 source_type="direct_market_source",
-                blockers=("direct_vix_source_not_present",),
+                blockers=(),
             ),
             _db_field_candidate(
                 conn,
@@ -612,7 +633,6 @@ def build_report(
                 surface_id="option_quote_snapshots_iv_proxy_volatility_regime",
                 source_path="data/options-validation/options_history.db:option_quote_snapshots.iv",
                 window=window,
-                extra_blockers=("proxy_may_not_clear_direct_vix_blocker",),
                 next_safe_branch="option_iv_proxy_volatility_regime_playbook_no_write",
             ),
             _artifact_candidate(

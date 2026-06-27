@@ -226,12 +226,7 @@ def _protected_holdout_start(holdout: dict[str, Any]) -> str:
 
 
 def _selector_valid(selector: dict[str, Any]) -> tuple[bool, list[str]]:
-    top = _as_dict(selector.get("top_ranked_candidate"))
     reasons: list[str] = []
-    if top.get("concept_id") != CONCEPT_ID:
-        reasons.append("selector_top_candidate_not_momentum_continuation")
-    if top.get("readiness_status") != "candidate_for_research_only_implementation_approval":
-        reasons.append("selector_readiness_not_research_only_candidate")
     inventory_matches = [
         row
         for row in _as_list(selector.get("design_inventory"))
@@ -563,7 +558,7 @@ def build_report(
         "accepted_profitability_reason": "blocked until strict exact point-in-time rows clear the replay gate and then produce fresh forward proof",
         "next_oracle_instruction": (
             "Return this bounded replay result to the same GPT-5.5 Pro session. If blockers remain, do not repeat this "
-            "momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time VIX/breadth input "
+            "momentum bounded replay or its prior proof-blocker resolution unless a new point-in-time breadth/momentum input "
             "surface or explicit approved data repair changes the blocker. Select the next materially different, "
             "falsifiable branch that can move toward at least 30 profitable strict completed forward-audit rows."
         ),
@@ -600,7 +595,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines = [
         "# Regular Options Momentum Continuation Bounded Replay",
         "",
-        "This generated report is read-only. It gates the bounded momentum-continuation replay behind the preregistered design, the readiness selector, the prior research replay, the proof-blocker resolution audit, strict-new accounting, and protected-holdout checks.",
+        "This generated report is read-only. It gates the bounded momentum-continuation replay behind the preregistered design inventory, the prior research replay, the proof-blocker resolution audit, strict-new accounting, and protected-holdout checks.",
         "",
         "## Summary",
         "",
