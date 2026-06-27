@@ -19,6 +19,8 @@ Status: `waiting_for_valid_market_window`.
 - Latest scheduled Phase 2 drop-count total: `63`.
 - Latest scheduled Phase 2 symbol drop reasons: `0`.
 - Latest readiness status: `market_window_blocked_no_candidate_jsonl`.
+- Latest scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Latest scan-task health blockers: `[]`.
 - Safe no-append collector command: `npm run options:goal-loop:strict-forward-30-collector -- --selection-date 2026-06-29 --market-window-confirmed --market-window-status open --run-scan-sweep --max-attempts 3 --sleep-seconds 300 --json`.
 - Next action: `wait_for_valid_market_window_then_run_safe_no_append_collector_command`.
 

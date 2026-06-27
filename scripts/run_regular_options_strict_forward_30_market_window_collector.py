@@ -76,6 +76,10 @@ def _attempt_summary(index: int, report: dict[str, Any]) -> dict[str, Any]:
         "scheduled_phase2_drop_count_total": report.get("scheduled_phase2_drop_count_total"),
         "scheduled_phase2_scan_drop_reason_count_total": report.get("scheduled_phase2_scan_drop_reason_count_total"),
         "readiness_status": report.get("readiness_status"),
+        "scan_task_health_status": report.get("scan_task_health_status"),
+        "scan_task_health_blockers": report.get("scan_task_health_blockers")
+        if isinstance(report.get("scan_task_health_blockers"), list)
+        else [],
         "safety_violations": report.get("safety_violations") if isinstance(report.get("safety_violations"), list) else [],
         "next_action": report.get("next_action"),
     }
@@ -230,6 +234,10 @@ def build_report(
         "latest_scheduled_phase2_drop_count_total": latest_child.get("scheduled_phase2_drop_count_total"),
         "latest_scheduled_phase2_scan_drop_reason_count_total": latest_child.get("scheduled_phase2_scan_drop_reason_count_total"),
         "latest_readiness_status": latest_child.get("readiness_status"),
+        "latest_scan_task_health_status": latest_child.get("scan_task_health_status"),
+        "latest_scan_task_health_blockers": latest_child.get("scan_task_health_blockers")
+        if isinstance(latest_child.get("scan_task_health_blockers"), list)
+        else [],
         "candidate_rows_staged": _int(latest_child.get("candidate_rows_staged")),
         "candidate_jsonl_exists": bool(latest_child.get("candidate_jsonl_exists")),
         "cohort_append_performed": bool(latest_child.get("cohort_append_performed")),
@@ -279,6 +287,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Latest scheduled Phase 2 drop-count total: `{report.get('latest_scheduled_phase2_drop_count_total')}`.",
         f"- Latest scheduled Phase 2 symbol drop reasons: `{report.get('latest_scheduled_phase2_scan_drop_reason_count_total')}`.",
         f"- Latest readiness status: `{report.get('latest_readiness_status')}`.",
+        f"- Latest scan-task health status: `{report.get('latest_scan_task_health_status')}`.",
+        f"- Latest scan-task health blockers: `{json.dumps(report.get('latest_scan_task_health_blockers'), sort_keys=True)}`.",
         f"- Safe no-append collector command: `{report.get('safe_no_append_collector_command')}`.",
         f"- Next action: `{report.get('next_action')}`.",
         "",

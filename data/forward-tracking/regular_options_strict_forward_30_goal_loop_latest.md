@@ -20,6 +20,8 @@ Status: `waiting_for_valid_market_window`.
 - Scheduled Phase 2 drop-count total: `63`.
 - Scheduled Phase 2 symbol drop reasons: `0`.
 - Readiness status: `market_window_blocked_no_candidate_jsonl`.
+- Scan-task health status: `scan_tasks_ready_for_next_market_window`.
+- Scan-task health blockers: `[]`.
 - Scheduled Phase 2 scan picks: `0`.
 - Next action: `wait_for_valid_market_window_then_run_with_--market-window-confirmed_--market-window-status_open_--run-scan-sweep`.
 

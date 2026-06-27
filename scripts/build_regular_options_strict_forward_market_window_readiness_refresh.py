@@ -29,6 +29,7 @@ DEFAULT_SOURCES = {
     "monthly_profitability_audit": ROOT / "data" / "forward-tracking" / "monthly_all_lanes_profitability_audit_latest.json",
     "market_window_approval_preflight": ROOT / "data" / "forward-tracking" / "regular_options_market_window_approval_preflight_latest.json",
     "forward_candidate_throughput_audit": ROOT / "data" / "forward-tracking" / "regular_options_forward_candidate_throughput_audit_latest.json",
+    "strict_forward_scan_task_health": ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_scan_task_health_latest.json",
 }
 
 EXPECTED_SELECTED_PATH = {
@@ -206,13 +207,33 @@ def _preflight_view(preflight: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _status_for(*, source_status: str | None, safety_violations: list[dict[str, str]], drift: list[str], preflight: dict[str, Any], strict_rows: int, required_rows: int) -> tuple[str, list[str]]:
+def _scan_task_health_view(scan_task_health: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "status": scan_task_health.get("status"),
+        "blockers": _as_list(scan_task_health.get("blockers")),
+    }
+
+
+def _status_for(
+    *,
+    source_status: str | None,
+    safety_violations: list[dict[str, str]],
+    drift: list[str],
+    preflight: dict[str, Any],
+    scan_task_health: dict[str, Any],
+    strict_rows: int,
+    required_rows: int,
+) -> tuple[str, list[str]]:
     if source_status:
         return source_status, [source_status]
     if safety_violations:
         return "safety_blocked", [f"safety_flag:{item['source']}:{item['flag']}" for item in safety_violations]
     if drift:
         return "selected_path_identity_drift", drift
+    scan_status = _norm(scan_task_health.get("status"))
+    scan_blockers = [str(item) for item in _as_list(scan_task_health.get("blockers"))]
+    if scan_status != "scan_tasks_ready_for_next_market_window":
+        return "scan_task_health_blocked", ["scan_tasks_not_ready", *scan_blockers]
     blockers: list[str] = []
     if strict_rows < required_rows:
         blockers.append(f"strict_forward_rows_{strict_rows}_below_{required_rows}")
@@ -252,6 +273,7 @@ def build_report(
     selected_path = _as_dict(queue.get("selected_path"))
     preflight = _preflight_view(payloads["market_window_approval_preflight"])
     throughput = payloads["forward_candidate_throughput_audit"]
+    scan_task_health = _scan_task_health_view(payloads["strict_forward_scan_task_health"])
     try:
         strict_rows = int(queue.get("strict_forward_rows") or 0)
     except (TypeError, ValueError):
@@ -269,6 +291,7 @@ def build_report(
         safety_violations=safety_violations,
         drift=drift,
         preflight=preflight,
+        scan_task_health=scan_task_health,
         strict_rows=strict_rows,
         required_rows=required_rows,
     )
@@ -289,6 +312,9 @@ def build_report(
         "selected_path": selected_path,
         "selected_path_drift": drift,
         "preflight": preflight,
+        "scan_task_health": scan_task_health,
+        "scan_task_health_status": scan_task_health.get("status"),
+        "scan_task_health_blockers": scan_task_health.get("blockers"),
         "candidate_throughput": {
             "status": throughput.get("status"),
             "scan_picks_row_count": throughput.get("scan_picks_row_count"),
@@ -377,6 +403,11 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Append allowed: `{str(bool(preflight.get('append_allowed'))).lower()}`.",
         f"- Operator approval required: `{str(bool(preflight.get('operator_approval_required'))).lower()}`.",
         f"- Operator approval granted: `{str(bool(preflight.get('operator_approval_granted'))).lower()}`.",
+        "",
+        "## Scan-Task Health",
+        "",
+        f"- Scan-task health status: `{report.get('scan_task_health_status')}`.",
+        f"- Scan-task health blockers: `{_json_inline(report.get('scan_task_health_blockers'))}`.",
         "",
         "## Candidate Throughput",
         "",

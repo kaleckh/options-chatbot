@@ -308,6 +308,10 @@ def build_report(
         "scheduled_phase2_scan_drop_reason_count_total": throughput.get("scheduled_phase2_scan_drop_reason_count_total"),
         "candidate_starvation_evidence_status": throughput.get("candidate_starvation_evidence_status"),
         "readiness_status": readiness.get("overall_status"),
+        "scan_task_health_status": readiness.get("scan_task_health_status"),
+        "scan_task_health_blockers": readiness.get("scan_task_health_blockers")
+        if isinstance(readiness.get("scan_task_health_blockers"), list)
+        else [],
         "scheduled_phase2_all_lanes_scanned": _as_dict(readiness.get("candidate_throughput")).get("scheduled_phase2_all_lanes_scanned"),
         "scheduled_phase2_scan_picks_count": _as_dict(readiness.get("candidate_throughput")).get("scheduled_phase2_scan_picks_count"),
         "safety_violations": safety_violations,
@@ -358,6 +362,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Scheduled Phase 2 drop-count total: `{report.get('scheduled_phase2_drop_count_total')}`.",
         f"- Scheduled Phase 2 symbol drop reasons: `{report.get('scheduled_phase2_scan_drop_reason_count_total')}`.",
         f"- Readiness status: `{report.get('readiness_status')}`.",
+        f"- Scan-task health status: `{report.get('scan_task_health_status')}`.",
+        f"- Scan-task health blockers: `{json.dumps(report.get('scan_task_health_blockers'), sort_keys=True)}`.",
         f"- Scheduled Phase 2 scan picks: `{report.get('scheduled_phase2_scan_picks_count')}`.",
         f"- Next action: `{report.get('next_action')}`.",
         "",

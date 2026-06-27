@@ -28,6 +28,8 @@ def _goal_report(**overrides):
         "scheduled_phase2_drop_count_total": 63,
         "scheduled_phase2_scan_drop_reason_count_total": 0,
         "readiness_status": "market_window_blocked_no_candidate_jsonl",
+        "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
+        "scan_task_health_blockers": [],
         "safety_violations": [],
         "next_action": "keep_passive_sweep_enabled_for_next_valid_market_window",
         "market_window_schedule": {
@@ -88,9 +90,15 @@ class RegularOptionsStrictForward30MarketWindowCollectorTests(unittest.TestCase)
         self.assertEqual(report["latest_candidate_starvation_evidence_status"], "stage_counts_only_waiting_for_symbol_drop_reasons")
         self.assertEqual(report["latest_scheduled_phase2_drop_count_total"], 63)
         self.assertEqual(report["latest_scheduled_phase2_scan_drop_reason_count_total"], 0)
+        self.assertEqual(report["latest_scan_task_health_status"], "scan_tasks_ready_for_next_market_window")
+        self.assertEqual(report["latest_scan_task_health_blockers"], [])
         self.assertEqual(
             report["attempt_reports"][0]["candidate_starvation_evidence_status"],
             "stage_counts_only_waiting_for_symbol_drop_reasons",
+        )
+        self.assertEqual(
+            report["attempt_reports"][0]["scan_task_health_status"],
+            "scan_tasks_ready_for_next_market_window",
         )
 
     def test_open_market_attempts_get_fresh_timestamps_when_clock_not_fixed(self):

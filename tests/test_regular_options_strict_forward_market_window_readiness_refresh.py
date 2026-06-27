@@ -106,6 +106,12 @@ def _payloads(generated_at: str = NOW) -> dict[str, dict]:
             "stager_rejected_counts": {"non_phase2_lane": 468},
         }
     )
+    payloads["strict_forward_scan_task_health"].update(
+        {
+            "status": "scan_tasks_ready_for_next_market_window",
+            "blockers": [],
+        }
+    )
     return payloads
 
 
@@ -137,6 +143,8 @@ class RegularOptionsStrictForwardMarketWindowReadinessRefreshTests(unittest.Test
             report["candidate_throughput"]["candidate_starvation_evidence_status"],
             "stage_counts_only_waiting_for_symbol_drop_reasons",
         )
+        self.assertEqual(report["scan_task_health_status"], "scan_tasks_ready_for_next_market_window")
+        self.assertEqual(report["scan_task_health_blockers"], [])
         self.assertEqual(report["candidate_throughput"]["scheduled_phase2_drop_count_total"], 63)
         self.assertEqual(report["candidate_throughput"]["scheduled_phase2_scan_drop_reason_count_total"], 0)
         self.assertIn("valid_market_window_required", report["blockers"])
@@ -170,6 +178,22 @@ class RegularOptionsStrictForwardMarketWindowReadinessRefreshTests(unittest.Test
         self.assertEqual(report["overall_status"], "safety_blocked")
         self.assertEqual(report["safety_violations"][0]["source"], "trade_qualification")
         self.assertTrue(report["safety"]["live_entry_allowed"])
+
+    def test_blocked_scan_task_health_blocks_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            payloads = _payloads()
+            payloads["strict_forward_scan_task_health"].update(
+                {
+                    "status": "scan_task_config_blocked",
+                    "blockers": ["\\OptionsScanPicks:task_not_enabled"],
+                }
+            )
+            paths = _write_sources(Path(temp_dir), payloads)
+            report = refresh.build_report(source_paths=paths, generated_at_utc=NOW)
+
+        self.assertEqual(report["overall_status"], "scan_task_health_blocked")
+        self.assertIn("scan_tasks_not_ready", report["blockers"])
+        self.assertIn("\\OptionsScanPicks:task_not_enabled", report["blockers"])
 
     def test_future_valid_candidate_still_does_not_append(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -210,6 +234,7 @@ class RegularOptionsStrictForwardMarketWindowReadinessRefreshTests(unittest.Test
         self.assertIn("latest_json", artifacts)
         self.assertIn("Strict forward proof: `0/30`", doc)
         self.assertIn("Candidate-starvation evidence status", doc)
+        self.assertIn("Scan-task health status", doc)
         self.assertIn("This is a no-write readiness refresh", doc)
 
 

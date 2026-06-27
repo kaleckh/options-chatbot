@@ -2,10 +2,10 @@
   "accepted_profitability": false,
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-30-completion-monitor.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260627T054522Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260627T055101Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260627T054522Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_20260627T055101Z.md"
   },
   "bootstrap_pf_lower_bound_5pct_usd": null,
   "candidate_review_source_status": "loaded",
@@ -19,27 +19,27 @@
     "candidate_review_capture_freshness": {
       "blockers": [],
       "capture_latest_generated_at_utc": "2026-06-27T01:53:28Z",
-      "collector_generated_at_utc": "2026-06-27T05:45:20Z",
-      "collector_nested_capture_generated_at_utc": "2026-06-27T05:45:20Z",
+      "collector_generated_at_utc": "2026-06-27T05:50:59Z",
+      "collector_nested_capture_generated_at_utc": "2026-06-27T05:50:59Z",
       "effective_capture_source": "collector_nested_capture_report",
       "fresh": true,
       "status": "collector_nested_capture_fresh_for_candidate_review"
     },
-    "candidate_review_generated_at_utc": "2026-06-27T05:45:21Z",
+    "candidate_review_generated_at_utc": "2026-06-27T05:51:00Z",
     "candidate_review_scheduler_freshness": {
       "blockers": [],
-      "collector_generated_at_utc": "2026-06-27T05:45:20Z",
+      "collector_generated_at_utc": "2026-06-27T05:50:59Z",
       "fresh": true,
-      "scheduler_generated_at_utc": "2026-06-27T05:45:21Z",
+      "scheduler_generated_at_utc": "2026-06-27T05:51:00Z",
       "status": "scheduler_health_fresh_for_candidate_review"
     },
-    "collector_generated_at_utc": "2026-06-27T05:45:20Z",
-    "exit_completion_stager_generated_at_utc": "2026-06-27T05:45:21Z",
-    "exit_evidence_plan_generated_at_utc": "2026-06-27T05:45:21Z",
+    "collector_generated_at_utc": "2026-06-27T05:50:59Z",
+    "exit_completion_stager_generated_at_utc": "2026-06-27T05:51:00Z",
+    "exit_evidence_plan_generated_at_utc": "2026-06-27T05:51:00Z",
     "fresh": true,
-    "lifecycle_audit_generated_at_utc": "2026-06-27T05:45:21Z",
-    "scan_task_health_generated_at_utc": "2026-06-27T05:45:21Z",
-    "scheduler_generated_at_utc": "2026-06-27T05:45:21Z",
+    "lifecycle_audit_generated_at_utc": "2026-06-27T05:51:00Z",
+    "scan_task_health_generated_at_utc": "2026-06-27T05:51:00Z",
+    "scheduler_generated_at_utc": "2026-06-27T05:51:00Z",
     "status": "completion_monitor_dependencies_fresh"
   },
   "exact_completed_forward_pnl_count": 0,
@@ -48,7 +48,7 @@
   "exit_completion_stager_status": "exit_completion_waiting_for_open_forward_rows",
   "exit_evidence_plan_source_status": "loaded",
   "exit_evidence_plan_status": "exit_evidence_plan_waiting_for_open_forward_rows",
-  "generated_at_utc": "2026-06-27T05:45:22Z",
+  "generated_at_utc": "2026-06-27T05:51:01Z",
   "hard_fail_states": [],
   "lifecycle_audit_source_status": "loaded",
   "lifecycle_audit_status": "lifecycle_waiting_for_first_entry_row",
@@ -319,7 +319,7 @@
       "preferred_completed_rows": 50,
       "preferred_review_packet_ready": false
     },
-    "generated_at_utc": "2026-06-27T05:45:22Z",
+    "generated_at_utc": "2026-06-27T05:51:01Z",
     "hard_fail_states": [],
     "is_trade_recommendation": false,
     "leave_one_trade_out_pf_lower_bound": null,
@@ -558,7 +558,7 @@
       "status": "loaded"
     },
     "phase2_report": {
-      "generated_at_utc": "2026-06-27T05:45:22Z",
+      "generated_at_utc": "2026-06-27T05:51:01Z",
       "path": null,
       "proposed_report_exists": false,
       "proposed_report_path": "data/forward-tracking/phase2_regular_options_forward_paper_shadow_report_latest.json",

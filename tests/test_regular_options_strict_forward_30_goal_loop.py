@@ -51,6 +51,8 @@ def _readiness(**overrides):
             "scheduled_phase2_all_lanes_scanned": True,
             "scheduled_phase2_scan_picks_count": 0,
         },
+        "scan_task_health_status": "scan_tasks_ready_for_next_market_window",
+        "scan_task_health_blockers": [],
         "live_entry_allowed": False,
         "auto_track_allowed": False,
         "broker_order_allowed": False,
@@ -92,6 +94,8 @@ class RegularOptionsStrictForward30GoalLoopTests(unittest.TestCase):
         self.assertEqual(report["candidate_starvation_evidence_status"], "stage_counts_only_waiting_for_symbol_drop_reasons")
         self.assertEqual(report["scheduled_phase2_drop_count_total"], 63)
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_count_total"], 0)
+        self.assertEqual(report["scan_task_health_status"], "scan_tasks_ready_for_next_market_window")
+        self.assertEqual(report["scan_task_health_blockers"], [])
         self.assertFalse(report["cohort_append_performed"])
 
     def test_market_window_schedule_rolls_after_hours_to_next_market_day(self):
