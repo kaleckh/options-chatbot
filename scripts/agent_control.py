@@ -722,6 +722,32 @@ def _assert_memory_policy_valid(
         raise AgentControlError("; ".join(errors))
 
 
+def _metadata_for_retrieval(metadata: dict[str, Any]) -> dict[str, Any]:
+    source_type = metadata.get("source_type")
+    if _is_operating_memory(metadata):
+        return metadata
+    sanitized = {
+        key: value
+        for key, value in metadata.items()
+        if key not in AUTHORITY_METADATA_KEYS
+    }
+    if source_type == "dream_proposal":
+        sanitized.pop("entries", None)
+        sanitized["entries_omitted_from_retrieval"] = True
+    if any(key in metadata for key in AUTHORITY_METADATA_KEYS):
+        sanitized["authority_metadata_ignored_for_retrieval"] = True
+    sanitized["authority_scope"] = OPERATING_AUTHORITY_SCOPE
+    sanitized["capability_label"] = "coordination_only"
+    return sanitized
+
+
+def _metadata_for_prompt(node: dict[str, Any]) -> dict[str, Any]:
+    metadata = node.get("metadata") or {}
+    if _is_operating_memory(metadata):
+        return metadata
+    return _metadata_for_retrieval(metadata)
+
+
 def _memory_is_inactive(metadata: dict[str, Any], *, now: datetime | None = None) -> bool:
     if not _is_operating_memory(metadata):
         return False
@@ -764,7 +790,7 @@ def _score_node_for_query(node: dict[str, Any], query: str) -> int | None:
     terms = _query_terms(query)
     if not terms:
         return 0
-    metadata = node.get("metadata", {})
+    metadata = _metadata_for_retrieval(node.get("metadata", {}))
     haystack = " ".join(
         [
             str(node.get("id", "")),
@@ -824,7 +850,7 @@ def _format_graph_context(
         body = _truncate(str(node.get("body", "")), 260)
         if body:
             lines.append(f"  body: {body}")
-        metadata = node.get("metadata") or {}
+        metadata = _metadata_for_prompt(node)
         if metadata:
             lines.append(f"  metadata: {_truncate(canonical_json(metadata), 360)}")
         explanation = next(
@@ -1417,6 +1443,7 @@ def _record_event(
 
 
 def _graph_node_search_text(node: dict[str, Any], metadata: dict[str, Any]) -> str:
+    metadata = _metadata_for_retrieval(metadata)
     keywords = metadata.get("retrieval_keywords") or []
     if isinstance(keywords, list):
         keyword_text = " ".join(str(item) for item in keywords)
@@ -1442,9 +1469,10 @@ def _retrieval_source_quality(metadata: dict[str, Any]) -> str:
 
 def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -> None:
     metadata = node.get("metadata") or {}
+    retrieval_metadata = _metadata_for_retrieval(metadata)
     source_type = str(metadata.get("source_type") or "graph_node")
-    authority_scope = str(metadata.get("authority_scope") or OPERATING_AUTHORITY_SCOPE)
-    capability_label = str(metadata.get("capability_label") or "coordination_only")
+    authority_scope = str(retrieval_metadata.get("authority_scope") or OPERATING_AUTHORITY_SCOPE)
+    capability_label = str(retrieval_metadata.get("capability_label") or "coordination_only")
     search_text = _graph_node_search_text(node, metadata)
     content_sha256 = _text_sha256(
         canonical_json(
@@ -1452,7 +1480,7 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
                 "id": node.get("id"),
                 "title": node.get("title"),
                 "body": node.get("body"),
-                "metadata": metadata,
+                "metadata": retrieval_metadata,
                 "source_ref": node.get("source_ref"),
             }
         )
@@ -1490,7 +1518,7 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
             str(node.get("title") or ""),
             str(node.get("body") or ""),
             search_text,
-            canonical_json(metadata),
+            canonical_json(retrieval_metadata),
             content_sha256,
             freshness_status,
             utc_now(),
@@ -2391,6 +2419,12 @@ def remember_graph_node(
     metadata = metadata or {}
     if metadata.get("source_type") == "operating_memory":
         raise AgentControlError("graph remember cannot create operating_memory nodes; use memory remember")
+    _assert_memory_policy_valid(
+        title=title,
+        body=body,
+        metadata=_with_memory_policy_metadata(metadata, source_type=str(metadata.get("source_type") or "graph_node")),
+        field_name="graph memory",
+    )
     with closing(connect(db_path)) as conn, conn:
         node = upsert_graph_node(
             conn,
@@ -4727,6 +4761,23 @@ def memory_audit(
                                 "operating memory must be orchestration_only and must not authorize "
                                 "trading or evidence mutation"
                             ),
+                        },
+                    }
+                )
+            policy_errors = _validate_memory_policy_text(
+                title=str(node.get("title") or ""),
+                body=str(node.get("body") or ""),
+                metadata=_with_memory_policy_metadata(metadata, source_type="operating_memory"),
+                field_name=node["id"],
+            )
+            if policy_errors:
+                authority_inconsistencies.append(
+                    {
+                        **node,
+                        "metadata": {
+                            **metadata,
+                            "audit_issue": "operating memory contains prohibited authority wording",
+                            "policy_errors": policy_errors,
                         },
                     }
                 )
