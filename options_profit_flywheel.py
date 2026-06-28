@@ -192,6 +192,27 @@ def _tracked_objective_score(tracked_metrics: dict[str, Any]) -> float:
     return round((tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
 
 
+def _profitability_floor_blocker(metrics: dict[str, Any], *, prefix: str) -> str | None:
+    avg = _safe_float(
+        metrics.get("net_realized_pnl_pct")
+        if metrics.get("net_realized_pnl_pct") is not None
+        else metrics.get("avg_net_pnl_pct")
+    )
+    if avg is None:
+        avg = _safe_float(metrics.get("avg_pnl_pct"))
+    if avg is None or avg <= 0:
+        return f"{prefix}_avg_net_pnl_not_positive"
+
+    pf = _safe_float(metrics.get("net_profit_factor"))
+    if pf is None:
+        pf = _safe_float(metrics.get("profit_factor"))
+    if pf is None:
+        return f"{prefix}_profit_factor_missing"
+    if pf < 1.0:
+        return f"{prefix}_profit_factor_below_1"
+    return None
+
+
 def _candidate_is_side_level(candidate: dict[str, Any]) -> bool:
     symbol = str(candidate.get("symbol") or "").strip().upper()
     symbols = [
@@ -607,6 +628,12 @@ def _candidate_is_eligible(
         blockers.append("insufficient_exact_forward_support")
     if int(tracked_metrics.get("closed_position_count") or 0) <= 0:
         blockers.append("missing_tracked_realized_support")
+    forward_floor_blocker = _profitability_floor_blocker(forward_metrics, prefix="forward_exact")
+    if forward_floor_blocker:
+        blockers.append(forward_floor_blocker)
+    tracked_floor_blocker = _profitability_floor_blocker(tracked_metrics, prefix="tracked_realized")
+    if tracked_floor_blocker:
+        blockers.append(tracked_floor_blocker)
     if float(objective_metrics.get("objective_score") or 0.0) <= float(incumbent_metrics.get("objective_score") or 0.0):
         blockers.append("objective_not_better_than_incumbent")
 

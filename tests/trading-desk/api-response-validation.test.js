@@ -90,6 +90,27 @@ test("Trading Desk response validation accepts unavailable error sentinels", () 
   assertValid("suggested_trades_create", { error: "Suggested trades storage is unavailable." });
 });
 
+test("Trading Desk response validation rejects contaminated unavailable sentinels", () => {
+  assertInvalid(
+    "tracked_positions_create",
+    {
+      error: "Tracked positions storage is unavailable.",
+      trade: row(),
+      position_event_persistence: { status: "recorded" },
+    },
+    /body\.trade/
+  );
+  assertInvalid(
+    "suggested_trades_create",
+    {
+      error: "Suggested trades storage is unavailable.",
+      position: row(),
+      duplicate: false,
+    },
+    /body\.position/
+  );
+});
+
 test("Trading Desk response validation rejects malformed rows and pages", () => {
   assertInvalid(
     "tracked_positions_read",

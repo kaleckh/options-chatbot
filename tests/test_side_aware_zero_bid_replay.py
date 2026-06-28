@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 import unittest
 
-from scripts.run_side_aware_zero_bid_replay import RawQuote, parse_occ, replay_trade
+from scripts.run_side_aware_zero_bid_replay import RawQuote, _pnl_metrics, parse_occ, replay_trade
 
 
 class FakeQuoteProvider:
@@ -33,6 +33,13 @@ class SideAwareZeroBidReplayTests(unittest.TestCase):
         self.assertEqual(parts.expiry, date(2025, 9, 26))
         self.assertEqual(parts.option_type, "call")
         self.assertEqual(parts.strike, 109.0)
+
+    def test_no_loss_profit_factor_is_status_not_numeric_sentinel(self):
+        metrics = _pnl_metrics([10.0, 5.0])
+
+        self.assertIsNone(metrics["profit_factor"])
+        self.assertEqual(metrics["profit_factor_status"], "no_losses")
+        self.assertTrue(metrics["no_loss_sample"])
 
     def test_conservative_mode_prices_zero_bid_short_buyback_as_loss(self):
         long_contract = "AAA260106C00100000"

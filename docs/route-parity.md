@@ -223,5 +223,5 @@ Active client components fetch these mounted browser API routes through Next, no
 ## Known Snapshot Caveats
 
 - `GET /api/predictions/history` was a duplicate Next alias and has been removed from the live route tree.
-- `src/app/api/day-trading/*` exists only as empty scaffolding folders in this worktree.
+- `src/app/api/day-trading/*` is absent in this worktree.
 - Any historical doc that describes mounted day-trading browser routes should be treated as archive context.

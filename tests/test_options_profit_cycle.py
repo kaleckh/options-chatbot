@@ -364,6 +364,81 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertFalse(ranking["eligible"])
         self.assertIn("shadow_only_side", ranking["blockers"])
 
+    def test_profit_cycle_rejects_losing_candidate_even_when_objective_improves(self):
+        ensure_options_profit_state()
+        losing_candidate = {
+            "candidate_id": "SPY__call__less_bad",
+            "symbol": "SPY",
+            "direction": "call",
+            "base_profile": "index",
+            "overrides": {"entry": {"min_tech_score": 88.0}},
+            "evaluation": {
+                "replay_gate": {"passes": True, "promotion_status": "promote", "stability_status": "promote"},
+                "forward_exact_contract": {
+                    "eligible_trade_count": 30,
+                    "avg_net_pnl_pct": -1.0,
+                    "net_profit_factor": 0.5,
+                },
+                "tracked_realized": {
+                    "closed_position_count": 4,
+                    "avg_net_pnl_pct": -5.0,
+                    "net_profit_factor": 0.5,
+                },
+            },
+        }
+        incumbents = load_incumbents_state()
+        incumbents["symbols"]["SPY"]["call"]["objective"] = {"objective_score": -100.0}
+        save_incumbents_state(incumbents)
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[losing_candidate]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=[]):
+            result = run_options_profit_cycle()
+
+        self.assertEqual(result["decision"]["action"], "no_op")
+        ranking = result["status"]["candidate_rankings"][0]
+        self.assertFalse(ranking["eligible"])
+        self.assertIn("forward_exact_avg_net_pnl_not_positive", ranking["blockers"])
+        self.assertIn("tracked_realized_avg_net_pnl_not_positive", ranking["blockers"])
+
+    def test_profit_cycle_rejects_no_loss_candidate_without_defined_profit_factor(self):
+        ensure_options_profit_state()
+        no_loss_candidate = {
+            "candidate_id": "SPY__call__no_loss_missing_pf",
+            "symbol": "SPY",
+            "direction": "call",
+            "base_profile": "index",
+            "overrides": {"entry": {"min_tech_score": 88.0}},
+            "evaluation": {
+                "replay_gate": {"passes": True, "promotion_status": "promote", "stability_status": "promote"},
+                "forward_exact_contract": {
+                    "eligible_trade_count": 30,
+                    "avg_net_pnl_pct": 5.0,
+                    "net_profit_factor": None,
+                    "no_loss_sample": True,
+                },
+                "tracked_realized": {
+                    "closed_position_count": 4,
+                    "avg_net_pnl_pct": 3.0,
+                    "net_profit_factor": None,
+                    "no_loss_sample": True,
+                },
+            },
+        }
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[no_loss_candidate]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=[]):
+            result = run_options_profit_cycle()
+
+        self.assertEqual(result["decision"]["action"], "no_op")
+        ranking = result["status"]["candidate_rankings"][0]
+        self.assertFalse(ranking["eligible"])
+        self.assertIn("forward_exact_profit_factor_missing", ranking["blockers"])
+        self.assertIn("tracked_realized_profit_factor_missing", ranking["blockers"])
+
     def test_profit_cycle_derives_candidate_evaluation_from_policy_forward_and_positions(self):
         candidate_id = "SPY__call__broad_ev7"
         candidate = {

@@ -47,7 +47,7 @@ test("Trading Desk response contracts preserve tracked versus suggested envelope
     "ReviewTrackedPositionsResponse",
     "CloseTrackedPositionResponse",
   ]) {
-    const block = source.match(new RegExp(`export type ${responseName} =[\\s\\S]*?;\\n\\n`));
+    const block = source.match(new RegExp(`export type ${responseName} =[\\s\\S]*?;\\r?\\n\\r?\\n`));
     assert.ok(block, `${responseName} should be declared`);
     assert.match(block[0], /position_event_persistence\?: PositionEventPersistence/);
   }
@@ -57,7 +57,7 @@ test("Trading Desk response contracts preserve tracked versus suggested envelope
     "ReviewSuggestedTradesResponse",
     "CloseSuggestedTradeResponse",
   ]) {
-    const block = source.match(new RegExp(`export type ${responseName} =[\\s\\S]*?;\\n\\n`));
+    const block = source.match(new RegExp(`export type ${responseName} =[\\s\\S]*?;\\r?\\n\\r?\\n`));
     assert.ok(block, `${responseName} should be declared`);
     assert.match(block[0], /position_event_persistence\?: never/);
   }

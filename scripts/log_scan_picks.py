@@ -1314,6 +1314,8 @@ def _backfill_position_scan_provenance(
     updated = 0
     for link in tracked_links:
         position_id, candidate_rank = int(link[0]), int(link[1])
+        if len(link) >= 3 and str(link[2]) == "duplicate_open":
+            continue
         if candidate_rank <= 0 or candidate_rank > len(picks):
             continue
         try:

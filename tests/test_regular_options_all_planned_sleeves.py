@@ -53,6 +53,34 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
 
         self.assertEqual(status, "not_worth_current_shape")
 
+    def test_no_loss_profit_factor_is_not_collapsed_to_zero(self):
+        metrics = all_sleeves._run_metrics(
+            {
+                "candidate_trade_count": 30,
+                "priced_trade_count": 30,
+                "quote_coverage_pct": 100.0,
+                "authoritative_profitability_metrics": {
+                    "trade_count": 30,
+                    "profit_factor": None,
+                    "profit_factor_status": "no_losses",
+                    "avg_pnl_pct": 12.0,
+                    "win_rate_pct": 100.0,
+                },
+            }
+        )
+
+        self.assertIsNone(metrics["profit_factor"])
+        self.assertEqual(metrics["profit_factor_status"], "no_losses")
+        self.assertTrue(metrics["no_loss_sample"])
+        self.assertNotEqual(
+            all_sleeves.worth_status(
+                metrics,
+                {"rolling_status": "passed", "stress_5pct_per_side_profit_factor": None},
+                {"strict_new_trade_count": 30},
+            ),
+            "not_worth_current_shape",
+        )
+
     def test_worth_status_marks_small_profitable_samples_as_thin(self):
         status = all_sleeves.worth_status(
             {
@@ -82,6 +110,38 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
         )
 
         self.assertEqual(status, "candidate_to_close_200_gap")
+
+    def test_worth_status_requires_stress_profit_factor_before_counting(self):
+        status = all_sleeves.worth_status(
+            {
+                "exact_trade_count": 100,
+                "profit_factor": 1.8,
+                "avg_pnl_pct": 12.0,
+                "quote_coverage_pct": 100.0,
+                "unpriced_trade_count": 0,
+            },
+            {"rolling_status": "passed", "stress_5pct_per_side_profit_factor": None},
+            {"strict_new_trade_count": 43},
+        )
+
+        self.assertEqual(status, "repair_stress_before_counting")
+
+    def test_worth_status_does_not_count_standalone_no_loss_profit_factor(self):
+        status = all_sleeves.worth_status(
+            {
+                "exact_trade_count": 100,
+                "profit_factor": None,
+                "profit_factor_status": "no_losses",
+                "no_loss_sample": True,
+                "avg_pnl_pct": 12.0,
+                "quote_coverage_pct": 100.0,
+                "unpriced_trade_count": 0,
+            },
+            {"rolling_status": "passed", "stress_5pct_per_side_profit_factor": 1.5},
+            {"strict_new_trade_count": 43},
+        )
+
+        self.assertEqual(status, "repair_profit_factor_before_counting")
 
     def test_worth_status_blocks_sub_100_portfolio_candidate_even_if_gap_closing(self):
         status = all_sleeves.worth_status(
@@ -126,6 +186,35 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
 
         self.assertEqual(status, "not_worth_after_zero_bid_replay")
 
+    def test_worth_status_requires_countable_zero_bid_profit_factor(self):
+        status = all_sleeves.worth_status(
+            {
+                "exact_trade_count": 100,
+                "profit_factor": 1.9,
+                "avg_pnl_pct": 12.0,
+                "quote_coverage_pct": 70.0,
+                "unpriced_trade_count": 30,
+            },
+            {"rolling_status": "passed", "stress_5pct_per_side_profit_factor": 1.5},
+            {"strict_new_trade_count": 43},
+            {
+                "status": "completed",
+                "modes": {
+                    "conservative": {
+                        "unpriced_count": 0,
+                        "zero_bid_exit_rate_pct": 0.0,
+                        "combined_with_existing_metrics": {
+                            "profit_factor": None,
+                            "profit_factor_status": "no_losses",
+                            "avg_pnl_pct": 12.0,
+                        },
+                    }
+                },
+            },
+        )
+
+        self.assertEqual(status, "repair_zero_bid_replay_before_counting")
+
     def test_side_aware_probe_is_required_for_profitable_gap_closing_missing_exits(self):
         run = {
             "unpriced_trades": [
@@ -140,6 +229,30 @@ class RegularOptionsAllPlannedSleevesTests(unittest.TestCase):
             run,
             {
                 "profit_factor": 1.8,
+                "avg_pnl_pct": 12.0,
+            },
+            {"gap_after_candidate": 0},
+        )
+
+        self.assertTrue(should_run)
+        self.assertEqual(reason, "gap_closing_profitable_candidate_has_missing_exits")
+
+    def test_side_aware_probe_runs_for_no_loss_missing_exit_candidate(self):
+        run = {
+            "unpriced_trades": [
+                {
+                    "unpriced_reason": "missing_exit_quote_for_leg",
+                    "missing_short_contract_symbol": "AAA260117C00110000",
+                }
+            ]
+        }
+
+        should_run, reason = all_sleeves._should_run_side_aware_zero_bid(
+            run,
+            {
+                "profit_factor": None,
+                "profit_factor_status": "no_losses",
+                "no_loss_sample": True,
                 "avg_pnl_pct": 12.0,
             },
             {"gap_after_candidate": 0},

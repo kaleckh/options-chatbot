@@ -1430,6 +1430,24 @@ class LogScanPicksTests(unittest.TestCase):
             "2026-04-14T17:00:00Z",
         )
 
+    def test_duplicate_open_link_does_not_overwrite_existing_scan_provenance(self):
+        repo = _FakeRepository()
+        pick = _make_pick("SPY", debit=5.0)
+
+        updated = log_scan_picks._backfill_position_scan_provenance(
+            repository=repo,
+            picks=[pick],
+            tracked_links=[(7, 1, "duplicate_open")],
+            ledger_result={
+                "session_id": 321,
+                "run_id": "scheduled_scan:duplicate",
+                "recorded_at_utc": "2026-04-14T17:00:00Z",
+            },
+        )
+
+        self.assertEqual(updated, 0)
+        self.assertEqual(repo.updates, [])
+
 
 if __name__ == "__main__":
     unittest.main()

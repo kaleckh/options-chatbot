@@ -1065,8 +1065,10 @@ def build_position_payload(
         normalized_entry_execution_basis=normalized_entry_execution_basis,
         source_scan_lineage_verified=source_scan_lineage_verified,
     )
+    source_pick_snapshot["proof_eligible"] = proof_eligible
     source_pick_snapshot["proof_class"] = proof_class
     source_pick_snapshot["proof_class_reason"] = proof_class_reason
+    source_pick_snapshot["proof_ineligibility_reason"] = proof_ineligibility_reason
 
     if require_proof_eligible and not proof_eligible:
         raise ValueError(

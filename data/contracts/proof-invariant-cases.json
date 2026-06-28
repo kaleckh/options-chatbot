@@ -219,7 +219,7 @@
           "verified_live_scan_lineage": false,
           "trusted_opra_source": false,
           "executable_entry": false,
-          "trusted_executable_exit": true,
+          "trusted_executable_exit": false,
           "calculable_realized_pnl": true,
           "production_proof": false,
           "proof_grade_exact_closed": false
@@ -228,9 +228,9 @@
           "evidence_group": "manual_exact",
           "production_proof": false,
           "truth_grade_closed": false,
-          "realized_pnl_closed": true,
+          "realized_pnl_closed": false,
           "matches_truth_grade": false,
-          "matches_realized_pnl": true
+          "matches_realized_pnl": false
         }
       },
       "notes": "Manual exact rows may enter realized P&L views but never production proof."

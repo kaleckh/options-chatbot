@@ -68,13 +68,18 @@ class AICommodityIsolationTests(unittest.TestCase):
         latest = self.contract["latest_progress_readback"]
         proof_source = latest["proof_source_isolation"]
 
-        self.assertTrue(latest["available"])
-        self.assertEqual(latest["proof_source_label"], isolation.PROOF_SOURCE_LABEL)
-        self.assertEqual(
-            proof_source["exact_profitability_proof_source_labels"],
-            [isolation.PROOF_SOURCE_LABEL],
-        )
-        self.assertEqual(proof_source["blockers"], [])
+        if latest["available"]:
+            self.assertEqual(latest["proof_source_label"], isolation.PROOF_SOURCE_LABEL)
+            self.assertEqual(
+                proof_source["exact_profitability_proof_source_labels"],
+                [isolation.PROOF_SOURCE_LABEL],
+            )
+            self.assertEqual(proof_source["blockers"], [])
+        else:
+            self.assertEqual(latest["verification_status"], "unavailable")
+            self.assertEqual(proof_source["blockers"], ["latest_progress_missing"])
+            self.assertEqual(proof_source["exact_profitability_proof_source_labels"], [])
+            self.assertFalse(latest["completion_claim_allowed"])
         if latest["verification_status"] != "verified_profitable":
             self.assertIsNot(latest["verified"], True)
 

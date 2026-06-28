@@ -74,6 +74,15 @@ function validatePositionEventPersistence(
   return pass();
 }
 
+function validateUnavailableResponse(record: Record<string, unknown>): TradingDeskResponseValidationResult {
+  if (typeof record.error !== "string") return pass();
+  return validateNoKeys(
+    record,
+    ["position", "positions", "trade", "trades", "duplicate", "position_event_persistence"],
+    "body"
+  );
+}
+
 function validateTrackedRead(record: Record<string, unknown>): TradingDeskResponseValidationResult {
   const wrongEnvelope = validateNoKeys(record, ["trade", "trades", "position_event_persistence"], "body");
   if (!wrongEnvelope.ok) return wrongEnvelope;
@@ -142,7 +151,7 @@ export function validateTradingDeskApiResponse(
   body: unknown
 ): TradingDeskResponseValidationResult {
   if (!isRecord(body)) return fail("body", "response must be an object");
-  if (typeof body.error === "string") return pass();
+  if (typeof body.error === "string") return validateUnavailableResponse(body);
 
   switch (contractId) {
     case "tracked_positions_read":

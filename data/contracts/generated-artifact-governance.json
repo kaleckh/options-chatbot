@@ -534,8 +534,7 @@
       "runtime_use": false,
       "source_inputs": [
         "data/contracts/route-mutation-inventory.json",
-        "data/contracts/storage-ownership-map.json",
-        "data/ai-commodity-infra/progress/latest.json"
+        "data/contracts/storage-ownership-map.json"
       ],
       "source_of_truth_for_runtime": false,
       "source_of_truth_role": "derived snapshot from generator source inputs",
@@ -567,8 +566,7 @@
       "runtime_use": false,
       "source_inputs": [
         "data/contracts/route-mutation-inventory.json",
-        "data/contracts/storage-ownership-map.json",
-        "data/ai-commodity-infra/progress/latest.json"
+        "data/contracts/storage-ownership-map.json"
       ],
       "source_of_truth_for_runtime": false,
       "source_of_truth_role": "derived snapshot from generator source inputs",
@@ -1099,8 +1097,7 @@
     ],
     "scripts/generate_ai_commodity_isolation.py": [
       "data/contracts/route-mutation-inventory.json",
-      "data/contracts/storage-ownership-map.json",
-      "data/ai-commodity-infra/progress/latest.json"
+      "data/contracts/storage-ownership-map.json"
     ],
     "scripts/generate_backend_route_ownership_map.py": [
       "data/contracts/route-mutation-inventory.json",

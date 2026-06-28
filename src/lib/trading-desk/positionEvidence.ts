@@ -18,7 +18,6 @@ import {
   RESEARCH_BACKFILL_IDENTITY_FIELDS,
   RESEARCH_BACKFILL_TOKENS,
   TRUSTED_ENTRY_BASIS_TOKENS,
-  TRUSTED_EXIT_BASIS_TOKENS,
   TRUSTED_OPTIONS_SOURCE_LABELS,
   TRUSTED_OPTIONS_SOURCE_REQUIRED_TOKENS,
   UNTRUSTED_ENTRY_BASIS_TOKENS,
@@ -1143,7 +1142,7 @@ export function hasTrustedExecutableExit(position: TrackedPosition | SuggestedTr
   const basis = getExitExecutionBasis(position);
   if (!basis) return false;
   if (UNTRUSTED_EXIT_BASIS_TOKENS.some((token) => basis.includes(token))) return false;
-  return TRUSTED_EXIT_BASIS_TOKENS.some((token) => basis.includes(token));
+  return basis === "spread_bid_ask_exact";
 }
 
 export function hasExecutableEntry(position: TrackedPosition | SuggestedTrade): boolean {
@@ -1167,7 +1166,7 @@ export function hasExecutableLatestReviewExit(position: TrackedPosition | Sugges
   const basis = normalizeEvidenceValue(review.exit_execution_basis);
   if (!basis) return false;
   if (UNTRUSTED_EXIT_BASIS_TOKENS.some((token) => basis.includes(token))) return false;
-  return TRUSTED_EXIT_BASIS_TOKENS.some((token) => basis.includes(token));
+  return basis === "spread_bid_ask_exact";
 }
 
 export function getOpenReviewActionState(position: TrackedPosition | SuggestedTrade): OpenReviewActionState {

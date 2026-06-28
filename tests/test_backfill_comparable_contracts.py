@@ -82,7 +82,12 @@ class BackfillComparableContractsTests(unittest.TestCase):
             self.assertEqual(row[0], "SPY260619C00500000")
             self.assertEqual(row[1], 500.0)
             self.assertEqual(row[2], 5.0)
-            self.assertEqual(json.loads(row[3])["contract_symbol"], "SPY260619C00500000")
+            snapshot = json.loads(row[3])
+            self.assertEqual(snapshot["contract_symbol"], "SPY260619C00500000")
+            self.assertFalse(snapshot["proof_eligible"])
+            self.assertEqual(snapshot["proof_class"], "ineligible")
+            self.assertEqual(snapshot["proof_class_reason"], "comparable_exact_contract")
+            self.assertEqual(snapshot["proof_ineligibility_reason"], "comparable_exact_contract")
 
     def test_migrate_suggested_trades_repairs_missing_column_from_exact_snapshot(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -293,6 +298,12 @@ class BackfillComparableContractsTests(unittest.TestCase):
         self.assertEqual(repo.updated[0][1]["contract_symbol"], "SPY260619C00500000")
         self.assertEqual(repo.updated[0][1]["entry_option_price"], 5.0)
         self.assertEqual(repo.updated[0][1]["proof_ineligibility_reason"], "comparable_exact_contract")
+        self.assertEqual(repo.updated[0][1]["proof_class"], "ineligible")
+        self.assertEqual(repo.updated[0][1]["source_pick_snapshot"]["proof_class"], "ineligible")
+        self.assertEqual(
+            repo.updated[0][1]["source_pick_snapshot"]["proof_class_reason"],
+            "comparable_exact_contract",
+        )
 
     def test_migrate_tracked_positions_resolves_missing_short_leg_for_spreads(self):
         class FakeRepository:

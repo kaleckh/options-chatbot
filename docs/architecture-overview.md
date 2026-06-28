@@ -24,7 +24,7 @@ AI commodity / commodity-infrastructure options is a separate non-browser proof-
 
 Some scheduled scan commands fall back to `bullish_pullback_observation` (Bullish Pullback) when no playbook is supplied. That fallback is routing behavior only; every configured regular-options playbook is a peer lane that needs its own profitability, risk, execution, and proof validation. Despite the legacy ID suffix, Bullish Pullback is not observation-only.
 
-The current snapshot does not include the old app-facing day-trading route files or `DayTradingLab` component. The `src/app/api/day-trading/*` directories still exist as empty scaffolding folders in this worktree, but they do not currently expose route handlers. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree.
+The current snapshot does not include the old app-facing day-trading route files, `src/app/api/day-trading/*`, or the `DayTradingLab` component. Day-trading code still exists in the repo, but it is not part of the active Next.js UI surface shown by this worktree and has no mounted App Router handlers.
 
 The generated lane-boundary map is `docs/legacy-lane-boundaries.md`, with machine-readable guard data at `data/contracts/legacy-lane-boundaries.json`. Use it before treating crypto options, Polymarket, day-trading, AI commodity, or legacy analytics code as active browser product work.
 

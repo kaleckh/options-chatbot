@@ -169,4 +169,4 @@ Backend-only backtest support endpoints are not mounted browser Strategy Lab rou
 
 ## Snapshot Warning
 
-The current worktree does not include the old `src/app/api/day-trading/*` route files. The folders are still present as empty scaffolding only. Any document that still describes those as active browser endpoints is stale for this snapshot.
+The current worktree does not include the old `src/app/api/day-trading/*` route files or scaffold directories. Any document that still describes those as active browser endpoints is stale for this snapshot.

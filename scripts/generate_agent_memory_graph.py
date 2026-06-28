@@ -10,6 +10,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 JSON_OUTPUT_PATH = ROOT / "data" / "contracts" / "agent-memory-graph.json"
 MD_OUTPUT_PATH = ROOT / "docs" / "agent-memory-graph.md"
+OPTIONAL_NODE_PATHS = {
+    "data/ai-commodity-infra/progress/latest.md",
+}
 
 NON_GOALS = (
     "Does not replace generated route inventory.",
@@ -1254,6 +1257,8 @@ def _validate_graph(graph: dict[str, Any], *, allow_output_paths: bool = False) 
     for node in nodes:
         path = _node_path(node)
         if allow_output_paths and path in output_paths:
+            continue
+        if node["path"] in OPTIONAL_NODE_PATHS:
             continue
         if not path.exists():
             raise ValueError(f"Memory graph node path does not exist: {node['id']} -> {node['path']}")

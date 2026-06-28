@@ -513,8 +513,10 @@ def _zero_bid_quality_blockers(side_aware_zero_bid: dict[str, Any] | None) -> li
         return []
     blockers: list[str] = []
     combined = conservative.get("combined_with_existing_lane_a_metrics") or {}
+    if combined.get("profit_factor") is None:
+        blockers.append("lane_a:conservative_zero_bid_profit_factor_missing")
     combined_pf = _safe_float(combined.get("profit_factor"))
-    if combined_pf < ZERO_BID_REPLAY_MIN_COMBINED_PF:
+    if combined.get("profit_factor") is not None and combined_pf < ZERO_BID_REPLAY_MIN_COMBINED_PF:
         blockers.append(
             f"lane_a:conservative_zero_bid_pf_{combined_pf:.2f}_below_{str(ZERO_BID_REPLAY_MIN_COMBINED_PF).replace('.', '_')}"
         )

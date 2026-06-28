@@ -385,13 +385,24 @@ def _pnl_metrics(pnls: list[float]) -> dict[str, Any]:
     losses = [item for item in pnls if item < 0]
     gross_win = round(sum(wins), 2)
     gross_loss = round(abs(sum(losses)), 2)
+    if not pnls:
+        profit_factor = 0.0
+        profit_factor_status = "no_trades"
+    elif losses:
+        profit_factor = round(gross_win / gross_loss, 2)
+        profit_factor_status = "has_losses"
+    else:
+        profit_factor = None
+        profit_factor_status = "no_losses"
     return {
         "trade_count": len(pnls),
         "win_trade_count": len(wins),
         "loss_trade_count": len(losses),
         "win_rate_pct": round(len(wins) / len(pnls) * 100.0, 1) if pnls else 0.0,
         "avg_pnl_pct": round(sum(pnls) / len(pnls), 2) if pnls else 0.0,
-        "profit_factor": round(gross_win / gross_loss, 2) if gross_loss else (gross_win if gross_win > 0 else 0.0),
+        "profit_factor": profit_factor,
+        "profit_factor_status": profit_factor_status,
+        "no_loss_sample": bool(pnls and not losses),
         "gross_win": gross_win,
         "gross_loss": gross_loss,
     }

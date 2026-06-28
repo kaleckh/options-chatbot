@@ -95,7 +95,7 @@
         "Do not add app-facing routes, UI tabs, background automation, performance work, or fresh documentation effort by default."
       ],
       "hard_rules": [
-        "The current src/app/api/day-trading folders are empty scaffolding, not live routes.",
+        "There are no mounted day-trading App Router handlers in the current worktree.",
         "Existing engine code and tests may remain without making the lane active.",
         "Reopening requires an explicit user request."
       ],
@@ -108,11 +108,10 @@
       "path_roots": [
         "src/lib/day-trading",
         "tests/day-trading",
-        "src/app/api/day-trading",
         "docs/day-trading-current-state.md",
         "docs/archive/day-trading-product-roadmap.md"
       ],
-      "route_ui_status": "empty_route_scaffolding_only",
+      "route_ui_status": "not_mounted_browser_product",
       "status": "paused_out_of_scope"
     },
     {

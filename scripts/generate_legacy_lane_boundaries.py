@@ -109,11 +109,10 @@ LANES: tuple[dict[str, Any], ...] = (
         "lane_id": "day_trading",
         "label": "Paused day-trading lane",
         "status": "paused_out_of_scope",
-        "route_ui_status": "empty_route_scaffolding_only",
+        "route_ui_status": "not_mounted_browser_product",
         "path_roots": (
             "src/lib/day-trading",
             "tests/day-trading",
-            "src/app/api/day-trading",
             "docs/day-trading-current-state.md",
             "docs/archive/day-trading-product-roadmap.md",
         ),
@@ -128,7 +127,7 @@ LANES: tuple[dict[str, Any], ...] = (
             "Do not add app-facing routes, UI tabs, background automation, performance work, or fresh documentation effort by default.",
         ),
         "hard_rules": (
-            "The current src/app/api/day-trading folders are empty scaffolding, not live routes.",
+            "There are no mounted day-trading App Router handlers in the current worktree.",
             "Existing engine code and tests may remain without making the lane active.",
             "Reopening requires an explicit user request.",
         ),

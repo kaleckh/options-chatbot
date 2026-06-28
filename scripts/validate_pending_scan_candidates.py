@@ -67,16 +67,22 @@ def _candidate_scan_date(row: dict[str, Any]) -> str:
     return recorded[:10]
 
 
-def pending_playbooks_for_date(scan_date: date, *, queue_file: Path = DEFAULT_QUEUE_FILE) -> dict[str, list[dict[str, Any]]]:
+def pending_playbooks_for_date(
+    scan_date: date,
+    *,
+    queue_file: Path = DEFAULT_QUEUE_FILE,
+    validation_hold_playbooks: set[str] | None = None,
+) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     forward_cohort = load_forward_cohort_preregistration()
+    hold_playbooks = validation_hold_playbooks or set()
     for row in latest_candidate_rows(queue_file):
         if str(row.get("candidate_status") or "") != STATUS_PENDING_LIVE_VALIDATION:
             continue
         playbook_id = str(row.get("playbook_id") or "").strip()
-        if forward_cohort_playbook_is_parked(playbook_id, forward_cohort):
+        if playbook_id not in hold_playbooks and forward_cohort_playbook_is_parked(playbook_id, forward_cohort):
             continue
-        if not scan_playbook_fresh_live_validation_enabled(playbook_id):
+        if playbook_id not in hold_playbooks and not scan_playbook_fresh_live_validation_enabled(playbook_id):
             continue
         if _candidate_scan_date(row) != scan_date.isoformat():
             continue
@@ -131,7 +137,13 @@ def main(argv: list[str] | None = None) -> int:
     if not is_us_equity_market_day(scan_date):
         print(f"{stamp} skip market-closed pending_validation_date={scan_date.isoformat()}")
         return 0
-    grouped = pending_playbooks_for_date(scan_date, queue_file=args.queue_file)
+    breaker_payload: dict[str, Any] = circuit_breaker.load_report(args.circuit_breaker)
+    validation_hold_playbooks = circuit_breaker.validation_hold_playbooks(breaker_payload)
+    grouped = pending_playbooks_for_date(
+        scan_date,
+        queue_file=args.queue_file,
+        validation_hold_playbooks=validation_hold_playbooks,
+    )
     if not grouped:
         print(f"{stamp} no pending candidates for validation date={scan_date.isoformat()}")
         return 0
@@ -150,8 +162,6 @@ def main(argv: list[str] | None = None) -> int:
         print("dry-run: pending candidate validation scans not started")
         return 0
 
-    breaker_payload: dict[str, Any] = circuit_breaker.load_report(args.circuit_breaker)
-    validation_hold_playbooks = circuit_breaker.validation_hold_playbooks(breaker_payload)
     lane_gate_report = None if args.ignore_lane_profitability_gate else load_lane_gate_report(args.lane_gate_report)
     ignore_promotion_state = args.ignore_lane_profitability_gate or args.ignore_lane_promotion_state
     lane_promotion_report = None if ignore_promotion_state else load_lane_promotion_report(args.lane_promotion_report)

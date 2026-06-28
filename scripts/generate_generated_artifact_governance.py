@@ -78,7 +78,6 @@ SOURCE_INPUTS_BY_GENERATOR = {
     "scripts/generate_ai_commodity_isolation.py": (
         "data/contracts/route-mutation-inventory.json",
         "data/contracts/storage-ownership-map.json",
-        "data/ai-commodity-infra/progress/latest.json",
     ),
     "scripts/generate_remediation_loop_map.py": (
         "docs/WORKLOG.md",

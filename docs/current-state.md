@@ -28,7 +28,7 @@ AI commodity / commodity-infrastructure options is a separate non-browser proof-
 
 - The mounted browser surface is still the options lane in `AppShell`, with `PredictionsView` and `StrategyView`.
 - The Next route layer under `src/app/api/*` is the only browser-facing API surface in this worktree.
-- The repo still contains crypto and legacy day-trading research code, but the old day-trading route files and `DayTradingLab` UI are not present in this checkout. `src/app/api/day-trading/*` exists only as empty scaffolding folders right now.
+- The repo still contains crypto and legacy day-trading research code, but the old day-trading route files, `src/app/api/day-trading/*`, and `DayTradingLab` UI are not present in this checkout.
 - Tracked positions are the real supervised lane and live in Postgres via `DATABASE_URL`.
 - Suggested trades are the hypothetical lane and live in `chat_history.db`.
 - FastAPI exposes support endpoints such as `/api/proof-summary` and `/api/positions/{position_id}/close-prefill`, but those are backend-only right now and are not mirrored through the Next proxy layer.

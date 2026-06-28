@@ -13,7 +13,7 @@ Last updated: 2026-05-25
 
 ## Snapshot Warning
 
-In this worktree, there is no active day-trading Next route or mounted day-trading React surface. `src/app/api/day-trading/*` contains empty scaffolding folders only.
+In this worktree, there is no active day-trading Next route or mounted day-trading React surface. `src/app/api/day-trading/*` is absent.
 
 Use this file as a status note for legacy and sidecar code, not as a current browser route map.
 

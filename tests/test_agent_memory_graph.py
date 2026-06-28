@@ -28,6 +28,8 @@ class AgentMemoryGraphTests(unittest.TestCase):
         self.assertEqual(len(self.nodes), len(self.graph["nodes"]))
 
         for node in self.graph["nodes"]:
+            if node["path"] in memory_graph.OPTIONAL_NODE_PATHS:
+                continue
             self.assertTrue(
                 (ROOT / node["path"]).exists(),
                 f"{node['id']} points at a missing path: {node['path']}",

@@ -266,10 +266,24 @@ test("manual exact rows are visible but not production proof", () => {
   const group = evidence.getPositionEvidenceGroup(position);
   assert.equal(group.id, "manual_exact");
   assert.equal(group.productionProof, false);
-  assert.equal(evidence.hasTrustedExecutableExit(position), true);
-  assert.equal(evidence.isRealizedPnlClosedPosition(position), true);
+  assert.equal(evidence.hasTrustedExecutableExit(position), false);
+  assert.equal(evidence.isRealizedPnlClosedPosition(position), false);
   assert.equal(evidence.isProductionProofPosition(position), false);
   assert.equal(evidence.isTruthGradeClosedPosition(position), false);
+});
+
+test("trusted executable exits require the exact spread bid ask basis", () => {
+  const exact = closedPosition({
+    proof_class: "live_scan_exact_contract",
+    exit_execution_basis: "spread_bid_ask_exact",
+  });
+  const contaminated = closedPosition({
+    proof_class: "live_scan_exact_contract",
+    exit_execution_basis: "spread_bid_ask_exact_manual",
+  });
+
+  assert.equal(evidence.hasTrustedExecutableExit(exact), true);
+  assert.equal(evidence.hasTrustedExecutableExit(contaminated), false);
 });
 
 test("stale proof eligible flags without live proof class do not become production proof", () => {

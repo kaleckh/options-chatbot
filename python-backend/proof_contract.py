@@ -49,6 +49,7 @@ UNTRUSTED_QUOTE_FRESHNESS_TOKENS = tuple(ENTRY_PROOF_CONTRACT["untrustedQuoteFre
 
 TRUSTED_EXIT_BASIS_TOKENS = tuple(EXIT_BASIS_CONTRACT["trustedTokens"])
 UNTRUSTED_EXIT_BASIS_TOKENS = tuple(EXIT_BASIS_CONTRACT["untrustedTokens"])
+PRODUCTION_EXIT_BASIS_TOKENS = {"spread_bid_ask_exact"}
 QUOTE_TRUSTED_INTRADAY_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("trustedIntradayTokens") or ())
 QUOTE_DAILY_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("dailyTokens") or ())
 QUOTE_SYNTHETIC_TOKENS = tuple(QUOTE_EVIDENCE_CONTRACT.get("syntheticTokens") or ())
@@ -316,7 +317,7 @@ def row_has_trusted_executable_exit(row: dict[str, Any]) -> bool:
         return False
     if any(token in basis for token in UNTRUSTED_EXIT_BASIS_TOKENS):
         return False
-    return any(token in basis for token in TRUSTED_EXIT_BASIS_TOKENS)
+    return basis in PRODUCTION_EXIT_BASIS_TOKENS
 
 
 def row_has_calculable_realized_pnl(row: dict[str, Any]) -> bool:

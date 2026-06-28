@@ -378,6 +378,6 @@ Read in this order:
 ## Snapshot Warnings
 
 - `src/app/page.tsx` is intentionally a stub; the real browser entrypoint is the layout plus app shell.
-- `src/app/api/day-trading/*` exists only as empty scaffolding folders in this worktree.
+- `src/app/api/day-trading/*` is absent in this worktree; the paused day-trading lane has no mounted App Router handlers.
 - `src/lib/polymarket/*` and `crypto_options/*` are sidecar lanes, not the mounted browser product.
 - `data/ai-commodity-infra/progress/latest.md` is generated lane evidence. Read it for the latest AI commodity proof state, but update the living docs manually when the project state changes.

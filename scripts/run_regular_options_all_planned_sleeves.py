@@ -625,14 +625,27 @@ def _metric_value(run: dict[str, Any], key: str) -> Any:
     return run.get(key)
 
 
+def _rounded_optional_float(value: Any) -> float | None:
+    try:
+        if value is None:
+            return None
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 def _run_metrics(run: dict[str, Any]) -> dict[str, Any]:
+    profit_factor = _rounded_optional_float(_metric_value(run, "profit_factor"))
+    profit_factor_status = _metric_value(run, "profit_factor_status")
     return {
         "candidate_trade_count": int(run.get("candidate_trade_count") or 0),
         "priced_trade_count": int(run.get("priced_trade_count") or run.get("total_trades") or 0),
         "exact_trade_count": int(_metric_value(run, "trade_count") or run.get("exact_contract_match_count") or 0),
         "unpriced_trade_count": int(run.get("unpriced_trade_count") or 0),
         "quote_coverage_pct": round(float(run.get("quote_coverage_pct") or 0.0), 2),
-        "profit_factor": round(float(_metric_value(run, "profit_factor") or 0.0), 2),
+        "profit_factor": profit_factor,
+        "profit_factor_status": profit_factor_status,
+        "no_loss_sample": bool(_metric_value(run, "no_loss_sample") or profit_factor_status == "no_losses"),
         "avg_pnl_pct": round(float(_metric_value(run, "avg_pnl_pct") or 0.0), 2),
         "win_rate_pct": round(float(_metric_value(run, "win_rate_pct") or 0.0), 2),
     }
@@ -730,7 +743,9 @@ def _robustness_summary(report: dict[str, Any]) -> dict[str, Any]:
     return {
         "status": report.get("status"),
         "rolling_status": rolling.get("status"),
-        "stress_5pct_per_side_profit_factor": round(float(stress_5.get("profit_factor") or 0.0), 2) if stress_5 else None,
+        "stress_5pct_per_side_profit_factor": _rounded_optional_float(stress_5.get("profit_factor")) if stress_5 else None,
+        "stress_5pct_per_side_profit_factor_status": stress_5.get("profit_factor_status") if stress_5 else None,
+        "stress_5pct_per_side_no_loss_sample": bool(stress_5.get("no_loss_sample") or stress_5.get("profit_factor_status") == "no_losses") if stress_5 else False,
     }
 
 
@@ -768,7 +783,12 @@ def _should_run_side_aware_zero_bid(run: dict[str, Any], metrics: dict[str, Any]
         return False, "no_missing_exit_quote_candidates"
     if int(novelty.get("gap_after_candidate") or 0) > 0:
         return False, "candidate_does_not_close_clean_count_gap"
-    if float(metrics.get("profit_factor") or 0.0) < ZERO_BID_REPLAY_MIN_COMBINED_PF:
+    profit_factor = metrics.get("profit_factor")
+    no_loss_sample = bool(metrics.get("no_loss_sample") or metrics.get("profit_factor_status") == "no_losses")
+    if profit_factor is None:
+        if not no_loss_sample:
+            return False, "priced_only_pf_below_zero_bid_probe_floor"
+    elif float(profit_factor or 0.0) < ZERO_BID_REPLAY_MIN_COMBINED_PF:
         return False, "priced_only_pf_below_zero_bid_probe_floor"
     if float(metrics.get("avg_pnl_pct") or 0.0) <= 0:
         return False, "priced_only_avg_not_positive"
@@ -921,7 +941,8 @@ def worth_status(
     side_aware_zero_bid: dict[str, Any] | None = None,
 ) -> str:
     exact = int(metrics.get("exact_trade_count") or 0)
-    pf = float(metrics.get("profit_factor") or 0.0)
+    no_loss_sample = bool(metrics.get("no_loss_sample") or metrics.get("profit_factor_status") == "no_losses")
+    pf = None if metrics.get("profit_factor") is None else float(metrics.get("profit_factor") or 0.0)
     avg = float(metrics.get("avg_pnl_pct") or 0.0)
     coverage = float(metrics.get("quote_coverage_pct") or 0.0)
     unpriced = int(metrics.get("unpriced_trade_count") or 0)
@@ -930,11 +951,13 @@ def worth_status(
     novel = int(novelty.get("strict_new_trade_count") or 0)
     if exact == 0:
         return "no_current_candidates"
-    if pf < 1.0 or avg <= 0:
+    if (pf is not None and pf < 1.0) or avg <= 0:
+        return "not_worth_current_shape"
+    if pf is None and not no_loss_sample:
         return "not_worth_current_shape"
     if exact < 25:
         return "thin_sample"
-    if pf < 1.5:
+    if pf is not None and pf < 1.5:
         return "weak_positive_or_marginal"
     if side_aware_zero_bid and side_aware_zero_bid.get("status") == "error":
         return "repair_zero_bid_replay_before_counting"
@@ -945,6 +968,8 @@ def worth_status(
         combined_avg = float(combined.get("avg_pnl_pct") or 0.0)
         if int(conservative.get("unpriced_count") or 0) > 0:
             return "repair_zero_bid_replay_before_counting"
+        if combined.get("profit_factor") is None:
+            return "repair_zero_bid_replay_before_counting"
         if combined_pf < ZERO_BID_REPLAY_MIN_COMBINED_PF or combined_avg <= 0:
             return "not_worth_after_zero_bid_replay"
         zero_bid_rate = conservative.get("zero_bid_exit_rate_pct")
@@ -954,10 +979,14 @@ def worth_status(
         return "repair_coverage_before_counting"
     if exact < PORTFOLIO_CANDIDATE_MIN_EXACT_TRADES:
         return "below_portfolio_candidate_exact_count"
+    if stress_pf is None:
+        return "repair_stress_before_counting"
     if stress_pf is not None and float(stress_pf) < 1.25:
         return "repair_stress_before_counting"
     if rolling and rolling != "passed":
         return "repair_oos_before_counting"
+    if pf is None:
+        return "repair_profit_factor_before_counting"
     if novel < 10:
         return "profitable_but_overlaps"
     if novel >= 43:

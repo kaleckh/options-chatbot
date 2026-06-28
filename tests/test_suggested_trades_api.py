@@ -330,6 +330,9 @@ class SuggestedTradesApiTests(unittest.TestCase):
             trade["source_pick_snapshot"]["source_scan_event_key"],
             scan_pick["source_scan_event_key"],
         )
+        self.assertTrue(trade["source_pick_snapshot"]["proof_eligible"])
+        self.assertEqual(trade["source_pick_snapshot"]["proof_class"], "live_scan_exact_contract")
+        self.assertIsNone(trade["source_pick_snapshot"]["proof_ineligibility_reason"])
 
     def test_create_scanner_origin_suggested_trade_rejects_paper_probation_lane(self):
         scan_pick = build_scanner_origin_proof_scan_pick(self.bundle)

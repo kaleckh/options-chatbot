@@ -29,7 +29,6 @@ OWNER_PATHS = (
     "scripts/run_ai_commodity_opra_progress.py",
     "data/ai-commodity-infra",
     "data/ai-commodity-infra/universe.json",
-    "data/ai-commodity-infra/progress/latest.json",
     "tests/test_ai_commodity_opra_progress.py",
     "tests/test_ai_commodity_universe.py",
 )
@@ -228,7 +227,24 @@ def _runtime_scanner_snapshot() -> dict[str, Any]:
 
 def _latest_progress_snapshot() -> dict[str, Any]:
     if not LATEST_PROGRESS_PATH.exists():
-        return {"available": False, "path": _relative(LATEST_PROGRESS_PATH)}
+        return {
+            "available": False,
+            "path": _relative(LATEST_PROGRESS_PATH),
+            "proof_source_label": None,
+            "verification_status": "unavailable",
+            "verified": False,
+            "shared_quote_dates": {"current": None, "required": None},
+            "proof_source_isolation": {
+                "status": "unavailable",
+                "decision": None,
+                "exact_profitability_proof_source_labels": [],
+                "research_only_source_labels": [],
+                "blockers": ["latest_progress_missing"],
+                "top_level_shared_dates_match_proof_source": None,
+            },
+            "completion_claim_allowed": False,
+            "no_mutation_guard": None,
+        }
     report = _read_json(LATEST_PROGRESS_PATH)
     verification = report.get("verification_gate") if isinstance(report.get("verification_gate"), dict) else {}
     isolation = (
@@ -424,7 +440,6 @@ def build_contract() -> dict[str, Any]:
             "data/contracts/route-mutation-inventory.json",
             "data/contracts/storage-ownership-map.json",
             "data/contracts/scanner-creation-safety-contract.json",
-            "data/ai-commodity-infra/progress/latest.json",
             "supervised_scan.py",
         ],
         "lane": {

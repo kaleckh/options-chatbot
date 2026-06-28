@@ -218,6 +218,27 @@ class RegularOptionsMultilanePortfolioTests(unittest.TestCase):
         self.assertIn("lane_a:conservative_zero_bid_pf_0.85_below_1_3", gate["blockers"])
         self.assertIn("lane_a:conservative_zero_bid_exit_rate_41.99_above_2.0", gate["blockers"])
 
+    def test_quality_gate_blocks_missing_zero_bid_profit_factor(self):
+        gate = build_quality_gate(
+            [],
+            {"exact_trade_count": 230},
+            {
+                "modes": {
+                    "conservative": {
+                        "combined_with_existing_lane_a_metrics": {
+                            "profit_factor": None,
+                            "profit_factor_status": "no_losses",
+                            "avg_pnl_pct": 12.0,
+                        },
+                        "combined_lane_a_unpriced_count": 0,
+                    }
+                }
+            },
+        )
+
+        self.assertEqual(gate["zero_bid_status"], "blocked")
+        self.assertIn("lane_a:conservative_zero_bid_profit_factor_missing", gate["blockers"])
+
     def test_side_aware_zero_bid_summary_keeps_compact_metrics(self):
         summary = compact_side_aware_zero_bid_report(
             {

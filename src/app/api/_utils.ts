@@ -47,11 +47,19 @@ export function jsonError(
   status: number = 500
 ) {
   if (error instanceof BackendHttpError) {
+    if (error.status >= 500) {
+      console.error(fallbackMessage, error);
+      return NextResponse.json({ error: fallbackMessage }, { status: error.status });
+    }
     const body = { error: error.message, details: error.payload };
     return NextResponse.json(
       body,
       { status: error.status }
     );
+  }
+  if (status >= 500) {
+    console.error(fallbackMessage, error);
+    return NextResponse.json({ error: fallbackMessage }, { status });
   }
   return NextResponse.json(
     { error: error instanceof Error ? error.message : fallbackMessage },

@@ -141,6 +141,10 @@ def migrate_tracked_positions(repository) -> dict[str, Any]:
         contracts = max(int(row.get("contracts") or 1), 1)
         strategy_type = _strategy_type(resolved_pick)
         entry_fee = commission_total_usd(contracts=contracts, sides=2 if strategy_type == "vertical_spread" else 1)
+        resolved_pick["proof_eligible"] = False
+        resolved_pick["proof_class"] = "ineligible"
+        resolved_pick["proof_class_reason"] = "comparable_exact_contract"
+        resolved_pick["proof_ineligibility_reason"] = "comparable_exact_contract"
         repository.update_position(
             int(row["id"]),
             {
@@ -156,6 +160,8 @@ def migrate_tracked_positions(repository) -> dict[str, Any]:
                 "entry_underlying_price": resolved_pick.get("entry_underlying_price"),
                 "source_pick_snapshot": resolved_pick,
                 "proof_eligible": False,
+                "proof_class": "ineligible",
+                "proof_class_reason": "comparable_exact_contract",
                 "proof_ineligibility_reason": "comparable_exact_contract",
             },
         )
@@ -199,6 +205,10 @@ def migrate_suggested_trades() -> dict[str, Any]:
         if resolution is None or not str(resolved_pick.get("contract_symbol") or "").strip():
             skipped.append({"id": int(row["id"]), "ticker": source_pick.get("ticker"), "reason": "no_comparable_contract"})
             continue
+        resolved_pick["proof_eligible"] = False
+        resolved_pick["proof_class"] = "ineligible"
+        resolved_pick["proof_class_reason"] = "comparable_exact_contract"
+        resolved_pick["proof_ineligibility_reason"] = "comparable_exact_contract"
         cur.execute(
             """
             UPDATE suggested_trades

@@ -190,7 +190,7 @@ Store ownership:
 
 ## Snapshot Warning
 
-The current worktree does not include active Next route handlers for `src/app/api/day-trading/*`. The directories exist only as empty scaffolding folders, so any older docs that describe those as current browser endpoints are stale for this snapshot.
+The current worktree does not include active Next route handlers or scaffold directories for `src/app/api/day-trading/*`, so any older docs that describe those as current browser endpoints are stale for this snapshot.
 
 ## Backend-Only FastAPI Endpoints
 

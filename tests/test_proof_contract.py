@@ -159,6 +159,25 @@ class ProofContractTests(unittest.TestCase):
         self.assertFalse(contract.row_has_calculable_realized_pnl(missing_pnl))
         self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(missing_pnl))
 
+    def test_exit_basis_requires_exact_trusted_token(self):
+        for basis in (
+            "fixture_spread_bid_ask",
+            "not_spread_bid_ask",
+            "spread_bid_ask_display_only",
+            "spread_bid_ask",
+            "bid_ask",
+            "historical_spread_bid_ask",
+            "historical_suggested_close",
+            "auto_sell_recommendation",
+            "auto_sell_review",
+            "broker",
+        ):
+            with self.subTest(basis=basis):
+                row = self._live_proof_row(exit_execution_basis=basis)
+                self.assertFalse(contract.row_has_trusted_executable_exit(row))
+                self.assertFalse(contract.row_counts_as_production_proof(row))
+                self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(row))
+
     def test_closed_at_requires_closed_exit_even_when_status_is_missing(self):
         row = self._live_proof_row(status=None, closed_at="2026-04-06T20:00:00Z")
         row["exit_execution_price"] = None

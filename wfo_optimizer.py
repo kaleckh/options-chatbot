@@ -10531,7 +10531,8 @@ def build_prediction_replay_report(
     risk_flags: list[str] = []
     if overall["directional_accuracy_pct"] < 50.0:
         risk_flags.append("Directional accuracy is below 50%, so the signal is not clearing a naive coin-flip bar.")
-    if overall["profit_factor"] < 1.0:
+    overall_profit_factor = overall.get("profit_factor")
+    if overall_profit_factor is not None and float(overall_profit_factor) < 1.0:
         risk_flags.append("Profit factor is below 1.0, so option P&L is still net negative after the scoring fixes.")
     if highest_score_group and any(
         highest_score_group["avg_pnl_pct"] <= item["avg_pnl_pct"]

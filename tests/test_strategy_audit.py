@@ -2101,6 +2101,35 @@ class StrategyAuditTests(unittest.TestCase):
         self.assertEqual(regime_bucket["trades"], 2)
         self.assertTrue(any(item["value"] == "AAPL" for item in report["best_segments"] + report["weakest_segments"]))
 
+    def test_prediction_replay_report_handles_no_loss_profit_factor(self):
+        result = {
+            "run_at": "2026-03-30T10:00:00",
+            "mode": "backtest",
+            "lookback_years": 1,
+            "pricing_lane": "pessimistic",
+            "playbook": "broad",
+            "total_days": 100,
+            "trades": [
+                {
+                    "ticker": "SPY",
+                    "sector": "ETF",
+                    "market_regime": "bullish",
+                    "direction_score": 82.0,
+                    "quality_score": 64.0,
+                    "ev": 22.0,
+                    "prediction_outcome": "hit",
+                    "directional_correct": True,
+                    "pnl_pct": 12.0,
+                }
+            ],
+        }
+
+        report = wfo.build_prediction_replay_report(result=result, min_trades=1)
+
+        self.assertIsNone(report["overall"]["profit_factor"])
+        self.assertEqual(report["overall"]["profit_factor_status"], "no_losses")
+        self.assertFalse(any("Profit factor is below 1.0" in flag for flag in report["risk_flags"]))
+
 
 class CalibrationSurfaceAuditTests(unittest.TestCase):
     def setUp(self):

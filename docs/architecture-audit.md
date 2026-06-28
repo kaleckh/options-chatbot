@@ -70,7 +70,7 @@ These exist in the repo, but they are not the mounted browser product:
 ## Dead Or Misleading Surfaces
 
 - `src/app/api/day-trading/*`
-  - empty scaffolding folders only, not live routes
+  - absent in this worktree; no mounted App Router handlers
 - historical docs that still describe mounted day-trading browser routes
   - archive context only
 - removed duplicate Next alias:
