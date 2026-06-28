@@ -20,8 +20,7 @@ This generated artifact materializes the daily candidate/no-pick/blocker denomin
 
 | Status | Count |
 |---|---:|
-| `blocked_missing_daily_diagnostics` | `327` |
-| `blocked_missing_runner_output` | `167` |
+| `blocked_missing_daily_diagnostics` | `494` |
 
 ## Blockers
 
@@ -29,9 +28,11 @@ This generated artifact materializes the daily candidate/no-pick/blocker denomin
 - `blocked_latest_four_month_rows_below_30`
 - `candidate_generation_months_0_below_requested_24`
 - `missing_daily_candidate_generation_diagnostics`
-- `missing_frozen_13_symbol_candidate_generation_engine`
-- `outside_universe_source_rows_present`
-- `source_artifact_universe_not_13_symbol`
+- `missing_historical_entry_underlying_price_surface`
+- `missing_historical_option_chain_selection_surface`
+- `missing_historical_scanner_point_in_time_inputs`
+- `missing_lane_specific_point_in_time_feature_inputs`
+- `missing_point_in_time_earnings_calendar_source`
 
 ## Boundary
 

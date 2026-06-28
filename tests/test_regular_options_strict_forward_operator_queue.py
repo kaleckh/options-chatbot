@@ -167,6 +167,22 @@ class RegularOptionsStrictForwardOperatorQueueTests(unittest.TestCase):
         self.assertIn("missing_point_in_time_flow_extreme_input", branches["flow_extreme_ratio_backspread"]["blockers"])
         self.assertIn("missing_point_in_time_downside_skew_inputs", branches["skew_broken_wing"]["blockers"])
 
+    def test_ready_blocker_free_research_branch_is_not_labeled_current_blocker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            payloads = _payloads()
+            summary = payloads["oracle"]["current_evidence_summary"]
+            summary["dispersion_proxy_hybrid_replay_readiness_status"] = "dispersion_proxy_hybrid_replay_readiness_ready"
+            summary["dispersion_proxy_hybrid_replay_readiness_blockers"] = []
+            paths = _write_sources(Path(temp_dir), payloads)
+            report = queue.build_report(generated_at_utc=NOW, **paths)
+
+        branches = {item["branch_id"]: item for item in report["blocked_or_superseded_branches"]}
+        self.assertEqual(
+            branches["dispersion_proxy_hybrid"]["classification"],
+            "ready_for_research_only_replay_decision",
+        )
+        self.assertEqual(branches["dispersion_proxy_hybrid"]["blockers"], [])
+
     def test_write_outputs_creates_json_and_doc_without_append_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -128,6 +128,20 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
         self.assertEqual(report["scheduled_phase2_drop_stage_summary"]["top_drop_stages"][0], {"stage": "momentum", "count": 50})
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_count_total"], 2)
         self.assertEqual(report["candidate_starvation_evidence_status"], "raw_symbol_drop_reasons_recorded")
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded")
+        self.assertEqual(diagnostics["target_selection_date"], "2026-06-26")
+        self.assertTrue(diagnostics["allowed_lanes_only"])
+        self.assertTrue(diagnostics["target_date_only"])
+        self.assertTrue(diagnostics["post_freeze_only"])
+        self.assertEqual(diagnostics["scheduled_sessions_reviewed"], 2)
+        self.assertEqual(diagnostics["drop_stage_ranking"][0], {"stage": "momentum", "count": 50})
+        self.assertEqual(diagnostics["symbol_drop_reason_status"], "symbol_drop_reasons_recorded")
+        self.assertIn("rank_symbol_level_drop_reasons_for_frozen_phase2_sessions", diagnostics["safe_next_read_only_actions"])
+        self.assertIn("append_phase2_forward_cohort_rows", diagnostics["deferred_actions"])
+        self.assertTrue(diagnostics["candidate_scope_flags"]["parked_or_non_phase2_rows_excluded"])
+        self.assertTrue(diagnostics["safety_flags"]["read_only_diagnostic"])
+        self.assertFalse(diagnostics["safety_flags"]["scanner_called"])
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"][0]["symbol"], "QQQ")
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"][0]["playbook"], "volatility_expansion_observation")
         self.assertNotIn("notes_json", report["scheduled_scan_sessions"][0])
@@ -173,8 +187,10 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
 
         self.assertIn("latest_json", artifacts)
         self.assertIn("Forward Candidate Throughput Audit", doc)
-        self.assertIn("Actionable Candidate-Starvation Stages", doc)
+        self.assertIn("Aggregate Candidate-Starvation Stages", doc)
         self.assertIn("Candidate-starvation evidence status", doc)
+        self.assertIn("Zero-Candidate Diagnostics", doc)
+        self.assertIn("Zero-candidate diagnostics", doc)
         self.assertIn("Symbol Drop-Reason Samples", doc)
         self.assertIn("symbol drop reasons", doc)
         self.assertIn("does not run the scanner", doc)
@@ -205,7 +221,78 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
             report["candidate_starvation_evidence_status"],
             "stage_counts_only_waiting_for_symbol_drop_reasons",
         )
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(
+            diagnostics["status"],
+            "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons",
+        )
+        self.assertEqual(
+            diagnostics["symbol_drop_reason_status"],
+            "missing_symbol_drop_reasons_for_aggregate_drops",
+        )
+        self.assertIn(
+            "wait_for_future_scheduled_sessions_with_symbol_drop_reason_persistence",
+            diagnostics["safe_next_read_only_actions"],
+        )
+        self.assertEqual(diagnostics["drop_count_total"], 62)
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"], [])
+
+    def test_returned_picks_disable_zero_candidate_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger)
+            conn = sqlite3.connect(ledger)
+            try:
+                conn.execute(
+                    """
+                    UPDATE forward_sessions
+                    SET scan_picks_count = 1,
+                        notes_json = json_set(notes_json, '$.scan_funnel.returned_picks', 1)
+                    WHERE playbook = 'volatility_expansion_observation'
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _write_jsonl(path, [_row(playbook_id="short_term", scan_date="2026-06-26")])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "not_zero_candidate_context_picks_available")
+        self.assertEqual(diagnostics["scheduled_scan_picks_count"], 1)
+        self.assertEqual(diagnostics["returned_picks"], 1)
+        self.assertIn("review_existing_phase2_picks_or_candidate_jsonl_without_append", diagnostics["safe_next_read_only_actions"])
+        self.assertEqual(report["candidate_starvation_evidence_status"], "returned_picks_available")
+
+    def test_scheduled_scan_pick_count_disables_zero_candidate_diagnostic_even_without_returned_funnel(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger)
+            conn = sqlite3.connect(ledger)
+            try:
+                conn.execute(
+                    """
+                    UPDATE forward_sessions
+                    SET scan_picks_count = 1,
+                        notes_json = json_remove(notes_json, '$.scan_funnel.returned_picks')
+                    WHERE playbook = 'volatility_expansion_observation'
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _write_jsonl(path, [_row(playbook_id="short_term", scan_date="2026-06-26")])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(report["scheduled_phase2_scan_picks_count"], 1)
+        self.assertEqual(diagnostics["status"], "not_zero_candidate_context_picks_available")
+        self.assertEqual(diagnostics["scheduled_scan_picks_count"], 1)
+        self.assertEqual(diagnostics["returned_picks"], 0)
 
     def test_missing_scheduled_lane_session_points_to_passive_sweep(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -238,6 +325,103 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
         self.assertEqual(report["status"], "blocked_forward_cohort_scheduled_scan_session_missing")
         self.assertEqual(report["next_action"], "run_passive_forward_cohort_scan_sweep_in_valid_market_window")
         self.assertIn("bullish_pullback_observation", report["scheduled_phase2_playbooks_missing_session"])
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "waiting_for_scheduled_phase2_sessions")
+        self.assertIn("bullish_pullback_observation", diagnostics["missing_scheduled_sessions"])
+        self.assertIn("wait_for_next_valid_market_window_scheduled_phase2_sweep", diagnostics["safe_next_read_only_actions"])
+
+    def test_missing_ledger_source_reports_source_unavailable_not_missing_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "missing_forward_tracking_authoritative.db"
+            _write_jsonl(path, [])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+
+        self.assertEqual(report["status"], "blocked_forward_cohort_scheduled_scan_session_source_unavailable")
+        self.assertEqual(report["scheduled_scan_session_error"], "ledger_db_missing")
+        self.assertEqual(report["next_action"], "repair_or_refresh_forward_session_ledger_read_only")
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "scheduled_phase2_session_source_unavailable")
+        self.assertEqual(diagnostics["scheduled_session_error"], "ledger_db_missing")
+
+    def test_pre_freeze_selection_date_does_not_claim_post_freeze_zero_candidate_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger, selection_date="2026-06-13")
+            _write_jsonl(path, [])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-13", generated_at_utc=NOW)
+
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "not_post_freeze_target_date")
+        self.assertFalse(diagnostics["post_freeze_only"])
+        self.assertIn("do_not_use_pre_freeze_rows_as_forward_zero_candidate_diagnosis", diagnostics["safe_next_read_only_actions"])
+
+    def test_no_drops_and_no_reasons_waits_for_next_scan_funnel_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger)
+            conn = sqlite3.connect(ledger)
+            try:
+                conn.execute(
+                    """
+                    UPDATE forward_sessions
+                    SET notes_json = json_remove(
+                        json_set(notes_json, '$.scan_funnel.drop_counts', json('{}')),
+                        '$.symbol_diagnostics'
+                    )
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _write_jsonl(path, [_row(playbook_id="short_term", scan_date="2026-06-26")])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(diagnostics["status"], "waiting_for_next_scan_funnel_evidence")
+        self.assertEqual(diagnostics["symbol_drop_reason_status"], "no_symbol_drop_reasons_expected_until_scan_funnel_drops_exist")
+        self.assertEqual(diagnostics["drop_count_total"], 0)
+        self.assertEqual(diagnostics["symbol_drop_reason_count_total"], 0)
+
+    def test_parked_non_phase2_rows_do_not_disable_zero_candidate_diagnostic(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger)
+            conn = sqlite3.connect(ledger)
+            try:
+                conn.execute(
+                    """
+                    UPDATE forward_sessions
+                    SET notes_json = json_remove(notes_json, '$.symbol_diagnostics')
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _write_jsonl(
+                path,
+                [
+                    _row(playbook_id="short_term", scan_date="2026-06-26"),
+                    _row(playbook_id="range_breakout_observation", scan_date="2026-06-26"),
+                    _row(playbook_id="bullish_pullback_observation", scan_date="2026-06-13"),
+                ],
+            )
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+
+        diagnostics = report["zero_candidate_diagnostics"]
+        self.assertEqual(report["target_date_scan_pick_count"], 2)
+        self.assertEqual(report["target_date_phase2_scan_pick_count"], 0)
+        self.assertEqual(report["post_freeze_phase2_scan_pick_count"], 0)
+        self.assertEqual(diagnostics["status"], "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons")
+        self.assertTrue(diagnostics["candidate_scope_flags"]["parked_or_non_phase2_rows_excluded"])
+        self.assertTrue(diagnostics["candidate_scope_flags"]["pre_freeze_rows_excluded"])
 
     def test_default_selection_date_uses_new_york_market_date_not_utc_date(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

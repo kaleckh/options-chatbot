@@ -5,7 +5,7 @@ Status: `waiting_for_valid_market_window`.
 - Strict completed forward rows: `0/30`.
 - Remaining rows: `30`.
 - Accepted profitability: `false`.
-- Market-window status: `closed`.
+- Market-window status: `unknown`.
 - Next window trade date: `2026-06-29`.
 - Next window start ET: `2026-06-29T09:30:00-04:00`.
 - Safe no-append collection command: `npm run options:goal-loop:strict-forward-30 -- --selection-date 2026-06-29 --market-window-confirmed --market-window-status open --run-scan-sweep --json`.

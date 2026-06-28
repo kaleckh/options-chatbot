@@ -9,7 +9,7 @@ This generated artifact is a bounded read-only adapter for the frozen Phase 2 la
 - Daily rows: `6916`.
 - Covered months: `0` / `24`.
 - Selected candidates: `0`.
-- Smallest next blocker: `underlying_daily_history_source_not_point_in_time`.
+- Smallest next blocker: `candidate_generation_months_0_below_requested_24`.
 
 ## Status Counts
 
@@ -26,8 +26,6 @@ This generated artifact is a bounded read-only adapter for the frozen Phase 2 la
 | `missing_historical_scanner_point_in_time_inputs` | `6916` |
 | `missing_lane_specific_point_in_time_feature_inputs` | `6916` |
 | `missing_point_in_time_earnings_calendar_source` | `4446` |
-| `missing_point_in_time_market_regime_inputs` | `6916` |
-| `underlying_daily_history_source_not_point_in_time` | `6916` |
 
 ## Blockers
 
@@ -37,8 +35,6 @@ This generated artifact is a bounded read-only adapter for the frozen Phase 2 la
 - `missing_historical_scanner_point_in_time_inputs`
 - `missing_lane_specific_point_in_time_feature_inputs`
 - `missing_point_in_time_earnings_calendar_source`
-- `missing_point_in_time_market_regime_inputs`
-- `underlying_daily_history_source_not_point_in_time`
 
 ## Boundary
 

@@ -482,7 +482,7 @@ def build_report(
             "base_clean_stack_identity_ledger": base_ledger_meta,
             "holdout_contract": holdout_meta,
         },
-        "allowed_next_step": "send readiness back to GPT-5.5 Pro" if blockers else "ask GPT-5.5 Pro whether research-only implementation approval is warranted",
+        "allowed_next_step": "send readiness back to GPT-5.5 Pro" if blockers else "ask GPT-5.5 Pro for one bounded research-only implementation task inside the current non-live, non-broker research posture",
     }
     return report
 

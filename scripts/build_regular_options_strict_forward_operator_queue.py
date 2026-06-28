@@ -159,17 +159,38 @@ def _strict_forward_target(oracle_packet: dict[str, Any]) -> tuple[int, int]:
 
 
 def _oracle_blocker_row(summary: dict[str, Any], *, branch_id: str, status_key: str, blocker_key: str | None = None, extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    status = summary.get(status_key)
+    blockers = _as_list(summary.get(blocker_key)) if blocker_key else []
+    status_text = str(status or "")
+    classification = (
+        "ready_for_research_only_replay_decision"
+        if not blockers and not status_text.startswith("blocked_") and any(token in status_text for token in ("ready", "available", "materialized"))
+        else "current_blocker"
+    )
     return {
         "branch_id": branch_id,
-        "status": summary.get(status_key),
-        "blockers": _as_list(summary.get(blocker_key)) if blocker_key else [],
-        "classification": "current_blocker",
+        "status": status,
+        "blockers": blockers,
+        "classification": classification,
         **(extra or {}),
     }
 
 
 def _blocked_or_superseded_branches(oracle_packet: dict[str, Any]) -> list[dict[str, Any]]:
     summary = _as_dict(oracle_packet.get("current_evidence_summary"))
+    underlying_import_ready = (
+        summary.get("underlying_daily_source_import_status") == "underlying_daily_history_source_import_materialized"
+        and bool(summary.get("underlying_daily_source_import_source_rows_written"))
+    )
+    theta_resume_status = summary.get("source_repair_59_symbol_resume_status")
+    theta_resume_blockers = _as_list(summary.get("source_repair_59_symbol_resume_blockers"))
+    if not theta_resume_status:
+        theta_resume_status = _as_dict(summary.get("source_repair_59_symbol_resume_theta_terminal")).get("status") or "missing_59_symbol_resume_readback"
+    if not theta_resume_blockers:
+        if theta_resume_status == "blocked_59_symbol_import_repair":
+            theta_resume_blockers = ["bulk_import_execution_not_started_by_preflight_wrapper"]
+        elif theta_resume_status in {"blocked_thetaterminal_source_unavailable_retry", "unavailable"}:
+            theta_resume_blockers = ["thetaterminal_source_unavailable"]
     rows = [
         {
             "branch_id": "direct_vix_source",
@@ -191,18 +212,39 @@ def _blocked_or_superseded_branches(oracle_packet: dict[str, Any]) -> list[dict[
             blocker_key="candidate_generation_13_symbol_frozen_engine_blockers",
             extra={"candidate_months": summary.get("candidate_generation_13_symbol_candidate_months"), "selected_rows": summary.get("candidate_generation_13_symbol_frozen_engine_selected_rows")},
         ),
-        _oracle_blocker_row(
-            summary,
-            branch_id="underlying_daily_source_acquisition",
-            status_key="underlying_daily_source_acquisition_status",
-            blocker_key="underlying_daily_source_acquisition_blockers",
-            extra={"ready_candidate_count": summary.get("underlying_daily_source_acquisition_ready_candidate_count")},
+        {
+            "branch_id": "quote_surface_opening_range_reversal",
+            "status": summary.get("quote_surface_opening_range_reversal_status"),
+            "blockers": _as_list(summary.get("quote_surface_opening_range_reversal_blockers")),
+            "classification": summary.get("quote_surface_opening_range_reversal_classification") or "current_blocker",
+            "blocker_category": summary.get("quote_surface_opening_range_reversal_blocker_category"),
+            "candidate_rows": summary.get("quote_surface_opening_range_reversal_candidate_rows"),
+            "full_window_pf": summary.get("quote_surface_opening_range_reversal_full_window_pf"),
+            "full_window_pf_lb_5pct": summary.get("quote_surface_opening_range_reversal_full_window_pf_lb_5pct"),
+            "latest_four_rows": summary.get("quote_surface_opening_range_reversal_latest_four_rows"),
+        },
+        (
+            {
+                "branch_id": "underlying_daily_source",
+                "status": summary.get("underlying_daily_source_import_status"),
+                "blockers": [],
+                "classification": "cleared_current_input",
+                "source_row_count": summary.get("underlying_daily_source_import_source_row_count"),
+            }
+            if underlying_import_ready
+            else _oracle_blocker_row(
+                summary,
+                branch_id="underlying_daily_source_acquisition",
+                status_key="underlying_daily_source_acquisition_status",
+                blocker_key="underlying_daily_source_acquisition_blockers",
+                extra={"ready_candidate_count": summary.get("underlying_daily_source_acquisition_ready_candidate_count")},
+            )
         ),
         {
             "branch_id": "source_repair_59_symbol_thetadata_opra",
-            "status": _as_dict(summary.get("source_repair_59_symbol_resume_theta_terminal")).get("status") or "blocked_thetaterminal_source_unavailable_retry",
-            "blockers": ["thetaterminal_source_unavailable"],
-            "classification": "current_provider_blocker",
+            "status": theta_resume_status,
+            "blockers": theta_resume_blockers,
+            "classification": "current_provider_or_import_blocker",
         },
         _oracle_blocker_row(summary, branch_id="vrp_credit_spread", status_key="vrp_credit_spread_replay_readiness_status", blocker_key="vrp_credit_spread_replay_readiness_blockers"),
         _oracle_blocker_row(summary, branch_id="term_structure_calendar", status_key="term_structure_calendar_replay_readiness_status", blocker_key="term_structure_calendar_replay_readiness_blockers"),

@@ -104,6 +104,27 @@ class RegularOptionsPointInTimeDispersionConcentrationProxyTests(unittest.TestCa
         self.assertFalse(report["proxy_rows"][0]["proof_eligible"])
         self.assertEqual(report["blockers"], [])
 
+    def test_source_rows_can_provide_return_fields_without_feature_store_return_counts(self) -> None:
+        with WorkspaceTempDir(prefix="dispersion-proxy-source-fields") as tmp_dir:
+            tmp = Path(tmp_dir)
+            rows = tmp / "source.jsonl"
+            dates = ["2026-01-02", "2026-01-05", "2026-01-06"]
+            _write_jsonl(rows, self._rows(dates))
+            report = proxy.build_report(
+                source_rows_path=rows,
+                feature_store_path=self._feature_store(tmp, dates, include_returns=False),
+                start_date="2026-01-01",
+                end_date="2026-01-31",
+                as_of_date="2026-01-31",
+                no_write=True,
+            )
+
+        self.assertEqual(report["status"], "point_in_time_dispersion_concentration_proxy_available")
+        inventory = report["source_inventory"]["feature_store"]
+        self.assertTrue(inventory["proxy_source_rows_provide_return_fields"])
+        self.assertTrue(inventory["return_fields_available"])
+        self.assertNotIn("missing_required_return_fields", report["blockers"])
+
     def test_missing_source_fails_closed_without_inventing_rows(self) -> None:
         with WorkspaceTempDir(prefix="dispersion-proxy") as tmp_dir:
             tmp = Path(tmp_dir)

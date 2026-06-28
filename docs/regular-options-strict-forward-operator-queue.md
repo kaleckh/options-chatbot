@@ -29,7 +29,7 @@ No live release. No broker orders. No proof bar changes. No source-row, quote, e
 ## Operator Posture
 
 - Gateboard status: `safe_blocked_no_live_release`.
-- Market-window checklist status: `blocked_stale_readbacks`.
+- Market-window checklist status: `waiting_for_market_window`.
 - Market-window status: `unknown`.
 - Oracle packet status: `ready_for_same_session_gpt55_guidance`.
 
@@ -53,12 +53,13 @@ No live release. No broker orders. No proof bar changes. No source-row, quote, e
 
 - `direct_vix_source`: `direct_vix_source_import_materialized` / `superseded_cleared`; blockers `[]`.
 - `direct_vix_bucket`: `point_in_time_vix_bucket_ready` / `cleared_current_input`; blockers `[]`.
-- `candidate_generation_13_symbol_frozen_engine`: `blocked_frozen_13_symbol_candidate_generation_engine` / `current_blocker`; blockers `["blocked_daily_candidate_generation_coverage", "blocked_latest_audit_rows_below_30", "blocked_train_or_audit_month_coverage", "candidate_generation_months_0_below_requested_24", "missing_historical_entry_underlying_price_surface", "missing_historical_option_chain_selection_surface", "missing_historical_scanner_point_in_time_inputs", "missing_lane_specific_point_in_time_feature_inputs", "missing_point_in_time_earnings_calendar_source", "missing_point_in_time_market_regime_inputs", "underlying_daily_history_source_not_point_in_time"]`.
-- `underlying_daily_source_acquisition`: `blocked_underlying_daily_source_acquisition_missing` / `current_blocker`; blockers `["trusted_source_csv_missing"]`.
-- `source_repair_59_symbol_thetadata_opra`: `unavailable` / `current_provider_blocker`; blockers `["thetaterminal_source_unavailable"]`.
+- `candidate_generation_13_symbol_frozen_engine`: `blocked_frozen_13_symbol_candidate_generation_engine` / `current_blocker`; blockers `["blocked_daily_candidate_generation_coverage", "blocked_latest_audit_rows_below_30", "blocked_train_or_audit_month_coverage", "candidate_generation_months_0_below_requested_24", "missing_historical_entry_underlying_price_surface", "missing_historical_option_chain_selection_surface", "missing_historical_scanner_point_in_time_inputs", "missing_lane_specific_point_in_time_feature_inputs", "missing_point_in_time_earnings_calendar_source"]`.
+- `quote_surface_opening_range_reversal`: `blocked_quote_surface_opening_range_reversal_replay` / `falsified_under_current_data`; blockers `["blocked_latest_four_rows_below_30", "blocked_pf_lower_bound_not_above_1", "blocked_single_expiration_profit_concentration", "blocked_single_month_profit_concentration", "blocked_single_trade_profit_concentration", "blocked_single_underlying_profit_concentration", "blocked_top_5_trade_profit_concentration"]`.
+- `underlying_daily_source`: `underlying_daily_history_source_import_materialized` / `cleared_current_input`; blockers `[]`.
+- `source_repair_59_symbol_thetadata_opra`: `blocked_59_symbol_import_repair` / `current_provider_or_import_blocker`; blockers `["bulk_import_execution_not_started_by_preflight_wrapper"]`.
 - `vrp_credit_spread`: `blocked_vrp_credit_spread_bounded_replay_gate` / `current_blocker`; blockers `["missing_index_credit_spread_quote_surface"]`.
 - `term_structure_calendar`: `blocked_term_structure_calendar_bounded_replay` / `current_blocker`; blockers `["missing_index_calendar_quote_surface", "missing_point_in_time_term_structure_inputs"]`.
-- `dispersion_proxy_hybrid`: `blocked_dispersion_proxy_hybrid_replay_readiness` / `current_blocker`; blockers `["missing_dispersion_or_concentration_proxy_inputs"]`.
+- `dispersion_proxy_hybrid`: `dispersion_proxy_hybrid_replay_readiness_ready` / `ready_for_research_only_replay_decision`; blockers `[]`.
 - `flow_extreme_ratio_backspread`: `blocked_flow_extreme_ratio_backspread_replay_readiness` / `current_blocker`; blockers `["missing_point_in_time_flow_extreme_input"]`.
 - `momentum_continuation`: `blocked_momentum_continuation_bounded_replay` / `current_blocker`; blockers `["bootstrap_pf_lower_bound_not_above_1_after_resolution", "duplicate_within_research_harness", "entry_missing_leg_quote", "exit_missing_leg_quote", "exit_value_negative", "exit_zero_or_nonpositive_bid_ask", "missing_net_usd_pnl", "missing_point_in_time_breadth_confirmation", "missing_point_in_time_qqq_momentum_confirmation", "missing_point_in_time_spy_momentum_confirmation", "net_usd_not_positive_after_resolution", "rejected_not_call_debit_spread", "rejected_outside_preregistered_universe", "strict_rows_below_30_after_resolution"]`.
 - `stale_cleanup_branches`: `do_not_repeat_without_new_artifact_or_source_state_change` / `superseded_or_exhausted`; blockers `[]`.

@@ -15,6 +15,7 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - Scheduled Phase 2 drop-stage status: `candidate_starvation_from_scan_filters`.
 - Scheduled Phase 2 symbol drop reasons: `0`.
 - Candidate-starvation evidence status: `stage_counts_only_waiting_for_symbol_drop_reasons`.
+- Zero-candidate diagnostics: `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`.
 - Scheduled Phase 2 scan picks: `0`.
 - Scheduled Phase 2 all lanes scanned: `true`.
 - Scheduled Phase 2 eligibility statuses: `{'ineligible': 2}`.
@@ -55,13 +56,21 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - `ticker_regime_filter`: `0`.
 - `ticker_vol_filter`: `0`.
 
-## Actionable Candidate-Starvation Stages
+## Aggregate Candidate-Starvation Stages
 
 - `momentum`: `50`.
 - `history_or_liquidity`: `8`.
 - `tech_score`: `2`.
 - `direction_score`: `1`.
 - `ev_floor`: `1`.
+
+## Zero-Candidate Diagnostics
+
+- Status: `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`.
+- Scope: allowed lanes `true`, target date `true`, post-freeze `true`.
+- Scheduled sessions reviewed: `2`.
+- Symbol drop-reason status: `missing_symbol_drop_reasons_for_aggregate_drops`.
+- Safe next read-only actions: `wait_for_future_scheduled_sessions_with_symbol_drop_reason_persistence`, `inspect_existing_aggregate_drop_stage_counts_read_only`.
 
 ## Rejection Counts
 

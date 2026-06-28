@@ -33,8 +33,6 @@ This generated artifact materializes the frozen 13-symbol candidate-generation e
 - `missing_historical_scanner_point_in_time_inputs`
 - `missing_lane_specific_point_in_time_feature_inputs`
 - `missing_point_in_time_earnings_calendar_source`
-- `missing_point_in_time_market_regime_inputs`
-- `underlying_daily_history_source_not_point_in_time`
 
 ## Boundary
 

@@ -43,9 +43,9 @@ This report is generated from `scripts/build_regular_options_term_structure_cale
 - `missing_index_calendar_quote_surface`
 - `missing_strict_new_dedupe`
 
-## Approval Boundary
+## Research-Only Task Boundary
 
-A later implementation/replay harness requires separate research-only approval and must still forbid live, broker, quote import, evidence mutation, protected-holdout consumption, scanner/strategy release, stop/sizing/proof-bar changes, and promotion.
+A later bounded research-only implementation/replay harness must stay inside the current non-live, non-broker research posture and must still forbid live, broker, quote import, evidence mutation, protected-holdout consumption, scanner/strategy release, stop/sizing/proof-bar changes, and promotion.
 
 ## Forbidden Actions
 

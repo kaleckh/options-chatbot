@@ -160,6 +160,116 @@ def _candidate_starvation_evidence_status(
     return "waiting_for_next_scan_funnel_evidence"
 
 
+def _zero_candidate_diagnostics(
+    *,
+    target_selection_date: str,
+    scheduled_sessions_reviewed: int,
+    scheduled_session_error: str | None,
+    missing_scheduled_sessions: list[str],
+    scheduled_scan_picks_count: int,
+    returned_picks: int,
+    candidate_rows_staged: int,
+    drop_stage_summary: dict[str, Any],
+    drop_reason_count_total: int,
+) -> dict[str, Any]:
+    post_freeze_only = target_selection_date > FREEZE_DATE
+    drop_count_total = int(drop_stage_summary.get("total_drop_count") or 0)
+    top_drop_stages = drop_stage_summary.get("top_drop_stages")
+    drop_stage_ranking = top_drop_stages if isinstance(top_drop_stages, list) else []
+    if not post_freeze_only:
+        status = "not_post_freeze_target_date"
+    elif scheduled_session_error:
+        status = "scheduled_phase2_session_source_unavailable"
+    elif scheduled_scan_picks_count > 0 or returned_picks > 0 or candidate_rows_staged > 0:
+        status = "not_zero_candidate_context_picks_available"
+    elif missing_scheduled_sessions:
+        status = "waiting_for_scheduled_phase2_sessions"
+    elif drop_reason_count_total > 0:
+        status = "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded"
+    elif drop_count_total > 0:
+        status = "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons"
+    else:
+        status = "waiting_for_next_scan_funnel_evidence"
+    if drop_reason_count_total > 0:
+        symbol_drop_reason_status = "symbol_drop_reasons_recorded"
+    elif drop_count_total > 0:
+        symbol_drop_reason_status = "missing_symbol_drop_reasons_for_aggregate_drops"
+    else:
+        symbol_drop_reason_status = "no_symbol_drop_reasons_expected_until_scan_funnel_drops_exist"
+    safe_next_read_only_actions = {
+        "not_zero_candidate_context_picks_available": [
+            "review_existing_phase2_picks_or_candidate_jsonl_without_append",
+            "run_candidate_review_packet_read_only",
+        ],
+        "waiting_for_scheduled_phase2_sessions": [
+            "wait_for_next_valid_market_window_scheduled_phase2_sweep",
+            "refresh_forward_candidate_throughput_audit_no_write",
+        ],
+        "scheduled_phase2_session_source_unavailable": [
+            "repair_or_refresh_forward_session_ledger_read_only",
+            "refresh_forward_candidate_throughput_audit_no_write_after_source_available",
+        ],
+        "not_post_freeze_target_date": [
+            "rerun_throughput_audit_for_post_freeze_target_date",
+            "do_not_use_pre_freeze_rows_as_forward_zero_candidate_diagnosis",
+        ],
+        "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded": [
+            "rank_symbol_level_drop_reasons_for_frozen_phase2_sessions",
+            "compare_drop_stage_ranking_to_symbol_reason_samples_read_only",
+        ],
+        "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons": [
+            "wait_for_future_scheduled_sessions_with_symbol_drop_reason_persistence",
+            "inspect_existing_aggregate_drop_stage_counts_read_only",
+        ],
+        "waiting_for_next_scan_funnel_evidence": [
+            "wait_for_next_valid_market_window_scan_funnel_evidence",
+            "refresh_forward_candidate_throughput_audit_no_write",
+        ],
+    }[status]
+    return {
+        "status": status,
+        "target_selection_date": target_selection_date,
+        "allowed_lanes_only": True,
+        "target_date_only": True,
+        "post_freeze_only": post_freeze_only,
+        "scheduled_sessions_reviewed": scheduled_sessions_reviewed,
+        "scheduled_session_error": scheduled_session_error,
+        "missing_scheduled_sessions": missing_scheduled_sessions,
+        "scheduled_scan_picks_count": scheduled_scan_picks_count,
+        "returned_picks": returned_picks,
+        "candidate_rows_staged": candidate_rows_staged,
+        "drop_count_total": drop_count_total,
+        "drop_stage_ranking": drop_stage_ranking,
+        "symbol_drop_reason_count_total": drop_reason_count_total,
+        "symbol_drop_reason_status": symbol_drop_reason_status,
+        "safe_next_read_only_actions": safe_next_read_only_actions,
+        "deferred_actions": [
+            "append_phase2_forward_cohort_rows",
+            "create_candidate_identity",
+            "promote_parked_lanes",
+            "run_scanner_from_audit",
+            "change_proof_bars",
+            "enable_live_validation_auto_track_or_broker_orders",
+            "mutate_evidence_stores",
+        ],
+        "candidate_scope_flags": {
+            "parked_or_non_phase2_rows_excluded": True,
+            "non_target_date_rows_excluded": True,
+            "pre_freeze_rows_excluded": True,
+            "scheduled_sessions_required_before_zero_candidate_diagnosis": True,
+        },
+        "safety_flags": {
+            "read_only_diagnostic": True,
+            "scanner_called": False,
+            "cohort_append_allowed": False,
+            "candidate_identity_created": False,
+            "parked_lane_promotion_allowed": False,
+            "proof_bar_change_allowed": False,
+            "evidence_store_mutation_allowed": False,
+        },
+    }
+
+
 def _parse_utc(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(UTC)
 
@@ -326,14 +436,30 @@ def build_report(
         drop_count_total=sum(scheduled_drop_counts.values()),
         drop_reason_count_total=scheduled_drop_reason_count_total,
     )
+    candidate_rows_staged = int(stage_report.get("candidate_rows_staged") or 0)
+    zero_candidate_diagnostics = _zero_candidate_diagnostics(
+        target_selection_date=target_date,
+        scheduled_sessions_reviewed=len(scheduled_sessions),
+        scheduled_session_error=scheduled_session_error,
+        missing_scheduled_sessions=missing_scheduled,
+        scheduled_scan_picks_count=scheduled_pick_count,
+        returned_picks=scheduled_returned_picks,
+        candidate_rows_staged=candidate_rows_staged,
+        drop_stage_summary=scheduled_drop_stage_summary,
+        drop_reason_count_total=scheduled_drop_reason_count_total,
+    )
     status = "candidate_throughput_ready_for_validation" if stage_report.get("candidate_rows_staged") else "blocked_no_same_day_phase2_natural_selections"
     if malformed:
         status = "blocked_malformed_scan_picks"
+    elif scheduled_session_error:
+        status = "blocked_forward_cohort_scheduled_scan_session_source_unavailable"
     elif missing_scheduled:
         status = "blocked_forward_cohort_scheduled_scan_session_missing"
     next_action = (
         "validate_candidate_jsonl_read_only"
         if stage_report.get("candidate_rows_staged")
+        else "repair_or_refresh_forward_session_ledger_read_only"
+        if scheduled_session_error
         else "run_passive_forward_cohort_scan_sweep_in_valid_market_window"
         if missing_scheduled
         else "wait_for_valid_market_window_and_real_phase2_scan_picks"
@@ -372,6 +498,7 @@ def build_report(
         "scheduled_phase2_scan_drop_reason_count_total": scheduled_drop_reason_count_total,
         "scheduled_phase2_scan_drop_reason_sample": scheduled_drop_reason_samples,
         "candidate_starvation_evidence_status": candidate_starvation_evidence_status,
+        "zero_candidate_diagnostics": zero_candidate_diagnostics,
         "scheduled_phase2_eligibility_status_counts": _counter_dict(scheduled_eligibility_statuses),
         "scheduled_phase2_eligibility_blocker_counts": _counter_dict(scheduled_eligibility_blockers),
         "scheduled_phase2_all_lanes_scanned": not missing_scheduled and not scheduled_session_error,
@@ -380,7 +507,7 @@ def build_report(
         ),
         "last_scan_pick_dates": sorted({_selection_date(row) for row in rows if _selection_date(row)})[-20:],
         "stager_status": stage_report.get("status"),
-        "candidate_rows_staged": int(stage_report.get("candidate_rows_staged") or 0),
+        "candidate_rows_staged": candidate_rows_staged,
         "candidate_jsonl_written": bool(stage_report.get("candidate_jsonl_written")),
         "candidate_jsonl_path": stage_report.get("output_path"),
         "stager_rejected_counts": _as_dict(stage_report.get("rejected_counts")),
@@ -422,6 +549,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Scheduled Phase 2 drop-stage status: `{_as_dict(report.get('scheduled_phase2_drop_stage_summary')).get('status')}`.",
         f"- Scheduled Phase 2 symbol drop reasons: `{report.get('scheduled_phase2_scan_drop_reason_count_total')}`.",
         f"- Candidate-starvation evidence status: `{report.get('candidate_starvation_evidence_status')}`.",
+        f"- Zero-candidate diagnostics: `{_as_dict(report.get('zero_candidate_diagnostics')).get('status')}`.",
         f"- Scheduled Phase 2 scan picks: `{report.get('scheduled_phase2_scan_picks_count')}`.",
         f"- Scheduled Phase 2 all lanes scanned: `{str(bool(report.get('scheduled_phase2_all_lanes_scanned'))).lower()}`.",
         f"- Scheduled Phase 2 eligibility statuses: `{_as_dict(report.get('scheduled_phase2_eligibility_status_counts'))}`.",
@@ -456,10 +584,26 @@ def render_markdown(report: dict[str, Any]) -> str:
     drop_summary = _as_dict(report.get("scheduled_phase2_drop_stage_summary"))
     top_stages = drop_summary.get("top_drop_stages") if isinstance(drop_summary.get("top_drop_stages"), list) else []
     if top_stages:
-        lines.extend(["", "## Actionable Candidate-Starvation Stages", ""])
+        lines.extend(["", "## Aggregate Candidate-Starvation Stages", ""])
         for item in top_stages:
             if isinstance(item, dict):
                 lines.append(f"- `{item.get('stage')}`: `{item.get('count')}`.")
+    zero_diagnostics = _as_dict(report.get("zero_candidate_diagnostics"))
+    if zero_diagnostics:
+        safe_actions = zero_diagnostics.get("safe_next_read_only_actions")
+        safe_action_text = ", ".join(f"`{item}`" for item in safe_actions) if isinstance(safe_actions, list) else "`none`"
+        lines.extend(
+            [
+                "",
+                "## Zero-Candidate Diagnostics",
+                "",
+                f"- Status: `{zero_diagnostics.get('status')}`.",
+                f"- Scope: allowed lanes `{str(bool(zero_diagnostics.get('allowed_lanes_only'))).lower()}`, target date `{str(bool(zero_diagnostics.get('target_date_only'))).lower()}`, post-freeze `{str(bool(zero_diagnostics.get('post_freeze_only'))).lower()}`.",
+                f"- Scheduled sessions reviewed: `{zero_diagnostics.get('scheduled_sessions_reviewed')}`.",
+                f"- Symbol drop-reason status: `{zero_diagnostics.get('symbol_drop_reason_status')}`.",
+                f"- Safe next read-only actions: {safe_action_text}.",
+            ]
+        )
     drop_reason_sample = report.get("scheduled_phase2_scan_drop_reason_sample")
     if isinstance(drop_reason_sample, list) and drop_reason_sample:
         lines.extend(["", "## Symbol Drop-Reason Samples", ""])

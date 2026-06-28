@@ -4,13 +4,13 @@ This report is generated from `scripts/build_regular_options_dispersion_proxy_hy
 
 ## Summary
 
-- Status: `blocked_dispersion_proxy_hybrid_replay_readiness`.
+- Status: `dispersion_proxy_hybrid_replay_readiness_ready`.
 - Concept: `index_constituent_dispersion_proxy_defined_risk_hybrid_v1`.
 - Structure: `defined_risk_index_constituent_debit_credit_hybrid_pairs_only`.
 - Accepted profitability: `false`.
 - Historical replay performed: `false`.
 - Replay performed: `false`.
-- Smallest next blocker-clearing slice: `missing_dispersion_or_concentration_proxy_inputs`.
+- Smallest next blocker-clearing slice: `None`.
 
 ## Preregistration Validation
 
@@ -21,7 +21,7 @@ This report is generated from `scripts/build_regular_options_dispersion_proxy_hy
 
 | Prerequisite | Status | Blocker | Evidence |
 | --- | --- | --- | --- |
-| Point-in-time dispersion or concentration proxy inputs | `blocked` | `missing_dispersion_or_concentration_proxy_inputs` | `data/profitability-lab/regular-options-point-in-time-dispersion-concentration-proxy/latest.json` |
+| Point-in-time dispersion or concentration proxy inputs | `ready` | `None` | `data/profitability-lab/regular-options-point-in-time-dispersion-concentration-proxy/latest.json` |
 | Point-in-time VIX bucket requirement | `ready` | `None` | `data/profitability-lab/regular-options-point-in-time-vix-bucket/latest.json` |
 | Index/constituent pair construction and universe rules | `ready` | `None` | `data/profitability-lab/regular-options-preregistered-dispersion-proxy-hybrid-playbook/latest.json` |
 | Side-aware all-leg pair pricing | `ready` | `None` | `data/profitability-lab/regular-options-preregistered-dispersion-proxy-hybrid-playbook/latest.json` |
@@ -36,7 +36,7 @@ This report is generated from `scripts/build_regular_options_dispersion_proxy_hy
 
 ## Blockers
 
-- `missing_dispersion_or_concentration_proxy_inputs`
+- None.
 
 ## Boundary
 

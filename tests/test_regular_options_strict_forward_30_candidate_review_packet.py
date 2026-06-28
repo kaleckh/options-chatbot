@@ -71,6 +71,23 @@ def _scan_task_health(**overrides):
     return payload
 
 
+def _throughput(**overrides):
+    payload = {
+        "report_id": "regular_options_forward_candidate_throughput_audit",
+        "status": "blocked_no_same_day_phase2_natural_selections",
+        "generated_at_utc": "2026-06-27T01:56:00Z",
+        "candidate_starvation_evidence_status": "stage_counts_only_waiting_for_symbol_drop_reasons",
+        "zero_candidate_diagnostics": {
+            "status": "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons",
+            "drop_stage_ranking": [{"stage": "momentum", "count": 50}],
+            "symbol_drop_reason_status": "missing_symbol_drop_reasons_for_aggregate_drops",
+            "safe_next_read_only_actions": ["inspect_existing_aggregate_drop_stage_counts_read_only"],
+        },
+    }
+    payload.update(overrides)
+    return payload
+
+
 def _validation(append_allowed: bool = True):
     return {
         "overall_status": "candidate_validation_ready" if append_allowed else "candidate_validation_blocked",
@@ -90,11 +107,13 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
         collector = root / "collector.json"
         scheduler = root / "scheduler.json"
         scan_task_health = root / "regular_options_strict_forward_scan_task_health_latest.json"
+        throughput = root / "regular_options_forward_candidate_throughput_audit_latest.json"
         _write_json(capture, _capture())
         _write_json(collector, _collector())
         _write_json(scheduler, _scheduler())
         _write_json(scan_task_health, _scan_task_health())
-        return {"capture": capture, "collector": collector, "scheduler": scheduler, "candidate": root / "candidate.jsonl"}
+        _write_json(throughput, _throughput(status="waiting_for_valid_market_window", zero_candidate_diagnostics={}))
+        return {"capture": capture, "collector": collector, "scheduler": scheduler, "throughput": throughput, "candidate": root / "candidate.jsonl"}
 
     def test_no_candidate_jsonl_waits_for_real_candidates(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -111,6 +130,124 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
         self.assertFalse(report["candidate_jsonl_exists"])
         self.assertFalse(report["cohort_append_performed"])
         self.assertIn("validate_candidate_jsonl", report["operator_commands"])
+
+    def test_no_candidate_jsonl_propagates_zero_candidate_throughput_blocker(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["throughput"], _throughput())
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_blocked_no_scanner_candidates_for_target_date")
+        self.assertEqual(report["throughput_status"], "blocked_no_same_day_phase2_natural_selections")
+        self.assertEqual(report["zero_candidate_diagnostics_status"], "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons")
+        self.assertEqual(report["zero_candidate_throughput_evidence"]["status"], "zero_candidate_evidence_blocks_candidate_review")
+        self.assertFalse(report["cohort_append_performed"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_zero_candidate_evidence_waits(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(
+                paths["throughput"],
+                _throughput(zero_candidate_diagnostics={"status": "scheduled_phase2_session_source_unavailable"}),
+            )
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertEqual(report["zero_candidate_throughput_evidence"]["status"], "zero_candidate_evidence_waiting_for_throughput_audit")
+        self.assertIn("refresh_candidate_throughput_audit", report["operator_commands"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_blocked_throughput_lacks_diagnostics(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["throughput"], _throughput(zero_candidate_diagnostics={}))
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertIn("zero_candidate_diagnostics_missing_from_throughput_audit", report["throughput_blockers"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_throughput_is_older_than_collector(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["collector"], _collector(generated_at_utc="2026-06-27T02:00:00Z"))
+            _write_json(paths["capture"], _capture(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(paths["scheduler"], _scheduler(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(Path(temp_dir) / "regular_options_strict_forward_scan_task_health_latest.json", _scan_task_health(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(paths["throughput"], _throughput(generated_at_utc="2026-06-27T01:59:59Z"))
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertIn("throughput_older_than_collector", report["throughput_blockers"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_target_date_mismatches_collector(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["collector"], _collector(selection_date="2026-06-26"))
+            _write_json(paths["throughput"], _throughput(target_selection_date="2026-06-25"))
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertIn("throughput_target_selection_date_mismatch", report["throughput_blockers"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_target_date_missing_for_zero_candidate_evidence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["collector"], _collector(selection_date="2026-06-26"))
+            _write_json(paths["throughput"], _throughput())
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertIn("throughput_target_selection_date_missing", report["throughput_blockers"])
+
+    def test_no_candidate_jsonl_waits_for_throughput_audit_when_throughput_generated_at_is_malformed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            paths = self._paths(Path(temp_dir))
+            _write_json(paths["throughput"], _throughput(generated_at_utc="not-a-timestamp"))
+            report = packet.build_report(
+                candidate_jsonl_path=paths["candidate"],
+                capture_latest_path=paths["capture"],
+                collector_latest_path=paths["collector"],
+                scheduler_health_latest_path=paths["scheduler"],
+                generated_at_utc=NOW,
+            )
+
+        self.assertEqual(report["status"], "candidate_review_waiting_for_candidate_throughput_audit")
+        self.assertIn("throughput_generated_at_missing_or_malformed", report["throughput_blockers"])
 
     def test_append_allowed_candidate_requires_operator_review_without_append(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -256,6 +393,7 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
             _write_json(paths["capture"], _capture(status="stale_status", generated_at_utc="2026-06-27T01:59:59Z"))
             _write_json(paths["scheduler"], _scheduler(generated_at_utc="2026-06-27T02:00:01Z"))
             _write_json(Path(temp_dir) / "regular_options_strict_forward_scan_task_health_latest.json", _scan_task_health(generated_at_utc="2026-06-27T02:00:01Z"))
+            _write_json(Path(temp_dir) / "regular_options_forward_candidate_throughput_audit_latest.json", _throughput(status="waiting_for_valid_market_window", generated_at_utc="2026-06-27T02:00:01Z", zero_candidate_diagnostics={}))
             _write_json(
                 paths["collector"],
                 _collector(
@@ -371,6 +509,7 @@ class RegularOptionsStrictForward30CandidateReviewPacketTests(unittest.TestCase)
             doc = (root / "doc.md").read_text(encoding="utf8")
             self.assertIn("Candidate batch provenance", doc)
             self.assertIn("Scan-task health freshness", doc)
+            self.assertIn("Zero-candidate throughput evidence", doc)
             self.assertIn("docs_report", artifacts)
 
 

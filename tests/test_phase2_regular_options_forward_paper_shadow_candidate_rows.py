@@ -43,6 +43,30 @@ class Phase2ForwardPaperShadowCandidateStagerTests(unittest.TestCase):
             self.assertFalse(report["broker_order_allowed"])
             self.assertFalse(report["auto_track_allowed"])
 
+    def test_closed_market_refresh_overwrites_stale_latest_without_candidate_output(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            output = root / "candidate.jsonl"
+            latest = root / "latest.json"
+            docs = root / "report.md"
+            latest.write_text(json.dumps({"status": "candidate_rows_staged_validation_passed"}) + "\n", encoding="utf8")
+            docs.write_text("stale append-ready report\n", encoding="utf8")
+
+            report = stager.build_stage_report(
+                output_path=output,
+                latest_json_path=latest,
+                docs_report_path=docs,
+                market_window_status="closed",
+                generated_at_utc=NOW,
+            )
+
+            refreshed = json.loads(latest.read_text(encoding="utf8"))
+            self.assertEqual(report["status"], "blocked_market_window_not_confirmed")
+            self.assertEqual(refreshed["status"], "blocked_market_window_not_confirmed")
+            self.assertFalse(refreshed["candidate_jsonl_written"])
+            self.assertFalse(output.exists())
+            self.assertIn("blocked_market_window_not_confirmed", docs.read_text(encoding="utf8"))
+
     def test_fixture_stages_schema_valid_but_append_ineligible_phase2_rows(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

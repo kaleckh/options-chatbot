@@ -1,10 +1,10 @@
 # Regular Options 59-Symbol ThetaData OPRA Import Resume
 
-- Status: `blocked_thetaterminal_source_unavailable_retry`
+- Status: `blocked_59_symbol_import_repair`
 - Dry run: `false`
 - Resume missing only: `true`
 - Provider recheck: `true`
-- ThetaTerminal: `unavailable`
+- ThetaTerminal: `available_status_endpoint_gone`
 - Shared trusted imported quote dates: `260`
 - Missing symbol-date rows: `11565`
 - Protected holdout overlap rows: `0`
@@ -17,4 +17,4 @@ This is a scoped source-repair preflight. It does not create trades, prepare ord
 
 ## Blockers
 
-- `thetaterminal_source_unavailable`
+- `bulk_import_execution_not_started_by_preflight_wrapper`

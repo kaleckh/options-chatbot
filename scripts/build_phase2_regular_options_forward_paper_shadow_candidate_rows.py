@@ -129,6 +129,18 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _write_latest_and_docs(report: dict[str, Any], latest_json_path: Path, docs_report_path: Path) -> None:
+    latest_json_path.parent.mkdir(parents=True, exist_ok=True)
+    docs_report_path.parent.mkdir(parents=True, exist_ok=True)
+    writes = [str(path) for path in report.get("writes_performed", [])]
+    for path in (_rel(latest_json_path), _rel(docs_report_path)):
+        if path not in writes:
+            writes.append(path)
+    report["writes_performed"] = writes
+    latest_json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf8")
+    docs_report_path.write_text(render_markdown(report) + "\n", encoding="utf8")
+
+
 def _policy_maps(preregistration: dict[str, Any]) -> tuple[dict[str, str], dict[str, set[str]], str]:
     lanes = {
         _norm(row.get("lane_id")): _as_dict(row)
@@ -372,7 +384,7 @@ def build_stage_report(
     generated_at = generated_at_utc or _utc_now_iso()
     target_selection_date = selection_date or _default_selection_date(generated_at)
     if fixture_path is None and (not market_window_confirmed or market_window_status != "open"):
-        return _final_report(
+        report = _final_report(
             generated_at,
             status="blocked_market_window_not_confirmed",
             reason_codes=["market_window_not_confirmed"],
@@ -387,13 +399,16 @@ def build_stage_report(
             no_write=no_write,
             writes_performed=[],
         )
+        if not no_write:
+            _write_latest_and_docs(report, latest_json_path, docs_report_path)
+        return report
 
     preregistration = _load_json(preregistration_path)
     policy_hashes, allowed_symbols, freeze_date = _policy_maps(preregistration)
     source_path = fixture_path or source_scan_picks_path
     if not source_path.exists():
         status = "missing_phase2_natural_selection_source" if fixture_path is None else "fixture_missing"
-        return _final_report(
+        report = _final_report(
             generated_at,
             status=status,
             reason_codes=[status],
@@ -408,6 +423,9 @@ def build_stage_report(
             no_write=no_write,
             writes_performed=[],
         )
+        if not no_write:
+            _write_latest_and_docs(report, latest_json_path, docs_report_path)
+        return report
 
     source_rows, malformed = _load_rows(source_path)
     source_mode = "fixture" if fixture_path else "scan_picks"
@@ -475,15 +493,9 @@ def build_stage_report(
         if staged and (validation_allowed or (source_mode == "fixture" and not fixture_canonical_output)):
             _write_jsonl(output_path, staged)
             writes_performed.append(_rel(output_path))
-        latest_json_path.parent.mkdir(parents=True, exist_ok=True)
-        latest_json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf8")
-        writes_performed.append(_rel(latest_json_path))
-        docs_report_path.parent.mkdir(parents=True, exist_ok=True)
-        docs_report_path.write_text(render_markdown(report) + "\n", encoding="utf8")
-        writes_performed.append(_rel(docs_report_path))
         report["writes_performed"] = writes_performed
         report["candidate_jsonl_written"] = _rel(output_path) in writes_performed
-        latest_json_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        _write_latest_and_docs(report, latest_json_path, docs_report_path)
     return report
 
 

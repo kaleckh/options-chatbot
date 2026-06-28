@@ -1,12 +1,12 @@
 # Regular Options Existing Input Surface Atlas
 
-- Status: `research_only_input_surfaces_exhausted_under_current_repository`
-- Generated: `2026-06-26T05:01:53Z`
+- Status: `existing_input_surface_ready_for_branch_selection`
+- Generated: `2026-06-27T18:22:22Z`
 - Read-only DB open: `True`
 - Accepted profitability: `False`
 - Strict latest-four/forward rows: `0/30`
-- Ready source surfaces: `0`
-- Stop exception candidate: `True`
+- Ready source surfaces: `1`
+- Stop exception candidate: `False`
 
 This is a source/input inventory only. It does not run P&L replay, generate trades, import quotes, mutate evidence, consume protected holdout, change strategy logic, or promote a lane.
 
@@ -35,14 +35,26 @@ This is a source/input inventory only. It does not run P&L replay, generate trad
 - `macro_event_calendar_artifact` (macro_event_calendar, direct_market_source): ready=`False`, train_months=`0`, latest_four_months=`0`, date_coverage=`0.0%`, latest_four_date_coverage=`0.0%`, blockers=date_coverage_below_90, latest_four_date_coverage_below_90, latest_four_months_below_4, macro_event_calendar_source_missing, missing_or_unsafe_known_at, missing_required_fields, missing_required_macro_event_categories, train_months_below_20
 - `earnings_event_calendar_existing_artifact_search` (earnings_event_calendar, missing): ready=`False`, train_months=`0`, latest_four_months=`0`, date_coverage=`0.0%`, latest_four_date_coverage=`0.0%`, blockers=date_coverage_below_90, earnings_event_calendar_source_missing, latest_four_date_coverage_below_90, latest_four_months_below_4, missing_or_unsafe_known_at, missing_required_fields, source_missing, train_months_below_20
 - `option_quote_snapshots_term_structure_skew_quote_proxy` (term_structure_or_skew, derived_point_in_time_proxy): ready=`False`, train_months=`20`, latest_four_months=`4`, date_coverage=`95.0%`, latest_four_date_coverage=`96.47%`, blockers=already_parked_quote_surface_only
-- `dispersion_concentration_proxy_artifact` (dispersion_or_concentration_proxy, derived_point_in_time_proxy): ready=`False`, train_months=`0`, latest_four_months=`0`, date_coverage=`0.0%`, latest_four_date_coverage=`0.0%`, blockers=date_coverage_below_90, insufficient_date_coverage, insufficient_month_coverage, latest_four_date_coverage_below_90, latest_four_months_below_4, missing_or_unsafe_known_at, missing_point_in_time_dispersion_proxy_source, missing_required_fields, missing_required_return_fields, train_months_below_20
+- `dispersion_concentration_proxy_artifact` (dispersion_or_concentration_proxy, derived_point_in_time_proxy): ready=`True`, train_months=`20`, latest_four_months=`4`, date_coverage=`100.0%`, latest_four_date_coverage=`100.0%`, blockers=none
 - `candidate_generation_diagnostics_from_oracle_packet` (candidate_generation_diagnostics, diagnostic_only): ready=`False`, train_months=`0`, latest_four_months=`0`, date_coverage=`0.0%`, latest_four_date_coverage=`0.0%`, blockers=date_coverage_below_90, latest_four_date_coverage_below_90, latest_four_months_below_4, missing_daily_candidate_generation_diagnostics, missing_or_unsafe_known_at, missing_required_fields, train_months_below_20
 - `fresh_forward_collection_readiness_from_existing_contracts` (fresh_forward_collection_readiness, approval_required_import): ready=`False`, train_months=`0`, latest_four_months=`0`, date_coverage=`0.0%`, latest_four_date_coverage=`0.0%`, blockers=approval_required, date_coverage_below_90, forward_cohort_append_forbidden_in_this_slice, latest_four_date_coverage_below_90, latest_four_months_below_4, train_months_below_20, valid_market_window_required
 
-## Next Gates
+## Next Research Branch
 
-- `fresh_forward_cohort_append_during_valid_market_window`
-- `scoped_source_repair_or_replay`
-- `quote_import_or_new_data_surface`
-- `protected_holdout_decision`
-- `promotion_review`
+```json
+{
+  "bounded_no_write_command": "npm run options:research:existing-input-surface-atlas -- --start-date 2024-06-01 --end-date 2026-05-31 --as-of-date 2026-06-04 --no-write --json",
+  "cleared_blockers": [],
+  "coverage_metrics": {
+    "date_coverage_pct": 100.0,
+    "latest_four_date_coverage_pct": 100.0,
+    "latest_four_months_covered": 4,
+    "train_months_covered": 20,
+    "usable_row_count": 494
+  },
+  "input_family": "dispersion_or_concentration_proxy",
+  "remaining_blockers": [],
+  "source_path": "data/profitability-lab/regular-options-point-in-time-dispersion-concentration-proxy/latest.json",
+  "surface_id": "dispersion_concentration_proxy_artifact"
+}
+```

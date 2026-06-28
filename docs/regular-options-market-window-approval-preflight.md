@@ -1,8 +1,8 @@
 # Regular Options Market-Window Approval Preflight
 
-Generated: `2026-06-27T03:52:52Z`.
+Generated: `2026-06-28T21:30:05Z`.
 
-Status: `blocked_market_closed`.
+Status: `blocked_market_window_unknown`.
 
 ## Safety Boundary
 
@@ -14,7 +14,7 @@ Status: `blocked_market_closed`.
 
 ## Gate State
 
-- Market-window status: `market_closed`.
+- Market-window status: `unknown`.
 - Operator approval granted: `False`.
 - Candidate JSONL supplied: `False`.
 - Candidate rows valid for future approval review: `False`.

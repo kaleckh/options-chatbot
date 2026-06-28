@@ -24,6 +24,13 @@ STRUCTURE = "defined_risk_same_expiration_debit_verticals_only"
 DEFAULT_QUOTES_DB = ROOT / "data" / "options-validation" / "options_history.db"
 DEFAULT_BASE_LEDGER = ROOT / "data" / "profitability-lab" / "regular-options-base-clean-stack-identity-ledger" / "latest.json"
 DEFAULT_HOLDOUT_CONTRACT = ROOT / "data" / "contracts" / "forward-holdout-contract.json"
+DEFAULT_UNDERLYING_PRICE_SOURCE_ROWS = (
+    ROOT
+    / "data"
+    / "profitability-lab"
+    / "regular-options-alpaca-underlying-minute-price-surface"
+    / "source_rows.jsonl"
+)
 DEFAULT_OUTPUT_DIR = ROOT / "data" / "profitability-lab" / "regular-options-quote-surface-opening-range-reversal-replay"
 DEFAULT_DOCS_REPORT = ROOT / "docs" / "regular-options-quote-surface-opening-range-reversal-replay.md"
 
@@ -162,6 +169,37 @@ def _load_json(path: Path, *, required: bool) -> tuple[dict[str, Any], dict[str,
     return payload, meta
 
 
+def _load_underlying_price_source_rows(path: Path) -> tuple[dict[tuple[str, str, int], dict[str, Any]], dict[str, Any]]:
+    meta = {"path": _rel(path), "required": False, "exists": path.exists(), "status": "missing", "row_count": 0, "error": None}
+    if not path.exists():
+        return {}, meta
+    price_rows: dict[tuple[str, str, int], dict[str, Any]] = {}
+    try:
+        lines = path.read_text(encoding="utf8").splitlines()
+        for index, line in enumerate(lines, start=1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if not isinstance(row, dict):
+                raise ValueError(f"line {index}: expected object")
+            if row.get("source_family") != "alpaca_sip_underlying_minute_price_v1":
+                raise ValueError(f"line {index}: unsupported source_family")
+            symbol = str(row.get("underlying") or "").upper()
+            quote_date = str(row.get("price_date_et") or "")
+            minute = int(row.get("price_minute_et"))
+            close = _safe_float(row.get("close"))
+            if not symbol or not quote_date or close is None or close <= 0:
+                raise ValueError(f"line {index}: invalid source row")
+            price_rows[(symbol, quote_date, minute)] = row
+    except Exception as exc:
+        meta["status"] = "malformed"
+        meta["error"] = f"{exc.__class__.__name__}: {exc}"
+        return {}, meta
+    meta["status"] = "loaded"
+    meta["row_count"] = len(price_rows)
+    return price_rows, meta
+
+
 def _base_identity_hashes(base_ledger: dict[str, Any]) -> set[str]:
     hashes: set[str] = set()
     for value in _as_list(base_ledger.get("identity_hashes")):
@@ -223,6 +261,7 @@ def _snapshot_underlying(
     quote_date: str,
     start_minute: int,
     end_minute: int,
+    underlying_price_rows: dict[tuple[str, str, int], dict[str, Any]] | None = None,
     choose_latest: bool = False,
 ) -> dict[str, Any] | None:
     order = "DESC" if choose_latest else "ASC"
@@ -234,13 +273,39 @@ def _snapshot_underlying(
           AND underlying = ?
           AND quote_date_et = ?
           AND quote_minute_et BETWEEN ? AND ?
-          AND underlying_price IS NOT NULL
         ORDER BY quote_minute_et {order}, as_of_utc {order}
         LIMIT 1
         """,
         (symbol, quote_date, start_minute, end_minute),
     ).fetchone()
-    return dict(row) if row else None
+    prices = underlying_price_rows or {}
+    if not row:
+        candidate_minutes = sorted(
+            minute
+            for source_symbol, source_date, minute in prices
+            if source_symbol == str(symbol).upper() and source_date == str(quote_date) and start_minute <= minute <= end_minute
+        )
+        if choose_latest:
+            candidate_minutes = list(reversed(candidate_minutes))
+        if not candidate_minutes:
+            return None
+        source_row = prices[(str(symbol).upper(), str(quote_date), candidate_minutes[0])]
+        return {
+            "quote_minute_et": int(source_row["price_minute_et"]),
+            "as_of_utc": source_row.get("price_timestamp_utc"),
+            "underlying_price": _safe_float(source_row.get("close")),
+            "underlying_price_source": source_row.get("source_family"),
+            "underlying_price_source_ref": source_row.get("source_ref"),
+        }
+    payload = dict(row)
+    if payload.get("underlying_price") is not None:
+        return payload
+    source_row = prices.get((str(symbol).upper(), str(quote_date), int(payload["quote_minute_et"])))
+    if source_row is not None:
+        payload["underlying_price"] = _safe_float(source_row.get("close"))
+        payload["underlying_price_source"] = source_row.get("source_family")
+        payload["underlying_price_source_ref"] = source_row.get("source_ref")
+    return payload
 
 
 def _has_snapshot_rows(conn: sqlite3.Connection, *, symbol: str, quote_date: str, start_minute: int, end_minute: int) -> bool:
@@ -642,6 +707,7 @@ def build_report(
     quotes_db_path: Path = DEFAULT_QUOTES_DB,
     base_ledger_path: Path = DEFAULT_BASE_LEDGER,
     holdout_contract_path: Path = DEFAULT_HOLDOUT_CONTRACT,
+    underlying_price_source_rows_path: Path = DEFAULT_UNDERLYING_PRICE_SOURCE_ROWS,
     start_date: str = "2024-06-01",
     end_date: str = "2026-05-31",
     as_of_date: str = "2026-06-04",
@@ -660,6 +726,7 @@ def build_report(
 
     base_ledger, base_meta = _load_json(base_ledger_path, required=True)
     holdout, holdout_meta = _load_json(holdout_contract_path, required=True)
+    underlying_price_rows, underlying_price_meta = _load_underlying_price_source_rows(underlying_price_source_rows_path)
     base_hashes = _base_identity_hashes(base_ledger)
     holdout_start = _parse_date(_protected_holdout_start(holdout))
     requested_months = []
@@ -710,6 +777,7 @@ def build_report(
             quote_date=quote_date,
             start_minute=OPENING_START_MINUTE,
             end_minute=OPENING_END_MINUTE,
+            underlying_price_rows=underlying_price_rows,
         )
         end_snap = _snapshot_underlying(
             conn,
@@ -717,6 +785,7 @@ def build_report(
             quote_date=quote_date,
             start_minute=OPENING_END_MINUTE,
             end_minute=OPENING_END_MINUTE,
+            underlying_price_rows=underlying_price_rows,
         )
         if start_snap is None or end_snap is None:
             reasons = []
@@ -890,6 +959,7 @@ def build_report(
             "quotes_db": {"path": _rel(quotes_db_path), "exists": quotes_db_path.exists(), "status": "read_only_opened"},
             "base_clean_stack_identity_ledger": base_meta,
             "forward_holdout_contract": holdout_meta,
+            "underlying_price_source_rows": underlying_price_meta,
         },
         "proof_formula": {
             "entry_debit": "long_leg_ask - short_leg_bid",
@@ -1047,6 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--quotes-db", type=Path, default=DEFAULT_QUOTES_DB)
     parser.add_argument("--base-ledger", type=Path, default=DEFAULT_BASE_LEDGER)
     parser.add_argument("--holdout-contract", type=Path, default=DEFAULT_HOLDOUT_CONTRACT)
+    parser.add_argument("--underlying-price-source-rows", type=Path, default=DEFAULT_UNDERLYING_PRICE_SOURCE_ROWS)
     parser.add_argument("--start-date", default="2024-06-01")
     parser.add_argument("--end-date", default="2026-05-31")
     parser.add_argument("--as-of-date", default="2026-06-04")
@@ -1061,6 +1132,7 @@ def main(argv: list[str] | None = None) -> int:
         quotes_db_path=args.quotes_db,
         base_ledger_path=args.base_ledger,
         holdout_contract_path=args.holdout_contract,
+        underlying_price_source_rows_path=args.underlying_price_source_rows,
         start_date=args.start_date,
         end_date=args.end_date,
         as_of_date=args.as_of_date,

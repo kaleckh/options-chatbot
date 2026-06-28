@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from scripts import import_regular_options_direct_vix_source as vix_import
+from scripts import import_regular_options_dispersion_concentration_proxy_source as dispersion_import
+from scripts import import_regular_options_alpaca_underlying_minute_price_surface as minute_import
 from scripts import import_regular_options_flow_extreme_volume_oi as flow_import
 from scripts import import_regular_options_macro_event_calendar as macro_import
 from scripts import import_regular_options_underlying_daily_history as underlying_import
@@ -65,7 +67,187 @@ def _underlying_daily_csv(symbols: list[str], start: date, end: date, *, vendor:
     return "\n".join(lines) + "\n"
 
 
+class _FakeMinuteClient:
+    def stock_bars(self, symbol: str, *, start: str, end: str, interval: str):
+        import pandas as pd
+
+        idx = pd.to_datetime(
+            [
+                "2026-01-05T14:35:00Z",
+                "2026-01-05T15:35:00Z",
+                "2026-01-05T15:45:00Z",
+                "2026-01-05T16:00:00Z",
+            ],
+            utc=True,
+        )
+        return pd.DataFrame(
+            {
+                "Open": [100.0, 101.0, 102.0, 103.0],
+                "High": [100.5, 101.5, 102.5, 103.5],
+                "Low": [99.5, 100.5, 101.5, 102.5],
+                "Close": [100.25, 101.25, 102.25, 103.25],
+                "Volume": [1000, 1100, 1200, 1300],
+            },
+            index=idx,
+        )
+
+
 class RegularOptionsSourceImportTests(unittest.TestCase):
+    def test_alpaca_underlying_minute_import_materializes_source_rows(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-alpaca-minute") as tmp_dir:
+            tmp = Path(tmp_dir)
+            source_rows = tmp / "source_rows.jsonl"
+            report = minute_import.build_report(
+                target_start_date="2026-01-05",
+                target_end_date="2026-01-05",
+                universe="SPY,QQQ,IWM,DIA",
+                minute_start=9 * 60 + 35,
+                minute_end=10 * 60 + 45,
+                approval_token=minute_import.APPROVAL_TOKEN,
+                no_replay=True,
+                source_rows_path=source_rows,
+                client=_FakeMinuteClient(),
+                generated_at_utc="2026-06-27T00:00:00Z",
+            )
+            rows = [json.loads(line) for line in source_rows.read_text(encoding="utf8").splitlines()]
+
+        self.assertEqual(report["status"], "alpaca_underlying_minute_price_surface_source_import_materialized")
+        self.assertTrue(report["source_rows_written"])
+        self.assertEqual(report["source_row_count"], 12)
+        self.assertEqual({row["source_family"] for row in rows}, {minute_import.SOURCE_FAMILY})
+        self.assertFalse(report["options_history_db_mutated"])
+        self.assertFalse(report["accepted_profitability"])
+
+    def test_alpaca_underlying_minute_import_requires_token_before_provider_query(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-alpaca-minute-token") as tmp_dir:
+            tmp = Path(tmp_dir)
+            source_rows = tmp / "source_rows.jsonl"
+            report = minute_import.build_report(
+                target_start_date="2026-01-05",
+                target_end_date="2026-01-05",
+                universe="SPY,QQQ,IWM,DIA",
+                approval_token="",
+                no_replay=True,
+                source_rows_path=source_rows,
+                client=_FakeMinuteClient(),
+            )
+
+        self.assertEqual(report["status"], "blocked_alpaca_underlying_minute_price_surface_source_import")
+        self.assertIn("missing_or_invalid_approval_token", report["blockers"])
+        self.assertFalse(report["source_rows_written"])
+        self.assertFalse(source_rows.exists())
+
+    def test_dispersion_proxy_import_materializes_from_underlying_daily_source_rows(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-dispersion") as tmp_dir:
+            tmp = Path(tmp_dir)
+            dates = ["2026-01-05", "2026-01-06"]
+            symbols = ["SPY", "QQQ", "IWM", "AAPL", "GOOGL", "UNH", "LLY", "JNJ", "XOM", "CVX", "COP", "NEM", "DIA"]
+            underlying_rows = []
+            for day_index, day in enumerate(dates):
+                prior_day = "2026-01-02" if day == "2026-01-05" else "2026-01-05"
+                for symbol_index, symbol in enumerate(symbols):
+                    underlying_rows.append(
+                        {
+                            "input_date_et": day,
+                            "symbol": symbol,
+                            "prior_20_trading_day_return_pct": round(symbol_index * 0.25 + day_index * 0.1, 6),
+                            "source_ref": f"fixture://alpaca/{symbol}/{prior_day}",
+                            "source_timestamp_utc": f"{prior_day}T21:15:00Z",
+                            "known_at_utc": f"{prior_day}T21:15:00Z",
+                            "point_in_time_valid": True,
+                            "source_provenance_status": "trusted_local_or_contract_declared",
+                            "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+                            "source_row_hash": f"hash-{symbol}-{day}",
+                        }
+                    )
+            underlying_path = tmp / "underlying.jsonl"
+            _write_text(underlying_path, "\n".join(json.dumps(row, sort_keys=True) for row in underlying_rows) + "\n")
+            source_rows = tmp / "dispersion-source.jsonl"
+            report = dispersion_import.build_report(
+                underlying_daily_source_rows=underlying_path,
+                source_rows_path=source_rows,
+                feature_store_path=_feature_store(tmp / "feature-store.json", dates, symbols),
+                target_start_date="2026-01-01",
+                target_end_date="2026-01-31",
+                as_of_date="2026-01-31",
+                approval_token=dispersion_import.APPROVAL_TOKEN,
+                no_replay=True,
+                generated_at_utc="2026-06-27T00:00:00Z",
+            )
+            rows = [json.loads(line) for line in source_rows.read_text(encoding="utf8").splitlines()]
+
+        self.assertEqual(report["status"], "dispersion_concentration_proxy_source_import_materialized")
+        self.assertTrue(report["source_rows_written"])
+        self.assertEqual(report["source_row_count"], 26)
+        self.assertEqual(report["downstream_dispersion_concentration_proxy_status"], "point_in_time_dispersion_concentration_proxy_available")
+        self.assertEqual({row["source_family"] for row in rows}, {dispersion_import.SOURCE_FAMILY})
+        self.assertFalse(report["accepted_profitability"])
+        self.assertFalse(report["historical_replay_performed"])
+        self.assertFalse(report["evidence_stores_mutated"])
+
+    def test_dispersion_proxy_import_requires_token_before_writing_rows(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-dispersion-token") as tmp_dir:
+            tmp = Path(tmp_dir)
+            source_rows = tmp / "dispersion-source.jsonl"
+            report = dispersion_import.build_report(
+                underlying_daily_source_rows=tmp / "missing.jsonl",
+                source_rows_path=source_rows,
+                feature_store_path=_feature_store(tmp / "feature-store.json", ["2026-01-05"], ["SPY"]),
+                universe="SPY",
+                approval_token="",
+                no_replay=True,
+            )
+
+        self.assertEqual(report["status"], "blocked_dispersion_concentration_proxy_source_import")
+        self.assertIn("missing_or_invalid_approval_token", report["blockers"])
+        self.assertFalse(report["source_rows_written"])
+        self.assertFalse(source_rows.exists())
+
+    def test_dispersion_proxy_import_does_not_promote_rows_when_downstream_validation_fails(self) -> None:
+        with WorkspaceTempDir(prefix="source-import-dispersion-downstream-fail") as tmp_dir:
+            tmp = Path(tmp_dir)
+            underlying_path = tmp / "underlying.jsonl"
+            source_rows = tmp / "dispersion-source.jsonl"
+            _write_text(
+                underlying_path,
+                json.dumps(
+                    {
+                        "input_date_et": "2026-01-05",
+                        "symbol": "SPY",
+                        "prior_20_trading_day_return_pct": 1.0,
+                        "source_ref": "fixture://alpaca/SPY/2026-01-02",
+                        "source_timestamp_utc": "2026-01-02T21:15:00Z",
+                        "known_at_utc": "2026-01-02T21:15:00Z",
+                        "point_in_time_valid": True,
+                        "source_provenance_status": "trusted_local_or_contract_declared",
+                        "source_family": "point_in_time_underlying_daily_ohlcv_adjusted_v1",
+                        "source_row_hash": "hash-SPY-2026-01-05",
+                    },
+                    sort_keys=True,
+                )
+                + "\n",
+            )
+            report = dispersion_import.build_report(
+                underlying_daily_source_rows=underlying_path,
+                source_rows_path=source_rows,
+                feature_store_path=_feature_store(tmp / "feature-store.json", ["2026-01-05"], ["SPY"]),
+                target_start_date="2026-01-01",
+                target_end_date="2026-01-31",
+                as_of_date="2026-01-31",
+                universe="SPY",
+                index_carrier="SPY",
+                approval_token=dispersion_import.APPROVAL_TOKEN,
+                no_replay=True,
+                generated_at_utc="2026-06-27T00:00:00Z",
+            )
+
+        self.assertEqual(report["status"], "blocked_dispersion_concentration_proxy_source_import")
+        self.assertIn("downstream_dispersion_concentration_proxy_validation_failed", report["blockers"])
+        self.assertFalse(report["source_rows_written"])
+        self.assertEqual(report["source_row_count"], 1)
+        self.assertFalse(source_rows.exists())
+        self.assertFalse(dispersion_import._validation_source_rows_path(source_rows).exists())
+
     def test_direct_vix_import_materializes_rows_and_clears_bucket_validator(self) -> None:
         with WorkspaceTempDir(prefix="source-import-vix") as tmp_dir:
             tmp = Path(tmp_dir)

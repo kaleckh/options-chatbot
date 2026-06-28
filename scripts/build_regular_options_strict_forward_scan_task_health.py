@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 from datetime import UTC, datetime
+from datetime import time as datetime_time
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +14,16 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from scripts.build_regular_options_strict_forward_30_scheduler_health import parse_schtasks_list
+from scripts.build_regular_options_strict_forward_30_scheduler_health import (
+    RUNTIME_STALE_GRACE,
+    _field_value,
+    _generated_at_local_naive,
+    _is_never_run,
+    _parse_result_code,
+    _parse_start_datetime,
+    _parse_task_datetime,
+    parse_schtasks_list,
+)
 
 
 REPORT_ID = "regular_options_strict_forward_scan_task_health"
@@ -45,6 +55,29 @@ EXPECTED_BATCH_STEPS = [
     "scripts\\build_regular_options_strict_forward_30_lifecycle_audit.py --json",
     "scripts\\build_regular_options_strict_forward_30_completion_monitor.py --json",
 ]
+
+RUNTIME_BLOCKING_STATUSES = {
+    "scan_task_runtime_failed",
+    "scan_task_runtime_stale",
+    "scan_task_runtime_unobservable",
+}
+
+PROHIBITED_BATCH_TOKENS = (
+    "--append",
+    "APPROVE_PHASE2_FORWARD_COHORT_APPEND",
+    "OPTIONS_SCAN_AUTO_TRACK=1",
+    "OPTIONS_SCAN_AUTO_TRACK=true",
+    "OPTIONS_SCAN_AUTO_TRACK=True",
+    "OPTIONS_SCAN_AUTO_TRACK=TRUE",
+    "append_volatility_expansion_forward_paper_shadow_rows.py",
+)
+
+TIME_FORMATS = (
+    "%I:%M:%S %p",
+    "%I:%M %p",
+    "%H:%M:%S",
+    "%H:%M",
+)
 
 
 def _utc_now_iso() -> str:
@@ -86,6 +119,7 @@ def _inspect_batch_file(path: Path) -> dict[str, Any]:
         report["missing_steps"] = list(EXPECTED_BATCH_STEPS)
         return report
     text = path.read_text(encoding="utf8", errors="replace")
+    text_casefold = text.casefold()
     missing = [step for step in EXPECTED_BATCH_STEPS if step not in text]
     order_blockers: list[str] = []
     last_index = -1
@@ -96,7 +130,7 @@ def _inspect_batch_file(path: Path) -> dict[str, Any]:
         if index < last_index:
             order_blockers.append(f"step_out_of_order:{step}")
         last_index = index
-    prohibited = [token for token in ("--append", "OPTIONS_SCAN_AUTO_TRACK=1") if token in text]
+    prohibited = [token for token in PROHIBITED_BATCH_TOKENS if token.casefold() in text_casefold]
     report.update(
         {
             "status": "loaded",
@@ -106,6 +140,142 @@ def _inspect_batch_file(path: Path) -> dict[str, Any]:
         }
     )
     return report
+
+
+def _parse_expected_time(value: str) -> datetime_time | None:
+    text = _norm(value)
+    for fmt in TIME_FORMATS:
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    return None
+
+
+def _is_weekday_scan_date(value: datetime) -> bool:
+    return value.weekday() < 5
+
+
+def _expected_datetime_for_date(value: datetime, expected_start_time: str) -> datetime | None:
+    parsed_time = _parse_expected_time(expected_start_time)
+    if parsed_time is None:
+        return None
+    return datetime.combine(value.date(), parsed_time)
+
+
+def build_scan_task_runtime_telemetry(
+    fields: dict[str, str],
+    *,
+    returncode: int,
+    generated_at_utc: str,
+    expected_start_time: str,
+) -> dict[str, Any]:
+    raw_last_run = _field_value(fields, ("Last Run Time", "LastRunTime"))
+    raw_last_result = _field_value(fields, ("Last Result", "Last Task Result", "Last Run Result"))
+    raw_next_run = _field_value(fields, ("Next Run Time", "NextRunTime"))
+    raw_missed_runs = _field_value(fields, ("Number of Missed Runs", "Missed Runs", "Missed Run Count"))
+
+    last_run = _parse_task_datetime(raw_last_run)
+    next_run = _parse_task_datetime(raw_next_run)
+    start_run = _parse_start_datetime(fields)
+    last_result = _parse_result_code(raw_last_result)
+    missed_runs = _parse_result_code(raw_missed_runs)
+    generated_local = _generated_at_local_naive(generated_at_utc)
+    never_run = _is_never_run(raw_last_run, last_run)
+    expected_today = _expected_datetime_for_date(generated_local, expected_start_time)
+    expected_start_parseable = expected_today is not None
+    after_expected_today = bool(
+        expected_today is not None and generated_local >= expected_today + RUNTIME_STALE_GRACE
+    )
+    blockers: list[str] = []
+
+    if returncode != 0:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_schtasks_query_failed")
+    elif not any((raw_last_run, raw_last_result, raw_next_run, raw_missed_runs)):
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_fields_missing")
+    elif not expected_start_parseable:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_expected_start_time_unparseable")
+    elif not raw_last_run:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_last_run_time_missing")
+    elif not raw_last_result:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_last_result_missing")
+    elif not raw_next_run:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_next_run_time_missing")
+    elif last_run is None and not never_run:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_last_run_time_unparseable")
+    elif next_run is None:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_next_run_time_unparseable")
+    elif last_result is None:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_last_result_unparseable")
+    elif raw_missed_runs and missed_runs is None:
+        status = "scan_task_runtime_unobservable"
+        blockers.append("scan_task_runtime_missed_runs_unparseable")
+    elif missed_runs is not None and missed_runs > 0:
+        status = "scan_task_runtime_stale"
+        blockers.append("scan_task_runtime_missed_runs_nonzero")
+    elif never_run:
+        if start_run is None:
+            status = "scan_task_runtime_unobservable"
+            blockers.append("scan_task_runtime_never_run_start_metadata_missing_or_unparseable")
+        elif generated_local < start_run + RUNTIME_STALE_GRACE:
+            status = "scan_task_runtime_pending_first_expected_run"
+        else:
+            status = "scan_task_runtime_stale"
+            blockers.append("scan_task_runtime_last_run_never_after_expected_window")
+    elif last_result is not None and last_result != 0:
+        status = "scan_task_runtime_failed"
+        blockers.append("scan_task_runtime_last_result_nonzero")
+    elif _is_weekday_scan_date(generated_local) and after_expected_today and expected_today is not None:
+        if last_run is None or last_run.date() != expected_today.date():
+            status = "scan_task_runtime_stale"
+            blockers.append("scan_task_runtime_last_run_not_on_expected_scan_date")
+        elif last_run < expected_today - RUNTIME_STALE_GRACE:
+            status = "scan_task_runtime_stale"
+            blockers.append("scan_task_runtime_last_run_before_expected_start_window")
+        else:
+            status = "scan_task_runtime_observed_ok"
+    else:
+        status = "scan_task_runtime_observed_ok"
+
+    return {
+        "status": status,
+        "blockers": blockers,
+        "runtime_blocking": status in RUNTIME_BLOCKING_STATUSES,
+        "generated_at_local": generated_local.isoformat(timespec="seconds"),
+        "fields": {
+            "last_run_time": raw_last_run,
+            "last_result": raw_last_result,
+            "next_run_time": raw_next_run,
+            "number_of_missed_runs": raw_missed_runs,
+            "start_date": _field_value(fields, ("Start Date", "StartDate")),
+            "start_time": _field_value(fields, ("Start Time", "StartTime")),
+            "configured_expected_start_time": expected_start_time,
+        },
+        "parsed": {
+            "last_run_time_local": last_run.isoformat(timespec="seconds") if last_run else None,
+            "last_result_code": last_result,
+            "next_run_time_local": next_run.isoformat(timespec="seconds") if next_run else None,
+            "start_run_time_local": start_run.isoformat(timespec="seconds") if start_run else None,
+            "number_of_missed_runs": missed_runs,
+            "last_run_time_is_never_run_sentinel": never_run,
+            "generated_local_is_weekday_scan_date": _is_weekday_scan_date(generated_local),
+            "expected_scan_start_today_local": expected_today.isoformat(timespec="seconds") if expected_today else None,
+            "generated_after_expected_start_grace": after_expected_today,
+        },
+        "notes": [
+            "Scan-task runtime telemetry is evaluated as a daily weekday feeder, not a repeated 30-minute collector.",
+            "Runtime blockers do not authorize append, live validation, auto-track, broker orders, quote import, proof-bar changes, or evidence mutation.",
+        ],
+    }
 
 
 def _task_blockers(task_name: str, fields: dict[str, str], *, returncode: int, expected_batch: Path, expected_start: str) -> list[str]:
@@ -142,16 +312,35 @@ def _batch_blockers(batch: dict[str, Any]) -> list[str]:
     return blockers
 
 
+def _aggregate_runtime_status(task_reports: dict[str, Any]) -> str:
+    statuses = [
+        task_report.get("runtime_status")
+        for task_report in task_reports.values()
+        if isinstance(task_report, dict) and task_report.get("runtime_status")
+    ]
+    if any(
+        isinstance(task_report, dict) and bool(task_report.get("runtime_blocking"))
+        for task_report in task_reports.values()
+    ):
+        return "scan_task_runtime_blocked"
+    if any(status == "scan_task_runtime_pending_first_expected_run" for status in statuses):
+        return "scan_task_runtime_pending_first_expected_run"
+    if statuses and all(status == "scan_task_runtime_observed_ok" for status in statuses):
+        return "scan_task_runtime_observed_ok"
+    return "scan_task_runtime_unobservable"
+
+
 def build_report(*, generated_at_utc: str | None = None) -> dict[str, Any]:
     generated_at = generated_at_utc or _utc_now_iso()
     task_reports: dict[str, Any] = {}
-    all_blockers: list[str] = []
+    all_config_blockers: list[str] = []
+    all_runtime_blockers: list[str] = []
     for task_name, expected in EXPECTED_TASKS.items():
         returncode, stdout, stderr = query_task(task_name)
         fields = parse_schtasks_list(stdout)
         batch_path = expected["batch_file"]
         batch = _inspect_batch_file(batch_path)
-        blockers = [
+        config_blockers = [
             *_task_blockers(
                 task_name,
                 fields,
@@ -161,22 +350,55 @@ def build_report(*, generated_at_utc: str | None = None) -> dict[str, Any]:
             ),
             *_batch_blockers(batch),
         ]
+        runtime = build_scan_task_runtime_telemetry(
+            fields,
+            returncode=returncode,
+            generated_at_utc=generated_at,
+            expected_start_time=str(expected["start_time"]),
+        )
+        runtime_blockers = runtime.get("blockers") if isinstance(runtime.get("blockers"), list) else []
+        runtime_blocking = bool(runtime.get("runtime_blocking"))
+        blockers = list(config_blockers)
+        if runtime_blocking:
+            blockers.append(f"scan_task_runtime_blocking:{runtime.get('status')}")
+            blockers.extend(str(blocker) for blocker in runtime_blockers)
         task_reports[task_name] = {
             "status": "ready" if not blockers else "blocked",
             "blockers": blockers,
+            "config_status": "ready" if not config_blockers else "blocked",
+            "config_blockers": config_blockers,
+            "runtime_status": runtime.get("status"),
+            "runtime_blockers": runtime_blockers,
+            "runtime_blocking": runtime_blocking,
+            "runtime_telemetry": runtime,
             "query_returncode": returncode,
             "query_stderr": stderr.strip().splitlines()[-5:],
             "task": fields,
             "batch_file": batch,
         }
-        all_blockers.extend(f"{task_name}:{blocker}" for blocker in blockers)
-    status = "scan_tasks_ready_for_next_market_window" if not all_blockers else "scan_task_config_blocked"
+        all_config_blockers.extend(f"{task_name}:{blocker}" for blocker in config_blockers)
+        if runtime_blocking:
+            all_runtime_blockers.append(f"{task_name}:scan_task_runtime_blocking:{runtime.get('status')}")
+            all_runtime_blockers.extend(f"{task_name}:{blocker}" for blocker in runtime_blockers)
+    config_status = "scan_tasks_config_ready" if not all_config_blockers else "scan_task_config_blocked"
+    runtime_status = _aggregate_runtime_status(task_reports)
+    blockers = [*all_config_blockers, *all_runtime_blockers]
+    if all_config_blockers:
+        status = "scan_task_config_blocked"
+    elif all_runtime_blockers:
+        status = "scan_task_runtime_blocked"
+    else:
+        status = "scan_tasks_ready_for_next_market_window"
     return {
         "report_id": REPORT_ID,
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at_utc": generated_at,
         "status": status,
-        "blockers": all_blockers,
+        "blockers": blockers,
+        "config_status": config_status,
+        "config_blockers": all_config_blockers,
+        "runtime_status": runtime_status,
+        "runtime_blockers": all_runtime_blockers,
         "task_reports": task_reports,
         "expected": {
             "tasks": {
@@ -215,6 +437,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         "# Regular Options Strict Forward Scan Task Health",
         "",
         f"Status: `{report.get('status')}`.",
+        f"Config readiness status: `{report.get('config_status')}`.",
+        f"Scan-task runtime telemetry status: `{report.get('runtime_status')}`.",
         "",
         "This read-only report verifies the two scheduled scan tasks that feed strict-forward collection. It does not run scans, append rows, enable live validation, enable auto-track, submit broker orders, import quotes, lower proof bars, or count historical rows as forward proof.",
         "",
@@ -225,16 +449,23 @@ def render_markdown(report: dict[str, Any]) -> str:
         if not isinstance(task_report, dict):
             continue
         task = task_report.get("task") if isinstance(task_report.get("task"), dict) else {}
+        runtime = task_report.get("runtime_telemetry") if isinstance(task_report.get("runtime_telemetry"), dict) else {}
+        runtime_fields = runtime.get("fields") if isinstance(runtime.get("fields"), dict) else {}
         lines.extend(
             [
                 f"### `{task_name}`",
                 "",
                 f"- Status: `{task_report.get('status')}`.",
+                f"- Config status: `{task_report.get('config_status')}`.",
+                f"- Runtime telemetry status: `{task_report.get('runtime_status')}`.",
                 f"- Runtime status: `{task.get('Status')}`.",
                 f"- Scheduled state: `{task.get('Scheduled Task State')}`.",
                 f"- Next run time: `{task.get('Next Run Time')}`.",
-                f"- Last result: `{task.get('Last Result')}`.",
+                f"- Last run time: `{runtime_fields.get('last_run_time')}`.",
+                f"- Last result: `{runtime_fields.get('last_result')}`.",
+                f"- Number of missed runs: `{runtime_fields.get('number_of_missed_runs')}`.",
                 f"- Task to run: `{task.get('Task To Run')}`.",
+                f"- Start date: `{runtime_fields.get('start_date')}`.",
                 f"- Start time: `{task.get('Start Time')}`.",
                 f"- Batch status: `{_batch_status(task_report)}`.",
                 "",
@@ -248,6 +479,11 @@ def render_markdown(report: dict[str, Any]) -> str:
     lines.extend(["## Blockers", ""])
     lines.extend(f"- `{item}`" for item in blockers) if blockers else lines.append("- None.")
     lines.append("")
+    runtime_blockers = report.get("runtime_blockers") if isinstance(report.get("runtime_blockers"), list) else []
+    if runtime_blockers:
+        lines.extend(["## Runtime Blockers", ""])
+        lines.extend(f"- `{item}`" for item in runtime_blockers)
+        lines.append("")
     return "\n".join(lines)
 
 

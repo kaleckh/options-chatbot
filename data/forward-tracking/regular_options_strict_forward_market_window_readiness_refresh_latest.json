@@ -2,10 +2,10 @@
   "accepted_profitability": false,
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-market-window-readiness-refresh.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260627T055059Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260628T213008Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260627T055059Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_market_window_readiness_refresh_20260628T213008Z.md"
   },
   "auto_track_allowed": false,
   "blockers": [
@@ -46,7 +46,7 @@
   },
   "cohort_append_performed": false,
   "evidence_stores_mutated": false,
-  "generated_at_utc": "2026-06-27T05:50:59Z",
+  "generated_at_utc": "2026-06-28T21:30:08Z",
   "historical_executable_economics": {
     "harness_decision": "profitable_but_preflight_blocked",
     "historical_side_aware_pf": 3.7414,
@@ -97,12 +97,12 @@
     "candidate_jsonl_exists": false,
     "candidate_rows": 0,
     "candidate_validator_read_only": true,
-    "market_window_status": "market_closed",
+    "market_window_status": "unknown",
     "market_window_valid": false,
     "next_operator_action": "wait_for_valid_market_window_then_run_preflight_again",
     "operator_approval_granted": false,
     "operator_approval_required": true,
-    "preflight_status": "blocked_market_closed",
+    "preflight_status": "blocked_market_window_unknown",
     "rejected_candidate_rows": 0,
     "valid_candidate_rows": 0
   },
@@ -135,7 +135,7 @@
     "fill_attempt_evidence_capture_plan": "fill_attempt_evidence_capture_plan_ready_blocked_for_fresh_selection",
     "forward_candidate_throughput_audit": "blocked_no_same_day_phase2_natural_selections",
     "gateboard": "safe_blocked_no_live_release",
-    "market_window_approval_preflight": "blocked_market_closed",
+    "market_window_approval_preflight": "blocked_market_window_unknown",
     "monthly_profitability_audit": "monthly_profitability_readback",
     "paper_shadow_evidence_plan": "paper_shadow_evidence_collecting",
     "strict_forward_operator_queue": "strict_forward_queue_ready_approval_and_market_window_blocked",
@@ -193,7 +193,7 @@
   "sizing_changed": false,
   "source_artifacts": {
     "bullish_pullback_layer4_forward_capture_protocol": {
-      "age_hours": 15.4,
+      "age_hours": 55.05,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:06Z",
@@ -204,7 +204,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_executable_economics": {
-      "age_hours": 15.4,
+      "age_hours": 55.05,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:05Z",
@@ -215,7 +215,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_execution_safety_audit": {
-      "age_hours": 15.41,
+      "age_hours": 55.07,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:26:07Z",
@@ -226,7 +226,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_shadow_selection": {
-      "age_hours": 15.41,
+      "age_hours": 55.07,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:26:07Z",
@@ -237,7 +237,7 @@
       "status": "loaded"
     },
     "fill_attempt_evidence_capture_plan": {
-      "age_hours": 2.04,
+      "age_hours": 41.69,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:48:43Z",
@@ -251,7 +251,7 @@
       "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T05:50:59Z",
+      "generated_at_utc": "2026-06-28T21:30:08Z",
       "path": "data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_forward_candidate_throughput_audit",
@@ -259,7 +259,7 @@
       "status": "loaded"
     },
     "gateboard": {
-      "age_hours": 1.97,
+      "age_hours": 41.62,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:53:00Z",
@@ -270,10 +270,10 @@
       "status": "loaded"
     },
     "market_window_approval_preflight": {
-      "age_hours": 1.97,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T03:52:52Z",
+      "generated_at_utc": "2026-06-28T21:30:05Z",
       "path": "data/forward-tracking/regular_options_market_window_approval_preflight_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_market_window_approval_preflight",
@@ -281,7 +281,7 @@
       "status": "loaded"
     },
     "monthly_profitability_audit": {
-      "age_hours": 2.0,
+      "age_hours": 41.65,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:50:51Z",
@@ -292,7 +292,7 @@
       "status": "loaded"
     },
     "paper_shadow_evidence_plan": {
-      "age_hours": 1.97,
+      "age_hours": 41.62,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:52:56Z",
@@ -303,10 +303,10 @@
       "status": "loaded"
     },
     "strict_forward_operator_queue": {
-      "age_hours": 15.38,
+      "age_hours": 26.79,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-26T14:27:55Z",
+      "generated_at_utc": "2026-06-27T18:42:32Z",
       "path": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_strict_forward_operator_queue",
@@ -314,10 +314,10 @@
       "status": "loaded"
     },
     "strict_forward_scan_task_health": {
-      "age_hours": 0.09,
+      "age_hours": 28.32,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T05:45:21Z",
+      "generated_at_utc": "2026-06-27T17:10:59Z",
       "path": "data/forward-tracking/regular_options_strict_forward_scan_task_health_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_strict_forward_scan_task_health",
@@ -325,7 +325,7 @@
       "status": "loaded"
     },
     "suggested_trade_review_plan": {
-      "age_hours": 2.04,
+      "age_hours": 41.69,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:48:43Z",
@@ -336,7 +336,7 @@
       "status": "loaded"
     },
     "trade_qualification": {
-      "age_hours": 2.0,
+      "age_hours": 41.65,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:50:52Z",

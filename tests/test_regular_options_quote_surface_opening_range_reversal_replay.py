@@ -107,6 +107,25 @@ def _add_underlying_day(path: Path, quote_date: str, *, symbol: str = "SPY", sta
     )
 
 
+def _write_underlying_minute_source_rows(path: Path, quote_date: str, *, symbol: str = "SPY", start_price: float, end_price: float) -> None:
+    rows = []
+    for minute, price in ((replay.OPENING_START_MINUTE, start_price), (replay.OPENING_END_MINUTE, end_price)):
+        rows.append(
+            {
+                "source_family": "alpaca_sip_underlying_minute_price_v1",
+                "underlying": symbol,
+                "price_date_et": quote_date,
+                "price_minute_et": minute,
+                "close": price,
+                "source_ref": f"fixture://alpaca/{symbol}/{quote_date}/{minute}",
+                "point_in_time_valid": True,
+                "proof_eligible": False,
+            }
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(json.dumps(row, sort_keys=True) for row in rows) + "\n", encoding="utf8")
+
+
 def _add_vertical(path: Path, quote_date: str, *, symbol: str = "SPY", direction: str = "call", win: bool = True) -> None:
     option_type = "call" if direction == "call" else "put"
     expiry = (date.fromisoformat(quote_date) + timedelta(days=14)).isoformat()
@@ -185,6 +204,7 @@ class QuoteSurfaceOpeningRangeReversalReplayTests(unittest.TestCase):
                 quotes_db_path=db,
                 base_ledger_path=_base(tmp / "base.json"),
                 holdout_contract_path=_holdout(tmp / "holdout.json"),
+                underlying_price_source_rows_path=tmp / "missing_source_rows.jsonl",
                 start_date="2026-02-01",
                 end_date="2026-02-28",
                 as_of_date="2026-06-04",
@@ -196,6 +216,46 @@ class QuoteSurfaceOpeningRangeReversalReplayTests(unittest.TestCase):
         self.assertTrue(report["read_only_db_open"])
         self.assertFalse(report["broker_order_allowed"])
         self.assertFalse(report["accepted_profitability"])
+
+    def test_underlying_price_source_rows_clear_missing_underlying_price_without_db_mutation(self) -> None:
+        with WorkspaceTempDir(prefix="opening-range-source-rows") as tmp_dir:
+            tmp = Path(tmp_dir)
+            db = tmp / "quotes.db"
+            source_rows = tmp / "source_rows.jsonl"
+            _create_db(db)
+            _insert_quote(
+                db,
+                quote_date="2026-02-02",
+                minute=replay.OPENING_START_MINUTE,
+                contract="SPY260220C00100000",
+                underlying_price=None,
+            )
+            _insert_quote(
+                db,
+                quote_date="2026-02-02",
+                minute=replay.OPENING_END_MINUTE,
+                contract="SPY260220C00100000B",
+                underlying_price=None,
+            )
+            _write_underlying_minute_source_rows(source_rows, "2026-02-02", start_price=100.0, end_price=95.0)
+            report = replay.build_report(
+                quotes_db_path=db,
+                base_ledger_path=_base(tmp / "base.json"),
+                holdout_contract_path=_holdout(tmp / "holdout.json"),
+                underlying_price_source_rows_path=source_rows,
+                start_date="2026-02-01",
+                end_date="2026-02-28",
+                as_of_date="2026-06-04",
+            )
+
+            con = sqlite3.connect(db)
+            persisted = con.execute("SELECT COUNT(*) FROM option_quote_snapshots WHERE underlying_price IS NOT NULL").fetchone()[0]
+            con.close()
+
+        self.assertNotIn("blocked_missing_quote_surface_underlying_price", report["blockers"])
+        self.assertEqual(report["source_artifacts"]["underlying_price_source_rows"]["status"], "loaded")
+        self.assertEqual(persisted, 0)
+        self.assertEqual(report["metrics"]["denominator_status_counts"]["blocked_insufficient_prior_20_day_distribution"], 1)
 
     def test_prior_day_distribution_prevents_lookahead_thresholds(self) -> None:
         with WorkspaceTempDir(prefix="opening-range") as tmp_dir:

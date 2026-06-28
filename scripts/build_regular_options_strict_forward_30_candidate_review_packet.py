@@ -25,6 +25,24 @@ DEFAULT_CAPTURE_LATEST = ROOT / "data" / "forward-tracking" / "phase2_regular_op
 DEFAULT_COLLECTOR_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_30_market_window_collector_latest.json"
 DEFAULT_SCHEDULER_HEALTH_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_30_scheduler_health_latest.json"
 DEFAULT_SCAN_TASK_HEALTH_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_strict_forward_scan_task_health_latest.json"
+DEFAULT_THROUGHPUT_LATEST = ROOT / "data" / "forward-tracking" / "regular_options_forward_candidate_throughput_audit_latest.json"
+
+ZERO_CANDIDATE_DIAGNOSTIC_BLOCKED_STATUSES = {
+    "opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons",
+    "zero_candidate_diagnosis_ready_symbol_drop_reasons_recorded",
+}
+
+ZERO_CANDIDATE_DIAGNOSTIC_WAITING_STATUSES = {
+    "waiting_for_next_scan_funnel_evidence",
+    "waiting_for_scheduled_phase2_sessions",
+    "scheduled_phase2_session_source_unavailable",
+}
+
+ZERO_CANDIDATE_THROUGHPUT_STATUSES = {
+    "blocked_no_same_day_phase2_natural_selections",
+    "blocked_forward_cohort_scheduled_scan_session_missing",
+    "blocked_forward_cohort_scheduled_scan_session_source_unavailable",
+}
 
 
 def _utc_now_iso() -> str:
@@ -288,6 +306,115 @@ def _candidate_batch_provenance(candidate_path: Path, validation: dict[str, Any]
     }
 
 
+def _throughput_target_selection_date(collector: dict[str, Any]) -> str:
+    latest_goal_loop = _as_dict(collector.get("latest_goal_loop_report"))
+    return (
+        _norm(collector.get("selection_date"))
+        or _norm(_as_dict(collector.get("market_schedule")).get("default_selection_date"))
+        or _norm(_as_dict(latest_goal_loop.get("market_schedule")).get("default_selection_date"))
+        or _norm(latest_goal_loop.get("selection_date"))
+    )
+
+
+def _zero_candidate_throughput_evidence(throughput: dict[str, Any], collector: dict[str, Any]) -> dict[str, Any]:
+    source_status = _norm(throughput.get("_source_status")) or "unknown"
+    diagnostics = _as_dict(throughput.get("zero_candidate_diagnostics"))
+    diagnostic_status = _norm(diagnostics.get("status"))
+    throughput_status = _norm(throughput.get("status"))
+    throughput_generated_at = _norm(throughput.get("generated_at_utc"))
+    collector_generated_at = _norm(collector.get("generated_at_utc"))
+    throughput_ts = _parse_utc_iso(throughput_generated_at)
+    collector_ts = _parse_utc_iso(collector_generated_at)
+    throughput_target_date = _norm(throughput.get("target_selection_date"))
+    collector_target_date = _throughput_target_selection_date(collector)
+    if source_status != "loaded":
+        return {
+            "status": "throughput_source_not_loaded",
+            "blockers": ["throughput_source_not_loaded"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+        }
+    if collector_generated_at and collector_ts is None:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["collector_generated_at_malformed_for_throughput_review"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+            "throughput_generated_at_utc": throughput_generated_at or None,
+            "collector_generated_at_utc": collector_generated_at,
+        }
+    if not throughput_generated_at or throughput_ts is None:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["throughput_generated_at_missing_or_malformed"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+            "throughput_generated_at_utc": throughput_generated_at or None,
+            "collector_generated_at_utc": collector_generated_at or None,
+        }
+    if collector_ts is not None and throughput_ts < collector_ts:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["throughput_older_than_collector"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+            "throughput_generated_at_utc": throughput_generated_at,
+            "collector_generated_at_utc": collector_generated_at,
+        }
+    if (
+        collector_target_date
+        and not throughput_target_date
+        and (throughput_status in ZERO_CANDIDATE_THROUGHPUT_STATUSES or diagnostic_status in ZERO_CANDIDATE_DIAGNOSTIC_BLOCKED_STATUSES | ZERO_CANDIDATE_DIAGNOSTIC_WAITING_STATUSES)
+    ):
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["throughput_target_selection_date_missing"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+            "collector_target_selection_date": collector_target_date,
+        }
+    if collector_target_date and throughput_target_date and throughput_target_date != collector_target_date:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["throughput_target_selection_date_mismatch"],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status or None,
+            "throughput_target_selection_date": throughput_target_date,
+            "collector_target_selection_date": collector_target_date,
+        }
+    if not diagnostics and throughput_status in ZERO_CANDIDATE_THROUGHPUT_STATUSES:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": ["zero_candidate_diagnostics_missing_from_throughput_audit"],
+            "throughput_status": throughput_status,
+            "zero_candidate_diagnostics_status": None,
+        }
+    if diagnostic_status in ZERO_CANDIDATE_DIAGNOSTIC_BLOCKED_STATUSES:
+        return {
+            "status": "zero_candidate_evidence_blocks_candidate_review",
+            "blockers": [diagnostic_status],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status,
+            "drop_stage_ranking": diagnostics.get("drop_stage_ranking") if isinstance(diagnostics.get("drop_stage_ranking"), list) else [],
+            "symbol_drop_reason_status": _norm(diagnostics.get("symbol_drop_reason_status")) or None,
+            "safe_next_read_only_actions": diagnostics.get("safe_next_read_only_actions") if isinstance(diagnostics.get("safe_next_read_only_actions"), list) else [],
+        }
+    if diagnostic_status in ZERO_CANDIDATE_DIAGNOSTIC_WAITING_STATUSES:
+        return {
+            "status": "zero_candidate_evidence_waiting_for_throughput_audit",
+            "blockers": [diagnostic_status],
+            "throughput_status": throughput_status or None,
+            "zero_candidate_diagnostics_status": diagnostic_status,
+            "safe_next_read_only_actions": diagnostics.get("safe_next_read_only_actions") if isinstance(diagnostics.get("safe_next_read_only_actions"), list) else [],
+        }
+    return {
+        "status": "zero_candidate_evidence_not_applicable",
+        "blockers": [],
+        "throughput_status": throughput_status or None,
+        "zero_candidate_diagnostics_status": diagnostic_status or None,
+    }
+
+
 def _fresh_capture_for_review(capture: dict[str, Any], collector: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     collector_generated_at = _norm(collector.get("generated_at_utc"))
     collector_ts = _parse_utc_iso(collector_generated_at)
@@ -376,6 +503,7 @@ def _status_for(
     collector: dict[str, Any],
     validation: dict[str, Any],
     candidate_batch_provenance: dict[str, Any],
+    zero_candidate_throughput_evidence: dict[str, Any],
     safety_violations: list[str],
     guarded_append_observed: bool,
 ) -> str:
@@ -394,6 +522,10 @@ def _status_for(
     if guarded_append_observed:
         return "candidate_review_guarded_append_observed_waiting_for_exits"
     if not validation.get("candidate_jsonl_exists"):
+        if zero_candidate_throughput_evidence.get("status") == "zero_candidate_evidence_blocks_candidate_review":
+            return "candidate_review_blocked_no_scanner_candidates_for_target_date"
+        if zero_candidate_throughput_evidence.get("status") == "zero_candidate_evidence_waiting_for_throughput_audit":
+            return "candidate_review_waiting_for_candidate_throughput_audit"
         return "candidate_review_waiting_for_real_candidate_jsonl"
     if capture.get("candidate_rows_staged") or collector.get("candidate_rows_staged"):
         if not validation.get("append_allowed"):
@@ -412,20 +544,24 @@ def build_report(
     collector_latest_path: Path = DEFAULT_COLLECTOR_LATEST,
     scheduler_health_latest_path: Path = DEFAULT_SCHEDULER_HEALTH_LATEST,
     scan_task_health_latest_path: Path | None = None,
+    throughput_latest_path: Path | None = None,
     generated_at_utc: str | None = None,
 ) -> dict[str, Any]:
     generated_at = generated_at_utc or _utc_now_iso()
     scan_task_health_latest_path = scan_task_health_latest_path or _default_aux_path(collector_latest_path, DEFAULT_SCAN_TASK_HEALTH_LATEST)
+    throughput_latest_path = throughput_latest_path or _default_aux_path(collector_latest_path, DEFAULT_THROUGHPUT_LATEST)
     capture = _load_json(capture_latest_path)
     collector = _load_json(collector_latest_path)
     scheduler = _load_json(scheduler_health_latest_path)
     scan_task_health = _load_json(scan_task_health_latest_path)
+    throughput = _load_json(throughput_latest_path)
     effective_capture, capture_freshness = _fresh_capture_for_review(capture, collector)
     validation = _candidate_validation(candidate_jsonl_path, generated_at)
     scheduler_freshness = _scheduler_freshness(scheduler, collector)
     scan_task_health_freshness = _scan_task_health_freshness(scan_task_health, collector)
     candidate_batch_provenance = _candidate_batch_provenance(candidate_jsonl_path, validation, effective_capture)
-    safety_violations = _safety_violations(effective_capture, collector, scheduler, scan_task_health)
+    zero_candidate_throughput_evidence = _zero_candidate_throughput_evidence(throughput, collector)
+    safety_violations = _safety_violations(effective_capture, collector, scheduler, scan_task_health, throughput)
     guarded_append_observed = _guarded_append_observed(effective_capture, collector)
     status = _status_for(
         scheduler=scheduler,
@@ -437,6 +573,7 @@ def build_report(
         collector=collector,
         validation=validation,
         candidate_batch_provenance=candidate_batch_provenance,
+        zero_candidate_throughput_evidence=zero_candidate_throughput_evidence,
         safety_violations=safety_violations,
         guarded_append_observed=guarded_append_observed,
     )
@@ -475,6 +612,12 @@ def build_report(
             *(_as_list(scan_task_health.get("blockers"))),
             *(_as_list(scan_task_health_freshness.get("blockers"))),
         ],
+        "throughput_status": throughput.get("status"),
+        "candidate_starvation_evidence_status": throughput.get("candidate_starvation_evidence_status"),
+        "zero_candidate_diagnostics": _as_dict(throughput.get("zero_candidate_diagnostics")),
+        "zero_candidate_diagnostics_status": _norm(_as_dict(throughput.get("zero_candidate_diagnostics")).get("status")) or None,
+        "zero_candidate_throughput_evidence": zero_candidate_throughput_evidence,
+        "throughput_blockers": _as_list(zero_candidate_throughput_evidence.get("blockers")),
         "safety_violations": safety_violations,
         "review_decision_table": [
             {
@@ -512,10 +655,21 @@ def build_report(
                 "pass": status == "candidate_review_waiting_for_fresh_capture_report",
                 "requirements": ["capture_latest_fresh_or_collector_nested_capture_fresh_for_candidate_review"],
             },
+            {
+                "decision": "zero_candidate_throughput_blocked",
+                "pass": status == "candidate_review_blocked_no_scanner_candidates_for_target_date",
+                "requirements": ["inspect_zero_candidate_diagnostics", "do_not_append"],
+            },
+            {
+                "decision": "candidate_throughput_audit_waiting",
+                "pass": status == "candidate_review_waiting_for_candidate_throughput_audit",
+                "requirements": ["refresh_forward_candidate_throughput_audit", "do_not_append"],
+            },
         ],
         "operator_commands": {
             "refresh_scheduler_health": "npm run options:goal-loop:strict-forward-30-scheduler-health -- --json",
             "refresh_scan_task_health": "npm run options:goal-loop:strict-forward-scan-task-health -- --json",
+            "refresh_candidate_throughput_audit": "npm run options:audit:forward-candidate-throughput -- --json",
             "refresh_collector_status": "npm run options:goal-loop:strict-forward-30-auto-window -- --json",
             "validate_candidate_jsonl": f"npm run options:validate:phase2-forward-paper-shadow-candidate -- {_rel(candidate_jsonl_path)}",
             "guarded_append_template": append_command_template,
@@ -546,6 +700,7 @@ def build_report(
             "collector_latest": {"path": _rel(collector_latest_path), "status": collector.get("_source_status"), "report_status": collector.get("status")},
             "scheduler_health_latest": {"path": _rel(scheduler_health_latest_path), "status": scheduler.get("_source_status"), "report_status": scheduler.get("status")},
             "scan_task_health_latest": {"path": _rel(scan_task_health_latest_path), "status": scan_task_health.get("_source_status"), "report_status": scan_task_health.get("status")},
+            "throughput_latest": {"path": _rel(throughput_latest_path), "status": throughput.get("_source_status"), "report_status": throughput.get("status")},
         },
         "artifacts": {},
     }
@@ -572,6 +727,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Scheduler freshness: `{_as_dict(report.get('scheduler_health_freshness')).get('status')}`.",
         f"- Scan-task health status: `{report.get('scan_task_health_status')}`.",
         f"- Scan-task health freshness: `{_as_dict(report.get('scan_task_health_freshness')).get('status')}`.",
+        f"- Throughput status: `{report.get('throughput_status')}`.",
+        f"- Candidate-starvation evidence status: `{report.get('candidate_starvation_evidence_status')}`.",
+        f"- Zero-candidate diagnostics status: `{report.get('zero_candidate_diagnostics_status')}`.",
+        f"- Zero-candidate throughput evidence: `{_as_dict(report.get('zero_candidate_throughput_evidence')).get('status')}`.",
         f"- Candidate batch provenance: `{candidate_batch_provenance.get('status')}`.",
         "",
         "This packet is review-only. It validates the candidate handoff and renders guarded commands, but it does not append rows or authorize live validation, auto-track, broker orders, quote import, proof-bar changes, promotion, or historical rows as forward proof.",
@@ -592,6 +751,11 @@ def render_markdown(report: dict[str, Any]) -> str:
     if isinstance(provenance_blockers, list) and provenance_blockers:
         lines.extend(["## Candidate Batch Provenance Blockers", ""])
         lines.extend(f"- `{item}`" for item in provenance_blockers)
+        lines.append("")
+    throughput_blockers = report.get("throughput_blockers") if isinstance(report.get("throughput_blockers"), list) else []
+    if throughput_blockers:
+        lines.extend(["## Candidate Throughput Blockers", ""])
+        lines.extend(f"- `{item}`" for item in throughput_blockers)
         lines.append("")
     return "\n".join(lines)
 

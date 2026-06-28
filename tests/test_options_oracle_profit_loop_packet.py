@@ -63,6 +63,7 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
             "flow_extreme_source_repair_packet_path": tmp / "flow-extreme-source-repair-packet.json",
             "underlying_daily_source_acquisition_path": tmp / "underlying-daily-source-acquisition.json",
             "underlying_daily_source_import_path": tmp / "underlying-daily-source-import.json",
+            "opening_range_replay_path": tmp / "opening-range-replay.json",
             "goal_loop_path": tmp / "goal.json",
             "next_steps_path": tmp / "NEXT_STEPS.md",
             "decisions_path": tmp / "DECISIONS.md",
@@ -165,6 +166,29 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
                     "audit_months_covered": 0,
                     "latest_audit_exact_trades": 0,
                     "cleared": False,
+                },
+            },
+        )
+        _write_json(
+            paths["opening_range_replay_path"],
+            {
+                "report_id": "regular_options_quote_surface_opening_range_reversal_replay",
+                "status": "blocked_quote_surface_opening_range_reversal_replay",
+                "blockers": [
+                    "blocked_latest_four_rows_below_30",
+                    "blocked_pf_lower_bound_not_above_1",
+                    "blocked_single_trade_profit_concentration",
+                ],
+                "smallest_next_blocker_clearing_slice": "blocked_latest_four_rows_below_30",
+                "metrics": {
+                    "candidate_rows": 74,
+                    "full_window": {
+                        "profit_factor": 0.0914,
+                        "profit_factor_lower_bound_5pct": 0.0256,
+                    },
+                    "latest_four_months": {
+                        "strict_executable_completed_rows_after_opportunity_dedupe": 0,
+                    },
                 },
             },
         )
@@ -1392,15 +1416,25 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         self.assertEqual(pmcc_meta["status"], "loaded")
         self.assertEqual(pmcc_meta["validated_status"], "blocked_pmcc_diagonal_replay_readiness")
         source_repair_meta = report["source_artifacts"]["source_repair_59_symbol_thetadata_opra"]
-        self.assertEqual(source_repair_meta["status"], "loaded")
+        self.assertEqual(source_repair_meta["status"], "loaded_provenance_only")
         self.assertEqual(
-            report["current_evidence_summary"]["source_repair_59_symbol_status"],
+            source_repair_meta["current_state_superseded_by"],
+            "source_repair_59_symbol_thetadata_opra_resume",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["source_repair_59_symbol_current_status"],
+            "blocked_thetaterminal_source_unavailable_retry",
+        )
+        self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_current_basis"], "resume_artifact_current_state")
+        self.assertFalse(report["current_evidence_summary"]["source_repair_59_symbol_current_import_attempted"])
+        self.assertFalse(report["current_evidence_summary"]["source_repair_59_symbol_current_quotes_imported"])
+        self.assertEqual(
+            report["current_evidence_summary"]["source_repair_59_symbol_legacy_status"],
             "blocked_thetaterminal_source_unavailable",
         )
-        self.assertTrue(report["current_evidence_summary"]["source_repair_59_symbol_approval_token_valid"])
-        self.assertFalse(report["current_evidence_summary"]["source_repair_59_symbol_import_attempted"])
-        self.assertFalse(report["current_evidence_summary"]["source_repair_59_symbol_quotes_imported"])
-        self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_missing_symbol_date_count"], 11565)
+        self.assertTrue(report["current_evidence_summary"]["source_repair_59_symbol_legacy_provenance_only"])
+        self.assertTrue(report["current_evidence_summary"]["source_repair_59_symbol_legacy_approval_token_valid"])
+        self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_legacy_missing_symbol_date_count"], 11565)
         source_repair_resume_meta = report["source_artifacts"]["source_repair_59_symbol_thetadata_opra_resume"]
         self.assertEqual(source_repair_resume_meta["status"], "loaded")
         self.assertEqual(
@@ -1413,6 +1447,19 @@ class OptionsOracleProfitLoopPacketTests(unittest.TestCase):
         self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_resume_missing_symbol_date_count"], 11565)
         self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_resume_protected_holdout_overlap_rows"], 0)
         self.assertEqual(report["current_evidence_summary"]["source_repair_59_symbol_resume_outside_universe_import_rows"], 0)
+        opening_meta = report["source_artifacts"]["quote_surface_opening_range_reversal_replay"]
+        self.assertEqual(opening_meta["status"], "loaded")
+        self.assertEqual(
+            report["current_evidence_summary"]["quote_surface_opening_range_reversal_classification"],
+            "falsified_under_current_data",
+        )
+        self.assertEqual(
+            report["current_evidence_summary"]["quote_surface_opening_range_reversal_blocker_category"],
+            "proof_economics_statistical_blocker",
+        )
+        self.assertTrue(report["current_evidence_summary"]["quote_surface_opening_range_reversal_source_cleared"])
+        self.assertEqual(report["current_evidence_summary"]["quote_surface_opening_range_reversal_latest_four_rows"], 0)
+        self.assertEqual(report["current_evidence_summary"]["quote_surface_opening_range_reversal_full_window_pf"], 0.0914)
         direct_vix_meta = report["source_artifacts"]["direct_vix_source_repair_packet"]
         self.assertEqual(direct_vix_meta["status"], "loaded")
         self.assertEqual(

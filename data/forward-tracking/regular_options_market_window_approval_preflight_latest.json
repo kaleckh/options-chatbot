@@ -5,10 +5,10 @@
   "approval_token_required": "APPROVE_BULLISH_PULLBACK_LAYER4_FORWARD_CAPTURE_REVIEW",
   "artifacts": {
     "docs_report": "docs/regular-options-market-window-approval-preflight.md",
-    "json": "data/forward-tracking/regular_options_market_window_approval_preflight_20260627T035252Z.json",
+    "json": "data/forward-tracking/regular_options_market_window_approval_preflight_20260628T213005Z.json",
     "latest_json": "data/forward-tracking/regular_options_market_window_approval_preflight_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_market_window_approval_preflight_latest.md",
-    "markdown": "data/forward-tracking/regular_options_market_window_approval_preflight_20260627T035252Z.md"
+    "markdown": "data/forward-tracking/regular_options_market_window_approval_preflight_20260628T213005Z.md"
   },
   "auto_track_allowed": false,
   "broker_order_allowed": false,
@@ -30,18 +30,18 @@
   "cohort_append_performed": false,
   "consumed_protected_holdout": false,
   "evidence_databases_mutated": false,
-  "generated_at_utc": "2026-06-27T03:52:52Z",
+  "generated_at_utc": "2026-06-28T21:30:05Z",
   "imported_quotes": false,
   "invariant_blockers": [],
   "live_entry_allowed": false,
   "lowered_proof_bars": false,
-  "market_window_status": "market_closed",
+  "market_window_status": "unknown",
   "market_window_valid": false,
   "mutated_evidence_databases": false,
   "next_operator_action": "wait_for_valid_market_window_then_run_preflight_again",
   "operator_approval_granted": false,
   "operator_approval_required": true,
-  "overall_status": "blocked_market_closed",
+  "overall_status": "blocked_market_window_unknown",
   "prohibited_actions": [
     "do_not_append_forward_cohort_rows_from_approval_preflight",
     "do_not_create_trades_from_approval_preflight",
@@ -91,7 +91,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer4_forward_capture_protocol": {
-      "age_hours": 13.43,
+      "age_hours": 55.05,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:06Z",
@@ -102,7 +102,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_executable_economics": {
-      "age_hours": 13.43,
+      "age_hours": 55.05,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:05Z",
@@ -113,7 +113,7 @@
       "status": "loaded"
     },
     "bullish_pullback_layer_execution_safety_audit": {
-      "age_hours": 13.45,
+      "age_hours": 55.07,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:26:07Z",
@@ -124,10 +124,10 @@
       "status": "loaded"
     },
     "gateboard": {
-      "age_hours": 0.03,
+      "age_hours": 41.62,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T03:50:52Z",
+      "generated_at_utc": "2026-06-27T03:53:00Z",
       "path": "data/forward-tracking/project_operator_gateboard_latest.json",
       "reason_codes": [],
       "report_id": "project_operator_gateboard",
@@ -135,7 +135,7 @@
       "status": "loaded"
     },
     "goal_loop": {
-      "age_hours": 13.42,
+      "age_hours": 55.04,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:53Z",
@@ -146,10 +146,10 @@
       "status": "loaded"
     },
     "market_window_checklist": {
-      "age_hours": 13.42,
+      "age_hours": 41.6,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-26T14:27:54Z",
+      "generated_at_utc": "2026-06-27T03:54:10Z",
       "path": "data/forward-tracking/regular_options_market_window_evidence_checklist_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_market_window_evidence_checklist",
@@ -157,10 +157,10 @@
       "status": "loaded"
     },
     "paper_shadow_plan": {
-      "age_hours": 0.0,
+      "age_hours": 41.62,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-27T03:52:36Z",
+      "generated_at_utc": "2026-06-27T03:52:56Z",
       "path": "data/forward-tracking/regular_options_paper_shadow_evidence_plan_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_paper_shadow_evidence_plan",
@@ -168,7 +168,7 @@
       "status": "loaded"
     },
     "trade_qualification": {
-      "age_hours": 0.03,
+      "age_hours": 41.65,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-27T03:50:52Z",

@@ -16,34 +16,33 @@ This artifact proves the research-only runner controls for the frozen 13-symbol 
 
 | Month | Attempted | Proven | Explicit No-Pick | Selected | Outside Universe | Coverable | Blockers |
 |---|---:|---:|---:|---:|---:|---:|---|
-| `2024-06` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-07` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-08` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-09` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-10` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-11` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2024-12` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-01` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-02` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-03` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-04` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-05` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-06` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-07` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-08` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-09` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-10` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-11` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2025-12` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2026-01` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2026-02` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2026-03` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2026-04` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
-| `2026-05` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month, source_artifact_universe_not_13_symbol |
+| `2024-06` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-07` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-08` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-09` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-10` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-11` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2024-12` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-01` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-02` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-03` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-04` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-05` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-06` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-07` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-08` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-09` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-10` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-11` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2025-12` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2026-01` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2026-02` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2026-03` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2026-04` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
+| `2026-05` | False | False | False | 0 | 0 | False | candidate_generation_diagnostics_missing_for_month |
 
 ## Blockers
 
 - `audit_coverable_months_0_below_requested_24`
 - `candidate_generation_diagnostics_missing_for_month`
-- `source_artifact_universe_not_13_symbol`
 

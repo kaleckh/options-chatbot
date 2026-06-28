@@ -79,8 +79,10 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             report["top_ranked_candidate"]["concept_id"],
             "breadth_confirmed_index_qqq_momentum_continuation_debit_spread_v1",
         )
-        self.assertIn("no live validation", report["recommended_operator_approval_question"])
-        self.assertIn("no broker orders", report["recommended_operator_approval_question"])
+        self.assertIsNone(report["recommended_operator_approval_question"])
+        self.assertIn("no live validation", report["recommended_research_only_task_boundary"])
+        self.assertIn("no broker orders", report["recommended_research_only_task_boundary"])
+        self.assertIn("Do not ask an operator approval question", report["allowed_next_step"])
 
     def test_known_readiness_blockers_are_preserved(self) -> None:
         with WorkspaceTempDir(prefix="playbook-selector") as tmp_dir:
@@ -148,7 +150,8 @@ class PreregisteredPlaybookReadinessSelectorTests(unittest.TestCase):
             self.assertIn("docs_report", artifacts)
             markdown = (tmp / "docs" / "selector.md").read_text(encoding="utf8")
             self.assertIn("Regular Options Preregistered Playbook Readiness Selector", markdown)
-            self.assertIn("Recommended Operator Approval Question", markdown)
+            self.assertIn("Recommended Research-Only Task Boundary", markdown)
+            self.assertNotIn("Do you approve", markdown)
 
 
 if __name__ == "__main__":

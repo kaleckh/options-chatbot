@@ -1,11 +1,11 @@
 # Regular Options Underlying Daily History Source Import
 
-- Status: `blocked_underlying_daily_history_source_import`.
+- Status: `underlying_daily_history_source_import_materialized`.
 - Source family: `point_in_time_underlying_daily_ohlcv_adjusted_v1`.
 - Source family binding matched: `true`.
 - Approval token valid: `true`.
-- Source rows written: `false`.
-- Source rows: `0`.
+- Source rows written: `true`.
+- Source rows: `6422`.
 - Historical replay performed: `false`.
 - Accepted profitability: `false`.
 
@@ -13,7 +13,7 @@ This import writes generated point-in-time underlying daily source rows only aft
 
 ## Blockers
 
-- `fixture_source_file_requires_non_default_source_rows_path`
+- None.
 
 ## Next Command
 

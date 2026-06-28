@@ -4,12 +4,12 @@ This report is generated from `scripts/build_regular_options_point_in_time_dispe
 
 ## Summary
 
-- Status: `blocked_point_in_time_dispersion_concentration_proxy`.
+- Status: `point_in_time_dispersion_concentration_proxy_available`.
 - Accepted profitability: `false`.
-- Covered months: `0` / `24`.
-- Date coverage: `0.0`.
-- Accepted source rows: `0`.
-- Proxy rows: `0`.
+- Covered months: `24` / `24`.
+- Date coverage: `100.0`.
+- Accepted source rows: `6422`.
+- Proxy rows: `494`.
 
 ## Source Inventory
 
@@ -33,27 +33,28 @@ This report is generated from `scripts/build_regular_options_point_in_time_dispe
     ],
     "error": null,
     "exists": true,
-    "generated_at_utc": "2026-06-18T06:09:35Z",
-    "inventory_status": "feature_store_missing_underlying_return_fields",
+    "generated_at_utc": "2026-06-27T03:50:44Z",
+    "inventory_status": "feature_store_return_fields_present",
     "missing_symbols": [],
     "path": "data/profitability-lab/regular-options-feature-store/latest.json",
+    "proxy_source_rows_provide_return_fields": true,
     "report_id": "regular_options_feature_store",
     "requested_date_count": 494,
     "required": true,
-    "return_fields_available": false,
+    "return_fields_available": true,
     "status": "loaded",
     "status_value": "feature_store_built",
     "underlying_price_row_count": 0
   },
   "source_rows": {
     "error": null,
-    "exists": false,
+    "exists": true,
     "path": "data/profitability-lab/regular-options-point-in-time-dispersion-concentration-proxy/source_rows.jsonl",
     "required": false,
-    "row_count": 0,
-    "status": "missing"
+    "row_count": 6422,
+    "status": "loaded"
   },
-  "status": "missing_proxy_source_rows"
+  "status": "ready"
 }
 ```
 
@@ -71,10 +72,7 @@ This report is generated from `scripts/build_regular_options_point_in_time_dispe
 
 ## Blockers
 
-- `missing_point_in_time_dispersion_proxy_source`
-- `missing_required_return_fields`
-- `insufficient_month_coverage`
-- `insufficient_date_coverage`
+- None.
 
 ## Forbidden Actions
 

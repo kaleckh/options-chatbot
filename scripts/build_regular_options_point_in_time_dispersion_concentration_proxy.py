@@ -354,7 +354,8 @@ def _source_inventory(
     available_symbols = {str(row.get("symbol") or "").upper() for row in rows if row.get("symbol")}
     missing_symbols = sorted(universe - available_symbols)
     underlying_price_rows = sum(int(row.get("underlying_price_row_count") or 0) for row in rows if str(row.get("symbol") or "").upper() in universe)
-    return_fields_available = underlying_price_rows > 0
+    proxy_source_rows_loaded = source_meta.get("status") == "loaded" and int(source_meta.get("row_count") or 0) > 0
+    return_fields_available = underlying_price_rows > 0 or proxy_source_rows_loaded
     status = "ready" if source_meta.get("status") == "loaded" and source_meta.get("row_count", 0) > 0 else "missing_proxy_source_rows"
     if feature_meta.get("status") != "loaded":
         feature_status = "missing_feature_store"
@@ -373,6 +374,7 @@ def _source_inventory(
             "available_symbols": sorted(available_symbols & universe),
             "missing_symbols": missing_symbols,
             "underlying_price_row_count": underlying_price_rows,
+            "proxy_source_rows_provide_return_fields": proxy_source_rows_loaded,
             "return_fields_available": return_fields_available,
             "inventory_status": feature_status,
         },

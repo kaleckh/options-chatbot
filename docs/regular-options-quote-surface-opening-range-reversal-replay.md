@@ -12,30 +12,39 @@ This generated report is read-only. It tests one quote-surface-only mean-reversi
 - Accepted profitability: `false`.
 - Historical rows are forward proof: `false`.
 - Daily denominator rows: `1976`.
-- Candidate rows: `0`.
+- Candidate rows: `74`.
 - Latest-four strict executable rows: `0`.
-- Full-window strict-new rows: `0`.
-- Full-window net USD P&L: `0.0`.
-- Full-window PF / lower-bound / stress PF: `None` / `None` / `None`.
+- Full-window strict-new rows: `74`.
+- Full-window net USD P&L: `-2134.4`.
+- Full-window PF / lower-bound / stress PF: `0.0914` / `0.0256` / `0.0827`.
 
 ## Blockers
 
 - `blocked_latest_four_rows_below_30`
-- `blocked_missing_quote_surface_underlying_price`
+- `blocked_pf_lower_bound_not_above_1`
+- `blocked_single_expiration_profit_concentration`
+- `blocked_single_month_profit_concentration`
+- `blocked_single_trade_profit_concentration`
+- `blocked_single_underlying_profit_concentration`
+- `blocked_top_5_trade_profit_concentration`
 
 ## Denominator Status Counts
 
 | Status | Count |
 |---|---:|
-| `blocked_missing_underlying_price` | `1976` |
+| `blocked_crossed_or_stale_quote` | `1` |
+| `blocked_insufficient_prior_20_day_distribution` | `80` |
+| `blocked_missing_leg_quote` | `444` |
+| `candidate_generated` | `74` |
+| `explicit_no_pick` | `1377` |
 
 ## Concentration
 
-- Single-trade profit share: `0.0`.
-- Top-5 trade profit share: `0.0`.
-- Single-month profit share: `0.0`.
-- Single-underlying profit share: `0.0`.
-- Single-expiration profit share: `0.0`.
+- Single-trade profit share: `0.3464`.
+- Top-5 trade profit share: `0.8845`.
+- Single-month profit share: `0.6108`.
+- Single-underlying profit share: `0.6834`.
+- Single-expiration profit share: `0.6108`.
 
 ## Boundary
 

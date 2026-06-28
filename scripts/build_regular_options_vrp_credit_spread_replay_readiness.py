@@ -414,8 +414,8 @@ def build_report(
         },
         "critical_prerequisites": assessments,
         "blockers": blockers,
-        "next_approval_boundary": (
-            "A later implementation/replay harness requires separate research-only approval and must still forbid "
+        "next_research_only_task_boundary": (
+            "A later bounded research-only implementation/replay harness must stay inside the current non-live, non-broker research posture and must still forbid "
             "live, broker, quote import, evidence mutation, protected-holdout consumption, scanner/strategy release, "
             "stop/sizing/proof-bar changes, and promotion."
         ),
@@ -496,7 +496,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(f"- `{item}`" for item in _as_list(report.get("blockers")))
     else:
         lines.append("- None.")
-    lines.extend(["", "## Approval Boundary", "", report["next_approval_boundary"], "", "## Forbidden Actions", ""])
+    lines.extend(["", "## Research-Only Task Boundary", "", report["next_research_only_task_boundary"], "", "## Forbidden Actions", ""])
     lines.extend(f"- `{item}`" for item in _as_list(report.get("forbidden_actions")))
     lines.append("")
     return "\n".join(lines)

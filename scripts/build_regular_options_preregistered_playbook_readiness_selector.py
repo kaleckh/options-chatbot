@@ -277,14 +277,14 @@ def _rank_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda row: (status_rank.get(str(row.get("readiness_status")), 99), int(row["complexity_score"]), str(row["key"])))
 
 
-def _approval_question(row: dict[str, Any] | None) -> str | None:
+def _research_only_task_boundary(row: dict[str, Any] | None) -> str | None:
     if not row:
         return None
     return (
-        "Do you approve one research-only implementation/replay harness for "
+        "GPT-5.5 Pro may select one bounded research-only implementation/replay task for "
         f"`{row['concept_id']}` only, writing derived research artifacts only, with no live validation, "
         "no auto-track, no broker orders, no quote import, no evidence-store mutation, no protected-holdout "
-        "consumption, no scanner release, no stop/sizing/proof-bar changes, and no promotion?"
+        "consumption, no scanner release, no stop/sizing/proof-bar changes, and no promotion."
     )
 
 
@@ -330,10 +330,11 @@ def build_report(*, goal_loop_path: Path = DEFAULT_GOAL_LOOP, generated_at_utc: 
         "design_inventory": rows,
         "ranked_designs": ranked,
         "top_ranked_candidate": candidate,
-        "recommended_operator_approval_question": _approval_question(candidate),
+        "recommended_operator_approval_question": None,
+        "recommended_research_only_task_boundary": _research_only_task_boundary(candidate),
         "missing_preregistered_designs": missing,
         "allowed_next_step": (
-            "Return this selector to GPT-5.5 Pro. If it accepts the selected candidate, ask the exact operator approval question before any research-only implementation/replay."
+            "Return this selector to GPT-5.5 Pro. Do not ask an operator approval question for bounded read-only/research-only work already covered by the Oracle packet posture; instead ask GPT-5.5 Pro for the next concrete Codex task inside the research-only task boundary."
             if candidate
             else "Return this selector to GPT-5.5 Pro to decide whether to ask for approval-gated source repair/forward collection or earn a stop_exception."
         ),
@@ -364,12 +365,12 @@ def _validate_report(report: dict[str, Any]) -> None:
         raise ValueError("VRP must preserve known readiness blockers")
     if term["readiness_artifact_status"] == "loaded" and term["readiness_status"] != "blocked_by_known_readiness_audit":
         raise ValueError("term-structure must preserve known readiness blockers")
-    question = report.get("recommended_operator_approval_question")
-    if question is not None:
-        if question.count("`") < 2:
-            raise ValueError("approval question must name exactly one concept")
-        if "no live validation" not in question or "no broker orders" not in question:
-            raise ValueError("approval question must preserve live/broker prohibitions")
+    boundary = report.get("recommended_research_only_task_boundary")
+    if boundary is not None:
+        if str(boundary).count("`") < 2:
+            raise ValueError("research-only task boundary must name exactly one concept")
+        if "no live validation" not in str(boundary) or "no broker orders" not in str(boundary):
+            raise ValueError("research-only task boundary must preserve live/broker prohibitions")
 
 
 def _fmt_bool(value: Any) -> str:
@@ -402,9 +403,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"- Status: `{candidate['readiness_status']}`.",
                 f"- Rationale: `{candidate['label']}` is the lowest-complexity valid preregistered design and uses the simplest defined-risk spread proof path.",
                 "",
-                "## Recommended Operator Approval Question",
+                "## Recommended Research-Only Task Boundary",
                 "",
-                str(report.get("recommended_operator_approval_question")),
+                str(report.get("recommended_research_only_task_boundary")),
                 "",
             ]
         )

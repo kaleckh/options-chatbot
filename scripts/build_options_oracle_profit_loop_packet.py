@@ -57,6 +57,7 @@ DEFAULT_MACRO_EVENT_CALENDAR_SOURCE_REPAIR_PACKET = ROOT / "data" / "profitabili
 DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET = ROOT / "data" / "profitability-lab" / "regular-options-flow-extreme-source-repair-packet" / "latest.json"
 DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION = ROOT / "data" / "profitability-lab" / "regular-options-underlying-daily-source-acquisition" / "latest.json"
 DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT = ROOT / "data" / "profitability-lab" / "regular-options-underlying-daily-source-import" / "latest.json"
+DEFAULT_OPENING_RANGE_REPLAY = ROOT / "data" / "profitability-lab" / "regular-options-quote-surface-opening-range-reversal-replay" / "latest.json"
 DEFAULT_GOAL_LOOP = ROOT / "data" / "forward-tracking" / "options_goal_loop_latest.json"
 DEFAULT_NEXT_STEPS = ROOT / "docs" / "NEXT_STEPS.md"
 DEFAULT_DECISIONS = ROOT / "docs" / "DECISIONS.md"
@@ -670,6 +671,7 @@ def build_packet(
     flow_extreme_source_repair_packet_path: Path = DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET,
     underlying_daily_source_acquisition_path: Path = DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION,
     underlying_daily_source_import_path: Path = DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT,
+    opening_range_replay_path: Path = DEFAULT_OPENING_RANGE_REPLAY,
     goal_loop_path: Path = DEFAULT_GOAL_LOOP,
     next_steps_path: Path = DEFAULT_NEXT_STEPS,
     decisions_path: Path = DEFAULT_DECISIONS,
@@ -817,6 +819,12 @@ def build_packet(
         source_repair_59_symbol_resume_path,
         required=False,
     )
+    if source_repair_59_symbol_meta.get("status") == "loaded" and source_repair_59_symbol_resume_meta.get("status") == "loaded":
+        source_repair_59_symbol_meta = {
+            **source_repair_59_symbol_meta,
+            "status": "loaded_provenance_only",
+            "current_state_superseded_by": "source_repair_59_symbol_thetadata_opra_resume",
+        }
     direct_vix_source_import, direct_vix_source_import_meta = _load_json(
         direct_vix_source_import_path,
         required=False,
@@ -841,6 +849,7 @@ def build_packet(
         underlying_daily_source_import_path,
         required=False,
     )
+    opening_range_replay, opening_range_replay_meta = _load_json(opening_range_replay_path, required=False)
     goal_loop, goal_meta = _load_json(goal_loop_path, required=False)
     next_steps, next_meta = _load_text_excerpt(next_steps_path)
     decisions, decisions_meta = _load_text_excerpt(decisions_path)
@@ -892,6 +901,7 @@ def build_packet(
         "flow_extreme_source_repair_packet": flow_extreme_source_repair_packet_meta,
         "underlying_daily_source_acquisition": underlying_daily_source_acquisition_meta,
         "underlying_daily_source_import": underlying_daily_source_import_meta,
+        "quote_surface_opening_range_reversal_replay": opening_range_replay_meta,
         "goal_loop": goal_meta,
         "next_steps": next_meta,
         "decisions": decisions_meta,
@@ -927,6 +937,26 @@ def build_packet(
         "late_known_at_count": point_in_time_vix_bucket.get("late_known_at_count"),
         "leakage_reject_count": point_in_time_vix_bucket.get("leakage_reject_count"),
     }
+    source_repair_59_symbol_current = source_repair_59_symbol_resume if source_repair_59_symbol_resume else source_repair_59_symbol
+    source_repair_59_symbol_current_basis = (
+        "resume_artifact_current_state" if source_repair_59_symbol_resume else "legacy_artifact_current_state_fallback"
+    )
+    opening_metrics = _as_dict(opening_range_replay.get("metrics"))
+    opening_full_window = _as_dict(opening_metrics.get("full_window"))
+    opening_latest_four = _as_dict(opening_metrics.get("latest_four_months"))
+    opening_blockers = _as_list(opening_range_replay.get("blockers"))
+    opening_source_cleared = "blocked_missing_quote_surface_underlying_price" not in opening_blockers
+    opening_range_replay_classification = (
+        "falsified_under_current_data"
+        if opening_range_replay.get("status") == "blocked_quote_surface_opening_range_reversal_replay"
+        and opening_source_cleared
+        and any(
+            token in str(blocker).lower()
+            for blocker in opening_blockers
+            for token in ("pf", "concentration", "latest_four")
+        )
+        else "current_source_or_engine_blocker"
+    )
     vrp_packet_readiness = dict(vrp_readiness)
     if vrp_bounded_meta.get("status") == "loaded":
         vrp_packet_readiness.update(
@@ -1258,20 +1288,28 @@ def build_packet(
             "pmcc_diagonal_replay_readiness_smallest_next_blocker": pmcc_diagonal_readiness.get(
                 "smallest_next_blocker_clearing_slice"
             ),
-            "source_repair_59_symbol_status": source_repair_59_symbol.get("status"),
-            "source_repair_59_symbol_approval_token_valid": source_repair_59_symbol.get("approval_token_valid"),
-            "source_repair_59_symbol_blockers": source_repair_59_symbol.get("blockers"),
-            "source_repair_59_symbol_theta_terminal": source_repair_59_symbol.get("theta_terminal"),
-            "source_repair_59_symbol_shared_trusted_dates": source_repair_59_symbol.get(
+            "source_repair_59_symbol_current_status": source_repair_59_symbol_current.get("status"),
+            "source_repair_59_symbol_current_basis": source_repair_59_symbol_current_basis,
+            "source_repair_59_symbol_current_blockers": source_repair_59_symbol_current.get("blockers"),
+            "source_repair_59_symbol_current_theta_terminal": source_repair_59_symbol_current.get("theta_terminal"),
+            "source_repair_59_symbol_current_import_attempted": source_repair_59_symbol_current.get("import_attempted"),
+            "source_repair_59_symbol_current_imported_rows": source_repair_59_symbol_current.get("imported_rows"),
+            "source_repair_59_symbol_current_quotes_imported": source_repair_59_symbol_current.get("quotes_imported"),
+            "source_repair_59_symbol_legacy_status": source_repair_59_symbol.get("status"),
+            "source_repair_59_symbol_legacy_provenance_only": bool(source_repair_59_symbol_resume),
+            "source_repair_59_symbol_legacy_approval_token_valid": source_repair_59_symbol.get("approval_token_valid"),
+            "source_repair_59_symbol_legacy_blockers": source_repair_59_symbol.get("blockers"),
+            "source_repair_59_symbol_legacy_theta_terminal": source_repair_59_symbol.get("theta_terminal"),
+            "source_repair_59_symbol_legacy_shared_trusted_dates": source_repair_59_symbol.get(
                 "shared_trusted_imported_quote_dates"
             ),
-            "source_repair_59_symbol_missing_symbol_date_count": source_repair_59_symbol.get(
+            "source_repair_59_symbol_legacy_missing_symbol_date_count": source_repair_59_symbol.get(
                 "missing_symbol_date_count"
             ),
-            "source_repair_59_symbol_import_attempted": source_repair_59_symbol.get("import_attempted"),
-            "source_repair_59_symbol_imported_rows": source_repair_59_symbol.get("imported_rows"),
-            "source_repair_59_symbol_quotes_imported": source_repair_59_symbol.get("quotes_imported"),
-            "source_repair_59_symbol_accepted_profitability": source_repair_59_symbol.get("accepted_profitability"),
+            "source_repair_59_symbol_legacy_import_attempted": source_repair_59_symbol.get("import_attempted"),
+            "source_repair_59_symbol_legacy_imported_rows": source_repair_59_symbol.get("imported_rows"),
+            "source_repair_59_symbol_legacy_quotes_imported": source_repair_59_symbol.get("quotes_imported"),
+            "source_repair_59_symbol_legacy_accepted_profitability": source_repair_59_symbol.get("accepted_profitability"),
             "source_repair_59_symbol_resume_status": source_repair_59_symbol_resume.get("status"),
             "source_repair_59_symbol_resume_approval_token_valid": source_repair_59_symbol_resume.get("approval_token_valid"),
             "source_repair_59_symbol_resume_blockers": source_repair_59_symbol_resume.get("blockers"),
@@ -1290,6 +1328,26 @@ def build_packet(
             ),
             "source_repair_59_symbol_resume_outside_universe_import_rows": source_repair_59_symbol_resume.get(
                 "outside_universe_import_rows"
+            ),
+            "quote_surface_opening_range_reversal_status": opening_range_replay.get("status"),
+            "quote_surface_opening_range_reversal_blockers": opening_blockers,
+            "quote_surface_opening_range_reversal_classification": opening_range_replay_classification,
+            "quote_surface_opening_range_reversal_blocker_category": (
+                "proof_economics_statistical_blocker"
+                if opening_range_replay_classification == "falsified_under_current_data"
+                else "source_or_engine_blocker"
+            ),
+            "quote_surface_opening_range_reversal_source_cleared": opening_source_cleared,
+            "quote_surface_opening_range_reversal_candidate_rows": opening_metrics.get("candidate_rows"),
+            "quote_surface_opening_range_reversal_full_window_pf": opening_full_window.get("profit_factor"),
+            "quote_surface_opening_range_reversal_full_window_pf_lb_5pct": opening_full_window.get(
+                "profit_factor_lower_bound_5pct"
+            ),
+            "quote_surface_opening_range_reversal_latest_four_rows": opening_latest_four.get(
+                "strict_executable_completed_rows_after_opportunity_dedupe"
+            ),
+            "quote_surface_opening_range_reversal_smallest_next_blocker": opening_range_replay.get(
+                "smallest_next_blocker_clearing_slice"
             ),
             "direct_vix_source_import_status": direct_vix_source_import.get("status"),
             "direct_vix_materialized": direct_vix_materialized,
@@ -1581,9 +1639,9 @@ Current Fact Table:
 - Phase 2 forward capture: latest real run produced 0 staged rows, no candidate JSONL, and no cohort log unless a newer current artifact says otherwise.
 - Historical rows remain research evidence only; they are not forward profitability proof.
 - VIX is cleared when current artifacts show `direct_vix_source_import_materialized` / `point_in_time_vix_bucket_ready` with 505/505 coverage. Do not rank VIX as missing unless a newer artifact is stale, malformed, or policy-incompatible.
-- 59-symbol ThetaData repair is parked on provider/source availability when the current artifact is `blocked_thetaterminal_source_unavailable_retry`; do not select another retry unless a fresh provider/source check proves availability changed.
+- 59-symbol ThetaData repair must be interpreted from the current resume artifact. If it reports `blocked_thetaterminal_source_unavailable_retry`, treat that as provider/source availability. If it reports `blocked_59_symbol_import_repair` / `bulk_import_execution_not_started_by_preflight_wrapper`, treat the blocker as scoped import execution or entitlement-source state, not a stale connection-refused retry.
 - 13-symbol historical scanner path remains blocked when current artifacts show 0/24 candidate-generation months and 0 selected rows; quote depth alone is not candidate-generation proof.
-- Underlying daily OHLCV is a first-class blocker: acquisition is `blocked_underlying_daily_source_acquisition_missing` when no trusted full-window CSV is staged. The parser/import path exists; do not rerun a packet-only plan for this blocker.
+- Underlying daily OHLCV is a first-class blocker/source: it is cleared when current source-import status is `underlying_daily_history_source_import_materialized` with generated source rows written. If only acquisition is ready, the next material step is the exact tokened import. If acquisition is missing/invalid, name that source-file/parser blocker. Do not rerun packet-only plans for this blocker.
 - Macro-event calendar and flow volume/OI source packets are ready for operator import decision when their current statuses say so, but real trusted CSV/source materialization is still missing.
 - Bullish pullback layer4 is a relevant existing economics branch when current docs/artifacts show it: executable economics were profitable but preflight/forward protocol remains blocked or waiting for natural full-denominator market-window capture and explicit approval. Compare it against source-repair branches instead of omitting it.
 
@@ -1591,7 +1649,7 @@ Evidence precedence:
 1. Current Fact Table overrides older embedded blocker text.
 2. Latest structured artifact statuses override pasted docs.
 3. Older artifact blockers that still name VIX as missing are stale if current VIX is `point_in_time_vix_bucket_ready`.
-4. If pasted NEXT_STEPS says ThetaTerminal is generally reachable but the structured 59-symbol repair artifact says `blocked_thetaterminal_source_unavailable_retry`, do not select another 59-symbol retry unless current provider/source availability changed.
+4. If pasted NEXT_STEPS and structured 59-symbol repair artifacts disagree, prefer the latest resume artifact. Do not select another provider-down retry when the current state is scoped import execution/entitlement-source blocked.
 5. Historical/dashboard/replay rows can guide ranking but cannot satisfy forward proof.
 
 Your job:
@@ -1612,7 +1670,7 @@ Before selecting a task, produce a blocker map with these categories:
 
 3. Data/source blocker
 - Which missing point-in-time sources block the most downstream profitable tests?
-- Explicitly evaluate `underlying_daily_point_in_time_source` as a first-class blocker for frozen scanner/candidate generation and historical simulated-forward audit.
+- Explicitly evaluate `underlying_daily_point_in_time_source` as a first-class source. If current import status is materialized, do not rank daily OHLCV as missing; rank the remaining opening/intraday underlying, candidate-generation, option-chain, lane-specific input, earnings/calendar, or quote-surface blockers instead.
 - VIX is cleared in current artifacts when the VIX bucket is ready; stale branch blockers naming missing VIX must be refreshed and ranked by their remaining non-VIX blockers.
 - Macro-event and flow volume/OI are not missing parser/plan work if their packet statuses are ready; they are missing trusted input CSV/source-row materialization.
 - Rank source repairs by downstream unlock value, time-to-test, and whether a trusted source file is actually staged and ready.
@@ -1682,7 +1740,7 @@ Hard rules:
 - Do not select macro_event_calendar_source_repair_packet_v1 again; it is already implemented and verified.
 - Do not select direct_point_in_time_vix_source_repair_packet_v1 again; it is already implemented and verified.
 - Do not select trusted_flow_volume_oi_source_repair_packet_v1 again if the attached/current artifact status is flow_extreme_source_repair_packet_ready_for_operator_import_decision; it is already implemented and verified.
-- Do not select the 59-symbol ThetaTerminal retry again until provider/source availability changes.
+- Do not select the 59-symbol ThetaTerminal provider-down retry again unless current provider availability is actually down; if the resume artifact is blocked by wrapper execution or entitlement-source state, name that exact blocker.
 - Do not select historical dashboard/picks visibility unless it directly affects forward capture.
 - Do not select another packet-only source plan for a blocker that already has a verified source packet, parser/import contract, and approval boundary. Packet-only work is allowed only for a newly identified blocker that lacks a safe parser, approval boundary, or measurable acceptance criteria.
 - Do not select an import/materialization command unless the needed trusted source file exists or the selected task explicitly asks the operator for the exact approval/source file and provides a safe read-only fallback. Approved non-live source materialization may be recommended when it is the shortest path to a replay or forward audit, but the task must name the source file, approval token, write target, forbidden writes, and pass/fail thresholds.
@@ -1815,12 +1873,12 @@ Current PMCC diagonal replay-readiness result, if available:
 Current approved 59-symbol ThetaData OPRA/NBBO source-repair result, if available:
 {json.dumps({"status": source_repair_59_symbol.get("status"), "approval_token_valid": source_repair_59_symbol.get("approval_token_valid"), "blockers": source_repair_59_symbol.get("blockers"), "theta_terminal": source_repair_59_symbol.get("theta_terminal"), "shared_trusted_imported_quote_dates": source_repair_59_symbol.get("shared_trusted_imported_quote_dates"), "missing_symbol_date_count": source_repair_59_symbol.get("missing_symbol_date_count"), "import_attempted": source_repair_59_symbol.get("import_attempted"), "imported_rows": source_repair_59_symbol.get("imported_rows"), "quotes_imported": source_repair_59_symbol.get("quotes_imported"), "accepted_profitability": source_repair_59_symbol.get("accepted_profitability"), "historical_simulated_forward_status": source_repair_59_symbol.get("historical_simulated_forward_status")}, indent=2, sort_keys=True)}
 
-Interpretation: if the 59-symbol source repair status is blocked_thetaterminal_source_unavailable, do not treat that as an operator-approval blocker or an earned stop. The operator approved non-live/non-broker research continuation. Choose the next meaningful non-live/non-broker branch unless your stop_exception burden of proof is fully satisfied.
+Interpretation: the original 59-symbol repair artifact is provenance. If it is still `blocked_thetaterminal_source_unavailable` but a newer resume artifact exists, prefer the newer resume artifact for current provider/source state. If the current state is provider, wrapper, or entitlement-source blocked, do not treat that as an operator-approval blocker or an earned stop; choose the next meaningful non-live/non-broker branch unless your stop_exception burden of proof is fully satisfied.
 
 Current tokened 59-symbol ThetaData OPRA/NBBO source-repair resume result, if available:
 {json.dumps({"status": source_repair_59_symbol_resume.get("status"), "resume_missing_only": source_repair_59_symbol_resume.get("resume_missing_only"), "provider_recheck": source_repair_59_symbol_resume.get("provider_recheck"), "approval_token_valid": source_repair_59_symbol_resume.get("approval_token_valid"), "blockers": source_repair_59_symbol_resume.get("blockers"), "theta_terminal": source_repair_59_symbol_resume.get("theta_terminal"), "shared_trusted_imported_quote_dates": source_repair_59_symbol_resume.get("shared_trusted_imported_quote_dates"), "post_import_shared_trusted_imported_quote_dates": source_repair_59_symbol_resume.get("post_import_shared_trusted_imported_quote_dates"), "missing_symbol_date_count": source_repair_59_symbol_resume.get("missing_symbol_date_count"), "import_attempted": source_repair_59_symbol_resume.get("import_attempted"), "imported_rows": source_repair_59_symbol_resume.get("imported_rows"), "quotes_imported": source_repair_59_symbol_resume.get("quotes_imported"), "protected_holdout_overlap_rows": source_repair_59_symbol_resume.get("protected_holdout_overlap_rows"), "outside_universe_import_rows": source_repair_59_symbol_resume.get("outside_universe_import_rows"), "split_audit_gate": source_repair_59_symbol_resume.get("split_audit_gate")}, indent=2, sort_keys=True)}
 
-Interpretation: if the tokened 59-symbol resume status is blocked_thetaterminal_source_unavailable_retry, do not select another 59-symbol ThetaTerminal retry until provider/source availability changes. The retry already proved token approval, exact universe, no protected-holdout overlap, no outside-universe import, no import attempted, and no coverage improvement under current provider state. Choose the next meaningful non-live/non-broker source family or causal branch unless your stop_exception burden of proof is fully satisfied.
+Interpretation: if the tokened 59-symbol resume status is `blocked_thetaterminal_source_unavailable_retry`, do not select another 59-symbol ThetaTerminal retry until provider/source availability changes. If it is `blocked_59_symbol_import_repair` with `bulk_import_execution_not_started_by_preflight_wrapper`, the blocker is scoped import execution/wrapper state; if direct probes return entitlement errors, the blocker is entitlement-source state. In all cases, no coverage improvement or forward proof exists until a permitted import path actually writes trusted rows.
 
 Current direct point-in-time VIX source state:
 {json.dumps({"source_import": {"status": direct_vix_source_import.get("status"), "source_family": direct_vix_source_import.get("source_family"), "source_row_count": direct_vix_source_import.get("source_row_count"), "source_rows_written": direct_vix_source_import.get("source_rows_written"), "source_rows_path": direct_vix_source_import.get("source_rows_path"), "threshold_policy_path": direct_vix_source_import.get("threshold_policy_path"), "downstream_vix_bucket_status": direct_vix_source_import.get("downstream_vix_bucket_status"), "downstream_vix_coverage_pct": direct_vix_source_import.get("downstream_vix_coverage_pct"), "quotes_imported": direct_vix_source_import.get("quotes_imported"), "evidence_stores_mutated": direct_vix_source_import.get("evidence_stores_mutated"), "protected_holdout_consumed": direct_vix_source_import.get("protected_holdout_consumed"), "accepted_profitability": direct_vix_source_import.get("accepted_profitability")}, "vix_bucket": {"status": point_in_time_vix_bucket.get("status"), "source_rows_count": point_in_time_vix_bucket.get("source_rows_count"), "coverage_pct": point_in_time_vix_bucket.get("coverage_pct"), "covered_date_count": point_in_time_vix_bucket.get("covered_date_count"), "requested_date_count": point_in_time_vix_bucket.get("requested_date_count"), "late_known_at_count": point_in_time_vix_bucket.get("late_known_at_count"), "leakage_reject_count": point_in_time_vix_bucket.get("leakage_reject_count"), "bucket_threshold_source": point_in_time_vix_bucket.get("bucket_threshold_source"), "threshold_policy": point_in_time_vix_bucket.get("threshold_policy") or direct_vix_source_repair_packet.get("bucket_policy"), "blockers": point_in_time_vix_bucket.get("blockers")}, "legacy_source_repair_packet_status": direct_vix_source_repair_packet.get("status"), "legacy_future_import_command": direct_vix_source_repair_packet.get("future_import_command"), "legacy_future_import_manifest_template": direct_vix_source_repair_packet.get("future_import_manifest_template"), "current_branch_implications": current_vix_branch_implications}, indent=2, sort_keys=True)}
@@ -1840,7 +1898,7 @@ Interpretation: if the flow-extreme source repair packet status is flow_extreme_
 Current underlying daily OHLCV source acquisition/import state:
 {json.dumps({"acquisition": {"status": underlying_daily_source_acquisition.get("status"), "source_family": underlying_daily_source_acquisition.get("source_family"), "candidate_file_count": underlying_daily_source_acquisition.get("candidate_file_count"), "ready_candidate_count": underlying_daily_source_acquisition.get("ready_candidate_count"), "selected_ready_source_file": underlying_daily_source_acquisition.get("selected_ready_source_file"), "blockers": underlying_daily_source_acquisition.get("blockers"), "candidate_blocker_counts": underlying_daily_source_acquisition.get("candidate_blocker_counts"), "future_import_command": underlying_daily_source_acquisition.get("future_import_command"), "source_rows_written": underlying_daily_source_acquisition.get("source_rows_written"), "source_import_command_executed": underlying_daily_source_acquisition.get("source_import_command_executed")}, "source_import": {"status": underlying_daily_source_import.get("status"), "source_family": underlying_daily_source_import.get("source_family"), "source_row_count": underlying_daily_source_import.get("source_row_count"), "source_rows_written": underlying_daily_source_import.get("source_rows_written"), "source_rows_path": underlying_daily_source_import.get("source_rows_path"), "blockers": underlying_daily_source_import.get("blockers"), "accepted_profitability": underlying_daily_source_import.get("accepted_profitability"), "historical_rows_are_forward_proof": underlying_daily_source_import.get("historical_rows_are_forward_proof")}}, indent=2, sort_keys=True)}
 
-Interpretation: if underlying daily acquisition is `blocked_underlying_daily_source_acquisition_missing`, the current highest-leverage 13-symbol historical scanner blocker is an absent trusted full-window source CSV, not a missing parser or missing importer. Do not rerun the underlying source plan. If acquisition is `blocked_underlying_daily_source_acquisition_invalid`, name the exact parser/coverage/local-provenance blocker. If acquisition is `ready_for_underlying_daily_source_import_approval`, the next material step requires the exact tokened source import command and source materialization approval. Do not treat `market_data.db:daily_history`, local historical reconstruction, inferred known-at rows, or fixture rows as point-in-time proof.
+Interpretation: if underlying daily source import is `underlying_daily_history_source_import_materialized` with source rows written, daily OHLCV is no longer the 13-symbol historical scanner blocker; rank the remaining opening/intraday underlying, option-chain selection, scanner point-in-time, lane-specific input, earnings/calendar, candidate-generation coverage, and quote-surface blockers. If acquisition is `blocked_underlying_daily_source_acquisition_missing`, the blocker is an absent trusted full-window source CSV. If acquisition is `blocked_underlying_daily_source_acquisition_invalid`, name the exact parser/coverage/local-provenance blocker. If acquisition is `ready_for_underlying_daily_source_import_approval` and import is not materialized, the next material step requires the exact tokened source import command and source materialization approval. Do not treat `market_data.db:daily_history`, local historical reconstruction, inferred known-at rows, or fixture rows as point-in-time proof.
 
 Current goal-loop state:
 {json.dumps({"state": goal_loop.get("current_decision_state"), "next_safe_action": goal_loop.get("next_safe_action"), "forward_evidence_accounting": goal_loop.get("forward_evidence_accounting")}, indent=2, sort_keys=True)}
@@ -2003,6 +2061,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--flow-extreme-source-repair-packet", type=Path, default=DEFAULT_FLOW_EXTREME_SOURCE_REPAIR_PACKET)
     parser.add_argument("--underlying-daily-source-acquisition", type=Path, default=DEFAULT_UNDERLYING_DAILY_SOURCE_ACQUISITION)
     parser.add_argument("--underlying-daily-source-import", type=Path, default=DEFAULT_UNDERLYING_DAILY_SOURCE_IMPORT)
+    parser.add_argument("--opening-range-replay", type=Path, default=DEFAULT_OPENING_RANGE_REPLAY)
     parser.add_argument("--goal-loop", type=Path, default=DEFAULT_GOAL_LOOP)
     parser.add_argument("--next-steps", type=Path, default=DEFAULT_NEXT_STEPS)
     parser.add_argument("--decisions", type=Path, default=DEFAULT_DECISIONS)
@@ -2060,6 +2119,7 @@ def main(argv: list[str] | None = None) -> int:
         flow_extreme_source_repair_packet_path=args.flow_extreme_source_repair_packet,
         underlying_daily_source_acquisition_path=args.underlying_daily_source_acquisition,
         underlying_daily_source_import_path=args.underlying_daily_source_import,
+        opening_range_replay_path=args.opening_range_replay,
         goal_loop_path=args.goal_loop,
         next_steps_path=args.next_steps,
         decisions_path=args.decisions,

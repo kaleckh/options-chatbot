@@ -1,10 +1,10 @@
 {
   "artifacts": {
     "docs_report": "docs/regular-options-strict-forward-operator-queue.md",
-    "json": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260626T142755Z.json",
+    "json": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260627T184232Z.json",
     "latest_json": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json",
     "latest_markdown": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.md",
-    "markdown": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260626T142755Z.md"
+    "markdown": "data/forward-tracking/regular_options_strict_forward_operator_queue_20260627T184232Z.md"
   },
   "auto_track_allowed": false,
   "blocked_or_superseded_branches": [
@@ -31,9 +31,7 @@
         "missing_historical_option_chain_selection_surface",
         "missing_historical_scanner_point_in_time_inputs",
         "missing_lane_specific_point_in_time_feature_inputs",
-        "missing_point_in_time_earnings_calendar_source",
-        "missing_point_in_time_market_regime_inputs",
-        "underlying_daily_history_source_not_point_in_time"
+        "missing_point_in_time_earnings_calendar_source"
       ],
       "branch_id": "candidate_generation_13_symbol_frozen_engine",
       "candidate_months": 0,
@@ -42,21 +40,38 @@
       "status": "blocked_frozen_13_symbol_candidate_generation_engine"
     },
     {
+      "blocker_category": "proof_economics_statistical_blocker",
       "blockers": [
-        "trusted_source_csv_missing"
+        "blocked_latest_four_rows_below_30",
+        "blocked_pf_lower_bound_not_above_1",
+        "blocked_single_expiration_profit_concentration",
+        "blocked_single_month_profit_concentration",
+        "blocked_single_trade_profit_concentration",
+        "blocked_single_underlying_profit_concentration",
+        "blocked_top_5_trade_profit_concentration"
       ],
-      "branch_id": "underlying_daily_source_acquisition",
-      "classification": "current_blocker",
-      "ready_candidate_count": 0,
-      "status": "blocked_underlying_daily_source_acquisition_missing"
+      "branch_id": "quote_surface_opening_range_reversal",
+      "candidate_rows": 74,
+      "classification": "falsified_under_current_data",
+      "full_window_pf": 0.0914,
+      "full_window_pf_lb_5pct": 0.0256,
+      "latest_four_rows": 0,
+      "status": "blocked_quote_surface_opening_range_reversal_replay"
+    },
+    {
+      "blockers": [],
+      "branch_id": "underlying_daily_source",
+      "classification": "cleared_current_input",
+      "source_row_count": 6422,
+      "status": "underlying_daily_history_source_import_materialized"
     },
     {
       "blockers": [
-        "thetaterminal_source_unavailable"
+        "bulk_import_execution_not_started_by_preflight_wrapper"
       ],
       "branch_id": "source_repair_59_symbol_thetadata_opra",
-      "classification": "current_provider_blocker",
-      "status": "unavailable"
+      "classification": "current_provider_or_import_blocker",
+      "status": "blocked_59_symbol_import_repair"
     },
     {
       "blockers": [
@@ -76,12 +91,10 @@
       "status": "blocked_term_structure_calendar_bounded_replay"
     },
     {
-      "blockers": [
-        "missing_dispersion_or_concentration_proxy_inputs"
-      ],
+      "blockers": [],
       "branch_id": "dispersion_proxy_hybrid",
-      "classification": "current_blocker",
-      "status": "blocked_dispersion_proxy_hybrid_replay_readiness"
+      "classification": "ready_for_research_only_replay_decision",
+      "status": "dispersion_proxy_hybrid_replay_readiness_ready"
     },
     {
       "blockers": [
@@ -260,7 +273,7 @@
       "read_only": true
     }
   ],
-  "generated_at_utc": "2026-06-26T14:27:55Z",
+  "generated_at_utc": "2026-06-27T18:42:32Z",
   "historical_executable_economics": {
     "harness_decision": "profitable_but_preflight_blocked",
     "historical_side_aware_avg_net_lb_5pct": 235.07,
@@ -282,7 +295,7 @@
   "live_entry_allowed": false,
   "operator_posture": {
     "gateboard_status": "safe_blocked_no_live_release",
-    "market_window_checklist_status": "blocked_stale_readbacks",
+    "market_window_checklist_status": "waiting_for_market_window",
     "market_window_status": "unknown",
     "oracle_packet_status": "ready_for_same_session_gpt55_guidance"
   },
@@ -409,7 +422,7 @@
   "sizing_changed": false,
   "source_artifacts": {
     "bullish_pullback_layer4_forward_capture_protocol": {
-      "age_hours": 0.01,
+      "age_hours": 28.26,
       "error": null,
       "exists": true,
       "generated_at_utc": "2026-06-26T14:27:06Z",
@@ -420,10 +433,10 @@
       "status": "loaded"
     },
     "options_oracle_profit_loop_packet": {
-      "age_hours": 8.63,
+      "age_hours": 0.0,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-26T05:49:59Z",
+      "generated_at_utc": "2026-06-27T18:42:18Z",
       "path": "data/forward-tracking/options_oracle_profit_loop_packet_latest.json",
       "reason_codes": [],
       "report_id": "options_oracle_profit_loop_packet",
@@ -431,10 +444,10 @@
       "status": "loaded"
     },
     "project_operator_gateboard": {
-      "age_hours": 0.03,
+      "age_hours": 14.83,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-26T14:26:05Z",
+      "generated_at_utc": "2026-06-27T03:53:00Z",
       "path": "data/forward-tracking/project_operator_gateboard_latest.json",
       "reason_codes": [],
       "report_id": "project_operator_gateboard",
@@ -442,10 +455,10 @@
       "status": "loaded"
     },
     "regular_options_market_window_evidence_checklist": {
-      "age_hours": 0.0,
+      "age_hours": 14.81,
       "error": null,
       "exists": true,
-      "generated_at_utc": "2026-06-26T14:27:54Z",
+      "generated_at_utc": "2026-06-27T03:54:10Z",
       "path": "data/forward-tracking/regular_options_market_window_evidence_checklist_latest.json",
       "reason_codes": [],
       "report_id": "regular_options_market_window_evidence_checklist",

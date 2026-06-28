@@ -1,6 +1,6 @@
 # Regular Options Strict Forward 30 Candidate Review Packet
 
-Status: `candidate_review_waiting_for_real_candidate_jsonl`.
+Status: `candidate_review_blocked_no_scanner_candidates_for_target_date`.
 
 - Strict forward rows: `0/30`.
 - Candidate JSONL exists: `false`.
@@ -15,6 +15,10 @@ Status: `candidate_review_waiting_for_real_candidate_jsonl`.
 - Scheduler freshness: `scheduler_health_fresh_for_candidate_review`.
 - Scan-task health status: `scan_tasks_ready_for_next_market_window`.
 - Scan-task health freshness: `scan_task_health_fresh_for_candidate_review`.
+- Throughput status: `blocked_no_same_day_phase2_natural_selections`.
+- Candidate-starvation evidence status: `stage_counts_only_waiting_for_symbol_drop_reasons`.
+- Zero-candidate diagnostics status: `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`.
+- Zero-candidate throughput evidence: `zero_candidate_evidence_blocks_candidate_review`.
 - Candidate batch provenance: `candidate_batch_not_present`.
 
 This packet is review-only. It validates the candidate handoff and renders guarded commands, but it does not append rows or authorize live validation, auto-track, broker orders, quote import, proof-bar changes, promotion, or historical rows as forward proof.
@@ -23,6 +27,11 @@ This packet is review-only. It validates the candidate handoff and renders guard
 
 - `refresh_scheduler_health`: `npm run options:goal-loop:strict-forward-30-scheduler-health -- --json`
 - `refresh_scan_task_health`: `npm run options:goal-loop:strict-forward-scan-task-health -- --json`
+- `refresh_candidate_throughput_audit`: `npm run options:audit:forward-candidate-throughput -- --json`
 - `refresh_collector_status`: `npm run options:goal-loop:strict-forward-30-auto-window -- --json`
 - `validate_candidate_jsonl`: `npm run options:validate:phase2-forward-paper-shadow-candidate -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl`
 - `guarded_append_template`: `npm run options:append:phase2-forward-paper-shadow -- data/forward-tracking/phase2_regular_options_forward_paper_shadow_candidate_rows.jsonl --approval-token <EXPLICIT_OPERATOR_APPROVAL_TOKEN> --market-window-confirmed`
+
+## Candidate Throughput Blockers
+
+- `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`

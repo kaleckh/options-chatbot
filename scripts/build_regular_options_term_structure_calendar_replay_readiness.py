@@ -389,14 +389,14 @@ def build_report(
         },
         "critical_prerequisites": assessments,
         "blockers": blockers,
-        "next_approval_boundary": (
-            "A later implementation/replay harness requires separate research-only approval and must still forbid "
+        "next_research_only_task_boundary": (
+            "A later bounded research-only implementation/replay harness must stay inside the current non-live, non-broker research posture and must still forbid "
             "live, broker, quote import, evidence mutation, protected-holdout consumption, scanner/strategy release, "
             "stop/sizing/proof-bar changes, and promotion."
         ),
         "allowed_next_step": (
             "Return this readiness artifact to GPT-5.5 Pro for a continue/stop decision. If ready, the next step is "
-            "an exact operator approval question for one research-only implementation/replay harness. If blocked, "
+            "one bounded research-only implementation/replay task inside the current non-live, non-broker research posture. If blocked, "
             "GPT-5.5 Pro should decide whether a named blocker needs approval or whether another read-only option-structure branch remains."
         ),
         "forbidden_actions": list(FORBIDDEN_ACTIONS),
@@ -473,7 +473,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines.extend(f"- `{item}`" for item in _as_list(report.get("blockers")))
     else:
         lines.append("- None.")
-    lines.extend(["", "## Approval Boundary", "", report["next_approval_boundary"], "", "## Forbidden Actions", ""])
+    lines.extend(["", "## Research-Only Task Boundary", "", report["next_research_only_task_boundary"], "", "## Forbidden Actions", ""])
     lines.extend(f"- `{item}`" for item in _as_list(report.get("forbidden_actions")))
     lines.append("")
     return "\n".join(lines)

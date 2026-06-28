@@ -691,7 +691,7 @@ def build_report(
                 payload=artifacts["dispersion_proxy"],
                 window=window,
                 source_type="derived_point_in_time_proxy",
-                blockers=("missing_point_in_time_dispersion_proxy_source",),
+                blockers=(),
             ),
             _artifact_candidate(
                 input_family="candidate_generation_diagnostics",
