@@ -4,8 +4,9 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stdout
+from contextlib import closing, redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from scripts import agent_control
 
@@ -300,6 +301,111 @@ class AgentControlTests(unittest.TestCase):
             tasks = agent_control.list_tasks(db_path=self.db_path, status=status)["tasks"]
             self.assertIn(task_id, {task["id"] for task in tasks})
 
+    def test_claim_task_rejects_stale_status_update(self):
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="Claim stale task",
+            pathway="operator",
+        )
+        original_task_row = agent_control._task_row
+        stale_once = {"done": False}
+
+        def stale_task_row(conn, task_id):
+            row = original_task_row(conn, task_id)
+            if task_id == task["id"] and not stale_once["done"]:
+                stale_once["done"] = True
+                conn.execute(
+                    "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+                    ("accepted", agent_control.utc_now(), task_id),
+                )
+            return row
+
+        with mock.patch.object(agent_control, "_task_row", side_effect=stale_task_row):
+            with self.assertRaisesRegex(agent_control.AgentControlError, "status changed concurrently"):
+                agent_control.claim_task(
+                    db_path=self.db_path,
+                    events_path=self.events_path,
+                    task_id=task["id"],
+                    worker_id="late-worker",
+                )
+
+        with closing(agent_control.connect(self.db_path)) as conn:
+            self.assertEqual(agent_control._task_row(conn, task["id"])["status"], "open")
+
+    def test_report_task_rejects_stale_terminal_status_update(self):
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="Report stale task",
+            pathway="operator",
+        )
+        original_task_row = agent_control._task_row
+        stale_once = {"done": False}
+
+        def stale_task_row(conn, task_id):
+            row = original_task_row(conn, task_id)
+            if task_id == task["id"] and not stale_once["done"]:
+                stale_once["done"] = True
+                conn.execute(
+                    "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+                    ("accepted", agent_control.utc_now(), task_id),
+                )
+            return row
+
+        with mock.patch.object(agent_control, "_task_row", side_effect=stale_task_row):
+            with self.assertRaisesRegex(agent_control.AgentControlError, "status changed concurrently"):
+                agent_control.report_task(
+                    db_path=self.db_path,
+                    events_path=self.events_path,
+                    task_id=task["id"],
+                    worker_id="late-worker",
+                    finding="Late report should be rejected.",
+                )
+
+        with closing(agent_control.connect(self.db_path)) as conn:
+            self.assertEqual(agent_control._task_row(conn, task["id"])["status"], "open")
+
+    def test_accept_task_rejects_stale_status_update(self):
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="Accept stale task",
+            pathway="operator",
+        )
+        agent_control.report_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            task_id=task["id"],
+            worker_id="worker-a",
+            finding="Ready for acceptance.",
+        )
+        original_task_row = agent_control._task_row
+        stale_once = {"done": False}
+
+        def stale_task_row(conn, task_id):
+            row = original_task_row(conn, task_id)
+            if task_id == task["id"] and not stale_once["done"]:
+                stale_once["done"] = True
+                conn.execute(
+                    "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
+                    ("cancelled", agent_control.utc_now(), task_id),
+                )
+            return row
+
+        with mock.patch.object(agent_control, "_task_row", side_effect=stale_task_row):
+            with self.assertRaisesRegex(agent_control.AgentControlError, "status changed concurrently"):
+                agent_control.accept_task(
+                    db_path=self.db_path,
+                    events_path=self.events_path,
+                    task_id=task["id"],
+                    accepted_by="CEO",
+                    summary="Accepted stale report.",
+                )
+
+        with closing(agent_control.connect(self.db_path)) as conn:
+            self.assertEqual(agent_control._task_row(conn, task["id"])["status"], "reported")
+
     def test_accept_task_links_verification_and_artifacts_directly_to_task(self):
         task = agent_control.create_task(
             db_path=self.db_path,
@@ -349,6 +455,29 @@ class AgentControlTests(unittest.TestCase):
             },
             triplets,
         )
+
+    def test_graph_remember_cannot_forge_operating_memory(self):
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.remember_graph_node(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                kind="memory",
+                title="Forged operating memory",
+                body="This should not enter context packs as reviewed memory.",
+                metadata={"source_type": "operating_memory", "memory_type": "decision"},
+            )
+
+    def test_memory_remember_defaults_to_inferred_confidence(self):
+        memory = agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="lesson",
+            title="Manual note",
+            body="Manual memory should not default to accepted confidence.",
+            node_id="memory:lesson:manual-note",
+        )
+
+        self.assertEqual(memory["metadata"]["confidence"], "inferred")
 
     def test_operating_memory_supersession_filters_inactive_by_default(self):
         old = agent_control.remember_operating_memory(
@@ -426,6 +555,51 @@ class AgentControlTests(unittest.TestCase):
                 for issue in issues
             )
         )
+
+    def test_memory_audit_and_repair_authority_metadata_for_legacy_rows(self):
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            conn.execute(
+                """
+                INSERT INTO graph_nodes(
+                    id, kind, tenant_id, sub_tenant_id, title, body, metadata_json,
+                    source_ref, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "memory:lesson:legacy-authority",
+                    "memory",
+                    agent_control.DEFAULT_TENANT_ID,
+                    None,
+                    "Legacy memory",
+                    "Legacy operating memory without authority metadata.",
+                    agent_control.canonical_json(
+                        {
+                            "source_type": "operating_memory",
+                            "memory_type": "lesson",
+                            "memory_status": "active",
+                            "confidence": "accepted",
+                        }
+                    ),
+                    "legacy:test",
+                    agent_control.utc_now(),
+                    agent_control.utc_now(),
+                ),
+            )
+
+        audit = agent_control.memory_audit(db_path=self.db_path)
+
+        self.assertEqual(audit["status"], "issues")
+        self.assertTrue(
+            any(issue["id"] == "memory:lesson:legacy-authority" for issue in audit["authority_inconsistencies"])
+        )
+
+        repair = agent_control.repair_operating_memory_authority_metadata(db_path=self.db_path)
+        repaired_audit = agent_control.memory_audit(db_path=self.db_path)
+
+        self.assertEqual(repair["status"], "repaired")
+        self.assertEqual(repair["repaired_count"], 1)
+        self.assertEqual(repaired_audit["authority_inconsistencies"], [])
 
     def test_memory_audit_flags_missing_supersedes_edge(self):
         old = agent_control.remember_operating_memory(
@@ -512,6 +686,8 @@ class AgentControlTests(unittest.TestCase):
             finding="Accepted worker report writes durable context.",
             verification="npm run verify:agent-control",
             blockers="Memory audit must stay green.",
+            files_read="docs/agent-control-plane.md",
+            commands_run="npm run verify:agent-control",
             artifacts_written="docs/agent-control-plane.md; scripts/agent_control.py",
         )
         accepted = agent_control.accept_task(
@@ -533,10 +709,89 @@ class AgentControlTests(unittest.TestCase):
         self.assertIn(f"memory:verification:{task['id']}:{report['id']}", accepted["writeback_node_ids"])
         self.assertIn(f"memory:blocker:{task['id']}:{report['id']}", accepted["writeback_node_ids"])
         self.assertTrue(any(node["id"] in accepted["writeback_node_ids"] for node in pack["worker_reports"]))
+        decision_graph = agent_control.query_graph(
+            db_path=self.db_path,
+            query=accepted["decision_node_id"],
+            max_depth=0,
+            include_inactive=True,
+        )
+        decision_node = next(
+            node for node in decision_graph["graph_context"]["nodes"] if node["id"] == accepted["decision_node_id"]
+        )
+        self.assertEqual(decision_node["metadata"]["authority_scope"], "orchestration_only")
+        self.assertTrue(decision_node["metadata"]["does_not_authorize_trading_or_evidence_mutation"])
+        worker_memory = next(node for node in pack["worker_reports"] if node["id"] in accepted["writeback_node_ids"])
+        self.assertEqual(worker_memory["metadata"]["authority_scope"], "orchestration_only")
+        self.assertTrue(worker_memory["metadata"]["does_not_authorize_trading_or_evidence_mutation"])
+        self.assertEqual(worker_memory["metadata"]["files_artifacts_read"], "docs/agent-control-plane.md")
+        self.assertEqual(worker_memory["metadata"]["commands_run"], "npm run verify:agent-control")
         self.assertTrue(any(node["id"] in accepted["writeback_node_ids"] for node in pack["recent_verifications"]))
         self.assertTrue(any(node["id"] in accepted["writeback_node_ids"] for node in pack["recent_artifacts"]))
         self.assertIn("# Agent Context Pack", pack["prompt_context"])
         self.assertIn("Accepted worker reports", pack["prompt_context"])
+        self.assertIn("commands: npm run verify:agent-control", pack["prompt_context"])
+
+    def test_writeback_alias_accepts_report_into_operating_memory(self):
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="Alias writeback",
+            pathway="operator",
+        )
+        report = agent_control.report_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            task_id=task["id"],
+            worker_id="memory-worker",
+            finding="Writeback alias should accept this report.",
+        )
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "writeback",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    task["id"],
+                    "--summary",
+                    "Accepted through writeback alias.",
+                    "--json",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["status"], "accepted")
+        self.assertIn(f"memory:worker_report:{task['id']}:{report['id']}", payload["writeback_node_ids"])
+
+    def test_writeback_alias_requires_worker_report(self):
+        task = agent_control.create_task(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            title="No report writeback",
+            pathway="operator",
+        )
+
+        exit_code = agent_control.main(
+            [
+                "writeback",
+                "--db",
+                str(self.db_path),
+                "--events",
+                str(self.events_path),
+                task["id"],
+                "--summary",
+                "Should fail because no report exists.",
+                "--json",
+            ]
+        )
+        listed = agent_control.list_tasks(db_path=self.db_path)
+
+        self.assertEqual(exit_code, 2)
+        self.assertEqual(next(row for row in listed["tasks"] if row["id"] == task["id"])["status"], "open")
 
     def test_context_pack_includes_all_gateboard_blockers_for_operator_pathway(self):
         repo_root = self.root / "context-pack-repo"
@@ -1019,7 +1274,7 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(seed["blockers_seeded"], 1)
         self.assertGreaterEqual(seed["documents_seeded"], 12)
         self.assertEqual(seed["static_nodes_seeded"], 1)
-        self.assertGreaterEqual(seed["repo_files_seeded"], 12)
+        self.assertGreaterEqual(seed["repo_files_seeded"], 11)
         result = agent_control.query_graph(
             db_path=self.db_path,
             query="QQQ risk",
@@ -1081,6 +1336,45 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(tracked["graph_context"]["seed_node_ids"], ["repo_file:tracked.md"])
         self.assertEqual(untracked["graph_context"]["seed_node_ids"], ["repo_file:scratch/untracked.md"])
         self.assertEqual(ignored["graph_context"]["seed_node_ids"], [])
+
+    def test_repo_index_refuses_secret_and_generated_paths(self):
+        repo_root = self.root / "safety-repo"
+        self._write_minimal_seed_repo(repo_root)
+        self._write_repo_file(repo_root, ".env", "SECRET=value\n")
+        self._write_repo_file(repo_root, "keys/private.pem", "private key\n")
+        self._write_repo_file(repo_root, "data/forward-tracking/report.md", "# Generated evidence\n")
+        self._write_repo_file(repo_root, "data/contracts/allowed.json", json.dumps({"runtime_use": False}))
+
+        seed = agent_control.seed_project_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            include_static_memory_graph=False,
+            include_gateboard=False,
+            max_repo_files=50,
+        )
+
+        self.assertGreater(seed["repo_files_seeded"], 0)
+        blocked_queries = [
+            "SECRET",
+            "private key",
+            "Generated evidence",
+        ]
+        for query in blocked_queries:
+            result = agent_control.query_graph(
+                db_path=self.db_path,
+                query=query,
+                metadata_filter={"source_type": "repo_file_index"},
+                max_depth=0,
+            )
+            self.assertEqual(result["graph_context"]["seed_node_ids"], [])
+        allowed = agent_control.query_graph(
+            db_path=self.db_path,
+            query="allowed",
+            metadata_filter={"source_type": "repo_file_index"},
+            max_depth=0,
+        )
+        self.assertEqual(allowed["graph_context"]["seed_node_ids"], ["repo_file:data/contracts/allowed.json"])
 
     def test_seed_project_memory_prunes_stale_current_state_nodes(self):
         repo_root = self.root / "prune-repo"
@@ -1163,10 +1457,15 @@ class AgentControlTests(unittest.TestCase):
         )
 
         self.assertEqual(result["context_query"]["metadata_filter"], {"source_type": "gateboard_blocker"})
+        self.assertEqual(result["context_query"]["query"], "gateboard")
         self.assertEqual(result["seed"]["blockers_seeded"], 1)
-        self.assertGreaterEqual(result["seed"]["repo_files_seeded"], 12)
+        self.assertGreaterEqual(result["seed"]["repo_files_seeded"], 11)
         self.assertEqual(result["digest"]["runtime_use"], True)
         self.assertIsNone(result["latest_checkpoint"])
+        self.assertIn(
+            "blocker:gateboard:open_risk_governor_blocked_or_missing",
+            result["context"]["graph_context"]["seed_node_ids"],
+        )
         self.assertIn("blocker:gateboard:open_risk_governor_blocked_or_missing", result["context"]["prompt_context"])
         self.assertTrue(result["recommended_next_queries"])
 
@@ -1245,6 +1544,41 @@ class AgentControlTests(unittest.TestCase):
         self.assertIn("Build memory graph", output)
         self.assertIn("# Agent Graph Context", output)
         self.assertIn("blocker:gateboard:open_risk_governor_blocked_or_missing", output)
+
+    def test_agent_facing_memory_commands_are_discoverable(self):
+        help_text = agent_control.build_parser().format_help()
+        for expected in [
+            "Common agent commands",
+            "npm run memory:bootstrap",
+            "npm run memory:context",
+            "npm run memory:audit",
+            "npm run memory:repair-authority",
+            "npm run memory:dream-run",
+            "npm run memory:dream-audit",
+            "npm run memory:review-dreams",
+            "npm run memory:dreams",
+            "npm run memory:eval",
+            "npm run verify:memory",
+            "writeback <task-id>",
+        ]:
+            self.assertIn(expected, help_text)
+
+        package = json.loads((agent_control.ROOT / "package.json").read_text(encoding="utf-8"))
+        for script_name in [
+            "memory:bootstrap",
+            "memory:context",
+            "memory:audit",
+            "memory:repair-authority",
+            "memory:dream-run",
+            "memory:dream-audit",
+            "memory:schedule-dreams",
+            "memory:review-dreams",
+            "memory:dreams",
+            "memory:eval",
+            "memory:writeback",
+            "verify:memory",
+        ]:
+            self.assertIn(script_name, package["scripts"])
 
     def test_high_risk_modes_require_explicit_ack(self):
         with self.assertRaises(agent_control.AgentControlError):
@@ -1350,6 +1684,8 @@ class AgentControlTests(unittest.TestCase):
                             "body": "Fresh agent sessions should recover checkpoint and gateboard context before assigning workers.",
                             "confidence": "inferred",
                             "evidence": ["session:session-safe"],
+                            "review_question": "Should this lesson be accepted?",
+                            "acceptance_criteria": "Bootstrap is documented and verified.",
                         }
                     ],
                 }
@@ -1390,6 +1726,21 @@ class AgentControlTests(unittest.TestCase):
         node = next(node for node in memory["graph_context"]["nodes"] if node["id"] == accepted["accepted_memory_ids"][0])
         self.assertEqual(node["metadata"]["confidence"], "inferred")
         self.assertTrue(node["metadata"]["does_not_authorize_trading_or_evidence_mutation"])
+        self.assertEqual(node["metadata"]["authority_scope"], "orchestration_only")
+        self.assertEqual(node["metadata"]["review_question"], "Should this lesson be accepted?")
+
+        review = agent_control.review_dreams(db_path=self.db_path)
+        self.assertEqual(review["status"], "no_proposed_dreams")
+        self.assertEqual([node["id"] for node in review["accepted_dreams"]], ["dream:nightly-1"])
+        self.assertEqual([node["id"] for node in review["dream_lessons"]], accepted["accepted_memory_ids"])
+        pack = agent_control.build_context_pack(
+            db_path=self.db_path,
+            goal="bootstrap graph queries",
+            pathway="operator",
+            include_prompt_context=True,
+        )
+        self.assertEqual([node["id"] for node in pack["dream_lessons"]], accepted["accepted_memory_ids"])
+        self.assertIn("Dream-derived lessons and constraints", pack["prompt_context"])
 
         self._write_repo_file(
             repo_root,
@@ -1423,6 +1774,716 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "rejected")
         listed = agent_control.list_dreams(db_path=self.db_path, status="rejected")
         self.assertEqual([node["id"] for node in listed["dreams"]], ["dream:nightly-2"])
+
+    def test_dream_propose_rejects_empty_and_duplicate_entries(self):
+        repo_root = self.root / "dream-validation-repo"
+        self._write_repo_file(repo_root, "docs/non-list-dream.json", json.dumps({"title": "Bad", "entries": "oops"}))
+        with self.assertRaisesRegex(agent_control.AgentControlError, "entries must be a list"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/non-list-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(repo_root, "docs/non-object-entry-dream.json", json.dumps({"title": "Bad", "entries": ["oops"]}))
+        with self.assertRaisesRegex(agent_control.AgentControlError, "entry 1 must be a JSON object"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/non-object-entry-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(repo_root, "docs/empty-dream.json", json.dumps({"title": "Empty", "entries": []}))
+        with self.assertRaisesRegex(agent_control.AgentControlError, "at least one entry"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/empty-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/duplicate-dream.json",
+            json.dumps(
+                {
+                    "title": "Duplicate",
+                    "entries": [
+                        {"id": "same", "type": "lesson", "title": "One", "body": "First."},
+                        {"id": "same", "type": "lesson", "title": "Two", "body": "Second."},
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "duplicates entry id"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/duplicate-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/string-supersedes-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad supersedes",
+                    "entries": [
+                        {
+                            "id": "bad-supersedes",
+                            "type": "lesson",
+                            "title": "Bad supersedes",
+                            "body": "Supersedes must not be parsed as characters.",
+                            "supersedes": "memory:lesson:old",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "supersedes must be a list"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/string-supersedes-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/non-string-supersedes-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad supersedes entry",
+                    "entries": [
+                        {
+                            "id": "bad-supersedes-entry",
+                            "type": "lesson",
+                            "title": "Bad supersedes entry",
+                            "body": "Supersedes entries must be node ids.",
+                            "supersedes": [42],
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "supersedes entries must be non-empty strings"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/non-string-supersedes-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/string-evidence-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad evidence",
+                    "entries": [
+                        {
+                            "id": "bad-evidence",
+                            "type": "lesson",
+                            "title": "Bad evidence",
+                            "body": "Evidence must stay structured.",
+                            "evidence": "not-a-list",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "evidence must be a list"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/string-evidence-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/empty-string-evidence-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad empty evidence",
+                    "entries": [
+                        {
+                            "id": "bad-empty-evidence",
+                            "type": "lesson",
+                            "title": "Bad empty evidence",
+                            "body": "Empty-string evidence must not be coerced away.",
+                            "evidence": "",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "evidence must be a list"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/empty-string-evidence-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/string-metadata-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad metadata",
+                    "entries": [
+                        {
+                            "id": "bad-metadata",
+                            "type": "lesson",
+                            "title": "Bad metadata",
+                            "body": "Metadata must stay structured.",
+                            "metadata": "not-an-object",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "metadata must be a JSON object"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/string-metadata-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/empty-list-metadata-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad empty metadata",
+                    "entries": [
+                        {
+                            "id": "bad-empty-metadata",
+                            "type": "lesson",
+                            "title": "Bad empty metadata",
+                            "body": "Empty metadata lists must not be coerced away.",
+                            "metadata": [],
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "metadata must be a JSON object"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/empty-list-metadata-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/bad-freshness-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad freshness",
+                    "entries": [
+                        {
+                            "id": "bad-freshness",
+                            "type": "lesson",
+                            "title": "Bad freshness",
+                            "body": "Freshness must be validated before acceptance.",
+                            "freshness_days": "soon",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "freshness_days must be a non-negative integer"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/bad-freshness-dream.json"),
+                repo_root=repo_root,
+            )
+
+        self._write_repo_file(
+            repo_root,
+            "docs/empty-string-supersedes-dream.json",
+            json.dumps(
+                {
+                    "title": "Bad empty supersedes",
+                    "entries": [
+                        {
+                            "id": "bad-empty-supersedes",
+                            "type": "lesson",
+                            "title": "Bad empty supersedes",
+                            "body": "Empty-string supersedes must not be coerced away.",
+                            "supersedes": "",
+                        }
+                    ],
+                }
+            ),
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "supersedes must be a list"):
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path("docs/empty-string-supersedes-dream.json"),
+                repo_root=repo_root,
+            )
+
+    def test_dream_review_cli_prompt_only(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(["dreams", "--db", str(self.db_path)])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Dream Review Packet", stdout.getvalue())
+        self.assertIn("No proposed dreams", stdout.getvalue())
+
+    def test_dream_review_prompt_only_includes_populated_proposals(self):
+        repo_root = self.root / "dream-review-populated-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/proposed-dream.json",
+            json.dumps(
+                {
+                    "title": "Proposed lesson",
+                    "entries": [
+                        {
+                            "id": "prompt-visible",
+                            "type": "lesson",
+                            "title": "Prompt visible lesson",
+                            "body": "Populated dream review should show proposed dream context.",
+                        }
+                    ],
+                }
+            ),
+        )
+        agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/proposed-dream.json"),
+            repo_root=repo_root,
+            dream_id="prompt-visible",
+        )
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(["dream", "review", "--db", str(self.db_path), "--prompt-only"])
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Dream Review Packet", output)
+        self.assertIn("Proposed dreams: 1", output)
+        self.assertIn("dream:prompt-visible", output)
+        self.assertIn("Recommended Commands", output)
+
+    def test_auto_dream_run_extracts_session_lessons_and_audits(self):
+        repo_root = self.root / "auto-dream-repo"
+        transcript_body = "# Session\nLesson: Run memory bootstrap before assigning subagents.\n"
+        self._write_repo_file(repo_root, "docs/session.md", transcript_body)
+        agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="auto-session",
+            title="Auto dream session",
+            summary=(
+                "Lesson: Run memory bootstrap before assigning subagents.\n"
+                "Constraint: Keep automated dreams scoped to future agent handoff context.\n"
+                "Open question: Should row-level compare-and-swap hashes be added later?"
+            ),
+        )
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+        )
+        audit = agent_control.dream_audit(
+            db_path=self.db_path,
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+        )
+        review = agent_control.review_dreams(db_path=self.db_path)
+
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(len(result["processed_sessions"]), 1)
+        self.assertEqual(len(result["generated_proposals"]), 1)
+        self.assertEqual(len(result["accepted"]), 1)
+        self.assertEqual(result["rejected"], [])
+        self.assertEqual(review["status"], "no_proposed_dreams")
+        self.assertEqual(audit["status"], "pass")
+        self.assertEqual(audit["dream_review"]["accepted_count"], 1)
+        self.assertTrue((repo_root / "data/agent-control/dream-runs/latest.json").is_file())
+        self.assertTrue((repo_root / "data/agent-control/dream-runs/latest.md").is_file())
+        self.assertGreaterEqual(len(result["accepted"][0]["accepted_memory_ids"]), 3)
+
+    def test_auto_dream_run_cli_prompt_only(self):
+        repo_root = self.root / "auto-dream-cli-repo"
+        self._write_repo_file(repo_root, "docs/session.md", "# Session\n")
+        agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="auto-cli-session",
+            title="Auto dream CLI session",
+            summary="Lesson: Direct dream run CLI smoke coverage should stay in place.",
+        )
+        dreams_dir = repo_root / "data/agent-control/dreams"
+        runs_dir = repo_root / "data/agent-control/dream-runs"
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "dream",
+                    "run",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    "--repo-root",
+                    str(repo_root),
+                    "--dreams-dir",
+                    str(dreams_dir),
+                    "--runs-dir",
+                    str(runs_dir),
+                    "--prompt-only",
+                ]
+            )
+        review = agent_control.review_dreams(db_path=self.db_path)
+
+        output = stdout.getvalue()
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Automated Dreaming Audit", output)
+        self.assertIn("Generated proposals: 1", output)
+        self.assertIn("Accepted dreams: 1", output)
+        self.assertEqual(review["status"], "no_proposed_dreams")
+        self.assertTrue((runs_dir / "latest.json").is_file())
+        self.assertTrue((runs_dir / "latest.md").is_file())
+
+    def test_auto_dream_run_extracts_markers_from_transcript_when_summary_is_plain(self):
+        repo_root = self.root / "auto-dream-transcript-source-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/session.md",
+            (
+                "# Session\n"
+                "Plain transcript context.\n"
+                "Lesson: Transcript markers must be scanned when summaries are plain.\n"
+                "Constraint: Do not mark unreadable transcript sources as processed.\n"
+                "Open question: Should zero-entry old sessions be reprocessed once after policy upgrades?\n"
+            ),
+        )
+        agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="transcript-source-session",
+            title="Transcript source session",
+            summary="Plain summary without marker lines.",
+        )
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+        )
+
+        self.assertEqual(result["processed_sessions"][0]["extracted_entry_count"], 3)
+        self.assertIn("transcript_file", result["processed_sessions"][0]["scanned_sources"])
+        self.assertTrue(result["processed_sessions"][0]["marked_processed"])
+        self.assertEqual(len(result["generated_proposals"]), 1)
+        self.assertEqual(len(result["accepted"]), 1)
+        self.assertEqual(result["rejected"], [])
+        self.assertGreaterEqual(len(result["accepted"][0]["accepted_memory_ids"]), 3)
+
+    def test_auto_dream_run_does_not_mark_missing_transcript_source_processed(self):
+        repo_root = self.root / "auto-dream-missing-transcript-repo"
+        self._write_repo_file(repo_root, "docs/session.md", "# Session\nLesson: Missing source should retry later.\n")
+        agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="missing-transcript-session",
+            title="Missing transcript source session",
+            summary="Plain summary without marker lines.",
+        )
+        (repo_root / "docs/session.md").unlink()
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+        )
+        with closing(agent_control.connect(self.db_path)) as conn:
+            node = agent_control._graph_node_row(conn, "session:missing-transcript-session")
+
+        self.assertEqual(result["processed_sessions"][0]["extracted_entry_count"], 0)
+        self.assertIn("transcript_file_unreadable", result["processed_sessions"][0]["scanned_sources"])
+        self.assertFalse(result["processed_sessions"][0]["marked_processed"])
+        self.assertEqual(result["generated_proposals"], [])
+        self.assertEqual(len(result["skipped"]), 1)
+        self.assertNotIn("auto_dream_processed_at", node["metadata"])
+
+    def test_auto_dream_run_rejects_fabricated_evidence_and_prohibited_actions(self):
+        repo_root = self.root / "auto-dream-safety-repo"
+        self._write_repo_file(repo_root, "docs/session.md", "# Session\nEvidence source.\n")
+        session = agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            sessions_path=self.root / "sessions.jsonl",
+            transcript_path=Path("docs/session.md"),
+            repo_root=repo_root,
+            session_id="real-evidence-session",
+            title="Real evidence session",
+            summary="Real evidence source for auto dream safety tests.",
+        )
+        evidence_node_id = session["graph_node_id"]
+        self._write_repo_file(
+            repo_root,
+            "docs/fabricated-evidence-dream.json",
+            json.dumps(
+                {
+                    "title": "Fabricated evidence dream",
+                    "entries": [
+                        {
+                            "id": "fake-evidence",
+                            "type": "lesson",
+                            "title": "Fake evidence",
+                            "body": "Evidence references must point at real graph nodes.",
+                            "confidence": "inferred",
+                            "evidence": ["session:does-not-exist"],
+                        }
+                    ],
+                }
+            ),
+        )
+        self._write_repo_file(
+            repo_root,
+            "docs/prohibited-action-dream.json",
+            json.dumps(
+                {
+                    "title": "Prohibited action dream",
+                    "entries": [
+                        {
+                            "id": "prohibited-actions",
+                            "type": "lesson",
+                            "title": "Never auto approve prohibited actions",
+                            "body": (
+                                "Enable auto-track, submit order, mutate evidence, "
+                                "perform evidence-store mutation, use protected-holdout, "
+                                "change scanner policy, lower proof-bar, import quotes, "
+                                "place order, open order, close order, create order, and cancel order."
+                            ),
+                            "confidence": "inferred",
+                            "evidence": [evidence_node_id],
+                        }
+                    ],
+                }
+            ),
+        )
+        self._write_repo_file(
+            repo_root,
+            "docs/manual-review-dream.json",
+            json.dumps(
+                {
+                    "title": "Manual review dream",
+                    "entries": [
+                        {
+                            "id": "manual-review",
+                            "type": "decision",
+                            "title": "Decision requires review",
+                            "body": "Decisions should not be auto accepted.",
+                            "confidence": "observed",
+                            "evidence": [evidence_node_id],
+                            "supersedes": [evidence_node_id],
+                        }
+                    ],
+                }
+            ),
+        )
+        self._write_repo_file(
+            repo_root,
+            "docs/self-evidence-dream.json",
+            json.dumps(
+                {
+                    "title": "Self evidence dream",
+                    "entries": [
+                        {
+                            "id": "self-evidence",
+                            "type": "lesson",
+                            "title": "Self evidence must not pass",
+                            "body": "A dream proposal cannot use its own node as evidence.",
+                            "confidence": "inferred",
+                            "evidence": ["dream:self-evidence"],
+                        }
+                    ],
+                }
+            ),
+        )
+        for dream_id, path in [
+            ("fabricated-evidence", "docs/fabricated-evidence-dream.json"),
+            ("prohibited-action", "docs/prohibited-action-dream.json"),
+            ("manual-review", "docs/manual-review-dream.json"),
+            ("self-evidence", "docs/self-evidence-dream.json"),
+        ]:
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=Path(path),
+                repo_root=repo_root,
+                dream_id=dream_id,
+            )
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+            generate_from_sessions=False,
+        )
+        reasons = "\n".join(item["reason"] for item in result["rejected"])
+
+        self.assertEqual(result["accepted"], [])
+        self.assertEqual(len(result["rejected"]), 4)
+        self.assertIn("evidence graph node not found", reasons)
+        self.assertIn("high-risk options/action wording", reasons)
+        self.assertIn("requires manual review", reasons)
+        self.assertIn("uses observed confidence", reasons)
+        self.assertIn("supersedes existing memory", reasons)
+        self.assertIn("evidence cannot cite the dream proposal itself", reasons)
+
+    def test_auto_dream_run_rejects_high_risk_or_weak_proposals(self):
+        repo_root = self.root / "auto-dream-reject-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/risky-dream.json",
+            json.dumps(
+                {
+                    "title": "Risky dream",
+                    "entries": [
+                        {
+                            "id": "risky",
+                            "type": "lesson",
+                            "title": "Approve live trading",
+                            "body": "Approve live trading from dream memory.",
+                            "confidence": "inferred",
+                            "evidence": ["session:risky"],
+                        }
+                    ],
+                }
+            ),
+        )
+        proposed = agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/risky-dream.json"),
+            repo_root=repo_root,
+            dream_id="risky",
+        )
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+            generate_from_sessions=False,
+        )
+        listed = agent_control.list_dreams(db_path=self.db_path, status="rejected")
+
+        self.assertEqual(proposed["graph_node_id"], "dream:risky")
+        self.assertEqual(len(result["accepted"]), 0)
+        self.assertEqual(len(result["rejected"]), 1)
+        self.assertIn("high-risk", result["rejected"][0]["reason"])
+        self.assertEqual([node["id"] for node in listed["dreams"]], ["dream:risky"])
+
+    def test_auto_dream_audit_cli_prompt_only(self):
+        runs_dir = self.root / "dream-runs"
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dreams_dir=self.root / "dreams",
+            runs_dir=runs_dir,
+            generate_from_sessions=False,
+        )
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                ["dream", "audit", "--db", str(self.db_path), "--runs-dir", str(runs_dir), "--prompt-only"]
+            )
+
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Automated Dreaming Audit Summary", stdout.getvalue())
+        self.assertIn("Latest run:", stdout.getvalue())
+
+    def test_dream_propose_rejects_malformed_json_without_traceback(self):
+        repo_root = self.root / "dream-json-repo"
+        self._write_repo_file(repo_root, "docs/bad-dream.json", '{"title":')
+
+        with self.assertRaises(agent_control.AgentControlError) as raised:
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                proposal_path=repo_root / "docs/bad-dream.json",
+                repo_root=repo_root,
+            )
+
+        self.assertIn("dream proposal must be valid JSON", str(raised.exception))
+
+    def test_dream_propose_accepts_utf8_bom_json(self):
+        repo_root = self.root / "dream-bom-repo"
+        path = repo_root / "docs/dream.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            "\ufeff"
+            + json.dumps(
+                {
+                    "title": "BOM dream",
+                    "summary": "PowerShell-compatible JSON parse.",
+                    "entries": [
+                        {
+                            "id": "bom-json",
+                            "type": "lesson",
+                            "title": "Read UTF-8 BOM JSON",
+                            "body": "Dream proposal parsing accepts PowerShell-created UTF-8 BOM JSON.",
+                            "confidence": "inferred",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        proposed = agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=path,
+            repo_root=repo_root,
+            dream_id="bom-dream",
+        )
+
+        self.assertEqual(proposed["dream_id"], "bom-dream")
 
     def test_dream_accept_rejects_observed_without_evidence(self):
         repo_root = self.root / "observed-dream-repo"

@@ -11,15 +11,42 @@ Before changing code or docs in this repo:
 3. Read `docs/PROJECT_CONTEXT.md`.
 4. Read `docs/DECISIONS.md`.
 5. Check `docs/NEXT_STEPS.md` for current blockers and active work.
-6. Confirm commands in `package.json` before running verification.
+6. For multi-step, resumed, CEO-style, audit, or worker/subagent work, read `docs/agent-control-plane.md`.
+7. Confirm commands in `package.json` before running verification.
 
 ## Memory Graphs
 
 - Computer-wide memory index: `C:\Users\kalec\projects-memory\MEMORY_GRAPH.md`
 - Options runtime memory: `data/agent-control/agent_control.db`, managed by `npm run agent:control`
-- Startup recovery: `npm run agent:control -- bootstrap --prompt-only`
+- Startup recovery: `npm run memory:bootstrap`
 
 The computer-wide graph is a pointer/provenance layer only. For this repo, living docs, generated readbacks, code, exact evidence artifacts, gateboard state, and the local `data/agent-control/` runtime graph remain authoritative.
+
+For large, resumed, CEO-style, audit, or worker/subagent work, run `npm run memory:bootstrap` before planning. For focused recovery, run:
+
+```bash
+npm run memory:context -- --goal "current task" --pathway operator --prompt-only
+```
+
+Agent memory read paths:
+
+- `npm run memory:bootstrap`: recover checkpoint plus current gateboard blockers.
+- `npm run memory:context -- --goal "<goal>" --pathway <pathway> --prompt-only`: build a focused handoff pack.
+- `npm run agent:control -- graph query "<query>" --metadata KEY=VALUE --prompt-only`: retrieve targeted graph context.
+- `npm run memory:dream-run`: run the automated dreaming loop now; it extracts explicit session lessons/open questions, auto-accepts only low-risk evidence-backed orchestration memory, auto-rejects everything else, and writes an audit trail.
+- `npm run memory:dream-audit`: inspect the latest automated dreaming run and current dream/memory health.
+- `npm run memory:audit`, `npm run memory:repair-authority`, `npm run memory:review-dreams`, and `npm run verify:memory`: check lifecycle health before final handoff on meaningful memory work and backfill legacy authority metadata when audit reports it.
+
+Agent memory write paths:
+
+- Use `checkpoint write` for sprint objective, scope, blockers, and next actions.
+- Use `task report` then `memory:writeback -- <task-id> --summary "..."` when a worker/subagent report has been reviewed and should become durable operating memory.
+- Use `memory remember` only for reviewed durable lessons, constraints, decisions, blockers, artifacts, verifications, or open questions.
+- Use `dream propose` / `dream accept` only for reviewed out-of-band memory updates; dreams remain non-authoritative context.
+- Use `dream run` / `memory:dream-run` for automated low-risk dream extraction and auto-resolution; inspect it with `memory:dream-audit`.
+- Do not use raw `graph remember` for accepted operating memory.
+
+Memory, checkpoints, accepted worker reports, and dreams never authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, live validation, stop/sizing changes, protected-holdout use, or treating historical rows as forward proof.
 
 ## Coding Style: Minimal Senior-Dev Mode
 

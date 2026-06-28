@@ -6,6 +6,35 @@ The runtime implementation is `scripts/agent_control.py`. It stores local operat
 
 - `agent_control.db`: SQLite task/message/graph ledger using WAL mode
 - `events.jsonl`: append-only event mirror for agent-readable audit trails
+- `sessions.jsonl`: compact session transcript provenance records
+
+## Fresh Agent Quickstart
+
+For meaningful multi-step work, resumed work, CEO/worker orchestration, or subagent debates, treat the runtime graph as on by default:
+
+```powershell
+npm run memory:bootstrap
+npm run memory:context -- --goal "current task" --pathway operator --prompt-only
+```
+
+Use the graph to recover context and write back reviewed lessons, not to replace repo facts. Living docs, generated readbacks, code, exact evidence artifacts, and gateboard state remain authoritative.
+
+| Need | Command |
+| --- | --- |
+| Recover current checkpoint and gateboard blockers | `npm run memory:bootstrap` |
+| Build a focused prompt pack | `npm run memory:context -- --goal "<goal>" --pathway operator --prompt-only` |
+| Query targeted graph context | `npm run agent:control -- graph query "<query>" --metadata KEY=VALUE --prompt-only` |
+| Accept a reviewed worker/subagent report into operating memory | `npm run memory:writeback -- <task-id> --summary "Accepted after review."` |
+| Record a reviewed durable lesson directly | `npm run agent:control -- memory remember --type lesson --title "..." --body "..." --confidence inferred --json` |
+| Review dream proposals and dream-origin lessons | `npm run memory:review-dreams` |
+| Run automated dreaming now | `npm run memory:dream-run` |
+| Audit automated dreaming | `npm run memory:dream-audit` |
+| Register the nightly Windows dreaming task | `npm run memory:schedule-dreams` |
+| Audit memory lifecycle health | `npm run memory:audit` |
+| Backfill authority metadata on legacy operating memory rows | `npm run memory:repair-authority` |
+| Run deterministic memory recovery checks | `npm run memory:eval` or `npm run verify:memory` |
+
+Do not use raw `graph remember` for accepted operating memory. `graph remember` stores raw graph context only; durable reviewed memory goes through `memory remember`, accepted task writeback, or accepted dreams.
 
 ## Design Model
 
@@ -38,12 +67,12 @@ The runtime graph can seed a repo-wide current-workspace context layer from chec
 - runtime-memory docs: `docs/agent-control-plane.md`, `docs/agent-memory-graph.md`, `data/contracts/agent-memory-graph.json`
 - gateboard artifacts: `docs/project-operator-gateboard.md`, `data/forward-tracking/project_operator_gateboard_latest.json`
 - package scripts: `package.json`
-- visible repo text files from `git ls-files --cached --others --exclude-standard`, capped by file count, byte size, and excerpt length
+- visible repo text files from `git ls-files --cached --others --exclude-standard`, capped by file count, byte size, excerpt length, and memory-safe path filters
 
 The seed creates deterministic graph nodes instead of copying hidden state into source control:
 
 - `knowledge:<path>` for checked docs/manifests, with path, source type, authority, line count, and content hash metadata
-- `repo_file:<path>` for each indexed visible repo file, with `source_type=repo_file_index`, category, extension, `git_state=tracked|untracked`, content hash, line count, byte size, and truncation metadata
+- `repo_file:<path>` for each indexed visible repo file, with `source_type=repo_file_index`, category, extension, `git_state=tracked|untracked`, content hash, line count, byte size, and truncation metadata. Repo-file indexing refuses obvious secrets, credential files, databases, ignored runtime control-plane state, and high-risk generated evidence/data paths.
 - `static:<id>` for nodes from the generated static memory graph
 - `knowledge:gateboard:latest`, `entity:gateboard:pathway:*`, `blocker:gateboard:*`, and `evidence_artifact:gateboard:*` for the current gateboard, no-chase blockers, pathway statuses, and source artifacts
 
@@ -92,7 +121,7 @@ npm run agent:control -- checkpoint latest --prompt-only
 Query by text plus metadata and emit prompt-ready context:
 
 ```powershell
-npm run agent:control -- graph query "open risk" `
+npm run agent:control -- graph query "gateboard" `
   --metadata source_type=gateboard_blocker `
   --max-depth 1 `
   --context `
@@ -102,7 +131,7 @@ npm run agent:control -- graph query "open risk" `
 Or print only the prompt-ready query context:
 
 ```powershell
-npm run agent:control -- graph query "open risk" `
+npm run agent:control -- graph query "gateboard" `
   --metadata source_type=gateboard_blocker `
   --max-depth 1 `
   --prompt-only
@@ -137,7 +166,9 @@ Typed operating memory:
 - `open_question`
 - `superseded_fact`
 
-Each operating memory carries `memory_type`, `memory_status`, `confidence`, `recorded_at`, optional `freshness_days`, optional `expires_at`, and optional supersession metadata. Valid memory statuses are `active`, `resolved`, `superseded`, `expired`, and `archived`. Valid confidence values are `accepted`, `observed`, `inferred`, and `unknown`.
+Each operating memory carries `memory_type`, `memory_status`, `confidence`, `recorded_at`, `authority_scope=orchestration_only`, `does_not_authorize_trading_or_evidence_mutation=true`, optional `freshness_days`, optional `expires_at`, and optional supersession metadata. Valid memory statuses are `active`, `resolved`, `superseded`, `expired`, and `archived`. Valid confidence values are `accepted`, `observed`, `inferred`, and `unknown`.
+
+Manual `memory remember` defaults to `confidence=inferred`; use `confidence=accepted` only when the caller is intentionally recording reviewed operator memory. Generic `graph remember` cannot create `source_type=operating_memory` nodes. Typed operating memory must go through `memory remember`, accepted worker-report writeback, or accepted dream entries so future context packs do not confuse raw graph notes with reviewed memory.
 
 When the CEO accepts a task that has worker reports, `task accept` writes back the latest submitted report as accepted operating memory:
 
@@ -147,7 +178,13 @@ When the CEO accepts a task that has worker reports, `task accept` writes back t
 - `memory:artifact:<task_id>:<report_id>:<n>` for reported artifacts
 - edges from the accepting decision to the raw report and accepted worker-report memory, from the accepted worker-report memory to the raw report and task, from verification and artifact memories through the accepted worker report, and direct `verifies` / `documents` links from verification and artifact memories back to the task
 
-This is a review gate, not a trading gate. Accepting a worker report records that the CEO integrated the context; it does not prove profitability, authorize evidence mutation, open a broker path, or promote a lane. After a task reaches `accepted`, `blocked`, or `cancelled`, late `task report` submissions are rejected so terminal task state cannot regress.
+This is a review gate, not a trading gate. Accepting a worker report records that the CEO integrated the context; it does not prove profitability, authorize evidence mutation, open a broker path, or promote a lane. Task lifecycle transitions use guarded status updates: `claim`, `report`, and `accept` update only if the task is still in an allowed source state, and stale concurrent writers roll back instead of regressing terminal state. After a task reaches `accepted`, `blocked`, or `cancelled`, late `task report` submissions are rejected so terminal task state cannot regress.
+
+The agent-facing shortcut for accepting a reviewed worker report is:
+
+```powershell
+npm run memory:writeback -- T-20260614-abcdef12 --summary "Accepted after review."
+```
 
 Store a manual typed memory:
 
@@ -156,7 +193,7 @@ npm run agent:control -- memory remember `
   --type lesson `
   --title "Bootstrap first" `
   --body "Future CEO windows should run bootstrap before graph queries." `
-  --confidence accepted `
+  --confidence inferred `
   --freshness-days 30 `
   --json
 ```
@@ -239,9 +276,38 @@ npm run agent:control -- dream propose `
 npm run agent:control -- dream accept DREAM-20260626-abcdef12 --accepted-by CEO --json
 npm run agent:control -- dream reject DREAM-20260626-abcdef12 --reason "Weak evidence." --json
 npm run agent:control -- dream list --json
+npm run memory:review-dreams
 ```
 
-Dream proposal JSON contains a title, summary, optional evidence, and entries with `type`, `title`, `body`, optional `confidence`, optional `evidence`, optional `supersedes`, and optional `freshness_days`. Accepted entries flow through the existing operating-memory path as `origin=dreaming`, `proposal_origin=dream`, `non_authoritative=true`, and `does_not_authorize_trading_or_evidence_mutation=true`. Dream entries default to `confidence=inferred`; `confidence=observed` is accepted only when the entry carries evidence.
+Automated dreaming is the default low-maintenance loop:
+
+```powershell
+npm run memory:dream-run
+npm run memory:dream-audit
+npm run memory:schedule-dreams
+```
+
+`memory:dream-run` does three bounded things:
+
+- scans unprocessed `session_transcript` graph nodes and their transcript files for explicit `Lesson:`, `Constraint:`, and `Open question:` lines
+- creates an auto dream proposal from those explicit lines only
+- auto-accepts or auto-rejects proposed dreams under `auto_dream_v1`
+
+The auto policy accepts only session-transcript-graph-evidence-backed `lesson`, `constraint`, and `open_question` entries with inferred/unknown confidence, no supersession, and no high-risk options-action wording. Evidence refs must be non-empty graph node IDs for existing same-tenant `session_transcript` nodes, and a dream cannot cite itself as evidence. It rejects decisions, blockers, superseded facts, observed-confidence claims, entries without real session evidence, fabricated evidence refs, supersession attempts, and anything that appears to approve or authorize trading, broker paths/orders, live validation, evidence-store mutation, quote import, auto-track, scanner policy changes, proof-bar changes, promotion, stop/sizing changes, or protected-holdout use. If a session transcript source is unreadable, the run does not mark that session as fully processed.
+
+Every automated run writes:
+
+- `data/agent-control/dream-runs/latest.json`
+- `data/agent-control/dream-runs/latest.md`
+- `data/agent-control/dream-runs/scheduler.log` when run from Task Scheduler
+- a `dream_run:<id>` graph node
+- a `dream.auto_run` event
+
+Audit the loop with `npm run memory:dream-audit`. Use `npm run memory:review-dreams` when you want to inspect accepted/rejected dream state in prompt-ready form.
+
+Dream proposal JSON contains a title, summary, optional evidence, and entries with `type`, `title`, `body`, optional `confidence`, optional `evidence`, optional `supersedes`, optional `freshness_days`, and optional review-routing fields: `target_project`, `pathway`, `intended_consumer`, `promotion_target`, `review_question`, `acceptance_criteria`, `reject_if`, and `retrieval_keywords`. Proposals must contain at least one entry, and duplicate `(type, id)` entries are rejected. Accepted entries flow through the existing operating-memory path as `origin=dreaming`, `proposal_origin=dream`, `accepted_by`, `accepted_at`, `source_sha256`, `non_authoritative=true`, and `does_not_authorize_trading_or_evidence_mutation=true`. Dream entries default to `confidence=inferred`; `confidence=observed` is accepted only when the entry carries evidence.
+
+Dream proposal parsing accepts PowerShell-created UTF-8 BOM JSON and rejects malformed JSON with a controlled `agent_control:` error instead of a traceback.
 
 Dream acceptance is a memory review gate only. It does not prove profitability, approve evidence mutation, change scanner policy, promote lanes, open broker-paper or live-capital paths, or override living docs, generated readbacks, gateboard state, exact OPRA/NBBO evidence, or code. Reject stale or weak dream proposals instead of letting speculative context accumulate.
 

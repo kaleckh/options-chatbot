@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -18,6 +19,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT / "data" / "agent-control" / "agent_control.db"
 DEFAULT_EVENTS_PATH = ROOT / "data" / "agent-control" / "events.jsonl"
 DEFAULT_SESSIONS_PATH = ROOT / "data" / "agent-control" / "sessions.jsonl"
+DEFAULT_DREAMS_DIR = ROOT / "data" / "agent-control" / "dreams"
+DEFAULT_DREAM_RUNS_DIR = ROOT / "data" / "agent-control" / "dream-runs"
 DEFAULT_TENANT_ID = "options-chatbot"
 DEFAULT_REPO_INDEX_MAX_FILES = 2000
 DEFAULT_REPO_INDEX_MAX_FILE_BYTES = 256_000
@@ -81,9 +84,53 @@ DREAM_PROPOSAL_TYPES = {
     "open_question",
     "superseded_fact",
 }
+AUTO_DREAM_POLICY_VERSION = "auto_dream_v1"
+AUTO_DREAM_ALLOWED_TYPES = {"lesson", "constraint", "open_question"}
+AUTO_DREAM_MANUAL_REVIEW_TYPES = {"decision", "blocker", "superseded_fact"}
+AUTO_DREAM_HIGH_RISK_PATTERNS = (
+    r"\bauthori[sz]e\b",
+    r"\bapproval\b",
+    r"\bapprove\b",
+    r"\bbroker\b",
+    r"\bbroker[-_ ]?orders?\b",
+    r"\bsubmit[-_ ]?orders?\b",
+    r"\bplace[-_ ]?orders?\b",
+    r"\bopen[-_ ]?orders?\b",
+    r"\bclose[-_ ]?orders?\b",
+    r"\bcreate[-_ ]?orders?\b",
+    r"\bcancel[-_ ]?orders?\b",
+    r"\blive\b",
+    r"\blive[-_ ]?validation\b",
+    r"\btrade\b",
+    r"\btrading\b",
+    r"\bauto[-_ ]?track\b",
+    r"\bscanner[-_ ]?policy\b",
+    r"\bproof[-_ ]?bars?\b",
+    r"\bevidence[-_ ]?mutation\b",
+    r"\bevidence[-_ ]?store\b",
+    r"\bevidence[-_ ]?store[-_ ]?mutation\b",
+    r"\bmutate[-_ ]?evidence\b",
+    r"\bquote[-_ ]?imports?\b",
+    r"\bimport[-_ ]?quotes?\b",
+    r"\bpromotion\b",
+    r"\bpromote\b",
+    r"\bprotected[-_ ]?holdout\b",
+    r"\bstop[-_/ ]?sizing\b",
+    r"\bsizing\b",
+)
+AUTO_DREAM_HIGH_RISK_RE = tuple(re.compile(pattern, re.IGNORECASE) for pattern in AUTO_DREAM_HIGH_RISK_PATTERNS)
+AUTO_DREAM_LINE_RE = re.compile(
+    r"^\s*(?:[-*]\s*)?(lesson|constraint|open[_ -]?question)\s*:\s*(.+?)\s*$",
+    re.IGNORECASE,
+)
 MEMORY_STATUSES = {"active", "resolved", "superseded", "expired", "archived"}
 INACTIVE_MEMORY_STATUSES = {"resolved", "superseded", "expired", "archived"}
 MEMORY_CONFIDENCE = {"accepted", "observed", "inferred", "unknown"}
+OPERATING_AUTHORITY_SCOPE = "orchestration_only"
+OPERATING_AUTHORITY_METADATA = {
+    "authority_scope": OPERATING_AUTHORITY_SCOPE,
+    "does_not_authorize_trading_or_evidence_mutation": True,
+}
 OPERATING_MEMORY_KIND_BY_TYPE = {
     "artifact": "evidence_artifact",
     "blocker": "blocker",
@@ -192,7 +239,6 @@ REPO_INDEX_TEXT_EXTENSIONS = {
     ".cmd",
     ".css",
     ".csv",
-    ".env",
     ".html",
     ".js",
     ".json",
@@ -413,6 +459,10 @@ def _repo_file_category(relative_path: str) -> str:
 def _repo_file_is_indexable(repo_root: Path, relative_path: str, *, max_file_bytes: int) -> bool:
     if _repo_index_skip(relative_path):
         return False
+    try:
+        _assert_memory_safe_source_path(relative_path)
+    except AgentControlError:
+        return False
     path = repo_root / relative_path
     if not path.is_file():
         return False
@@ -531,6 +581,17 @@ def _metadata_matches(metadata: dict[str, Any], metadata_filter: dict[str, Any] 
 
 def _is_operating_memory(metadata: dict[str, Any]) -> bool:
     return metadata.get("source_type") == "operating_memory"
+
+
+def _has_operating_authority_metadata(metadata: dict[str, Any]) -> bool:
+    return (
+        metadata.get("authority_scope") == OPERATING_AUTHORITY_SCOPE
+        and metadata.get("does_not_authorize_trading_or_evidence_mutation") is True
+    )
+
+
+def _with_operating_authority_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {**metadata, **OPERATING_AUTHORITY_METADATA}
 
 
 def _memory_is_inactive(metadata: dict[str, Any], *, now: datetime | None = None) -> bool:
@@ -708,6 +769,15 @@ def _format_node_list(nodes: list[dict[str, Any]], *, empty: str) -> list[str]:
         body = _truncate(str(node.get("body", "")), 220)
         if body:
             lines.append(f"  body: {body}")
+        for key, label in [
+            ("commands_run", "commands"),
+            ("files_artifacts_read", "files read"),
+            ("acceptance_criteria", "acceptance criteria"),
+            ("review_question", "review question"),
+        ]:
+            value = metadata.get(key)
+            if value:
+                lines.append(f"  {label}: {_truncate(str(value), 220)}")
     return lines
 
 
@@ -739,6 +809,7 @@ def _format_context_pack(result: dict[str, Any]) -> str:
         ("Recent verifications", result.get("recent_verifications", []), "No recent verification memories in this pack."),
         ("Recent artifacts", result.get("recent_artifacts", []), "No recent artifact memories in this pack."),
         ("Accepted worker reports", result.get("worker_reports", []), "No accepted worker reports in this pack."),
+        ("Dream-derived lessons and constraints", result.get("dream_lessons", []), "No dream-derived lessons or constraints in this pack."),
         ("Open questions", result.get("open_questions", []), "No open questions in this pack."),
         ("Relevant repo files", result.get("relevant_repo_files", []), "No relevant repo files matched."),
     ]
@@ -761,6 +832,7 @@ def _format_memory_audit(result: dict[str, Any]) -> str:
         f"Checked memories: {result.get('checked_memories')}",
     ]
     for key, heading in [
+        ("authority_inconsistencies", "Authority metadata inconsistencies"),
         ("stale_or_expired", "Stale or expired active memories"),
         ("supersession_inconsistencies", "Supersession inconsistencies"),
         ("open_questions", "Open questions"),
@@ -778,6 +850,75 @@ def _format_memory_eval(result: dict[str, Any]) -> str:
         marker = "PASS" if check.get("pass") else "FAIL"
         detail = f" - {check.get('detail')}" if check.get("detail") else ""
         lines.append(f"- {marker}: {check.get('name')}{detail}")
+    return "\n".join(lines)
+
+
+def _format_dream_review(result: dict[str, Any]) -> str:
+    lines = [
+        "# Dream Review Packet",
+        f"Status: {result.get('status')}",
+        f"Proposed dreams: {len(result.get('proposed_dreams', []))}",
+        f"Accepted dreams: {len(result.get('accepted_dreams', []))}",
+    ]
+    for key, heading, empty in [
+        ("proposed_dreams", "Proposed dreams needing review", "No proposed dreams."),
+        ("accepted_dreams", "Accepted dream proposals", "No accepted dream proposals."),
+        ("dream_lessons", "Accepted dream lessons and constraints", "No accepted dream lessons or constraints."),
+        ("open_questions", "Open dream-origin questions", "No open dream-origin questions."),
+    ]:
+        lines.append("")
+        lines.append(f"# {heading}")
+        lines.extend(_format_node_list(result.get(key, []), empty=empty))
+    if result.get("recommended_commands"):
+        lines.append("")
+        lines.append("# Recommended Commands")
+        for command in result["recommended_commands"]:
+            lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def _format_dream_audit(result: dict[str, Any]) -> str:
+    lines = ["# Automated Dreaming Audit Summary", f"Status: {result.get('status')}"]
+    latest = result.get("latest_run")
+    if latest:
+        lines.extend(
+            [
+                f"Latest run: {latest.get('run_id')}",
+                f"Policy: {latest.get('policy_version')}",
+                f"Completed: {latest.get('completed_at')}",
+                f"Generated proposals: {len(latest.get('generated_proposals', []))}",
+                f"Processed sessions: {len(latest.get('processed_sessions', []))}",
+                f"Accepted dreams: {len(latest.get('accepted', []))}",
+                f"Rejected dreams: {len(latest.get('rejected', []))}",
+                f"Skipped dreams: {len(latest.get('skipped', []))}",
+            ]
+        )
+    else:
+        lines.append("Latest run: none")
+    dream_review = result.get("dream_review") or {}
+    memory = result.get("memory_audit") or {}
+    lines.extend(
+        [
+            "",
+            "# Current Dream State",
+            f"- Review status: {dream_review.get('status')}",
+            f"- Proposed dreams: {dream_review.get('proposed_count')}",
+            f"- Accepted dreams: {dream_review.get('accepted_count')}",
+            f"- Dream-origin open questions: {dream_review.get('open_question_count')}",
+            "",
+            "# Memory Audit State",
+            f"- Status: {memory.get('status')}",
+            f"- Checked memories: {memory.get('checked_memories')}",
+            f"- Authority issues: {memory.get('authority_issue_count')}",
+            f"- Stale or expired: {memory.get('stale_or_expired_count')}",
+            f"- Supersession issues: {memory.get('supersession_issue_count')}",
+            f"- Open blockers: {memory.get('open_blocker_count')}",
+            "",
+            "# Recommended Commands",
+        ]
+    )
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
     return "\n".join(lines)
 
 
@@ -970,6 +1111,44 @@ def _task_row(conn: sqlite3.Connection, task_id: str) -> dict[str, Any]:
     if row is None:
         raise AgentControlError(f"Unknown task: {task_id}")
     return row
+
+
+def _guard_task_status_update(
+    conn: sqlite3.Connection,
+    *,
+    task_id: str,
+    next_status: str,
+    now: str,
+    allowed_statuses: set[str] | None = None,
+    disallowed_statuses: set[str] | None = None,
+    owner: str | None = None,
+) -> None:
+    clauses = ["id = ?"]
+    params: list[Any] = [task_id]
+    if allowed_statuses is not None:
+        placeholders = ", ".join("?" for _ in sorted(allowed_statuses))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(sorted(allowed_statuses))
+    if disallowed_statuses is not None:
+        placeholders = ", ".join("?" for _ in sorted(disallowed_statuses))
+        clauses.append(f"status NOT IN ({placeholders})")
+        params.extend(sorted(disallowed_statuses))
+
+    set_clause = "status = ?, updated_at = ?"
+    update_params: list[Any] = [next_status, now]
+    if owner is not None:
+        set_clause += ", owner = ?"
+        update_params.append(owner)
+
+    cursor = conn.execute(
+        f"UPDATE tasks SET {set_clause} WHERE {' AND '.join(clauses)}",
+        (*update_params, *params),
+    )
+    if cursor.rowcount != 1:
+        current = _task_row(conn, task_id)
+        raise AgentControlError(
+            f"Task {task_id} status changed concurrently; current status is {current['status']}"
+        )
 
 
 def _graph_node_row(conn: sqlite3.Connection, node_id: str) -> dict[str, Any]:
@@ -1242,9 +1421,13 @@ def claim_task(
             """,
             (task_id, worker_id, now, "active", canonical_json(metadata or {})),
         )
-        conn.execute(
-            "UPDATE tasks SET status = ?, owner = ?, updated_at = ? WHERE id = ?",
-            ("claimed", worker_id, now, task_id),
+        _guard_task_status_update(
+            conn,
+            task_id=task_id,
+            next_status="claimed",
+            now=now,
+            allowed_statuses={"open", "reported"},
+            owner=worker_id,
         )
         _update_task_graph_status(conn, task_id, "claimed", owner=worker_id)
         run_node = upsert_graph_node(
@@ -1323,9 +1506,12 @@ def report_task(
             (task_id, worker_id, now, canonical_json(report), "submitted"),
         )
         report_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        conn.execute(
-            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
-            ("reported", now, task_id),
+        _guard_task_status_update(
+            conn,
+            task_id=task_id,
+            next_status="reported",
+            now=now,
+            disallowed_statuses=TERMINAL_TASK_STATUSES,
         )
         _update_task_graph_status(conn, task_id, "reported", latest_report_id=report_id, latest_report_worker=worker_id)
         report_node = upsert_graph_node(
@@ -1426,6 +1612,7 @@ def _upsert_operating_memory(
     memory_metadata = {
         **(metadata or {}),
         "source_type": "operating_memory",
+        **OPERATING_AUTHORITY_METADATA,
         "memory_type": memory_type,
         "memory_status": memory_status,
         "confidence": confidence,
@@ -1487,6 +1674,8 @@ def _writeback_accepted_report(
         "accepted_by": accepted_by,
         "proof_gate_status": report.get("proof_gate_status"),
         "pathway": task.get("pathway"),
+        "files_artifacts_read": report.get("files_artifacts_read"),
+        "commands_run": report.get("commands_run"),
     }
     accepted_node_ids: list[str] = []
     report_node_id = f"report:{task_id}:{report_id}"
@@ -1635,25 +1824,23 @@ def accept_task(
         if task["status"] not in {"reported", "claimed", "open"}:
             raise AgentControlError(f"Task {task_id} cannot be accepted from status {task['status']}")
         now = utc_now()
-        conn.execute(
-            "UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?",
-            ("accepted", now, task_id),
+        _guard_task_status_update(
+            conn,
+            task_id=task_id,
+            next_status="accepted",
+            now=now,
+            allowed_statuses={"reported", "claimed", "open"},
         )
         _update_task_graph_status(conn, task_id, "accepted", accepted_by=accepted_by)
-        decision_node = upsert_graph_node(
+        decision_node = _upsert_operating_memory(
             conn,
             node_id=f"decision:{task_id}:{uuid.uuid4().hex[:8]}",
-            kind="decision",
+            memory_type="decision",
             title=f"Accepted {task_id}",
             body=summary,
             sub_tenant_id=task["pathway"],
             metadata={
                 **(metadata or {}),
-                "source_type": "operating_memory",
-                "memory_type": "decision",
-                "memory_status": "active",
-                "confidence": "accepted",
-                "recorded_at": now,
                 "task_id": task_id,
                 "accepted_by": accepted_by,
                 "pathway": task["pathway"],
@@ -1717,6 +1904,9 @@ def remember_graph_node(
     upsert: bool = True,
 ) -> dict[str, Any]:
     node_id = node_id or _short_id(kind.upper())
+    metadata = metadata or {}
+    if metadata.get("source_type") == "operating_memory":
+        raise AgentControlError("graph remember cannot create operating_memory nodes; use memory remember")
     with closing(connect(db_path)) as conn, conn:
         node = upsert_graph_node(
             conn,
@@ -1726,7 +1916,7 @@ def remember_graph_node(
             body=body,
             tenant_id=tenant_id,
             sub_tenant_id=sub_tenant_id,
-            metadata=metadata or {},
+            metadata=metadata,
             source_ref=source_ref,
             upsert=upsert,
         )
@@ -1749,7 +1939,7 @@ def remember_operating_memory(
     tenant_id: str = DEFAULT_TENANT_ID,
     sub_tenant_id: str | None = None,
     memory_status: str = "active",
-    confidence: str = "accepted",
+    confidence: str = "inferred",
     metadata: dict[str, Any] | None = None,
     source_ref: str | None = None,
     node_id: str | None = None,
@@ -1860,9 +2050,14 @@ def log_session(
     return payload
 
 
-def _parse_dream_entries(raw_entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _parse_dream_entries(raw_entries: Any) -> list[dict[str, Any]]:
+    if not isinstance(raw_entries, list):
+        raise AgentControlError("dream proposal entries must be a list")
     entries: list[dict[str, Any]] = []
+    seen_ids: set[tuple[str, str]] = set()
     for index, raw in enumerate(raw_entries, start=1):
+        if not isinstance(raw, dict):
+            raise AgentControlError(f"dream entry {index} must be a JSON object")
         memory_type = str(raw.get("type") or "").strip()
         if memory_type not in DREAM_PROPOSAL_TYPES:
             raise AgentControlError(
@@ -1875,17 +2070,59 @@ def _parse_dream_entries(raw_entries: list[dict[str, Any]]) -> list[dict[str, An
         confidence = str(raw.get("confidence") or "inferred").strip()
         if confidence not in {"observed", "inferred", "unknown"}:
             raise AgentControlError(f"dream entry {index} confidence must be observed, inferred, or unknown")
+        entry_id = str(raw.get("id") or f"entry-{index}").strip()
+        identity = (memory_type, entry_id)
+        if identity in seen_ids:
+            raise AgentControlError(f"dream entry {index} duplicates entry id {memory_type}:{entry_id}")
+        seen_ids.add(identity)
+        evidence = raw.get("evidence", [])
+        if evidence is None:
+            evidence = []
+        if not isinstance(evidence, list):
+            raise AgentControlError(f"dream entry {index} evidence must be a list")
+        if any(not isinstance(value, str) or not value.strip() for value in evidence):
+            raise AgentControlError(f"dream entry {index} evidence entries must be non-empty strings")
+        supersedes = raw.get("supersedes", [])
+        if supersedes is None:
+            supersedes = []
+        if isinstance(supersedes, str) or not isinstance(supersedes, list):
+            raise AgentControlError(f"dream entry {index} supersedes must be a list")
+        if any(not isinstance(value, str) or not value.strip() for value in supersedes):
+            raise AgentControlError(f"dream entry {index} supersedes entries must be non-empty strings")
+        freshness_days = raw.get("freshness_days")
+        if freshness_days is not None and (
+            isinstance(freshness_days, bool) or not isinstance(freshness_days, int) or freshness_days < 0
+        ):
+            raise AgentControlError(f"dream entry {index} freshness_days must be a non-negative integer")
+        raw_metadata = raw.get("metadata", {})
+        if raw_metadata is None:
+            raw_metadata = {}
+        if not isinstance(raw_metadata, dict):
+            raise AgentControlError(f"dream entry {index} metadata must be a JSON object")
+        entry_metadata = dict(raw_metadata)
+        for key in [
+            "target_project",
+            "pathway",
+            "intended_consumer",
+            "promotion_target",
+            "review_question",
+            "acceptance_criteria",
+            "reject_if",
+            "retrieval_keywords",
+        ]:
+            if key in raw and key not in entry_metadata:
+                entry_metadata[key] = raw[key]
         entries.append(
             {
-                "id": str(raw.get("id") or f"entry-{index}").strip(),
+                "id": entry_id,
                 "type": memory_type,
                 "title": title,
                 "body": body,
                 "confidence": confidence,
-                "evidence": raw.get("evidence") or [],
-                "supersedes": raw.get("supersedes") or [],
-                "freshness_days": raw.get("freshness_days"),
-                "metadata": raw.get("metadata") or {},
+                "evidence": evidence,
+                "supersedes": supersedes,
+                "freshness_days": freshness_days,
+                "metadata": entry_metadata,
             }
         )
     return entries
@@ -1913,10 +2150,15 @@ def propose_dream(
         raise AgentControlError(
             f"dream proposal hash mismatch for {resolved}: expected {expected_sha256}, got {current_sha256}"
         )
-    raw = json.loads(resolved.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(resolved.read_text(encoding="utf-8-sig"))
+    except json.JSONDecodeError as exc:
+        raise AgentControlError(f"dream proposal must be valid JSON: {exc}") from exc
     if not isinstance(raw, dict):
         raise AgentControlError("dream proposal must be a JSON object")
     entries = _parse_dream_entries(raw.get("entries") or [])
+    if not entries:
+        raise AgentControlError("dream proposal requires at least one entry")
     dream_id = dream_id or _short_id("DREAM")
     now = utc_now()
     proposal = {
@@ -2002,7 +2244,7 @@ def accept_dream(
                 "evidence": entry.get("evidence") or [],
                 "accepted_by": accepted_by,
                 "accepted_at": accepted_at,
-                "does_not_authorize_trading_or_evidence_mutation": True,
+                **OPERATING_AUTHORITY_METADATA,
             }
             node = _upsert_operating_memory(
                 conn,
@@ -2117,6 +2359,612 @@ def list_dreams(
         if len(dreams) >= limit:
             break
     return {"dreams": dreams}
+
+
+def review_dreams(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 12,
+) -> dict[str, Any]:
+    proposed = list_dreams(db_path=db_path, tenant_id=tenant_id, status="proposed", limit=limit)["dreams"]
+    accepted = list_dreams(db_path=db_path, tenant_id=tenant_id, status="accepted", limit=limit)["dreams"]
+    with closing(connect(db_path)) as conn, conn:
+        dream_lessons = [
+            node
+            for node in _dedupe_nodes(
+                [
+                    *_select_graph_nodes(
+                        conn,
+                        tenant_id=tenant_id,
+                        memory_type="lesson",
+                        active_only=True,
+                        limit=limit,
+                    ),
+                    *_select_graph_nodes(
+                        conn,
+                        tenant_id=tenant_id,
+                        memory_type="constraint",
+                        active_only=True,
+                        limit=limit,
+                    ),
+                ]
+            )
+            if (node.get("metadata") or {}).get("origin") == "dreaming"
+        ][:limit]
+        open_questions = [
+            node
+            for node in _select_graph_nodes(
+                conn,
+                tenant_id=tenant_id,
+                memory_type="open_question",
+                active_only=True,
+                limit=max(limit * 3, 12),
+            )
+            if (node.get("metadata") or {}).get("origin") == "dreaming"
+        ][:limit]
+    return {
+        "status": "review_required" if proposed else "no_proposed_dreams",
+        "tenant_id": tenant_id,
+        "proposed_dreams": proposed,
+        "accepted_dreams": accepted,
+        "dream_lessons": dream_lessons,
+        "open_questions": open_questions,
+        "recommended_commands": [
+            "npm run memory:review-dreams",
+            "npm run memory:dreams",
+            "npm run memory:audit",
+            "npm run agent:control -- dream accept <dream-id> --accepted-by CEO --json",
+            "npm run agent:control -- dream reject <dream-id> --reason \"Weak or stale evidence.\" --json",
+        ],
+    }
+
+
+def _normalize_dream_line_type(raw_type: str) -> str:
+    normalized = raw_type.lower().replace("-", "_").replace(" ", "_")
+    if normalized == "open_question":
+        return "open_question"
+    return normalized
+
+
+def _auto_dream_text_has_high_risk(text: str) -> bool:
+    return any(pattern.search(text) for pattern in AUTO_DREAM_HIGH_RISK_RE)
+
+
+def _auto_dream_evidence_issue(
+    conn: sqlite3.Connection,
+    evidence_refs: Any,
+    *,
+    tenant_id: str,
+    field_name: str,
+    current_node_id: str,
+) -> str | None:
+    if evidence_refs is None:
+        return None
+    if not isinstance(evidence_refs, list):
+        return f"{field_name} evidence must be a list"
+    for value in evidence_refs:
+        if not isinstance(value, str) or not value.strip():
+            return f"{field_name} evidence entries must be non-empty graph node ids"
+        evidence_node_id = value.strip()
+        if evidence_node_id == current_node_id:
+            return f"{field_name} evidence cannot cite the dream proposal itself: {evidence_node_id}"
+        node = _row_dict(
+            conn.execute(
+                "SELECT * FROM graph_nodes WHERE id = ?",
+                (evidence_node_id,),
+            ).fetchone()
+        )
+        if node is None:
+            return f"{field_name} evidence graph node not found: {evidence_node_id}"
+        if node.get("tenant_id") != tenant_id:
+            return f"{field_name} evidence graph node belongs to another tenant: {evidence_node_id}"
+        evidence_metadata = node.get("metadata") or {}
+        if evidence_metadata.get("source_type") != "session_transcript":
+            return f"{field_name} evidence must cite session_transcript nodes for auto-accept: {evidence_node_id}"
+    return None
+
+
+def _auto_dream_session_source_text(session_node: dict[str, Any], *, repo_root: Path) -> tuple[str, list[str]]:
+    texts = [str(session_node.get("body") or "")]
+    sources = ["graph_body"]
+    metadata = session_node.get("metadata") or {}
+    path = metadata.get("path") or session_node.get("source_ref")
+    if isinstance(path, str) and path.strip():
+        try:
+            resolved = _resolve_inside_repo(repo_root, Path(path))
+            if resolved.is_file():
+                texts.append(resolved.read_text(encoding="utf-8"))
+                sources.append("transcript_file")
+            else:
+                sources.append("transcript_file_unreadable")
+        except (OSError, UnicodeDecodeError, AgentControlError):
+            sources.append("transcript_file_unreadable")
+    return "\n".join(texts), sources
+
+
+def _auto_dream_title(text: str, *, max_chars: int = 96) -> str:
+    title = " ".join(text.split())
+    if len(title) <= max_chars:
+        return title
+    return title[: max_chars - 3].rstrip() + "..."
+
+
+def _extract_session_dream_entries(
+    session_node: dict[str, Any],
+    *,
+    repo_root: Path = ROOT,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    metadata = session_node.get("metadata") or {}
+    session_id = str(metadata.get("session_id") or session_node["id"]).replace("session:", "")
+    evidence_id = session_node["id"]
+    entries: list[dict[str, Any]] = []
+    source_text, scanned_sources = _auto_dream_session_source_text(session_node, repo_root=repo_root)
+    seen_entries: set[tuple[str, str]] = set()
+    for line in source_text.splitlines():
+        match = AUTO_DREAM_LINE_RE.match(line)
+        if not match:
+            continue
+        memory_type = _normalize_dream_line_type(match.group(1))
+        body = " ".join(match.group(2).split())
+        if not body:
+            continue
+        identity = (memory_type, body)
+        if identity in seen_entries:
+            continue
+        seen_entries.add(identity)
+        entry_hash = _text_sha256(f"{evidence_id}:{memory_type}:{body}")[:12]
+        entries.append(
+            {
+                "id": f"{session_id}-{entry_hash}",
+                "type": memory_type,
+                "title": _auto_dream_title(body),
+                "body": body,
+                "confidence": "inferred",
+                "evidence": [evidence_id],
+                "metadata": {
+                    "target_project": DEFAULT_TENANT_ID,
+                    "pathway": metadata.get("sub_tenant_id") or "operator",
+                    "intended_consumer": "future_agents",
+                    "retrieval_keywords": ["agent-memory", "dreaming", session_id],
+                    "auto_generated_from_session": True,
+                },
+            }
+        )
+    return entries, scanned_sources
+
+
+def _auto_dream_evaluate_node(
+    node: dict[str, Any],
+    *,
+    conn: sqlite3.Connection,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any]:
+    metadata = node.get("metadata") or {}
+    try:
+        entries = _parse_dream_entries(metadata.get("entries", []))
+    except AgentControlError as exc:
+        return {"decision": "reject", "reason": f"invalid dream proposal: {exc}"}
+    if not entries:
+        return {"decision": "reject", "reason": "dream proposal has no entries"}
+    proposal_evidence = metadata.get("evidence") or []
+    proposal_evidence_issue = _auto_dream_evidence_issue(
+        conn,
+        proposal_evidence,
+        tenant_id=tenant_id,
+        field_name="proposal",
+        current_node_id=node["id"],
+    )
+    if proposal_evidence_issue:
+        return {"decision": "reject", "reason": proposal_evidence_issue}
+    reasons: list[str] = []
+    for entry in entries:
+        if entry["type"] in AUTO_DREAM_MANUAL_REVIEW_TYPES:
+            reasons.append(f"{entry['id']} type {entry['type']} requires manual review")
+        elif entry["type"] not in AUTO_DREAM_ALLOWED_TYPES:
+            reasons.append(f"{entry['id']} type {entry['type']} is not auto-acceptable")
+        if entry.get("confidence") == "observed":
+            reasons.append(f"{entry['id']} uses observed confidence; auto dreams use inferred/unknown only")
+        if entry.get("supersedes"):
+            reasons.append(f"{entry['id']} supersedes existing memory; auto dreams do not supersede")
+        entry_evidence = entry.get("evidence") or []
+        if not entry_evidence and not proposal_evidence:
+            reasons.append(f"{entry['id']} has no evidence")
+        evidence_issue = _auto_dream_evidence_issue(
+            conn,
+            entry_evidence,
+            tenant_id=tenant_id,
+            field_name=f"{entry['id']} entry",
+            current_node_id=node["id"],
+        )
+        if evidence_issue:
+            reasons.append(evidence_issue)
+        text = f"{entry.get('title', '')}\n{entry.get('body', '')}"
+        if _auto_dream_text_has_high_risk(text):
+            reasons.append(f"{entry['id']} contains high-risk options/action wording")
+    if reasons:
+        return {"decision": "reject", "reason": "; ".join(reasons)}
+    return {"decision": "accept", "reason": "all entries are low-risk, evidence-backed orchestration memory"}
+
+
+def _load_proposed_dream_nodes(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT * FROM graph_nodes
+        WHERE tenant_id = ?
+        ORDER BY updated_at ASC, created_at ASC
+        """,
+        (tenant_id,),
+    ).fetchall()
+    nodes: list[dict[str, Any]] = []
+    for row in rows:
+        node = _row_dict(row)
+        if node is None:
+            continue
+        metadata = node.get("metadata") or {}
+        if metadata.get("source_type") != "dream_proposal":
+            continue
+        if metadata.get("proposal_status") != "proposed":
+            continue
+        nodes.append(node)
+        if len(nodes) >= limit:
+            break
+    return nodes
+
+
+def _load_auto_dream_session_nodes(
+    conn: sqlite3.Connection,
+    *,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        """
+        SELECT * FROM graph_nodes
+        WHERE tenant_id = ?
+        ORDER BY updated_at ASC, created_at ASC
+        """,
+        (tenant_id,),
+    ).fetchall()
+    nodes: list[dict[str, Any]] = []
+    for row in rows:
+        node = _row_dict(row)
+        if node is None:
+            continue
+        metadata = node.get("metadata") or {}
+        if metadata.get("source_type") != "session_transcript":
+            continue
+        try:
+            extracted_entry_count = int(metadata.get("auto_dream_extracted_entry_count") or 0)
+        except (TypeError, ValueError):
+            extracted_entry_count = 0
+        if metadata.get("auto_dream_processed_at") and (
+            metadata.get("auto_dream_policy_version") == AUTO_DREAM_POLICY_VERSION
+            or extracted_entry_count > 0
+        ):
+            continue
+        nodes.append(node)
+        if len(nodes) >= limit:
+            break
+    return nodes
+
+
+def _write_auto_dream_proposal_file(
+    *,
+    dreams_dir: Path,
+    run_id: str,
+    entries: list[dict[str, Any]],
+) -> Path:
+    target_dir = dreams_dir / "auto"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    proposal_path = target_dir / f"{run_id}.json"
+    payload = {
+        "title": f"Automated memory dream {run_id}",
+        "summary": "Deterministic extraction of explicit session lessons for future agent context.",
+        "evidence": sorted({item for entry in entries for item in entry.get("evidence", [])}),
+        "entries": entries,
+        "metadata": {
+            "automation": True,
+            "auto_policy_version": AUTO_DREAM_POLICY_VERSION,
+            "does_not_authorize_trading_or_evidence_mutation": True,
+        },
+    }
+    proposal_path.write_text(pretty_json(payload) + "\n", encoding="utf-8")
+    return proposal_path
+
+
+def _format_dream_run_audit(result: dict[str, Any]) -> str:
+    lines = [
+        "# Automated Dreaming Audit",
+        f"Run ID: {result.get('run_id')}",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_version')}",
+        f"Started: {result.get('started_at')}",
+        f"Completed: {result.get('completed_at')}",
+        "",
+        "# Summary",
+        f"- Generated proposals: {len(result.get('generated_proposals', []))}",
+        f"- Processed sessions: {len(result.get('processed_sessions', []))}",
+        f"- Accepted dreams: {len(result.get('accepted', []))}",
+        f"- Rejected dreams: {len(result.get('rejected', []))}",
+        f"- Skipped dreams: {len(result.get('skipped', []))}",
+    ]
+    for key, heading in [
+        ("generated_proposals", "Generated Proposals"),
+        ("accepted", "Accepted"),
+        ("rejected", "Rejected"),
+        ("skipped", "Skipped"),
+    ]:
+        lines.append("")
+        lines.append(f"# {heading}")
+        items = result.get(key, [])
+        if not items:
+            lines.append("- None.")
+            continue
+        for item in items:
+            if isinstance(item, dict):
+                detail = item.get("dream_node_id") or item.get("proposal_path") or item.get("id") or item.get("dream_id")
+                reason = item.get("reason")
+                suffix = f" - {reason}" if reason else ""
+                lines.append(f"- {detail}{suffix}")
+            else:
+                lines.append(f"- {item}")
+    lines.append("")
+    lines.append("# Audit Commands")
+    lines.append("- `npm run memory:dream-audit`")
+    lines.append("- `npm run memory:review-dreams`")
+    lines.append("- `npm run memory:audit`")
+    return "\n".join(lines)
+
+
+def _write_dream_run_audit_files(result: dict[str, Any], *, runs_dir: Path) -> None:
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    run_id = result["run_id"]
+    json_text = pretty_json(result) + "\n"
+    md_text = _format_dream_run_audit(result) + "\n"
+    (runs_dir / f"{run_id}.json").write_text(json_text, encoding="utf-8")
+    (runs_dir / f"{run_id}.md").write_text(md_text, encoding="utf-8")
+    (runs_dir / "latest.json").write_text(json_text, encoding="utf-8")
+    (runs_dir / "latest.md").write_text(md_text, encoding="utf-8")
+
+
+def run_dream_cycle(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    repo_root: Path = ROOT,
+    dreams_dir: Path = DEFAULT_DREAMS_DIR,
+    runs_dir: Path = DEFAULT_DREAM_RUNS_DIR,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 50,
+    actor: str = "AutoDream",
+    generate_from_sessions: bool = True,
+    auto_resolve: bool = True,
+) -> dict[str, Any]:
+    started_at = utc_now()
+    run_id = _short_id("DREAMRUN")
+    result: dict[str, Any] = {
+        "run_id": run_id,
+        "status": "running",
+        "policy_version": AUTO_DREAM_POLICY_VERSION,
+        "started_at": started_at,
+        "completed_at": None,
+        "tenant_id": tenant_id,
+        "generated_proposals": [],
+        "processed_sessions": [],
+        "accepted": [],
+        "rejected": [],
+        "skipped": [],
+        "audit_paths": {
+            "latest_json": str((runs_dir / "latest.json").resolve()),
+            "latest_md": str((runs_dir / "latest.md").resolve()),
+        },
+        "safety": {
+            "authority_scope": OPERATING_AUTHORITY_SCOPE,
+            "does_not_authorize_trading_or_evidence_mutation": True,
+            "auto_accepts_only": sorted(AUTO_DREAM_ALLOWED_TYPES),
+        },
+    }
+    if generate_from_sessions:
+        entries: list[dict[str, Any]] = []
+        session_updates: list[dict[str, Any]] = []
+        with closing(connect(db_path)) as conn:
+            sessions = _load_auto_dream_session_nodes(conn, tenant_id=tenant_id, limit=limit)
+            for session in sessions:
+                session_entries, scanned_sources = _extract_session_dream_entries(session, repo_root=repo_root)
+                if session_entries:
+                    entries.extend(session_entries)
+                source_unreadable = "transcript_file_unreadable" in scanned_sources
+                if not source_unreadable:
+                    session_updates.append(
+                        {
+                            "id": session["id"],
+                            "extracted_entry_count": len(session_entries),
+                            "scanned_sources": scanned_sources,
+                        }
+                    )
+                result["processed_sessions"].append(
+                    {
+                        "id": session["id"],
+                        "extracted_entry_count": len(session_entries),
+                        "scanned_sources": scanned_sources,
+                        "marked_processed": not source_unreadable,
+                    }
+                )
+                if source_unreadable:
+                    result["skipped"].append(
+                        {
+                            "dream_id": session["id"],
+                            "dream_node_id": session["id"],
+                            "reason": "session transcript source was unreadable; not marking processed",
+                        }
+                    )
+        if entries:
+            proposal_file = _write_auto_dream_proposal_file(dreams_dir=dreams_dir, run_id=run_id, entries=entries)
+            proposed = propose_dream(
+                db_path=db_path,
+                events_path=events_path,
+                proposal_path=proposal_file,
+                repo_root=repo_root,
+                dream_id=f"auto-{run_id}",
+                title=f"Automated memory dream {run_id}",
+                tenant_id=tenant_id,
+                expected_sha256=_file_sha256(proposal_file),
+            )
+            result["generated_proposals"].append(
+                {
+                    "dream_id": proposed["dream_id"],
+                    "dream_node_id": proposed["graph_node_id"],
+                    "proposal_path": str(proposal_file.resolve()),
+                    "entry_count": proposed["entry_count"],
+                }
+            )
+        if session_updates:
+            with closing(connect(db_path)) as conn, conn:
+                for update in session_updates:
+                    _update_graph_node_metadata(
+                        conn,
+                        update["id"],
+                        {
+                            "auto_dream_processed_at": started_at,
+                            "auto_dream_extracted_entry_count": update["extracted_entry_count"],
+                            "auto_dream_run_id": run_id,
+                            "auto_dream_policy_version": AUTO_DREAM_POLICY_VERSION,
+                            "auto_dream_scanned_sources": update["scanned_sources"],
+                        },
+                    )
+    if auto_resolve:
+        with closing(connect(db_path)) as conn:
+            proposed_nodes = _load_proposed_dream_nodes(conn, tenant_id=tenant_id, limit=limit)
+            evaluations = [
+                (node, _auto_dream_evaluate_node(node, conn=conn, tenant_id=tenant_id))
+                for node in proposed_nodes
+            ]
+        for node, evaluation in evaluations:
+            metadata = node.get("metadata") or {}
+            dream_id = str(metadata.get("dream_id") or node["id"])
+            if evaluation["decision"] == "accept":
+                accepted = accept_dream(
+                    db_path=db_path,
+                    events_path=events_path,
+                    dream_id=dream_id,
+                    accepted_by=actor,
+                    note=f"Auto-accepted by {AUTO_DREAM_POLICY_VERSION}: {evaluation['reason']}",
+                )
+                result["accepted"].append(
+                    {
+                        "dream_id": accepted["dream_id"],
+                        "dream_node_id": accepted["dream_node_id"],
+                        "accepted_memory_ids": accepted["accepted_memory_ids"],
+                        "reason": evaluation["reason"],
+                    }
+                )
+            elif evaluation["decision"] == "reject":
+                rejected = reject_dream(
+                    db_path=db_path,
+                    events_path=events_path,
+                    dream_id=dream_id,
+                    rejected_by=actor,
+                    reason=f"Auto-rejected by {AUTO_DREAM_POLICY_VERSION}: {evaluation['reason']}",
+                )
+                result["rejected"].append(
+                    {
+                        "dream_id": rejected["dream_id"],
+                        "dream_node_id": rejected["dream_node_id"],
+                        "reason": evaluation["reason"],
+                    }
+                )
+            else:
+                result["skipped"].append(
+                    {
+                        "dream_id": dream_id,
+                        "dream_node_id": node["id"],
+                        "reason": evaluation.get("reason", "not resolved"),
+                    }
+                )
+    result["completed_at"] = utc_now()
+    result["status"] = "complete"
+    with closing(connect(db_path)) as conn, conn:
+        node = upsert_graph_node(
+            conn,
+            node_id=f"dream_run:{run_id}",
+            kind="episode",
+            title=f"Automated dreaming run {run_id}",
+            body=_format_dream_run_audit(result),
+            tenant_id=tenant_id,
+            sub_tenant_id="operator",
+            metadata={
+                "source_type": "dream_run",
+                "run_id": run_id,
+                "status": result["status"],
+                "policy_version": AUTO_DREAM_POLICY_VERSION,
+                "accepted_count": len(result["accepted"]),
+                "rejected_count": len(result["rejected"]),
+                "generated_count": len(result["generated_proposals"]),
+                "processed_session_count": len(result["processed_sessions"]),
+                **OPERATING_AUTHORITY_METADATA,
+            },
+            source_ref=str((runs_dir / f"{run_id}.json").resolve()),
+        )
+        result["graph_node_id"] = node["id"]
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="dream.auto_run",
+            payload={
+                "run_id": run_id,
+                "graph_node_id": node["id"],
+                "accepted_count": len(result["accepted"]),
+                "rejected_count": len(result["rejected"]),
+                "generated_count": len(result["generated_proposals"]),
+            },
+        )
+    _write_dream_run_audit_files(result, runs_dir=runs_dir)
+    return result
+
+
+def dream_audit(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    runs_dir: Path = DEFAULT_DREAM_RUNS_DIR,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 12,
+) -> dict[str, Any]:
+    latest_path = runs_dir / "latest.json"
+    latest = None
+    if latest_path.exists():
+        latest = json.loads(latest_path.read_text(encoding="utf-8"))
+    review = review_dreams(db_path=db_path, tenant_id=tenant_id, limit=limit)
+    memory = memory_audit(db_path=db_path, tenant_id=tenant_id, limit=limit)
+    return {
+        "status": "pass" if latest is not None and memory["status"] == "pass" else "needs_attention",
+        "latest_run": latest,
+        "dream_review": {
+            "status": review["status"],
+            "proposed_count": len(review["proposed_dreams"]),
+            "accepted_count": len(review["accepted_dreams"]),
+            "open_question_count": len(review["open_questions"]),
+        },
+        "memory_audit": {
+            "status": memory["status"],
+            "checked_memories": memory["checked_memories"],
+            "authority_issue_count": len(memory.get("authority_inconsistencies", [])),
+            "stale_or_expired_count": len(memory.get("stale_or_expired", [])),
+            "supersession_issue_count": len(memory.get("supersession_inconsistencies", [])),
+            "open_blocker_count": len(memory.get("open_blockers", [])),
+        },
+        "recommended_commands": [
+            "npm run memory:dream-run",
+            "npm run memory:dream-audit",
+            "npm run memory:review-dreams",
+            "npm run memory:audit",
+        ],
+    }
 
 
 def supersede_memory(
@@ -2779,7 +3627,7 @@ def bootstrap_project_context(
     repo_root: Path = ROOT,
     tenant_id: str = DEFAULT_TENANT_ID,
     seed: bool = True,
-    query: str = "open risk",
+    query: str = "gateboard",
     metadata_filter: dict[str, Any] | None = None,
     max_depth: int = 1,
     max_context_nodes: int = 8,
@@ -2826,7 +3674,7 @@ def bootstrap_project_context(
         "recommended_next_queries": [
             {
                 "purpose": "current gateboard blockers",
-                "command": 'npm run agent:control -- graph query "open risk" --metadata source_type=gateboard_blocker --max-depth 1 --context --json',
+                "command": 'npm run agent:control -- graph query "gateboard" --metadata source_type=gateboard_blocker --max-depth 1 --context --json',
             },
             {
                 "purpose": "living doc by path",
@@ -3119,6 +3967,28 @@ def build_context_pack(
                 active_only=True,
                 limit=limit,
             ),
+            "dream_lessons": [
+                node
+                for node in _dedupe_nodes(
+                    [
+                        *_select_graph_nodes(
+                            conn,
+                            tenant_id=tenant_id,
+                            memory_type="lesson",
+                            active_only=True,
+                            limit=limit,
+                        ),
+                        *_select_graph_nodes(
+                            conn,
+                            tenant_id=tenant_id,
+                            memory_type="constraint",
+                            active_only=True,
+                            limit=limit,
+                        ),
+                    ]
+                )
+                if (node.get("metadata") or {}).get("origin") == "dreaming"
+            ][:limit],
         }
     repo_query = goal or "agent control checkpoint bootstrap"
     repo_context = query_graph(
@@ -3131,9 +4001,10 @@ def build_context_pack(
     )
     result["relevant_repo_files"] = repo_context["graph_context"]["nodes"][:limit]
     result["recommended_commands"] = [
-        "npm run agent:control -- bootstrap --prompt-only",
-        f'npm run agent:control -- context pack --goal "{goal or repo_query}" --prompt-only',
-        "npm run agent:control -- memory audit --prompt-only",
+        "npm run memory:bootstrap",
+        f'npm run memory:context -- --goal "{goal or repo_query}" --prompt-only',
+        "npm run memory:audit",
+        "npm run memory:review-dreams",
         "npm run verify:memory",
     ]
     if include_prompt_context:
@@ -3148,6 +4019,7 @@ def memory_audit(
     limit: int = 12,
 ) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
+    authority_inconsistencies: list[dict[str, Any]] = []
     stale_or_expired: list[dict[str, Any]] = []
     supersession_inconsistencies: list[dict[str, Any]] = []
     open_questions: list[dict[str, Any]] = []
@@ -3166,6 +4038,19 @@ def memory_audit(
             if not _is_operating_memory(metadata):
                 continue
             checked_memories += 1
+            if not _has_operating_authority_metadata(metadata):
+                authority_inconsistencies.append(
+                    {
+                        **node,
+                        "metadata": {
+                            **metadata,
+                            "audit_issue": (
+                                "operating memory must be orchestration_only and must not authorize "
+                                "trading or evidence mutation"
+                            ),
+                        },
+                    }
+                )
             superseded_by = metadata.get("superseded_by")
             supersedes = metadata.get("supersedes") or []
             if isinstance(supersedes, str):
@@ -3219,16 +4104,52 @@ def memory_audit(
                 open_questions.append(node)
             if metadata.get("memory_type") == "blocker" and not _memory_is_inactive(metadata):
                 open_blockers.append(node)
-    issue_count = len(stale_or_expired) + len(supersession_inconsistencies)
+    issue_count = len(authority_inconsistencies) + len(stale_or_expired) + len(supersession_inconsistencies)
     result = {
         "status": "pass" if issue_count == 0 else "issues",
         "checked_memories": checked_memories,
+        "authority_inconsistencies": authority_inconsistencies[:limit],
         "stale_or_expired": stale_or_expired[:limit],
         "supersession_inconsistencies": supersession_inconsistencies[:limit],
         "open_questions": open_questions[:limit],
         "open_blockers": open_blockers[:limit],
     }
     return result
+
+
+def repair_operating_memory_authority_metadata(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any]:
+    repaired_node_ids: list[str] = []
+    checked_memories = 0
+    with closing(connect(db_path)) as conn, conn:
+        rows = conn.execute(
+            "SELECT id, metadata_json FROM graph_nodes WHERE tenant_id = ? ORDER BY updated_at DESC",
+            (tenant_id,),
+        ).fetchall()
+        for row in rows:
+            try:
+                metadata = json.loads(row["metadata_json"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(metadata, dict) or not _is_operating_memory(metadata):
+                continue
+            checked_memories += 1
+            if _has_operating_authority_metadata(metadata):
+                continue
+            conn.execute(
+                "UPDATE graph_nodes SET metadata_json = ? WHERE id = ?",
+                (canonical_json(_with_operating_authority_metadata(metadata)), row["id"]),
+            )
+            repaired_node_ids.append(row["id"])
+    return {
+        "status": "repaired" if repaired_node_ids else "noop",
+        "checked_memories": checked_memories,
+        "repaired_count": len(repaired_node_ids),
+        "repaired_node_ids": repaired_node_ids,
+    }
 
 
 def memory_eval(
@@ -3438,8 +4359,48 @@ def _add_common(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Local CEO/worker runtime memory graph control plane.")
+    parser = argparse.ArgumentParser(
+        description="Local CEO/worker runtime memory graph control plane.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Common agent commands:
+  npm run memory:bootstrap
+  npm run memory:context -- --goal "current task" --pathway operator --prompt-only
+  npm run memory:audit
+  npm run memory:repair-authority
+  npm run memory:dream-run
+  npm run memory:dream-audit
+  npm run memory:review-dreams
+  npm run memory:dreams
+  npm run memory:eval
+  npm run verify:memory
+  npm run agent:control -- writeback <task-id> --summary "Accepted after review."
+""",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    audit_alias = subparsers.add_parser("audit", help="Shortcut for memory audit --prompt-only.")
+    audit_alias.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    audit_alias.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    audit_alias.add_argument("--limit", type=int, default=12)
+    audit_alias.set_defaults(func=_cmd_audit_alias)
+
+    dreams_alias = subparsers.add_parser("dreams", help="Shortcut for dream review --prompt-only.")
+    dreams_alias.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    dreams_alias.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dreams_alias.add_argument("--limit", type=int, default=12)
+    dreams_alias.add_argument("--json", action="store_true")
+    dreams_alias.set_defaults(func=_cmd_dreams_alias)
+
+    writeback = subparsers.add_parser(
+        "writeback",
+        help="Accept latest worker report and write accepted operating memory.",
+    )
+    _add_common(writeback)
+    writeback.add_argument("task_id")
+    writeback.add_argument("--accepted-by", default="CEO")
+    writeback.add_argument("--summary", required=True)
+    writeback.add_argument("--metadata", default="{}")
+    writeback.set_defaults(func=_cmd_writeback)
 
     seed = subparsers.add_parser("seed", help="Seed visible project context into the runtime graph.")
     seed_sub = seed.add_subparsers(dest="seed_command", required=True)
@@ -3461,7 +4422,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--repo-root", type=Path, default=ROOT)
     bootstrap.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     bootstrap.add_argument("--skip-seed", action="store_true")
-    bootstrap.add_argument("--query", default="open risk")
+    bootstrap.add_argument("--query", default="gateboard")
     bootstrap.add_argument("--no-repo-files", action="store_true")
     bootstrap.add_argument("--max-repo-files", type=int, default=DEFAULT_REPO_INDEX_MAX_FILES)
     bootstrap.add_argument("--max-repo-file-bytes", type=int, default=DEFAULT_REPO_INDEX_MAX_FILE_BYTES)
@@ -3672,6 +4633,38 @@ def build_parser() -> argparse.ArgumentParser:
     dream_list.add_argument("--json", action="store_true")
     dream_list.set_defaults(func=_cmd_dream_list)
 
+    dream_review = dream_sub.add_parser("review", help="Emit a prompt-ready dream review packet.")
+    dream_review.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    dream_review.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dream_review.add_argument("--limit", type=int, default=12)
+    dream_review.add_argument("--prompt-only", action="store_true")
+    dream_review.add_argument("--json", action="store_true")
+    dream_review.set_defaults(func=_cmd_dream_review)
+
+    dream_run = dream_sub.add_parser("run", help="Run automated dreaming and auto-resolution.")
+    dream_run.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    dream_run.add_argument("--events", type=Path, default=DEFAULT_EVENTS_PATH)
+    dream_run.add_argument("--repo-root", type=Path, default=ROOT)
+    dream_run.add_argument("--dreams-dir", type=Path, default=DEFAULT_DREAMS_DIR)
+    dream_run.add_argument("--runs-dir", type=Path, default=DEFAULT_DREAM_RUNS_DIR)
+    dream_run.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dream_run.add_argument("--limit", type=int, default=50)
+    dream_run.add_argument("--actor", default="AutoDream")
+    dream_run.add_argument("--no-generate-from-sessions", action="store_true")
+    dream_run.add_argument("--no-auto-resolve", action="store_true")
+    dream_run.add_argument("--prompt-only", action="store_true")
+    dream_run.add_argument("--json", action="store_true")
+    dream_run.set_defaults(func=_cmd_dream_run)
+
+    dream_audit_parser = dream_sub.add_parser("audit", help="Inspect automated dreaming state.")
+    dream_audit_parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    dream_audit_parser.add_argument("--runs-dir", type=Path, default=DEFAULT_DREAM_RUNS_DIR)
+    dream_audit_parser.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    dream_audit_parser.add_argument("--limit", type=int, default=12)
+    dream_audit_parser.add_argument("--prompt-only", action="store_true")
+    dream_audit_parser.add_argument("--json", action="store_true")
+    dream_audit_parser.set_defaults(func=_cmd_dream_audit)
+
     memory = subparsers.add_parser("memory", help="Remember, supersede, audit, and evaluate operating memory.")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
     memory_remember = memory_sub.add_parser("remember", help="Store typed operating memory.")
@@ -3682,7 +4675,7 @@ def build_parser() -> argparse.ArgumentParser:
     memory_remember.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     memory_remember.add_argument("--sub-tenant-id")
     memory_remember.add_argument("--status", default="active", choices=sorted(MEMORY_STATUSES))
-    memory_remember.add_argument("--confidence", default="accepted", choices=sorted(MEMORY_CONFIDENCE))
+    memory_remember.add_argument("--confidence", default="inferred", choices=sorted(MEMORY_CONFIDENCE))
     memory_remember.add_argument("--metadata", default="{}")
     memory_remember.add_argument("--source-ref")
     memory_remember.add_argument("--node-id")
@@ -3704,6 +4697,15 @@ def build_parser() -> argparse.ArgumentParser:
     memory_audit_parser.add_argument("--json", action="store_true")
     memory_audit_parser.add_argument("--prompt-only", action="store_true")
     memory_audit_parser.set_defaults(func=_cmd_memory_audit)
+
+    memory_repair_authority = memory_sub.add_parser(
+        "repair-authority",
+        help="Backfill required authority metadata on operating memory nodes.",
+    )
+    memory_repair_authority.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_repair_authority.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_repair_authority.add_argument("--json", action="store_true")
+    memory_repair_authority.set_defaults(func=_cmd_memory_repair_authority)
 
     memory_eval_parser = memory_sub.add_parser("eval", help="Run deterministic memory recovery checks.")
     _add_common(memory_eval_parser)
@@ -3863,6 +4865,28 @@ def _cmd_task_accept(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_writeback(args: argparse.Namespace) -> int:
+    with closing(connect(args.db)) as conn:
+        _task_row(conn, args.task_id)
+        if _latest_task_report(conn, args.task_id) is None:
+            raise AgentControlError(
+                f"writeback requires a worker report for task {args.task_id}; "
+                "use task accept for non-report acceptance"
+            )
+    result = accept_task(
+        db_path=args.db,
+        events_path=args.events,
+        task_id=args.task_id,
+        accepted_by=args.accepted_by,
+        summary=args.summary,
+        metadata=parse_json_object(args.metadata, field_name="metadata"),
+    )
+    if not result.get("writeback_node_ids"):
+        raise AgentControlError(f"writeback accepted task {args.task_id} but wrote no operating memory")
+    _emit(result, as_json=args.json)
+    return 0
+
+
 def _cmd_task_list(args: argparse.Namespace) -> int:
     result = list_tasks(db_path=args.db, status=args.status, pathway=args.pathway, limit=args.limit)
     _emit(result, as_json=True if args.json else False)
@@ -4014,6 +5038,76 @@ def _cmd_dream_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_dream_review(args: argparse.Namespace) -> int:
+    result = review_dreams(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    if args.prompt_only:
+        print(_format_dream_review(result))
+        return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_run(args: argparse.Namespace) -> int:
+    result = run_dream_cycle(
+        db_path=args.db,
+        events_path=args.events,
+        repo_root=args.repo_root,
+        dreams_dir=args.dreams_dir,
+        runs_dir=args.runs_dir,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+        actor=args.actor,
+        generate_from_sessions=not args.no_generate_from_sessions,
+        auto_resolve=not args.no_auto_resolve,
+    )
+    if args.prompt_only:
+        print(_format_dream_run_audit(result))
+        return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_dream_audit(args: argparse.Namespace) -> int:
+    result = dream_audit(
+        db_path=args.db,
+        runs_dir=args.runs_dir,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    if args.prompt_only:
+        print(_format_dream_audit(result))
+        return 0 if result["status"] == "pass" else 1
+    _emit(result, as_json=True if args.json else False)
+    return 0 if result["status"] == "pass" else 1
+
+
+def _cmd_audit_alias(args: argparse.Namespace) -> int:
+    result = memory_audit(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    print(_format_memory_audit(result))
+    return 0
+
+
+def _cmd_dreams_alias(args: argparse.Namespace) -> int:
+    result = review_dreams(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    if args.json:
+        _emit(result, as_json=True)
+        return 0
+    print(_format_dream_review(result))
+    return 0
+
+
 def _cmd_memory_remember(args: argparse.Namespace) -> int:
     result = remember_operating_memory(
         db_path=args.db,
@@ -4057,6 +5151,15 @@ def _cmd_memory_audit(args: argparse.Namespace) -> int:
         print(_format_memory_audit(result))
         return 0
     _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_memory_repair_authority(args: argparse.Namespace) -> int:
+    result = repair_operating_memory_authority_metadata(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+    )
+    _emit(result, as_json=args.json)
     return 0
 
 
