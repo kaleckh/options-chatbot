@@ -223,7 +223,7 @@
     },
     "snapshot_format": "canonical_json_sha256_with_embedded_policy_payloads",
     "source_file": "supervised_scan.py",
-    "source_file_sha256": "9f11ac689a910fb9122867284407ca0366ea37671a1b12842f2483fe9addc20d"
+    "source_file_sha256": "b90c6a2f59b53b02a37cf270aac04762817f083e9890a2f27e825edc9e5a645b"
   },
   "cohort": {
     "date_basis": "candidate_entry_date_after_freeze_date",

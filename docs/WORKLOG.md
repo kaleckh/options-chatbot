@@ -1,5 +1,9 @@
 # Worklog
 
+## 2026-06-28
+
+- Restored the tracked paused day-trading API scaffold with a non-route `.gitkeep` placeholder so the generated legacy lane-boundary contract matches the documented empty-scaffolding state without mounting a day-trading route or reopening the paused lane. Verification target: `npm run verify:docs`.
+
 ## 2026-06-27
 
 - Ran a stricter six-subagent readiness consensus round for the regular-options profitability loop. All six agents returned `REJECT_NOT_READY`, distinguishing fixed blocker-surface correctness from actual readiness to run the profitability loop. The shared blockers are strict forward proof `0/30`, no candidate JSONL, no cohort rows, no valid market window on 2026-06-28, operator approval still required for any guarded append path, candidate-generation starvation, and remaining source/provider/quote/replay/engine surfaces. Refreshed `options:preflight:market-window-approval`, `options:goal-loop:strict-forward-30`, and `options:goal-loop:strict-forward-30-completion-monitor`; the no-write readbacks remain `blocked_market_window_unknown`, `waiting_for_valid_market_window`, and `completion_monitor_waiting_for_first_cohort_row`, with next safe no-append collection window `2026-06-29T09:30:00-04:00`. No scan, append, quote import, evidence-store mutation, live validation, auto-track, broker action, protected-holdout use, proof-bar change, or promotion occurred.
