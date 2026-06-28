@@ -1339,6 +1339,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS zero_candidate_episodes (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             lane TEXT NOT NULL,
             selection_date TEXT NOT NULL,
             drop_stage_counts_json TEXT NOT NULL DEFAULT '{}',
@@ -1386,6 +1387,14 @@ def init_schema(conn: sqlite3.Connection) -> None:
         )
     except sqlite3.OperationalError:
         pass
+    zero_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(zero_candidate_episodes)").fetchall()
+    }
+    if "tenant_id" not in zero_columns:
+        conn.execute(
+            "ALTER TABLE zero_candidate_episodes ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
+        )
     conn.commit()
 
 
@@ -4853,10 +4862,11 @@ def repair_operating_memory_authority_metadata(
     tenant_id: str = DEFAULT_TENANT_ID,
 ) -> dict[str, Any]:
     repaired_node_ids: list[str] = []
+    skipped_policy_errors: list[dict[str, Any]] = []
     checked_memories = 0
     with closing(connect(db_path)) as conn, conn:
         rows = conn.execute(
-            "SELECT id, metadata_json FROM graph_nodes WHERE tenant_id = ? ORDER BY updated_at DESC",
+            "SELECT id, title, body, metadata_json FROM graph_nodes WHERE tenant_id = ? ORDER BY updated_at DESC",
             (tenant_id,),
         ).fetchall()
         for row in rows:
@@ -4867,18 +4877,29 @@ def repair_operating_memory_authority_metadata(
             if not isinstance(metadata, dict) or not _is_operating_memory(metadata):
                 continue
             checked_memories += 1
+            candidate_metadata = _with_memory_policy_metadata(metadata, source_type="operating_memory")
+            policy_errors = _validate_memory_policy_text(
+                title=str(row["title"] or ""),
+                body=str(row["body"] or ""),
+                metadata=candidate_metadata,
+                field_name=row["id"],
+            )
+            if policy_errors:
+                skipped_policy_errors.append({"node_id": row["id"], "policy_errors": policy_errors})
+                continue
             if _has_operating_authority_metadata(metadata):
                 continue
             conn.execute(
                 "UPDATE graph_nodes SET metadata_json = ? WHERE id = ?",
-                (canonical_json(_with_operating_authority_metadata(metadata)), row["id"]),
+                (canonical_json(candidate_metadata), row["id"]),
             )
             repaired_node_ids.append(row["id"])
     return {
-        "status": "repaired" if repaired_node_ids else "noop",
+        "status": "issues" if skipped_policy_errors else ("repaired" if repaired_node_ids else "noop"),
         "checked_memories": checked_memories,
         "repaired_count": len(repaired_node_ids),
         "repaired_node_ids": repaired_node_ids,
+        "skipped_policy_errors": skipped_policy_errors,
     }
 
 
@@ -5132,6 +5153,7 @@ def record_zero_candidate_episode(
     *,
     db_path: Path = DEFAULT_DB_PATH,
     events_path: Path = DEFAULT_EVENTS_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
     lane: str,
     selection_date: str,
     drop_stage_counts: dict[str, Any] | None = None,
@@ -5149,6 +5171,7 @@ def record_zero_candidate_episode(
         {
             **(metadata or {}),
             "provenance_kind": "zero_candidate_episode",
+            "tenant_id": tenant_id,
             "lane": lane,
             "selection_date": selection_date,
             "drop_stage_counts": drop_stage_counts or {},
@@ -5166,11 +5189,12 @@ def record_zero_candidate_episode(
         conn.execute(
             """
             INSERT INTO zero_candidate_episodes(
-                id, created_at, lane, selection_date, drop_stage_counts_json,
+                id, created_at, tenant_id, lane, selection_date, drop_stage_counts_json,
                 blocker_summary, source_ref, metadata_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
+                tenant_id = excluded.tenant_id,
                 drop_stage_counts_json = excluded.drop_stage_counts_json,
                 blocker_summary = excluded.blocker_summary,
                 source_ref = excluded.source_ref,
@@ -5179,6 +5203,7 @@ def record_zero_candidate_episode(
             (
                 episode_id,
                 utc_now(),
+                tenant_id,
                 lane,
                 selection_date,
                 canonical_json(drop_stage_counts or {}),
@@ -5193,7 +5218,7 @@ def record_zero_candidate_episode(
             kind="episode",
             title=f"Zero candidate episode: {lane} {selection_date}",
             body=blocker_summary or canonical_json(drop_stage_counts or {}),
-            tenant_id=DEFAULT_TENANT_ID,
+            tenant_id=tenant_id,
             sub_tenant_id="profitability",
             metadata=safe_metadata,
             source_ref=source_ref,
@@ -5225,8 +5250,10 @@ def research_priority_report(
         zero_rows = conn.execute(
             """
             SELECT * FROM zero_candidate_episodes
+            WHERE tenant_id = ?
             ORDER BY created_at DESC
             """,
+            (tenant_id,),
         ).fetchall()
         hypothesis_rows = conn.execute(
             """
@@ -5795,6 +5822,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_common(memory_zero)
     memory_zero.add_argument("--lane", required=True)
+    memory_zero.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     memory_zero.add_argument("--selection-date", required=True)
     memory_zero.add_argument("--drop-stage", action="append", default=[], help="Stage count as KEY=VALUE.")
     memory_zero.add_argument("--blocker-summary", default="")
@@ -6297,6 +6325,7 @@ def _cmd_memory_record_zero_candidate(args: argparse.Namespace) -> int:
     result = record_zero_candidate_episode(
         db_path=args.db,
         events_path=args.events,
+        tenant_id=args.tenant_id,
         lane=args.lane,
         selection_date=args.selection_date,
         drop_stage_counts=parse_key_value_filters(args.drop_stage, field_name="drop_stage"),
