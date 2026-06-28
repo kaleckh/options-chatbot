@@ -822,6 +822,53 @@ class TrackedPositionsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("position_ids", response.text)
 
+    def test_review_rejects_empty_position_id_list(self):
+        response = self.client.post("/api/positions/review", json={"position_ids": []})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("position_ids must not be empty", response.text)
+
+    def test_review_rejects_missing_position_ids(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+
+        response = self.client.post("/api/positions/review", json={"position_ids": [999999]})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("tracked position not found", response.text)
+
+    def test_review_rejects_closed_position_ids(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.50,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        close_response = self.client.post(
+            f"/api/positions/{position_id}/close",
+            json={"exit_price": 3.25, "notes": "close before review"},
+        )
+        self.assertEqual(close_response.status_code, 200)
+
+        response = self.client.post("/api/positions/review", json={"position_ids": [position_id]})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("tracked position is not open", response.text)
+
     def test_close_rejects_negative_exit_price_and_allows_zero(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
         create_response = self.client.post(
@@ -882,6 +929,41 @@ class TrackedPositionsApiTests(unittest.TestCase):
         bool_exit = self.client.post(f"/api/positions/{position_id}/close", json={"exit_price": True})
         self.assertEqual(bool_exit.status_code, 400)
         self.assertIn("exit_price", bool_exit.text)
+
+    def test_position_routes_reject_non_object_root_bodies_with_controlled_400s(self):
+        create_non_object = self.client.post("/api/positions", json=["bad"])
+        self.assertEqual(create_non_object.status_code, 400)
+        self.assertIn("request body must be an object", create_non_object.text)
+
+        review_non_object = self.client.post("/api/positions/review", json=True)
+        self.assertEqual(review_non_object.status_code, 400)
+        self.assertIn("request body must be an object", review_non_object.text)
+
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/positions",
+            json={"scan_pick": scan_pick, "fill_price": 4.50, "contracts": 1},
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["position"]["id"]
+
+        close_non_object = self.client.post(f"/api/positions/{position_id}/close", json=["bad"])
+        self.assertEqual(close_non_object.status_code, 400)
+        self.assertIn("request body must be an object", close_non_object.text)
+
+    def test_position_routes_return_503_when_storage_is_unavailable(self):
+        class UnavailableRepository:
+            is_available = False
+            error_message = "tracked positions down"
+
+        with patch.object(self.backend, "POSITIONS_REPOSITORY", UnavailableRepository()):
+            create_response = self.client.post("/api/positions", json={})
+            review_response = self.client.post("/api/positions/review", json={})
+            close_response = self.client.post("/api/positions/1/close", json={"exit_price": 1})
+
+        self.assertEqual(create_response.status_code, 503)
+        self.assertEqual(review_response.status_code, 503)
+        self.assertEqual(close_response.status_code, 503)
 
     def test_create_rejects_bool_scan_pick_numeric_fields(self):
         for field in ("strike", "stop_loss_pct", "profit_target_pct", "time_exit_day"):
@@ -1698,7 +1780,7 @@ class TrackedPositionsApiTests(unittest.TestCase):
         unavailable = UnavailableTrackedPositionsRepository("DATABASE_URL is not configured for tracked positions.")
         with patch.object(self.backend, "POSITIONS_REPOSITORY", unavailable):
             list_response = self.client.get("/api/positions", params={"status": "open"})
-            self.assertEqual(list_response.status_code, 200)
+            self.assertEqual(list_response.status_code, 503)
             self.assertIn("error", list_response.json())
 
             create_response = self.client.post(
@@ -1709,8 +1791,26 @@ class TrackedPositionsApiTests(unittest.TestCase):
                     "contracts": 1,
                 },
             )
-            self.assertEqual(create_response.status_code, 200)
+            self.assertEqual(create_response.status_code, 503)
             self.assertIn("error", create_response.json())
+
+    def test_positions_list_invalid_query_values_return_route_owned_400(self):
+        response = self.client.get(
+            "/api/positions",
+            params={"status": "open", "grouped": "maybe", "limit": "abc", "offset": "-1"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("must be a boolean", response.json()["detail"])
+
+    def test_suggested_trades_list_invalid_query_values_return_route_owned_400(self):
+        response = self.client.get(
+            "/api/suggested-trades",
+            params={"status": "open", "grouped": "1", "limit": "abc"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["detail"], "limit must be a positive integer.")
 
 
 if __name__ == "__main__":

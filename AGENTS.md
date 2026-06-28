@@ -35,6 +35,8 @@ Agent memory read paths:
 - `npm run agent:control -- graph query "<query>" --metadata KEY=VALUE --prompt-only`: retrieve targeted graph context.
 - `npm run memory:dream-run`: run the automated dreaming loop now; it extracts explicit session lessons/open questions, auto-accepts only low-risk evidence-backed orchestration memory, auto-rejects everything else, and writes an audit trail.
 - `npm run memory:dream-audit`: inspect the latest automated dreaming run and current dream/memory health.
+- `npm run memory:operator-dashboard`: audit startup compliance, retrieval index health, dream automation, event outbox, and research provenance counts.
+- `npm run memory:research-priorities`: inspect research-only provenance priorities such as zero-candidate episodes; this cannot authorize trading or evidence changes.
 - `npm run memory:audit`, `npm run memory:repair-authority`, `npm run memory:review-dreams`, and `npm run verify:memory`: check lifecycle health before final handoff on meaningful memory work and backfill legacy authority metadata when audit reports it.
 
 Agent memory write paths:
@@ -46,7 +48,7 @@ Agent memory write paths:
 - Use `dream run` / `memory:dream-run` for automated low-risk dream extraction and auto-resolution; inspect it with `memory:dream-audit`.
 - Do not use raw `graph remember` for accepted operating memory.
 
-Memory, checkpoints, accepted worker reports, and dreams never authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, live validation, stop/sizing changes, protected-holdout use, or treating historical rows as forward proof.
+Memory, checkpoints, accepted worker reports, dreams, retrieval context, context manifests, dashboard output, and research provenance never authorize evidence mutation, scanner policy changes, proof-bar changes, broker action, promotion, live validation, stop/sizing changes, protected-holdout use, cohort append, or treating historical rows as forward proof.
 
 ## Coding Style: Minimal Senior-Dev Mode
 

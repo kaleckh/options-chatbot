@@ -5,7 +5,7 @@ import os
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 
 
 SaveProfileFn = Callable[..., None]
@@ -54,9 +54,15 @@ def create_profile_router(
         return _all_profiles()
 
     @router.put("/api/profile")
-    async def update_profile(body: dict[str, Any]):
+    async def update_profile(body: Any = Body(default=None)):
         """Update a strategy profile section."""
+        if body is None:
+            body = {}
+        if not isinstance(body, dict):
+            raise HTTPException(400, "request body must be an object")
         profile_type = body.get("type", "equity")
+        if not isinstance(profile_type, str):
+            raise HTTPException(400, "type must be a string")
         updates = body.get("updates", {})
         note = body.get("note", "")
 
@@ -68,8 +74,6 @@ def create_profile_router(
                 update_profile_sections_fn(profile_type, updates)
             except KeyError:
                 raise HTTPException(400, f"Unknown profile type: {profile_type}") from None
-            except TypeError:
-                raise HTTPException(400, "updates must be an object") from None
         else:
             profile = _one_profile(profile_type)
             for section_key, section_value in updates.items():

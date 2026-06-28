@@ -19,6 +19,7 @@ from options_profit_state import (
     default_symbol_manifest,
     ensure_options_profit_state,
     list_candidate_manifests,
+    live_profile_path,
     load_incumbents,
     load_live_profile,
     load_status,
@@ -62,6 +63,13 @@ def _safe_float(value: Any) -> Optional[float]:
         return parsed
     except (TypeError, ValueError):
         return None
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    parsed = _safe_float(value)
+    if parsed is None:
+        return None
+    return int(parsed)
 
 
 def _position_fee_sides_from_total(position: dict[str, Any]) -> tuple[float, float]:
@@ -130,9 +138,11 @@ def _position_net_pnl_usd(position: dict[str, Any]) -> float | None:
     return _safe_float(snapshot.get("net_pnl_usd"))
 
 
-def _score_profit_factor(value: Any) -> float:
+def _score_profit_factor(value: Any, *, no_loss_sample: bool = False) -> float:
     parsed = _safe_float(value)
     if parsed is None:
+        if no_loss_sample:
+            return 1.0
         return 0.0
     return max(min(parsed, 5.0), 0.0)
 
@@ -145,6 +155,13 @@ def _preferred_metric(metrics: dict[str, Any], *keys: str) -> float:
     return 0.0
 
 
+def _preferred_metric_value(metrics: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if _safe_float(metrics.get(key)) is not None:
+            return metrics.get(key)
+    return None
+
+
 def _composite_objective_score(forward_metrics: dict[str, Any], tracked_metrics: dict[str, Any]) -> float:
     forward_avg = _preferred_metric(
         forward_metrics,
@@ -153,11 +170,12 @@ def _composite_objective_score(forward_metrics: dict[str, Any], tracked_metrics:
         "avg_pnl_pct",
     )
     forward_pf = _score_profit_factor(
-        _preferred_metric(
+        _preferred_metric_value(
             forward_metrics,
             "net_profit_factor",
             "profit_factor",
-        )
+        ),
+        no_loss_sample=bool(forward_metrics.get("no_loss_sample")),
     )
     tracked_avg = _preferred_metric(
         tracked_metrics,
@@ -166,11 +184,12 @@ def _composite_objective_score(forward_metrics: dict[str, Any], tracked_metrics:
         "avg_pnl_pct",
     )
     tracked_pf = _score_profit_factor(
-        _preferred_metric(
+        _preferred_metric_value(
             tracked_metrics,
             "net_profit_factor",
             "profit_factor",
-        )
+        ),
+        no_loss_sample=bool(tracked_metrics.get("no_loss_sample")),
     )
     return round((forward_avg * 0.6) + ((forward_pf - 1.0) * 25.0) + (tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
 
@@ -183,11 +202,12 @@ def _tracked_objective_score(tracked_metrics: dict[str, Any]) -> float:
         "avg_pnl_pct",
     )
     tracked_pf = _score_profit_factor(
-        _preferred_metric(
+        _preferred_metric_value(
             tracked_metrics,
             "net_profit_factor",
             "profit_factor",
-        )
+        ),
+        no_loss_sample=bool(tracked_metrics.get("no_loss_sample")),
     )
     return round((tracked_avg * 0.4) + ((tracked_pf - 1.0) * 20.0), 4)
 
@@ -495,6 +515,9 @@ def _candidate_position_metrics(
     pnl_usds: list[float] = []
     exact_outcome_count = 0
     normalized_direction = _normalize_direction(direction)
+    candidate_aliases = {str(candidate_id).strip()}
+    if "__" in str(candidate_id):
+        candidate_aliases.add(str(candidate_id).rsplit("__", 1)[-1].strip())
     for position in positions:
         if not _position_proof_eligible(position):
             continue
@@ -506,13 +529,20 @@ def _candidate_position_metrics(
             or position.get("option_type")
             or source.get("option_type")
         )
-        cohort_id = str(
-            source.get("profit_candidate_id")
-            or source.get("cohort_id")
-            or source.get("candidate_id")
-            or ""
-        ).strip()
-        if position_symbol != symbol or position_direction != normalized_direction or cohort_id != candidate_id:
+        position_candidate_aliases = {
+            str(value).strip()
+            for value in (
+                source.get("profit_candidate_id"),
+                source.get("cohort_id"),
+                source.get("candidate_id"),
+            )
+            if str(value or "").strip()
+        }
+        if (
+            position_symbol != symbol
+            or position_direction != normalized_direction
+            or not position_candidate_aliases.intersection(candidate_aliases)
+        ):
             continue
         net_pnl_pct = _position_net_pnl_pct(position)
         if net_pnl_pct is None:
@@ -603,9 +633,13 @@ def _candidate_is_eligible(
 
     forward_metrics = dict(objective_metrics.get("forward_exact_contract") or {})
     tracked_metrics = dict(objective_metrics.get("tracked_realized") or {})
-    if int(forward_metrics.get("eligible_trade_count") or 0) < 25:
+    forward_support_count = _safe_int(forward_metrics.get("priced_trade_count"))
+    if forward_support_count is None:
+        forward_support_count = _safe_int(forward_metrics.get("eligible_trade_count"))
+    forward_support_count = forward_support_count or 0
+    if forward_support_count < 25:
         blockers.append("insufficient_exact_forward_support")
-    if int(tracked_metrics.get("closed_position_count") or 0) <= 0:
+    if (_safe_int(tracked_metrics.get("closed_position_count")) or 0) <= 0:
         blockers.append("missing_tracked_realized_support")
     if float(objective_metrics.get("objective_score") or 0.0) <= float(incumbent_metrics.get("objective_score") or 0.0):
         blockers.append("objective_not_better_than_incumbent")
@@ -738,7 +772,7 @@ def _apply_candidate(
             "symbol": symbol,
             "direction": direction,
             "candidate_id": candidate_id,
-            "live_profile_path": str((ROOT_DIR / "data" / "options-profit" / "live_profile.json")),
+            "live_profile_path": str(live_profile_path()),
             "pre_apply_decision_path": pre_decision_path,
             "active_manifest": candidate_live_manifest,
         },

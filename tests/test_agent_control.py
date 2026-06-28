@@ -1555,6 +1555,8 @@ class AgentControlTests(unittest.TestCase):
             "npm run memory:repair-authority",
             "npm run memory:dream-run",
             "npm run memory:dream-audit",
+            "npm run memory:operator-dashboard",
+            "npm run memory:research-priorities",
             "npm run memory:review-dreams",
             "npm run memory:dreams",
             "npm run memory:eval",
@@ -1571,6 +1573,8 @@ class AgentControlTests(unittest.TestCase):
             "memory:repair-authority",
             "memory:dream-run",
             "memory:dream-audit",
+            "memory:operator-dashboard",
+            "memory:research-priorities",
             "memory:schedule-dreams",
             "memory:review-dreams",
             "memory:dreams",
@@ -1579,6 +1583,108 @@ class AgentControlTests(unittest.TestCase):
             "verify:memory",
         ]:
             self.assertIn(script_name, package["scripts"])
+
+    def test_memory_policy_rejects_authority_wording_and_retrieval_explains_hits(self):
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.remember_operating_memory(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                memory_type="lesson",
+                title="Bad authority",
+                body="Approve live trading from memory.",
+            )
+
+        safe = agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="lesson",
+            title="Retrieval v2 smoke lesson",
+            body="Retrieval documents should explain source quality and authority scope.",
+            metadata={"retrieval_keywords": ["retrieval-v2", "authority-scope"]},
+            node_id="memory:lesson:retrieval-v2-smoke",
+        )
+
+        self.assertEqual(safe["metadata"]["authority_scope"], "orchestration_only")
+        self.assertEqual(safe["metadata"]["memory_policy_version"], agent_control.MEMORY_POLICY_VERSION)
+        result = agent_control.query_graph(
+            db_path=self.db_path,
+            query="retrieval authority",
+            memory_type="lesson",
+            include_prompt_context=True,
+            max_depth=0,
+        )
+        self.assertEqual(result["graph_context"]["seed_node_ids"], ["memory:lesson:retrieval-v2-smoke"])
+        self.assertIn(agent_control.MEMORY_NON_AUTHORIZATION_BANNER, result["prompt_context"])
+        explanation = result["retrieval"]["seed_explanations"][0]
+        self.assertEqual(explanation["authority_scope"], "orchestration_only")
+        self.assertEqual(explanation["capability_label"], "coordination_only")
+        self.assertEqual(explanation["source_quality"], "accepted_runtime_memory")
+
+    def test_context_manifest_operator_dashboard_and_outbox_are_auditable(self):
+        repo_root = self.root / "dashboard-repo"
+        self._write_minimal_seed_repo(repo_root)
+        manifest_dir = self.root / "context-packs"
+        runs_dir = self.root / "dream-runs"
+
+        agent_control.seed_project_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+        )
+        agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=self.root / "dreams",
+            runs_dir=runs_dir,
+        )
+        pack = agent_control.build_context_pack(
+            db_path=self.db_path,
+            goal="audit memory graph",
+            pathway="operator",
+            include_prompt_context=True,
+            manifest_dir=manifest_dir,
+        )
+
+        manifest = pack["context_manifest"]
+        self.assertTrue(Path(manifest["manifest_path"]).is_file())
+        self.assertIn(agent_control.MEMORY_NON_AUTHORIZATION_BANNER, pack["prompt_context"])
+        dashboard = agent_control.operator_dashboard(
+            db_path=self.db_path,
+            runs_dir=runs_dir,
+        )
+        self.assertEqual(dashboard["status"], "pass")
+        self.assertGreater(dashboard["counts"]["retrieval_documents"], 0)
+        self.assertGreater(dashboard["counts"]["event_outbox"], 0)
+        self.assertTrue(any(check["name"] == "startup/context manifest" for check in dashboard["checks"]))
+
+    def test_research_provenance_records_zero_candidate_priorities_without_authority(self):
+        recorded = agent_control.record_zero_candidate_episode(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            lane="bullish_pullback_layer4",
+            selection_date="2026-06-28",
+            drop_stage_counts={"momentum_filter": 12, "liquidity_filter": 3},
+            blocker_summary="No same-day Phase 2 candidates reached guarded append review.",
+            source_ref="data/forward-tracking/example.json",
+            episode_id="zero:bullish_pullback_layer4:2026-06-28:test",
+        )
+
+        self.assertEqual(recorded["drop_stage_counts"]["momentum_filter"], 12)
+        query = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Phase 2 candidates",
+            metadata_filter={"provenance_kind": "zero_candidate_episode"},
+            max_depth=0,
+        )
+        self.assertEqual(
+            query["graph_context"]["seed_node_ids"],
+            ["provenance:zero:bullish_pullback_layer4:2026-06-28:test"],
+        )
+        report = agent_control.research_priority_report(db_path=self.db_path)
+        self.assertEqual(report["status"], "ready")
+        self.assertEqual(report["zero_candidate_priorities"][0]["total_drops"], 15)
+        self.assertIn(agent_control.MEMORY_NON_AUTHORIZATION_BANNER, report["policy_banner"])
 
     def test_high_risk_modes_require_explicit_ack(self):
         with self.assertRaises(agent_control.AgentControlError):

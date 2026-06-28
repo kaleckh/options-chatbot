@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -157,6 +158,55 @@ class BackendBridgeAuthTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 401)
         self.assertEqual(wrong.status_code, 401)
         self.assertEqual(allowed.status_code, 200)
+
+    def test_backend_api_token_also_protects_docs_and_openapi_routes(self):
+        backend = self._load_backend(
+            {
+                "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": "",
+            }
+        )
+        client = TestClient(backend.app)
+        self.addCleanup(client.close)
+
+        with patch.dict(
+            os.environ,
+            {"OPTIONS_BACKEND_API_TOKEN": "test-token", "OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED": ""},
+            clear=False,
+        ):
+            self.assertEqual(client.get("/docs").status_code, 401)
+            self.assertEqual(client.get("/redoc").status_code, 401)
+            self.assertEqual(client.get("/openapi.json").status_code, 401)
+            self.assertEqual(
+                client.get("/openapi.json", headers={backend.BACKEND_API_TOKEN_HEADER: "test-token"}).status_code,
+                200,
+            )
+
+    def test_preferred_results_cache_key_tracks_historical_options_store(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            historical_db = Path(tmpdir) / "options_history.db"
+            historical_db.write_text("db", encoding="utf-8")
+            with patch.dict(os.environ, {"HISTORICAL_OPTIONS_DB_PATH": str(historical_db)}, clear=False):
+                backend = self._load_backend(
+                    {
+                        "OPTIONS_BACKEND_API_TOKEN": "test-token",
+                        "HISTORICAL_OPTIONS_DB_PATH": str(historical_db),
+                    }
+                )
+                key = backend._preferred_results_cache_key(None)
+
+        self.assertIn(str(historical_db), {part[0] for part in key if isinstance(part, tuple) and len(part) == 2})
+
+    def test_cached_preferred_results_returns_deep_copy_on_cache_hit(self):
+        backend = self._load_backend({"OPTIONS_BACKEND_API_TOKEN": "test-token"})
+        key = backend._preferred_results_cache_key(None)
+        backend._PREFERRED_RESULTS_CACHE[key] = {"nested": {"value": 1}}
+
+        first = backend._cached_preferred_results_by_truth_lane(None)
+        first["nested"]["value"] = 9
+        second = backend._cached_preferred_results_by_truth_lane(None)
+
+        self.assertEqual(second["nested"]["value"], 1)
 
     def test_dev_python_script_sets_backend_unauthenticated_opt_out(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))

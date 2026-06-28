@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { BackendHttpError } from "@/lib/backend/transport";
+import { BackendHttpError, BackendTransportError } from "@/lib/backend/transport";
 import {
   TRADING_DESK_MUTATION_HEADER,
   type TradingDeskMutationIntent,
@@ -46,15 +46,16 @@ export function jsonError(
   fallbackMessage: string,
   status: number = 500
 ) {
+  if (error instanceof BackendTransportError) {
+    return NextResponse.json({ error: fallbackMessage }, { status: error.status });
+  }
   if (error instanceof BackendHttpError) {
-    const body = { error: error.message, details: error.payload };
-    return NextResponse.json(
-      body,
-      { status: error.status }
-    );
+    const message =
+      error.status >= 500 && error.status !== 503 ? fallbackMessage : error.message;
+    return NextResponse.json({ error: message }, { status: error.status });
   }
   return NextResponse.json(
-    { error: error instanceof Error ? error.message : fallbackMessage },
+    { error: fallbackMessage },
     { status }
   );
 }

@@ -24,6 +24,8 @@
     "memory:review-dreams": "uv run --locked python scripts/agent_control.py dream review --prompt-only",
     "memory:dream-run": "uv run --locked python scripts/agent_control.py dream run --prompt-only",
     "memory:dream-audit": "uv run --locked python scripts/agent_control.py dream audit --prompt-only",
+    "memory:operator-dashboard": "uv run --locked python scripts/agent_control.py memory operator-dashboard --prompt-only",
+    "memory:research-priorities": "uv run --locked python scripts/agent_control.py memory research-priorities --prompt-only",
     "memory:schedule-dreams": "powershell -ExecutionPolicy Bypass -File scripts/register_agent_memory_dreaming_task.ps1",
     "memory:writeback": "uv run --locked python scripts/agent_control.py writeback",
     "verify:deps": "uv lock --check && uv run --locked python -m pip check && npm ci --dry-run --ignore-scripts && npm audit --omit=dev --audit-level=moderate",

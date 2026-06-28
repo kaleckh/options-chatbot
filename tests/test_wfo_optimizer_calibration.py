@@ -173,7 +173,14 @@ class WFOOptimizerCalibrationTests(unittest.TestCase):
             ],
         }
 
-        def _promote_window_summary(label, subset, min_trades, pass_profit_factor, pass_avg_pnl_pct):
+        def _promote_window_summary(
+            label,
+            subset,
+            min_trades,
+            pass_profit_factor,
+            pass_avg_pnl_pct,
+            min_directional_accuracy_pct=0.0,
+        ):
             start_date = min((str(trade.get("date")) for trade in subset if trade.get("date")), default=None)
             end_date = max((str(trade.get("date")) for trade in subset if trade.get("date")), default=None)
             return {
@@ -202,6 +209,35 @@ class WFOOptimizerCalibrationTests(unittest.TestCase):
         self.assertTrue(
             any("dense replay-calibrated trade" in text.lower() for text in report["recommendations"])
         )
+
+    def test_make_objective_preserves_explicit_zero_commission(self):
+        prices = pd.Series(
+            [100 + i * 0.25 for i in range(80)],
+            index=pd.date_range("2026-01-01", periods=80, freq="B"),
+        )
+
+        class Trial:
+            def suggest_float(self, _name, low, _high, step=None):
+                return float(low if step is None else low)
+
+            def suggest_int(self, _name, low, _high):
+                return int(low)
+
+        captured = {}
+
+        def fake_simulate_window(_closes_input, **kwargs):
+            captured.update(kwargs)
+            return {"n_trades": 1, "profit_factor": 1.0, "sharpe": 0.0, "max_drawdown_pct": 0.0}
+
+        objective = wfo._make_objective(
+            prices,
+            {"dte_at_entry": 10, "min_trades": 1, "commission_per_contract_usd": 0.0},
+        )
+
+        with patch.object(wfo, "_simulate_window", side_effect=fake_simulate_window):
+            objective(Trial())
+
+        self.assertEqual(captured["commission_per_contract_usd"], 0.0)
 
 
 if __name__ == "__main__":

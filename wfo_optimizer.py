@@ -103,6 +103,34 @@ from options_execution import (
 
 PLAYBOOK_EXIT_AUDIT_FALLBACK_PLAYBOOK = "bullish_pullback_observation"
 
+
+def _directional_hit(value: Any) -> bool:
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized == "true":
+            return True
+        if normalized == "false":
+            return False
+    return False
+
+
+def _trade_playbook_id(trade: dict[str, Any]) -> str:
+    return str(
+        trade.get("playbook")
+        or trade.get("playbook_id")
+        or trade.get("source_playbook")
+        or ""
+    ).strip().lower()
+
+
+def _trades_require_row_playbook_match(trades: Sequence[dict[str, Any]]) -> bool:
+    return any(_trade_playbook_id(trade) for trade in trades)
+
+
 try:
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -1038,7 +1066,7 @@ def _profit_factor_denominator_truth_from_pnls(pnl_values: Sequence[Any]) -> dic
 
 def _profit_factor_denominator_truth(trades: Sequence[dict[str, Any]]) -> dict[str, Any]:
     return _profit_factor_denominator_truth_from_pnls(
-        [trade.get("pnl_pct", 0.0) for trade in trades]
+        [trade.get("net_pnl_usd", trade.get("pnl_pct", 0.0)) for trade in trades]
     )
 
 
@@ -1737,8 +1765,9 @@ def _make_objective(
             entry_slippage_pct=float(config.get("entry_slippage_pct", 0.0) or 0.0),
             exit_slippage_pct=float(config.get("exit_slippage_pct", 0.0) or 0.0),
             commission_per_contract_usd=float(
-                config.get("commission_per_contract_usd", DEFAULT_COMMISSION_PER_CONTRACT_USD)
-                or DEFAULT_COMMISSION_PER_CONTRACT_USD
+                config["commission_per_contract_usd"]
+                if config.get("commission_per_contract_usd") is not None
+                else DEFAULT_COMMISSION_PER_CONTRACT_USD
             ),
         )
 
@@ -3287,7 +3316,7 @@ def run_archived_forward_daily_backtest(
         if str(trade.get("prediction_outcome") or "").strip().lower() in {"hit", "miss"}
     ]
     full_hits = sum(1 for outcome in full_hit_outcomes if outcome == "hit")
-    directional_hits = sum(1 for trade in priced_trades if trade.get("directional_correct"))
+    directional_hits = sum(1 for trade in priced_trades if _directional_hit(trade.get("directional_correct")))
     full_hit_rate = full_hits / len(full_hit_outcomes) * 100.0 if full_hit_outcomes else None
     directional_accuracy = directional_hits / len(priced_trades) * 100.0
     avg_pnl = sum(pnl_list) / len(pnl_list)
@@ -3651,7 +3680,7 @@ def _normalized_market_regime(trade: dict) -> str:
 
 
 def _profit_factor_for(group: list[dict]) -> float | None:
-    return _profit_factor_from_values([float(t.get("pnl_pct", 0.0) or 0.0) for t in group])
+    return _profit_factor_from_values([t.get("net_pnl_usd", t.get("pnl_pct", 0.0)) for t in group])
 
 
 def _summarize_prediction_group(
@@ -3662,12 +3691,13 @@ def _summarize_prediction_group(
 ) -> dict:
     count = len(trades)
     pnl_values = [float(t.get("pnl_pct", 0.0) or 0.0) for t in trades]
+    pf_values = [t.get("net_pnl_usd", t.get("pnl_pct", 0.0)) for t in trades]
     direction_scores = [float(t.get("direction_score", 0.0) or 0.0) for t in trades]
     quality_scores = [float(t.get("quality_score", 0.0) or 0.0) for t in trades]
     ev_values = [float(t.get("ev", 0.0) or 0.0) for t in trades]
     wins = sum(1 for pnl in pnl_values if pnl > 0)
     full_hits = sum(1 for trade in trades if trade.get("prediction_outcome") == "hit")
-    directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
+    directional_hits = sum(1 for trade in trades if _directional_hit(trade.get("directional_correct")))
 
     return {
         "group": group_name,
@@ -3682,8 +3712,8 @@ def _summarize_prediction_group(
             if count and _profit_factor_for(trades) is not None
             else (0.0 if not count else None)
         ),
-        **_profit_factor_denominator_truth_from_pnls(pnl_values),
-        "no_loss_sample": _no_loss_sample_from_values(pnl_values),
+        **_profit_factor_denominator_truth_from_pnls(pf_values),
+        "no_loss_sample": _no_loss_sample_from_values(pf_values),
         "avg_pnl_pct": round(sum(pnl_values) / count, 2) if count else 0.0,
         "avg_direction_score": round(sum(direction_scores) / count, 1) if count else 0.0,
         "avg_quality_score": round(sum(quality_scores) / count, 1) if count else 0.0,
@@ -4625,6 +4655,7 @@ def build_live_options_trade_policy(
         result=result,
         min_trades=min_trades,
         min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
     )
     if stability.get("error"):
         return stability
@@ -5138,7 +5169,7 @@ def _playbook_trade_window(playbook: str) -> dict[str, int]:
 def _summarize_exit_reason_group(exit_reason: str, trades: list[dict]) -> dict:
     pnl_values = [float(trade.get("pnl_pct", 0.0) or 0.0) for trade in trades]
     profit_factor = _profit_factor_from_values(pnl_values)
-    directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
+    directional_hits = sum(1 for trade in trades if _directional_hit(trade.get("directional_correct")))
     return {
         "exit_reason": exit_reason,
         "trades": len(trades),
@@ -5164,7 +5195,7 @@ def _summarize_policy_audit_bucket(label: str, trades: list[dict]) -> dict:
 
     pnl_values = [float(trade.get("pnl_pct", 0.0) or 0.0) for trade in trades]
     profit_factor = _profit_factor_from_values(pnl_values)
-    directional_hits = sum(1 for trade in trades if trade.get("directional_correct"))
+    directional_hits = sum(1 for trade in trades if _directional_hit(trade.get("directional_correct")))
 
     by_exit_reason: dict[str, list[dict]] = {}
     for trade in trades:
@@ -10203,7 +10234,7 @@ def run_historical_backtest(
     pf         = _profit_factor_from_values(pnl_list)
     win_rate   = len(wins) / len(pnl_list) * 100
     full_hits  = sum(1 for t in all_trades if t.get("prediction_outcome") == "hit")
-    directional_hits = sum(1 for t in all_trades if t.get("directional_correct"))
+    directional_hits = sum(1 for t in all_trades if _directional_hit(t.get("directional_correct")))
     full_hit_rate = full_hits / len(all_trades) * 100
     directional_accuracy = directional_hits / len(all_trades) * 100
     avg_pnl    = sum(pnl_list) / len(pnl_list)
@@ -10527,11 +10558,13 @@ def build_prediction_replay_report(
     overall = _summarize_prediction_group("overall", "overall", trades, total_trades)
     populated_score_groups = [item for item in score_groups if item["trades"] > 0]
     highest_score_group = populated_score_groups[-1] if populated_score_groups else None
+    overall_profit_factor = overall.get("profit_factor")
+    overall_directional_accuracy = float(overall.get("directional_accuracy_pct") or 0.0)
 
     risk_flags: list[str] = []
-    if overall["directional_accuracy_pct"] < 50.0:
+    if overall_directional_accuracy < 50.0:
         risk_flags.append("Directional accuracy is below 50%, so the signal is not clearing a naive coin-flip bar.")
-    if overall["profit_factor"] < 1.0:
+    if overall_profit_factor is not None and float(overall_profit_factor) < 1.0:
         risk_flags.append("Profit factor is below 1.0, so option P&L is still net negative after the scoring fixes.")
     if highest_score_group and any(
         highest_score_group["avg_pnl_pct"] <= item["avg_pnl_pct"]
@@ -10591,6 +10624,7 @@ def _window_summary(
     min_trades: int,
     pass_profit_factor: float,
     pass_avg_pnl_pct: float,
+    min_directional_accuracy_pct: float = 0.0,
 ) -> dict:
     dates = [dt for dt in (_trade_date(trade) for trade in trades) if dt is not None]
     daily_groups: dict[str, list[float]] = {}
@@ -10601,6 +10635,9 @@ def _window_summary(
     summary = _summarize_prediction_group("window", label, trades, len(trades))
     profit_factor, profit_factor_finite = _finite_metric(summary.get("profit_factor"))
     avg_pnl_pct, avg_pnl_pct_finite = _finite_metric(summary.get("avg_pnl_pct"))
+    directional_accuracy_pct, directional_accuracy_finite = _finite_metric(
+        summary.get("directional_accuracy_pct")
+    )
     summary.update(
         {
             "label": label,
@@ -10611,8 +10648,10 @@ def _window_summary(
                 len(trades) >= int(min_trades)
                 and profit_factor_finite
                 and avg_pnl_pct_finite
+                and directional_accuracy_finite
                 and profit_factor >= float(pass_profit_factor)
                 and avg_pnl_pct > float(pass_avg_pnl_pct)
+                and directional_accuracy_pct >= float(min_directional_accuracy_pct)
             ),
         }
     )
@@ -10628,6 +10667,7 @@ def _slice_window_summary(
     min_trades: int,
     pass_profit_factor: float,
     pass_avg_pnl_pct: float,
+    min_directional_accuracy_pct: float = 0.0,
 ) -> dict:
     item = _window_summary(
         window_label,
@@ -10635,6 +10675,7 @@ def _slice_window_summary(
         min_trades=min_trades,
         pass_profit_factor=pass_profit_factor,
         pass_avg_pnl_pct=pass_avg_pnl_pct,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
     )
     item["category"] = category
     item["value"] = value
@@ -10649,6 +10690,7 @@ def build_options_stability_report(
     rolling_window_days: int = 182,
     rolling_step_days: int = 91,
     catastrophic_pf_floor: float = 0.85,
+    min_directional_accuracy_pct: float = MIN_EXACT_CONTRACT_DIRECTIONAL_ACCURACY_PCT,
 ) -> dict:
     if result is None:
         result = load_last_results()
@@ -10669,6 +10711,7 @@ def build_options_stability_report(
         profitability_view["metrics"],
         min_trade_count=min_trades,
         min_profit_factor=min_profit_factor,
+        min_directional_accuracy_pct=min_directional_accuracy_pct,
     )
     if not trades:
         return {
@@ -10680,6 +10723,7 @@ def build_options_stability_report(
                 "min_trades": int(min_trades),
                 "min_profit_factor": float(min_profit_factor),
                 "min_avg_pnl_pct": 0.0,
+                "min_directional_accuracy_pct": float(min_directional_accuracy_pct),
                 "catastrophic_pf_floor": float(catastrophic_pf_floor),
             },
             "scenario_results": {},
@@ -10736,6 +10780,7 @@ def build_options_stability_report(
                     min_trades=min_trades,
                     pass_profit_factor=1.0,
                     pass_avg_pnl_pct=0.0,
+                    min_directional_accuracy_pct=min_directional_accuracy_pct,
                 )
             )
             cursor += timedelta(days=rolling_step_days)
@@ -10747,6 +10792,7 @@ def build_options_stability_report(
                 min_trades=min_trades,
                 pass_profit_factor=1.0,
                 pass_avg_pnl_pct=0.0,
+                min_directional_accuracy_pct=min_directional_accuracy_pct,
             )
         )
 
@@ -10757,6 +10803,7 @@ def build_options_stability_report(
             min_trades=max(min_trades * 2, min_trades),
             pass_profit_factor=min_profit_factor,
             pass_avg_pnl_pct=0.0,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
         ),
         "last_1y": _window_summary(
             "last_1y",
@@ -10764,13 +10811,18 @@ def build_options_stability_report(
             min_trades=max(min_trades * 2, min_trades),
             pass_profit_factor=min_profit_factor,
             pass_avg_pnl_pct=0.0,
+            min_directional_accuracy_pct=min_directional_accuracy_pct,
         ),
         "rolling_6m_windows": rolling_windows,
     }
 
-    rolling_passes = [window for window in rolling_windows if window["passes_quality_bar"]]
-    rolling_pass_rate = round(len(rolling_passes) / max(len(rolling_windows), 1) * 100.0, 1)
-    worst_rolling_pf = min(float(window.get("profit_factor", 0.0) or 0.0) for window in rolling_windows)
+    dense_rolling_windows = [window for window in rolling_windows if int(window.get("trades", 0) or 0) >= int(min_trades)]
+    rolling_passes = [window for window in dense_rolling_windows if window["passes_quality_bar"]]
+    rolling_pass_rate = round(len(rolling_passes) / max(len(dense_rolling_windows), 1) * 100.0, 1)
+    worst_rolling_pf = min(
+        (float(window.get("profit_factor", 0.0) or 0.0) for window in dense_rolling_windows),
+        default=0.0,
+    )
     fixed_pass = (
         scenario_results["full_window"]["passes_quality_bar"]
         and scenario_results["last_1y"]["passes_quality_bar"]
@@ -10831,6 +10883,7 @@ def build_options_stability_report(
                         min_trades=min_trades,
                         pass_profit_factor=1.0,
                         pass_avg_pnl_pct=0.0,
+                        min_directional_accuracy_pct=min_directional_accuracy_pct,
                     )
                 )
 
@@ -10842,10 +10895,19 @@ def build_options_stability_report(
                 continue
             pfs = [float(window.get("profit_factor", 0.0) or 0.0) for window in seen]
             avg_pnls = [float(window.get("avg_pnl_pct", 0.0) or 0.0) for window in seen]
+            directional_accuracies = [float(window.get("directional_accuracy_pct", 0.0) or 0.0) for window in seen]
             pass_rate_pct = round(sum(1 for window in seen if window["passes_quality_bar"]) / len(seen) * 100.0, 1)
-            if pass_rate_pct >= 70.0 and min(pfs) >= 1.0 and min(avg_pnls) >= 0.0:
+            if (
+                pass_rate_pct >= 70.0
+                and min(pfs) >= 1.0
+                and min(avg_pnls) >= 0.0
+                and min(directional_accuracies) >= float(min_directional_accuracy_pct)
+            ):
                 status = "promote"
-            elif max(pfs) >= 1.0 or max(avg_pnls) > 0.0:
+            elif (
+                max(directional_accuracies) >= float(min_directional_accuracy_pct)
+                and (max(pfs) >= 1.0 or max(avg_pnls) > 0.0)
+            ):
                 status = "watch"
             else:
                 status = "block"
@@ -10860,6 +10922,8 @@ def build_options_stability_report(
                     "worst_profit_factor": round(min(pfs), 2),
                     "median_avg_pnl_pct": round(float(np.median(avg_pnls)), 2),
                     "worst_avg_pnl_pct": round(min(avg_pnls), 2),
+                    "median_directional_accuracy_pct": round(float(np.median(directional_accuracies)), 1),
+                    "worst_directional_accuracy_pct": round(min(directional_accuracies), 1),
                     "status": status,
                     "windows": seen,
                 }
@@ -10953,6 +11017,7 @@ def build_options_stability_report(
             "min_trades": int(min_trades),
             "min_profit_factor": float(min_profit_factor),
             "min_avg_pnl_pct": 0.0,
+            "min_directional_accuracy_pct": float(min_directional_accuracy_pct),
             "catastrophic_pf_floor": float(catastrophic_pf_floor),
             "min_quote_coverage_pct": float(MIN_IMPORTED_QUOTE_COVERAGE_PCT),
         },
@@ -10962,6 +11027,7 @@ def build_options_stability_report(
             "windows_passed": len(rolling_passes),
             "pass_rate_pct": rolling_pass_rate,
             "worst_profit_factor": round(worst_rolling_pf, 2),
+            "dense_windows": len(dense_rolling_windows),
         },
         "slice_statuses": slice_statuses,
         "promotion_recommendations": {
@@ -11102,7 +11168,11 @@ def _summarize_playbook_discovery_slice(
             "candidate_id": _experiment_id("playbook_discovery", filters),
             "label": label,
             "filters": dict(filters),
-            "profit_factor": round(profit_factor, 2),
+            "profit_factor": (
+                round(profit_factor, 2)
+                if profit_factor_finite
+                else (None if summary.get("no_loss_sample") else 0.0)
+            ),
             "avg_pnl_pct": round(avg_pnl_pct, 2),
             "directional_accuracy_pct": round(directional_accuracy_pct, 1),
             "metrics_finite": not non_finite_metrics,
@@ -11228,6 +11298,7 @@ def _playbook_rolling_summary(
     *,
     min_trades: int,
     min_profit_factor: float,
+    min_directional_accuracy_pct: float,
     rolling_window_days: int,
     rolling_step_days: int,
     catastrophic_pf_floor: float,
@@ -11280,6 +11351,7 @@ def _playbook_rolling_summary(
                 min_trades=min_trades,
                 pass_profit_factor=min_profit_factor,
                 pass_avg_pnl_pct=0.0,
+                min_directional_accuracy_pct=min_directional_accuracy_pct,
             )
         )
         cursor += timedelta(days=rolling_step_days)
@@ -11293,6 +11365,7 @@ def _playbook_rolling_summary(
                 min_trades=min_trades,
                 pass_profit_factor=min_profit_factor,
                 pass_avg_pnl_pct=0.0,
+                min_directional_accuracy_pct=min_directional_accuracy_pct,
             )
         )
 
@@ -11322,8 +11395,14 @@ def _playbook_rolling_summary(
         status = "stable"
     elif (
         windows_passed > 0
-        or max(float(window.get("profit_factor", 0.0) or 0.0) for window in dense_windows) >= 1.0
-        or max(float(window.get("avg_pnl_pct", 0.0) or 0.0) for window in dense_windows) > 0.0
+        or (
+            max(float(window.get("directional_accuracy_pct", 0.0) or 0.0) for window in dense_windows)
+            >= float(min_directional_accuracy_pct)
+            and (
+                max(float(window.get("profit_factor", 0.0) or 0.0) for window in dense_windows) >= 1.0
+                or max(float(window.get("avg_pnl_pct", 0.0) or 0.0) for window in dense_windows) > 0.0
+            )
+        )
     ):
         status = "mixed"
     else:
@@ -11350,6 +11429,10 @@ def _playbook_rolling_summary(
 def _pairwise_playbook_comparison(kind: str, left: dict, right: dict) -> dict:
     left_label = str(left.get("source_label") or "left")
     right_label = str(right.get("source_label") or "right")
+    left_pf = left.get("profit_factor")
+    right_pf = right.get("profit_factor")
+    left_pf_label = "n/a" if left_pf is None else f"{float(left_pf):.2f}"
+    right_pf_label = "n/a" if right_pf is None else f"{float(right_pf):.2f}"
     if bool(left.get("sparse")) or bool(right.get("sparse")):
         status = "insufficient_sample"
         reason = (
@@ -11359,8 +11442,8 @@ def _pairwise_playbook_comparison(kind: str, left: dict, right: dict) -> dict:
     elif left.get("passes_quality_bar") and right.get("passes_quality_bar"):
         status = "confirmed"
         reason = (
-            f"{kind} comparison confirmed the slice: {left_label} PF {left['profit_factor']:.2f} "
-            f"vs {right_label} PF {right['profit_factor']:.2f}."
+            f"{kind} comparison confirmed the slice: {left_label} PF {left_pf_label} "
+            f"vs {right_label} PF {right_pf_label}."
         )
     elif bool(left.get("passes_quality_bar")) != bool(right.get("passes_quality_bar")):
         status = "conflict"
@@ -11371,8 +11454,8 @@ def _pairwise_playbook_comparison(kind: str, left: dict, right: dict) -> dict:
     else:
         status = "weak"
         reason = (
-            f"{kind} comparison stayed weak: {left_label} PF {left['profit_factor']:.2f} "
-            f"and {right_label} PF {right['profit_factor']:.2f} both missed the bar."
+            f"{kind} comparison stayed weak: {left_label} PF {left_pf_label} "
+            f"and {right_label} PF {right_pf_label} both missed the bar."
         )
 
     return {
@@ -11543,6 +11626,7 @@ def build_playbook_discovery_report(
                 filters,
                 min_trades=min_trades,
                 min_profit_factor=min_profit_factor,
+                min_directional_accuracy_pct=min_directional_accuracy_pct,
                 rolling_window_days=rolling_window_days,
                 rolling_step_days=rolling_step_days,
                 catastrophic_pf_floor=catastrophic_pf_floor,
@@ -11550,10 +11634,14 @@ def build_playbook_discovery_report(
             for source in sources
         ]
         available_rolling = [summary for summary in rolling_summaries if summary["available"]]
+        overall_profit_factor = overall.get("profit_factor")
+        overall_profit_factor_label = (
+            "n/a" if overall_profit_factor is None else f"{float(overall_profit_factor):.2f}"
+        )
 
         reasons: list[str] = [
             (
-                f"Authoritative evidence: {overall['trades']} trades, PF {overall['profit_factor']:.2f}, "
+                f"Authoritative evidence: {overall['trades']} trades, PF {overall_profit_factor_label}, "
                 f"avg P&L {overall['avg_pnl_pct']:+.2f}%, directional accuracy {overall['directional_accuracy_pct']:.1f}%."
             )
         ]

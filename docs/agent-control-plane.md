@@ -7,6 +7,8 @@ The runtime implementation is `scripts/agent_control.py`. It stores local operat
 - `agent_control.db`: SQLite task/message/graph ledger using WAL mode
 - `events.jsonl`: append-only event mirror for agent-readable audit trails
 - `sessions.jsonl`: compact session transcript provenance records
+- `context-packs/*.json`: generated context-pack manifests with node IDs, retrieval explanations, policy banner, and gateboard hash
+- `dream-runs/latest.*`: automated dreaming audit output
 
 ## Fresh Agent Quickstart
 
@@ -29,12 +31,32 @@ Use the graph to recover context and write back reviewed lessons, not to replace
 | Review dream proposals and dream-origin lessons | `npm run memory:review-dreams` |
 | Run automated dreaming now | `npm run memory:dream-run` |
 | Audit automated dreaming | `npm run memory:dream-audit` |
+| Audit the whole memory system | `npm run memory:operator-dashboard` |
+| Review research-only provenance priorities | `npm run memory:research-priorities` |
 | Register the nightly Windows dreaming task | `npm run memory:schedule-dreams` |
 | Audit memory lifecycle health | `npm run memory:audit` |
 | Backfill authority metadata on legacy operating memory rows | `npm run memory:repair-authority` |
 | Run deterministic memory recovery checks | `npm run memory:eval` or `npm run verify:memory` |
 
 Do not use raw `graph remember` for accepted operating memory. `graph remember` stores raw graph context only; durable reviewed memory goes through `memory remember`, accepted task writeback, or accepted dreams.
+
+## Memory Graph V2 Guardrails
+
+The runtime graph uses a shared policy contract, `memory_graph_v2_2026_06_28`, on accepted operating memory, dream promotion, retrieval documents, context manifests, operator-dashboard output, and research provenance.
+
+Every accepted memory is stamped with:
+
+- `authority_scope=orchestration_only`
+- `does_not_authorize_trading_or_evidence_mutation=true`
+- `capability_label=coordination_only`
+- `source_quality=<source class>`
+- `memory_policy_version=memory_graph_v2_2026_06_28`
+
+The write paths reject memory or dream entries that try to approve live trading, broker action, evidence mutation, scanner/strategy changes, proof-bar changes, promotion, stop/sizing changes, append readiness, or treating historical rows as forward proof. This is intentionally stricter than ordinary graph notes: accepted memory can improve coordination and retrieval, but it cannot become an authority surface for options actions.
+
+Graph queries index nodes into `retrieval_documents` and use SQLite FTS/BM25 before the older substring fallback. Prompt-ready graph context includes the non-authorization banner plus retrieval explanations with `source_quality`, `authority_scope`, `capability_label`, `freshness_status`, and source hash metadata. Focused context packs write manifests under `data/agent-control/context-packs/` so future agents can audit exactly which nodes were loaded.
+
+`npm run memory:operator-dashboard` is the no-management audit view. It checks memory lifecycle health, automated dreaming, startup/context manifest presence, retrieval index counts, event outbox hash-chain activity, and deterministic memory eval status. `npm run memory:research-priorities` reads research-only provenance, including zero-candidate episodes, to help select the next diagnostic task without changing scanners, evidence stores, proof gates, live validation, broker behavior, or append state.
 
 ## Design Model
 
@@ -54,7 +76,7 @@ Local mapping:
 | Memory | Dynamic operator/session facts, preferences, lessons learned |
 | Knowledge | Shared docs, runbooks, reports, or artifact summaries |
 | Context graph | SQLite `graph_nodes` and `graph_edges` triplets |
-| Hybrid retrieval | Text/metadata query plus graph-neighborhood expansion for now |
+| Hybrid retrieval | SQLite `retrieval_documents` FTS/BM25, metadata filters, explanations, and graph-neighborhood expansion |
 | Graph context | Returned nodes, edges, and `source -> relation -> target` triplets |
 
 Future embedding/vector retrieval can be added behind the query command, but the first slice is deliberately deterministic and local.

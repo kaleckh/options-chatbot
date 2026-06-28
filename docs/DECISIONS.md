@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-06-28: Memory Graph V2 Is Retrieval And Research Provenance, Not Trading Authority
+
+The options runtime memory graph should help future agents recover context, learn from dream loops, audit automation, and choose research diagnostics without becoming another action gate.
+
+Durable decision: `scripts/agent_control.py` now applies `memory_graph_v2_2026_06_28` across accepted operating memory, dream promotion, retrieval documents, context manifests, operator-dashboard output, event outbox records, and research provenance. Accepted memory is stamped `authority_scope=orchestration_only`, `does_not_authorize_trading_or_evidence_mutation=true`, `capability_label=coordination_only`, and `source_quality`, and shared validation rejects memory/dream text that tries to approve live trading, broker action, evidence mutation, scanner/strategy/proof-bar changes, promotion, stop/sizing changes, append readiness, or treating historical rows as forward proof. Graph writes populate a SQLite `retrieval_documents` FTS/BM25 index, prompt contexts include retrieval explanations and the non-authorization banner, context packs write auditable manifests, and `npm run memory:operator-dashboard` checks startup/context manifests, dream automation, retrieval health, outbox activity, lifecycle audit, and deterministic memory eval status. Research provenance now records zero-candidate episodes and exposes `npm run memory:research-priorities` for research-only prioritization.
+
+This is an agent-productivity and research-selection control plane only. It does not append cohort rows, import quotes, mutate evidence stores, change scanners or strategies, lower proof bars, enable live validation, enable auto-track, submit broker orders, change stop/sizing, consume protected holdout, promote lanes, or convert historical/backtest rows into forward proof.
+
 ## 2026-06-27: Paid Provider Source Priority And Underlying Source Materialization
 
 Regular-options profitability blocker repair should prefer paid provider data already available to the operator before falling back to public web sources. Alpaca and ThetaData are first-choice import/probe sources for market data blockers; web sources are acceptable only when those providers do not cover the required field family or current provider state blocks the exact source.

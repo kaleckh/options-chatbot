@@ -159,6 +159,26 @@ class ProofContractTests(unittest.TestCase):
         self.assertFalse(contract.row_has_calculable_realized_pnl(missing_pnl))
         self.assertFalse(contract.row_counts_as_proof_grade_exact_closed(missing_pnl))
 
+    def test_lifecycle_only_review_marks_do_not_count_as_production_proof(self):
+        row = self._live_proof_row(
+            exit_execution_price=None,
+            exit_option_price=None,
+            net_pnl_pct=None,
+            gross_pnl_pct=None,
+            latest_review={
+                "current_option_price": 5.5,
+                "pricing_source": "spread_bid_ask_exact",
+                "net_pnl_pct": 22.2,
+            },
+        )
+
+        summary = contract.classify_row_evidence(row)
+
+        self.assertEqual(summary["evidence_group"], "lifecycle_only")
+        self.assertFalse(summary["production_proof"])
+        self.assertFalse(summary["truth_grade_closed"])
+        self.assertFalse(summary["realized_pnl_closed"])
+
     def test_closed_at_requires_closed_exit_even_when_status_is_missing(self):
         row = self._live_proof_row(status=None, closed_at="2026-04-06T20:00:00Z")
         row["exit_execution_price"] = None

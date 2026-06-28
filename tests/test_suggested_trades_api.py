@@ -133,7 +133,7 @@ class SuggestedTradesApiTests(unittest.TestCase):
         self.assertEqual(grouped_open_payload["closed"], [])
 
         positions_response = self.client.get("/api/positions", params={"status": "open"})
-        self.assertEqual(positions_response.status_code, 200)
+        self.assertEqual(positions_response.status_code, 503)
         self.assertIn("error", positions_response.json())
         self.assertIn("DATABASE_URL", positions_response.json()["error"])
 
@@ -197,7 +197,7 @@ class SuggestedTradesApiTests(unittest.TestCase):
             f"/api/suggested-trades/{reviewed['id']}/close",
             json={"exit_price": 6.0, "notes": "Should not overwrite"},
         )
-        self.assertEqual(second_close_response.status_code, 400)
+        self.assertEqual(second_close_response.status_code, 409)
 
         unchanged_response = self.client.get("/api/suggested-trades", params={"status": "closed"})
         unchanged_trade = unchanged_response.json()["trades"][0]
@@ -209,6 +209,53 @@ class SuggestedTradesApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("position_ids must be a list of positive integers", response.json()["detail"])
+
+    def test_review_rejects_empty_position_id_list(self):
+        response = self.client.post("/api/suggested-trades/review", json={"position_ids": []})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("position_ids must not be empty", response.json()["detail"])
+
+    def test_review_rejects_missing_position_ids(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/suggested-trades",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.10,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+
+        response = self.client.post("/api/suggested-trades/review", json={"position_ids": [999999]})
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("suggested trade not found", response.json()["detail"])
+
+    def test_review_rejects_closed_position_ids(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/suggested-trades",
+            json={
+                "scan_pick": scan_pick,
+                "fill_price": 4.10,
+                "contracts": 1,
+            },
+        )
+        self.assertEqual(create_response.status_code, 200)
+        position_id = create_response.json()["trade"]["id"]
+
+        close_response = self.client.post(
+            f"/api/suggested-trades/{position_id}/close",
+            json={"exit_price": 5.15, "notes": "close before review"},
+        )
+        self.assertEqual(close_response.status_code, 200)
+
+        response = self.client.post("/api/suggested-trades/review", json={"position_ids": [position_id]})
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("suggested trade is not open", response.json()["detail"])
 
     def test_create_scanner_origin_suggested_trade_rejects_caps_off_source_scan(self):
         scan_pick = build_tracked_position_scan_pick(self.bundle)
@@ -452,6 +499,57 @@ class SuggestedTradesApiTests(unittest.TestCase):
         bool_exit = self.client.post(f"/api/suggested-trades/{trade_id}/close", json={"exit_price": True})
         self.assertEqual(bool_exit.status_code, 400)
         self.assertIn("exit_price", bool_exit.text)
+
+    def test_suggested_trade_routes_reject_non_object_root_bodies_with_controlled_400s(self):
+        create_non_object = self.client.post("/api/suggested-trades", json=["bad"])
+        self.assertEqual(create_non_object.status_code, 400)
+        self.assertIn("request body must be an object", create_non_object.text)
+
+        review_non_object = self.client.post("/api/suggested-trades/review", json=True)
+        self.assertEqual(review_non_object.status_code, 400)
+        self.assertIn("request body must be an object", review_non_object.text)
+
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/suggested-trades",
+            json={"scan_pick": scan_pick, "fill_price": 4.10, "contracts": 1},
+        )
+        self.assertEqual(create_response.status_code, 200)
+        trade_id = create_response.json()["trade"]["id"]
+
+        close_non_object = self.client.post(f"/api/suggested-trades/{trade_id}/close", json=["bad"])
+        self.assertEqual(close_non_object.status_code, 400)
+        self.assertIn("request body must be an object", close_non_object.text)
+
+    def test_suggested_trade_routes_return_503_when_storage_is_unavailable(self):
+        class UnavailableRepository:
+            is_available = False
+            error_message = "suggested trades down"
+
+        with patch.object(self.backend, "SUGGESTED_TRADES_REPOSITORY", UnavailableRepository()):
+            create_response = self.client.post("/api/suggested-trades", json={})
+            review_response = self.client.post("/api/suggested-trades/review", json={})
+            close_response = self.client.post("/api/suggested-trades/1/close", json={"exit_price": 1})
+
+        self.assertEqual(create_response.status_code, 503)
+        self.assertEqual(review_response.status_code, 503)
+        self.assertEqual(close_response.status_code, 503)
+
+    def test_suggested_trade_close_returns_conflict_for_already_closed_trade(self):
+        scan_pick = build_tracked_position_scan_pick(self.bundle)
+        create_response = self.client.post(
+            "/api/suggested-trades",
+            json={"scan_pick": scan_pick, "fill_price": 4.10, "contracts": 1},
+        )
+        self.assertEqual(create_response.status_code, 200)
+        trade_id = create_response.json()["trade"]["id"]
+
+        first_close = self.client.post(f"/api/suggested-trades/{trade_id}/close", json={"exit_price": 1.0})
+        self.assertEqual(first_close.status_code, 200)
+
+        second_close = self.client.post(f"/api/suggested-trades/{trade_id}/close", json={"exit_price": 1.1})
+        self.assertEqual(second_close.status_code, 409)
+        self.assertIn("already closed", second_close.text)
 
     def test_create_rejects_bool_scan_pick_numeric_fields(self):
         for field in ("strike", "stop_loss_pct", "profit_target_pct", "time_exit_day"):

@@ -410,8 +410,8 @@ def _has_resolved_contract_identity(scan_pick: dict[str, Any]) -> bool:
     fields = _pick_context_fields(scan_pick)
     if not fields["contract_symbol"]:
         return False
-    if fields["strategy_type"] == "vertical_spread" and fields["short_strike"] is not None:
-        return bool(fields["short_contract_symbol"])
+    if fields["strategy_type"] == "vertical_spread":
+        return bool(fields["short_contract_symbol"]) and fields["short_strike"] is not None
     return not bool(scan_pick.get("approximation_only"))
 
 
@@ -423,7 +423,6 @@ def _spread_has_executable_leg_quotes(scan_pick: dict[str, Any]) -> bool:
         return False
 
     quoted_roles: set[str] = set()
-    quoted_count = 0
     for leg in legs:
         if not isinstance(leg, dict):
             continue
@@ -432,10 +431,11 @@ def _spread_has_executable_leg_quotes(scan_pick: dict[str, Any]) -> bool:
         if bid is None or ask is None:
             continue
         role = str(leg.get("role") or "").strip().lower()
-        if role in {"long", "short"}:
+        if role == "long":
             quoted_roles.add(role)
-        quoted_count += 1
-    return {"long", "short"}.issubset(quoted_roles) or quoted_count >= 2
+        elif role == "short" and bid > 0:
+            quoted_roles.add(role)
+    return {"long", "short"}.issubset(quoted_roles)
 
 
 def _scan_pick_has_research_backfill_marker(scan_pick: dict[str, Any]) -> bool:
@@ -484,18 +484,29 @@ def _classify_position_proof(
     source_scan_lineage_verified: bool = False,
 ) -> tuple[bool, Optional[str], str, Optional[str]]:
     selection_source = str(scan_pick.get("selection_source") or scan_pick.get("contract_selection_source") or "").strip()
-    quote_time_et = scan_pick.get("quote_time_et")
     bid = _safe_float(scan_pick.get("bid"))
     ask = _safe_float(scan_pick.get("ask"))
     strategy_type = _pick_strategy_type(scan_pick)
+    entry_quote_snapshot = _safe_dict(scan_pick.get("entry_quote_snapshot"))
+    quote_timestamp_present = any(
+        str(value or "").strip()
+        for value in (
+            scan_pick.get("quote_time_et"),
+            scan_pick.get("quote_time_utc"),
+            entry_quote_snapshot.get("captured_at_et"),
+            entry_quote_snapshot.get("captured_at_utc"),
+            entry_quote_snapshot.get("quote_time_et"),
+            entry_quote_snapshot.get("quote_time_utc"),
+        )
+    )
 
     proof_missing: list[str] = []
     if not contract_symbol or not _has_resolved_contract_identity(scan_pick):
         proof_missing.append("contract_symbol")
     if _scan_pick_has_research_backfill_marker(scan_pick):
         proof_missing.append("research_backfill_not_live_proof")
-    if not quote_time_et:
-        proof_missing.append("quote_time_et")
+    if not quote_timestamp_present:
+        proof_missing.append("quote_time")
     if strategy_type == "vertical_spread":
         if not _spread_has_executable_leg_quotes(scan_pick):
             proof_missing.append("spread_leg_bid_ask")
@@ -919,7 +930,12 @@ def _resolve_live_comparable_pick(scan_pick: dict[str, Any]) -> Optional[dict[st
         "contract_symbol": _normalize_contract_symbol(row.get("contractSymbol").iloc[0]),
         "entry_execution_price": round(float(display_price), 4),
         "entry_execution_basis": "live_comparable_mid",
-        "entry_underlying_price": _safe_float(scan_pick.get("stock_price") or scan_pick.get("entry_price")),
+        "entry_underlying_price": _safe_float(
+            scan_pick.get("entry_underlying_price")
+            or scan_pick.get("underlying_price_at_selection")
+            or scan_pick.get("stock_price")
+            or scan_pick.get("entry_price")
+        ),
         "entry_fee_total_usd": commission_total_usd(contracts=1),
         "quote_basis": str(execution.get("display_basis") or "mid"),
         "selection_source": "live_comparable_exact_contract",
@@ -1714,10 +1730,15 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
         contract_fields["short_contract_symbol"] or contract_fields["short_strike"] is not None
     )
     entry_option_price = float(position["entry_option_price"])
-    configured_stop_loss_pct = float(position["stop_loss_pct"])
+    configured_stop_loss_pct = _safe_float(position.get("stop_loss_pct"))
     stop_loss_pct = _effective_live_stop_loss_pct(position)
-    profit_target_pct = float(position["profit_target_pct"])
-    time_exit_day = int(position["time_exit_day"])
+    if configured_stop_loss_pct is None:
+        configured_stop_loss_pct = stop_loss_pct
+    profit_target_pct = _safe_float(position.get("profit_target_pct"))
+    if profit_target_pct is None:
+        profit_target_pct = 100.0
+    time_exit_day_value = _safe_float(position.get("time_exit_day"))
+    time_exit_day = int(time_exit_day_value) if time_exit_day_value is not None and time_exit_day_value > 0 else 1
     days_held = max((datetime.now().date() - filled_at.date()).days, 0)
     stop_option_price = round(entry_option_price * (1.0 - stop_loss_pct / 100.0), 4)
     target_option_price = round(entry_option_price * (1.0 + profit_target_pct / 100.0), 4)
@@ -1902,6 +1923,8 @@ def review_position(position: dict[str, Any], context: Optional[_ReviewContext] 
 def review_open_positions(
     repository: TradingDeskPositionRepository,
     position_ids: Optional[list[int]] = None,
+    *,
+    auto_close_sell: bool = True,
 ) -> list[dict[str, Any]]:
     with _market_data_request_scope():
         review_context = _ReviewContext()
@@ -1917,9 +1940,12 @@ def review_open_positions(
             needs_resolution = not _has_resolved_contract_identity(source_pick)
             resolved_position = False
             if needs_resolution and hasattr(repository, "update_position"):
+                entry_fill_price = _safe_float(position.get("entry_execution_price")) or _safe_float(
+                    position.get("entry_option_price")
+                ) or 0.0
                 resolved_pick, resolved_fill_price, resolution = resolve_comparable_contract_pick(
                     source_pick,
-                    fill_price=float(position.get("entry_option_price") or 0.0),
+                    fill_price=float(entry_fill_price),
                     filled_at=position.get("filled_at"),
                 )
                 if resolution is not None and _has_resolved_contract_identity(resolved_pick):
@@ -1957,7 +1983,7 @@ def review_open_positions(
                 continue
             review = review_position(position, review_context)
             saved_position = repository.save_review(int(position["id"]), review)
-            if review.get("recommendation") == "SELL" and hasattr(repository, "close_position"):
+            if auto_close_sell and review.get("recommendation") == "SELL" and hasattr(repository, "close_position"):
                 pricing_state = str(review.get("pricing_state") or "").strip().lower()
                 if "display_only" in pricing_state:
                     reviewed_positions.append(saved_position)

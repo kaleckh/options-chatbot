@@ -142,6 +142,35 @@ class ProfileRoutesTests(unittest.TestCase):
         bad_updates = self.client.put("/api/profile", json={"updates": []})
         self.assertEqual(bad_updates.status_code, 400)
 
+        non_object = self.client.put("/api/profile", json=["bad"])
+        self.assertEqual(non_object.status_code, 400)
+        self.assertIn("request body must be an object", non_object.text)
+
+        bad_type = self.client.put("/api/profile", json={"type": ["equity"], "updates": {}})
+        self.assertEqual(bad_type.status_code, 400)
+        self.assertIn("type must be a string", bad_type.text)
+
+    def test_profile_router_does_not_mask_server_type_errors_as_client_input(self):
+        def update_profile_sections(_profile_type: str, _updates: dict[str, object]):
+            raise TypeError("server bug")
+
+        app = FastAPI()
+        app.include_router(
+            create_profile_router(
+                save_profile=lambda **_kwargs: None,
+                changelog_files={},
+                get_strategy_profile_fn=lambda _profile_type: {"risk": {}, "entry": {}},
+                get_strategy_profiles_fn=lambda: {"equity": {"risk": {}, "entry": {}}},
+                update_profile_sections_fn=update_profile_sections,
+            )
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        self.addCleanup(client.close)
+
+        response = client.put("/api/profile", json={"type": "equity", "updates": {"entry": {"min_tech_score": 60.0}}})
+
+        self.assertEqual(response.status_code, 500)
+
     def test_profile_router_reads_changelog_as_profile_artifact(self):
         response = self.client.get("/api/changelog?profile=equity")
         self.assertEqual(response.status_code, 200)

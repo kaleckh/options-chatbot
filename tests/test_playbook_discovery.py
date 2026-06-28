@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import date, timedelta
+from unittest.mock import patch
 
 import supervised_scan as ss
 import wfo_optimizer as wfo
@@ -181,6 +182,181 @@ class PlaybookDiscoveryTests(unittest.TestCase):
         self.assertTrue(candidate["overall"]["no_loss_sample"])
         self.assertIn("avg_pnl_pct", candidate["overall"]["non_finite_metrics"])
         self.assertTrue(any("non-finite metrics" in blocker.lower() for blocker in candidate["blockers"]))
+
+    def test_prediction_replay_report_does_not_flag_no_loss_sample_as_sub_unit_pf(self):
+        result = _make_result(
+            [
+                _make_trade(date(2024, 1, 5), ticker="SPY", pnl_pct=12.0),
+                _make_trade(date(2024, 1, 6), ticker="QQQ", pnl_pct=8.0),
+            ],
+            playbook="short_term",
+        )
+
+        report = wfo.build_prediction_replay_report(result=result, min_trades=1)
+
+        self.assertIsNone(report["overall"]["profit_factor"])
+        self.assertTrue(report["overall"]["no_loss_sample"])
+        self.assertFalse(any("Profit factor is below 1.0" in flag for flag in report["risk_flags"]))
+
+    def test_prediction_replay_report_treats_string_directional_flags_strictly(self):
+        result = _make_result(
+            [
+                _make_trade(date(2024, 1, 5), ticker="SPY", pnl_pct=12.0, directional_correct="False"),
+                _make_trade(date(2024, 1, 6), ticker="QQQ", pnl_pct=8.0, directional_correct="true"),
+            ],
+            playbook="short_term",
+        )
+
+        report = wfo.build_prediction_replay_report(result=result, min_trades=1)
+
+        self.assertEqual(report["overall"]["directional_accuracy_pct"], 50.0)
+
+    def test_stability_report_does_not_crash_for_mixed_forward_playbook_results(self):
+        result = _make_result(
+            [
+                _make_trade(date(2024, 1, 5), ticker="SPY", dte=7, pnl_pct=12.0),
+                _make_trade(date(2024, 2, 5), ticker="QQQ", dte=7, pnl_pct=-4.0, directional_correct=False),
+            ],
+            playbook="forward_ledger_scan",
+        )
+        result["truth_source"] = wfo.IMPORTED_DAILY_TRUTH_SOURCE
+        result["quote_coverage_pct"] = 100.0
+
+        report = wfo.build_options_stability_report(result=result, min_trades=1, rolling_window_days=30, rolling_step_days=30)
+
+        self.assertNotIn("error", report)
+        self.assertIn("overall_status", report)
+
+    def test_playbook_rolling_summary_requires_directional_accuracy_gate(self):
+        trades = [
+            _make_trade(date(2024, 1, 5), ticker="SPY", pnl_pct=12.0, directional_correct=False),
+            _make_trade(date(2024, 1, 20), ticker="QQQ", pnl_pct=8.0, directional_correct=False),
+        ]
+        source = {
+            "label": "1y-pessimistic",
+            "dated_trades": trades,
+        }
+
+        summary = wfo._playbook_rolling_summary(
+            source,
+            {"direction": "put", "sector": "Healthcare"},
+            min_trades=1,
+            min_profit_factor=1.05,
+            min_directional_accuracy_pct=50.0,
+            rolling_window_days=40,
+            rolling_step_days=40,
+            catastrophic_pf_floor=0.85,
+        )
+
+        self.assertEqual(summary["windows_seen"], 1)
+        self.assertEqual(summary["windows_passed"], 0)
+        self.assertEqual(summary["status"], "weak")
+
+    def test_live_trade_policy_forwards_directional_threshold_to_stability_report(self):
+        result = _make_result(
+            [_make_trade(date(2024, 1, 5), ticker="SPY", pnl_pct=12.0)],
+            playbook="short_term",
+        )
+
+        with (
+            patch.object(
+                wfo,
+                "build_options_experiment_matrix",
+                return_value={"overall": {}, "by_category": {}},
+            ),
+            patch.object(
+                wfo,
+                "build_options_stability_report",
+                return_value={"overall_status": "watch", "slice_statuses": {}},
+            ) as stability_report,
+        ):
+            wfo.build_live_options_trade_policy(
+                result=result,
+                min_trades=1,
+                min_profit_factor=1.0,
+                min_directional_accuracy_pct=67.0,
+            )
+
+        self.assertEqual(
+            stability_report.call_args.kwargs["min_directional_accuracy_pct"],
+            67.0,
+        )
+
+    def test_stability_report_enforces_directional_accuracy_gate(self):
+        result = _make_result(
+            [
+                _make_trade(date(2024, 1, 5), ticker="SPY", dte=7, pnl_pct=10.0, directional_correct=False),
+                _make_trade(date(2024, 1, 6), ticker="QQQ", dte=7, pnl_pct=-1.0, directional_correct=False),
+            ],
+            playbook="short_term",
+        )
+
+        report = wfo.build_options_stability_report(
+            result=result,
+            min_trades=1,
+            min_profit_factor=1.0,
+            rolling_window_days=30,
+            rolling_step_days=30,
+        )
+
+        self.assertNotEqual(report["overall_status"], "promote")
+        self.assertFalse(report["scenario_results"]["full_window"]["passes_quality_bar"])
+        self.assertTrue(all(item["status"] == "block" for item in report["slice_statuses"]["sector"]))
+
+    def test_pairwise_playbook_comparison_formats_none_profit_factor_safely(self):
+        comparison = wfo._pairwise_playbook_comparison(
+            "mid vs pessimistic",
+            {
+                "source_label": "mid",
+                "trades": 5,
+                "profit_factor": None,
+                "avg_pnl_pct": 4.0,
+                "directional_accuracy_pct": 80.0,
+                "passes_quality_bar": True,
+            },
+            {
+                "source_label": "pessimistic",
+                "trades": 5,
+                "profit_factor": None,
+                "avg_pnl_pct": 3.0,
+                "directional_accuracy_pct": 80.0,
+                "passes_quality_bar": True,
+            },
+        )
+
+        self.assertEqual(comparison["status"], "confirmed")
+        self.assertIn("PF n/a", comparison["reason"])
+
+    def test_playbook_discovery_slice_preserves_none_profit_factor_for_no_loss_sample(self):
+        summary = wfo._summarize_playbook_discovery_slice(
+            {"direction": "call", "sector": "Healthcare"},
+            [
+                _make_trade(date(2024, 1, 5), ticker="SPY", pnl_pct=12.0),
+                _make_trade(date(2024, 1, 6), ticker="QQQ", pnl_pct=8.0),
+            ],
+            2,
+            min_trades=1,
+            min_profit_factor=1.05,
+            min_directional_accuracy_pct=50.0,
+        )
+
+        self.assertIsNone(summary["profit_factor"])
+        self.assertTrue(summary["no_loss_sample"])
+
+    def test_prediction_group_profit_factor_denominator_matches_net_usd_basis(self):
+        summary = wfo._summarize_prediction_group(
+            "window",
+            "all",
+            [
+                {"pnl_pct": 1.0, "net_pnl_usd": 200.0, "directional_correct": True},
+                {"pnl_pct": -10.0, "net_pnl_usd": -50.0, "directional_correct": False},
+            ],
+            2,
+        )
+
+        self.assertEqual(summary["profit_factor"], 4.0)
+        self.assertEqual(summary["gross_win"], 200.0)
+        self.assertEqual(summary["gross_loss"], 50.0)
 
     def test_ticker_only_slice_is_not_promoted_by_default(self):
         start = date(2024, 1, 5)

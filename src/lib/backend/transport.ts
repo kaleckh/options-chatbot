@@ -14,6 +14,8 @@ const BACKEND_API_TOKEN_HEADER = "x-options-backend-token";
 const JSON_REQUEST_HEADERS = { "Content-Type": "application/json" };
 export const PYTHON_BACKEND_DURATION_HEADER = "x-python-backend-duration-ms";
 
+export type BackendMutationHeaders = Partial<Record<string, string>>;
+
 export class BackendHttpError extends Error {
   status: number;
   payload?: Record<string, unknown>;
@@ -26,9 +28,43 @@ export class BackendHttpError extends Error {
   }
 }
 
-function buildBackendTimeoutError(path: string): Error {
-  return new Error(
-    `Python backend request timed out for ${path} after ${Math.round(PYTHON_BACKEND_TIMEOUT_MS / 1000)}s`
+export class BackendTransportError extends Error {
+  status: number;
+  payload?: Record<string, unknown>;
+
+  constructor(message: string, status: number, payload?: Record<string, unknown>) {
+    super(message);
+    this.name = "BackendTransportError";
+    this.status = status;
+    this.payload = payload;
+  }
+}
+
+function buildBackendTimeoutError(path: string): BackendTransportError {
+  return new BackendTransportError(
+    `Python backend request timed out for ${path} after ${Math.round(PYTHON_BACKEND_TIMEOUT_MS / 1000)}s`,
+    504,
+    { path, timeoutMs: PYTHON_BACKEND_TIMEOUT_MS }
+  );
+}
+
+function buildBackendAbortError(path: string): BackendTransportError {
+  return new BackendTransportError(
+    `Python backend request aborted by caller for ${path}`,
+    499,
+    { path }
+  );
+}
+
+function isAbortError(error: unknown): boolean {
+  if (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "AbortError") {
+    return true;
+  }
+  return Boolean(
+    error
+    && typeof error === "object"
+    && "name" in error
+    && (error as { name?: unknown }).name === "AbortError"
   );
 }
 
@@ -37,7 +73,24 @@ export async function fetchBackendResponse(
   init?: RequestInit
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), PYTHON_BACKEND_TIMEOUT_MS);
+  let timedOut = false;
+  let callerAborted = false;
+  const onCallerAbort = () => {
+    callerAborted = true;
+    controller.abort();
+  };
+  if (init?.signal) {
+    if (init.signal.aborted) {
+      callerAborted = true;
+      controller.abort();
+    } else {
+      init.signal.addEventListener("abort", onCallerAbort, { once: true });
+    }
+  }
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, PYTHON_BACKEND_TIMEOUT_MS);
   try {
     const headers = new Headers(init?.headers);
     if (BACKEND_API_TOKEN) {
@@ -49,12 +102,24 @@ export async function fetchBackendResponse(
       signal: controller.signal,
     });
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
+    if (isAbortError(error)) {
+      if (timedOut) {
+        throw buildBackendTimeoutError(path);
+      }
+      if (callerAborted) {
+        throw buildBackendAbortError(path);
+      }
       throw buildBackendTimeoutError(path);
     }
-    throw error;
+    const message = error instanceof Error ? error.message : String(error);
+    throw new BackendTransportError(
+      `Python backend request failed for ${path}: ${message}`,
+      502,
+      { path, cause: message }
+    );
   } finally {
     clearTimeout(timeoutId);
+    init?.signal?.removeEventListener("abort", onCallerAbort);
   }
 }
 
@@ -117,6 +182,19 @@ export function toJsonBody(value: object): string {
   return JSON.stringify(value);
 }
 
+function buildJsonRequestHeaders(extraHeaders?: BackendMutationHeaders): Headers {
+  const headers = new Headers(JSON_REQUEST_HEADERS);
+  if (!extraHeaders) {
+    return headers;
+  }
+  for (const [name, value] of Object.entries(extraHeaders)) {
+    if (typeof value === "string" && value.trim()) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
+
 export function toSearchSuffix(params: Record<string, unknown> = {}): string {
   const search = new URLSearchParams(
     Object.entries(params).reduce<Record<string, string>>((acc, [key, value]) => {
@@ -165,13 +243,14 @@ function backendErrorMessage(
 export async function postBackendJson<T = Record<string, unknown>, Payload extends object = Record<string, unknown>>(
   path: string,
   payload: Payload,
-  errorPrefix: string
+  errorPrefix: string,
+  headers?: BackendMutationHeaders,
 ): Promise<T> {
   return fetchBackendJson<T>(
     path,
     {
       method: "POST",
-      headers: JSON_REQUEST_HEADERS,
+      headers: buildJsonRequestHeaders(headers),
       body: toJsonBody(payload),
     },
     errorPrefix
@@ -181,13 +260,14 @@ export async function postBackendJson<T = Record<string, unknown>, Payload exten
 export async function putBackendJson<Payload extends object = Record<string, unknown>>(
   path: string,
   payload: Payload,
-  errorPrefix: string
+  errorPrefix: string,
+  headers?: BackendMutationHeaders,
 ): Promise<void> {
   await fetchBackendJson<Record<string, unknown>>(
     path,
     {
       method: "PUT",
-      headers: JSON_REQUEST_HEADERS,
+      headers: buildJsonRequestHeaders(headers),
       body: toJsonBody(payload),
     },
     errorPrefix

@@ -18,6 +18,7 @@ from forward_options_ledger import build_forward_scan_snapshot, record_forward_s
 from historical_options_fixtures import make_validation_history, write_daily_options_parquet
 from historical_options_store import HistoricalOptionsStore, import_daily_option_parquet
 from options_profit_gate import (
+    _measurement_status_for_event,
     _daily_truth_source_freshness,
     _normalize_evidence_class,
     _realized_position_metrics,
@@ -279,6 +280,21 @@ class OptionsProfitGateTests(unittest.TestCase):
             _normalize_evidence_class(None, source_label="live_production"),
             "live_production",
         )
+
+    def test_measurement_status_rejects_comparable_and_non_opra_forward_events(self):
+        status = _measurement_status_for_event(
+            {
+                "selection_source": "comparable_exact_contract",
+                "options_data_source": "delayed_vendor",
+                "entry_execution_price": 1.0,
+                "contract_symbol": "SPY240101C00500000",
+                "entry_date": "2026-04-01",
+            },
+            trusted_truth_horizon=date(2026, 4, 30),
+            base_blockers=["comparable_exact_contract", "options_data_source_not_opra"],
+        )
+
+        self.assertEqual(status, "ineligible")
 
     def test_source_freshness_uses_manifest_date_to_for_csv_inputs(self):
         csv_path = self.tmpdir / "alpaca_daily.csv"

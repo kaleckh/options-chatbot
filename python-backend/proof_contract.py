@@ -293,6 +293,8 @@ def row_has_executable_entry(row: dict[str, Any]) -> bool:
 
 def row_has_trusted_executable_exit(row: dict[str, Any]) -> bool:
     row_mapping = _mapping(row)
+    if _has_lifecycle_only_exit(row_mapping):
+        return False
     review = _mapping(row_mapping.get("latest_review"))
     exit_price = (
         _finite_float(row_mapping.get("exit_execution_price"))
@@ -321,6 +323,8 @@ def row_has_trusted_executable_exit(row: dict[str, Any]) -> bool:
 
 def row_has_calculable_realized_pnl(row: dict[str, Any]) -> bool:
     row_mapping = _mapping(row)
+    if _has_lifecycle_only_exit(row_mapping):
+        return False
     review = _mapping(row_mapping.get("latest_review"))
     for field in ("net_pnl_pct", "gross_pnl_pct"):
         if _finite_float(row_mapping.get(field)) is not None:
@@ -342,6 +346,8 @@ def row_counts_as_production_proof(row: dict[str, Any]) -> bool:
     if row_has_research_backfill_marker(row):
         return False
     row_mapping = _mapping(row)
+    if _has_lifecycle_only_exit(row_mapping):
+        return False
     source = _source_snapshot(row_mapping)
     proof_class = _normalized(row_mapping.get("proof_class") or source.get("proof_class"))
     if proof_class != LIVE_SCAN_EXACT_PROOF_CLASS or row_mapping.get("proof_eligible") is not True:

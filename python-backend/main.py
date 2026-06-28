@@ -17,7 +17,7 @@ import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing import Any
@@ -197,7 +197,12 @@ def _backend_api_token() -> str:
 
 
 def _backend_allow_unauthenticated() -> bool:
-    return str(os.getenv("OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED") or "").strip() == "1"
+    return _parse_bool_env(os.getenv("OPTIONS_BACKEND_ALLOW_UNAUTHENTICATED"))
+
+
+def _parse_bool_env(value: Any) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "on"}
 
 
 def _assert_backend_api_token_configured() -> None:
@@ -210,7 +215,12 @@ def _assert_backend_api_token_configured() -> None:
 
 
 def _backend_api_token_required(path: str) -> bool:
-    return bool(_backend_api_token()) and str(path or "").startswith("/api/")
+    if not _backend_api_token():
+        return False
+    normalized = "/" + str(path or "").lstrip("/")
+    if normalized.startswith("/api/"):
+        return True
+    return normalized in {"/docs", "/docs/", "/docs/oauth2-redirect", "/redoc", "/redoc/", "/openapi.json"}
 
 
 _assert_backend_api_token_configured()
@@ -1836,11 +1846,16 @@ def _artifact_mtime(path: str) -> tuple[str, float | None]:
 
 
 def _preferred_results_cache_key(truth_lane: str | None) -> tuple[Any, ...]:
+    historical_options_db = os.getenv("HISTORICAL_OPTIONS_DB_PATH") or os.path.join(
+        ROOT_DIR, "data", "options-validation", "options_history.db"
+    )
     return (
         str(truth_lane or "").strip() or None,
+        _artifact_mtime(wfo_module.WFO_RESULTS_FILE),
         _artifact_mtime(wfo_module.OPTIONS_VALIDATION_LATEST_FILE),
         _artifact_mtime(wfo_module.OPTIONS_VALIDATION_DAILY_LATEST_FILE),
         _artifact_mtime(wfo_module.OPTIONS_VALIDATION_DAILY_FORWARD_LATEST_FILE),
+        _artifact_mtime(historical_options_db),
     )
 
 
@@ -1863,7 +1878,7 @@ def _cached_preferred_results_by_truth_lane(truth_lane: str | None) -> Any:
     key = _preferred_results_cache_key(truth_lane)
     with _REPORT_CACHE_LOCK:
         if key in _PREFERRED_RESULTS_CACHE:
-            return _PREFERRED_RESULTS_CACHE[key]
+            return copy.deepcopy(_PREFERRED_RESULTS_CACHE[key])
     result = load_preferred_results_by_truth_lane(truth_lane)
     with _REPORT_CACHE_LOCK:
         _PREFERRED_RESULTS_CACHE[key] = copy.deepcopy(result)
@@ -1874,7 +1889,7 @@ def _cached_last_results_by_truth_lane(truth_lane: str | None) -> Any:
     key = ("last",) + _preferred_results_cache_key(truth_lane)
     with _REPORT_CACHE_LOCK:
         if key in _LAST_RESULTS_CACHE:
-            return _LAST_RESULTS_CACHE[key]
+            return copy.deepcopy(_LAST_RESULTS_CACHE[key])
     result = load_last_results_by_truth_lane(truth_lane)
     with _REPORT_CACHE_LOCK:
         _LAST_RESULTS_CACHE[key] = copy.deepcopy(result)
@@ -1885,7 +1900,7 @@ def _cached_forward_evidence_report() -> dict[str, Any]:
     key = _forward_evidence_cache_key()
     with _REPORT_CACHE_LOCK:
         if key in _FORWARD_EVIDENCE_REPORT_CACHE:
-            return _FORWARD_EVIDENCE_REPORT_CACHE[key]
+            return copy.deepcopy(_FORWARD_EVIDENCE_REPORT_CACHE[key])
     report = _build_forward_evidence_report()
     with _REPORT_CACHE_LOCK:
         _FORWARD_EVIDENCE_REPORT_CACHE[key] = copy.deepcopy(report)
@@ -2500,21 +2515,23 @@ def _positions_unavailable_response():
     message = getattr(POSITIONS_REPOSITORY, "error_message", None) or (
         "Tracked positions storage is unavailable."
     )
-    return {"error": message}
+    return JSONResponse(status_code=503, content={"error": message})
 
 
 def _suggested_trades_unavailable_response():
     message = getattr(SUGGESTED_TRADES_REPOSITORY, "error_message", None) or (
         "Suggested trades storage is unavailable."
     )
-    return {"error": message}
+    return JSONResponse(status_code=503, content={"error": message})
 
 
 def _parse_position_ids(raw_ids: Any) -> list[int] | None:
-    if raw_ids in (None, "", []):
+    if raw_ids in (None, ""):
         return None
     if not isinstance(raw_ids, list):
         raise ValueError("position_ids must be a list of positive integers.")
+    if not raw_ids:
+        raise ValueError("position_ids must not be empty.")
 
     parsed: list[int] = []
     seen: set[int] = set()
@@ -2536,6 +2553,31 @@ def _parse_position_ids(raw_ids: Any) -> list[int] | None:
     return parsed
 
 
+def _validate_requested_review_ids(repository: Any, position_ids: list[int] | None, record_label: str) -> None:
+    if not position_ids:
+        return
+    all_positions = list(repository.list_positions(None) or [])
+    positions_by_id: dict[int, dict[str, Any]] = {}
+    for row in all_positions:
+        try:
+            row_id = int(row.get("id"))
+        except (AttributeError, TypeError, ValueError):
+            continue
+        positions_by_id[row_id] = row
+
+    missing_ids = [position_id for position_id in position_ids if position_id not in positions_by_id]
+    if missing_ids:
+        raise HTTPException(404, f"{record_label} not found: {missing_ids[0]}")
+
+    closed_ids = [
+        position_id
+        for position_id in position_ids
+        if str(positions_by_id[position_id].get("status") or "").strip().lower() != "open"
+    ]
+    if closed_ids:
+        raise HTTPException(409, f"{record_label} is not open: {closed_ids[0]}")
+
+
 def _parse_result_window(limit: int | None, offset: int) -> tuple[int | None, int]:
     if isinstance(limit, bool) or isinstance(offset, bool):
         raise ValueError("limit and offset must be integers.")
@@ -2548,6 +2590,30 @@ def _parse_result_window(limit: int | None, offset: int) -> tuple[int | None, in
     if offset < 0:
         raise ValueError("offset must be greater than or equal to 0.")
     return limit, offset
+
+
+def _parse_optional_positive_int(value: Any, field_name: str) -> int | None:
+    if value in (None, ""):
+        return None
+    return _parse_positive_int(value, field_name)
+
+
+def _parse_nonnegative_int(value: Any, field_name: str) -> int:
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    if not math.isfinite(parsed) or parsed < 0 or not parsed.is_integer():
+        raise ValueError(f"{field_name} must be a non-negative integer.")
+    return int(parsed)
+
+
+def _parse_nonnegative_int_or_default(value: Any, field_name: str, default: int) -> int:
+    if value in (None, ""):
+        return default
+    return _parse_nonnegative_int(value, field_name)
 
 
 def _page_metadata(rows: list[dict[str, Any]], limit: int | None, offset: int) -> dict[str, int] | None:
@@ -2863,7 +2929,7 @@ async def run_scan_endpoint(body: dict[str, Any] | None = None):
 
 
 @app.post("/api/positions")
-async def create_position_endpoint(request: Request, body: dict[str, Any]):
+async def create_position_endpoint(request: Request, body: Any = Body(default=None)):
     """Track a user-confirmed options position from a live scan pick."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -2981,10 +3047,10 @@ async def create_position_endpoint(request: Request, body: dict[str, Any]):
 @app.get("/api/positions")
 async def list_positions_endpoint(
     status: str = "open",
-    grouped: bool = False,
-    limit: int | None = None,
-    offset: int = 0,
-    compact: bool = False,
+    grouped: str | None = None,
+    limit: str | None = None,
+    offset: str | None = None,
+    compact: str | None = None,
 ):
     """Return tracked options positions from local Postgres."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
@@ -2994,19 +3060,23 @@ async def list_positions_endpoint(
         raise HTTPException(400, "status must be one of: open, closed, all")
 
     try:
-        limit, offset = _parse_result_window(limit, offset)
+        grouped_flag = _parse_bool_param(grouped, "grouped", default=False)
+        compact_flag = _parse_bool_param(compact, "compact", default=False)
+        parsed_limit = _parse_optional_positive_int(limit, "limit")
+        parsed_offset = _parse_nonnegative_int_or_default(offset, "offset", 0)
+        limit, offset = _parse_result_window(parsed_limit, parsed_offset)
         query_status = None if status == "all" else status
-        compact_closed_list = compact and not grouped and query_status == "closed"
+        compact_closed_list = compact_flag and not grouped_flag and query_status == "closed"
         if compact_closed_list and callable(getattr(POSITIONS_REPOSITORY, "list_compact_positions", None)):
             positions = POSITIONS_REPOSITORY.list_compact_positions(query_status, limit=limit, offset=offset)
         else:
             positions = _annotate_share_safety_rows(
                 POSITIONS_REPOSITORY.list_positions(query_status, limit=limit, offset=offset)
             )
-        if compact:
+        if compact_flag:
             positions = _compact_position_list_rows(positions)
         page = _page_metadata(positions, limit, offset)
-        if grouped:
+        if grouped_flag:
             payload = _group_rows_by_status(positions)
             if page is not None:
                 payload["page"] = page
@@ -3024,7 +3094,7 @@ async def list_positions_endpoint(
 
 
 @app.post("/api/positions/review")
-async def review_positions_endpoint(request: Request, body: dict[str, Any] | None = None):
+async def review_positions_endpoint(request: Request, body: Any = Body(default=None)):
     """Review open tracked positions and return HOLD/SELL guidance."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -3032,6 +3102,7 @@ async def review_positions_endpoint(request: Request, body: dict[str, Any] | Non
     try:
         body = parse_review_trading_desk_records_body(body)
         position_ids = _parse_position_ids(body.get("position_ids"))
+        _validate_requested_review_ids(POSITIONS_REPOSITORY, position_ids, "tracked position")
         reviewed = await _run_in_worker(review_open_positions, POSITIONS_REPOSITORY, position_ids=position_ids)
         reviewed = _annotate_share_safety_rows(reviewed)
         position_event_persistence: dict[str, Any]
@@ -3066,6 +3137,8 @@ async def review_positions_endpoint(request: Request, body: dict[str, Any] | Non
         return {"positions": reviewed, "position_event_persistence": position_event_persistence}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _internal_server_error(exc, "review_tracked_positions")
 
@@ -3115,7 +3188,7 @@ async def close_prefill_endpoint(position_id: int):
 
 
 @app.post("/api/positions/{position_id}/close")
-async def close_position_endpoint(position_id: int, request: Request, body: dict[str, Any]):
+async def close_position_endpoint(position_id: int, request: Request, body: Any = Body(default=None)):
     """Mark a tracked position closed after the user exits it."""
     if not getattr(POSITIONS_REPOSITORY, "is_available", False):
         return _positions_unavailable_response()
@@ -3176,7 +3249,7 @@ async def close_position_endpoint(position_id: int, request: Request, body: dict
 
 
 @app.post("/api/suggested-trades")
-async def create_suggested_trade_endpoint(request: Request, body: dict[str, Any]):
+async def create_suggested_trade_endpoint(request: Request, body: Any = Body(default=None)):
     """Save a hypothetical scanner trade for later mark-to-market review."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3235,10 +3308,10 @@ async def create_suggested_trade_endpoint(request: Request, body: dict[str, Any]
 @app.get("/api/suggested-trades")
 async def list_suggested_trades_endpoint(
     status: str = "open",
-    grouped: bool = False,
-    limit: int | None = None,
-    offset: int = 0,
-    compact: bool = False,
+    grouped: str | None = None,
+    limit: str | None = None,
+    offset: str | None = None,
+    compact: str | None = None,
 ):
     """Return hypothetical scanner trades tracked in local SQLite."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
@@ -3248,15 +3321,19 @@ async def list_suggested_trades_endpoint(
         raise HTTPException(400, "status must be one of: open, closed, all")
 
     try:
-        limit, offset = _parse_result_window(limit, offset)
+        grouped_flag = _parse_bool_param(grouped, "grouped", default=False)
+        compact_flag = _parse_bool_param(compact, "compact", default=False)
+        parsed_limit = _parse_optional_positive_int(limit, "limit")
+        parsed_offset = _parse_nonnegative_int_or_default(offset, "offset", 0)
+        limit, offset = _parse_result_window(parsed_limit, parsed_offset)
         query_status = None if status == "all" else status
         trades = _annotate_share_safety_rows(
             SUGGESTED_TRADES_REPOSITORY.list_positions(query_status, limit=limit, offset=offset)
         )
-        if compact:
+        if compact_flag:
             trades = _compact_position_list_rows(trades, record_class="suggested_trade")
         page = _page_metadata(trades, limit, offset)
-        if grouped:
+        if grouped_flag:
             payload = _group_rows_by_status(trades)
             if page is not None:
                 payload["page"] = page
@@ -3274,7 +3351,7 @@ async def list_suggested_trades_endpoint(
 
 
 @app.post("/api/suggested-trades/review")
-async def review_suggested_trades_endpoint(request: Request, body: dict[str, Any] | None = None):
+async def review_suggested_trades_endpoint(request: Request, body: Any = Body(default=None)):
     """Review open suggested trades and refresh their hypothetical P/L."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3282,7 +3359,13 @@ async def review_suggested_trades_endpoint(request: Request, body: dict[str, Any
     try:
         body = parse_review_trading_desk_records_body(body)
         position_ids = _parse_position_ids(body.get("position_ids"))
-        reviewed = await _run_in_worker(review_open_positions, SUGGESTED_TRADES_REPOSITORY, position_ids=position_ids)
+        _validate_requested_review_ids(SUGGESTED_TRADES_REPOSITORY, position_ids, "suggested trade")
+        reviewed = await _run_in_worker(
+            review_open_positions,
+            SUGGESTED_TRADES_REPOSITORY,
+            position_ids=position_ids,
+            auto_close_sell=False,
+        )
         reviewed = _annotate_share_safety_rows(reviewed)
         _append_operator_mutation(
             request,
@@ -3295,12 +3378,14 @@ async def review_suggested_trades_endpoint(request: Request, body: dict[str, Any
         return {"trades": reviewed}
     except ValueError as exc:
         raise HTTPException(400, str(exc))
+    except HTTPException:
+        raise
     except Exception as exc:
         raise _internal_server_error(exc, "review_suggested_trades")
 
 
 @app.post("/api/suggested-trades/{position_id}/close")
-async def close_suggested_trade_endpoint(position_id: int, request: Request, body: dict[str, Any]):
+async def close_suggested_trade_endpoint(position_id: int, request: Request, body: Any = Body(default=None)):
     """Mark a suggested trade closed using a hypothetical or observed exit price."""
     if not getattr(SUGGESTED_TRADES_REPOSITORY, "is_available", False):
         return _suggested_trades_unavailable_response()
@@ -3333,7 +3418,9 @@ async def close_suggested_trade_endpoint(position_id: int, request: Request, bod
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(400, str(exc))
+        message = str(exc)
+        status = 409 if "already closed" in message.lower() or "not open" in message.lower() else 400
+        raise HTTPException(status, message)
     except Exception as exc:
         raise _internal_server_error(exc, "close_suggested_trade")
 

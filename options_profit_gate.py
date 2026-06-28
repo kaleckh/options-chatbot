@@ -630,6 +630,26 @@ def _load_forward_evidence(
         if _safe_float(event.get("entry_execution_price")) is None:
             if "missing_executable_entry_quote" not in eligibility_blockers:
                 eligibility_blockers.append("missing_executable_entry_quote")
+        selection_source = str(
+            event.get("selection_source")
+            or event.get("contract_selection_source")
+            or ""
+        ).strip().lower()
+        options_data_source = str(
+            event.get("options_data_source")
+            or event.get("market_data_source")
+            or event.get("quote_source")
+            or ""
+        ).strip().lower()
+        if "comparable_exact_contract" in selection_source:
+            if "comparable_exact_contract" not in eligibility_blockers:
+                eligibility_blockers.append("comparable_exact_contract")
+        elif selection_source and selection_source != "live_chain_exact_contract":
+            if "selection_source_not_exact" not in eligibility_blockers:
+                eligibility_blockers.append("selection_source_not_exact")
+        if options_data_source and "opra" not in options_data_source:
+            if "options_data_source_not_opra" not in eligibility_blockers:
+                eligibility_blockers.append("options_data_source_not_opra")
         effective_status = _measurement_status_for_event(
             event,
             trusted_truth_horizon=trusted_truth_horizon,
@@ -656,12 +676,12 @@ def _load_forward_evidence(
             bucket = effective_status if effective_status in {"eligible", PENDING_TRUTH_STATUS} else "ineligible"
             by_symbol[symbol][bucket] += 1
 
-        if evidence_class != LIVE_EVIDENCE_CLASS and source_label:
+        if evidence_class != LIVE_EVIDENCE_CLASS:
             contamination_findings.append(
                 {
                     "event_id": normalized_event.get("event_id"),
                     "session_id": normalized_event.get("session_id"),
-                    "source_label": source_label,
+                    "source_label": source_label or None,
                     "evidence_class": evidence_class,
                 }
             )

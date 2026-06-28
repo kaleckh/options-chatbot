@@ -55,8 +55,14 @@ class GeneratedArtifactGovernanceTests(unittest.TestCase):
             for artifact in self.artifacts.values()
             if artifact["runtime_use"]
         ]
-        self.assertEqual([artifact["path"] for artifact in runtime_artifacts], ["src/lib/generated/proofEvidenceContract.ts"])
-        proof_ts = runtime_artifacts[0]
+        self.assertEqual(
+            sorted(artifact["path"] for artifact in runtime_artifacts),
+            [
+                "data/contracts/forward-cohort-preregistration.json",
+                "src/lib/generated/proofEvidenceContract.ts",
+            ],
+        )
+        proof_ts = next(artifact for artifact in runtime_artifacts if artifact["path"] == "src/lib/generated/proofEvidenceContract.ts")
         self.assertEqual(proof_ts["runtime_posture"], "generated_frontend_runtime_policy")
         self.assertEqual(proof_ts["trust_role"], "generated_runtime_bridge")
         self.assertIn("data/contracts/proof-evidence-contract.json", proof_ts["source_inputs"])

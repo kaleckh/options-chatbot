@@ -40,18 +40,23 @@ import {
 } from "@/components/predictions/trackedPositionUtils";
 import type { TrackedPosition } from "@/lib/types";
 import {
+  buildCurrentPolicyCohortHealth,
   calcAveragePositionPnlPct,
   closedDataViewLabel,
   getCloseNowPnlPct,
   getRealizedExitPrice,
   getRealizedPnlPct,
+  isCurrentPolicyClosedPosition,
+  isLearnedAwayClosedPosition,
   isProductionProofPosition,
   isRealizedPnlClosedPosition,
   isResearchLearningPosition,
   isTruthGradeClosedPosition,
   matchesClosedDataView,
+  policyCohortHealthStatusLabel,
   summarizePositionOutcomes,
   type ClosedDataView,
+  type PolicyCohortSummary,
 } from "@/lib/trading-desk/positionEvidence";
 
 type TrackedPositionsTabProps = {
@@ -69,6 +74,11 @@ type TrackedPositionsTabProps = {
   onReviewPosition: (positionId: number) => void;
   onOpenClose: (position: TrackedPosition) => void;
 };
+
+function fmtCohortAvg(summary?: PolicyCohortSummary | null): string {
+  if (!summary) return "n/a";
+  return `${summary.key} ${fmtPct(summary.avgPnlPct)}`;
+}
 
 function isPickedToday(position: TrackedPosition): boolean {
   return matchesEntryDateFilter(getTradeDateFilterValue(position), "today", "");
@@ -341,10 +351,19 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
     [dedupedOpenPositions, laneFilter]
   );
   const realizedPnlClosedPositions = dateLaneClosedPositions.filter(isRealizedPnlClosedPosition);
+  const currentPolicyClosedPositions = dateLaneClosedPositions.filter(isCurrentPolicyClosedPosition);
+  const learnedAwayClosedPositions = dateLaneClosedPositions.filter(isLearnedAwayClosedPosition);
   const truthGradeClosedPositions = dateLaneClosedPositions.filter(isTruthGradeClosedPosition);
   const filteredClosedPositions = dateLaneClosedPositions.filter((position) =>
     matchesClosedDataView(position, closedDataView)
   );
+  const currentPolicyCohortHealth = useMemo(
+    () => buildCurrentPolicyCohortHealth(currentPolicyClosedPositions),
+    [currentPolicyClosedPositions]
+  );
+  const currentPolicyCohortState = closedRowsHasMore
+    ? "Loading"
+    : policyCohortHealthStatusLabel(currentPolicyCohortHealth.overallStatus);
   const positions = view === "open" ? filteredOpenPositions : filteredClosedPositions;
   const shouldOfferClosedPagination = view === "closed" && closedRowsHasMore && !error;
   const shouldAutoLoadNextClosedBatch = shouldOfferClosedPagination && positions.length > 0;
@@ -476,6 +495,8 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
           ) : (
             <div className="inline-flex flex-wrap gap-1 rounded-md border border-border bg-bg-2 p-1">
               {([
+                "current_policy",
+                "learned_away",
                 "truth_grade",
                 "realized_pnl",
                 "all",
@@ -538,12 +559,25 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
         </div>
       ) : !error ? (
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-6">
-          <CompactStat label="Truth Rows" value={String(truthGradeClosedPositions.length)} help="Closed rows that meet strict production-proof evidence requirements" />
-          <CompactStat label="Realized Rows" value={String(realizedPnlClosedPositions.length)} help="Closed rows with executable entry, trusted executable exit, and realized P&L" />
-          <CompactStat label="Shown Rows" value={`${filteredClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows shown after evidence, date, and lane filters" />
-          <CompactStat label="Shown Win Rate" value={fmtPct(visibleClosedSummary.winRatePct)} help="Win rate for the currently visible closed rows with realized P&L" />
-          <CompactStat label="Shown Avg P&L" value={fmtPct(visibleClosedSummary.avgPnlPct)} help="Average realized P&L for the currently visible closed rows" />
-          <CompactStat label="Truth Avg P&L" value={fmtPct(truthGradeClosedSummary.avgPnlPct)} help="Production-proof average P&L; this stays strict and may be empty when only historical paper rows are loaded" />
+          {closedDataView === "current_policy" ? (
+            <>
+              <CompactStat label="Current Rows" value={`${currentPolicyClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows the current promoted entry policy would still take, with trusted realized P&L" />
+              <CompactStat label="Current Avg" value={fmtPct(currentPolicyCohortHealth.overall.avgPnlPct)} help="Average realized P&L across current-policy rows after filters" />
+              <CompactStat label="Showcase Month" value={fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)} help="Best sufficiently priced current-policy monthly cohort after filters" />
+              <CompactStat label="Recent Month" value={fmtCohortAvg(currentPolicyCohortHealth.recentMonth)} help="Most recent current-policy monthly cohort after filters" />
+              <CompactStat label="Recent Median" value={fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)} help="Median realized P&L for the most recent current-policy monthly cohort" />
+              <CompactStat label="Cohort State" value={currentPolicyCohortState} help="Recent cohort health state; paper-only means the recent cohort broke despite older showcase strength" />
+            </>
+          ) : (
+            <>
+              <CompactStat label="Current Rows" value={String(currentPolicyClosedPositions.length)} help="Closed rows the current promoted entry policy would still take, with trusted realized P&L" />
+              <CompactStat label="Learned Away" value={String(learnedAwayClosedPositions.length)} help="Closed rows the current promoted entry policy would now block or flag" />
+              <CompactStat label="Shown Rows" value={`${filteredClosedPositions.length}${closedRowsHasMore ? "+" : ""}`} help="Closed rows shown after evidence, date, and lane filters" />
+              <CompactStat label="Shown Win Rate" value={fmtPct(visibleClosedSummary.winRatePct)} help="Win rate for the currently visible closed rows with realized P&L" />
+              <CompactStat label="Shown Avg P&L" value={fmtPct(visibleClosedSummary.avgPnlPct)} help="Average realized P&L for the currently visible closed rows" />
+              <CompactStat label="Truth Avg P&L" value={fmtPct(truthGradeClosedSummary.avgPnlPct)} help="Production-proof average P&L; this stays strict and may be empty when only historical paper rows are loaded" />
+            </>
+          )}
         </div>
       ) : null}
 
@@ -592,6 +626,12 @@ export const TrackedPositionsTab = memo(function TrackedPositionsTab({
             : ""}
           {closedDataView === "truth_grade"
             ? ` ${closedEvidenceHiddenCount} non-truth-grade row(s) are hidden from this strict production-proof view.`
+            : ""}
+          {closedDataView === "current_policy"
+            ? ` Raw realized rows: ${realizedPnlClosedPositions.length}; learned-away rows: ${learnedAwayClosedPositions.length}. Cohort state: ${currentPolicyCohortState}; showcase ${fmtCohortAvg(currentPolicyCohortHealth.showcaseMonth)}; recent ${fmtCohortAvg(currentPolicyCohortHealth.recentMonth)}, median ${fmtPct(currentPolicyCohortHealth.recentMonth?.medianPnlPct)}.`
+            : ""}
+          {closedDataView === "learned_away"
+            ? " These rows stay visible as historical learning data, but current promoted entry guardrails would block them."
             : ""}
           {closedDataView === "realized_pnl"
             ? ` ${closedEvidenceHiddenCount} row(s) without trusted realized P&L are hidden.`

@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import options_chatbot as oc
-from options_profit_flywheel import _candidate_position_metrics, run_options_profit_cycle
+from options_profit_flywheel import _candidate_position_metrics, _composite_objective_score, run_options_profit_cycle
 from options_profit_state import (
     ensure_options_profit_state,
     live_profile_path,
@@ -244,6 +244,31 @@ class OptionsProfitCycleTests(unittest.TestCase):
         self.assertTrue(metrics["no_loss_sample"])
         self.assertEqual(metrics["profit_factor_basis"], "net_pnl_usd")
 
+    def test_candidate_position_metrics_matches_plain_cohort_id_for_canary_candidate_ids(self):
+        metrics = _candidate_position_metrics(
+            "SPY",
+            "call",
+            "SPY__call__broad_ev7",
+            [
+                self._live_proof_position(
+                    contract_symbol="SPY240101C00510000",
+                    net_pnl_pct=12.0,
+                    source_pick_snapshot={"cohort_id": "broad_ev7"},
+                ),
+            ],
+        )
+
+        self.assertEqual(metrics["closed_position_count"], 1)
+        self.assertEqual(metrics["avg_net_pnl_pct"], 12.0)
+
+    def test_composite_objective_treats_no_loss_samples_as_neutral_pf(self):
+        score = _composite_objective_score(
+            {"avg_net_pnl_pct": 10.0, "profit_factor": None, "no_loss_sample": True},
+            {"avg_net_pnl_pct": 5.0, "profit_factor": None, "no_loss_sample": True},
+        )
+
+        self.assertEqual(score, 8.0)
+
     def test_candidate_position_metrics_excludes_non_opra_proof_flag_rows(self):
         metrics = _candidate_position_metrics(
             "SPY",
@@ -429,6 +454,60 @@ class OptionsProfitCycleTests(unittest.TestCase):
         refreshed_status = load_profit_status()
         self.assertIsNone(refreshed_status["current_canary"]["SPY"]["call"])
         self.assertEqual(refreshed_status["active_incumbents"]["SPY"]["call"]["candidate_id"], candidate_id)
+        post_apply_path = max((Path(self.state_dir) / "decisions").glob("*_post_apply.json"))
+        post_apply = json.loads(post_apply_path.read_text(encoding="utf-8"))
+        self.assertEqual(post_apply["live_profile_path"], str(live_profile_path()))
+
+    def test_candidate_eligibility_treats_non_finite_manifest_counts_as_missing_support(self):
+        ensure_options_profit_state()
+        candidate = {
+            "candidate_id": "SPY__call__bad_counts",
+            "symbol": "SPY",
+            "direction": "call",
+            "base_profile": "equity",
+            "evaluation": {
+                "replay_gate": {"passes": True, "promotion_status": "promote", "stability_status": "promote"},
+                "forward_exact_contract": {"eligible_trade_count": "nan"},
+                "tracked_realized": {"closed_position_count": "nan"},
+            },
+        }
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[candidate]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=[]):
+            result = run_options_profit_cycle()
+
+        self.assertEqual(result["decision"]["action"], "no_op")
+        ranking = result["status"]["candidate_rankings"][0]
+        self.assertFalse(ranking["eligible"])
+        self.assertIn("insufficient_exact_forward_support", ranking["blockers"])
+        self.assertIn("missing_tracked_realized_support", ranking["blockers"])
+
+    def test_candidate_eligibility_requires_priced_forward_outcomes(self):
+        ensure_options_profit_state()
+        candidate = {
+            "candidate_id": "SPY__call__unpriced_forward",
+            "symbol": "SPY",
+            "direction": "call",
+            "cohort_id": "broad_ev7",
+            "base_profile": "equity",
+            "evaluation": {
+                "replay_gate": {"passes": True, "promotion_status": "promote", "stability_status": "promote"},
+                "forward_exact_contract": {"eligible_trade_count": 30, "priced_trade_count": 0},
+                "tracked_realized": {"closed_position_count": 2},
+            },
+        }
+
+        with patch("options_profit_flywheel._require_daily_truth_refresh", return_value={"status": "refreshed", "commands": []}), \
+             patch("options_profit_flywheel.evaluate_measurement_gate", return_value={"state": "healthy", "blockers": [], "checks": {}}), \
+             patch("options_profit_flywheel.list_candidate_manifests", return_value=[candidate]), \
+             patch("options_profit_flywheel._load_closed_positions", return_value=[]):
+            result = run_options_profit_cycle()
+
+        ranking = result["status"]["candidate_rankings"][0]
+        self.assertFalse(ranking["eligible"])
+        self.assertIn("insufficient_exact_forward_support", ranking["blockers"])
 
     def test_canary_pending_truth_holds_instead_of_rolling_back(self):
         candidate_id = "SPY__call__broad_ev7"

@@ -21,6 +21,7 @@ DEFAULT_EVENTS_PATH = ROOT / "data" / "agent-control" / "events.jsonl"
 DEFAULT_SESSIONS_PATH = ROOT / "data" / "agent-control" / "sessions.jsonl"
 DEFAULT_DREAMS_DIR = ROOT / "data" / "agent-control" / "dreams"
 DEFAULT_DREAM_RUNS_DIR = ROOT / "data" / "agent-control" / "dream-runs"
+DEFAULT_CONTEXT_PACKS_DIR = ROOT / "data" / "agent-control" / "context-packs"
 DEFAULT_TENANT_ID = "options-chatbot"
 DEFAULT_REPO_INDEX_MAX_FILES = 2000
 DEFAULT_REPO_INDEX_MAX_FILE_BYTES = 256_000
@@ -85,6 +86,7 @@ DREAM_PROPOSAL_TYPES = {
     "superseded_fact",
 }
 AUTO_DREAM_POLICY_VERSION = "auto_dream_v1"
+MEMORY_POLICY_VERSION = "memory_graph_v2_2026_06_28"
 AUTO_DREAM_ALLOWED_TYPES = {"lesson", "constraint", "open_question"}
 AUTO_DREAM_MANUAL_REVIEW_TYPES = {"decision", "blocker", "superseded_fact"}
 AUTO_DREAM_HIGH_RISK_PATTERNS = (
@@ -131,6 +133,48 @@ OPERATING_AUTHORITY_METADATA = {
     "authority_scope": OPERATING_AUTHORITY_SCOPE,
     "does_not_authorize_trading_or_evidence_mutation": True,
 }
+MEMORY_NON_AUTHORIZATION_BANNER = (
+    "Memory is retrieval context only. It never authorizes evidence mutation, scanner or strategy changes, "
+    "proof-bar changes, broker action, promotion, live validation, stop/sizing changes, protected-holdout use, "
+    "or treating historical rows as forward proof."
+)
+MEMORY_SOURCE_QUALITY_BY_TYPE = {
+    "operating_memory": "accepted_runtime_memory",
+    "dream_proposal": "unaccepted_dream_proposal",
+    "dream_run": "automation_audit",
+    "session_transcript": "session_transcript",
+    "startup_doc": "repo_startup_doc",
+    "living_doc": "living_doc",
+    "control_plane_doc": "living_doc",
+    "repo_file_index": "repo_file_index",
+    "gateboard_blocker": "generated_gateboard",
+    "gateboard_doc": "generated_gateboard",
+    "gateboard_latest_json": "generated_gateboard",
+    "static_memory_graph_node": "generated_navigation",
+    "static_memory_graph_doc": "generated_navigation",
+    "static_memory_graph_json": "generated_navigation",
+    "project_memory_seed": "automation_audit",
+}
+PROVENANCE_KINDS = {
+    "strategy_hypothesis",
+    "experiment_run",
+    "dataset_version",
+    "feature_snapshot",
+    "zero_candidate_episode",
+    "drift_report",
+}
+MEMORY_PROHIBITED_AUTHORITY_RE = tuple(
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\b(?:authori[sz]e|approve|approved|approval)\s+(?:live|broker|trade|trading|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner|strategy|stop|sizing)",
+        r"\b(?:live|broker|trading|trade|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner[-_ ]?policy|strategy|stop[-_/ ]?sizing)\s+(?:is\s+)?(?:approved|authorized|allowed|enabled|cleared|complete)",
+        r"\btreat(?:ing)?\s+historical\s+rows\s+as\s+forward\s+proof\b",
+        r"\bhistorical\s+rows\s+(?:are|count\s+as)\s+forward\s+proof\b",
+        r"\bappend[_ -]?allowed\s*[:=]\s*true\b",
+        r"\bpromotion[_ -]?ready\s*[:=]\s*true\b",
+        r"\blive[_ -]?validation[_ -]?eligible\s*[:=]\s*true\b",
+    )
+)
 OPERATING_MEMORY_KIND_BY_TYPE = {
     "artifact": "evidence_artifact",
     "blocker": "blocker",
@@ -594,6 +638,73 @@ def _with_operating_authority_metadata(metadata: dict[str, Any]) -> dict[str, An
     return {**metadata, **OPERATING_AUTHORITY_METADATA}
 
 
+def _with_memory_policy_metadata(
+    metadata: dict[str, Any] | None,
+    *,
+    source_type: str | None = None,
+    source_quality: str | None = None,
+    capability_label: str = "coordination_only",
+) -> dict[str, Any]:
+    result = dict(metadata or {})
+    if source_type is not None:
+        result["source_type"] = source_type
+    inferred_source = str(result.get("source_type") or source_type or "")
+    result.update(OPERATING_AUTHORITY_METADATA)
+    result["memory_policy_version"] = MEMORY_POLICY_VERSION
+    result["capability_label"] = capability_label
+    result["source_quality"] = source_quality or str(
+        result.get("source_quality") or MEMORY_SOURCE_QUALITY_BY_TYPE.get(inferred_source, "unknown")
+    )
+    result["non_authorization_notice"] = MEMORY_NON_AUTHORIZATION_BANNER
+    return result
+
+
+def _validate_memory_policy_text(
+    *,
+    title: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+    field_name: str = "memory",
+) -> list[str]:
+    metadata = metadata or {}
+    errors: list[str] = []
+    if metadata.get("authority_scope", OPERATING_AUTHORITY_SCOPE) != OPERATING_AUTHORITY_SCOPE:
+        errors.append(f"{field_name} authority_scope must be {OPERATING_AUTHORITY_SCOPE}")
+    if metadata.get("does_not_authorize_trading_or_evidence_mutation", True) is not True:
+        errors.append(f"{field_name} must explicitly not authorize trading or evidence mutation")
+    if metadata.get("capability_label") in {
+        "broker_action",
+        "evidence_mutation",
+        "scanner_policy_change",
+        "promotion_authority",
+        "live_validation_authority",
+    }:
+        errors.append(f"{field_name} capability_label cannot grant action authority")
+    metadata_for_scan = {
+        key: value
+        for key, value in metadata.items()
+        if key not in {"non_authorization_notice"}
+    }
+    haystack = "\n".join([title, body, canonical_json(metadata_for_scan)])
+    for pattern in MEMORY_PROHIBITED_AUTHORITY_RE:
+        if pattern.search(haystack):
+            errors.append(f"{field_name} contains prohibited authority wording: {pattern.pattern}")
+            break
+    return errors
+
+
+def _assert_memory_policy_valid(
+    *,
+    title: str,
+    body: str,
+    metadata: dict[str, Any] | None = None,
+    field_name: str = "memory",
+) -> None:
+    errors = _validate_memory_policy_text(title=title, body=body, metadata=metadata, field_name=field_name)
+    if errors:
+        raise AgentControlError("; ".join(errors))
+
+
 def _memory_is_inactive(metadata: dict[str, Any], *, now: datetime | None = None) -> bool:
     if not _is_operating_memory(metadata):
         return False
@@ -679,6 +790,10 @@ def _format_graph_context(
         lines.append(f"Sub-tenant: {result['sub_tenant_id']}")
     if result.get("metadata_filter"):
         lines.append(f"Metadata filter: {canonical_json(result['metadata_filter'])}")
+    retrieval = result.get("retrieval") or {}
+    if retrieval:
+        lines.append(f"Policy: {retrieval.get('policy_banner')}")
+        lines.append(f"Retrieval index: {retrieval.get('index')} ({retrieval.get('policy_version')})")
 
     lines.append("")
     lines.append("Seed nodes:")
@@ -695,6 +810,30 @@ def _format_graph_context(
         metadata = node.get("metadata") or {}
         if metadata:
             lines.append(f"  metadata: {_truncate(canonical_json(metadata), 360)}")
+        explanation = next(
+            (
+                item
+                for item in retrieval.get("seed_explanations", [])
+                if item and item.get("source_node_id") == node["id"]
+            ),
+            None,
+        )
+        if explanation:
+            lines.append(
+                "  retrieval: "
+                + _truncate(
+                    canonical_json(
+                        {
+                            "source_quality": explanation.get("source_quality"),
+                            "authority_scope": explanation.get("authority_scope"),
+                            "capability_label": explanation.get("capability_label"),
+                            "freshness_status": explanation.get("freshness_status"),
+                            "why": explanation.get("why"),
+                        }
+                    ),
+                    360,
+                )
+            )
     if len(ordered_nodes) > max_nodes:
         lines.append(f"- ... {len(ordered_nodes) - max_nodes} additional nodes omitted")
 
@@ -750,10 +889,23 @@ def _format_checkpoint_context(checkpoint: dict[str, Any] | None) -> str:
 def _format_bootstrap_context(result: dict[str, Any]) -> str:
     checkpoint_text = _format_checkpoint_context(result.get("latest_checkpoint"))
     graph_text = result["context"]["prompt_context"]
+    manifest_text = ""
+    if result.get("context_manifest"):
+        manifest_text = "\n".join(
+            [
+                "# Context Manifest",
+                f"Path: {result['context_manifest'].get('manifest_path')}",
+                f"Policy: {result['context_manifest'].get('policy_banner')}",
+            ]
+        )
     next_queries = ["# Recommended Graph Queries"]
     for item in result.get("recommended_next_queries", []):
         next_queries.append(f"- {item['purpose']}: `{item['command']}`")
-    return "\n\n".join([checkpoint_text, graph_text, "\n".join(next_queries)])
+    sections = [checkpoint_text, graph_text]
+    if manifest_text:
+        sections.append(manifest_text)
+    sections.append("\n".join(next_queries))
+    return "\n\n".join(sections)
 
 
 def _format_node_list(nodes: list[dict[str, Any]], *, empty: str) -> list[str]:
@@ -798,6 +950,7 @@ def _format_context_pack(result: dict[str, Any]) -> str:
         "# Agent Context Pack",
         f"Goal/query: {result.get('goal') or '(none)'}",
         f"Tenant: {result.get('tenant_id')}",
+        f"Policy: {MEMORY_NON_AUTHORIZATION_BANNER}",
     ]
     if result.get("pathway"):
         lines.append(f"Pathway: {result['pathway']}")
@@ -822,6 +975,10 @@ def _format_context_pack(result: dict[str, Any]) -> str:
         lines.append("# Recommended Commands")
         for command in result["recommended_commands"]:
             lines.append(f"- `{command}`")
+    if result.get("context_manifest"):
+        lines.append("")
+        lines.append("# Context Manifest")
+        lines.append(f"- {result['context_manifest'].get('manifest_path')}")
     return "\n".join(lines)
 
 
@@ -1057,13 +1214,135 @@ def init_schema(conn: sqlite3.Connection) -> None:
             payload_json TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS event_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            prev_hash TEXT NOT NULL DEFAULT '',
+            event_hash TEXT NOT NULL,
+            delivered_at TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS retrieval_documents (
+            doc_id TEXT PRIMARY KEY,
+            source_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
+            source_type TEXT NOT NULL,
+            source_quality TEXT NOT NULL,
+            authority_scope TEXT NOT NULL,
+            capability_label TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            search_text TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            content_sha256 TEXT NOT NULL,
+            freshness_status TEXT NOT NULL DEFAULT 'current',
+            indexed_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS startup_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            goal TEXT NOT NULL DEFAULT '',
+            pathway TEXT,
+            status TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            manifest_path TEXT,
+            gateboard_hash TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS strategy_hypotheses (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            title TEXT NOT NULL,
+            thesis TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'research_only',
+            priority_score REAL NOT NULL DEFAULT 0,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS experiment_runs (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            hypothesis_id TEXT REFERENCES strategy_hypotheses(id) ON DELETE SET NULL,
+            status TEXT NOT NULL,
+            artifact_ref TEXT,
+            metric_json TEXT NOT NULL DEFAULT '{}',
+            dataset_version_id TEXT,
+            feature_snapshot_id TEXT,
+            testing_debt_json TEXT NOT NULL DEFAULT '[]',
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS dataset_versions (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            source_ref TEXT NOT NULL,
+            content_sha256 TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS feature_snapshots (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            source_ref TEXT NOT NULL,
+            content_sha256 TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS zero_candidate_episodes (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            lane TEXT NOT NULL,
+            selection_date TEXT NOT NULL,
+            drop_stage_counts_json TEXT NOT NULL DEFAULT '{}',
+            blocker_summary TEXT NOT NULL DEFAULT '',
+            source_ref TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS drift_reports (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            lane TEXT NOT NULL,
+            status TEXT NOT NULL,
+            summary TEXT NOT NULL DEFAULT '',
+            metric_json TEXT NOT NULL DEFAULT '{}',
+            source_ref TEXT,
+            metadata_json TEXT NOT NULL DEFAULT '{}'
+        );
+
+        CREATE TABLE IF NOT EXISTS provenance_edges (
+            id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            source_kind TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            target_kind TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            UNIQUE(source_kind, source_id, relation, target_kind, target_id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks(status, priority, created_at);
         CREATE INDEX IF NOT EXISTS idx_tasks_pathway ON tasks(pathway, status);
         CREATE INDEX IF NOT EXISTS idx_graph_nodes_scope ON graph_nodes(tenant_id, sub_tenant_id, kind);
         CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_node_id, relation);
         CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_node_id, relation);
+        CREATE INDEX IF NOT EXISTS idx_retrieval_documents_source ON retrieval_documents(source_node_id, source_type);
+        CREATE INDEX IF NOT EXISTS idx_startup_runs_created ON startup_runs(created_at);
+        CREATE INDEX IF NOT EXISTS idx_zero_candidate_lane_date ON zero_candidate_episodes(lane, selection_date);
         """
     )
+    try:
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS retrieval_documents_fts USING fts5(doc_id UNINDEXED, title, search_text)"
+        )
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
 
 
@@ -1091,12 +1370,182 @@ def _record_event(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
     event = {"event_type": event_type, "created_at": utc_now(), "payload": payload}
-    conn.execute(
+    cursor = conn.execute(
         "INSERT INTO event_log(created_at, event_type, payload_json) VALUES (?, ?, ?)",
         (event["created_at"], event_type, canonical_json(payload)),
     )
+    previous = conn.execute(
+        "SELECT event_hash FROM event_outbox ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    prev_hash = previous["event_hash"] if previous is not None else ""
+    outbox_payload = {
+        "event_log_id": cursor.lastrowid,
+        "event_type": event_type,
+        "created_at": event["created_at"],
+        "payload": payload,
+    }
+    hash_input = f"{prev_hash}\n{canonical_json(outbox_payload)}"
+    event_hash = _text_sha256(hash_input)
+    outbox_cursor = conn.execute(
+        """
+        INSERT INTO event_outbox(created_at, event_type, payload_json, prev_hash, event_hash)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (event["created_at"], event_type, canonical_json(outbox_payload), prev_hash, event_hash),
+    )
+    event["outbox_event_id"] = outbox_cursor.lastrowid
+    event["outbox_hash"] = event_hash
     _append_jsonl(events_path, event)
     return event
+
+
+def _graph_node_search_text(node: dict[str, Any], metadata: dict[str, Any]) -> str:
+    keywords = metadata.get("retrieval_keywords") or []
+    if isinstance(keywords, list):
+        keyword_text = " ".join(str(item) for item in keywords)
+    else:
+        keyword_text = str(keywords)
+    return "\n".join(
+        [
+            str(node.get("id") or ""),
+            str(node.get("kind") or ""),
+            str(node.get("title") or ""),
+            str(node.get("body") or ""),
+            str(node.get("source_ref") or ""),
+            keyword_text,
+            canonical_json(metadata),
+        ]
+    )
+
+
+def _retrieval_source_quality(metadata: dict[str, Any]) -> str:
+    source_type = str(metadata.get("source_type") or "")
+    return str(metadata.get("source_quality") or MEMORY_SOURCE_QUALITY_BY_TYPE.get(source_type, "unknown"))
+
+
+def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -> None:
+    metadata = node.get("metadata") or {}
+    source_type = str(metadata.get("source_type") or "graph_node")
+    authority_scope = str(metadata.get("authority_scope") or OPERATING_AUTHORITY_SCOPE)
+    capability_label = str(metadata.get("capability_label") or "coordination_only")
+    search_text = _graph_node_search_text(node, metadata)
+    content_sha256 = _text_sha256(
+        canonical_json(
+            {
+                "id": node.get("id"),
+                "title": node.get("title"),
+                "body": node.get("body"),
+                "metadata": metadata,
+                "source_ref": node.get("source_ref"),
+            }
+        )
+    )
+    freshness_status = "stale_or_inactive" if _memory_is_inactive(metadata) or _memory_is_stale(metadata) else "current"
+    conn.execute(
+        """
+        INSERT INTO retrieval_documents(
+            doc_id, source_node_id, source_type, source_quality, authority_scope,
+            capability_label, title, body, search_text, metadata_json, content_sha256,
+            freshness_status, indexed_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(doc_id) DO UPDATE SET
+            source_node_id = excluded.source_node_id,
+            source_type = excluded.source_type,
+            source_quality = excluded.source_quality,
+            authority_scope = excluded.authority_scope,
+            capability_label = excluded.capability_label,
+            title = excluded.title,
+            body = excluded.body,
+            search_text = excluded.search_text,
+            metadata_json = excluded.metadata_json,
+            content_sha256 = excluded.content_sha256,
+            freshness_status = excluded.freshness_status,
+            indexed_at = excluded.indexed_at
+        """,
+        (
+            str(node["id"]),
+            str(node["id"]),
+            source_type,
+            _retrieval_source_quality(metadata),
+            authority_scope,
+            capability_label,
+            str(node.get("title") or ""),
+            str(node.get("body") or ""),
+            search_text,
+            canonical_json(metadata),
+            content_sha256,
+            freshness_status,
+            utc_now(),
+        ),
+    )
+    try:
+        conn.execute("DELETE FROM retrieval_documents_fts WHERE doc_id = ?", (str(node["id"]),))
+        conn.execute(
+            "INSERT INTO retrieval_documents_fts(doc_id, title, search_text) VALUES (?, ?, ?)",
+            (str(node["id"]), str(node.get("title") or ""), search_text),
+        )
+    except sqlite3.OperationalError:
+        pass
+
+
+def _query_retrieval_documents(
+    conn: sqlite3.Connection,
+    *,
+    query: str,
+    metadata_filter: dict[str, Any] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    terms = [re.sub(r"[^a-zA-Z0-9_]", "", term) for term in _query_terms(query)]
+    terms = [term for term in terms if term]
+    if not terms:
+        return []
+    fts_query = " ".join(terms)
+    try:
+        rows = conn.execute(
+            """
+            SELECT d.*, bm25(retrieval_documents_fts) AS rank
+            FROM retrieval_documents_fts
+            JOIN retrieval_documents d ON d.doc_id = retrieval_documents_fts.doc_id
+            WHERE retrieval_documents_fts MATCH ?
+            ORDER BY rank ASC
+            LIMIT ?
+            """,
+            (fts_query, max(limit * 4, 20)),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        rows = conn.execute(
+            """
+            SELECT *, 0.0 AS rank
+            FROM retrieval_documents
+            WHERE lower(search_text) LIKE ?
+            ORDER BY indexed_at DESC
+            LIMIT ?
+            """,
+            (f"%{query.lower()}%", max(limit * 4, 20)),
+        ).fetchall()
+    hits: list[dict[str, Any]] = []
+    for row in rows:
+        metadata = json.loads(row["metadata_json"] or "{}")
+        if not _metadata_matches(metadata, metadata_filter):
+            continue
+        hits.append(
+            {
+                "doc_id": row["doc_id"],
+                "source_node_id": row["source_node_id"],
+                "source_type": row["source_type"],
+                "source_quality": row["source_quality"],
+                "authority_scope": row["authority_scope"],
+                "capability_label": row["capability_label"],
+                "content_sha256": row["content_sha256"],
+                "freshness_status": row["freshness_status"],
+                "rank": float(row["rank"] or 0.0),
+                "why": "Matched retrieval_documents FTS/BM25 index.",
+            }
+        )
+        if len(hits) >= limit:
+            break
+    return hits
 
 
 def _validate_choice(value: str, choices: set[str], field_name: str) -> str:
@@ -1203,7 +1652,9 @@ def upsert_graph_node(
             """,
             (node_id, kind, tenant_id, sub_tenant_id, title, body, metadata_json, source_ref, now, now),
         )
-    return _graph_node_row(conn, node_id)
+    node = _graph_node_row(conn, node_id)
+    _upsert_retrieval_document(conn, node)
+    return node
 
 
 def upsert_graph_edge(
@@ -1609,20 +2060,23 @@ def _upsert_operating_memory(
     memory_status = _validate_choice(memory_status, MEMORY_STATUSES, "memory_status")
     confidence = _validate_choice(confidence, MEMORY_CONFIDENCE, "confidence")
     recorded_at = utc_now()
-    memory_metadata = {
-        **(metadata or {}),
-        "source_type": "operating_memory",
-        **OPERATING_AUTHORITY_METADATA,
-        "memory_type": memory_type,
-        "memory_status": memory_status,
-        "confidence": confidence,
-        "recorded_at": recorded_at,
-        "freshness_days": freshness_days,
-    }
+    memory_metadata = _with_memory_policy_metadata(
+        {
+            **(metadata or {}),
+            "memory_type": memory_type,
+            "memory_status": memory_status,
+            "confidence": confidence,
+            "recorded_at": recorded_at,
+            "freshness_days": freshness_days,
+        },
+        source_type="operating_memory",
+        source_quality="accepted_runtime_memory",
+    )
     if freshness_days is not None:
         memory_metadata["expires_at"] = _utc_plus_days(freshness_days, from_raw=recorded_at)
     if supersedes:
         memory_metadata["supersedes"] = supersedes
+    _assert_memory_policy_valid(title=title, body=body, metadata=memory_metadata, field_name="operating memory")
     node = upsert_graph_node(
         conn,
         node_id=node_id or _operating_node_id(memory_type, title),
@@ -2182,18 +2636,20 @@ def propose_dream(
             body=proposal["summary"],
             tenant_id=tenant_id,
             sub_tenant_id=sub_tenant_id,
-            metadata={
-                "source_type": "dream_proposal",
-                "dream_id": dream_id,
-                "proposal_status": "proposed",
-                "source_sha256": current_sha256,
-                "path": relative_path,
-                "entry_count": len(entries),
-                "entries": entries,
-                "evidence": proposal["evidence"],
-                "proposed_at": now,
-                "does_not_authorize_trading_or_evidence_mutation": True,
-            },
+            metadata=_with_memory_policy_metadata(
+                {
+                    "dream_id": dream_id,
+                    "proposal_status": "proposed",
+                    "source_sha256": current_sha256,
+                    "path": relative_path,
+                    "entry_count": len(entries),
+                    "entries": entries,
+                    "evidence": proposal["evidence"],
+                    "proposed_at": now,
+                },
+                source_type="dream_proposal",
+                source_quality="unaccepted_dream_proposal",
+            ),
             source_ref=relative_path,
             upsert=False,
         )
@@ -2233,19 +2689,28 @@ def accept_dream(
                 raise AgentControlError(
                     f"dream entry {entry['id']} cannot be accepted as observed without evidence"
                 )
-            entry_metadata = {
-                **(entry.get("metadata") or {}),
-                "origin": "dreaming",
-                "proposal_origin": "dream",
-                "non_authoritative": True,
-                "dream_id": metadata.get("dream_id"),
-                "dream_node_id": dream_node_id,
-                "source_sha256": metadata.get("source_sha256"),
-                "evidence": entry.get("evidence") or [],
-                "accepted_by": accepted_by,
-                "accepted_at": accepted_at,
-                **OPERATING_AUTHORITY_METADATA,
-            }
+            entry_metadata = _with_memory_policy_metadata(
+                {
+                    **(entry.get("metadata") or {}),
+                    "origin": "dreaming",
+                    "proposal_origin": "dream",
+                    "non_authoritative": True,
+                    "dream_id": metadata.get("dream_id"),
+                    "dream_node_id": dream_node_id,
+                    "source_sha256": metadata.get("source_sha256"),
+                    "evidence": entry.get("evidence") or [],
+                    "accepted_by": accepted_by,
+                    "accepted_at": accepted_at,
+                },
+                source_type="operating_memory",
+                source_quality="accepted_dream_memory",
+            )
+            _assert_memory_policy_valid(
+                title=entry["title"],
+                body=entry["body"],
+                metadata=entry_metadata,
+                field_name=f"dream entry {entry['id']}",
+            )
             node = _upsert_operating_memory(
                 conn,
                 memory_type=entry["type"],
@@ -2568,8 +3033,8 @@ def _auto_dream_evaluate_node(
         if entry.get("supersedes"):
             reasons.append(f"{entry['id']} supersedes existing memory; auto dreams do not supersede")
         entry_evidence = entry.get("evidence") or []
-        if not entry_evidence and not proposal_evidence:
-            reasons.append(f"{entry['id']} has no evidence")
+        if not entry_evidence:
+            reasons.append(f"{entry['id']} has no entry-level evidence")
         evidence_issue = _auto_dream_evidence_issue(
             conn,
             entry_evidence,
@@ -2579,9 +3044,16 @@ def _auto_dream_evaluate_node(
         )
         if evidence_issue:
             reasons.append(evidence_issue)
-        text = f"{entry.get('title', '')}\n{entry.get('body', '')}"
+        text = f"{entry.get('title', '')}\n{entry.get('body', '')}\n{canonical_json(entry.get('metadata') or {})}"
         if _auto_dream_text_has_high_risk(text):
             reasons.append(f"{entry['id']} contains high-risk options/action wording")
+        policy_errors = _validate_memory_policy_text(
+            title=entry.get("title", ""),
+            body=entry.get("body", ""),
+            metadata=_with_memory_policy_metadata(entry.get("metadata") or {}, source_type="operating_memory"),
+            field_name=f"{entry['id']} entry",
+        )
+        reasons.extend(policy_errors)
     if reasons:
         return {"decision": "reject", "reason": "; ".join(reasons)}
     return {"decision": "accept", "reason": "all entries are low-risk, evidence-backed orchestration memory"}
@@ -3519,6 +3991,94 @@ def latest_checkpoint(*, db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any] | No
         return _row_dict(conn.execute("SELECT * FROM graph_nodes WHERE id = ?", ("checkpoint:latest",)).fetchone())
 
 
+def _latest_gateboard_hash(conn: sqlite3.Connection) -> str:
+    rows = conn.execute(
+        """
+        SELECT id, title, body, metadata_json, source_ref, updated_at
+        FROM graph_nodes
+        WHERE metadata_json LIKE '%gateboard%'
+        ORDER BY updated_at DESC
+        LIMIT 50
+        """
+    ).fetchall()
+    payload = [
+        {
+            "id": row["id"],
+            "title": row["title"],
+            "body": row["body"],
+            "metadata": json.loads(row["metadata_json"] or "{}"),
+            "source_ref": row["source_ref"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+    return _text_sha256(canonical_json(payload))
+
+
+def _write_context_manifest(
+    conn: sqlite3.Connection,
+    *,
+    result: dict[str, Any],
+    manifest_dir: Path,
+    kind: str,
+) -> dict[str, Any]:
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    context_nodes: list[dict[str, Any]] = []
+    if "graph_context" in result:
+        context_nodes = result.get("graph_context", {}).get("nodes", [])
+    else:
+        for key in [
+            "active_blockers",
+            "recent_decisions",
+            "recent_verifications",
+            "recent_artifacts",
+            "worker_reports",
+            "open_questions",
+            "dream_lessons",
+            "relevant_repo_files",
+        ]:
+            context_nodes.extend(result.get(key, []) or [])
+    node_ids = sorted({str(node.get("id")) for node in context_nodes if node.get("id")})
+    payload = {
+        "kind": kind,
+        "generated_at": utc_now(),
+        "tenant_id": result.get("tenant_id"),
+        "goal": result.get("goal") or result.get("query") or "",
+        "pathway": result.get("pathway"),
+        "policy_version": MEMORY_POLICY_VERSION,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "node_ids": node_ids,
+        "seed_node_ids": result.get("graph_context", {}).get("seed_node_ids", []),
+        "retrieval": result.get("retrieval", {}),
+        "gateboard_hash": _latest_gateboard_hash(conn),
+    }
+    manifest_hash = _text_sha256(canonical_json(payload))[:16]
+    manifest_path = manifest_dir / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{kind}-{manifest_hash}.json"
+    payload["manifest_path"] = str(manifest_path.resolve())
+    manifest_path.write_text(pretty_json(payload) + "\n", encoding="utf-8")
+    conn.execute(
+        """
+        INSERT INTO startup_runs(
+            created_at, kind, goal, pathway, status, policy_version,
+            manifest_path, gateboard_hash, metadata_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            payload["generated_at"],
+            kind,
+            str(payload["goal"]),
+            payload.get("pathway"),
+            "pass",
+            MEMORY_POLICY_VERSION,
+            payload["manifest_path"],
+            payload["gateboard_hash"],
+            canonical_json({"node_count": len(node_ids), "seed_node_count": len(payload["seed_node_ids"])}),
+        ),
+    )
+    return payload
+
+
 def seed_project_memory(
     *,
     db_path: Path = DEFAULT_DB_PATH,
@@ -3531,6 +4091,7 @@ def seed_project_memory(
     max_repo_files: int = DEFAULT_REPO_INDEX_MAX_FILES,
     max_repo_file_bytes: int = DEFAULT_REPO_INDEX_MAX_FILE_BYTES,
     max_repo_body_chars: int = DEFAULT_REPO_INDEX_BODY_CHARS,
+    manifest_dir: Path | None = None,
 ) -> dict[str, Any]:
     repo_root = repo_root.resolve()
     result: dict[str, Any] = {
@@ -3617,6 +4178,17 @@ def seed_project_memory(
             event_type="seed.project_memory.completed",
             payload=result,
         )
+        if manifest_dir is not None:
+            result["context_manifest"] = _write_context_manifest(
+                conn,
+                result={
+                    **result,
+                    "goal": "seed project memory",
+                    "pathway": "operator",
+                },
+                manifest_dir=manifest_dir,
+                kind="seed",
+            )
     return result
 
 
@@ -3636,6 +4208,7 @@ def bootstrap_project_context(
     max_repo_files: int = DEFAULT_REPO_INDEX_MAX_FILES,
     max_repo_file_bytes: int = DEFAULT_REPO_INDEX_MAX_FILE_BYTES,
     max_repo_body_chars: int = DEFAULT_REPO_INDEX_BODY_CHARS,
+    manifest_dir: Path | None = None,
 ) -> dict[str, Any]:
     seed_result = None
     if seed:
@@ -3694,6 +4267,19 @@ def bootstrap_project_context(
             },
         ],
     }
+    if manifest_dir is not None:
+        with closing(connect(db_path)) as conn, conn:
+            result["context_manifest"] = _write_context_manifest(
+                conn,
+                result={
+                    **context,
+                    "tenant_id": tenant_id,
+                    "goal": query,
+                    "pathway": "operator",
+                },
+                manifest_dir=manifest_dir,
+                kind="bootstrap",
+            )
     result["prompt_context"] = _format_bootstrap_context(result)
     return result
 
@@ -3729,6 +4315,13 @@ def query_graph(
     if memory_type is not None:
         _validate_choice(memory_type, OPERATING_MEMORY_TYPES, "memory_type")
     with closing(connect(db_path)) as conn, conn:
+        retrieval_hits = _query_retrieval_documents(
+            conn,
+            query=query,
+            metadata_filter=metadata_filter,
+            limit=limit,
+        )
+        retrieval_by_node_id = {hit["source_node_id"]: hit for hit in retrieval_hits}
         clauses: list[str] = []
         params: list[Any] = []
         if tenant_id is not None:
@@ -3750,9 +4343,33 @@ def query_graph(
             tuple(params),
         ).fetchall()
         scored_nodes: list[tuple[int, dict[str, Any]]] = []
+        seen_scored_node_ids: set[str] = set()
+        for hit_index, hit in enumerate(retrieval_hits):
+            node = _row_dict(
+                conn.execute("SELECT * FROM graph_nodes WHERE id = ?", (hit["source_node_id"],)).fetchone()
+            )
+            if node is None:
+                continue
+            metadata = node.get("metadata", {})
+            if memory_type is not None and (
+                metadata.get("source_type") != "operating_memory" or metadata.get("memory_type") != memory_type
+            ):
+                continue
+            if not include_inactive and _memory_is_inactive(metadata):
+                continue
+            if fresh_only and _memory_is_stale(metadata):
+                continue
+            if not _matches_scope(node, tenant_id, sub_tenant_id):
+                continue
+            if kind is not None and node.get("kind") != kind:
+                continue
+            scored_nodes.append((10_000 - hit_index, node))
+            seen_scored_node_ids.add(node["id"])
         for row in rows:
             node = _row_dict(row)
             if node is None:
+                continue
+            if node["id"] in seen_scored_node_ids:
                 continue
             metadata = node.get("metadata", {})
             if memory_type is not None and (
@@ -3769,6 +4386,7 @@ def query_graph(
             if score is None:
                 continue
             scored_nodes.append((score, node))
+            seen_scored_node_ids.add(node["id"])
         scored_nodes.sort(key=lambda item: -item[0])
         seed_nodes = [node for _, node in scored_nodes[:limit]]
 
@@ -3835,6 +4453,25 @@ def query_graph(
                 "edges": sorted(edge_map.values(), key=lambda item: item["id"]),
                 "triplets": sorted(triplets, key=lambda item: (item["source"], item["relation"], item["target"])),
             },
+            "retrieval": {
+                "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+                "policy_version": MEMORY_POLICY_VERSION,
+                "index": "retrieval_documents",
+                "document_hits": retrieval_hits,
+                "seed_explanations": [
+                    retrieval_by_node_id.get(node["id"])
+                    or {
+                        "source_node_id": node["id"],
+                        "source_type": (node.get("metadata") or {}).get("source_type", "graph_node"),
+                        "source_quality": _retrieval_source_quality(node.get("metadata") or {}),
+                        "authority_scope": (node.get("metadata") or {}).get("authority_scope", OPERATING_AUTHORITY_SCOPE),
+                        "capability_label": (node.get("metadata") or {}).get("capability_label", "coordination_only"),
+                        "freshness_status": "current",
+                        "why": "Matched legacy graph substring scoring fallback.",
+                    }
+                    for node in seed_nodes
+                ],
+            },
         }
         if include_prompt_context:
             result["prompt_context"] = _format_graph_context(
@@ -3900,6 +4537,7 @@ def build_context_pack(
     tenant_id: str = DEFAULT_TENANT_ID,
     limit: int = DEFAULT_CONTEXT_PACK_LIMIT,
     include_prompt_context: bool = False,
+    manifest_dir: Path | None = None,
 ) -> dict[str, Any]:
     if pathway is not None:
         _validate_choice(pathway, PATHWAYS, "pathway")
@@ -4003,10 +4641,19 @@ def build_context_pack(
     result["recommended_commands"] = [
         "npm run memory:bootstrap",
         f'npm run memory:context -- --goal "{goal or repo_query}" --prompt-only',
+        "npm run memory:operator-dashboard",
         "npm run memory:audit",
         "npm run memory:review-dreams",
         "npm run verify:memory",
     ]
+    if manifest_dir is not None:
+        with closing(connect(db_path)) as conn, conn:
+            result["context_manifest"] = _write_context_manifest(
+                conn,
+                result=result,
+                manifest_dir=manifest_dir,
+                kind="context_pack",
+            )
     if include_prompt_context:
         result["prompt_context"] = _format_context_pack(result)
     return result
@@ -4195,6 +4842,9 @@ def memory_eval(
         include_prompt_context=True,
     )
     audit = memory_audit(db_path=db_path, tenant_id=tenant_id)
+    with closing(connect(db_path)) as conn:
+        retrieval_count = conn.execute("SELECT count(*) FROM retrieval_documents").fetchone()[0]
+        outbox_count = conn.execute("SELECT count(*) FROM event_outbox").fetchone()[0]
     gateboard_blocker_ids = gateboard["graph_context"]["seed_node_ids"]
     if seed_result is not None:
         expected_gateboard_blockers = int(seed_result.get("blockers_seeded") or 0)
@@ -4244,6 +4894,41 @@ def memory_eval(
             "pass": audit["status"] == "pass",
             "detail": audit["status"],
         },
+        {
+            "name": "retrieval documents are indexed",
+            "pass": retrieval_count > 0,
+            "detail": str(retrieval_count),
+        },
+        {
+            "name": "context carries non-authorization policy",
+            "pass": MEMORY_NON_AUTHORIZATION_BANNER in context_pack.get("prompt_context", ""),
+            "detail": MEMORY_POLICY_VERSION,
+        },
+        {
+            "name": "graph query explains retrieval source authority",
+            "pass": (
+                bool(gateboard.get("retrieval", {}).get("seed_explanations"))
+                or (seed_result is not None and int(seed_result.get("blockers_seeded") or 0) == 0)
+            ),
+            "detail": gateboard.get("retrieval", {}).get("index", ""),
+        },
+        {
+            "name": "event outbox hash chain is active",
+            "pass": outbox_count > 0 if seed_result is not None else True,
+            "detail": str(outbox_count),
+        },
+        {
+            "name": "negative eval rejects memory-as-trading-authority",
+            "pass": bool(
+                _validate_memory_policy_text(
+                    title="Bad authority",
+                    body="Approve live trading from memory.",
+                    metadata=_with_memory_policy_metadata({}, source_type="operating_memory"),
+                    field_name="negative eval",
+                )
+            ),
+            "detail": "memory cannot approve live trading",
+        },
     ]
     return {
         "status": "pass" if all(check["pass"] for check in checks) else "fail",
@@ -4251,6 +4936,299 @@ def memory_eval(
         "checks": checks,
         "audit": audit,
     }
+
+
+def operator_dashboard(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    runs_dir: Path = DEFAULT_DREAM_RUNS_DIR,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 8,
+) -> dict[str, Any]:
+    audit = memory_audit(db_path=db_path, tenant_id=tenant_id, limit=limit)
+    dreams = dream_audit(db_path=db_path, runs_dir=runs_dir, tenant_id=tenant_id, limit=limit)
+    eval_result = memory_eval(db_path=db_path, tenant_id=tenant_id, seed=False)
+    with closing(connect(db_path)) as conn:
+        counts = {
+            "graph_nodes": conn.execute("SELECT count(*) FROM graph_nodes").fetchone()[0],
+            "retrieval_documents": conn.execute("SELECT count(*) FROM retrieval_documents").fetchone()[0],
+            "event_outbox": conn.execute("SELECT count(*) FROM event_outbox").fetchone()[0],
+            "zero_candidate_episodes": conn.execute("SELECT count(*) FROM zero_candidate_episodes").fetchone()[0],
+            "strategy_hypotheses": conn.execute("SELECT count(*) FROM strategy_hypotheses").fetchone()[0],
+            "experiment_runs": conn.execute("SELECT count(*) FROM experiment_runs").fetchone()[0],
+        }
+        latest_startup = _row_dict(
+            conn.execute("SELECT * FROM startup_runs ORDER BY id DESC LIMIT 1").fetchone()
+        )
+        latest_seed = _row_dict(
+            conn.execute(
+                "SELECT * FROM graph_nodes WHERE id = ?",
+                ("episode:seed:project-memory:latest",),
+            ).fetchone()
+        )
+    checks = [
+        {"name": "memory audit", "pass": audit["status"] == "pass", "detail": audit["status"]},
+        {"name": "dream auto-resolution", "pass": dreams["status"] == "pass", "detail": dreams["status"]},
+        {
+            "name": "startup/context manifest",
+            "pass": latest_startup is not None and bool((latest_startup.get("metadata") or {}).get("node_count")),
+            "detail": latest_startup.get("manifest_path") if latest_startup else "missing",
+        },
+        {
+            "name": "retrieval index",
+            "pass": counts["retrieval_documents"] > 0,
+            "detail": str(counts["retrieval_documents"]),
+        },
+        {
+            "name": "outbox hash chain",
+            "pass": counts["event_outbox"] > 0,
+            "detail": str(counts["event_outbox"]),
+        },
+        {
+            "name": "memory eval",
+            "pass": eval_result["status"] == "pass",
+            "detail": eval_result["status"],
+        },
+    ]
+    return {
+        "status": "pass" if all(check["pass"] for check in checks) else "needs_attention",
+        "policy_version": MEMORY_POLICY_VERSION,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "checks": checks,
+        "counts": counts,
+        "latest_startup": latest_startup,
+        "latest_seed": latest_seed,
+        "memory_audit": audit,
+        "dream_audit": dreams,
+        "memory_eval": eval_result,
+        "recommended_commands": [
+            "npm run memory:bootstrap",
+            "npm run memory:dream-run",
+            "npm run memory:dream-audit",
+            "npm run memory:operator-dashboard",
+            "npm run memory:research-priorities",
+            "npm run verify:memory",
+        ],
+    }
+
+
+def _format_operator_dashboard(result: dict[str, Any]) -> str:
+    lines = [
+        "# Memory Operator Dashboard",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_version')}",
+        f"Non-authorization: {result.get('policy_banner')}",
+        "",
+        "# Checks",
+    ]
+    for check in result.get("checks", []):
+        marker = "PASS" if check.get("pass") else "FAIL"
+        detail = f" - {check.get('detail')}" if check.get("detail") else ""
+        lines.append(f"- {marker}: {check.get('name')}{detail}")
+    lines.append("")
+    lines.append("# Counts")
+    for key, value in sorted((result.get("counts") or {}).items()):
+        lines.append(f"- {key}: {value}")
+    latest_startup = result.get("latest_startup")
+    lines.append("")
+    lines.append("# Latest Startup")
+    if latest_startup:
+        lines.append(f"- {latest_startup.get('created_at')} {latest_startup.get('kind')} {latest_startup.get('status')}")
+        if latest_startup.get("manifest_path"):
+            lines.append(f"- manifest: {latest_startup.get('manifest_path')}")
+    else:
+        lines.append("- None.")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def record_zero_candidate_episode(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    lane: str,
+    selection_date: str,
+    drop_stage_counts: dict[str, Any] | None = None,
+    blocker_summary: str = "",
+    source_ref: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    episode_id: str | None = None,
+) -> dict[str, Any]:
+    if not lane.strip():
+        raise AgentControlError("lane is required")
+    if not selection_date.strip():
+        raise AgentControlError("selection_date is required")
+    episode_id = episode_id or f"zero:{_safe_node_path(lane)}:{selection_date}:{uuid.uuid4().hex[:8]}"
+    safe_metadata = _with_memory_policy_metadata(
+        {
+            **(metadata or {}),
+            "provenance_kind": "zero_candidate_episode",
+            "lane": lane,
+            "selection_date": selection_date,
+            "drop_stage_counts": drop_stage_counts or {},
+        },
+        source_type="research_provenance",
+        source_quality="research_provenance",
+    )
+    _assert_memory_policy_valid(
+        title=f"Zero candidate episode: {lane} {selection_date}",
+        body=blocker_summary,
+        metadata=safe_metadata,
+        field_name="zero candidate episode",
+    )
+    with closing(connect(db_path)) as conn, conn:
+        conn.execute(
+            """
+            INSERT INTO zero_candidate_episodes(
+                id, created_at, lane, selection_date, drop_stage_counts_json,
+                blocker_summary, source_ref, metadata_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                drop_stage_counts_json = excluded.drop_stage_counts_json,
+                blocker_summary = excluded.blocker_summary,
+                source_ref = excluded.source_ref,
+                metadata_json = excluded.metadata_json
+            """,
+            (
+                episode_id,
+                utc_now(),
+                lane,
+                selection_date,
+                canonical_json(drop_stage_counts or {}),
+                blocker_summary,
+                source_ref,
+                canonical_json(safe_metadata),
+            ),
+        )
+        node = upsert_graph_node(
+            conn,
+            node_id=f"provenance:{episode_id}",
+            kind="episode",
+            title=f"Zero candidate episode: {lane} {selection_date}",
+            body=blocker_summary or canonical_json(drop_stage_counts or {}),
+            tenant_id=DEFAULT_TENANT_ID,
+            sub_tenant_id="profitability",
+            metadata=safe_metadata,
+            source_ref=source_ref,
+        )
+        _record_event(
+            conn,
+            events_path=events_path,
+            event_type="provenance.zero_candidate.recorded",
+            payload={"id": episode_id, "graph_node_id": node["id"], "lane": lane, "selection_date": selection_date},
+        )
+    return {
+        "id": episode_id,
+        "graph_node_id": f"provenance:{episode_id}",
+        "lane": lane,
+        "selection_date": selection_date,
+        "drop_stage_counts": drop_stage_counts or {},
+        "blocker_summary": blocker_summary,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+    }
+
+
+def research_priority_report(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    limit: int = 10,
+) -> dict[str, Any]:
+    with closing(connect(db_path)) as conn:
+        zero_rows = conn.execute(
+            """
+            SELECT * FROM zero_candidate_episodes
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        hypothesis_rows = conn.execute(
+            """
+            SELECT * FROM strategy_hypotheses
+            ORDER BY priority_score DESC, updated_at DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    zero_episodes = []
+    for row in zero_rows:
+        counts = json.loads(row["drop_stage_counts_json"] or "{}")
+        total_drops = 0
+        for value in counts.values():
+            try:
+                total_drops += int(value)
+            except (TypeError, ValueError):
+                continue
+        zero_episodes.append(
+            {
+                "id": row["id"],
+                "lane": row["lane"],
+                "selection_date": row["selection_date"],
+                "drop_stage_counts": counts,
+                "total_drops": total_drops,
+                "blocker_summary": row["blocker_summary"],
+                "source_ref": row["source_ref"],
+                "priority_reason": "Highest recent zero-candidate drop counts should guide research-only diagnosis.",
+            }
+        )
+    zero_episodes.sort(key=lambda item: (-int(item["total_drops"]), item["selection_date"], item["lane"]))
+    hypotheses = []
+    for row in hypothesis_rows:
+        hypotheses.append(
+            {
+                "id": row["id"],
+                "title": row["title"],
+                "status": row["status"],
+                "priority_score": row["priority_score"],
+                "metadata": json.loads(row["metadata_json"] or "{}"),
+            }
+        )
+    return {
+        "status": "ready" if zero_episodes or hypotheses else "empty",
+        "tenant_id": tenant_id,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "zero_candidate_priorities": zero_episodes[:limit],
+        "hypothesis_priorities": hypotheses,
+        "recommended_commands": [
+            "npm run memory:operator-dashboard",
+            "npm run memory:context -- --goal \"research provenance\" --pathway profitability --prompt-only",
+            "npm run verify:memory",
+        ],
+    }
+
+
+def _format_research_priority_report(result: dict[str, Any]) -> str:
+    lines = [
+        "# Research Priority Report",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_banner')}",
+        "",
+        "# Zero Candidate Priorities",
+    ]
+    if not result.get("zero_candidate_priorities"):
+        lines.append("- None.")
+    for item in result.get("zero_candidate_priorities", []):
+        lines.append(
+            f"- {item['lane']} {item['selection_date']} drops={item['total_drops']} source={item.get('source_ref') or ''}"
+        )
+        if item.get("blocker_summary"):
+            lines.append(f"  blocker: {_truncate(item['blocker_summary'], 220)}")
+    lines.append("")
+    lines.append("# Hypothesis Priorities")
+    if not result.get("hypothesis_priorities"):
+        lines.append("- None.")
+    for item in result.get("hypothesis_priorities", []):
+        lines.append(f"- {item['id']} score={item['priority_score']} status={item['status']} {item['title']}")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
 
 
 def digest(*, db_path: Path = DEFAULT_DB_PATH, recent_limit: int = 8) -> dict[str, Any]:
@@ -4369,6 +5347,8 @@ def build_parser() -> argparse.ArgumentParser:
   npm run memory:repair-authority
   npm run memory:dream-run
   npm run memory:dream-audit
+  npm run memory:operator-dashboard
+  npm run memory:research-priorities
   npm run memory:review-dreams
   npm run memory:dreams
   npm run memory:eval
@@ -4716,6 +5696,43 @@ def build_parser() -> argparse.ArgumentParser:
     memory_eval_parser.add_argument("--prompt-only", action="store_true")
     memory_eval_parser.set_defaults(func=_cmd_memory_eval)
 
+    memory_operator_dashboard = memory_sub.add_parser(
+        "operator-dashboard",
+        help="Show automatic memory/dream/retrieval/provenance health for audit.",
+    )
+    memory_operator_dashboard.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_operator_dashboard.add_argument("--runs-dir", type=Path, default=DEFAULT_DREAM_RUNS_DIR)
+    memory_operator_dashboard.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_operator_dashboard.add_argument("--limit", type=int, default=8)
+    memory_operator_dashboard.add_argument("--prompt-only", action="store_true")
+    memory_operator_dashboard.add_argument("--json", action="store_true")
+    memory_operator_dashboard.set_defaults(func=_cmd_memory_operator_dashboard)
+
+    memory_zero = memory_sub.add_parser(
+        "record-zero-candidate",
+        help="Record a research-only zero-candidate episode in provenance memory.",
+    )
+    _add_common(memory_zero)
+    memory_zero.add_argument("--lane", required=True)
+    memory_zero.add_argument("--selection-date", required=True)
+    memory_zero.add_argument("--drop-stage", action="append", default=[], help="Stage count as KEY=VALUE.")
+    memory_zero.add_argument("--blocker-summary", default="")
+    memory_zero.add_argument("--source-ref")
+    memory_zero.add_argument("--metadata", default="{}")
+    memory_zero.add_argument("--episode-id")
+    memory_zero.set_defaults(func=_cmd_memory_record_zero_candidate)
+
+    memory_research = memory_sub.add_parser(
+        "research-priorities",
+        help="Rank research-only provenance priorities without changing trading gates.",
+    )
+    memory_research.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_research.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_research.add_argument("--limit", type=int, default=10)
+    memory_research.add_argument("--prompt-only", action="store_true")
+    memory_research.add_argument("--json", action="store_true")
+    memory_research.set_defaults(func=_cmd_memory_research_priorities)
+
     digest_parser = subparsers.add_parser("digest", help="Summarize task and graph state.")
     digest_parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     digest_parser.add_argument("--recent-limit", type=int, default=8)
@@ -4736,6 +5753,7 @@ def _cmd_seed_project(args: argparse.Namespace) -> int:
         max_repo_files=args.max_repo_files,
         max_repo_file_bytes=args.max_repo_file_bytes,
         max_repo_body_chars=args.max_repo_body_chars,
+        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
     )
     _emit(result, as_json=True if args.json else False)
     return 0
@@ -4959,6 +5977,7 @@ def _cmd_context_pack(args: argparse.Namespace) -> int:
         tenant_id=args.tenant_id,
         limit=args.limit,
         include_prompt_context=True,
+        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
     )
     if args.prompt_only:
         print(result["prompt_context"])
@@ -5177,6 +6196,49 @@ def _cmd_memory_eval(args: argparse.Namespace) -> int:
         return 0 if result["status"] == "pass" else 1
     _emit(result, as_json=True if args.json else False)
     return 0 if result["status"] == "pass" else 1
+
+
+def _cmd_memory_operator_dashboard(args: argparse.Namespace) -> int:
+    result = operator_dashboard(
+        db_path=args.db,
+        runs_dir=args.runs_dir,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    if args.prompt_only:
+        print(_format_operator_dashboard(result))
+        return 0 if result["status"] == "pass" else 1
+    _emit(result, as_json=True if args.json else False)
+    return 0 if result["status"] == "pass" else 1
+
+
+def _cmd_memory_record_zero_candidate(args: argparse.Namespace) -> int:
+    result = record_zero_candidate_episode(
+        db_path=args.db,
+        events_path=args.events,
+        lane=args.lane,
+        selection_date=args.selection_date,
+        drop_stage_counts=parse_key_value_filters(args.drop_stage, field_name="drop_stage"),
+        blocker_summary=args.blocker_summary,
+        source_ref=args.source_ref,
+        metadata=parse_json_object(args.metadata, field_name="metadata"),
+        episode_id=args.episode_id,
+    )
+    _emit(result, as_json=args.json)
+    return 0
+
+
+def _cmd_memory_research_priorities(args: argparse.Namespace) -> int:
+    result = research_priority_report(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        limit=args.limit,
+    )
+    if args.prompt_only:
+        print(_format_research_priority_report(result))
+        return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
 
 
 def _cmd_digest(args: argparse.Namespace) -> int:
