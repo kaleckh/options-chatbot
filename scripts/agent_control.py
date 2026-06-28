@@ -149,7 +149,10 @@ MEMORY_SOURCE_QUALITY_BY_TYPE = {
     "repo_file_index": "repo_file_index",
     "gateboard_blocker": "generated_gateboard",
     "gateboard_doc": "generated_gateboard",
+    "gateboard_latest": "generated_gateboard",
     "gateboard_latest_json": "generated_gateboard",
+    "gateboard_pathway": "generated_gateboard",
+    "gateboard_source_artifact": "generated_gateboard",
     "static_memory_graph_node": "generated_navigation",
     "static_memory_graph_doc": "generated_navigation",
     "static_memory_graph_json": "generated_navigation",
@@ -163,16 +166,30 @@ PROVENANCE_KINDS = {
     "zero_candidate_episode",
     "drift_report",
 }
+AUTHORITY_METADATA_KEYS = {
+    "authority_scope",
+    "capability_label",
+    "append_allowed",
+    "appendAllowed",
+    "promotion_ready",
+    "promotionReady",
+    "live_validation_eligible",
+    "liveValidationEligible",
+}
 MEMORY_PROHIBITED_AUTHORITY_RE = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
         r"\b(?:authori[sz]e|approve|approved|approval)\s+(?:live|broker|trade|trading|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner|strategy|stop|sizing)",
-        r"\b(?:live|broker|trading|trade|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner[-_ ]?policy|strategy|stop[-_/ ]?sizing)\s+(?:is\s+)?(?:approved|authorized|allowed|enabled|cleared|complete)",
+        r"\b(?:live|broker|trading|trade|orders?|submit[-_ ]?orders?|place[-_ ]?orders?|open[-_ ]?orders?|close[-_ ]?orders?|create[-_ ]?orders?|cancel[-_ ]?orders?|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner[-_ ]?policy|strategy|stop[-_/ ]?sizing)\s+(?:is\s+|are\s+)?(?:approved|authorized|allowed|enabled|cleared|complete)",
+        r"\b(?:broker[-_ ]?orders?|submit[-_ ]?orders?|place[-_ ]?orders?|open[-_ ]?orders?|close[-_ ]?orders?|create[-_ ]?orders?|cancel[-_ ]?orders?)\b",
         r"\btreat(?:ing)?\s+historical\s+rows\s+as\s+forward\s+proof\b",
         r"\bhistorical\s+rows\s+(?:are|count\s+as)\s+forward\s+proof\b",
         r"\bappend[_ -]?allowed\s*[:=]\s*true\b",
+        r"\bappendAllowed\s*[:=]\s*true\b",
         r"\bpromotion[_ -]?ready\s*[:=]\s*true\b",
+        r"\bpromotionReady\s*[:=]\s*true\b",
         r"\blive[_ -]?validation[_ -]?eligible\s*[:=]\s*true\b",
+        r"\bliveValidationEligible\s*[:=]\s*true\b",
     )
 )
 OPERATING_MEMORY_KIND_BY_TYPE = {
@@ -1493,6 +1510,8 @@ def _query_retrieval_documents(
     conn: sqlite3.Connection,
     *,
     query: str,
+    tenant_id: str | None,
+    sub_tenant_id: str | None,
     metadata_filter: dict[str, Any] | None,
     limit: int,
 ) -> list[dict[str, Any]]:
@@ -1501,28 +1520,39 @@ def _query_retrieval_documents(
     if not terms:
         return []
     fts_query = " ".join(terms)
+    scope_clauses: list[str] = []
+    scope_params: list[Any] = []
+    if tenant_id is not None:
+        scope_clauses.append("n.tenant_id = ?")
+        scope_params.append(tenant_id)
+    if sub_tenant_id is not None:
+        scope_clauses.append("n.sub_tenant_id = ?")
+        scope_params.append(sub_tenant_id)
+    scope_sql = f" AND {' AND '.join(scope_clauses)}" if scope_clauses else ""
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT d.*, bm25(retrieval_documents_fts) AS rank
             FROM retrieval_documents_fts
             JOIN retrieval_documents d ON d.doc_id = retrieval_documents_fts.doc_id
-            WHERE retrieval_documents_fts MATCH ?
+            JOIN graph_nodes n ON n.id = d.source_node_id
+            WHERE retrieval_documents_fts MATCH ?{scope_sql}
             ORDER BY rank ASC
             LIMIT ?
             """,
-            (fts_query, max(limit * 4, 20)),
+            (fts_query, *scope_params, max(limit * 8, 50)),
         ).fetchall()
     except sqlite3.OperationalError:
         rows = conn.execute(
-            """
-            SELECT *, 0.0 AS rank
-            FROM retrieval_documents
-            WHERE lower(search_text) LIKE ?
-            ORDER BY indexed_at DESC
+            f"""
+            SELECT d.*, 0.0 AS rank
+            FROM retrieval_documents d
+            JOIN graph_nodes n ON n.id = d.source_node_id
+            WHERE lower(d.search_text) LIKE ?{scope_sql}
+            ORDER BY d.indexed_at DESC
             LIMIT ?
             """,
-            (f"%{query.lower()}%", max(limit * 4, 20)),
+            (f"%{query.lower()}%", *scope_params, max(limit * 8, 50)),
         ).fetchall()
     hits: list[dict[str, Any]] = []
     for row in rows:
@@ -4318,6 +4348,8 @@ def query_graph(
         retrieval_hits = _query_retrieval_documents(
             conn,
             query=query,
+            tenant_id=tenant_id,
+            sub_tenant_id=sub_tenant_id,
             metadata_filter=metadata_filter,
             limit=limit,
         )
@@ -5143,9 +5175,7 @@ def research_priority_report(
             """
             SELECT * FROM zero_candidate_episodes
             ORDER BY created_at DESC
-            LIMIT ?
             """,
-            (limit,),
         ).fetchall()
         hypothesis_rows = conn.execute(
             """
@@ -5753,7 +5783,6 @@ def _cmd_seed_project(args: argparse.Namespace) -> int:
         max_repo_files=args.max_repo_files,
         max_repo_file_bytes=args.max_repo_file_bytes,
         max_repo_body_chars=args.max_repo_body_chars,
-        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
     )
     _emit(result, as_json=True if args.json else False)
     return 0
@@ -5777,6 +5806,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         max_repo_files=args.max_repo_files,
         max_repo_file_bytes=args.max_repo_file_bytes,
         max_repo_body_chars=args.max_repo_body_chars,
+        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
     )
     if args.prompt_only:
         print(result["prompt_context"])
