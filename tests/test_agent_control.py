@@ -260,6 +260,423 @@ class AgentControlTests(unittest.TestCase):
             ["task.created", "task.claimed", "task.reported", "task.accepted"],
         )
 
+    def test_agent_run_ledger_appends_redacts_and_validates_hash_chain(self):
+        started = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-test-ledger",
+            event_type="started",
+            title="Test ledger sk-titleSecret123",
+            summary="Start run with Authorization: Basic abcdef.",
+            payload={"goal": "test", "api_token": "secret-token", "nested": {"password": "secret"}},
+        )
+        tool = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-test-ledger",
+            event_type="tool_call",
+            summary="Ran a read-only command.",
+            payload={"command": "npm run memory:bootstrap", "authorization": "Bearer abc"},
+        )
+        completed = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-test-ledger",
+            event_type="completed",
+            summary="Run completed.",
+            payload={"artifact": "docs/agent-control-plane.md"},
+        )
+
+        self.assertEqual(started["payload"]["api_token"], agent_control.AGENT_RUN_REDACTED)
+        self.assertEqual(started["payload"]["nested"]["password"], agent_control.AGENT_RUN_REDACTED)
+        self.assertNotIn("sk-titleSecret123", started["title"])
+        self.assertNotIn("abcdef", started["summary"])
+        self.assertEqual(tool["payload"]["authorization"], agent_control.AGENT_RUN_REDACTED)
+        self.assertEqual(tool["prev_event_hash"], started["event_hash"])
+        self.assertEqual(completed["prev_event_hash"], tool["event_hash"])
+        with closing(agent_control.connect(self.db_path)) as conn:
+            audit = agent_control.validate_agent_run_ledger(conn)
+        self.assertEqual(audit["status"], "pass")
+
+        runs = agent_control.list_agent_runs(db_path=self.db_path)
+        self.assertEqual(runs["runs"][0]["run_id"], "RUN-test-ledger")
+        self.assertEqual(runs["runs"][0]["status"], "succeeded")
+        self.assertEqual(runs["runs"][0]["tool_call_count"], 1)
+
+    def test_agent_run_ledger_handles_noisy_runs_and_tenant_scoped_run_ids(self):
+        for index in range(35):
+            agent_control.record_agent_run_event(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                run_id="RUN-noisy",
+                event_type="tool_call" if index else "started",
+                summary=f"noisy event {index}",
+            )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-quiet",
+            event_type="started",
+            summary="quiet run",
+        )
+        tenant_a = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-shared",
+            event_type="started",
+            tenant_id="tenant-a",
+            summary="tenant a",
+        )
+        tenant_b = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-shared",
+            event_type="started",
+            tenant_id="tenant-b",
+            summary="tenant b",
+        )
+
+        runs = agent_control.list_agent_runs(db_path=self.db_path, limit=2)
+        self.assertEqual({run["run_id"] for run in runs["runs"]}, {"RUN-noisy", "RUN-quiet"})
+        self.assertNotEqual(tenant_a["event_hash"], tenant_b["event_hash"])
+        with closing(agent_control.connect(self.db_path)) as conn:
+            self.assertEqual(agent_control.validate_agent_run_ledger(conn, tenant_id="tenant-a")["status"], "pass")
+            self.assertEqual(agent_control.validate_agent_run_ledger(conn, tenant_id="tenant-b")["status"], "pass")
+
+    def test_agent_run_ledger_status_filter_finds_older_matching_runs(self):
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-old-failed",
+            event_type="failed",
+            summary="older failed run",
+        )
+        for index in range(201):
+            agent_control.record_agent_run_event(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                run_id=f"RUN-noise-{index:03d}",
+                event_type="started",
+                summary="newer noise",
+            )
+
+        runs = agent_control.list_agent_runs(db_path=self.db_path, status="failed", limit=20)
+        self.assertEqual([run["run_id"] for run in runs["runs"]], ["RUN-old-failed"])
+
+    def test_agent_run_ledger_audit_reports_malformed_payload_json(self):
+        event = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-corrupt",
+            event_type="started",
+            summary="will corrupt payload",
+        )
+        with closing(agent_control.connect(self.db_path)) as conn:
+            with conn:
+                conn.execute(
+                    "UPDATE agent_run_events SET payload_json = ? WHERE id = ?",
+                    ("{broken-json", event["id"]),
+                )
+            audit = agent_control.validate_agent_run_ledger(conn)
+
+        self.assertEqual(audit["status"], "issues")
+        self.assertTrue(any("payload_json" in issue["issue"] for issue in audit["issues"]))
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                ["memory", "run-ledger", "--db", str(self.db_path), "--prompt-only"]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Audit: issues", stdout.getvalue())
+
+    def test_agent_run_ledger_cli_prompt_only(self):
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "run",
+                    "event",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    "--run-id",
+                    "RUN-cli-ledger",
+                    "--event-type",
+                    "blocked",
+                    "--title",
+                    "CLI ledger",
+                    "--summary",
+                    "Blocked waiting for user input.",
+                    "--payload",
+                    json.dumps({"blocker_code": "user_input_required"}),
+                    "--prompt-only",
+                ]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("RUN-cli-ledger", stdout.getvalue())
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                ["memory", "run-ledger", "--db", str(self.db_path), "--prompt-only"]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Agent Run Ledger", stdout.getvalue())
+        self.assertIn("Audit: pass", stdout.getvalue())
+        self.assertIn("user_input_required", stdout.getvalue())
+
+    def test_daily_operator_brief_surfaces_attention_and_pending_approvals(self):
+        repo_root = self.root / "daily-brief-repo"
+        self._write_minimal_seed_repo(repo_root)
+        agent_control.seed_project_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-brief-blocked",
+            event_type="started",
+            title="Brief blocked",
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-brief-blocked",
+            event_type="approval_requested",
+            summary="Need operator decision before guarded append.",
+            payload={"approval_scope": "guarded_append"},
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-brief-blocked",
+            event_type="blocked",
+            summary="Blocked waiting for operator.",
+            payload={"blocker_code": "user_input_required"},
+        )
+
+        brief = agent_control.daily_operator_brief(db_path=self.db_path, runs_dir=self.root / "dream-runs")
+        rendered = agent_control._format_daily_operator_brief(brief)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "daily-brief",
+                    "--db",
+                    str(self.db_path),
+                    "--runs-dir",
+                    str(self.root / "dream-runs"),
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(brief["status"], "needs_attention")
+        self.assertEqual(brief["attention_runs"][0]["run_id"], "RUN-brief-blocked")
+        self.assertEqual(brief["pending_approvals"][0]["run_id"], "RUN-brief-blocked")
+        self.assertTrue(brief["pending_approvals"][0]["non_authoritative"])
+        self.assertIn("ledger note only; not authorization", rendered)
+        self.assertIn("# Daily Operator Brief", stdout.getvalue())
+        self.assertIn("RUN-brief-blocked", stdout.getvalue())
+
+    def test_daily_operator_brief_keeps_later_approval_request_pending(self):
+        repo_root = self.root / "daily-brief-later-approval-repo"
+        self._write_minimal_seed_repo(repo_root)
+        agent_control.seed_project_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+        )
+        for event_type, summary in [
+            ("started", "started"),
+            ("approval_requested", "First request."),
+            ("approval_recorded", "First request recorded."),
+            ("approval_requested", "Second request still pending."),
+        ]:
+            agent_control.record_agent_run_event(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                run_id="RUN-later-approval",
+                event_type=event_type,
+                summary=summary,
+            )
+
+        brief = agent_control.daily_operator_brief(db_path=self.db_path, runs_dir=self.root / "dream-runs")
+
+        self.assertEqual([approval["run_id"] for approval in brief["pending_approvals"]], ["RUN-later-approval"])
+        self.assertIn("Second request still pending.", brief["pending_approvals"][0]["summary"])
+
+    def test_agent_eval_harness_runs_temp_self_tests_and_cli(self):
+        repo_root = self.root / "agent-eval-repo"
+        self._write_minimal_seed_repo(repo_root)
+        result = agent_control.agent_eval_harness(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+        )
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "agent-eval",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    "--repo-root",
+                    str(repo_root),
+                    "--prompt-only",
+                ]
+            )
+
+        self.assertEqual(result["status"], "pass")
+        self.assertTrue(all(check["pass"] for check in result["checks"]))
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Agent Eval Harness", stdout.getvalue())
+        self.assertIn("daily brief surfaces blocked run", stdout.getvalue())
+
+    def test_agent_eval_harness_fails_on_tampered_live_ledger(self):
+        repo_root = self.root / "agent-eval-fail-repo"
+        self._write_minimal_seed_repo(repo_root)
+        event = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-tampered-live",
+            event_type="started",
+            summary="tamper target",
+        )
+        with closing(agent_control.connect(self.db_path)) as conn:
+            with conn:
+                conn.execute(
+                    "UPDATE agent_run_events SET payload_json = ? WHERE id = ?",
+                    (json.dumps({"tampered": True}), event["id"]),
+                )
+
+        result = agent_control.agent_eval_harness(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+        )
+
+        self.assertEqual(result["status"], "fail")
+        failed = [check for check in result["checks"] if not check["pass"]]
+        self.assertTrue(any(check["name"] == "live agent run ledger audit passes" for check in failed))
+
+    def test_blocker_autopsy_groups_repeated_blockers_and_cli(self):
+        for run_id in ["RUN-blocker-a", "RUN-blocker-b"]:
+            agent_control.record_agent_run_event(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                run_id=run_id,
+                event_type="blocked",
+                summary="Waiting for explicit operator input.",
+                payload={"blocker_code": "user_input_required"},
+            )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-blocker-c",
+            event_type="failed",
+            summary="Different failure.",
+            payload={"blocker_code": "provider_unavailable"},
+        )
+
+        report = agent_control.blocker_autopsy_report(db_path=self.db_path)
+        rendered = agent_control._format_blocker_autopsy_report(report)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                ["memory", "blocker-autopsy", "--db", str(self.db_path), "--prompt-only"]
+            )
+
+        self.assertEqual(report["status"], "repeated_blockers")
+        self.assertEqual(report["repeated_blockers"][0]["code"], "user_input_required")
+        self.assertEqual(report["repeated_blockers"][0]["count"], 2)
+        provider = next(item for item in report["latest_blockers"] if item["code"] == "provider_unavailable")
+        self.assertEqual(provider["taxonomy"], "uncategorized")
+        self.assertIn("safe next step", rendered)
+        self.assertIn(agent_control.MEMORY_NON_AUTHORIZATION_BANNER, rendered)
+        self.assertEqual(exit_code, 0)
+        self.assertIn("user_input_required", stdout.getvalue())
+
+    def test_local_inbox_lists_pending_items_and_hides_resolved_approvals(self):
+        for event_type, summary in [
+            ("started", "started"),
+            ("approval_requested", "Resolved approval."),
+            ("approval_recorded", "Resolved approval recorded."),
+        ]:
+            agent_control.record_agent_run_event(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                run_id="RUN-resolved-approval",
+                event_type=event_type,
+                summary=summary,
+            )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-pending-approval",
+            event_type="approval_requested",
+            summary="Operator input needed.",
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-inbox-blocked",
+            event_type="blocked",
+            summary="Blocked on provider.",
+            payload={"blocker_code": "external_dependency"},
+        )
+        agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-inbox-failed",
+            event_type="failed",
+            summary="Failed local command.",
+            payload={"blocker_code": "tool_failure"},
+        )
+        running = agent_control.record_agent_run_event(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            run_id="RUN-inbox-stale",
+            event_type="started",
+            summary="Long running task.",
+        )
+        stale_time = (agent_control.datetime.now(agent_control.timezone.utc) - agent_control.timedelta(hours=8)).isoformat()
+        with closing(agent_control.connect(self.db_path)) as conn:
+            with conn:
+                conn.execute(
+                    "UPDATE agent_run_events SET created_at = ? WHERE id = ?",
+                    (stale_time, running["id"]),
+                )
+
+        report = agent_control.local_inbox_report(db_path=self.db_path)
+        rendered = agent_control._format_local_inbox_report(report)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                ["memory", "inbox", "--db", str(self.db_path), "--prompt-only"]
+            )
+        run_ids = {item["run_id"] for item in report["items"]}
+
+        self.assertEqual(report["status"], "pending")
+        self.assertIn("RUN-pending-approval", run_ids)
+        self.assertIn("RUN-inbox-blocked", run_ids)
+        self.assertIn("RUN-inbox-failed", run_ids)
+        self.assertIn("RUN-inbox-stale", run_ids)
+        self.assertNotIn("RUN-resolved-approval", run_ids)
+        kinds = {item["run_id"]: item["kind"] for item in report["items"]}
+        self.assertEqual(kinds["RUN-inbox-failed"], "failed")
+        self.assertEqual(kinds["RUN-inbox-stale"], "stale_running")
+        self.assertIn("ledger note only; not authorization", rendered)
+        self.assertEqual(exit_code, 0)
+        self.assertIn("# Local Agent Inbox", stdout.getvalue())
+
     def test_accept_task_writes_back_latest_report_only(self):
         task = agent_control.create_task(
             db_path=self.db_path,

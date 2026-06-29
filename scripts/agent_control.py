@@ -7,6 +7,7 @@ import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import uuid
 from collections import deque
 from contextlib import closing
@@ -23,6 +24,7 @@ DEFAULT_DREAMS_DIR = ROOT / "data" / "agent-control" / "dreams"
 DEFAULT_DREAM_RUNS_DIR = ROOT / "data" / "agent-control" / "dream-runs"
 DEFAULT_CONTEXT_PACKS_DIR = ROOT / "data" / "agent-control" / "context-packs"
 DEFAULT_TENANT_ID = "options-chatbot"
+AGENT_RUN_LEDGER_VERSION = "agent_run_ledger_v1"
 DEFAULT_REPO_INDEX_MAX_FILES = 2000
 DEFAULT_REPO_INDEX_MAX_FILE_BYTES = 256_000
 DEFAULT_REPO_INDEX_BODY_CHARS = 12_000
@@ -324,6 +326,53 @@ PROFIT_LEARNING_ARTIFACTS = {
     "forward_candidate_throughput": "data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json",
     "profit_capture_queue": "data/profitability-lab/regular-options-profit-capture-queue/latest.json",
     "repair_burndown": "data/profitability-lab/regular-options-repair-burndown/latest.json",
+}
+AGENT_RUN_EVENT_TYPES = {
+    "started",
+    "heartbeat",
+    "tool_call",
+    "memory_read",
+    "memory_write",
+    "approval_requested",
+    "approval_recorded",
+    "artifact",
+    "blocked",
+    "failed",
+    "completed",
+    "cancelled",
+}
+AGENT_RUN_TERMINAL_EVENT_TYPES = {"blocked", "failed", "completed", "cancelled"}
+AGENT_RUN_STATUSES = {"queued", "running", "succeeded", "failed", "blocked", "cancelled"}
+AGENT_RUN_EVENT_STATUS = {
+    "started": "running",
+    "heartbeat": "running",
+    "tool_call": "running",
+    "memory_read": "running",
+    "memory_write": "running",
+    "approval_requested": "blocked",
+    "approval_recorded": "running",
+    "artifact": "running",
+    "blocked": "blocked",
+    "failed": "failed",
+    "completed": "succeeded",
+    "cancelled": "cancelled",
+}
+AGENT_RUN_REDACTED = "[redacted]"
+AGENT_RUN_SENSITIVE_KEY_RE = re.compile(
+    r"(?:token|secret|password|passwd|api[_-]?key|auth|credential|cookie|session|private[_-]?key)",
+    re.IGNORECASE,
+)
+AGENT_RUN_BLOCKER_TAXONOMY = {
+    "missing_context",
+    "test_failure",
+    "tool_failure",
+    "permission",
+    "network",
+    "ambiguous_requirement",
+    "external_dependency",
+    "safety_policy",
+    "verification_gap",
+    "user_input_required",
 }
 
 PROJECT_SEED_FILES = [
@@ -1451,6 +1500,23 @@ def init_schema(conn: sqlite3.Connection) -> None:
             delivered_at TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS agent_run_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
+            sub_tenant_id TEXT,
+            created_at TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'agent',
+            event_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            title TEXT NOT NULL DEFAULT '',
+            summary TEXT NOT NULL DEFAULT '',
+            payload_json TEXT NOT NULL DEFAULT '{}',
+            payload_sha256 TEXT NOT NULL,
+            prev_event_hash TEXT NOT NULL DEFAULT '',
+            event_hash TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS retrieval_documents (
             doc_id TEXT PRIMARY KEY,
             source_node_id TEXT NOT NULL REFERENCES graph_nodes(id) ON DELETE CASCADE,
@@ -1563,6 +1629,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_graph_nodes_scope ON graph_nodes(tenant_id, sub_tenant_id, kind);
         CREATE INDEX IF NOT EXISTS idx_graph_edges_source ON graph_edges(source_node_id, relation);
         CREATE INDEX IF NOT EXISTS idx_graph_edges_target ON graph_edges(target_node_id, relation);
+        CREATE INDEX IF NOT EXISTS idx_agent_run_events_run ON agent_run_events(run_id, id);
+        CREATE INDEX IF NOT EXISTS idx_agent_run_events_tenant_run ON agent_run_events(tenant_id, run_id, id);
+        CREATE INDEX IF NOT EXISTS idx_agent_run_events_tenant_created ON agent_run_events(tenant_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_agent_run_events_type ON agent_run_events(event_type, status);
         CREATE INDEX IF NOT EXISTS idx_retrieval_documents_source ON retrieval_documents(source_node_id, source_type);
         CREATE INDEX IF NOT EXISTS idx_startup_runs_created ON startup_runs(created_at);
         CREATE INDEX IF NOT EXISTS idx_zero_candidate_lane_date ON zero_candidate_episodes(lane, selection_date);
@@ -1686,6 +1756,742 @@ def validate_event_outbox(conn: sqlite3.Connection) -> dict[str, Any]:
         "count": len(rows),
         "issues": issues,
     }
+
+
+def _redact_agent_run_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        redacted: dict[str, Any] = {}
+        for key, child in value.items():
+            if AGENT_RUN_SENSITIVE_KEY_RE.search(str(key)):
+                redacted[key] = AGENT_RUN_REDACTED
+            else:
+                redacted[key] = _redact_agent_run_payload(child)
+        return redacted
+    if isinstance(value, list):
+        return [_redact_agent_run_payload(item) for item in value]
+    if isinstance(value, str):
+        redacted = re.sub(
+            r"(?i)\b(authorization\s*:\s*(?:bearer|basic)\s+)[^\s,;]+",
+            rf"\1{AGENT_RUN_REDACTED}",
+            value,
+        )
+        redacted = re.sub(
+            r"(?i)\b((?:api[_-]?key|openai_api_key|token|password|secret)\s*[=:]\s*)[^\s,;]+",
+            rf"\1{AGENT_RUN_REDACTED}",
+            redacted,
+        )
+        redacted = re.sub(r"\bsk-[A-Za-z0-9_-]{8,}\b", AGENT_RUN_REDACTED, redacted)
+        return redacted
+    return value
+
+
+def _redact_agent_run_text(value: str) -> str:
+    return str(_redact_agent_run_payload(value))
+
+
+def _parse_utc_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _agent_run_event_row(row: sqlite3.Row) -> dict[str, Any]:
+    item = dict(row)
+    payload_json = item.pop("payload_json") or "{}"
+    try:
+        item["payload"] = json.loads(payload_json)
+    except json.JSONDecodeError as exc:
+        item["payload"] = {}
+        item["payload_parse_error"] = str(exc)
+    return item
+
+
+def _reduce_agent_run_events(events: list[dict[str, Any]]) -> dict[str, Any]:
+    if not events:
+        return {}
+    first = events[0]
+    last = events[-1]
+    terminal = next((event for event in reversed(events) if event["event_type"] in AGENT_RUN_TERMINAL_EVENT_TYPES), None)
+    status = terminal["status"] if terminal is not None else last["status"]
+    blockers: list[dict[str, Any]] = []
+    approvals: list[dict[str, Any]] = []
+    artifacts: list[dict[str, Any]] = []
+    tool_calls = 0
+    memory_reads = 0
+    memory_writes = 0
+    for event in events:
+        payload = event.get("payload") or {}
+        if event["event_type"] in {"blocked", "failed"}:
+            blockers.append(
+                {
+                    "event_id": event["id"],
+                    "created_at": event["created_at"],
+                    "code": payload.get("blocker_code") or payload.get("reason_code") or payload.get("error_code"),
+                    "summary": event.get("summary") or payload.get("summary") or payload.get("error") or "",
+                }
+            )
+        elif event["event_type"] in {"approval_requested", "approval_recorded"}:
+            approvals.append(
+                {
+                    "event_id": event["id"],
+                    "created_at": event["created_at"],
+                    "type": event["event_type"],
+                    "summary": event.get("summary") or payload.get("summary") or "",
+                    "decision": payload.get("decision"),
+                }
+            )
+        elif event["event_type"] == "artifact":
+            artifacts.append(
+                {
+                    "event_id": event["id"],
+                    "created_at": event["created_at"],
+                    "path": payload.get("path") or payload.get("artifact"),
+                    "sha256": payload.get("sha256"),
+                    "summary": event.get("summary") or "",
+                }
+            )
+        elif event["event_type"] == "tool_call":
+            tool_calls += 1
+        elif event["event_type"] == "memory_read":
+            memory_reads += 1
+        elif event["event_type"] == "memory_write":
+            memory_writes += 1
+    return {
+        "run_id": first["run_id"],
+        "tenant_id": first["tenant_id"],
+        "sub_tenant_id": first.get("sub_tenant_id"),
+        "actor": first.get("actor"),
+        "title": first.get("title") or last.get("title") or "",
+        "status": status,
+        "started_at": first["created_at"],
+        "updated_at": last["created_at"],
+        "event_count": len(events),
+        "tool_call_count": tool_calls,
+        "memory_read_count": memory_reads,
+        "memory_write_count": memory_writes,
+        "approval_count": len(approvals),
+        "blocker_count": len(blockers),
+        "artifact_count": len(artifacts),
+        "latest_summary": last.get("summary") or "",
+        "blockers": blockers,
+        "approvals": approvals,
+        "artifacts": artifacts,
+    }
+
+
+def record_agent_run_event(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    run_id: str | None = None,
+    event_type: str,
+    title: str = "",
+    summary: str = "",
+    status: str | None = None,
+    actor: str = "agent",
+    tenant_id: str = DEFAULT_TENANT_ID,
+    sub_tenant_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if event_type not in AGENT_RUN_EVENT_TYPES:
+        raise AgentControlError(f"unsupported agent run event type: {event_type}")
+    run_status = status or AGENT_RUN_EVENT_STATUS[event_type]
+    if run_status not in AGENT_RUN_STATUSES:
+        raise AgentControlError(f"unsupported agent run status: {run_status}")
+    now = utc_now()
+    safe_payload = _redact_agent_run_payload(payload or {})
+    safe_title = _redact_agent_run_text(title)
+    safe_summary = _redact_agent_run_text(summary)
+    payload_sha256 = _text_sha256(canonical_json(safe_payload))
+    run_id = run_id or f"RUN-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:8]}"
+    with closing(connect(db_path)) as conn:
+        with conn:
+            previous = conn.execute(
+                """
+                SELECT event_hash
+                FROM agent_run_events
+                WHERE tenant_id = ? AND run_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (tenant_id, run_id),
+            ).fetchone()
+            prev_hash = previous["event_hash"] if previous is not None else ""
+            hash_payload = {
+                "run_id": run_id,
+                "tenant_id": tenant_id,
+                "sub_tenant_id": sub_tenant_id,
+                "created_at": now,
+                "actor": actor,
+                "event_type": event_type,
+                "status": run_status,
+                "title": safe_title,
+                "summary": safe_summary,
+                "payload": safe_payload,
+                "payload_sha256": payload_sha256,
+            }
+            event_hash = _text_sha256(f"{prev_hash}\n{canonical_json(hash_payload)}")
+            cursor = conn.execute(
+                """
+                INSERT INTO agent_run_events(
+                    run_id, tenant_id, sub_tenant_id, created_at, actor, event_type, status,
+                    title, summary, payload_json, payload_sha256, prev_event_hash, event_hash
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    run_id,
+                    tenant_id,
+                    sub_tenant_id,
+                    now,
+                    actor,
+                    event_type,
+                    run_status,
+                    safe_title,
+                    safe_summary,
+                    canonical_json(safe_payload),
+                    payload_sha256,
+                    prev_hash,
+                    event_hash,
+                ),
+            )
+            event_id = cursor.lastrowid
+            _record_event(
+                conn,
+                events_path=events_path,
+                event_type=f"agent_run.{event_type}",
+                payload={
+                    "run_id": run_id,
+                    "agent_run_event_id": event_id,
+                    "status": run_status,
+                    "title": safe_title,
+                    "summary": safe_summary,
+                    "ledger_version": AGENT_RUN_LEDGER_VERSION,
+                    "non_authoritative": True,
+                    "does_not_authorize_trading_or_evidence_mutation": True,
+                },
+            )
+    return {
+        "id": event_id,
+        "run_id": run_id,
+        "created_at": now,
+        "event_type": event_type,
+        "status": run_status,
+        "title": safe_title,
+        "summary": safe_summary,
+        "payload": safe_payload,
+        "payload_sha256": payload_sha256,
+        "prev_event_hash": prev_hash,
+        "event_hash": event_hash,
+        "ledger_version": AGENT_RUN_LEDGER_VERSION,
+    }
+
+
+def list_agent_runs(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    status: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    with closing(connect(db_path)) as conn:
+        run_rows = conn.execute(
+            """
+            SELECT run_id, max(id) AS latest_id
+            FROM agent_run_events
+            WHERE tenant_id = ?
+            GROUP BY run_id
+            ORDER BY latest_id DESC
+            """,
+            (tenant_id,),
+        ).fetchall()
+        candidate_run_ids = [row["run_id"] for row in run_rows]
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for run_id in candidate_run_ids:
+            events = conn.execute(
+                """
+                SELECT *
+                FROM agent_run_events
+                WHERE tenant_id = ? AND run_id = ?
+                ORDER BY id ASC
+                """,
+                (tenant_id, run_id),
+            ).fetchall()
+            grouped[run_id] = [_agent_run_event_row(row) for row in events]
+    runs = [_reduce_agent_run_events(events) for events in grouped.values()]
+    runs = [run for run in runs if run]
+    runs.sort(key=lambda run: run["updated_at"], reverse=True)
+    if status:
+        runs = [run for run in runs if run["status"] == status]
+    return {
+        "status": "ready",
+        "ledger_version": AGENT_RUN_LEDGER_VERSION,
+        "runs": runs[:limit],
+    }
+
+
+def get_agent_run(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    run_id: str,
+    tenant_id: str = DEFAULT_TENANT_ID,
+) -> dict[str, Any]:
+    with closing(connect(db_path)) as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM agent_run_events
+            WHERE tenant_id = ? AND run_id = ?
+            ORDER BY id ASC
+            """,
+            (tenant_id, run_id),
+        ).fetchall()
+    events = [_agent_run_event_row(row) for row in rows]
+    return {
+        "status": "ready" if events else "missing",
+        "ledger_version": AGENT_RUN_LEDGER_VERSION,
+        "run": _reduce_agent_run_events(events) if events else None,
+        "events": events,
+    }
+
+
+def validate_agent_run_ledger(conn: sqlite3.Connection, *, tenant_id: str = DEFAULT_TENANT_ID) -> dict[str, Any]:
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM agent_run_events
+        WHERE tenant_id = ?
+        ORDER BY run_id ASC, id ASC
+        """,
+        (tenant_id,),
+    ).fetchall()
+    issues: list[dict[str, Any]] = []
+    previous_by_run: dict[str, str] = {}
+    for row in rows:
+        try:
+            payload = json.loads(row["payload_json"] or "{}")
+        except json.JSONDecodeError:
+            issues.append({"id": row["id"], "run_id": row["run_id"], "issue": "payload_json is not valid JSON"})
+            payload = {}
+        expected_prev = previous_by_run.get(row["run_id"], "")
+        if row["prev_event_hash"] != expected_prev:
+            issues.append({"id": row["id"], "run_id": row["run_id"], "issue": "prev_event_hash mismatch"})
+        payload_sha = _text_sha256(canonical_json(payload))
+        if row["payload_sha256"] != payload_sha:
+            issues.append({"id": row["id"], "run_id": row["run_id"], "issue": "payload_sha256 mismatch"})
+        hash_payload = {
+            "run_id": row["run_id"],
+            "tenant_id": row["tenant_id"],
+            "sub_tenant_id": row["sub_tenant_id"],
+            "created_at": row["created_at"],
+            "actor": row["actor"],
+            "event_type": row["event_type"],
+            "status": row["status"],
+            "title": row["title"],
+            "summary": row["summary"],
+            "payload": payload,
+            "payload_sha256": row["payload_sha256"],
+        }
+        expected_hash = _text_sha256(f"{row['prev_event_hash']}\n{canonical_json(hash_payload)}")
+        if row["event_hash"] != expected_hash:
+            issues.append({"id": row["id"], "run_id": row["run_id"], "issue": "event_hash mismatch"})
+        previous_by_run[row["run_id"]] = row["event_hash"]
+    return {"status": "pass" if not issues else "issues", "count": len(rows), "issues": issues}
+
+
+def agent_run_ledger_report(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    status: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    runs = list_agent_runs(db_path=db_path, tenant_id=tenant_id, status=status, limit=limit)
+    with closing(connect(db_path)) as conn:
+        audit = validate_agent_run_ledger(conn, tenant_id=tenant_id)
+    return {
+        **runs,
+        "audit": audit,
+        "status": "pass" if audit["status"] == "pass" else "issues",
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+    }
+
+
+def _format_agent_run_ledger(result: dict[str, Any]) -> str:
+    lines = [
+        "# Agent Run Ledger",
+        f"Status: {result.get('status')}",
+        f"Version: {result.get('ledger_version')}",
+        f"Policy: {result.get('policy_banner') or MEMORY_NON_AUTHORIZATION_BANNER}",
+        f"Audit: {(result.get('audit') or {}).get('status', 'not_run')}",
+        "",
+        "# Runs",
+    ]
+    for run in result.get("runs", []):
+        lines.append(
+            f"- {run['run_id']} status={run['status']} events={run['event_count']} "
+            f"updated={run['updated_at']} title={run.get('title') or '(untitled)'}"
+        )
+        if run.get("latest_summary"):
+            lines.append(f"  summary: {_truncate(run['latest_summary'], 180)}")
+        if run.get("blockers"):
+            blocker = run["blockers"][-1]
+            lines.append(
+                f"  blocker: {blocker.get('code') or 'unspecified'} - "
+                f"{_truncate(blocker.get('summary') or '', 160)}"
+            )
+        if run.get("approvals"):
+            lines.append(f"  approvals: {len(run['approvals'])} (ledger notes only; not authorization)")
+    if not result.get("runs"):
+        lines.append("- No runs recorded.")
+    lines.extend(
+        [
+            "",
+            "# Recommended Commands",
+            "- `npm run memory:run-ledger`",
+            "- `npm run agent:control -- run event --event-type started --title \"...\" --summary \"...\" --prompt-only`",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def daily_operator_brief(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    runs_dir: Path = DEFAULT_DREAM_RUNS_DIR,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    since_hours: int = 24,
+    stale_hours: int = 6,
+    limit: int = 20,
+) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=since_hours)
+    stale_cutoff = now - timedelta(hours=stale_hours)
+    ledger = agent_run_ledger_report(db_path=db_path, tenant_id=tenant_id, limit=max(limit * 5, limit))
+    dashboard = operator_dashboard(db_path=db_path, runs_dir=runs_dir, tenant_id=tenant_id, limit=min(max(limit, 4), 12))
+    priorities = research_priority_report(db_path=db_path, tenant_id=tenant_id, limit=min(max(limit, 4), 12))
+
+    recent_runs: list[dict[str, Any]] = []
+    attention_runs: list[dict[str, Any]] = []
+    stale_running_runs: list[dict[str, Any]] = []
+    pending_approvals: list[dict[str, Any]] = []
+    for run in ledger.get("runs", []):
+        updated_at = _parse_utc_timestamp(run.get("updated_at"))
+        if updated_at is not None and updated_at >= cutoff:
+            recent_runs.append(run)
+        if run.get("status") in {"failed", "blocked"}:
+            attention_runs.append(run)
+        if run.get("status") == "running" and updated_at is not None and updated_at < stale_cutoff:
+            stale_running_runs.append(run)
+        approval_events = run.get("approvals") or []
+        requested = [event for event in approval_events if event.get("type") == "approval_requested"]
+        latest_recorded_id = max(
+            (int(event.get("event_id") or 0) for event in approval_events if event.get("type") == "approval_recorded"),
+            default=0,
+        )
+        pending_requested = [
+            event for event in requested if int(event.get("event_id") or 0) > latest_recorded_id
+        ]
+        if pending_requested:
+            pending_approvals.append(
+                {
+                    "run_id": run["run_id"],
+                    "summary": pending_requested[-1].get("summary") or run.get("latest_summary") or "",
+                    "created_at": pending_requested[-1].get("created_at"),
+                    "non_authoritative": True,
+                }
+            )
+
+    brief_status = "needs_attention" if (
+        ledger.get("status") != "pass"
+        or dashboard.get("status") != "pass"
+        or attention_runs
+        or stale_running_runs
+        or pending_approvals
+    ) else "pass"
+    return {
+        "status": brief_status,
+        "tenant_id": tenant_id,
+        "generated_at": utc_now(),
+        "since_hours": since_hours,
+        "stale_hours": stale_hours,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "ledger_status": ledger.get("status"),
+        "ledger_audit": ledger.get("audit"),
+        "dashboard_status": dashboard.get("status"),
+        "dashboard_checks": dashboard.get("checks", []),
+        "recent_runs": recent_runs[:limit],
+        "attention_runs": attention_runs[:limit],
+        "stale_running_runs": stale_running_runs[:limit],
+        "pending_approvals": pending_approvals[:limit],
+        "research_priorities": {
+            "status": priorities.get("status"),
+            "zero_candidate_priorities": priorities.get("zero_candidate_priorities", [])[: min(limit, 5)],
+            "hypothesis_priorities": priorities.get("hypothesis_priorities", [])[: min(limit, 5)],
+        },
+        "recommended_commands": [
+            "npm run memory:run-ledger",
+            "npm run memory:operator-dashboard",
+            "npm run memory:research-priorities",
+            "npm run memory:daily-brief",
+        ],
+    }
+
+
+def _format_daily_operator_brief(result: dict[str, Any]) -> str:
+    lines = [
+        "# Daily Operator Brief",
+        f"Status: {result.get('status')}",
+        f"Generated: {result.get('generated_at')}",
+        f"Window: {result.get('since_hours')}h recent; stale running after {result.get('stale_hours')}h",
+        f"Policy: {result.get('policy_banner')}",
+        "",
+        "# Health",
+        f"- ledger: {result.get('ledger_status')} audit={(result.get('ledger_audit') or {}).get('status', 'not_run')}",
+        f"- dashboard: {result.get('dashboard_status')}",
+        "",
+        "# Attention Runs",
+    ]
+    if not result.get("attention_runs"):
+        lines.append("- None.")
+    for run in result.get("attention_runs", []):
+        blocker = (run.get("blockers") or [{}])[-1]
+        lines.append(
+            f"- {run['run_id']} status={run['status']} updated={run['updated_at']} "
+            f"blocker={blocker.get('code') or 'unspecified'}"
+        )
+        if blocker.get("summary"):
+            lines.append(f"  summary: {_truncate(blocker['summary'], 180)}")
+    lines.append("")
+    lines.append("# Stale Running Runs")
+    if not result.get("stale_running_runs"):
+        lines.append("- None.")
+    for run in result.get("stale_running_runs", []):
+        lines.append(f"- {run['run_id']} updated={run['updated_at']} title={run.get('title') or '(untitled)'}")
+    lines.append("")
+    lines.append("# Pending Approval Notes")
+    if not result.get("pending_approvals"):
+        lines.append("- None.")
+    for approval in result.get("pending_approvals", []):
+        lines.append(
+            f"- {approval['run_id']} created={approval.get('created_at')} "
+            f"(ledger note only; not authorization)"
+        )
+        if approval.get("summary"):
+            lines.append(f"  summary: {_truncate(approval['summary'], 180)}")
+    lines.append("")
+    lines.append("# Recent Runs")
+    if not result.get("recent_runs"):
+        lines.append("- None.")
+    for run in result.get("recent_runs", []):
+        lines.append(f"- {run['run_id']} status={run['status']} events={run['event_count']} updated={run['updated_at']}")
+    lines.append("")
+    lines.append("# Research Priorities")
+    research = result.get("research_priorities") or {}
+    zero_priorities = research.get("zero_candidate_priorities") or []
+    hypothesis_priorities = research.get("hypothesis_priorities") or []
+    if not zero_priorities and not hypothesis_priorities:
+        lines.append("- None.")
+    for item in zero_priorities:
+        lines.append(f"- zero-candidate {item['lane']} {item['selection_date']} drops={item['total_drops']}")
+    for item in hypothesis_priorities:
+        lines.append(f"- hypothesis {item['id']} score={item['priority_score']} {item['title']}")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def blocker_autopsy_report(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    min_count: int = 2,
+    limit: int = 20,
+) -> dict[str, Any]:
+    ledger = agent_run_ledger_report(db_path=db_path, tenant_id=tenant_id, limit=max(limit * 20, limit))
+    groups: dict[str, dict[str, Any]] = {}
+    for run in ledger.get("runs", []):
+        for blocker in run.get("blockers") or []:
+            code = blocker.get("code") or "unspecified"
+            group = groups.setdefault(
+                code,
+                {
+                    "code": code,
+                    "count": 0,
+                    "run_ids": [],
+                    "first_seen": blocker.get("created_at"),
+                    "last_seen": blocker.get("created_at"),
+                    "latest_summary": "",
+                    "taxonomy": code if code in AGENT_RUN_BLOCKER_TAXONOMY else "uncategorized",
+                    "safe_next_step": "capture exact blocker evidence and rerun read-only diagnostics",
+                },
+            )
+            group["count"] += 1
+            if run["run_id"] not in group["run_ids"]:
+                group["run_ids"].append(run["run_id"])
+            created_at = blocker.get("created_at")
+            if created_at and (not group.get("first_seen") or created_at < group["first_seen"]):
+                group["first_seen"] = created_at
+            if created_at and (not group.get("last_seen") or created_at > group["last_seen"]):
+                group["last_seen"] = created_at
+                group["latest_summary"] = blocker.get("summary") or ""
+    repeated = [group for group in groups.values() if int(group["count"]) >= min_count]
+    repeated.sort(key=lambda item: (-int(item["count"]), str(item.get("last_seen") or "")))
+    latest = sorted(groups.values(), key=lambda item: str(item.get("last_seen") or ""), reverse=True)
+    return {
+        "status": "repeated_blockers" if repeated else ("clear" if ledger.get("status") == "pass" else "issues"),
+        "tenant_id": tenant_id,
+        "min_count": min_count,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "ledger_status": ledger.get("status"),
+        "ledger_audit": ledger.get("audit"),
+        "repeated_blockers": repeated[:limit],
+        "latest_blockers": latest[:limit],
+        "recommended_commands": [
+            "npm run memory:blocker-autopsy",
+            "npm run memory:run-ledger",
+            "npm run memory:daily-brief",
+        ],
+    }
+
+
+def _format_blocker_autopsy_report(result: dict[str, Any]) -> str:
+    lines = [
+        "# Blocker Autopsy",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_banner')}",
+        f"Ledger: {result.get('ledger_status')} audit={(result.get('ledger_audit') or {}).get('status', 'not_run')}",
+        "",
+        "# Repeated Blockers",
+    ]
+    if not result.get("repeated_blockers"):
+        lines.append("- None.")
+    for item in result.get("repeated_blockers", []):
+        lines.append(
+            f"- {item['code']} count={item['count']} first={item.get('first_seen')} last={item.get('last_seen')}"
+        )
+        lines.append(f"  runs: {', '.join(item.get('run_ids', [])[:8])}")
+        if item.get("latest_summary"):
+            lines.append(f"  latest: {_truncate(item['latest_summary'], 180)}")
+        lines.append(f"  safe next step: {item.get('safe_next_step')}")
+    lines.append("")
+    lines.append("# Latest Blockers")
+    if not result.get("latest_blockers"):
+        lines.append("- None.")
+    for item in result.get("latest_blockers", []):
+        lines.append(f"- {item['code']} count={item['count']} last={item.get('last_seen')}")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def local_inbox_report(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    stale_hours: int = 6,
+    limit: int = 20,
+) -> dict[str, Any]:
+    ledger = agent_run_ledger_report(db_path=db_path, tenant_id=tenant_id, limit=max(limit * 20, limit))
+    stale_cutoff = datetime.now(timezone.utc) - timedelta(hours=stale_hours)
+    items: list[dict[str, Any]] = []
+    for run in ledger.get("runs", []):
+        approval_events = run.get("approvals") or []
+        latest_recorded_id = max(
+            (int(event.get("event_id") or 0) for event in approval_events if event.get("type") == "approval_recorded"),
+            default=0,
+        )
+        pending_requested = [
+            event
+            for event in approval_events
+            if event.get("type") == "approval_requested" and int(event.get("event_id") or 0) > latest_recorded_id
+        ]
+        for approval in pending_requested:
+            items.append(
+                {
+                    "kind": "approval_requested",
+                    "severity": "needs_operator",
+                    "run_id": run["run_id"],
+                    "created_at": approval.get("created_at"),
+                    "summary": approval.get("summary") or run.get("latest_summary") or "",
+                    "non_authoritative": True,
+                }
+            )
+        if run.get("status") in {"blocked", "failed"}:
+            blocker = (run.get("blockers") or [{}])[-1]
+            items.append(
+                {
+                    "kind": run.get("status"),
+                    "severity": "attention",
+                    "run_id": run["run_id"],
+                    "created_at": blocker.get("created_at") or run.get("updated_at"),
+                    "summary": blocker.get("summary") or run.get("latest_summary") or "",
+                    "blocker_code": blocker.get("code"),
+                    "non_authoritative": True,
+                }
+            )
+        updated_at = _parse_utc_timestamp(run.get("updated_at"))
+        if run.get("status") == "running" and updated_at is not None and updated_at < stale_cutoff:
+            items.append(
+                {
+                    "kind": "stale_running",
+                    "severity": "attention",
+                    "run_id": run["run_id"],
+                    "created_at": run.get("updated_at"),
+                    "summary": run.get("latest_summary") or run.get("title") or "",
+                    "non_authoritative": True,
+                }
+            )
+    items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+    return {
+        "status": "pending" if items else ("pass" if ledger.get("status") == "pass" else "issues"),
+        "tenant_id": tenant_id,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "ledger_status": ledger.get("status"),
+        "ledger_audit": ledger.get("audit"),
+        "items": items[:limit],
+        "recommended_commands": [
+            "npm run memory:inbox",
+            "npm run memory:daily-brief",
+            "npm run memory:run-ledger",
+        ],
+    }
+
+
+def _format_local_inbox_report(result: dict[str, Any]) -> str:
+    lines = [
+        "# Local Agent Inbox",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_banner')}",
+        f"Ledger: {result.get('ledger_status')} audit={(result.get('ledger_audit') or {}).get('status', 'not_run')}",
+        "",
+        "# Items",
+    ]
+    if not result.get("items"):
+        lines.append("- None.")
+    for item in result.get("items", []):
+        code = f" blocker={item.get('blocker_code')}" if item.get("blocker_code") else ""
+        lines.append(
+            f"- {item['kind']} run={item['run_id']} severity={item['severity']}{code} "
+            f"created={item.get('created_at')} (ledger note only; not authorization)"
+        )
+        if item.get("summary"):
+            lines.append(f"  summary: {_truncate(item['summary'], 180)}")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
 
 
 def _graph_node_search_text(node: dict[str, Any], metadata: dict[str, Any]) -> str:
@@ -5297,6 +6103,201 @@ def memory_eval(
     }
 
 
+def _write_agent_eval_fixture_repo(repo_root: Path) -> None:
+    for relative_path in [
+        "AGENTS.md",
+        "README.md",
+        "docs/index.md",
+        "docs/PROJECT_CONTEXT.md",
+        "docs/DECISIONS.md",
+        "docs/NEXT_STEPS.md",
+        "docs/agent-control-plane.md",
+        "docs/agent-memory-graph.md",
+        "docs/project-operator-gateboard.md",
+        "package.json",
+    ]:
+        path = repo_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"# {relative_path}\nagent eval fixture\n", encoding="utf-8")
+    graph_path = repo_root / "data" / "contracts" / "agent-memory-graph.json"
+    graph_path.parent.mkdir(parents=True, exist_ok=True)
+    graph_path.write_text(canonical_json({"runtime_use": False, "nodes": [], "edges": []}), encoding="utf-8")
+    gateboard_path = repo_root / "data" / "forward-tracking" / "project_operator_gateboard_latest.json"
+    gateboard_path.parent.mkdir(parents=True, exist_ok=True)
+    gateboard_path.write_text(
+        canonical_json(
+            {
+                "generated_at_utc": "2026-06-29T00:00:00Z",
+                "runtime_use": False,
+                "overall_status": "safe_blocked_no_live_release",
+                "primary_message": "Agent eval fixture blocker.",
+                "no_chase_manifest": {
+                    "status": "no_chase_active",
+                    "live_policy_change": False,
+                    "prohibited_actions": [],
+                    "reasons": [
+                        {
+                            "reason": "agent_eval_fixture_blocker",
+                            "severity": "block_new_scanner_origin_entries",
+                            "evidence": {"status": "fixture"},
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def agent_eval_harness(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    repo_root: Path = ROOT,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    seed: bool = True,
+) -> dict[str, Any]:
+    memory_eval_result = memory_eval(
+        db_path=db_path,
+        events_path=events_path,
+        repo_root=repo_root,
+        tenant_id=tenant_id,
+        seed=seed,
+    )
+    live_ledger = agent_run_ledger_report(db_path=db_path, tenant_id=tenant_id, limit=20)
+    self_checks: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="agent-eval-") as tmp_name:
+        tmp_root = Path(tmp_name)
+        fixture_repo = tmp_root / "repo"
+        fixture_db = tmp_root / "agent_control.db"
+        fixture_events = tmp_root / "events.jsonl"
+        fixture_runs = tmp_root / "dream-runs"
+        _write_agent_eval_fixture_repo(fixture_repo)
+        seed_project_memory(
+            db_path=fixture_db,
+            events_path=fixture_events,
+            repo_root=fixture_repo,
+            tenant_id=tenant_id,
+        )
+        started = record_agent_run_event(
+            db_path=fixture_db,
+            events_path=fixture_events,
+            run_id="RUN-agent-eval",
+            event_type="started",
+            title="Eval token sk-agentEvalSecret123",
+            summary="Eval run started.",
+            tenant_id=tenant_id,
+            payload={"api_key": "secret"},
+        )
+        record_agent_run_event(
+            db_path=fixture_db,
+            events_path=fixture_events,
+            run_id="RUN-agent-eval",
+            event_type="approval_requested",
+            summary="Eval pending approval note.",
+            tenant_id=tenant_id,
+            payload={"approval_scope": "eval_only"},
+        )
+        record_agent_run_event(
+            db_path=fixture_db,
+            events_path=fixture_events,
+            run_id="RUN-agent-eval",
+            event_type="blocked",
+            summary="Eval blocked self-test.",
+            tenant_id=tenant_id,
+            payload={"blocker_code": "agent_eval_fixture"},
+        )
+        fixture_ledger = agent_run_ledger_report(db_path=fixture_db, tenant_id=tenant_id)
+        fixture_brief = daily_operator_brief(
+            db_path=fixture_db,
+            runs_dir=fixture_runs,
+            tenant_id=tenant_id,
+            since_hours=24,
+            limit=10,
+        )
+        self_checks.extend(
+            [
+                {
+                    "name": "ledger self-test audit passes",
+                    "pass": fixture_ledger.get("status") == "pass",
+                    "detail": fixture_ledger.get("status"),
+                },
+                {
+                    "name": "ledger redacts secrets before storage",
+                    "pass": AGENT_RUN_REDACTED in started["title"] and started["payload"]["api_key"] == AGENT_RUN_REDACTED,
+                    "detail": started["title"],
+                },
+                {
+                    "name": "daily brief surfaces blocked run",
+                    "pass": any(run["run_id"] == "RUN-agent-eval" for run in fixture_brief.get("attention_runs", [])),
+                    "detail": fixture_brief.get("status"),
+                },
+                {
+                    "name": "daily brief keeps approval notes non-authoritative",
+                    "pass": any(
+                        approval.get("run_id") == "RUN-agent-eval" and approval.get("non_authoritative")
+                        for approval in fixture_brief.get("pending_approvals", [])
+                    ),
+                    "detail": str(len(fixture_brief.get("pending_approvals", []))),
+                },
+            ]
+        )
+    checks = [
+        {
+            "name": "existing memory eval passes",
+            "pass": memory_eval_result.get("status") == "pass",
+            "detail": memory_eval_result.get("status"),
+        },
+        {
+            "name": "live agent run ledger audit passes",
+            "pass": live_ledger.get("status") == "pass",
+            "detail": (live_ledger.get("audit") or {}).get("status"),
+        },
+        {
+            "name": "non-authorization policy present",
+            "pass": any(
+                check.get("name") == "context carries non-authorization policy" and check.get("pass")
+                for check in memory_eval_result.get("checks", [])
+            ),
+            "detail": MEMORY_POLICY_VERSION,
+        },
+        *self_checks,
+    ]
+    return {
+        "status": "pass" if all(check["pass"] for check in checks) else "fail",
+        "tenant_id": tenant_id,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "checks": checks,
+        "memory_eval": memory_eval_result,
+        "agent_run_ledger": live_ledger,
+        "recommended_commands": [
+            "npm run memory:agent-eval",
+            "npm run memory:daily-brief",
+            "npm run memory:run-ledger",
+            "npm run verify:agent-control",
+        ],
+    }
+
+
+def _format_agent_eval_harness(result: dict[str, Any]) -> str:
+    lines = [
+        "# Agent Eval Harness",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_banner')}",
+        "",
+        "# Checks",
+    ]
+    for check in result.get("checks", []):
+        marker = "PASS" if check.get("pass") else "FAIL"
+        detail = f" - {check.get('detail')}" if check.get("detail") else ""
+        lines.append(f"- {marker}: {check.get('name')}{detail}")
+    lines.append("")
+    lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
 def operator_dashboard(
     *,
     db_path: Path = DEFAULT_DB_PATH,
@@ -6604,12 +7605,17 @@ def build_parser() -> argparse.ArgumentParser:
   npm run memory:dream-run
   npm run memory:dream-audit
   npm run memory:operator-dashboard
+  npm run memory:run-ledger
+  npm run memory:daily-brief
+  npm run memory:blocker-autopsy
+  npm run memory:inbox
   npm run memory:research-priorities
   npm run memory:profit-learning-sync
   npm run memory:profit-learning-audit
   npm run memory:review-dreams
   npm run memory:dreams
   npm run memory:eval
+  npm run memory:agent-eval
   npm run verify:memory
   npm run agent:control -- writeback <task-id> --summary "Accepted after review."
 """,
@@ -6628,6 +7634,38 @@ def build_parser() -> argparse.ArgumentParser:
     dreams_alias.add_argument("--limit", type=int, default=12)
     dreams_alias.add_argument("--json", action="store_true")
     dreams_alias.set_defaults(func=_cmd_dreams_alias)
+
+    run = subparsers.add_parser("run", help="Record and inspect append-only agent run ledger events.")
+    run_sub = run.add_subparsers(dest="run_command", required=True)
+    run_event = run_sub.add_parser("event", help="Append an agent run event.")
+    _add_common(run_event)
+    run_event.add_argument("--run-id")
+    run_event.add_argument("--event-type", required=True, choices=sorted(AGENT_RUN_EVENT_TYPES))
+    run_event.add_argument("--title", default="")
+    run_event.add_argument("--summary", default="")
+    run_event.add_argument("--status", choices=sorted(AGENT_RUN_STATUSES))
+    run_event.add_argument("--actor", default="agent")
+    run_event.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    run_event.add_argument("--sub-tenant-id")
+    run_event.add_argument("--payload", help="JSON object payload; sensitive keys are redacted before storage.")
+    run_event.add_argument("--prompt-only", action="store_true")
+    run_event.set_defaults(func=_cmd_run_event)
+
+    run_list = run_sub.add_parser("list", help="List reduced agent runs.")
+    run_list.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    run_list.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    run_list.add_argument("--status", choices=sorted(AGENT_RUN_STATUSES))
+    run_list.add_argument("--limit", type=int, default=20)
+    run_list.add_argument("--prompt-only", action="store_true")
+    run_list.add_argument("--json", action="store_true")
+    run_list.set_defaults(func=_cmd_run_list)
+
+    run_show = run_sub.add_parser("show", help="Show one agent run with events.")
+    run_show.add_argument("run_id")
+    run_show.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    run_show.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    run_show.add_argument("--json", action="store_true")
+    run_show.set_defaults(func=_cmd_run_show)
 
     writeback = subparsers.add_parser(
         "writeback",
@@ -6907,6 +7945,40 @@ def build_parser() -> argparse.ArgumentParser:
 
     memory = subparsers.add_parser("memory", help="Remember, supersede, audit, and evaluate operating memory.")
     memory_sub = memory.add_subparsers(dest="memory_command", required=True)
+    memory_run_ledger = memory_sub.add_parser("run-ledger", help="Prompt-ready append-only agent run ledger report.")
+    memory_run_ledger.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_run_ledger.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_run_ledger.add_argument("--status", choices=sorted(AGENT_RUN_STATUSES))
+    memory_run_ledger.add_argument("--limit", type=int, default=20)
+    memory_run_ledger.add_argument("--json", action="store_true")
+    memory_run_ledger.add_argument("--prompt-only", action="store_true")
+    memory_run_ledger.set_defaults(func=_cmd_memory_run_ledger)
+    memory_daily_brief = memory_sub.add_parser("daily-brief", help="Prompt-ready daily operator brief from memory and run ledger state.")
+    memory_daily_brief.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_daily_brief.add_argument("--runs-dir", type=Path, default=DEFAULT_DREAM_RUNS_DIR)
+    memory_daily_brief.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_daily_brief.add_argument("--since-hours", type=int, default=24)
+    memory_daily_brief.add_argument("--stale-hours", type=int, default=6)
+    memory_daily_brief.add_argument("--limit", type=int, default=20)
+    memory_daily_brief.add_argument("--json", action="store_true")
+    memory_daily_brief.add_argument("--prompt-only", action="store_true")
+    memory_daily_brief.set_defaults(func=_cmd_memory_daily_brief)
+    memory_blocker_autopsy = memory_sub.add_parser("blocker-autopsy", help="Group repeated failed/blocked agent run blockers.")
+    memory_blocker_autopsy.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_blocker_autopsy.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_blocker_autopsy.add_argument("--min-count", type=int, default=2)
+    memory_blocker_autopsy.add_argument("--limit", type=int, default=20)
+    memory_blocker_autopsy.add_argument("--json", action="store_true")
+    memory_blocker_autopsy.add_argument("--prompt-only", action="store_true")
+    memory_blocker_autopsy.set_defaults(func=_cmd_memory_blocker_autopsy)
+    memory_inbox = memory_sub.add_parser("inbox", help="Show local pending agent inbox items from the run ledger.")
+    memory_inbox.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_inbox.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_inbox.add_argument("--stale-hours", type=int, default=6)
+    memory_inbox.add_argument("--limit", type=int, default=20)
+    memory_inbox.add_argument("--json", action="store_true")
+    memory_inbox.add_argument("--prompt-only", action="store_true")
+    memory_inbox.set_defaults(func=_cmd_memory_inbox)
     memory_remember = memory_sub.add_parser("remember", help="Store typed operating memory.")
     _add_common(memory_remember)
     memory_remember.add_argument("--type", required=True, choices=sorted(OPERATING_MEMORY_TYPES))
@@ -6955,6 +8027,14 @@ def build_parser() -> argparse.ArgumentParser:
     memory_eval_parser.add_argument("--require-checkpoint", action="store_true")
     memory_eval_parser.add_argument("--prompt-only", action="store_true")
     memory_eval_parser.set_defaults(func=_cmd_memory_eval)
+
+    memory_agent_eval = memory_sub.add_parser("agent-eval", help="Run deterministic agent control-plane eval harness.")
+    _add_common(memory_agent_eval)
+    memory_agent_eval.add_argument("--repo-root", type=Path, default=ROOT)
+    memory_agent_eval.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_agent_eval.add_argument("--skip-seed", action="store_true")
+    memory_agent_eval.add_argument("--prompt-only", action="store_true")
+    memory_agent_eval.set_defaults(func=_cmd_memory_agent_eval)
 
     memory_operator_dashboard = memory_sub.add_parser(
         "operator-dashboard",
@@ -7425,6 +8505,115 @@ def _cmd_dreams_alias(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_run_event(args: argparse.Namespace) -> int:
+    result = record_agent_run_event(
+        db_path=args.db,
+        events_path=args.events,
+        run_id=args.run_id,
+        event_type=args.event_type,
+        title=args.title,
+        summary=args.summary,
+        status=args.status,
+        actor=args.actor,
+        tenant_id=args.tenant_id,
+        sub_tenant_id=args.sub_tenant_id,
+        payload=parse_json_object(args.payload, field_name="payload"),
+    )
+    if args.prompt_only:
+        print(
+            "\n".join(
+                [
+                    "# Agent Run Event",
+                    f"Run: {result['run_id']}",
+                    f"Event: {result['event_type']}",
+                    f"Status: {result['status']}",
+                    f"Hash: {result['event_hash']}",
+                ]
+            )
+        )
+        return 0
+    _emit(result, as_json=args.json)
+    return 0
+
+
+def _cmd_run_list(args: argparse.Namespace) -> int:
+    result = agent_run_ledger_report(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        status=args.status,
+        limit=args.limit,
+    )
+    if args.prompt_only:
+        print(_format_agent_run_ledger(result))
+        return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_run_show(args: argparse.Namespace) -> int:
+    result = get_agent_run(db_path=args.db, run_id=args.run_id, tenant_id=args.tenant_id)
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_memory_run_ledger(args: argparse.Namespace) -> int:
+    result = agent_run_ledger_report(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        status=args.status,
+        limit=args.limit,
+    )
+    if args.prompt_only or not args.json:
+        print(_format_agent_run_ledger(result))
+        return 0
+    _emit(result, as_json=True)
+    return 0
+
+
+def _cmd_memory_daily_brief(args: argparse.Namespace) -> int:
+    result = daily_operator_brief(
+        db_path=args.db,
+        runs_dir=args.runs_dir,
+        tenant_id=args.tenant_id,
+        since_hours=args.since_hours,
+        stale_hours=args.stale_hours,
+        limit=args.limit,
+    )
+    if args.prompt_only or not args.json:
+        print(_format_daily_operator_brief(result))
+        return 0
+    _emit(result, as_json=True)
+    return 0
+
+
+def _cmd_memory_blocker_autopsy(args: argparse.Namespace) -> int:
+    result = blocker_autopsy_report(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        min_count=args.min_count,
+        limit=args.limit,
+    )
+    if args.prompt_only or not args.json:
+        print(_format_blocker_autopsy_report(result))
+        return 0
+    _emit(result, as_json=True)
+    return 0
+
+
+def _cmd_memory_inbox(args: argparse.Namespace) -> int:
+    result = local_inbox_report(
+        db_path=args.db,
+        tenant_id=args.tenant_id,
+        stale_hours=args.stale_hours,
+        limit=args.limit,
+    )
+    if args.prompt_only or not args.json:
+        print(_format_local_inbox_report(result))
+        return 0
+    _emit(result, as_json=True)
+    return 0
+
+
 def _cmd_memory_remember(args: argparse.Namespace) -> int:
     result = remember_operating_memory(
         db_path=args.db,
@@ -7491,6 +8680,21 @@ def _cmd_memory_eval(args: argparse.Namespace) -> int:
     )
     if args.prompt_only:
         print(_format_memory_eval(result))
+        return 0 if result["status"] == "pass" else 1
+    _emit(result, as_json=True if args.json else False)
+    return 0 if result["status"] == "pass" else 1
+
+
+def _cmd_memory_agent_eval(args: argparse.Namespace) -> int:
+    result = agent_eval_harness(
+        db_path=args.db,
+        events_path=args.events,
+        repo_root=args.repo_root,
+        tenant_id=args.tenant_id,
+        seed=not args.skip_seed,
+    )
+    if args.prompt_only:
+        print(_format_agent_eval_harness(result))
         return 0 if result["status"] == "pass" else 1
     _emit(result, as_json=True if args.json else False)
     return 0 if result["status"] == "pass" else 1

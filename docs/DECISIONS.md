@@ -1,5 +1,21 @@
 # Decisions
 
+## 2026-06-29: Frozen Historical Candidate-Generation Audit Chain Is The 20+4 Prerequisite
+
+The 4-month historical simulated-forward audit must consume an exact frozen daily candidate/no-pick/blocker source surface, not broad selected historical rows or quote-depth-only artifacts.
+
+Durable decision: the end-to-end chain is adapter -> frozen daily decisions -> reusable entrypoint -> frozen source surface -> frozen engine -> historical simulated-forward audit. The package alias `npm run options:research:13-symbol-frozen-candidate-generation-entrypoint` includes the script-required `--no-write`, and `npm run options:audit:historical-simulated-forward` defaults to the frozen source-surface latest artifact. Current generated readbacks are correctly blocked: `6,916` frozen lane/symbol/date rows are emitted, `0/24` candidate-generation months are covered, selected candidates are `0`, and the 20+4 audit has `0` train rows and `0` audit rows because point-in-time historical scanner inputs, entry underlying price surface, option-chain selection surface, lane-specific feature inputs, and earnings calendar source are missing.
+
+This is the authoritative prerequisite chain for historical candidate-generation coverage. It does not append cohort rows, import quotes, mutate evidence stores, change scanner or strategy logic, change stops/sizing/proof bars, enable live validation, enable auto-track, submit broker orders, consume protected holdout, promote lanes, or treat historical rows as forward proof.
+
+## 2026-06-29: Agent Run Ledger And Inbox Are Observability, Not Authority
+
+Autonomous agent work needs durable run observability before adding more unattended loops. The local memory graph should tell future agents what ran, what blocked, what needs operator attention, and whether the control-plane itself is healthy, without creating a new trading or evidence authority surface.
+
+Durable decision: `scripts/agent_control.py` now records tenant-scoped agent run events in `agent_run_events` with a per-run hash chain, redacted payload/title/summary storage, malformed-payload audit handling, and prompt-ready readback through `npm run memory:run-ledger`. `npm run memory:daily-brief` combines ledger state, operator-dashboard health, and research-priority readbacks. `npm run memory:agent-eval` runs the existing memory eval plus temp-backed self-tests for ledger redaction, blocked-run surfacing, pending approval notes, and live ledger audit failure detection. `npm run memory:blocker-autopsy` groups repeated blocked/failed run reasons, and `npm run memory:inbox` lists pending approval notes, blockers/failures, and stale running runs.
+
+Ledger approval events are orchestration notes only. These surfaces do not authorize cohort append, quote import, evidence-store mutation, scanner/strategy changes, proof-bar changes, live validation, auto-track, broker action, stop/sizing changes, promotion, protected-holdout use, or treating historical/generated rows as forward proof.
+
 ## 2026-06-29: Profit-Learning Memory Sync Is Research-Only Provenance
 
 Generated profitability readbacks can improve future agent routing only when they are stored as bounded research provenance, not as trading authority or proof.

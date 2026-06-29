@@ -6,6 +6,7 @@ The runtime implementation is `scripts/agent_control.py`. It stores local operat
 
 - `agent_control.db`: SQLite task/message/graph ledger using WAL mode
 - `events.jsonl`: append-only event mirror for agent-readable audit trails
+- `agent_run_events`: append-only-ish SQLite ledger for agent/subagent run events, hash-chain audit, blocked/failed run summaries, approval notes, and local inbox views
 - `sessions.jsonl`: compact session transcript provenance records
 - `context-packs/*.json`: generated context-pack manifests with node IDs, retrieval explanations, policy banner, and gateboard hash
 - `dream-runs/latest.*`: automated dreaming audit output
@@ -32,6 +33,11 @@ Use the graph to recover context and write back reviewed lessons, not to replace
 | Run automated dreaming now | `npm run memory:dream-run` |
 | Audit automated dreaming | `npm run memory:dream-audit` |
 | Audit the whole memory system | `npm run memory:operator-dashboard` |
+| Review recent agent/subagent run history | `npm run memory:run-ledger` |
+| Read the daily operator brief | `npm run memory:daily-brief` |
+| Run deterministic agent eval checks | `npm run memory:agent-eval` |
+| Group repeated agent blockers | `npm run memory:blocker-autopsy` |
+| Review local pending attention items | `npm run memory:inbox` |
 | Review research-only provenance priorities | `npm run memory:research-priorities` |
 | Sync allowlisted profitability readbacks into research-only memory | `npm run memory:profit-learning-sync` |
 | Audit the profit-learning memory sync | `npm run memory:profit-learning-audit` |
@@ -61,6 +67,10 @@ Graph queries index nodes into `retrieval_documents` and use SQLite FTS/BM25 bef
 `npm run memory:operator-dashboard` is the no-management audit view. It checks memory lifecycle health, automated dreaming, startup/context manifest presence, retrieval index counts, event outbox hash-chain activity, and deterministic memory eval status. `npm run memory:research-priorities` reads research-only provenance, including zero-candidate episodes, to help select the next diagnostic task without changing scanners, evidence stores, proof gates, live validation, broker behavior, or append state.
 
 `npm run memory:profit-learning-sync` is the options-profitability learning intake. It reads only the allowlisted generated readbacks from `data/forward-tracking/` and `data/profitability-lab/`, then writes research-only provenance rows into `data/agent-control/agent_control.db`. It records source hashes, generated timestamps, denominator context, zero-candidate episodes, diagnostic hypotheses, and experiment readbacks for future agents. It strips or sanitizes action-authority-shaped metric/status fields, requires valid generated timestamps, uses tenant-prefixed semantic IDs, rejects cross-tenant ID overwrites, and requires the explicit `APPROVE_PROFIT_LEARNING_MEMORY_SYNC` token in the package alias. It does not append cohort rows, import quotes, mutate evidence stores, change scanners/strategies/proof bars, open broker/live paths, consume holdout, or promote lanes.
+
+The agent run ledger is the local observability layer for autonomous work. `npm run memory:run-ledger` audits the tenant-scoped run-event hash chain and summarizes recent runs. `npm run memory:daily-brief` combines the ledger, operator dashboard, and research-priority report into one prompt-ready daily handoff. `npm run memory:agent-eval` runs the existing memory eval plus temp-backed self-tests for ledger redaction, blocked-run surfacing, and non-authoritative approval notes. `npm run memory:blocker-autopsy` groups repeated blocked/failed run reasons, and `npm run memory:inbox` shows pending approval notes, blockers/failures, and stale running runs.
+
+Approval notes in the ledger, daily brief, and inbox are not authorization. A recorded approval note is only local orchestration context; it does not approve cohort append, evidence mutation, quote import, scanner/strategy changes, proof-bar changes, live validation, auto-track, broker action, stop/sizing changes, promotion, protected-holdout use, or treating historical rows as forward proof.
 
 Audit that intake with:
 
