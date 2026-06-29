@@ -157,6 +157,8 @@ MEMORY_SOURCE_QUALITY_BY_TYPE = {
     "static_memory_graph_doc": "generated_navigation",
     "static_memory_graph_json": "generated_navigation",
     "project_memory_seed": "automation_audit",
+    "profit_learning_sync": "generated_readback",
+    "research_provenance": "research_provenance",
 }
 PROVENANCE_KINDS = {
     "strategy_hypothesis",
@@ -176,12 +178,104 @@ AUTHORITY_METADATA_KEYS = {
     "live_validation_eligible",
     "liveValidationEligible",
 }
+PROHIBITED_TRUE_FLAG_KEYS = {
+    "append_allowed",
+    "appendAllowed",
+    "promotion_ready",
+    "promotionReady",
+    "live_validation_eligible",
+    "liveValidationEligible",
+    "live_entry_allowed",
+    "liveEntryAllowed",
+    "auto_track_allowed",
+    "autoTrackAllowed",
+    "broker_order_allowed",
+    "brokerOrderAllowed",
+    "cohort_append_performed",
+    "cohortAppendPerformed",
+    "quotes_imported",
+    "quotesImported",
+    "evidence_stores_mutated",
+    "evidenceStoresMutated",
+    "scanner_policy_changed",
+    "scannerPolicyChanged",
+    "strategy_logic_changed",
+    "strategyLogicChanged",
+    "proof_bars_changed",
+    "proofBarsChanged",
+    "protected_holdout_consumed",
+    "protectedHoldoutConsumed",
+}
+PROFIT_LEARNING_OMIT_METRIC_KEYS = PROHIBITED_TRUE_FLAG_KEYS | {
+    "append_allowed",
+    "appendAllowed",
+    "live_validation_eligible",
+    "liveValidationEligible",
+    "accepted_profitability",
+    "profitability_readiness",
+}
+PROFIT_LEARNING_DENOMINATOR_KEYS = (
+    "queue_rows",
+    "quarantine_queue_count",
+    "high_priority_evidence_repair_count",
+    "fresh_scan_match_count",
+    "total_natural_selections",
+    "exact_completed_forward_pnl_count",
+    "remaining_rows",
+    "strict_reject_counts",
+    "warning_states",
+    "dependency_blockers",
+    "denominator_rule",
+)
+PROFIT_LEARNING_AUTHORITY_STATUS_TOKENS = {
+    "append_allowed",
+    "promotion_ready",
+    "live_validation_eligible",
+    "live_entry_allowed",
+    "auto_track_allowed",
+    "broker_order_allowed",
+    "cohort_append_performed",
+    "quotes_imported",
+    "evidence_stores_mutated",
+    "scanner_policy_changed",
+    "strategy_logic_changed",
+    "proof_bars_changed",
+    "protected_holdout_consumed",
+    "approval",
+    "approved",
+    "authorized",
+    "allowed",
+    "enabled",
+    "cleared",
+    "ready",
+    "readiness",
+    "promotion",
+    "live",
+    "broker",
+}
+PROHIBITED_AUTHORITY_VALUE_KEYS = {
+    "authority_scope": {
+        "broker_action",
+        "evidence_mutation",
+        "scanner_policy_change",
+        "promotion_authority",
+        "live_validation_authority",
+    },
+    "capability_label": {
+        "broker_action",
+        "evidence_mutation",
+        "scanner_policy_change",
+        "promotion_authority",
+        "live_validation_authority",
+    },
+}
 MEMORY_PROHIBITED_AUTHORITY_RE = tuple(
     re.compile(pattern, re.IGNORECASE)
     for pattern in (
-        r"\b(?:authori[sz]e|approve|approved|approval)\s+(?:live|broker|trade|trading|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner|strategy|stop|sizing)",
-        r"\b(?:live|broker|trading|trade|orders?|submit[-_ ]?orders?|place[-_ ]?orders?|open[-_ ]?orders?|close[-_ ]?orders?|create[-_ ]?orders?|cancel[-_ ]?orders?|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner[-_ ]?policy|strategy|stop[-_/ ]?sizing)\s+(?:is\s+|are\s+)?(?:approved|authorized|allowed|enabled|cleared|complete)",
+        r"\b(?:authori[sz]e|approve|approved|approval)\s+(?:live|broker|trade|trading|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner|strategy|stop|sizing|append|cohort[-_ ]?append|candidate[-_ ]?append|guarded[-_ ]?append|append[-_ ]?readiness)",
+        r"\b(?:live|broker|trading|trade|orders?|submit[-_ ]?orders?|place[-_ ]?orders?|open[-_ ]?orders?|close[-_ ]?orders?|create[-_ ]?orders?|cancel[-_ ]?orders?|append|cohort[-_ ]?append|candidate[-_ ]?append|guarded[-_ ]?append|append[-_ ]?readiness|auto[-_ ]?track|promotion|proof[-_ ]?bar|evidence[-_ ]?mutation|scanner[-_ ]?policy|strategy|stop[-_/ ]?sizing)\s+(?:is\s+|are\s+)?(?:approved|authorized|allowed|enabled|cleared|complete|ready)",
         r"\b(?:broker[-_ ]?orders?|submit[-_ ]?orders?|place[-_ ]?orders?|open[-_ ]?orders?|close[-_ ]?orders?|create[-_ ]?orders?|cancel[-_ ]?orders?)\b",
+        r"\b(?:append|cohort[-_ ]?append|candidate[-_ ]?append|guarded[-_ ]?append|append[-_ ]?readiness)\b[^.;\n]{0,80}\b(?:approved|authorized|allowed|enabled|cleared|complete|ready)\b",
         r"\btreat(?:ing)?\s+historical\s+rows\s+as\s+forward\s+proof\b",
         r"\bhistorical\s+rows\s+(?:are|count\s+as)\s+forward\s+proof\b",
         r"\bappend[_ -]?allowed\s*[:=]\s*true\b",
@@ -191,6 +285,15 @@ MEMORY_PROHIBITED_AUTHORITY_RE = tuple(
         r"\blive[_ -]?validation[_ -]?eligible\s*[:=]\s*true\b",
         r"\bliveValidationEligible\s*[:=]\s*true\b",
     )
+)
+SAFE_NEGATED_AUTHORITY_RE = re.compile(
+    r"\b(?:(?:must|does|do|should|can)\s+not|cannot|can't|never)\s+"
+    r"(?:authori[sz]e|approve|allow|enable)\s+"
+    r"(?:live|broker|trade|trading|auto[-_ ]?track|promotion|proof[-_ ]?bar|"
+    r"evidence[-_ ]?mutation|scanner|strategy|stop|sizing|append|cohort[-_ ]?append|"
+    r"candidate[-_ ]?append|guarded[-_ ]?append|append[-_ ]?readiness)"
+    r"(?:\s+actions?|\s+authority|\s+access|\s+execution)?",
+    re.IGNORECASE,
 )
 OPERATING_MEMORY_KIND_BY_TYPE = {
     "artifact": "evidence_artifact",
@@ -206,6 +309,22 @@ GATEBOARD_CURRENT_SOURCE_TYPES = {
     "gateboard_source_artifact",
 }
 REPO_FILE_SOURCE_TYPES = {"repo_file_index"}
+PROFIT_LEARNING_SYNC_TOKEN = "APPROVE_PROFIT_LEARNING_MEMORY_SYNC"
+PROFIT_LEARNING_EXTRACTOR_VERSION = "profit_learning_sync_v1"
+
+PROFIT_LEARNING_ARTIFACTS = {
+    "gateboard": "data/forward-tracking/project_operator_gateboard_latest.json",
+    "strict_forward_operator_queue": "data/forward-tracking/regular_options_strict_forward_operator_queue_latest.json",
+    "strict_forward_candidate_review": (
+        "data/forward-tracking/regular_options_strict_forward_30_candidate_review_packet_latest.json"
+    ),
+    "strict_forward_completion_monitor": (
+        "data/forward-tracking/regular_options_strict_forward_30_completion_monitor_latest.json"
+    ),
+    "forward_candidate_throughput": "data/forward-tracking/regular_options_forward_candidate_throughput_audit_latest.json",
+    "profit_capture_queue": "data/profitability-lab/regular-options-profit-capture-queue/latest.json",
+    "repair_burndown": "data/profitability-lab/regular-options-repair-burndown/latest.json",
+}
 
 PROJECT_SEED_FILES = [
     {
@@ -697,12 +816,38 @@ def _validate_memory_policy_text(
         "live_validation_authority",
     }:
         errors.append(f"{field_name} capability_label cannot grant action authority")
+    def truthy_authority_value(value: Any) -> bool:
+        if value is True:
+            return True
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return value == 1
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "yes", "y", "on", "enabled", "ready", "approved"}
+        return False
+
+    def scan_metadata(value: Any, path: str = "metadata") -> None:
+        if isinstance(value, dict):
+            for key, child in value.items():
+                child_path = f"{path}.{key}"
+                if key in PROHIBITED_TRUE_FLAG_KEYS and truthy_authority_value(child):
+                    errors.append(f"{field_name} cannot set {child_path}=true")
+                prohibited_values = PROHIBITED_AUTHORITY_VALUE_KEYS.get(key)
+                normalized_child = str(child).strip().lower()
+                if prohibited_values and normalized_child in prohibited_values:
+                    errors.append(f"{field_name} cannot set {child_path}={child}")
+                scan_metadata(child, child_path)
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                scan_metadata(child, f"{path}[{index}]")
+
+    scan_metadata(metadata)
     metadata_for_scan = {
         key: value
         for key, value in metadata.items()
         if key not in {"non_authorization_notice"}
     }
     haystack = "\n".join([title, body, canonical_json(metadata_for_scan)])
+    haystack = SAFE_NEGATED_AUTHORITY_RE.sub("", haystack)
     for pattern in MEMORY_PROHIBITED_AUTHORITY_RE:
         if pattern.search(haystack):
             errors.append(f"{field_name} contains prohibited authority wording: {pattern.pattern}")
@@ -748,6 +893,43 @@ def _metadata_for_prompt(node: dict[str, Any]) -> dict[str, Any]:
     return _metadata_for_retrieval(metadata)
 
 
+def _non_operating_policy_errors(title: str, body: str, metadata: dict[str, Any]) -> list[str]:
+    if _is_operating_memory(metadata):
+        return []
+    return _validate_memory_policy_text(
+        title=title,
+        body=body,
+        metadata=_with_memory_policy_metadata(
+            _metadata_for_retrieval(metadata),
+            source_type=str(metadata.get("source_type") or "graph_node"),
+        ),
+        field_name="non-operating graph context",
+    )
+
+
+def _node_retrieval_title_body(node: dict[str, Any], metadata: dict[str, Any]) -> tuple[str, str]:
+    title = str(node.get("title") or "")
+    body = str(node.get("body") or "")
+    if _non_operating_policy_errors(title, body, metadata):
+        return "[non-operating title omitted: prohibited authority wording]", (
+            "[non-operating body omitted from retrieval: prohibited authority wording]"
+        )
+    return title, body
+
+
+def _node_for_query_result(node: dict[str, Any]) -> dict[str, Any]:
+    metadata = node.get("metadata") or {}
+    if _is_operating_memory(metadata):
+        return node
+    title, body = _node_retrieval_title_body(node, metadata)
+    return {
+        **node,
+        "title": title,
+        "body": body,
+        "metadata": _metadata_for_retrieval(metadata),
+    }
+
+
 def _memory_is_inactive(metadata: dict[str, Any], *, now: datetime | None = None) -> bool:
     if not _is_operating_memory(metadata):
         return False
@@ -791,11 +973,12 @@ def _score_node_for_query(node: dict[str, Any], query: str) -> int | None:
     if not terms:
         return 0
     metadata = _metadata_for_retrieval(node.get("metadata", {}))
+    title, body = _node_retrieval_title_body(node, node.get("metadata") or {})
     haystack = " ".join(
         [
             str(node.get("id", "")),
-            str(node.get("title", "")),
-            str(node.get("body", "")),
+            title,
+            body,
             str(node.get("source_ref", "")),
             canonical_json(metadata) if isinstance(metadata, dict) else str(metadata),
         ]
@@ -805,7 +988,7 @@ def _score_node_for_query(node: dict[str, Any], query: str) -> int | None:
     score = sum(haystack.count(term) for term in terms)
     if query.lower() in haystack:
         score += len(terms) * 3
-    if str(node.get("title", "")).lower().find(query.lower()) >= 0:
+    if title.lower().find(query.lower()) >= 0:
         score += len(terms) * 2
     return score
 
@@ -846,8 +1029,9 @@ def _format_graph_context(
     for node in ordered_nodes[:max_nodes]:
         source_ref = f" source={node.get('source_ref')}" if node.get("source_ref") else ""
         sub_tenant = f"/{node.get('sub_tenant_id')}" if node.get("sub_tenant_id") else ""
-        lines.append(f"- {node['id']} [{node.get('kind')}{sub_tenant}] {node.get('title', '')}{source_ref}")
-        body = _truncate(str(node.get("body", "")), 260)
+        prompt_title, prompt_body = _node_retrieval_title_body(node, node.get("metadata") or {})
+        lines.append(f"- {node['id']} [{node.get('kind')}{sub_tenant}] {prompt_title}{source_ref}")
+        body = _truncate(prompt_body, 260)
         if body:
             lines.append(f"  body: {body}")
         metadata = _metadata_for_prompt(node)
@@ -1286,6 +1470,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS startup_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             kind TEXT NOT NULL,
             goal TEXT NOT NULL DEFAULT '',
             pathway TEXT,
@@ -1300,6 +1485,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             title TEXT NOT NULL,
             thesis TEXT NOT NULL DEFAULT '',
             status TEXT NOT NULL DEFAULT 'research_only',
@@ -1310,6 +1496,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS experiment_runs (
             id TEXT PRIMARY KEY,
             created_at TEXT NOT NULL,
+            tenant_id TEXT NOT NULL DEFAULT 'options-chatbot',
             hypothesis_id TEXT REFERENCES strategy_hypotheses(id) ON DELETE SET NULL,
             status TEXT NOT NULL,
             artifact_ref TEXT,
@@ -1395,6 +1582,30 @@ def init_schema(conn: sqlite3.Connection) -> None:
         conn.execute(
             "ALTER TABLE zero_candidate_episodes ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
         )
+    hypothesis_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(strategy_hypotheses)").fetchall()
+    }
+    if "tenant_id" not in hypothesis_columns:
+        conn.execute(
+            "ALTER TABLE strategy_hypotheses ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
+        )
+    startup_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(startup_runs)").fetchall()
+    }
+    if "tenant_id" not in startup_columns:
+        conn.execute(
+            "ALTER TABLE startup_runs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
+        )
+    experiment_columns = {
+        row["name"]
+        for row in conn.execute("PRAGMA table_info(experiment_runs)").fetchall()
+    }
+    if "tenant_id" not in experiment_columns:
+        conn.execute(
+            "ALTER TABLE experiment_runs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT 'options-chatbot'"
+        )
     conn.commit()
 
 
@@ -1451,8 +1662,35 @@ def _record_event(
     return event
 
 
+def validate_event_outbox(conn: sqlite3.Connection) -> dict[str, Any]:
+    rows = conn.execute(
+        "SELECT id, created_at, event_type, payload_json, prev_hash, event_hash FROM event_outbox ORDER BY id ASC"
+    ).fetchall()
+    issues: list[dict[str, Any]] = []
+    previous_hash = ""
+    for row in rows:
+        payload_json = row["payload_json"] or "{}"
+        try:
+            payload = json.loads(payload_json)
+        except json.JSONDecodeError:
+            issues.append({"id": row["id"], "issue": "payload_json is not valid JSON"})
+            payload = {}
+        if row["prev_hash"] != previous_hash:
+            issues.append({"id": row["id"], "issue": "prev_hash does not match previous event_hash"})
+        expected_hash = _text_sha256(f"{row['prev_hash']}\n{canonical_json(payload)}")
+        if row["event_hash"] != expected_hash:
+            issues.append({"id": row["id"], "issue": "event_hash does not match payload"})
+        previous_hash = row["event_hash"] or ""
+    return {
+        "status": "pass" if not issues else "issues",
+        "count": len(rows),
+        "issues": issues,
+    }
+
+
 def _graph_node_search_text(node: dict[str, Any], metadata: dict[str, Any]) -> str:
     metadata = _metadata_for_retrieval(metadata)
+    title, body = _node_retrieval_title_body(node, node.get("metadata") or {})
     keywords = metadata.get("retrieval_keywords") or []
     if isinstance(keywords, list):
         keyword_text = " ".join(str(item) for item in keywords)
@@ -1462,8 +1700,8 @@ def _graph_node_search_text(node: dict[str, Any], metadata: dict[str, Any]) -> s
         [
             str(node.get("id") or ""),
             str(node.get("kind") or ""),
-            str(node.get("title") or ""),
-            str(node.get("body") or ""),
+            title,
+            body,
             str(node.get("source_ref") or ""),
             keyword_text,
             canonical_json(metadata),
@@ -1479,6 +1717,7 @@ def _retrieval_source_quality(metadata: dict[str, Any]) -> str:
 def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -> None:
     metadata = node.get("metadata") or {}
     retrieval_metadata = _metadata_for_retrieval(metadata)
+    retrieval_title, retrieval_body = _node_retrieval_title_body(node, metadata)
     source_type = str(metadata.get("source_type") or "graph_node")
     authority_scope = str(retrieval_metadata.get("authority_scope") or OPERATING_AUTHORITY_SCOPE)
     capability_label = str(retrieval_metadata.get("capability_label") or "coordination_only")
@@ -1487,8 +1726,8 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
         canonical_json(
             {
                 "id": node.get("id"),
-                "title": node.get("title"),
-                "body": node.get("body"),
+                "title": retrieval_title,
+                "body": retrieval_body,
                 "metadata": retrieval_metadata,
                 "source_ref": node.get("source_ref"),
             }
@@ -1524,8 +1763,8 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
             _retrieval_source_quality(metadata),
             authority_scope,
             capability_label,
-            str(node.get("title") or ""),
-            str(node.get("body") or ""),
+            retrieval_title,
+            retrieval_body,
             search_text,
             canonical_json(retrieval_metadata),
             content_sha256,
@@ -1537,7 +1776,7 @@ def _upsert_retrieval_document(conn: sqlite3.Connection, node: dict[str, Any]) -
         conn.execute("DELETE FROM retrieval_documents_fts WHERE doc_id = ?", (str(node["id"]),))
         conn.execute(
             "INSERT INTO retrieval_documents_fts(doc_id, title, search_text) VALUES (?, ?, ?)",
-            (str(node["id"]), str(node.get("title") or ""), search_text),
+            (str(node["id"]), retrieval_title, search_text),
         )
     except sqlite3.OperationalError:
         pass
@@ -1695,10 +1934,15 @@ def upsert_graph_node(
     _validate_choice(kind, GRAPH_NODE_KINDS, "kind")
     now = utc_now()
     metadata_json = canonical_json(metadata or {})
-    existing = conn.execute("SELECT id FROM graph_nodes WHERE id = ?", (node_id,)).fetchone()
+    existing = conn.execute("SELECT id, tenant_id FROM graph_nodes WHERE id = ?", (node_id,)).fetchone()
     if existing and not upsert:
         raise AgentControlError(f"Graph node already exists: {node_id}")
     if existing:
+        if existing["tenant_id"] != tenant_id:
+            raise AgentControlError(
+                f"Graph node {node_id} already belongs to tenant {existing['tenant_id']}; "
+                f"refusing cross-tenant overwrite by {tenant_id}"
+            )
         conn.execute(
             """
             UPDATE graph_nodes
@@ -2126,6 +2370,12 @@ def _upsert_operating_memory(
     memory_type = _validate_choice(memory_type, OPERATING_MEMORY_TYPES, "memory_type")
     memory_status = _validate_choice(memory_status, MEMORY_STATUSES, "memory_status")
     confidence = _validate_choice(confidence, MEMORY_CONFIDENCE, "confidence")
+    _assert_memory_policy_valid(
+        title=title,
+        body=body,
+        metadata=metadata or {},
+        field_name="operating memory input",
+    )
     recorded_at = utc_now()
     memory_metadata = _with_memory_policy_metadata(
         {
@@ -2434,6 +2684,7 @@ def remember_graph_node(
         metadata=_with_memory_policy_metadata(metadata, source_type=str(metadata.get("source_type") or "graph_node")),
         field_name="graph memory",
     )
+    metadata = _metadata_for_retrieval(metadata)
     with closing(connect(db_path)) as conn, conn:
         node = upsert_graph_node(
             conn,
@@ -2691,6 +2942,8 @@ def propose_dream(
     proposal = {
         "dream_id": dream_id,
         "status": "proposed",
+        "tenant_id": tenant_id,
+        "sub_tenant_id": sub_tenant_id,
         "title": title or str(raw.get("title") or relative_path),
         "summary": str(raw.get("summary") or ""),
         "proposed_at": now,
@@ -2789,6 +3042,7 @@ def accept_dream(
                 memory_type=entry["type"],
                 title=entry["title"],
                 body=entry["body"],
+                tenant_id=proposal.get("tenant_id") or DEFAULT_TENANT_ID,
                 sub_tenant_id=proposal.get("sub_tenant_id"),
                 confidence=entry["confidence"],
                 metadata=entry_metadata,
@@ -4132,13 +4386,14 @@ def _write_context_manifest(
     conn.execute(
         """
         INSERT INTO startup_runs(
-            created_at, kind, goal, pathway, status, policy_version,
+            created_at, tenant_id, kind, goal, pathway, status, policy_version,
             manifest_path, gateboard_hash, metadata_json
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             payload["generated_at"],
+            str(payload.get("tenant_id") or DEFAULT_TENANT_ID),
             kind,
             str(payload["goal"]),
             payload.get("pathway"),
@@ -4524,7 +4779,7 @@ def query_graph(
             "fresh_only": fresh_only,
             "graph_context": {
                 "seed_node_ids": [node["id"] for node in seed_nodes],
-                "nodes": sorted(node_map.values(), key=lambda item: item["id"]),
+                "nodes": sorted((_node_for_query_result(node) for node in node_map.values()), key=lambda item: item["id"]),
                 "edges": sorted(edge_map.values(), key=lambda item: item["id"]),
                 "triplets": sorted(triplets, key=lambda item: (item["source"], item["relation"], item["target"])),
             },
@@ -4537,10 +4792,10 @@ def query_graph(
                     retrieval_by_node_id.get(node["id"])
                     or {
                         "source_node_id": node["id"],
-                        "source_type": (node.get("metadata") or {}).get("source_type", "graph_node"),
-                        "source_quality": _retrieval_source_quality(node.get("metadata") or {}),
-                        "authority_scope": (node.get("metadata") or {}).get("authority_scope", OPERATING_AUTHORITY_SCOPE),
-                        "capability_label": (node.get("metadata") or {}).get("capability_label", "coordination_only"),
+                        "source_type": _metadata_for_retrieval(node.get("metadata") or {}).get("source_type", "graph_node"),
+                        "source_quality": _retrieval_source_quality(_metadata_for_retrieval(node.get("metadata") or {})),
+                        "authority_scope": _metadata_for_retrieval(node.get("metadata") or {}).get("authority_scope", OPERATING_AUTHORITY_SCOPE),
+                        "capability_label": _metadata_for_retrieval(node.get("metadata") or {}).get("capability_label", "coordination_only"),
                         "freshness_status": "current",
                         "why": "Matched legacy graph substring scoring fallback.",
                     }
@@ -5053,16 +5308,37 @@ def operator_dashboard(
     dreams = dream_audit(db_path=db_path, runs_dir=runs_dir, tenant_id=tenant_id, limit=limit)
     eval_result = memory_eval(db_path=db_path, tenant_id=tenant_id, seed=False)
     with closing(connect(db_path)) as conn:
+        outbox_audit = validate_event_outbox(conn)
         counts = {
-            "graph_nodes": conn.execute("SELECT count(*) FROM graph_nodes").fetchone()[0],
-            "retrieval_documents": conn.execute("SELECT count(*) FROM retrieval_documents").fetchone()[0],
-            "event_outbox": conn.execute("SELECT count(*) FROM event_outbox").fetchone()[0],
-            "zero_candidate_episodes": conn.execute("SELECT count(*) FROM zero_candidate_episodes").fetchone()[0],
-            "strategy_hypotheses": conn.execute("SELECT count(*) FROM strategy_hypotheses").fetchone()[0],
-            "experiment_runs": conn.execute("SELECT count(*) FROM experiment_runs").fetchone()[0],
+            "graph_nodes": conn.execute("SELECT count(*) FROM graph_nodes WHERE tenant_id = ?", (tenant_id,)).fetchone()[0],
+            "retrieval_documents": conn.execute(
+                """
+                SELECT count(*)
+                FROM retrieval_documents d
+                JOIN graph_nodes n ON n.id = d.source_node_id
+                WHERE n.tenant_id = ?
+                """,
+                (tenant_id,),
+            ).fetchone()[0],
+            "event_outbox": outbox_audit["count"],
+            "zero_candidate_episodes": conn.execute(
+                "SELECT count(*) FROM zero_candidate_episodes WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()[0],
+            "strategy_hypotheses": conn.execute(
+                "SELECT count(*) FROM strategy_hypotheses WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()[0],
+            "experiment_runs": conn.execute(
+                "SELECT count(*) FROM experiment_runs WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()[0],
         }
         latest_startup = _row_dict(
-            conn.execute("SELECT * FROM startup_runs ORDER BY id DESC LIMIT 1").fetchone()
+            conn.execute(
+                "SELECT * FROM startup_runs WHERE tenant_id = ? ORDER BY id DESC LIMIT 1",
+                (tenant_id,),
+            ).fetchone()
         )
         latest_seed = _row_dict(
             conn.execute(
@@ -5075,7 +5351,7 @@ def operator_dashboard(
         {"name": "dream auto-resolution", "pass": dreams["status"] == "pass", "detail": dreams["status"]},
         {
             "name": "startup/context manifest",
-            "pass": latest_startup is not None and bool((latest_startup.get("metadata") or {}).get("node_count")),
+            "pass": latest_startup is not None and bool(latest_startup.get("manifest_path")),
             "detail": latest_startup.get("manifest_path") if latest_startup else "missing",
         },
         {
@@ -5085,8 +5361,8 @@ def operator_dashboard(
         },
         {
             "name": "outbox hash chain",
-            "pass": counts["event_outbox"] > 0,
-            "detail": str(counts["event_outbox"]),
+            "pass": outbox_audit["count"] > 0 and outbox_audit["status"] == "pass",
+            "detail": f"{outbox_audit['count']} rows; {outbox_audit['status']}",
         },
         {
             "name": "memory eval",
@@ -5102,6 +5378,7 @@ def operator_dashboard(
         "counts": counts,
         "latest_startup": latest_startup,
         "latest_seed": latest_seed,
+        "event_outbox_audit": outbox_audit,
         "memory_audit": audit,
         "dream_audit": dreams,
         "memory_eval": eval_result,
@@ -5186,6 +5463,15 @@ def record_zero_candidate_episode(
         field_name="zero candidate episode",
     )
     with closing(connect(db_path)) as conn, conn:
+        existing_episode = conn.execute(
+            "SELECT tenant_id FROM zero_candidate_episodes WHERE id = ?",
+            (episode_id,),
+        ).fetchone()
+        if existing_episode is not None and existing_episode["tenant_id"] != tenant_id:
+            raise AgentControlError(
+                f"Zero candidate episode {episode_id} already belongs to tenant {existing_episode['tenant_id']}; "
+                f"refusing cross-tenant overwrite by {tenant_id}"
+            )
         conn.execute(
             """
             INSERT INTO zero_candidate_episodes(
@@ -5258,10 +5544,11 @@ def research_priority_report(
         hypothesis_rows = conn.execute(
             """
             SELECT * FROM strategy_hypotheses
+            WHERE tenant_id = ?
             ORDER BY priority_score DESC, updated_at DESC
             LIMIT ?
             """,
-            (limit,),
+            (tenant_id, limit),
         ).fetchall()
     zero_episodes = []
     for row in zero_rows:
@@ -5334,6 +5621,867 @@ def _format_research_priority_report(result: dict[str, Any]) -> str:
         lines.append(f"- {item['id']} score={item['priority_score']} status={item['status']} {item['title']}")
     lines.append("")
     lines.append("# Recommended Commands")
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def _first_string_field(payload: Any, names: tuple[str, ...]) -> str | None:
+    if isinstance(payload, dict):
+        for name in names:
+            value = payload.get(name)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        for value in payload.values():
+            found = _first_string_field(value, names)
+            if found:
+                return found
+    elif isinstance(payload, list):
+        for item in payload:
+            found = _first_string_field(item, names)
+            if found:
+                return found
+    return None
+
+
+def _collect_named_values(payload: Any, names: set[str], *, limit: int = 80) -> list[Any]:
+    values: list[Any] = []
+
+    def visit(value: Any) -> None:
+        if len(values) >= limit:
+            return
+        if isinstance(value, dict):
+            for key, child in value.items():
+                if key in names:
+                    values.append(child)
+                    if len(values) >= limit:
+                        return
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+                if len(values) >= limit:
+                    return
+
+    visit(payload)
+    return values
+
+
+def _flatten_strings(value: Any, *, limit: int = 80) -> list[str]:
+    strings: list[str] = []
+
+    def visit(item: Any) -> None:
+        if len(strings) >= limit:
+            return
+        if isinstance(item, str):
+            if item.strip():
+                strings.append(item.strip())
+        elif isinstance(item, dict):
+            for key in ("reason", "status", "blocker", "stage", "classification", "branch_id", "id"):
+                child = item.get(key)
+                if isinstance(child, str) and child.strip():
+                    strings.append(child.strip())
+                    if len(strings) >= limit:
+                        return
+            for child in item.values():
+                visit(child)
+                if len(strings) >= limit:
+                    return
+        elif isinstance(item, list):
+            for child in item:
+                visit(child)
+                if len(strings) >= limit:
+                    return
+
+    visit(value)
+    return strings[:limit]
+
+
+def _safe_identifier(value: str, *, fallback: str = "unknown") -> str:
+    safe = re.sub(r"[^a-z0-9_./:-]+", "-", str(value).lower()).strip("-")
+    safe = safe.replace("/", "-").replace(".", "-").replace(":", "-")
+    return safe[:96] or fallback
+
+
+def _dedupe_strings(values: list[str], *, limit: int = 12) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        text = value.strip()
+        if not text:
+            continue
+        key = text.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(text)
+        if len(result) >= limit:
+            break
+    return result
+
+
+def _safe_profit_learning_metadata(metadata: dict[str, Any], *, source_type: str) -> dict[str, Any]:
+    allowed = {
+        key: value
+        for key, value in metadata.items()
+        if key
+        not in {
+            "prohibited_actions",
+            "deferred_actions",
+            "safety_flags",
+            "future_operator_checklist",
+            "validation",
+        }
+    }
+    allowed["research_only"] = True
+    allowed["promotion_allowed"] = False
+    return _with_memory_policy_metadata(
+        allowed,
+        source_type=source_type,
+        source_quality="generated_readback",
+    )
+
+
+def _artifact_status(payload: dict[str, Any]) -> str:
+    return _safe_profit_learning_status(
+        _first_string_field(
+            payload,
+            (
+                "overall_status",
+                "status",
+                "fresh_forward_capture_status",
+                "completion_status",
+                "stager_status",
+                "report_status",
+            ),
+        )
+        or "loaded"
+    )
+
+
+def _safe_profit_learning_status(value: Any) -> str:
+    text = str(value or "loaded").strip()
+    token = _safe_identifier(text)
+    token_parts = {part for part in re.split(r"[^a-z0-9]+", token.lower()) if part}
+    if token in PROFIT_LEARNING_AUTHORITY_STATUS_TOKENS or token_parts & PROFIT_LEARNING_AUTHORITY_STATUS_TOKENS:
+        return "generated_readback_status_omitted_authority_like"
+    return text or "loaded"
+
+
+def _profit_learning_semantic_key(value: str, *, fallback: str = "unknown") -> str:
+    safe = _safe_identifier(value, fallback=fallback)
+    digest = _text_sha256(str(value or fallback))[:10]
+    return f"{safe[:72]}-{digest}"
+
+
+def _artifact_generated_at(payload: dict[str, Any]) -> str | None:
+    raw = _first_string_field(payload, ("generated_at_utc", "generated_at", "created_at", "timestamp_utc"))
+    if not raw:
+        return None
+    parsed = _parse_utc(raw)
+    if parsed is None:
+        return None
+    return parsed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _artifact_blockers(payload: dict[str, Any], *, limit: int = 16) -> list[str]:
+    blockers = []
+    for value in _collect_named_values(
+        payload,
+        {
+            "blockers",
+            "reason_codes",
+            "reasons",
+            "dependency_blockers",
+            "warning_states",
+            "stager_rejected_counts",
+            "scheduled_phase2_eligibility_blocker_counts",
+            "scheduled_phase2_drop_counts",
+        },
+    ):
+        blockers.extend(_flatten_strings(value, limit=limit * 2))
+    zero = payload.get("zero_candidate_diagnostics")
+    if isinstance(zero, dict):
+        status = _safe_profit_learning_status(zero.get("status"))
+        if status and status != "loaded":
+            blockers.append(f"zero_candidate_status:{status}")
+    summary = payload.get("scheduled_phase2_drop_stage_summary")
+    if isinstance(summary, dict):
+        status = _safe_profit_learning_status(summary.get("status"))
+        if status and status != "loaded":
+            blockers.append(f"drop_stage_status:{status}")
+    return _dedupe_strings(blockers, limit=limit)
+
+
+def _copy_nested_value(payload: dict[str, Any], dotted_key: str) -> Any:
+    value: Any = payload
+    for part in dotted_key.split("."):
+        if not isinstance(value, dict) or part not in value:
+            return None
+        value = value[part]
+    return value
+
+
+def _artifact_metrics(payload: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "strict_forward_rows",
+        "required_rows",
+        "candidate_rows_staged",
+        "target_date_phase2_scan_pick_count",
+        "scheduled_phase2_drop_count_total",
+        "scheduled_scan_session_count",
+    )
+    result = {key: payload[key] for key in keys if key in payload}
+    omitted_count = sum(1 for key in PROFIT_LEARNING_OMIT_METRIC_KEYS if key in payload)
+    for key in PROFIT_LEARNING_DENOMINATOR_KEYS:
+        value = _copy_nested_value(payload, key)
+        if value is not None:
+            result[key] = value
+    summary = payload.get("summary")
+    if isinstance(summary, dict):
+        for key in PROFIT_LEARNING_DENOMINATOR_KEYS:
+            if key in summary:
+                result[key] = summary[key]
+        for key in (
+            "tier_counts",
+            "selection_readiness_counts",
+            "repair_actionability_counts",
+            "fresh_scan_guardrail_decision_counts",
+        ):
+            if key in summary:
+                result[key] = summary[key]
+    phase2 = payload.get("phase2_forward_report")
+    if isinstance(phase2, dict):
+        counts = phase2.get("counts")
+        if isinstance(counts, dict):
+            for key in ("total_natural_selections", "exact_completed_forward_pnl_count", "remaining_rows"):
+                if key in counts:
+                    result[key] = counts[key]
+        if "denominator_rule" in phase2:
+            result["denominator_rule"] = phase2["denominator_rule"]
+    zero = payload.get("zero_candidate_diagnostics")
+    if isinstance(zero, dict):
+        for key in (
+            "drop_count_total",
+            "returned_picks",
+            "candidate_rows_staged",
+            "scheduled_scan_picks_count",
+            "scheduled_sessions_reviewed",
+        ):
+            if key in zero:
+                result[f"zero_candidate_{key}"] = zero[key]
+    if omitted_count:
+        result["omitted_authority_metric_count"] = omitted_count
+    return result
+
+
+def _profit_learning_denominator_terms(metrics: dict[str, Any], *, limit: int = 8) -> list[str]:
+    terms: list[str] = []
+    for key in PROFIT_LEARNING_DENOMINATOR_KEYS:
+        if key in metrics:
+            value = metrics[key]
+            if isinstance(value, (dict, list)):
+                terms.append(f"{key}:{_truncate(canonical_json(value), 120)}")
+            else:
+                terms.append(f"{key}:{value}")
+        if len(terms) >= limit:
+            break
+    return terms
+
+
+def _assert_profit_learning_write_paths(*, repo_root: Path, db_path: Path, events_path: Path) -> tuple[Path, Path]:
+    allowed_dir = (repo_root / "data" / "agent-control").resolve()
+
+    def resolve_path(path: Path, label: str) -> Path:
+        resolved = path.resolve() if path.is_absolute() else (repo_root / path).resolve()
+        if resolved != allowed_dir and allowed_dir not in resolved.parents:
+            raise AgentControlError(f"profit-learning {label} writes must stay under data/agent-control: {path}")
+        return resolved
+
+    return resolve_path(db_path, "db"), resolve_path(events_path, "event")
+
+
+def _profit_learning_source_artifacts(repo_root: Path, artifact_names: list[str] | None = None) -> list[dict[str, Any]]:
+    selected_names = artifact_names or list(PROFIT_LEARNING_ARTIFACTS)
+    unknown = sorted(set(selected_names) - set(PROFIT_LEARNING_ARTIFACTS))
+    if unknown:
+        raise AgentControlError(f"unknown profit-learning artifact(s): {', '.join(unknown)}")
+    artifacts: list[dict[str, Any]] = []
+    for name in selected_names:
+        relative_path = PROFIT_LEARNING_ARTIFACTS[name]
+        path = _resolve_inside_repo(repo_root, Path(relative_path))
+        item: dict[str, Any] = {
+            "artifact_kind": name,
+            "source_ref": _safe_node_path(relative_path),
+            "path": path,
+            "exists": path.is_file(),
+        }
+        if not path.is_file():
+            item["status"] = "missing"
+            item["error"] = "source artifact is missing"
+            artifacts.append(item)
+            continue
+        item["source_sha256"] = _file_sha256(path)
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        except json.JSONDecodeError as exc:
+            item["status"] = "malformed"
+            item["error"] = f"source artifact is malformed JSON: {exc}"
+            artifacts.append(item)
+            continue
+        if not isinstance(payload, dict):
+            item["status"] = "malformed"
+            item["error"] = "source artifact root must be a JSON object"
+            artifacts.append(item)
+            continue
+        generated_at = _artifact_generated_at(payload)
+        if not generated_at:
+            item["status"] = "stale_or_unknown"
+            item["error"] = "source artifact is missing generated timestamp"
+            artifacts.append(item)
+            continue
+        item["status"] = "loaded"
+        item["payload"] = payload
+        item["artifact_status"] = _artifact_status(payload)
+        item["generated_at_utc"] = generated_at
+        item["blockers"] = _artifact_blockers(payload)
+        item["metrics"] = _artifact_metrics(payload)
+        artifacts.append(item)
+    return artifacts
+
+
+def _profit_learning_base_metadata(artifact: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    metadata = {
+        "provenance_kind": "profit_learning_sync",
+        "artifact_kind": artifact["artifact_kind"],
+        "source_ref": artifact["source_ref"],
+        "source_sha256": artifact.get("source_sha256"),
+        "artifact_generated_at": artifact.get("generated_at_utc"),
+        "artifact_status": artifact.get("artifact_status"),
+        "extractor_version": PROFIT_LEARNING_EXTRACTOR_VERSION,
+        "sync_scope": "research_only",
+        "blocker_count": len(artifact.get("blockers") or []),
+    }
+    if extra:
+        metadata.update(extra)
+    return _safe_profit_learning_metadata(metadata, source_type="profit_learning_sync")
+
+
+def _profit_learning_experiment_records(artifacts: list[dict[str, Any]], *, tenant_id: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    tenant_prefix = _safe_identifier(tenant_id)
+    for artifact in artifacts:
+        if artifact.get("status") != "loaded":
+            continue
+        record_id = f"{tenant_prefix}:experiment:profit-sync:{artifact['artifact_kind']}"
+        blockers = artifact.get("blockers") or []
+        body = (
+            f"Research-only generated readback `{artifact['artifact_kind']}` reports status "
+            f"`{artifact.get('artifact_status')}` with {len(blockers)} blocker/reason categories. "
+            "Use this for diagnostic routing only; it cannot authorize options actions."
+        )
+        metadata = _profit_learning_base_metadata(
+            artifact,
+            {
+                "record_kind": "experiment_run",
+                "blockers": blockers[:12],
+                "metrics": artifact.get("metrics") or {},
+            },
+        )
+        _assert_memory_policy_valid(
+            title=f"Profit learning readback: {artifact['artifact_kind']}",
+            body=body,
+            metadata=metadata,
+            field_name="profit-learning experiment",
+        )
+        records.append(
+            {
+                "id": record_id,
+                "status": str(artifact.get("artifact_status") or "loaded"),
+                "artifact_ref": artifact["source_ref"],
+                "metric_json": artifact.get("metrics") or {},
+                "metadata": metadata,
+                "title": f"Profit learning readback: {artifact['artifact_kind']}",
+                "body": body,
+            }
+        )
+    return records
+
+
+def _profit_learning_zero_records(artifacts: list[dict[str, Any]], *, tenant_id: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    tenant_prefix = _safe_identifier(tenant_id)
+    for artifact in artifacts:
+        if artifact.get("artifact_kind") != "forward_candidate_throughput" or artifact.get("status") != "loaded":
+            continue
+        payload = artifact["payload"]
+        zero = payload.get("zero_candidate_diagnostics")
+        if not isinstance(zero, dict):
+            continue
+        drop_counts = payload.get("scheduled_phase2_drop_counts")
+        summary = payload.get("scheduled_phase2_drop_stage_summary")
+        if isinstance(summary, dict) and isinstance(summary.get("drop_counts"), dict):
+            drop_counts = summary["drop_counts"]
+        if not isinstance(drop_counts, dict):
+            drop_counts = {}
+        selection_date = str(
+            zero.get("target_selection_date")
+            or payload.get("target_selection_date")
+            or (artifact.get("generated_at_utc") or "unknown")[:10]
+        )
+        total = 0
+        for value in drop_counts.values():
+            try:
+                total += int(value)
+            except (TypeError, ValueError):
+                continue
+        if total <= 0 and int(zero.get("candidate_rows_staged") or 0) != 0:
+            continue
+        lane = "phase2_forward_cohort"
+        record_id = f"{tenant_prefix}:zero:profit-sync:{lane}:{_profit_learning_semantic_key(selection_date)}"
+        blocker_summary = (
+            f"Research-only candidate-starvation readback for {selection_date}: "
+            f"status `{_safe_profit_learning_status(zero.get('status') or artifact.get('artifact_status'))}`, "
+            f"total drop count {total}. "
+            "Use this to select diagnostics only; it cannot authorize options actions."
+        )
+        metadata = _profit_learning_base_metadata(
+            artifact,
+            {
+                "record_kind": "zero_candidate_episode",
+                "zero_candidate_status": _safe_profit_learning_status(zero.get("status")),
+                "returned_picks": zero.get("returned_picks"),
+                "candidate_rows_staged": zero.get("candidate_rows_staged"),
+                "drop_stage_counts": drop_counts,
+            },
+        )
+        _assert_memory_policy_valid(
+            title=f"Zero candidate episode: {lane} {selection_date}",
+            body=blocker_summary,
+            metadata=metadata,
+            field_name="profit-learning zero-candidate episode",
+        )
+        records.append(
+            {
+                "id": record_id,
+                "lane": lane,
+                "selection_date": selection_date,
+                "drop_stage_counts": drop_counts,
+                "blocker_summary": blocker_summary,
+                "source_ref": artifact["source_ref"],
+                "metadata": metadata,
+            }
+        )
+    return records
+
+
+def _profit_learning_hypothesis_records(artifacts: list[dict[str, Any]], *, tenant_id: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    tenant_prefix = _safe_identifier(tenant_id)
+    for artifact in artifacts:
+        if artifact.get("status") != "loaded":
+            continue
+        payload = artifact["payload"]
+        branch_items: list[dict[str, Any]] = []
+        if isinstance(payload.get("blocked_or_superseded_branches"), list):
+            branch_items.extend(item for item in payload["blocked_or_superseded_branches"] if isinstance(item, dict))
+        no_chase = payload.get("no_chase_manifest")
+        if isinstance(no_chase, dict) and isinstance(no_chase.get("reasons"), list):
+            branch_items.extend(item for item in no_chase["reasons"] if isinstance(item, dict))
+        if not branch_items and artifact.get("blockers"):
+            denominator_terms = _profit_learning_denominator_terms(artifact.get("metrics") or {}, limit=8)
+            branch_items.append(
+                {
+                    "id": artifact["artifact_kind"],
+                    "status": artifact.get("artifact_status"),
+                    "classification": "artifact_blocker_summary",
+                    "blockers": denominator_terms + list(artifact.get("blockers") or []),
+                    "denominator_context": denominator_terms,
+                }
+            )
+        for index, item in enumerate(branch_items[:24]):
+            branch_id = str(item.get("branch_id") or item.get("reason") or item.get("id") or f"item-{index}")
+            status = _safe_profit_learning_status(
+                item.get("status") or item.get("classification") or artifact.get("artifact_status") or "research_only"
+            )
+            blockers = _dedupe_strings(_flatten_strings(item.get("blockers") or item.get("evidence") or item, limit=32), limit=10)
+            if not blockers and artifact.get("blockers"):
+                blockers = list(artifact["blockers"][:6])
+            record_id = (
+                f"{tenant_prefix}:hyp:profit-sync:{artifact['artifact_kind']}:"
+                f"{_profit_learning_semantic_key(branch_id)}"
+            )
+            priority_score = float(10 + min(len(blockers) * 8, 64))
+            if "ready_for_research_only" in status or "candidate_selected_for_research_only" in status:
+                priority_score += 20
+            if "falsified" in status or "exhausted" in status or "do_not_repeat" in status:
+                priority_score = max(1.0, priority_score - 24)
+            title = f"Research-only profit blocker: {branch_id}"
+            thesis = (
+                f"`{branch_id}` is tracked from `{artifact['artifact_kind']}` with status `{status}`. "
+                f"Blocker/reason categories: {', '.join(blockers[:6]) or 'none recorded'}. "
+                "Memory ranks diagnostic follow-up only; it cannot authorize options actions."
+            )
+            metadata = _profit_learning_base_metadata(
+                artifact,
+                {
+                    "record_kind": "strategy_hypothesis",
+                    "branch_id": branch_id,
+                    "hypothesis_status": status,
+                    "blockers": blockers,
+                    "denominator_context": _profit_learning_denominator_terms(artifact.get("metrics") or {}, limit=8),
+                },
+            )
+            _assert_memory_policy_valid(
+                title=title,
+                body=thesis,
+                metadata=metadata,
+                field_name="profit-learning hypothesis",
+            )
+            records.append(
+                {
+                    "id": record_id,
+                    "title": title,
+                    "thesis": thesis,
+                    "status": "research_only",
+                    "priority_score": priority_score,
+                    "metadata": metadata,
+                    "source_ref": artifact["source_ref"],
+                }
+            )
+    return records
+
+
+def profit_learning_sync(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    events_path: Path = DEFAULT_EVENTS_PATH,
+    repo_root: Path = ROOT,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    artifact_names: list[str] | None = None,
+    write_memory: bool = False,
+) -> dict[str, Any]:
+    artifacts = _profit_learning_source_artifacts(repo_root, artifact_names)
+    loaded = [artifact for artifact in artifacts if artifact.get("status") == "loaded"]
+    skipped = [
+        {
+            "artifact_kind": artifact["artifact_kind"],
+            "source_ref": artifact["source_ref"],
+            "status": artifact.get("status"),
+            "error": artifact.get("error"),
+        }
+        for artifact in artifacts
+        if artifact.get("status") != "loaded"
+    ]
+    zero_records = _profit_learning_zero_records(loaded, tenant_id=tenant_id)
+    hypothesis_records = _profit_learning_hypothesis_records(loaded, tenant_id=tenant_id)
+    experiment_records = _profit_learning_experiment_records(loaded, tenant_id=tenant_id)
+    proposed = {
+        "zero_candidate_episodes": zero_records,
+        "strategy_hypotheses": hypothesis_records,
+        "experiment_runs": experiment_records,
+    }
+    written = {"zero_candidate_episodes": 0, "strategy_hypotheses": 0, "experiment_runs": 0, "graph_nodes": 0}
+    if write_memory:
+        db_path, events_path = _assert_profit_learning_write_paths(
+            repo_root=repo_root,
+            db_path=db_path,
+            events_path=events_path,
+        )
+        now = utc_now()
+        with closing(connect(db_path)) as conn, conn:
+            for table, records in (
+                ("zero_candidate_episodes", zero_records),
+                ("strategy_hypotheses", hypothesis_records),
+                ("experiment_runs", experiment_records),
+            ):
+                for record in records:
+                    existing_tenant = conn.execute(
+                        f"SELECT tenant_id FROM {table} WHERE id = ?",
+                        (record["id"],),
+                    ).fetchone()
+                    if existing_tenant is not None and existing_tenant["tenant_id"] != tenant_id:
+                        raise AgentControlError(
+                            f"Profit-learning record {record['id']} in {table} already belongs to "
+                            f"tenant {existing_tenant['tenant_id']}; refusing cross-tenant overwrite by {tenant_id}"
+                        )
+            for record in zero_records:
+                conn.execute(
+                    """
+                    INSERT INTO zero_candidate_episodes(
+                        id, created_at, tenant_id, lane, selection_date, drop_stage_counts_json,
+                        blocker_summary, source_ref, metadata_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        tenant_id = excluded.tenant_id,
+                        drop_stage_counts_json = excluded.drop_stage_counts_json,
+                        blocker_summary = excluded.blocker_summary,
+                        source_ref = excluded.source_ref,
+                        metadata_json = excluded.metadata_json
+                    """,
+                    (
+                        record["id"],
+                        now,
+                        tenant_id,
+                        record["lane"],
+                        record["selection_date"],
+                        canonical_json(record["drop_stage_counts"]),
+                        record["blocker_summary"],
+                        record["source_ref"],
+                        canonical_json(record["metadata"]),
+                    ),
+                )
+                upsert_graph_node(
+                    conn,
+                    node_id=f"provenance:{record['id']}",
+                    kind="episode",
+                    title=f"Zero candidate episode: {record['lane']} {record['selection_date']}",
+                    body=record["blocker_summary"],
+                    tenant_id=tenant_id,
+                    sub_tenant_id="profitability",
+                    metadata=record["metadata"],
+                    source_ref=record["source_ref"],
+                )
+                written["zero_candidate_episodes"] += 1
+                written["graph_nodes"] += 1
+            for record in hypothesis_records:
+                conn.execute(
+                    """
+                    INSERT INTO strategy_hypotheses(
+                        id, created_at, updated_at, tenant_id, title, thesis, status, priority_score, metadata_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        updated_at = excluded.updated_at,
+                        tenant_id = excluded.tenant_id,
+                        title = excluded.title,
+                        thesis = excluded.thesis,
+                        status = excluded.status,
+                        priority_score = excluded.priority_score,
+                        metadata_json = excluded.metadata_json
+                    """,
+                    (
+                        record["id"],
+                        now,
+                        now,
+                        tenant_id,
+                        record["title"],
+                        record["thesis"],
+                        record["status"],
+                        record["priority_score"],
+                        canonical_json(record["metadata"]),
+                    ),
+                )
+                upsert_graph_node(
+                    conn,
+                    node_id=f"provenance:{record['id']}",
+                    kind="blocker",
+                    title=record["title"],
+                    body=record["thesis"],
+                    tenant_id=tenant_id,
+                    sub_tenant_id="profitability",
+                    metadata=record["metadata"],
+                    source_ref=record["source_ref"],
+                )
+                written["strategy_hypotheses"] += 1
+                written["graph_nodes"] += 1
+            for record in experiment_records:
+                conn.execute(
+                    """
+                    INSERT INTO experiment_runs(
+                        id, created_at, tenant_id, hypothesis_id, status, artifact_ref,
+                        metric_json, dataset_version_id, feature_snapshot_id, testing_debt_json, metadata_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        tenant_id = excluded.tenant_id,
+                        status = excluded.status,
+                        artifact_ref = excluded.artifact_ref,
+                        metric_json = excluded.metric_json,
+                        metadata_json = excluded.metadata_json
+                    """,
+                    (
+                        record["id"],
+                        now,
+                        tenant_id,
+                        None,
+                        record["status"],
+                        record["artifact_ref"],
+                        canonical_json(record["metric_json"]),
+                        None,
+                        None,
+                        "[]",
+                        canonical_json(record["metadata"]),
+                    ),
+                )
+                upsert_graph_node(
+                    conn,
+                    node_id=f"provenance:{record['id']}",
+                    kind="evidence_artifact",
+                    title=record["title"],
+                    body=record["body"],
+                    tenant_id=tenant_id,
+                    sub_tenant_id="profitability",
+                    metadata=record["metadata"],
+                    source_ref=record["artifact_ref"],
+                )
+                written["experiment_runs"] += 1
+                written["graph_nodes"] += 1
+            _record_event(
+                conn,
+                events_path=events_path,
+                event_type="profit_learning.sync",
+                payload={
+                    "tenant_id": tenant_id,
+                    "extractor_version": PROFIT_LEARNING_EXTRACTOR_VERSION,
+                    "artifact_count": len(loaded),
+                    "written": written,
+                    "source_refs": [artifact["source_ref"] for artifact in loaded],
+                },
+            )
+    return {
+        "status": "ready" if loaded else "empty",
+        "mode": "write_memory" if write_memory else "dry_run",
+        "tenant_id": tenant_id,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "extractor_version": PROFIT_LEARNING_EXTRACTOR_VERSION,
+        "loaded_artifacts": [
+            {
+                "artifact_kind": artifact["artifact_kind"],
+                "source_ref": artifact["source_ref"],
+                "source_sha256": artifact.get("source_sha256"),
+                "generated_at_utc": artifact.get("generated_at_utc"),
+                "artifact_status": artifact.get("artifact_status"),
+                "blocker_count": len(artifact.get("blockers") or []),
+            }
+            for artifact in loaded
+        ],
+        "skipped_artifacts": skipped,
+        "proposed_counts": {key: len(value) for key, value in proposed.items()},
+        "proposed": proposed,
+        "written_counts": written,
+        "recommended_commands": [
+            "npm run memory:research-priorities",
+            "npm run memory:operator-dashboard",
+            "npm run verify:memory",
+        ],
+    }
+
+
+def profit_learning_audit(
+    *,
+    db_path: Path = DEFAULT_DB_PATH,
+    repo_root: Path = ROOT,
+    tenant_id: str = DEFAULT_TENANT_ID,
+    artifact_names: list[str] | None = None,
+) -> dict[str, Any]:
+    db_path, _ = _assert_profit_learning_write_paths(
+        repo_root=repo_root,
+        db_path=db_path,
+        events_path=repo_root / "data" / "agent-control" / "events.jsonl",
+    )
+    dry_run = profit_learning_sync(
+        db_path=db_path,
+        repo_root=repo_root,
+        tenant_id=tenant_id,
+        artifact_names=artifact_names,
+        write_memory=False,
+    )
+    priorities = research_priority_report(db_path=db_path, tenant_id=tenant_id)
+    checks = [
+        {
+            "name": "allowlisted artifacts loaded",
+            "pass": bool(dry_run["loaded_artifacts"]),
+            "detail": str(len(dry_run["loaded_artifacts"])),
+        },
+        {
+            "name": "dry-run proposes research provenance",
+            "pass": sum(dry_run["proposed_counts"].values()) > 0,
+            "detail": canonical_json(dry_run["proposed_counts"]),
+        },
+        {
+            "name": "runtime research priorities populated",
+            "pass": priorities["status"] == "ready",
+            "detail": priorities["status"],
+        },
+        {
+            "name": "skipped artifacts are explicit",
+            "pass": all(item.get("error") for item in dry_run["skipped_artifacts"]),
+            "detail": str(len(dry_run["skipped_artifacts"])),
+        },
+    ]
+    return {
+        "status": "pass" if all(check["pass"] for check in checks) else "needs_attention",
+        "tenant_id": tenant_id,
+        "policy_banner": MEMORY_NON_AUTHORIZATION_BANNER,
+        "checks": checks,
+        "dry_run": {
+            "loaded_artifacts": dry_run["loaded_artifacts"],
+            "skipped_artifacts": dry_run["skipped_artifacts"],
+            "proposed_counts": dry_run["proposed_counts"],
+        },
+        "research_priorities": priorities,
+        "recommended_commands": [
+            (
+                "npm run agent:control -- memory profit-learning-sync --write-memory "
+                "--approval-token APPROVE_PROFIT_LEARNING_MEMORY_SYNC --prompt-only"
+            ),
+            "npm run memory:research-priorities",
+            "npm run verify:memory",
+        ],
+    }
+
+
+def _format_profit_learning_sync(result: dict[str, Any]) -> str:
+    lines = [
+        "# Profit Learning Sync",
+        f"Status: {result.get('status')}",
+        f"Mode: {result.get('mode')}",
+        f"Policy: {result.get('policy_banner')}",
+        "",
+        "# Artifacts",
+    ]
+    if not result.get("loaded_artifacts"):
+        lines.append("- None loaded.")
+    for artifact in result.get("loaded_artifacts", []):
+        lines.append(
+            f"- {artifact['artifact_kind']} status={artifact.get('artifact_status')} "
+            f"blockers={artifact.get('blocker_count')} source={artifact.get('source_ref')}"
+        )
+    if result.get("skipped_artifacts"):
+        lines.append("")
+        lines.append("# Skipped Artifacts")
+        for item in result["skipped_artifacts"]:
+            lines.append(f"- {item['artifact_kind']} {item.get('status')}: {item.get('error')}")
+    lines.extend(["", "# Counts"])
+    for key, value in result.get("proposed_counts", {}).items():
+        lines.append(f"- proposed {key}: {value}")
+    for key, value in result.get("written_counts", {}).items():
+        lines.append(f"- written {key}: {value}")
+    lines.extend(["", "# Recommended Commands"])
+    for command in result.get("recommended_commands", []):
+        lines.append(f"- `{command}`")
+    return "\n".join(lines)
+
+
+def _format_profit_learning_audit(result: dict[str, Any]) -> str:
+    lines = [
+        "# Profit Learning Audit",
+        f"Status: {result.get('status')}",
+        f"Policy: {result.get('policy_banner')}",
+        "",
+        "# Checks",
+    ]
+    for check in result.get("checks", []):
+        status = "PASS" if check.get("pass") else "FAIL"
+        lines.append(f"- {status}: {check.get('name')} - {check.get('detail')}")
+    lines.extend(["", "# Dry-Run Counts"])
+    for key, value in result.get("dry_run", {}).get("proposed_counts", {}).items():
+        lines.append(f"- {key}: {value}")
+    lines.extend(["", "# Research Priority Status"])
+    lines.append(f"- {result.get('research_priorities', {}).get('status')}")
+    lines.extend(["", "# Recommended Commands"])
     for command in result.get("recommended_commands", []):
         lines.append(f"- `{command}`")
     return "\n".join(lines)
@@ -5457,6 +6605,8 @@ def build_parser() -> argparse.ArgumentParser:
   npm run memory:dream-audit
   npm run memory:operator-dashboard
   npm run memory:research-priorities
+  npm run memory:profit-learning-sync
+  npm run memory:profit-learning-audit
   npm run memory:review-dreams
   npm run memory:dreams
   npm run memory:eval
@@ -5525,6 +6675,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument("--max-depth", type=int, default=1)
     bootstrap.add_argument("--max-context-nodes", type=int, default=8)
     bootstrap.add_argument("--max-context-edges", type=int, default=8)
+    bootstrap.add_argument("--manifest-dir", type=Path, default=DEFAULT_CONTEXT_PACKS_DIR)
     bootstrap.add_argument("--prompt-only", action="store_true", help="Print only the prompt-ready context text.")
     bootstrap.set_defaults(func=_cmd_bootstrap)
 
@@ -5666,6 +6817,7 @@ def build_parser() -> argparse.ArgumentParser:
     context_pack.add_argument("--pathway", choices=sorted(PATHWAYS))
     context_pack.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
     context_pack.add_argument("--limit", type=int, default=DEFAULT_CONTEXT_PACK_LIMIT)
+    context_pack.add_argument("--manifest-dir", type=Path, default=DEFAULT_CONTEXT_PACKS_DIR)
     context_pack.add_argument("--prompt-only", action="store_true")
     context_pack.set_defaults(func=_cmd_context_pack)
 
@@ -5842,6 +6994,43 @@ def build_parser() -> argparse.ArgumentParser:
     memory_research.add_argument("--json", action="store_true")
     memory_research.set_defaults(func=_cmd_memory_research_priorities)
 
+    memory_profit_sync = memory_sub.add_parser(
+        "profit-learning-sync",
+        help="Dry-run or write research-only profit-learning provenance from allowlisted generated readbacks.",
+    )
+    _add_common(memory_profit_sync)
+    memory_profit_sync.add_argument("--repo-root", type=Path, default=ROOT)
+    memory_profit_sync.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_profit_sync.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        choices=sorted(PROFIT_LEARNING_ARTIFACTS),
+        help="Restrict sync to one allowlisted artifact kind. Repeatable.",
+    )
+    memory_profit_sync.add_argument("--write-memory", action="store_true")
+    memory_profit_sync.add_argument("--approval-token", default="")
+    memory_profit_sync.add_argument("--prompt-only", action="store_true")
+    memory_profit_sync.set_defaults(func=_cmd_memory_profit_learning_sync)
+
+    memory_profit_audit = memory_sub.add_parser(
+        "profit-learning-audit",
+        help="Audit profit-learning sync readiness and current research-priority coverage.",
+    )
+    memory_profit_audit.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
+    memory_profit_audit.add_argument("--repo-root", type=Path, default=ROOT)
+    memory_profit_audit.add_argument("--tenant-id", default=DEFAULT_TENANT_ID)
+    memory_profit_audit.add_argument(
+        "--artifact",
+        action="append",
+        default=[],
+        choices=sorted(PROFIT_LEARNING_ARTIFACTS),
+        help="Restrict audit to one allowlisted artifact kind. Repeatable.",
+    )
+    memory_profit_audit.add_argument("--prompt-only", action="store_true")
+    memory_profit_audit.add_argument("--json", action="store_true")
+    memory_profit_audit.set_defaults(func=_cmd_memory_profit_learning_audit)
+
     digest_parser = subparsers.add_parser("digest", help="Summarize task and graph state.")
     digest_parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     digest_parser.add_argument("--recent-limit", type=int, default=8)
@@ -5885,7 +7074,7 @@ def _cmd_bootstrap(args: argparse.Namespace) -> int:
         max_repo_files=args.max_repo_files,
         max_repo_file_bytes=args.max_repo_file_bytes,
         max_repo_body_chars=args.max_repo_body_chars,
-        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
+        manifest_dir=args.manifest_dir,
     )
     if args.prompt_only:
         print(result["prompt_context"])
@@ -6086,7 +7275,7 @@ def _cmd_context_pack(args: argparse.Namespace) -> int:
         tenant_id=args.tenant_id,
         limit=args.limit,
         include_prompt_context=True,
-        manifest_dir=DEFAULT_CONTEXT_PACKS_DIR,
+        manifest_dir=args.manifest_dir,
     )
     if args.prompt_only:
         print(result["prompt_context"])
@@ -6349,6 +7538,41 @@ def _cmd_memory_research_priorities(args: argparse.Namespace) -> int:
         return 0
     _emit(result, as_json=True if args.json else False)
     return 0
+
+
+def _cmd_memory_profit_learning_sync(args: argparse.Namespace) -> int:
+    if args.approval_token and args.approval_token != PROFIT_LEARNING_SYNC_TOKEN:
+        raise AgentControlError("invalid profit-learning sync approval token")
+    if args.write_memory and args.approval_token != PROFIT_LEARNING_SYNC_TOKEN:
+        raise AgentControlError("profit-learning writes require --approval-token APPROVE_PROFIT_LEARNING_MEMORY_SYNC")
+    write_memory = bool(args.write_memory)
+    result = profit_learning_sync(
+        db_path=args.db,
+        events_path=args.events,
+        repo_root=args.repo_root,
+        tenant_id=args.tenant_id,
+        artifact_names=args.artifact or None,
+        write_memory=write_memory,
+    )
+    if args.prompt_only:
+        print(_format_profit_learning_sync(result))
+        return 0
+    _emit(result, as_json=True if args.json else False)
+    return 0
+
+
+def _cmd_memory_profit_learning_audit(args: argparse.Namespace) -> int:
+    result = profit_learning_audit(
+        db_path=args.db,
+        repo_root=args.repo_root,
+        tenant_id=args.tenant_id,
+        artifact_names=args.artifact or None,
+    )
+    if args.prompt_only:
+        print(_format_profit_learning_audit(result))
+        return 0 if result["status"] == "pass" else 1
+    _emit(result, as_json=True if args.json else False)
+    return 0 if result["status"] == "pass" else 1
 
 
 def _cmd_digest(args: argparse.Namespace) -> int:

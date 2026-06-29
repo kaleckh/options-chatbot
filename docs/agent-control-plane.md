@@ -33,6 +33,8 @@ Use the graph to recover context and write back reviewed lessons, not to replace
 | Audit automated dreaming | `npm run memory:dream-audit` |
 | Audit the whole memory system | `npm run memory:operator-dashboard` |
 | Review research-only provenance priorities | `npm run memory:research-priorities` |
+| Sync allowlisted profitability readbacks into research-only memory | `npm run memory:profit-learning-sync` |
+| Audit the profit-learning memory sync | `npm run memory:profit-learning-audit` |
 | Register the nightly Windows dreaming task | `npm run memory:schedule-dreams` |
 | Audit memory lifecycle health | `npm run memory:audit` |
 | Backfill authority metadata on legacy operating memory rows | `npm run memory:repair-authority` |
@@ -57,6 +59,20 @@ The write paths reject memory or dream entries that try to approve live trading,
 Graph queries index nodes into `retrieval_documents` and use SQLite FTS/BM25 before the older substring fallback. Prompt-ready graph context includes the non-authorization banner plus retrieval explanations with `source_quality`, `authority_scope`, `capability_label`, `freshness_status`, and source hash metadata. Focused context packs write manifests under `data/agent-control/context-packs/` so future agents can audit exactly which nodes were loaded.
 
 `npm run memory:operator-dashboard` is the no-management audit view. It checks memory lifecycle health, automated dreaming, startup/context manifest presence, retrieval index counts, event outbox hash-chain activity, and deterministic memory eval status. `npm run memory:research-priorities` reads research-only provenance, including zero-candidate episodes, to help select the next diagnostic task without changing scanners, evidence stores, proof gates, live validation, broker behavior, or append state.
+
+`npm run memory:profit-learning-sync` is the options-profitability learning intake. It reads only the allowlisted generated readbacks from `data/forward-tracking/` and `data/profitability-lab/`, then writes research-only provenance rows into `data/agent-control/agent_control.db`. It records source hashes, generated timestamps, denominator context, zero-candidate episodes, diagnostic hypotheses, and experiment readbacks for future agents. It strips or sanitizes action-authority-shaped metric/status fields, requires valid generated timestamps, uses tenant-prefixed semantic IDs, rejects cross-tenant ID overwrites, and requires the explicit `APPROVE_PROFIT_LEARNING_MEMORY_SYNC` token in the package alias. It does not append cohort rows, import quotes, mutate evidence stores, change scanners/strategies/proof bars, open broker/live paths, consume holdout, or promote lanes.
+
+Audit that intake with:
+
+```powershell
+npm run memory:profit-learning-audit
+```
+
+Use the raw dry-run when you want to inspect proposed records without writing:
+
+```powershell
+npm run agent:control -- memory profit-learning-sync --prompt-only
+```
 
 ## Design Model
 

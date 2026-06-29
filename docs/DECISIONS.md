@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-06-29: Profit-Learning Memory Sync Is Research-Only Provenance
+
+Generated profitability readbacks can improve future agent routing only when they are stored as bounded research provenance, not as trading authority or proof.
+
+Durable decision: `scripts/agent_control.py memory profit-learning-sync` reads a fixed allowlist of generated options readbacks, validates generated timestamps, hashes source artifacts, preserves denominator context, and writes only research-only rows under `data/agent-control/`. The package alias `npm run memory:profit-learning-sync` supplies the explicit `APPROVE_PROFIT_LEARNING_MEMORY_SYNC` token required for writes; dry-run mode remains available through the raw command. The sync uses tenant-prefixed semantic IDs, rejects cross-tenant graph/provenance overwrites, strips action-authority metric names, sanitizes authority-like status strings, and exposes audit/readback through `npm run memory:profit-learning-audit` plus `npm run memory:research-priorities`.
+
+This is a memory-routing and diagnostic-prioritization feature only. It does not append cohort rows, import quotes, mutate evidence stores, change scanners or strategies, change proof bars, enable live validation, enable auto-track, submit broker orders, change stop/sizing, consume protected holdout, promote lanes, or treat historical/backtest/generated readback rows as forward proof.
+
 ## 2026-06-28: Memory Graph V2 Is Retrieval And Research Provenance, Not Trading Authority
 
 The options runtime memory graph should help future agents recover context, learn from dream loops, audit automation, and choose research diagnostics without becoming another action gate.

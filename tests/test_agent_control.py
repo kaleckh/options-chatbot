@@ -111,6 +111,67 @@ class AgentControlTests(unittest.TestCase):
             "source_artifacts": {},
         }
 
+    def _write_profit_learning_artifact(self, repo_root: Path, artifact_name: str, payload: dict) -> None:
+        relative_path = agent_control.PROFIT_LEARNING_ARTIFACTS[artifact_name]
+        self._write_repo_file(repo_root, relative_path, json.dumps(payload))
+
+    def _write_profit_learning_repo(self, repo_root: Path) -> None:
+        self._write_profit_learning_artifact(
+            repo_root,
+            "gateboard",
+            {
+                "generated_at_utc": "2026-06-28T20:00:00Z",
+                "overall_status": "safe_blocked_no_live_release",
+                "no_chase_manifest": {
+                    "reasons": [
+                        {
+                            "reason": "thin_fresh_forward_denominator",
+                            "status": "ready_for_research_only",
+                            "evidence": ["exact_forward_rows:0", "fresh_scan_match_count:2"],
+                        }
+                    ]
+                },
+                "broker_order_allowed": True,
+                "scanner_policy_changed": True,
+            },
+        )
+        self._write_profit_learning_artifact(
+            repo_root,
+            "forward_candidate_throughput",
+            {
+                "generated_at_utc": "2026-06-28T20:01:00Z",
+                "status": "blocked_no_same_day_phase2_natural_selections",
+                "zero_candidate_diagnostics": {
+                    "target_selection_date": "2026-06-28",
+                    "status": "no_phase2_candidates",
+                    "returned_picks": 0,
+                    "candidate_rows_staged": 0,
+                },
+                "scheduled_phase2_drop_counts": {"strict_forward_reject": 4, "market_window_not_open": 2},
+                "broker_order_allowed": True,
+            },
+        )
+        self._write_profit_learning_artifact(
+            repo_root,
+            "profit_capture_queue",
+            {
+                "generated_at_utc": "2026-06-28T20:02:00Z",
+                "status": "promotion_ready",
+                "summary": {
+                    "queue_rows": 97,
+                    "quarantine_queue_count": 173,
+                    "high_priority_evidence_repair_count": 16,
+                    "fresh_scan_match_count": 2,
+                },
+                "reason_codes": [
+                    "positive_exact_intraday_symbol_lane",
+                    "fresh_executable_tier_a_match_required",
+                ],
+                "live_entry_allowed": True,
+                "evidence_stores_mutated": True,
+            },
+        )
+
     def _set_task_status(self, task_id: str, status: str) -> None:
         conn = agent_control.connect(self.db_path)
         try:
@@ -703,6 +764,7 @@ class AgentControlTests(unittest.TestCase):
             goal="operating memory",
             pathway="operator",
             include_prompt_context=True,
+            manifest_dir=self.root / "context-packs",
         )
 
         self.assertIn(f"memory:worker_report:{task['id']}:{report['id']}", accepted["writeback_node_ids"])
@@ -850,6 +912,7 @@ class AgentControlTests(unittest.TestCase):
             goal="operator context",
             pathway="operator",
             include_prompt_context=True,
+            manifest_dir=self.root / "context-packs",
         )
 
         blocker_ids = {node["id"] for node in pack["active_blockers"]}
@@ -1002,6 +1065,8 @@ class AgentControlTests(unittest.TestCase):
                     "Memory CLI decision",
                     "--pathway",
                     "operator",
+                    "--manifest-dir",
+                    str(self.root / "context-packs"),
                     "--prompt-only",
                 ]
             )
@@ -1532,6 +1597,8 @@ class AgentControlTests(unittest.TestCase):
                     "--repo-root",
                     str(repo_root),
                     "--skip-seed",
+                    "--manifest-dir",
+                    str(self.root / "context-packs"),
                     "--prompt-only",
                 ]
             )
@@ -1545,6 +1612,42 @@ class AgentControlTests(unittest.TestCase):
         self.assertIn("# Agent Graph Context", output)
         self.assertIn("blocker:gateboard:open_risk_governor_blocked_or_missing", output)
 
+    def test_bootstrap_cli_writes_context_manifest_and_dashboard_passes_startup(self):
+        repo_root = self.root / "bootstrap-cli-manifest-repo"
+        self._write_minimal_seed_repo(repo_root)
+        runs_dir = self.root / "dream-runs"
+        agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dreams_dir=self.root / "dreams",
+            runs_dir=runs_dir,
+            generate_from_sessions=False,
+        )
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            bootstrap_exit = agent_control.main(
+                [
+                    "bootstrap",
+                    "--db",
+                    str(self.db_path),
+                    "--events",
+                    str(self.events_path),
+                    "--repo-root",
+                    str(repo_root),
+                    "--no-repo-files",
+                    "--manifest-dir",
+                    str(self.root / "context-packs"),
+                    "--prompt-only",
+                ]
+            )
+
+        dashboard = agent_control.operator_dashboard(db_path=self.db_path, runs_dir=runs_dir)
+        self.assertEqual(bootstrap_exit, 0)
+        self.assertIn("# Context Manifest", stdout.getvalue())
+        startup_check = next(check for check in dashboard["checks"] if check["name"] == "startup/context manifest")
+        self.assertTrue(startup_check["pass"])
+
     def test_agent_facing_memory_commands_are_discoverable(self):
         help_text = agent_control.build_parser().format_help()
         for expected in [
@@ -1557,6 +1660,8 @@ class AgentControlTests(unittest.TestCase):
             "npm run memory:dream-audit",
             "npm run memory:operator-dashboard",
             "npm run memory:research-priorities",
+            "npm run memory:profit-learning-sync",
+            "npm run memory:profit-learning-audit",
             "npm run memory:review-dreams",
             "npm run memory:dreams",
             "npm run memory:eval",
@@ -1575,6 +1680,8 @@ class AgentControlTests(unittest.TestCase):
             "memory:dream-audit",
             "memory:operator-dashboard",
             "memory:research-priorities",
+            "memory:profit-learning-sync",
+            "memory:profit-learning-audit",
             "memory:schedule-dreams",
             "memory:review-dreams",
             "memory:dreams",
@@ -1583,15 +1690,76 @@ class AgentControlTests(unittest.TestCase):
             "verify:memory",
         ]:
             self.assertIn(script_name, package["scripts"])
+        self.assertEqual(
+            package["scripts"]["memory:profit-learning-sync"],
+            (
+                "uv run --locked python scripts/agent_control.py memory profit-learning-sync "
+                "--write-memory --approval-token APPROVE_PROFIT_LEARNING_MEMORY_SYNC --prompt-only"
+            ),
+        )
+        self.assertEqual(
+            package["scripts"]["memory:profit-learning-audit"],
+            "uv run --locked python scripts/agent_control.py memory profit-learning-audit --prompt-only",
+        )
 
     def test_memory_policy_rejects_authority_wording_and_retrieval_explains_hits(self):
+        for title, body, metadata in [
+            ("Bad authority", "Approve live trading from memory.", {}),
+            ("Broker order authority", "Broker orders are enabled by memory.", {}),
+            ("Submit order authority", "Submit orders is approved by memory.", {}),
+            ("Place order authority", "Place orders from memory.", {}),
+            ("Camel flags", "Looks harmless.", {"appendAllowed": True, "promotionReady": True}),
+            ("Live validation camel flag", "Looks harmless.", {"liveValidationEligible": True}),
+            ("Truthy string flags", "Looks harmless.", {"append_allowed": "true", "promotionReady": "yes"}),
+            ("Nested flags", "Looks harmless.", {"nested": {"appendAllowed": True, "liveValidationEligible": "1"}}),
+            ("Nested authority labels", "Looks harmless.", {"nested": {"authority_scope": "promotion_authority"}}),
+            ("Case authority labels", "Looks harmless.", {"authority_scope": "Promotion_Authority"}),
+            ("Whitespace authority labels", "Looks harmless.", {"capability_label": " promotion_authority "}),
+            ("List truthy flags", "Looks harmless.", {"items": [{"brokerOrderAllowed": "enabled"}]}),
+            ("Numeric truthy flags", "Looks harmless.", {"items": [{"brokerOrderAllowed": 1}]}),
+            ("Append readiness text", "Append readiness is approved by memory.", {}),
+            ("Cohort append text", "Cohort append is approved by memory.", {}),
+            ("Candidate append text", "Candidate append is ready and cleared by memory.", {}),
+            ("Guarded append text", "Guarded append is allowed by memory.", {}),
+            ("Mixed unsafe after negation", "Memory must not authorize trading but broker orders are approved by memory.", {}),
+            ("Unsafe after negation and", "Memory must not authorize trading and broker orders are approved by memory.", {}),
+            ("Unsafe after negation comma", "Memory must not authorize trading, broker orders are approved by memory.", {}),
+        ]:
+            with self.subTest(title=title):
+                with self.assertRaises(agent_control.AgentControlError):
+                    agent_control.remember_operating_memory(
+                        db_path=self.db_path,
+                        events_path=self.events_path,
+                        memory_type="lesson",
+                        title=title,
+                        body=body,
+                        metadata=metadata,
+                    )
+
+        for body in [
+            "Memory cannot authorize live trading.",
+            "Memory can't authorize broker orders.",
+            "Memory never approve proof-bar changes.",
+        ]:
+            with self.subTest(body=body):
+                agent_control.remember_operating_memory(
+                    db_path=self.db_path,
+                    events_path=self.events_path,
+                    memory_type="constraint",
+                    title=f"Safe prohibition {len(body)}",
+                    body=body,
+                    node_id=f"memory:constraint:safe-prohibition:{len(body)}",
+                    metadata={"safe_false": False, "safe_zero": 0, "safe_string_false": "false"},
+                )
+
         with self.assertRaises(agent_control.AgentControlError):
             agent_control.remember_operating_memory(
                 db_path=self.db_path,
                 events_path=self.events_path,
-                memory_type="lesson",
-                title="Bad authority",
-                body="Approve live trading from memory.",
+                memory_type="constraint",
+                title="Unsafe mixed cannot",
+                body="Memory cannot authorize live trading, but broker orders are approved by memory.",
+                node_id="memory:constraint:unsafe-mixed-cannot",
             )
 
         safe = agent_control.remember_operating_memory(
@@ -1603,8 +1771,17 @@ class AgentControlTests(unittest.TestCase):
             metadata={"retrieval_keywords": ["retrieval-v2", "authority-scope"]},
             node_id="memory:lesson:retrieval-v2-smoke",
         )
+        prohibition = agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="constraint",
+            title="Dreams cannot authorize options actions",
+            body="Dream memories must not authorize trading, broker paths, evidence mutation, or promotion.",
+            node_id="memory:constraint:safe-negated-authority",
+        )
 
         self.assertEqual(safe["metadata"]["authority_scope"], "orchestration_only")
+        self.assertEqual(prohibition["metadata"]["authority_scope"], "orchestration_only")
         self.assertEqual(safe["metadata"]["memory_policy_version"], agent_control.MEMORY_POLICY_VERSION)
         result = agent_control.query_graph(
             db_path=self.db_path,
@@ -1619,6 +1796,168 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(explanation["authority_scope"], "orchestration_only")
         self.assertEqual(explanation["capability_label"], "coordination_only")
         self.assertEqual(explanation["source_quality"], "accepted_runtime_memory")
+
+    def test_graph_remember_rejects_authority_metadata_and_retrieval_is_tenant_scoped(self):
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.remember_graph_node(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                kind="knowledge",
+                title="Raw authority note",
+                body="Promotion is approved by memory.",
+                metadata={"authority_scope": "promotion_authority", "capability_label": "promotion_authority"},
+                node_id="knowledge:raw-authority",
+            )
+
+        own = agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="lesson",
+            title="Tenant scoped retrieval own",
+            body="Shared retrieval phrase.",
+            node_id="memory:own",
+            tenant_id="options-chatbot",
+        )
+        agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="lesson",
+            title="Tenant scoped retrieval other",
+            body="Shared retrieval phrase.",
+            node_id="memory:other",
+            tenant_id="other-tenant",
+        )
+
+        result = agent_control.query_graph(
+            db_path=self.db_path,
+            query="shared retrieval phrase",
+            tenant_id="options-chatbot",
+            memory_type="lesson",
+            max_depth=0,
+        )
+        self.assertEqual(result["graph_context"]["seed_node_ids"], [own["id"]])
+        self.assertEqual(
+            [hit["source_node_id"] for hit in result["retrieval"]["document_hits"]],
+            [own["id"]],
+        )
+
+        sanitized = agent_control.remember_graph_node(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            kind="knowledge",
+            title="Harmless raw note",
+            body="Harmless coordination note.",
+            metadata={"authority_scope": "promotion_authority", "capability_label": "promotion_authority"},
+            node_id="knowledge:harmless-raw-note",
+        )
+        self.assertEqual(sanitized["metadata"]["authority_scope"], "orchestration_only")
+        self.assertEqual(sanitized["metadata"]["capability_label"], "coordination_only")
+
+    def test_graph_node_ids_and_zero_episode_ids_cannot_move_between_tenants(self):
+        agent_control.remember_operating_memory(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            memory_type="lesson",
+            title="Shared semantic id tenant A",
+            body="Tenant A owns this node id.",
+            node_id="memory:lesson:shared-semantic-id",
+            tenant_id="tenant-a",
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "cross-tenant overwrite"):
+            agent_control.remember_operating_memory(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                memory_type="lesson",
+                title="Shared semantic id tenant B",
+                body="Tenant B must not move tenant A's node.",
+                node_id="memory:lesson:shared-semantic-id",
+                tenant_id="tenant-b",
+            )
+
+        tenant_a = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Tenant A owns",
+            tenant_id="tenant-a",
+            max_depth=0,
+        )
+        tenant_b = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Tenant A owns",
+            tenant_id="tenant-b",
+            max_depth=0,
+        )
+        self.assertEqual(tenant_a["graph_context"]["seed_node_ids"], ["memory:lesson:shared-semantic-id"])
+        self.assertEqual(tenant_b["graph_context"]["seed_node_ids"], [])
+
+        agent_control.record_zero_candidate_episode(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            tenant_id="tenant-a",
+            lane="lane-a",
+            selection_date="2026-06-28",
+            drop_stage_counts={"filter": 1},
+            episode_id="zero:shared-semantic-id",
+        )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "cross-tenant overwrite"):
+            agent_control.record_zero_candidate_episode(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                tenant_id="tenant-b",
+                lane="lane-a",
+                selection_date="2026-06-28",
+                drop_stage_counts={"filter": 2},
+                episode_id="zero:shared-semantic-id",
+            )
+
+    def test_memory_audit_and_repair_do_not_launder_unsafe_legacy_memory(self):
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="memory:lesson:unsafe-legacy",
+                kind="memory",
+                title="Unsafe legacy memory",
+                body="Approve live trading from memory.",
+                metadata={"source_type": "operating_memory", "memory_type": "lesson", "memory_status": "active"},
+            )
+
+        before = agent_control.memory_audit(db_path=self.db_path)
+        repaired = agent_control.repair_operating_memory_authority_metadata(db_path=self.db_path)
+        after = agent_control.memory_audit(db_path=self.db_path)
+
+        self.assertEqual(before["status"], "issues")
+        self.assertEqual(repaired["status"], "issues")
+        self.assertEqual(repaired["repaired_count"], 0)
+        self.assertEqual(repaired["skipped_policy_errors"][0]["node_id"], "memory:lesson:unsafe-legacy")
+        self.assertEqual(after["status"], "issues")
+        self.assertEqual(after["authority_inconsistencies"][0]["id"], "memory:lesson:unsafe-legacy")
+
+    def test_query_graph_sanitizes_legacy_non_operating_authority_json(self):
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            agent_control.upsert_graph_node(
+                conn,
+                node_id="knowledge:legacy-raw-authority",
+                kind="knowledge",
+                title="Broker authority legacy",
+                body="Broker orders are approved by raw graph memory.",
+                metadata={"source_type": "legacy_note", "authority_scope": "promotion_authority"},
+            )
+            conn.execute("DELETE FROM retrieval_documents WHERE doc_id = ?", ("knowledge:legacy-raw-authority",))
+            try:
+                conn.execute("DELETE FROM retrieval_documents_fts WHERE doc_id = ?", ("knowledge:legacy-raw-authority",))
+            except agent_control.sqlite3.OperationalError:
+                pass
+
+        result = agent_control.query_graph(
+            db_path=self.db_path,
+            query="legacy raw authority",
+            max_depth=0,
+            include_prompt_context=True,
+        )
+        node = result["graph_context"]["nodes"][0]
+        self.assertNotIn("Broker orders are approved", node["body"])
+        self.assertEqual(node["metadata"]["authority_scope"], "orchestration_only")
+        self.assertEqual(result["retrieval"]["seed_explanations"][0]["authority_scope"], "orchestration_only")
+        self.assertNotIn("promotion_authority", result["prompt_context"])
 
     def test_context_manifest_operator_dashboard_and_outbox_are_auditable(self):
         repo_root = self.root / "dashboard-repo"
@@ -1658,6 +1997,73 @@ class AgentControlTests(unittest.TestCase):
         self.assertGreater(dashboard["counts"]["event_outbox"], 0)
         self.assertTrue(any(check["name"] == "startup/context manifest" for check in dashboard["checks"]))
 
+    def test_operator_dashboard_accepts_empty_manifest_and_validates_outbox_hash_chain(self):
+        repo_root = self.root / "dashboard-empty-repo"
+        self._write_minimal_seed_repo(repo_root, gateboard=self._gateboard_fixture([]))
+        runs_dir = self.root / "dream-runs"
+        agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dreams_dir=self.root / "dreams",
+            runs_dir=runs_dir,
+            generate_from_sessions=False,
+        )
+        agent_control.bootstrap_project_context(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            tenant_id="empty-tenant",
+            include_repo_files=False,
+            manifest_dir=self.root / "context-packs",
+        )
+
+        dashboard = agent_control.operator_dashboard(
+            db_path=self.db_path,
+            runs_dir=runs_dir,
+            tenant_id="empty-tenant",
+        )
+        startup_check = next(check for check in dashboard["checks"] if check["name"] == "startup/context manifest")
+        self.assertTrue(startup_check["pass"])
+        self.assertEqual(dashboard["event_outbox_audit"]["status"], "pass")
+
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            conn.execute("UPDATE event_outbox SET prev_hash = ? WHERE id = (SELECT max(id) FROM event_outbox)", ("bad",))
+        corrupted = agent_control.operator_dashboard(
+            db_path=self.db_path,
+            runs_dir=runs_dir,
+            tenant_id="empty-tenant",
+        )
+        outbox_check = next(check for check in corrupted["checks"] if check["name"] == "outbox hash chain")
+        self.assertFalse(outbox_check["pass"])
+        self.assertEqual(corrupted["event_outbox_audit"]["status"], "issues")
+
+    def test_operator_dashboard_startup_manifest_is_tenant_scoped(self):
+        repo_root = self.root / "dashboard-tenant-repo"
+        self._write_minimal_seed_repo(repo_root)
+        runs_dir = self.root / "dream-runs"
+        agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dreams_dir=self.root / "dreams",
+            runs_dir=runs_dir,
+            generate_from_sessions=False,
+        )
+        agent_control.bootstrap_project_context(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            tenant_id="tenant-a",
+            include_repo_files=False,
+            manifest_dir=self.root / "context-packs",
+        )
+
+        tenant_a = agent_control.operator_dashboard(db_path=self.db_path, runs_dir=runs_dir, tenant_id="tenant-a")
+        tenant_b = agent_control.operator_dashboard(db_path=self.db_path, runs_dir=runs_dir, tenant_id="tenant-b")
+        tenant_a_startup = next(check for check in tenant_a["checks"] if check["name"] == "startup/context manifest")
+        tenant_b_startup = next(check for check in tenant_b["checks"] if check["name"] == "startup/context manifest")
+        self.assertTrue(tenant_a_startup["pass"])
+        self.assertFalse(tenant_b_startup["pass"])
+
     def test_research_provenance_records_zero_candidate_priorities_without_authority(self):
         recorded = agent_control.record_zero_candidate_episode(
             db_path=self.db_path,
@@ -1685,6 +2091,333 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(report["status"], "ready")
         self.assertEqual(report["zero_candidate_priorities"][0]["total_drops"], 15)
         self.assertIn(agent_control.MEMORY_NON_AUTHORIZATION_BANNER, report["policy_banner"])
+
+        for index in range(12):
+            agent_control.record_zero_candidate_episode(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                lane=f"recent_low_drop_{index}",
+                selection_date=f"2026-06-{index + 1:02d}",
+                drop_stage_counts={"momentum_filter": 1},
+                episode_id=f"zero:recent-low-drop:{index}",
+            )
+        agent_control.record_zero_candidate_episode(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            lane="older_high_drop",
+            selection_date="2026-05-01",
+            drop_stage_counts={"momentum_filter": 1000},
+            episode_id="zero:older-high-drop",
+        )
+
+        ranked = agent_control.research_priority_report(db_path=self.db_path, limit=5)
+        self.assertEqual(ranked["zero_candidate_priorities"][0]["id"], "zero:older-high-drop")
+
+        with closing(agent_control.connect(self.db_path)) as conn, conn:
+            now = agent_control.utc_now()
+            conn.execute(
+                """
+                INSERT INTO strategy_hypotheses(
+                    id, created_at, updated_at, tenant_id, title, thesis, status, priority_score, metadata_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "hyp:other-tenant",
+                    now,
+                    now,
+                    "other-tenant",
+                    "Other tenant hypothesis",
+                    "Should not leak into default tenant report.",
+                    "research_only",
+                    1000,
+                    "{}",
+                ),
+            )
+        default_report = agent_control.research_priority_report(db_path=self.db_path, tenant_id="options-chatbot")
+        other_report = agent_control.research_priority_report(db_path=self.db_path, tenant_id="other-tenant")
+        self.assertEqual(default_report["hypothesis_priorities"], [])
+        self.assertEqual(other_report["hypothesis_priorities"][0]["id"], "hyp:other-tenant")
+
+    def test_profit_learning_sync_is_dry_run_safe_and_preserves_denominators(self):
+        repo_root = self.root / "profit-learning-repo"
+        self._write_profit_learning_repo(repo_root)
+        self._write_repo_file(
+            repo_root,
+            agent_control.PROFIT_LEARNING_ARTIFACTS["strict_forward_candidate_review"],
+            "{not-json",
+        )
+        self._write_repo_file(
+            repo_root,
+            agent_control.PROFIT_LEARNING_ARTIFACTS["repair_burndown"],
+            json.dumps(["not", "an", "object"]),
+        )
+        self._write_repo_file(
+            repo_root,
+            agent_control.PROFIT_LEARNING_ARTIFACTS["strict_forward_completion_monitor"],
+            json.dumps({"status": "missing_timestamp"}),
+        )
+        self._write_repo_file(
+            repo_root,
+            agent_control.PROFIT_LEARNING_ARTIFACTS["strict_forward_operator_queue"],
+            json.dumps({"generated_at_utc": "not-a-date", "status": "invalid_timestamp"}),
+        )
+
+        with self.assertRaises(agent_control.AgentControlError):
+            agent_control.profit_learning_sync(repo_root=repo_root, artifact_names=["not_allowlisted"])
+
+        result = agent_control.profit_learning_sync(
+            repo_root=repo_root,
+            db_path=repo_root / "data" / "agent-control" / "agent_control.db",
+            events_path=repo_root / "data" / "agent-control" / "events.jsonl",
+            artifact_names=[
+                "gateboard",
+                "forward_candidate_throughput",
+                "profit_capture_queue",
+                "strict_forward_candidate_review",
+                "repair_burndown",
+                "strict_forward_completion_monitor",
+                "strict_forward_operator_queue",
+            ],
+            write_memory=False,
+        )
+
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["mode"], "dry_run")
+        self.assertEqual(result["written_counts"]["graph_nodes"], 0)
+        self.assertEqual(
+            {item["status"] for item in result["skipped_artifacts"]},
+            {"malformed", "stale_or_unknown"},
+        )
+        self.assertFalse((repo_root / "data" / "agent-control" / "agent_control.db").exists())
+
+        unsafe_metric_keys = set().union(
+            *(record["metric_json"].keys() for record in result["proposed"]["experiment_runs"])
+        ) & agent_control.PROFIT_LEARNING_OMIT_METRIC_KEYS
+        self.assertEqual(unsafe_metric_keys, set())
+        self.assertTrue(
+            all(
+                record["status"] != "promotion_ready"
+                and record["metadata"].get("artifact_status") != "promotion_ready"
+                for record in result["proposed"]["experiment_runs"]
+            )
+        )
+        self.assertEqual(
+            agent_control._safe_profit_learning_status("broker-order-allowed"),
+            "generated_readback_status_omitted_authority_like",
+        )
+        self.assertEqual(
+            agent_control._safe_profit_learning_status("promotion-ready"),
+            "generated_readback_status_omitted_authority_like",
+        )
+        profit_hypothesis = next(
+            record
+            for record in result["proposed"]["strategy_hypotheses"]
+            if record["source_ref"].endswith("regular-options-profit-capture-queue/latest.json")
+        )
+        self.assertIn("queue_rows:97", profit_hypothesis["thesis"])
+        self.assertIn("quarantine_queue_count:173", profit_hypothesis["metadata"]["denominator_context"])
+        self.assertIn("source_sha256", profit_hypothesis["metadata"])
+
+    def test_profit_learning_write_is_token_scoped_idempotent_and_tenant_safe(self):
+        repo_root = self.root / "profit-learning-write-repo"
+        self._write_profit_learning_repo(repo_root)
+        db_path = repo_root / "data" / "agent-control" / "agent_control.db"
+        events_path = repo_root / "data" / "agent-control" / "events.jsonl"
+        artifact_names = ["gateboard", "forward_candidate_throughput", "profit_capture_queue"]
+
+        with self.assertRaisesRegex(agent_control.AgentControlError, "data/agent-control"):
+            agent_control.profit_learning_sync(
+                repo_root=repo_root,
+                db_path=self.db_path,
+                events_path=self.events_path,
+                artifact_names=artifact_names,
+                write_memory=True,
+            )
+
+        self.assertEqual(
+            agent_control.main(
+                [
+                    "memory",
+                    "profit-learning-sync",
+                    "--repo-root",
+                    str(repo_root),
+                    "--db",
+                    str(db_path),
+                    "--events",
+                    str(events_path),
+                    "--artifact",
+                    "gateboard",
+                    "--write-memory",
+                    "--prompt-only",
+                ]
+            ),
+            2,
+        )
+        self.assertEqual(
+            agent_control.main(
+                [
+                    "memory",
+                    "profit-learning-sync",
+                    "--repo-root",
+                    str(repo_root),
+                    "--db",
+                    str(db_path),
+                    "--events",
+                    str(events_path),
+                    "--artifact",
+                    "gateboard",
+                    "--approval-token",
+                    "WRONG",
+                ]
+            ),
+            2,
+        )
+
+        first = agent_control.profit_learning_sync(
+            repo_root=repo_root,
+            db_path=db_path,
+            events_path=events_path,
+            artifact_names=artifact_names,
+            write_memory=True,
+        )
+        second = agent_control.profit_learning_sync(
+            repo_root=repo_root,
+            db_path=db_path,
+            events_path=events_path,
+            artifact_names=artifact_names,
+            write_memory=True,
+        )
+        other = agent_control.profit_learning_sync(
+            repo_root=repo_root,
+            db_path=db_path,
+            events_path=events_path,
+            tenant_id="other-tenant",
+            artifact_names=artifact_names,
+            write_memory=True,
+        )
+
+        self.assertEqual(first["written_counts"], second["written_counts"])
+        self.assertGreater(first["written_counts"]["graph_nodes"], 0)
+        with closing(agent_control.connect(db_path)) as conn:
+            counts = {
+                "zero": conn.execute("SELECT count(*) FROM zero_candidate_episodes").fetchone()[0],
+                "hypotheses": conn.execute("SELECT count(*) FROM strategy_hypotheses").fetchone()[0],
+                "experiments": conn.execute("SELECT count(*) FROM experiment_runs").fetchone()[0],
+                "events": conn.execute("SELECT count(*) FROM event_outbox").fetchone()[0],
+            }
+            ids = [row[0] for row in conn.execute("SELECT id FROM strategy_hypotheses ORDER BY id").fetchall()]
+            metric_json = conn.execute(
+                "SELECT metric_json FROM experiment_runs WHERE id = ?",
+                ("options-chatbot:experiment:profit-sync:profit_capture_queue",),
+            ).fetchone()[0]
+            retrieval = conn.execute(
+                """
+                SELECT title, body, search_text, metadata_json
+                FROM retrieval_documents
+                WHERE source_node_id = ?
+                """,
+                ("provenance:options-chatbot:experiment:profit-sync:profit_capture_queue",),
+            ).fetchone()
+        self.assertEqual(counts["zero"], 2)
+        self.assertEqual(counts["experiments"], 6)
+        self.assertGreaterEqual(counts["hypotheses"], 4)
+        self.assertEqual(counts["events"], 3)
+        self.assertTrue(any(item.startswith("options-chatbot:") for item in ids))
+        self.assertTrue(any(item.startswith("other-tenant:") for item in ids))
+        self.assertIn("queue_rows", json.loads(metric_json))
+        self.assertNotIn("live_entry_allowed", metric_json)
+        retrieval_blob = "\n".join(str(value) for value in retrieval)
+        self.assertNotIn("promotion_ready", retrieval_blob)
+        self.assertNotIn("live_entry_allowed", retrieval_blob)
+        self.assertNotIn("broker_order_allowed", retrieval_blob)
+        self.assertEqual(other["tenant_id"], "other-tenant")
+
+        default_report = agent_control.research_priority_report(db_path=db_path, tenant_id="options-chatbot")
+        other_report = agent_control.research_priority_report(db_path=db_path, tenant_id="other-tenant")
+        self.assertEqual(default_report["status"], "ready")
+        self.assertEqual(other_report["status"], "ready")
+        self.assertTrue(all(item["id"].startswith("options-chatbot:") for item in default_report["hypothesis_priorities"]))
+        self.assertTrue(all(item["id"].startswith("other-tenant:") for item in other_report["hypothesis_priorities"]))
+
+        with closing(agent_control.connect(db_path)) as conn, conn:
+            conn.execute(
+                "UPDATE strategy_hypotheses SET tenant_id = ? WHERE id = ?",
+                ("conflicting-tenant", "options-chatbot:hyp:profit-sync:profit_capture_queue:profit_capture_queue-80d7b7eec2"),
+            )
+        with self.assertRaisesRegex(agent_control.AgentControlError, "cross-tenant overwrite"):
+            agent_control.profit_learning_sync(
+                repo_root=repo_root,
+                db_path=db_path,
+                events_path=events_path,
+                artifact_names=artifact_names,
+                write_memory=True,
+            )
+
+    def test_profit_learning_audit_and_cli_paths(self):
+        repo_root = self.root / "profit-learning-cli-repo"
+        self._write_profit_learning_repo(repo_root)
+        db_path = repo_root / "data" / "agent-control" / "agent_control.db"
+        events_path = repo_root / "data" / "agent-control" / "events.jsonl"
+
+        before = agent_control.profit_learning_audit(
+            repo_root=repo_root,
+            db_path=db_path,
+            artifact_names=["gateboard", "forward_candidate_throughput", "profit_capture_queue"],
+        )
+        self.assertEqual(before["status"], "needs_attention")
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "profit-learning-sync",
+                    "--repo-root",
+                    str(repo_root),
+                    "--db",
+                    str(db_path),
+                    "--events",
+                    str(events_path),
+                    "--artifact",
+                    "gateboard",
+                    "--artifact",
+                    "forward_candidate_throughput",
+                    "--artifact",
+                    "profit_capture_queue",
+                    "--write-memory",
+                    "--approval-token",
+                    agent_control.PROFIT_LEARNING_SYNC_TOKEN,
+                    "--prompt-only",
+                ]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Mode: write_memory", stdout.getvalue())
+
+        after = agent_control.profit_learning_audit(
+            repo_root=repo_root,
+            db_path=db_path,
+            artifact_names=["gateboard", "forward_candidate_throughput", "profit_capture_queue"],
+        )
+        self.assertEqual(after["status"], "pass")
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            exit_code = agent_control.main(
+                [
+                    "memory",
+                    "profit-learning-audit",
+                    "--repo-root",
+                    str(repo_root),
+                    "--db",
+                    str(db_path),
+                    "--artifact",
+                    "gateboard",
+                    "--json",
+                ]
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "pass")
 
     def test_high_risk_modes_require_explicit_ack(self):
         with self.assertRaises(agent_control.AgentControlError):
@@ -1844,6 +2577,7 @@ class AgentControlTests(unittest.TestCase):
             goal="bootstrap graph queries",
             pathway="operator",
             include_prompt_context=True,
+            manifest_dir=self.root / "context-packs",
         )
         self.assertEqual([node["id"] for node in pack["dream_lessons"]], accepted["accepted_memory_ids"])
         self.assertIn("Dream-derived lessons and constraints", pack["prompt_context"])
@@ -1880,6 +2614,56 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(rejected["status"], "rejected")
         listed = agent_control.list_dreams(db_path=self.db_path, status="rejected")
         self.assertEqual([node["id"] for node in listed["dreams"]], ["dream:nightly-2"])
+
+    def test_dream_accept_preserves_proposal_tenant(self):
+        repo_root = self.root / "dream-tenant-repo"
+        self._write_repo_file(
+            repo_root,
+            "docs/dream.json",
+            json.dumps(
+                {
+                    "title": "Tenant scoped dream",
+                    "entries": [
+                        {
+                            "id": "tenant-lesson",
+                            "type": "lesson",
+                            "title": "Tenant scoped dream lesson",
+                            "body": "Tenant scoped dream body.",
+                            "confidence": "inferred",
+                        }
+                    ],
+                }
+            ),
+        )
+        proposed = agent_control.propose_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            proposal_path=Path("docs/dream.json"),
+            repo_root=repo_root,
+            dream_id="tenant-dream",
+            tenant_id="other-tenant",
+        )
+        accepted = agent_control.accept_dream(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            dream_id="tenant-dream",
+        )
+
+        self.assertEqual(proposed["tenant_id"], "other-tenant")
+        default_query = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Tenant scoped dream lesson",
+            tenant_id="options-chatbot",
+            max_depth=0,
+        )
+        other_query = agent_control.query_graph(
+            db_path=self.db_path,
+            query="Tenant scoped dream lesson",
+            tenant_id="other-tenant",
+            max_depth=0,
+        )
+        self.assertEqual(default_query["graph_context"]["seed_node_ids"], [])
+        self.assertIn(accepted["accepted_memory_ids"][0], other_query["graph_context"]["seed_node_ids"])
 
     def test_dream_propose_rejects_empty_and_duplicate_entries(self):
         repo_root = self.root / "dream-validation-repo"
@@ -2521,6 +3305,87 @@ class AgentControlTests(unittest.TestCase):
         self.assertEqual(len(result["rejected"]), 1)
         self.assertIn("high-risk", result["rejected"][0]["reason"])
         self.assertEqual([node["id"] for node in listed["dreams"]], ["dream:risky"])
+
+    def test_auto_dream_run_requires_entry_level_evidence_and_scans_metadata(self):
+        repo_root = self.root / "auto-dream-entry-evidence-repo"
+        transcript_path = repo_root / "docs/session.md"
+        self._write_repo_file(repo_root, "docs/session.md", "Session evidence for rejected dreams.\n")
+        session = agent_control.log_session(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            transcript_path=transcript_path,
+            session_id="dream-edge-evidence",
+            title="Dream edge evidence session",
+            summary="Evidence source for edge-case dream rejection.",
+        )
+        self._write_repo_file(
+            repo_root,
+            "docs/top-level-evidence-only.json",
+            json.dumps(
+                {
+                    "title": "Top level evidence only",
+                    "evidence": [session["graph_node_id"]],
+                    "entries": [
+                        {
+                            "id": "missing-entry-evidence",
+                            "type": "lesson",
+                            "title": "Entry evidence required",
+                            "body": "Auto dreams need evidence on each entry.",
+                            "confidence": "inferred",
+                        }
+                    ],
+                }
+            ),
+        )
+        self._write_repo_file(
+            repo_root,
+            "docs/high-risk-metadata.json",
+            json.dumps(
+                {
+                    "title": "High risk metadata",
+                    "entries": [
+                        {
+                            "id": "metadata-risk",
+                            "type": "lesson",
+                            "title": "Metadata must be scanned",
+                            "body": "The body looks harmless.",
+                            "confidence": "inferred",
+                            "evidence": [session["graph_node_id"]],
+                            "metadata": {
+                                "promotion_target": "live_validation",
+                                "intended_consumer": "broker_order_operator",
+                            },
+                        }
+                    ],
+                }
+            ),
+        )
+        for dream_id, path in [
+            ("top-level-evidence-only", "docs/top-level-evidence-only.json"),
+            ("high-risk-metadata", "docs/high-risk-metadata.json"),
+        ]:
+            agent_control.propose_dream(
+                db_path=self.db_path,
+                events_path=self.events_path,
+                repo_root=repo_root,
+                proposal_path=Path(path),
+                dream_id=dream_id,
+            )
+
+        result = agent_control.run_dream_cycle(
+            db_path=self.db_path,
+            events_path=self.events_path,
+            repo_root=repo_root,
+            dreams_dir=repo_root / "data/agent-control/dreams",
+            runs_dir=repo_root / "data/agent-control/dream-runs",
+            generate_from_sessions=False,
+        )
+
+        self.assertEqual(result["accepted"], [])
+        reasons = " ".join(item["reason"] for item in result["rejected"])
+        self.assertIn("missing-entry-evidence has no entry-level evidence", reasons)
+        self.assertIn("metadata-risk contains high-risk options/action wording", reasons)
 
     def test_auto_dream_audit_cli_prompt_only(self):
         runs_dir = self.root / "dream-runs"

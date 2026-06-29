@@ -1,5 +1,11 @@
 # Worklog
 
+## 2026-06-29
+
+- Added token-gated `memory profit-learning-sync` / `memory profit-learning-audit` commands and package aliases for options-profitability memory intake. The sync reads only allowlisted generated readbacks, validates source timestamps, hashes source artifacts, preserves denominator context, writes research-only zero-candidate episodes / strategy hypotheses / experiment readbacks under `data/agent-control/`, and keeps writes scoped to the control-plane DB/events path.
+- Hardened memory graph tenant safety and authority hygiene: graph nodes and zero-candidate episodes now reject cross-tenant ID overwrites, dream acceptance preserves the proposal tenant, retrieval documents store sanitized title/body for unsafe raw graph notes, operating-memory input metadata is validated before policy defaults are applied, and profit-learning metric/status extraction strips or sanitizes action-authority-shaped fields.
+- Added agent-control regressions for profit-learning dry-run/write/audit behavior, CLI token gates, tenant isolation, malformed/stale artifacts, invalid generated timestamps, cross-tenant ID collisions, dream tenant preservation, and memory-policy edge cases. Verification: `uv run --locked python -m unittest tests.test_agent_control -v` passed (`67` tests).
+
 ## 2026-06-28
 
 - Upgraded the options agent-control memory graph to v2. `scripts/agent_control.py` now applies a shared non-authorizing memory policy, rejects memory/dream wording that tries to grant trading/evidence/scanner/proof/promotion authority, writes a SQLite `retrieval_documents` FTS/BM25 index with retrieval explanations, records context-pack manifests and startup runs, adds an event outbox hash chain, exposes `npm run memory:operator-dashboard`, and records research-only zero-candidate provenance with `npm run memory:research-priorities`. Added focused tests for unsafe-authority rejection, retrieval explanations, manifests/dashboard/outbox auditability, and research provenance. This remains orchestration/research memory only and does not authorize cohort append, evidence mutation, quote import, scanner changes, live validation, auto-track, broker action, proof-bar changes, promotion, protected-holdout use, or treating historical rows as forward proof.
