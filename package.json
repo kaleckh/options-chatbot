@@ -169,6 +169,7 @@
     "options:research:preregistered-dispersion-proxy-hybrid-playbook": "uv run --locked python scripts/build_regular_options_preregistered_dispersion_proxy_hybrid_playbook.py",
     "options:research:point-in-time-dispersion-concentration-proxy": "uv run --locked python scripts/build_regular_options_point_in_time_dispersion_concentration_proxy.py",
     "options:research:dispersion-proxy-hybrid-replay-readiness": "uv run --locked python scripts/build_regular_options_dispersion_proxy_hybrid_replay_readiness.py",
+    "options:research:dispersion-proxy-hybrid-bounded-replay": "uv run --locked python scripts/build_regular_options_dispersion_proxy_hybrid_bounded_replay.py",
     "options:research:preregistered-pmcc-diagonal-playbook": "uv run --locked python scripts/build_regular_options_preregistered_pmcc_diagonal_playbook.py",
     "options:research:pmcc-diagonal-replay-readiness": "uv run --locked python scripts/build_regular_options_pmcc_diagonal_replay_readiness.py",
     "options:research:preregistered-playbook-readiness-selector": "uv run --locked python scripts/build_regular_options_preregistered_playbook_readiness_selector.py",

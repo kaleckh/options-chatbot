@@ -14,6 +14,7 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - Scheduled Phase 2 drop-count total: `63`.
 - Scheduled Phase 2 drop-stage status: `candidate_starvation_from_scan_filters`.
 - Scheduled Phase 2 symbol drop reasons: `0`.
+- Scheduled Phase 2 near-miss status: `near_miss_table_waiting_for_symbol_drop_reasons`.
 - Candidate-starvation evidence status: `stage_counts_only_waiting_for_symbol_drop_reasons`.
 - Zero-candidate diagnostics: `opaque_zero_candidate_diagnosis_missing_symbol_drop_reasons`.
 - Scheduled Phase 2 scan picks: `0`.
@@ -71,6 +72,10 @@ Status: `blocked_no_same_day_phase2_natural_selections`.
 - Scheduled sessions reviewed: `2`.
 - Symbol drop-reason status: `missing_symbol_drop_reasons_for_aggregate_drops`.
 - Safe next read-only actions: `wait_for_future_scheduled_sessions_with_symbol_drop_reason_persistence`, `inspect_existing_aggregate_drop_stage_counts_read_only`.
+
+## Ranked Symbol Near Misses
+
+- Status: `near_miss_table_waiting_for_symbol_drop_reasons`.
 
 ## Rejection Counts
 

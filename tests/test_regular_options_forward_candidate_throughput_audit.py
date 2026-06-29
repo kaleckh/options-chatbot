@@ -144,12 +144,25 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
         self.assertFalse(diagnostics["safety_flags"]["scanner_called"])
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"][0]["symbol"], "QQQ")
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"][0]["playbook"], "volatility_expansion_observation")
+        near_miss_summary = report["scheduled_phase2_near_miss_summary"]
+        self.assertEqual(near_miss_summary["status"], "symbol_level_near_miss_table_ready")
+        self.assertEqual(near_miss_summary["row_count"], 2)
+        self.assertEqual(near_miss_summary["gate_category_counts"]["signal_or_regime_threshold"], 1)
+        ranked = near_miss_summary["ranked_symbol_near_misses"]
+        self.assertEqual(ranked[0]["symbol"], "SPY")
+        self.assertEqual(ranked[0]["drop_key"], "tech_score")
+        self.assertEqual(ranked[0]["distance_components"]["tech_score_gap"], 13.0)
+        self.assertEqual(ranked[0]["distance_to_pass"], 13.0)
+        self.assertTrue(ranked[0]["research_only"])
+        self.assertTrue(ranked[0]["non_promotable"])
+        self.assertEqual(report["scheduled_phase2_ranked_near_misses"][0]["symbol"], "SPY")
         self.assertNotIn("notes_json", report["scheduled_scan_sessions"][0])
         self.assertIn("scan_funnel_drop_counts", report["scheduled_scan_sessions"][0])
         vol_session = next(session for session in report["scheduled_scan_sessions"] if session["playbook"] == "volatility_expansion_observation")
         self.assertEqual(vol_session["scan_drop_reason_count"], 2)
         self.assertEqual(vol_session["scan_drop_reason_sample"][0]["symbol"], "QQQ")
         self.assertEqual(vol_session["scan_drop_reason_sample"][0]["drop_key"], "ev_floor")
+        self.assertEqual(vol_session["near_miss_rows"][0]["symbol"], "QQQ")
         self.assertEqual(report["scheduled_phase2_eligibility_status_counts"], {"ineligible": 2})
         self.assertEqual(report["scheduled_phase2_eligibility_blocker_counts"]["no_scan_picks"], 2)
         self.assertEqual(report["scheduled_phase2_eligibility_blocker_counts"]["missing_truth_source"], 1)
@@ -192,8 +205,41 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
         self.assertIn("Zero-Candidate Diagnostics", doc)
         self.assertIn("Zero-candidate diagnostics", doc)
         self.assertIn("Symbol Drop-Reason Samples", doc)
+        self.assertIn("Ranked Symbol Near Misses", doc)
         self.assertIn("symbol drop reasons", doc)
         self.assertIn("does not run the scanner", doc)
+
+    def test_symbol_drop_reasons_without_distance_are_not_ranked_near_misses(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "scan_picks.jsonl"
+            ledger = root / "forward_tracking_authoritative.db"
+            _write_ledger(ledger)
+            conn = sqlite3.connect(ledger)
+            try:
+                conn.execute(
+                    """
+                    UPDATE forward_sessions
+                    SET notes_json = json_set(
+                        notes_json,
+                        '$.symbol_diagnostics.scan_drop_reasons',
+                        json('{"SPY":{"drop_key":"tech_score","details":{"reason":"below_signal_gate"}}}')
+                    )
+                    WHERE playbook = 'volatility_expansion_observation'
+                    """
+                )
+                conn.commit()
+            finally:
+                conn.close()
+            _write_jsonl(path, [_row(playbook_id="short_term", scan_date="2026-06-26")])
+            report = audit.build_report(scan_picks_path=path, ledger_db_path=ledger, selection_date="2026-06-26", generated_at_utc=NOW)
+            doc = audit.render_markdown(report)
+
+        summary = report["scheduled_phase2_near_miss_summary"]
+        self.assertEqual(summary["status"], "symbol_drop_reasons_recorded_without_distance")
+        self.assertEqual(summary["row_count"], 1)
+        self.assertEqual(summary["distance_available_count"], 0)
+        self.assertNotIn("distance `unknown`", doc)
 
     def test_stage_counts_without_symbol_reasons_require_next_reason_capture(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -236,6 +282,10 @@ class RegularOptionsForwardCandidateThroughputAuditTests(unittest.TestCase):
         )
         self.assertEqual(diagnostics["drop_count_total"], 62)
         self.assertEqual(report["scheduled_phase2_scan_drop_reason_sample"], [])
+        self.assertEqual(
+            report["scheduled_phase2_near_miss_summary"]["status"],
+            "near_miss_table_waiting_for_symbol_drop_reasons",
+        )
 
     def test_returned_picks_disable_zero_candidate_diagnostic(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
