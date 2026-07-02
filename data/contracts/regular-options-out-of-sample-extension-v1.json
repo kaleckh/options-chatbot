@@ -1,0 +1,139 @@
+{
+  "accepted_profitability": false,
+  "auto_track_enabled": false,
+  "broker_order_allowed": false,
+  "contract_id": "regular_options_out_of_sample_extension_v1",
+  "evaluation_only": true,
+  "evaluation_scope": {
+    "evaluation_window_must_not_overlap_existing_24_month_selection_dataset": true,
+    "existing_24_month_dataset_selection_forbidden": true,
+    "filter_modification_prohibited": true,
+    "mode": "evaluation_only",
+    "new_filter_family_prohibited": true,
+    "new_window_only": true,
+    "phase_15_2_import_not_started_by_this_contract": true,
+    "registry_append_required_immediately_upon_evaluation": true,
+    "registry_disposition_on_evaluation": "consumed_for_evaluation",
+    "threshold_change_prohibited": true,
+    "window_consumption_registry_path": "data/contracts/regular-options-audit-window-consumption-registry.json"
+  },
+  "evidence_stores_mutated": false,
+  "fee_model": {
+    "contract_multiplier": 100,
+    "exit_value_formula": "max(0, long_bid - short_ask)",
+    "fee_per_contract_leg_usd": 0.65,
+    "legs_per_vertical_spread": 2,
+    "net_pnl_usd_formula": "(exit_value - entry_debit) * 100 - total_fees_usd",
+    "round_trip_leg_count": 4,
+    "source": "scripts/build_regular_options_historical_frozen_scanner_replay_adapter.py",
+    "total_fees_usd_formula": "4 * fee_per_contract_leg_usd"
+  },
+  "forward_rows_are_profitability_proof": false,
+  "frozen_at_utc": "2026-07-02T06:18:44Z",
+  "frozen_policy": {
+    "conditions": [
+      {
+        "field": "ticker",
+        "op": "in",
+        "value": [
+          "NEM",
+          "JNJ",
+          "GOOGL",
+          "AAPL",
+          "IWM",
+          "CVX",
+          "SPY",
+          "QQQ"
+        ]
+      },
+      {
+        "field": "signal_evidence.prior_20_trading_day_return_pct",
+        "op": "gte",
+        "value": 10.990605
+      }
+    ],
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "policy_id": "historical_filtered_candidate_policy_v1"
+  },
+  "gates": {
+    "bootstrap_draws": 10000,
+    "cluster_date_field": "entry_date",
+    "cluster_key": "ticker:ISO-week",
+    "percent_cluster_pf_lb_5pct_must_be_gt": 1.0,
+    "total_net_pnl_usd_must_be_gt": 0.0,
+    "usd_cluster_pf_lb_5pct_must_be_gt": 1.0,
+    "window": "new_out_of_sample_window_only"
+  },
+  "historical_rows_are_forward_proof": false,
+  "interpretation": {
+    "failure_verdict": "park_filter_hypothesis_tracker_may_continue",
+    "neither_outcome_authorizes_trading": true,
+    "passing_verdict": "historically_consistent_still_awaiting_forward_bar",
+    "pre_registered_expectation": "uncertain",
+    "train_percent_cluster_pf_lb": 0.93,
+    "train_usd_cluster_pf_lb": 0.8
+  },
+  "lane_promotion_authorized": false,
+  "live_validation_enabled": false,
+  "options_history_db_mutated": false,
+  "prohibited_actions": [
+    "do_not_import_quotes_from_phase_15_1_contract",
+    "do_not_mutate_options_history_db_from_phase_15_1_contract",
+    "do_not_mutate_evidence_stores_from_phase_15_1_contract",
+    "do_not_consume_protected_holdout_from_phase_15_1_contract",
+    "do_not_change_scanner_policy_from_out_of_sample_window",
+    "do_not_change_filter_threshold_from_out_of_sample_window",
+    "do_not_add_new_filter_family_from_out_of_sample_window",
+    "do_not_change_stops_sizing_or_proof_bars_from_phase_15_1_contract",
+    "do_not_enable_live_validation_or_auto_track_from_phase_15_1_contract",
+    "do_not_submit_broker_orders_from_phase_15_1_contract",
+    "do_not_promote_lanes_from_phase_15_1_contract",
+    "do_not_treat_historical_rows_as_forward_profitability_proof"
+  ],
+  "proof_set": {
+    "name": "frozen_13_symbol_proof_set",
+    "symbol_count": 13,
+    "symbols": [
+      "SPY",
+      "QQQ",
+      "IWM",
+      "DIA",
+      "AAPL",
+      "GOOGL",
+      "UNH",
+      "LLY",
+      "JNJ",
+      "XOM",
+      "CVX",
+      "COP",
+      "NEM"
+    ]
+  },
+  "protected_holdout_consumed": false,
+  "quotes_imported": false,
+  "read_only": true,
+  "report_id": "regular_options_out_of_sample_extension_contract",
+  "research_only": true,
+  "scanner_policy_changed": false,
+  "schema_version": 1,
+  "source_policy_contract": {
+    "conditions_sha256": "3b10d0306800e1a203480b80e4fafda03d5e1b6443d8d294cbf8ff7f20324967",
+    "filter_id": "train_ranked_top_8_tickers__signal_evidence_prior_20_trading_day_return_pct_gte_10.9906",
+    "path": "data/contracts/regular-options-frozen-filtered-policy-v1.json",
+    "policy_id": "historical_filtered_candidate_policy_v1",
+    "report_id": "regular_options_frozen_filtered_policy",
+    "sha256": "2054eafc577ddc10f4cd4bbd4c4b4133c6e82d3d8bd7be2d6bd1dc547dc42b00"
+  },
+  "target_window": {
+    "deepest_provider_window_observed": null,
+    "provider_received_end_month": null,
+    "provider_received_start_month": null,
+    "provider_received_status": "pending_phase_15_2_import",
+    "record_requested_vs_received_on_import": true,
+    "requested_end_date": "2024-05-31",
+    "requested_end_month": "2024-05",
+    "requested_start_date": "2022-01-01",
+    "requested_start_month": "2022-01"
+  }
+}

@@ -125,6 +125,7 @@
     "options:source-repair:59-symbol-thetadata-opra-import": "uv run --locked python scripts/run_regular_options_59_symbol_thetadata_opra_import_repair.py",
     "options:source-repair:59-symbol-thetadata-opra-import-resume": "uv run --locked python scripts/run_regular_options_59_symbol_thetadata_opra_import_resume.py",
     "options:audit:historical-simulated-forward": "uv run --locked python scripts/build_regular_options_historical_simulated_forward_audit.py",
+    "options:freeze:out-of-sample-extension": "uv run --locked python scripts/freeze_regular_options_out_of_sample_extension.py",
     "options:plan:lane-scan-hypothesis-repair": "uv run --locked python scripts/build_regular_options_lane_scan_hypothesis_repair.py",
     "options:replay:exact-candidate-repair": "uv run --locked python scripts/build_regular_options_exact_candidate_selection_repair.py",
     "options:replay:chain-native-filter-relaxation": "uv run --locked python scripts/build_regular_options_chain_native_filter_relaxation_replay.py",
