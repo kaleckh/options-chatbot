@@ -6,7 +6,7 @@ import json
 import math
 import sys
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -21,6 +21,7 @@ from scripts.build_regular_options_historical_profitability_filter_iteration imp
     _filter_rows,
 )
 from scripts import build_regular_options_filtered_forward_paper_shadow_tracker as tracker  # noqa: E402
+from us_equity_market_calendar import is_us_equity_market_day  # noqa: E402
 
 
 REPORT_ID = "regular_options_materializer_match_rate_stationarity"
@@ -41,6 +42,9 @@ DEFAULT_HASH_INVARIANCE_PATHS = (
 )
 MAX_INPUT_AGE_DAYS = 5
 ZERO_RUN_REGIME_BREAK_MAX_FRACTION = 0.05
+ZERO_RUN_CONFIRMATION_MAX_FRACTION = 0.01
+ZERO_RUN_TRIGGER_MIN_WINDOW_DAYS = 13
+ZERO_RUN_TRIGGER_MAX_WINDOW_DAYS = 90
 STATUS_VOCABULARY = {
     "post_freeze_zero_within_historical_variation",
     "post_freeze_zero_indicates_regime_break",
@@ -138,6 +142,16 @@ def _parse_datetime(value: Any) -> datetime | None:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _parse_date(value: Any) -> date | None:
+    text = str(value or "").strip()[:10]
+    if not text:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError:
+        return None
 
 
 def _input_age_days(input_generated_at: Any, reference: datetime) -> int | None:
@@ -262,6 +276,111 @@ def _sliding_zero_run(match_dates: set[str], all_dates: Sequence[str], window_da
         "zero_match_window_fraction": round(zero_count / window_count, 6) if window_count else None,
         "min_matches_in_any_window": min_matches,
         "max_matches_in_any_window": max_matches,
+    }
+
+
+def _market_days_after(start_date: date, days_needed: int) -> date:
+    if days_needed <= 0:
+        return start_date
+    remaining = days_needed
+    current = start_date
+    while remaining > 0:
+        current += timedelta(days=1)
+        if is_us_equity_market_day(current):
+            remaining -= 1
+    return current
+
+
+def _zero_run_trigger_schedule(
+    *,
+    match_dates: set[str],
+    all_dates: Sequence[str],
+    observed_market_days: int,
+    observed_filter_matches: int,
+    reference_date: date,
+    min_window_days: int = ZERO_RUN_TRIGGER_MIN_WINDOW_DAYS,
+    max_window_days: int = ZERO_RUN_TRIGGER_MAX_WINDOW_DAYS,
+) -> dict[str, Any]:
+    if observed_filter_matches > 0:
+        return {
+            "status": "voided_by_post_freeze_match",
+            "reason": "A parity materializer post-freeze filter match ends the zero-run schedule; rerun stationarity from the new matched observation.",
+            "observed_window_market_days": observed_market_days,
+            "observed_filter_match_source": "parity_materializer_filter_matched_selected_rows_in_window",
+            "reference_date": reference_date.isoformat(),
+            "voids_on_first_post_freeze_filter_match": True,
+            "windows": [],
+            "first_regime_break_trigger": None,
+            "first_confirmation_trigger": None,
+            "monotonicity_check": {"status": "not_applicable", "violations": []},
+        }
+    if observed_market_days <= 0:
+        return {
+            "status": "insufficient_observed_zero_run",
+            "reason": "Observed zero-run market-day count is unavailable.",
+            "observed_window_market_days": observed_market_days,
+            "observed_filter_match_source": "parity_materializer_filter_matched_selected_rows_in_window",
+            "reference_date": reference_date.isoformat(),
+            "voids_on_first_post_freeze_filter_match": True,
+            "windows": [],
+            "first_regime_break_trigger": None,
+            "first_confirmation_trigger": None,
+            "monotonicity_check": {"status": "not_applicable", "violations": []},
+        }
+
+    windows: list[dict[str, Any]] = []
+    previous_fraction: float | None = None
+    violations: list[dict[str, Any]] = []
+    first_regime_break: dict[str, Any] | None = None
+    first_confirmation: dict[str, Any] | None = None
+    for window_days in range(min_window_days, max_window_days + 1):
+        zero_run = _sliding_zero_run(match_dates, all_dates, window_days)
+        fraction = zero_run.get("zero_match_window_fraction")
+        trigger_date = _market_days_after(reference_date, max(window_days - observed_market_days, 0))
+        row = {
+            "window_market_days": window_days,
+            "status": zero_run.get("status"),
+            "historical_market_day_count": zero_run.get("historical_market_day_count"),
+            "window_count": zero_run.get("window_count"),
+            "zero_match_window_count": zero_run.get("zero_match_window_count"),
+            "zero_match_window_fraction": fraction,
+            "projected_calendar_date_if_zero_run_continues": trigger_date.isoformat(),
+            "already_reached": window_days <= observed_market_days,
+            "regime_break_threshold": ZERO_RUN_REGIME_BREAK_MAX_FRACTION,
+            "confirmation_threshold": ZERO_RUN_CONFIRMATION_MAX_FRACTION,
+        }
+        if fraction is not None:
+            parsed_fraction = float(fraction)
+            if previous_fraction is not None and parsed_fraction > previous_fraction:
+                violations.append(
+                    {
+                        "window_market_days": window_days,
+                        "previous_fraction": previous_fraction,
+                        "current_fraction": parsed_fraction,
+                    }
+                )
+            previous_fraction = parsed_fraction
+            if first_regime_break is None and parsed_fraction <= ZERO_RUN_REGIME_BREAK_MAX_FRACTION:
+                first_regime_break = dict(row)
+            if first_confirmation is None and parsed_fraction <= ZERO_RUN_CONFIRMATION_MAX_FRACTION:
+                first_confirmation = dict(row)
+        windows.append(row)
+    ready_windows = [row for row in windows if row.get("status") == "ready"]
+    return {
+        "status": "ready" if ready_windows else "insufficient_history",
+        "observed_window_market_days": observed_market_days,
+        "observed_filter_match_source": "parity_materializer_filter_matched_selected_rows_in_window",
+        "reference_date": reference_date.isoformat(),
+        "window_range_market_days": [min_window_days, max_window_days],
+        "voids_on_first_post_freeze_filter_match": True,
+        "first_regime_break_trigger": first_regime_break,
+        "first_confirmation_trigger": first_confirmation,
+        "monotonicity_check": {
+            "status": "passed" if not violations else "failed",
+            "expected": "historical_zero_match_window_fraction_should_not_increase_as_window_days_grow",
+            "violations": violations,
+        },
+        "windows": windows,
     }
 
 
@@ -418,6 +537,7 @@ def build_report(
 ) -> dict[str, Any]:
     generated_at = generated_at_utc or _utc_now_iso()
     reference = _parse_datetime(generated_at) or datetime.now(UTC)
+    reference_date = reference.date()
     policy, policy_meta = _load_json(policy_contract_path)
     tracker_latest, tracker_meta = _load_json(tracker_latest_path)
     parity_latest, parity_meta = _load_json(parity_latest_path)
@@ -506,6 +626,15 @@ def build_report(
         all_dates = [_date_key(row) for row in accepted_rows if _date_key(row)]
     match_dates = {_date_key(row) for row in filtered_rows if _date_key(row)}
     zero_run = _sliding_zero_run(match_dates, all_dates, observed_market_days)
+    zero_run_schedule = _zero_run_trigger_schedule(
+        match_dates=match_dates,
+        all_dates=all_dates,
+        observed_market_days=observed_market_days,
+        observed_filter_matches=observed_filter_matches,
+        reference_date=reference_date,
+    )
+    if _as_dict(zero_run_schedule.get("monotonicity_check")).get("status") == "failed":
+        blockers.append("zero_run_trigger_schedule_monotonicity_violation")
 
     if blockers:
         status = "blocked_missing_or_stale_inputs"
@@ -569,6 +698,7 @@ def build_report(
                 else "not_interpreted"
             ),
         },
+        "zero_run_trigger_schedule": zero_run_schedule,
         "frozen_threshold_distance_summary": _threshold_distance_summary(accepted_rows, conditions, threshold),
         "scheduled_scan_near_miss_summary": _throughput_near_miss_summary(throughput_latest),
         "session_entry_window_overlap": _session_overlap(parity_latest),
@@ -603,6 +733,9 @@ def render_markdown(report: dict[str, Any]) -> str:
     historical = _as_dict(report.get("historical_materializer"))
     post = _as_dict(report.get("post_freeze_observation"))
     zero = _as_dict(report.get("zero_run_stationarity"))
+    schedule = _as_dict(report.get("zero_run_trigger_schedule"))
+    break_trigger = _as_dict(schedule.get("first_regime_break_trigger"))
+    confirmation_trigger = _as_dict(schedule.get("first_confirmation_trigger"))
     threshold = _as_dict(report.get("frozen_threshold_distance_summary"))
     overlap = _as_dict(report.get("session_entry_window_overlap"))
     lines = [
@@ -614,8 +747,20 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- Post-freeze materializer rows: `{post.get('parity_materializer_rows_in_window')}`.",
         f"- Post-freeze filter-matched rows: `{post.get('parity_filter_matched_selected_rows_in_window')}`.",
         f"- Zero-run windows: `{zero.get('zero_match_window_count')}` / `{zero.get('window_count')}`; fraction `{zero.get('zero_match_window_fraction')}`.",
+        f"- Zero-run trigger schedule: `{schedule.get('status')}`; monotonicity `{_as_dict(schedule.get('monotonicity_check')).get('status')}`.",
+        f"- First <=0.05 trigger if zero-run continues: `{break_trigger.get('projected_calendar_date_if_zero_run_continues')}` at `{break_trigger.get('window_market_days')}` market days; fraction `{break_trigger.get('zero_match_window_fraction')}`.",
+        f"- First <=0.01 confirmation if zero-run continues: `{confirmation_trigger.get('projected_calendar_date_if_zero_run_continues')}` at `{confirmation_trigger.get('window_market_days')}` market days; fraction `{confirmation_trigger.get('zero_match_window_fraction')}`.",
         f"- Minimum historical distance below frozen threshold: `{threshold.get('min_distance')}`.",
         f"- Session-time overlap with materializer entry window: `{overlap.get('distinct_session_times_inside_entry_window')}` / `{overlap.get('distinct_scheduled_session_time_count')}` distinct times.",
+        "",
+        "## Zero-Run Trigger Schedule",
+        "",
+        "| Threshold | Window Market Days | Projected Date If Zero Continues | Historical Zero Fraction |",
+        "|---|---:|---|---:|",
+        f"| `<=0.05` | {break_trigger.get('window_market_days')} | `{break_trigger.get('projected_calendar_date_if_zero_run_continues')}` | {break_trigger.get('zero_match_window_fraction')} |",
+        f"| `<=0.01` | {confirmation_trigger.get('window_market_days')} | `{confirmation_trigger.get('projected_calendar_date_if_zero_run_continues')}` | {confirmation_trigger.get('zero_match_window_fraction')} |",
+        "",
+        "A single post-freeze parity materializer filter match voids this zero-run schedule and requires a fresh stationarity run.",
         "",
         "## Monthly Match Counts",
         "",

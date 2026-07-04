@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import build_regular_options_materializer_match_rate_stationarity as stationarity
 
@@ -25,6 +27,16 @@ def _paths(root: Path) -> dict[str, Path]:
         "parity": root / "parity" / "latest.json",
         "throughput": root / "throughput" / "latest.json",
     }
+
+
+def _market_dates(start: date, count: int) -> list[str]:
+    days: list[str] = []
+    current = start
+    while len(days) < count:
+        if stationarity.is_us_equity_market_day(current):
+            days.append(current.isoformat())
+        current += timedelta(days=1)
+    return days
 
 
 def _policy(path: Path, *, bad_hash: bool = False) -> None:
@@ -187,6 +199,106 @@ class MaterializerMatchRateStationarityTests(unittest.TestCase):
 
         self.assertEqual(report["status"], "post_freeze_zero_within_historical_variation")
         self.assertGreater(report["zero_run_stationarity"]["zero_match_window_fraction"], 0.05)
+
+    def test_zero_run_trigger_schedule_computes_dates_and_reuses_n13_fraction(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 20)
+            _write_engine(paths, dates, set(dates))
+            _write_artifacts(paths, observed_market_days=13, disclosed_rows=20)
+            report = _build(paths)
+
+        schedule = report["zero_run_trigger_schedule"]
+        window13 = schedule["windows"][0]
+        window14 = schedule["windows"][1]
+        self.assertEqual(schedule["status"], "ready")
+        self.assertEqual(schedule["window_range_market_days"], [13, 90])
+        self.assertEqual(len(schedule["windows"]), 78)
+        self.assertEqual(window13["window_market_days"], 13)
+        self.assertEqual(window13["projected_calendar_date_if_zero_run_continues"], "2026-07-04")
+        self.assertEqual(window14["window_market_days"], 14)
+        self.assertEqual(window14["projected_calendar_date_if_zero_run_continues"], "2026-07-06")
+        self.assertEqual(window13["zero_match_window_fraction"], report["zero_run_stationarity"]["zero_match_window_fraction"])
+        self.assertEqual(schedule["first_regime_break_trigger"]["window_market_days"], 13)
+        self.assertEqual(schedule["first_confirmation_trigger"]["window_market_days"], 13)
+        self.assertEqual(schedule["monotonicity_check"]["status"], "passed")
+
+    def test_zero_run_trigger_schedule_degrades_when_history_is_too_short(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 10)
+            _write_engine(paths, dates, set(dates))
+            _write_artifacts(paths, observed_market_days=3, disclosed_rows=10)
+            report = _build(paths)
+
+        schedule = report["zero_run_trigger_schedule"]
+        self.assertEqual(schedule["status"], "insufficient_history")
+        self.assertTrue(all(row["status"] == "insufficient_history" for row in schedule["windows"]))
+        self.assertIsNone(schedule["first_regime_break_trigger"])
+        self.assertIsNone(schedule["first_confirmation_trigger"])
+
+    def test_zero_run_trigger_schedule_reports_missing_observed_window(self) -> None:
+        schedule = stationarity._zero_run_trigger_schedule(
+            match_dates=set(),
+            all_dates=[],
+            observed_market_days=0,
+            observed_filter_matches=0,
+            reference_date=date(2026, 7, 4),
+        )
+
+        self.assertEqual(schedule["status"], "insufficient_observed_zero_run")
+        self.assertEqual(schedule["windows"], [])
+        self.assertEqual(
+            schedule["observed_filter_match_source"],
+            "parity_materializer_filter_matched_selected_rows_in_window",
+        )
+
+    def test_zero_run_trigger_schedule_voids_after_post_freeze_match(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 20)
+            _write_engine(paths, dates, set(dates))
+            _write_artifacts(paths, observed_market_days=13, observed_filter_matches=1, disclosed_rows=20)
+            report = _build(paths)
+
+        schedule = report["zero_run_trigger_schedule"]
+        self.assertEqual(schedule["status"], "voided_by_post_freeze_match")
+        self.assertTrue(schedule["voids_on_first_post_freeze_filter_match"])
+        self.assertEqual(schedule["windows"], [])
+        self.assertEqual(
+            schedule["observed_filter_match_source"],
+            "parity_materializer_filter_matched_selected_rows_in_window",
+        )
+
+    def test_zero_run_trigger_schedule_monotonicity_violation_blocks_report(self) -> None:
+        def fake_zero_run(match_dates: set[str], all_dates: list[str], window_days: int) -> dict:
+            fraction = {3: 0.0, 13: 0.1, 14: 0.2}.get(window_days, 0.0)
+            return {
+                "status": "ready",
+                "observed_window_market_days": window_days,
+                "historical_market_day_count": 20,
+                "window_count": 1,
+                "zero_match_window_count": 1,
+                "zero_match_window_fraction": fraction,
+                "min_matches_in_any_window": 0,
+                "max_matches_in_any_window": 1,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            paths = _paths(Path(tmp))
+            _policy(paths["policy"])
+            dates = _market_dates(date(2026, 1, 2), 20)
+            _write_engine(paths, dates, set(dates))
+            _write_artifacts(paths, observed_market_days=3, disclosed_rows=20)
+            with patch.object(stationarity, "_sliding_zero_run", side_effect=fake_zero_run):
+                report = _build(paths)
+
+        self.assertEqual(report["status"], "blocked_missing_or_stale_inputs")
+        self.assertIn("zero_run_trigger_schedule_monotonicity_violation", report["blockers"])
+        self.assertEqual(report["zero_run_trigger_schedule"]["monotonicity_check"]["status"], "failed")
 
     def test_insufficient_history_blocks_stationarity_verdict_without_inventing_days(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
